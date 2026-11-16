@@ -2011,19 +2011,23 @@ function markupRegions(text, rel) {
   for (; i < n; i++) {
     const l = lines[i];
     let k = 0, sc = "", mk = "", gt = -2; // gt: where the last opening tag's `>` was found on this line (-1: none is left)
-    // (the opening tag's end, from `k` — once a line where it is known: a line of openers with no `>` after them was
-    // scanned to its end for each, quadratic, review 1 of 1.35.4)
-    const tagEnd = () => { if (gt === -1 || gt >= k) return gt; gt = styleTagEnd(l, k); return gt; };
-    // (are two places of the line outside any quote — is a `/>` the tag's own, not an attribute's (`split('<br/>')`)? A
-    // quote is closed by its own mark alone: `"it's"`, `{`a "b"`}` — counting each mark apart was wrong there, review 2 of
-    // 1.35.4. The line's quotes followed once, when first asked: linear)
-    let qs = null;
-    const paired = (a, b) => {
-      if (!qs) {
-        qs = new Uint8Array(l.length + 1);
-        for (let x = 0, open = 0; x < l.length; x++) { const c = l.charCodeAt(x); if (open === 0 ? c === 34 || c === 39 || c === 96 : c === open) open = open === 0 ? c : 0; qs[x + 1] = open === 0 ? 0 : 1; }
+    // (the opening tag's end, from `k` — its first `>` outside a quote (each closed by its own mark alone: `"it's"`) and
+    // outside a `{…}` (Svelte's, Astro's expressions), never an arrow's `=>`: `v-if="count > 0"`, `split('<br/>')`,
+    // `set:html={n > 0 ? a : b}` end nothing — the quotes followed from the tag itself, an apostrophe in the text before
+    // it opens none (reviews 2 and 3 of 1.35.4). Once a line where it is known — a line of openers with no `>` after them
+    // was scanned to its end for each, quadratic, review 1 — and a tag's text is passed once it is read: linear)
+    const tagEnd = () => {
+      if (gt === -1 || gt >= k) return gt;
+      let open = 0, braces = 0;
+      for (let x = k; x < l.length; x++) {
+        const c = l.charCodeAt(x);
+        if (open !== 0) { if (c === open) open = 0; continue; }
+        if (c === 34 || c === 39 || c === 96) open = c;
+        else if (c === 123) braces++;
+        else if (c === 125) { if (braces > 0) braces--; }
+        else if (c === 62 && braces === 0 && l.charCodeAt(x - 1) !== 61) return (gt = x);
       }
-      return qs[a] === 0 && qs[b] === 0;
+      return (gt = -1);
     };
     while (k < l.length) {
       if (mode === "script" || mode === "raw") {
@@ -2043,8 +2047,8 @@ function markupRegions(text, rel) {
       if (m[1]) { back = mode; mode = "raw"; closer = "-->"; continue; }
       // (a tag that closes itself opens nothing — `<template #trailing />`, the empty slot eslint-plugin-vue writes so, held
       // a .vue template open to the file's end, its `<script>` read as markup: review 1 of 1.35.4 —, `<script src="…" />`)
-      const g = mode === "markup" && ext === "vue" && m[2] ? -1 : tagEnd(), closes = g > 0 && l[g - 1] === "/" && paired(k, g);
-      if (mode === "markup" && ext === "vue") { if (m[2]) { if (--depth === 0) mode = "top"; } else if (!closes) depth++; continue; }
+      const g = mode === "markup" && ext === "vue" && m[2] ? -1 : tagEnd(), closes = g > 0 && l[g - 1] === "/";
+      if (mode === "markup" && ext === "vue") { if (m[2]) { if (--depth === 0) mode = "top"; } else { if (!closes) depth++; if (g !== -1) k = g + 1; } continue; }
       if (closes) { k = g + 1; continue; }
       if (mode === "top" && m[2] === "template") { mode = "markup"; depth = 1; } else {
         back = mode;
@@ -2365,21 +2369,28 @@ function exportsMap(exp) {
 // Every path a key's value may lead to — any condition's (what the module MAY be, as the guess's two keys are; Chakra's
 // `dev` too) — kept without its `./`: a condition object's keys up to its `default` (none after it is ever reached), a
 // list's entries up to the first target Node takes (one it refuses, a `null` or an object that may match nothing are
-// passed, as its resolver passes them; an object whose branches all resolve up to its `default` ends it — `default` always
-// matches: reviews 1 and 2 of 1.35.4; a list that ends at a target ends the one around it), DS_EXPORT_DEPTH deep, DS_EXPORT_TARGETS of them, none longer than DS_PATH_CHARS. → whether a list ends at `t`.
+// passed, as its resolver passes them), DS_EXPORT_DEPTH deep, DS_EXPORT_TARGETS of them, none longer than DS_PATH_CHARS.
+// → what Node's resolver may make of `t`, three ways (reviews 1 to 3 of 1.35.4): REACH_ENDS — it resolves, whatever the
+// conditions: a list stops at it —; REACH_NONE — it may give nothing (an object none of whose conditions match): Node
+// tries the object's next key, a list its next entry —; REACH_NULL — it may give `null` or a target Node refuses: a list's
+// next entry. An object ends a list when its `default` resolves and no branch before it may give `null` (a nested object
+// that matches nothing gives nothing, so its `default` is still reached); a list ends at an entry that resolves.
+const REACH_NULL = 0, REACH_NONE = 1, REACH_ENDS = 2;
 function reachTargets(t, out, depth) {
   if (typeof t === "string") {
     const ok = t.startsWith("./") && !refused(t.slice(2));
     if (ok && out.length < DS_EXPORT_TARGETS && t.length <= DS_PATH_CHARS) out.push(t.slice(2));
-    return ok;
+    return ok ? REACH_ENDS : REACH_NULL;
   }
-  if (t === null || typeof t !== "object" || depth >= DS_EXPORT_DEPTH) return false;
-  if (Array.isArray(t)) { for (const v of t) if (reachTargets(v, out, depth + 1)) return true; return false; } // (a list that ends at a target ends the one around it)
-  // (it ends a list only when every branch up to its `default` resolves: a condition before it that gives nothing — a
-  // `null`, a target Node refuses — sends Node on to the list's next entry, review 2 of 1.35.4)
-  let all = true;
-  for (const k in t) { all = reachTargets(t[k], out, depth + 1) && all; if (k === "default") return all; }
-  return false;
+  if (t === null || typeof t !== "object" || depth >= DS_EXPORT_DEPTH) return REACH_NULL;
+  if (Array.isArray(t)) { for (const v of t) if (reachTargets(v, out, depth + 1) === REACH_ENDS) return REACH_ENDS; return REACH_NULL; }
+  let nullable = false;
+  for (const k in t) {
+    const r = reachTargets(t[k], out, depth + 1);
+    if (r === REACH_NULL) nullable = true;
+    if (k === "default") return nullable ? REACH_NULL : r;
+  }
+  return nullable ? REACH_NULL : REACH_NONE;
 }
 // (a key's targets, reached once whatever the lookups — a cost guard, timed)
 const targetsOf = (entry) => { if (entry.targets === null) { entry.targets = []; reachTargets(entry.value, entry.targets, 0); } return entry.targets; };
@@ -2428,8 +2439,17 @@ function projectPlaces(manifests, roots, configs, absRoot, realRoot) {
     for (; walked < manifests.length && !found.has(name) && spent.walk < DS_PACKAGE_NAMES; walked++) readOne(manifests[walked], "walk");
     return found.has(name) ? found.get(name).dirs : null;
   };
-  // the paths in a package's folder its map gives a subpath (none without a map)
-  const exported = (dir, sub) => { const map = mapAt.get(dir); return map ? exportedPaths(map, sub) : []; };
+  // the paths in a package's folder its map gives a subpath (none without a map) — DS_ALIAS_CHARS of them in a scan, as the
+  // configs' keys (review 3 of 1.35.4: a 16 KB map's 1 KB targets, kept once a folder and a distinct subpath, ran a scan out
+  // of memory; past it the maps give nothing more)
+  let given = 0;
+  const exported = (dir, sub) => {
+    const map = given > DS_ALIAS_CHARS ? null : mapAt.get(dir);
+    if (!map) return [];
+    const out = exportedPaths(map, sub);
+    for (const t of out) given += dir.length + 1 + t.length;
+    return out;
+  };
   return { roots, packageOf, aliasKeys, exported };
 }
 function settle(results, scripts, markups, read, places) {
@@ -2763,24 +2783,36 @@ function scanCode(root, withComponents = true) {
   // review 1 of 1.35.3, `export { default as FiltersToggle } from "./toggle"`)
   const add = (r, name) => { const key = dsKey(name); if (key && !byKey.has(key)) byKey.set(key, { name, key, path: r.path, index: false, route: false }); };
   for (const r of results) for (const name of r.found.names) if (!verdict.dropped.has(r.path + "\n" + name)) add(r, name);
-  // (a candidate the file also gives under another name that is a row already — THIS binding's row: one the file gave
-  // itself, or the row of the file the binding comes from, `import Root from "./card.svelte"` and its `Card`; another
-  // component of that name — elsewhere, in a folder below — is none of this binding's, review 2 of 1.35.4 — is that row
-  // under another name; the names given with `as` first, the kit's own over the bare ones)
-  const sameRow = (r, name, also, from) => {
-    const src = from != null && from[0] === "." ? inProject(r.path.slice(0, Math.max(0, r.path.lastIndexOf("/"))), from) : null;
-    const key = src == null ? null : moduleKey(src);
-    return also.some((n) => {
-      if (n === name) return false;
-      const row = byKey.get(dsKey(n));
-      if (row == null) return false;
-      if (row.path === r.path) return true;
-      const rk = key == null ? null : moduleKey(row.path);
-      return rk != null && (rk === key || rk === key + "/index");
-    });
+  // (a candidate the file gives under more than one name — `import Root from "./card.svelte"; export { Root, Root as Card }`
+  // — is no row of its own when the binding comes from a component file of the scan: that file IS a row, under its own
+  // name (`Card`), whoever won the name elsewhere — another app's `card.svelte`, an app's own `Table.svelte`; the module
+  // resolved as an import is, `$lib/…` too (review 3 of 1.35.4: asked of the row that won the name, a second install or
+  // an alias import listed the bare parts again). Of its names that are no such alias, a bare one gives way to one given
+  // with `as` the page renders too — within the binding alone: across files, the first file's row stands, review 3)
+  const componentKeys = new Set(files.map((c) => moduleKey(c.path)));
+  const fromComponent = new Map(); // (once a folder and a module)
+  const isComponentModule = (r, from) => {
+    if (from == null) return false;
+    const dir = r.path.slice(0, Math.max(0, r.path.lastIndexOf("/")));
+    const mk = dir + "\n" + from;
+    if (!fromComponent.has(mk)) {
+      let yes = false;
+      if (from[0] === ".") { const src = inProject(dir, from); const k = src == null ? null : moduleKey(src); yes = k != null && (componentKeys.has(k) || componentKeys.has(k + "/index")); }
+      else if (placed) { const at = placeOf(from, r.path, placed); yes = at != null && [...at.keys].some((k) => componentKeys.has(k) || componentKeys.has(k + "/index")); }
+      fromComponent.set(mk, yes);
+    }
+    return fromComponent.get(mk);
   };
-  for (const pass of [true, false]) for (const r of results) for (const { name, also, aliased, from } of r.found.candidates) {
-    if (aliased === pass && verdict.rendered.has(r.path + "\n" + name) && !sameRow(r, name, also, from)) add(r, name);
+  for (const r of results) {
+    const byName = new Map(r.found.candidates.map((c) => [c.name, c]));
+    const rendered = (n) => verdict.rendered.has(r.path + "\n" + n);
+    for (const { name, also, aliased, from } of r.found.candidates) {
+      if (!rendered(name)) continue;
+      const others = also.filter((n) => n !== name);
+      if (others.length && isComponentModule(r, from)) continue;
+      if (!aliased && others.some((n) => byName.has(n) && byName.get(n).aliased && rendered(n))) continue;
+      add(r, name);
+    }
   }
   const take = (file, list) => {
     sources.push(file.rel);

@@ -818,9 +818,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     on `/` and `\`); a key's value alone decides (`null`: nothing, never a shorter pattern). Its targets: a string that
     starts `./` with no refused segment; a condition object's branches up to its `default`, any condition (what the module
     MAY be: Chakra's `dev`); a list to its first accepted entry (a refused one, a `null`, an object that resolves nothing
-    passed — Node's code, not its spec prose; an object whose branches all resolve up to its `default` ends it — a
-    condition before it that gives nothing sends Node on —, and a list that ends at a target ends the one around it,
-    reviews 1 and 2); DS_EXPORT_DEPTH (a
+    passed — Node's code, not its spec prose; three ways, REACH_ENDS / REACH_NONE / REACH_NULL: an object ends a list
+    when its `default` resolves and no branch before it may give `null` or a refused target — a nested object that
+    matches nothing gives nothing, and Node tries the next key —, a list that ends at a target ends the one around it,
+    reviews 1 to 3); DS_EXPORT_DEPTH (a
     crash guard: 100,000 nested lists overflowed), DS_EXPORT_TARGETS; every `*` replaced, a target the match would make
     longer than DS_PATH_CHARS not taken (review 1: 200,000 `*`s × a long subpath ran a scan out of memory); an index
     target is its folder. Kept up to DS_MAP_CHARS of manifests (a memory bound). The bare `.`, `main`, `module`, `source`
@@ -851,9 +852,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     `stripFencedCode` would be wrong), inline code spans (`backtickRuns`), front matter, `<!-- -->` / `{/* */}` across
     lines, `<style>`, a Vue block but its script and root `<template>` (its depth counted; a tag that closes itself —
     `<template #trailing />`, the empty slot eslint-plugin-vue writes, `<script src="…" />` — opens nothing: review 1, a
-    template before the script held to the file's end — when the opener and its `/>` stand outside any quote, the
-    line's quotes followed once, each closed by its own mark alone: `split('<br/>')` in an attribute is no end, and
-    `"note !== `it's`"` opens no second quote, review 2), an Astro `<script>` (a client script). An opening tag's end is
+    template before the script held to the file's end — `tagEnd`: a tag ends at its first `>` outside quotes (each closed
+    by its own mark alone) and outside `{…}`, never an arrow's `=>`, the quotes followed from the tag itself — review 2
+    counted each mark apart, then followed them from the line's start, where an apostrophe in the text before the tag
+    opened one: review 3 —; a tag's text is passed once read), an Astro `<script>` (a client script). An opening tag's end is
     looked for once a line where it is known (`tagEnd`: a line of openers with no `>` after them was quadratic, review 1). In `.vue` alone a kebab tag with a dash is the component Vue resolves (`<my-button>` → MyButton; one word,
     `<card>`, needs Vue's own element list: never). Read after every script, one queue, the same counters (markups first
     or counted apart lost a script's reading).
@@ -869,13 +871,15 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     made its source ESM, a preload ran in it — one that refused workers stalled each pool 2 s, one that wrote to fd 1
     wrote into an MCP server's JSON-RPC: review 1), and a worker's 'error' is heard (`w.on("error", stop)` — unheard,
     it is thrown on the main thread and ends an MCP server once the scan has answered).
-  - **A barrel's other names** (exportedComponents' `also`, `aliased`; scanCode's `sameRow`): a candidate the file also
-    gives under another name — the same local (`export { Root, Root as Card }`), the same re-exported binding — is no row
-    of its own when one of those names is THIS binding's row already — the barrel's own, or the row of the file the
-    binding comes from (`from`: `import Root from "./card.svelte"`, whose row is `Card`) — (review 2: a row anywhere —
-    another `Pane` of the project — dropped `Pane as ResizablePane`, and a folder's rows were no better: a `Panel` below
-    a root barrel dropped `ResizablePanel`); the names given with `as` are taken first (review 2: in shadcn-svelte's
-    order, bare names first, the bare one had won); a binding given more than DS_ALIAS_NAMES (16) names asks none of
+  - **A barrel's other names** (exportedComponents' `also`, `aliased`, `from`; scanCode's `isComponentModule`): a
+    candidate the file gives under more than one name — the same local (`export { Root, Root as Card }`), the same
+    re-exported binding — is no row of its own when the binding comes from a COMPONENT FILE of the scan (`from` resolved:
+    relative, or through placeOf — `$lib/…`): that file is a row under its own name. Review 2 had asked whether a sibling
+    name's row was the binding's — a row anywhere dropped `Pane as ResizablePane` beside another `Pane`, a folder's took a
+    `Panel` below a root barrel —, and review 3 found the winner of the name the wrong question: a second install, an
+    alias import, an app's own `Table.svelte` listed the bare parts again. Of a package's binding's names (paneforge's
+    `Pane`), a bare one gives way to one given with `as` the page renders too — within the binding: run over every file,
+    review 2's two passes moved unrelated rows (chakra-ui/ark's `ErrorText`), review 3; a binding given more than DS_ALIAS_NAMES (16) names asks none of
     them (the corpus has 3 at most; 12,000 names were walked once a rendered candidate, ×31). Review 1 of 1.35.4: on a SvelteKit checkout
     that ran `svelte-kit sync`, `$lib` resolves through `.svelte-kit/tsconfig.json` and shadcn-svelte's barrels listed 75 bare parts, `Root`, `Content`, `Link`, beside `Card`,
     `CardContent` — the fresh clones of the corpus have no `.svelte-kit`, and the first measure of `$lib` was made on
@@ -1820,12 +1824,23 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   two made by review 1's fixes: the default import's pairing walked each base's files once a KEY (×26 on 400 packages of
   one name), and the barrel rule asked whether a sibling name was a row ANYWHERE (another `Pane` dropped
   `ResizablePane`; in shadcn-svelte's order the bare name won); the third older — the keys a config gives, bounded a
-  spec, not a scan (memory out on 9.5 MB of pages). Fixed: `at.bases`, `sameRow` (a sibling's row must be the
-  binding's own — the barrel's, or its source file's: the barrel's folder, the first answer, still took a `Panel` below
-  it) + the `as` names first, DS_ALIAS_CHARS. LOWs fixed too: an object ends a target list only when every branch up to `default` resolves, a
+  spec, not a scan (memory out on 9.5 MB of pages). Fixed: `at.bases`, a sibling's row asked to be the binding's
+  own — the barrel's, or its source file's: the barrel's folder, the first answer, still took a `Panel` below it; since
+  replaced by `isComponentModule`, review 3 — + the `as` names first, DS_ALIAS_CHARS. LOWs fixed too: an object ends a target list only when every branch up to `default` resolves, a
   `/>` closes a tag only outside quotes (the line's quotes followed, each closed by its own mark: counting each mark
   apart, the first answer, missed `"it's"`), an `extends` and every target measured against DS_PATH_CHARS, a binding's
   names kept as one group and none asked past 16, the read-ahead test proving again that the CLI and the server
   start workers, and the remaining absolute times of the design-system tests made ratios. Lesson: a fix that pairs or
   groups (review 1's per-key loop, its "a row already" test) is a new rule — ask it of the place it replaces AND of
   the project around it (another component of the same name, a hundred packages of one name).
+- **1.35.4 review 3** (the third short round the owner chose: three fresh reviewers on f5bb14d, review 2's tools replayed
+  — every review-2 finding fixed —, a skeptic for each HIGH / MEDIUM) — no HIGH; 2 MEDIUM: the map's keys were not in a
+  scan's budget as the configs' were (one 16 KB manifest ran a scan out of memory — older, from the feature), and the
+  barrel rule asked whether the row that WON a sibling name was the binding's (two installs, an alias import, an app's
+  own `Table.svelte` listed the bare parts again — made by review 2's fix). Fixed: the map's keys budgeted
+  (`given`), the rule asked of the binding's source (`isComponentModule`). LOWs: the `as` preference within a binding
+  (it moved rows between files), `reachTargets` three ways (a nested object matching nothing gave a list's next entry),
+  a tag's end from the tag itself, outside quotes and `{…}`, a review-7 twin that shared the cost it was to catch,
+  thin ratio slacks under the pre-push run, stale test wording. Lesson: when a rule keeps needing a narrower test of
+  "is this the same thing" (a row anywhere, in the folder, the winner's), ask the thing itself — here the binding's
+  source file — rather than what another lookup happened to keep.

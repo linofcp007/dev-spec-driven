@@ -174,12 +174,13 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
   // --- a stylesheet's lines: linear, strings, Less, parentheses --------------------------------------------------------------------------
   {
     // one line of 240K characters whose tail a `.` cannot cross (U+2028, U+2029, a stray CR): the value is never matched
-    // — each against its calm twin, the same file with a letter for the separator (a tail every pattern crosses), in a project
-    // of its own, read at the same moment: a ratio holds on a loaded machine where a time does not (1.35.4 review 2: the
-    // absolute 1.5 s it replaces)
-    const hostile = (sep) => "--a:" + " ".repeat(120000) + "x".repeat(120000) + sep + "z";
-    const sheet = (sep) => ({ "tokens.css": hostile(sep || String.fromCharCode(0x2028)), "_variables.scss": "$a:" + hostile(sep || String.fromCharCode(0x2029)).slice(4), "globals.css": ":root{" + hostile(sep || "\r") + "}" });
-    const cases = sheet(), calmCases = sheet("y");
+    // — each against its calm twin, the same file with its runs spelled in letters (`q`s for the blanks, a letter for the
+    // separator: no blank run, a tail every pattern crosses), in a project of its own, read at the same moment: a ratio holds
+    // on a loaded machine where a time does not (1.35.4 review 2: the absolute 1.5 s it replaces; review 3: the twin kept the
+    // 120,000 blanks, so a cost over that run — a trailing-run replace on the value, 14–17 s — was the twin's too and held)
+    const line = (run, sep) => "--a:" + run.repeat(120000) + "x".repeat(120000) + sep + "z";
+    const sheet = (run, seps) => ({ "tokens.css": line(run, seps[0]), "_variables.scss": "$a:" + line(run, seps[1]).slice(4), "globals.css": ":root{" + line(run, seps[2]) + "}" });
+    const cases = sheet(" ", [String.fromCharCode(0x2028), String.fromCharCode(0x2029), "\r"]), calmCases = sheet("q", ["y", "y", "y"]);
     const linear = (s) => s.ms < 3 * s.calm + 300;
     const lines = Object.entries(cases).map(([name, text], i) => {
       const p = project("linear-" + i), c = project("linear-calm-" + i);
@@ -208,7 +209,7 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     // a stylesheet's identifiers are its author's: listed as written
     const w = project("names");
     write(w, "src/styles/tokens.css", ":root {\n  --a1b2c3d4e5: 4px;\n  --mdc-outlined-text-field-disabled-outline-color: 4px;\n  --gray-900: #111;\n  --space-2xl: 4rem;\n}\n");
-    all("1.35 review 7: a token file's line is read whole in linear time — 240K characters whose tail a `.` cannot cross (U+2028, U+2029, a stray CR) took 56 s through `\\s*:\\s*(.*)$` —, with no bound said: within 3× + 0.3 s of its calm twin (a letter for the separator) read at the same moment (1.35.4 review 2: a ratio, no longer an absolute 1.5 s); a `/*` inside a quoted string opens no comment (Tailwind 4's `@source \"../components/*.tsx\"`, sass-glob's `@import \"mixins/*\"`), a real comment still hides its text; a .less file's `@name:` is a token; a `name:` inside the parentheses a statement opened is a parameter or a map's key, so a mixin's `$border: $background,` no longer shadows `$border: 1px solid #ccc` — an unmatched `(` in a string costs one statement; a lone `;` on the next line ends a declaration; a quoted string as a block's or a file's last declaration is shown blank; a stylesheet's own identifiers are listed as written, a hashed `--a1b2c3d4e5` and a 47-character name alike — review 8: only a JSON key is asked to be words (got " +
+    all("1.35 review 7: a token file's line is read whole in linear time — 240K characters whose tail a `.` cannot cross (U+2028, U+2029, a stray CR) took 56 s through `\\s*:\\s*(.*)$` —, with no bound said: within 3× + 0.3 s of its calm twin (its runs in letters: `q`s for the blanks, a letter for the separator) read at the same moment (1.35.4 review 2: a ratio, no longer an absolute 1.5 s; 1.35.4 review 3: a twin with no blank run, so a cost over the blanks — a trailing-run replace on the value — is the hostile line's alone); a `/*` inside a quoted string opens no comment (Tailwind 4's `@source \"../components/*.tsx\"`, sass-glob's `@import \"mixins/*\"`), a real comment still hides its text; a .less file's `@name:` is a token; a `name:` inside the parentheses a statement opened is a parameter or a map's key, so a mixin's `$border: $background,` no longer shadows `$border: 1px solid #ccc` — an unmatched `(` in a string costs one statement; a lone `;` on the next line ends a declaration; a quoted string as a block's or a file's last declaration is shown blank; a stylesheet's own identifiers are listed as written, a hashed `--a1b2c3d4e5` and a 47-character name alike — review 8: only a JSON key is asked to be words (got " +
       js({ timed, lines, quoted, forms, leaked, names: tokensOf(w) }) + ")", {
       linear: () => js(timed) === js([true, true, true]),
       quoted: () => js(quoted) === js({ "$brand": "#1d4ed8", "$sep": "", "$gap": "8px", "$pad": "4px", "$more": "1px", "--tw0": "0px", "--tw1": "1px", "--tw2": "2px", "--tw3": "3px", "--tw4": "4px", "--tw5": "5px", "--after": "2px" }),

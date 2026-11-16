@@ -161,16 +161,19 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       return d;
     };
     const lines = (line, n) => (line + "\n").repeat(n);
-    // (a sample: each side's best of two runs, interleaved — a burst on a shared machine lands on one run of a side)
-    const pair = (hard, soft) => {
+    // (a sample: each side's best of `runs` runs — two, three for the gate —, interleaved: a burst on a shared machine lands on
+    // one run of a side)
+    const pair = (hard, soft, runs) => {
       const t = (p) => { const t0 = Date.now(); S.designSystemReport(p); return Date.now() - t0; };
       t(hard); t(soft);
-      return () => { const h1 = t(hard), s1 = t(soft), h2 = t(hard), s2 = t(soft); return [Math.min(h1, h2), Math.min(s1, s2)]; };
+      return () => { const h = [], s = []; for (let k = 0; k < (runs || 2); k++) { h.push(t(hard)); s.push(t(soft)); } return [Math.min(...h), Math.min(...s)]; };
     };
-    //   the gate: a file that binds no factory is read once — 40 pages of 120 lines of `a(`×1,000 against `ax`×1,000 (×5
-    //   ungated; the soft side's own cost the same either way)
+    //   the gate: a file that binds no factory is read once — 40 pages of 120 lines of `a(`×1,000 against `ax`×1,000 (ungated
+    //   ×6: ~650 against ~110 ms, the soft side's own matching ×2; gated ~1.1×). 1.35.4 review 3: the best of two missed
+    //   under the pre-push shape ([1686, 481] ms; [78, 59] alone) — each side is the best of three; 3× + 300 ms instead would
+    //   not see the gate gone (642 against 630 ms)
     const gh = pages("gate-hard", 40, "", lines("a(".repeat(1000), 120)), gs = pages("gate-soft", 40, "", lines("ax".repeat(1000), 120));
-    const gms = remeasure(pair(gh, gs), (s) => s[0] < 2 * s[1] + 100);
+    const gms = remeasure(pair(gh, gs, 3), (s) => s[0] < 2 * s[1] + 100);
     //   the head's look-behind: a name is tried at its start alone — 120 lines of one 1,990-letter name in pages that bind
     //   `h`, against 120 lines of 995 one-letter names (no letter inside a name to try: ×90 without it, the soft side alike)
     const lh = pages("lookbehind-hard", 8, "import { h } from \"vue\";\n", lines("a".repeat(1990), 120), ["react", "vue"]);
@@ -183,7 +186,7 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const bh = pages("below-hard", 8, "import { h } from \"vue\";\n", below("h("), ["react", "vue"]);
     const bs = pages("below-soft", 8, "import { h } from \"vue\";\n", below("hx("), ["react", "vue"]);
     const bms = remeasure(pair(bh, bs), (s) => s[0] < 2.5 * s[1] + 150);
-    all("1.35.4: a call that renders a name costs a file that binds no factory nothing (40 pages of 120 lines of `a(`×1,000: no slower than the same lines of `ax`), and in one that binds one its heads and its look-below stay linear — 120 lines of one 1,990-letter name (each name tried at its start alone: no slower than 995 one-letter names), 1,000 calls broken after their `(` above 50 blank lines and 60 lines of `h(`×995 (each run of blank lines read once) — no slower than the same pages with the trigger out of reach (got " + js({ gms, lms, bms }) + ")", {
+    all("1.35.4: a call that renders a name costs a file that binds no factory nothing (40 pages of 120 lines of `a(`×1,000: no slower than the same lines of `ax` — 1.35.4 review 3: each side the best of three runs), and in one that binds one its heads and its look-below stay linear — 120 lines of one 1,990-letter name (each name tried at its start alone: no slower than 995 one-letter names), 1,000 calls broken after their `(` above 50 blank lines and 60 lines of `h(`×995 (each run of blank lines read once) — no slower than the same pages with the trigger out of reach (got " + js({ gms, lms, bms }) + ")", {
       gate: () => gms[0] < 2 * gms[1] + 100,
       lookBehind: () => lms[0] < 2.5 * lms[1] + 150,
       lookBelow: () => bms[0] < 2.5 * bms[1] + 150,

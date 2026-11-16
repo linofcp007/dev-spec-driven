@@ -6,12 +6,14 @@
 // beside it. Its bounds (500 keys, 8 deep, 16 targets, 4 MB of kept manifests; review 1: a path of 1,024 characters, the
 // match's in it too — a many-star target in a capped heap), a key's targets reached once (timed), each folder its own
 // manifest's map, the file Node's own require.resolve picks, and (review 1) a list that ends at an object whose `default` resolves
-// — review 2: whose branches all resolve up to its `default` (Node's import.meta.resolve too) —; a default import's lookup, timed.
+// — review 2: when no branch before it may give `null` (Node's import.meta.resolve too); review 3: a nested object that matches
+// nothing gives nothing, its `default` still reached —; a default import's lookup, timed; (review 3) the paths the maps give,
+// budgeted in a scan — counted, and in memory.
 
 const fs = require("fs");
 const path = require("path");
 const { createRequire } = require("module");
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const { pathToFileURL, fileURLToPath } = require("url");
 
 exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
@@ -364,14 +366,19 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       // (a list that ends at a target ends the one around it: a list in a list, a list under `default`)
       "./inlist": [[F("in-first"), F("in-second")], F("in-after")],
       "./deflist": [{ default: [F("dl-first")] }, F("dl-after")],
-      // (review 2: it ends the list only when every branch up to its `default` resolves — a condition before it that gives
-      // `null`, `[]` or a target Node refuses sends Node on to the next entry under that condition; one whose target
+      // (review 2: it ends the list only when no branch before its `default` may give `null` — a condition before it that
+      // gives `null`, `[]` or a target Node refuses sends Node on to the next entry under that condition; one whose target
       // resolves, `require` as `import` in `./both`, ends it)
       "./inull": [{ import: null, default: F("inull-first") }, F("inull-after")],
       "./rnull": [{ require: null, default: F("rnull-first") }, F("rnull-after")],
       "./rempty": [{ require: [], default: F("rempty-first") }, F("rempty-after")],
       "./rrefused": [{ require: "./node_modules/x.tsx", default: F("rref-first") }, F("rref-after")],
       "./ract": [{ require: F("ract-require"), default: F("ract-default") }, F("ract-after")],
+      // (review 3: a nested condition object that matches nothing gives NOTHING, not `null` — Node tries the object's next
+      // key, its `default`, which ends the list: the entry after it is reached under no conditions)
+      "./nested": [{ node: { import: F("nest-first") }, default: F("nest-def") }, F("nest-after")],
+      "./empty": [{ import: {}, default: F("empty-def") }, F("empty-after")],
+      "./types": [{ types: { import: F("types-first") }, default: F("types-def") }, F("types-after")],
     };
     // (a file's name is never the name it holds: a component folder's file gives a row of its own name — `ends-first.tsx`, EndsFirst)
     const pascal = (f) => f.replace(/(?:^|-)([a-z])/g, (_, c) => c.toUpperCase()) + "Glow";
@@ -396,10 +403,12 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     if (esmResolve) for (const key of Object.keys(LISTS)) { try { esm[key] = pascal(path.basename(fileURLToPath(esmResolve("@acme/lists/" + key.slice(2))), ".tsx")); } catch (e) { esm[key] = e.code || e.constructor.name; } }
     let listed = [], err = null;
     try { listed = seeded(p).filter((n) => asked.has(n)); } catch (e) { err = e.constructor.name + ": " + String(e.message).slice(0, 120); }
-    // (review 1's lists, review 2's: each check of its own)
-    const R2 = ["./inull", "./rnull", "./rempty", "./rrefused", "./ract"], R1 = Object.keys(LISTS).filter((k) => !R2.includes(k));
+    // (review 1's lists, review 2's, review 3's: each check of its own)
+    const R2 = ["./inull", "./rnull", "./rempty", "./rrefused", "./ract"], R3 = ["./nested", "./empty", "./types"];
+    const R1 = Object.keys(LISTS).filter((k) => !R2.includes(k) && !R3.includes(k));
     const namesOf = (keys) => new Set(keys.flatMap((k) => filesIn(LISTS[k]).map(pascal)));
     const of = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
+    const esmOf = (keys) => (esmResolve ? of(esm, keys) : {});
     const listed1 = listed.filter((n) => namesOf(R1).has(n)), listed2 = listed.filter((n) => namesOf(R2).has(n)), node1 = of(node, R1), node2 = of(node, R2);
     const CUT = ["EndsAfterGlow", "DeepAfterGlow", "BothAfterGlow", "InSecondGlow", "InAfterGlow", "DlAfterGlow", "RactAfterGlow"];
     all("1.35.4 review 1: in a target list, an object whose `default` resolves ends it as Node's resolver does (`default` always matches) — [{default: a}, b] never b, a `default` resolving through another object either — while an object that may match nothing (`{import}`, `{default: {import}}`), a `default: null` and a `default` Node refuses pass on to the next entry, and `{import, default}` gives both before it ends; Node's require.resolve picks a listed file for each list, never a cut one (got " + js({ listed: listed1, err, node: node1 }) + ")", {
@@ -413,18 +422,34 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       nodeListed: () => Object.values(node1).every((n) => listed.includes(n) && !CUT.includes(n)),
       exactly: () => js(listed1) === js(["BothDefaultGlow", "BothImportGlow", "DeepFirstGlow", "DlFirstGlow", "EndsFirstGlow", "GoesAfterGlow", "GoesFirstGlow", "InFirstGlow", "MayAfterGlow", "MayFirstGlow", "NullAfterGlow", "RefAfterGlow"]),
     });
-    // review 2: an object ends the list only when every branch up to its `default` resolves — [{import: null, default: a}, b]
+    // review 2: an object ends the list only when no branch before its `default` may give `null` — [{import: null, default: a}, b]
     // reaches b (Node's import.meta.resolve takes it), as `require: null`, `require: []` and a `require` target Node refuses
     // do (its require.resolve takes b); [{require: x, default: a}, b] — and `./both`'s `import` — does not
-    all("1.35.4 review 2: in a target list, an object ends it only when every branch up to its `default` resolves — [{import: null, default: a}, b], [{require: null, default: a}, b], [{require: [], default: a}, b] and [{require: \"./node_modules/x\", default: a}, b] reach b as well as a, as Node's resolver goes on to the next entry under that condition, while [{require: x, default: a}, b] (and `./both`'s {import: x, default: a}) does not reach b; Node's require.resolve and import.meta.resolve each pick a listed file for every list, never a cut one (got " + js({ listed: listed2, node: node2, esm: esmResolve ? esm : "no import.meta.resolve here: that check skipped" }) + ")", {
+    const esm12 = esmOf(R1.concat(R2));
+    all("1.35.4 review 2: in a target list, an object ends it only when no branch before its `default` may give `null` — [{import: null, default: a}, b], [{require: null, default: a}, b], [{require: [], default: a}, b] and [{require: \"./node_modules/x\", default: a}, b] reach b as well as a, as Node's resolver goes on to the next entry under that condition, while [{require: x, default: a}, b] (and `./both`'s {import: x, default: a}) does not reach b; Node's require.resolve and import.meta.resolve each pick a listed file for every list, never a cut one (got " + js({ listed: listed2, node: node2, esm: esmResolve ? esm12 : "no import.meta.resolve here: that check skipped" }) + ")", {
       scanned: () => err === null,
       goesOn: () => ["InullFirstGlow", "InullAfterGlow", "RnullFirstGlow", "RnullAfterGlow", "RemptyFirstGlow", "RemptyAfterGlow", "RrefFirstGlow", "RrefAfterGlow"].every((n) => listed.includes(n)),
       ends: () => listed.includes("RactRequireGlow") && listed.includes("RactDefaultGlow") && !listed.includes("RactAfterGlow") && !listed.includes("BothAfterGlow"),
       node: () => js(node2) === js({ "./inull": "InullFirstGlow", "./rnull": "RnullAfterGlow", "./rempty": "RemptyAfterGlow", "./rrefused": "RrefAfterGlow", "./ract": "RactRequireGlow" }),
-      esm: () => !esmResolve || js(esm) === js({ "./ends": "EndsFirstGlow", "./goes": "GoesFirstGlow", "./deep": "DeepFirstGlow", "./may": "MayFirstGlow", "./nulls": "NullAfterGlow", "./refused": "RefAfterGlow", "./both": "BothImportGlow",
+      esm: () => !esmResolve || js(esm12) === js({ "./ends": "EndsFirstGlow", "./goes": "GoesFirstGlow", "./deep": "DeepFirstGlow", "./may": "MayFirstGlow", "./nulls": "NullAfterGlow", "./refused": "RefAfterGlow", "./both": "BothImportGlow",
         "./inlist": "InFirstGlow", "./deflist": "DlFirstGlow", "./inull": "InullAfterGlow", "./rnull": "RnullFirstGlow", "./rempty": "RemptyFirstGlow", "./rrefused": "RrefFirstGlow", "./ract": "RactDefaultGlow" }),
-      nodeListed: () => Object.values(node2).concat(Object.values(esm)).every((n) => listed.includes(n) && !CUT.includes(n)),
+      nodeListed: () => Object.values(node2).concat(Object.values(esm12)).every((n) => listed.includes(n) && !CUT.includes(n)),
       exactly: () => js(listed2) === js(["InullAfterGlow", "InullFirstGlow", "RactDefaultGlow", "RactRequireGlow", "RemptyAfterGlow", "RemptyFirstGlow", "RnullAfterGlow", "RnullFirstGlow", "RrefAfterGlow", "RrefFirstGlow"]),
+    });
+    // review 3: a nested condition object that matches nothing gives nothing — Node goes on to the object's next key, and its
+    // `default` ends the list —: [{node: {import: a}, default: b}, c], [{import: {}, default: b}, c] and
+    // [{types: {import: a}, default: b}, c] never reach c, under any conditions; [{import: null, default: a}, b] still reaches b
+    const CUT3 = ["NestAfterGlow", "EmptyAfterGlow", "TypesAfterGlow"];
+    const listed3 = listed.filter((n) => namesOf(R3).has(n)), node3 = of(node, R3), esm3 = esmOf(R3);
+    all("1.35.4 review 3: in a target list, a nested condition object that matches nothing gives nothing, not `null` — Node tries the object's next key, so its `default` is still reached and ends the list: [{node: {import: a}, default: b}, c], [{import: {}, default: b}, c] and [{types: {import: a}, default: b}, c] list a and b, never c, while [{import: null, default: a}, b] still reaches b; Node's require.resolve and import.meta.resolve each pick a listed file for every list, never c (got " + js({ listed: listed3, node: node3, esm: esmResolve ? esm3 : "no import.meta.resolve here: that check skipped", inull: [listed.includes("InullAfterGlow"), esmResolve ? esm["./inull"] : "skipped"] }) + ")", {
+      scanned: () => err === null,
+      ends: () => CUT3.every((n) => !listed.includes(n)),
+      reached: () => ["NestFirstGlow", "NestDefGlow", "EmptyDefGlow", "TypesFirstGlow", "TypesDefGlow"].every((n) => listed.includes(n)),
+      nullGoesOn: () => listed.includes("InullAfterGlow") && (!esmResolve || esm["./inull"] === "InullAfterGlow"),
+      node: () => js(node3) === js({ "./nested": "NestDefGlow", "./empty": "EmptyDefGlow", "./types": "TypesDefGlow" }),
+      esm: () => !esmResolve || js(esm3) === js({ "./nested": "NestFirstGlow", "./empty": "EmptyDefGlow", "./types": "TypesDefGlow" }),
+      nodeListed: () => Object.values(node3).concat(Object.values(esm3)).every((n) => listed.includes(n) && !CUT3.includes(n)),
+      exactly: () => js(listed3) === js(["EmptyDefGlow", "NestDefGlow", "NestFirstGlow", "TypesDefGlow", "TypesFirstGlow"]),
     });
   }
 
@@ -454,6 +479,87 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     all("1.35.4 review 2: a default import's lookup walks each base's files once a place, its keys grouped by base — 200 page folders importing by default a button that 200 workspace packages all named `@workspace/ui` hold (400 keys a place, one base) cost within ×2.5 the same tree imported by name, and both settle Button (got " + js({ sample: dms, tries: dms.tries }) + ")", {
       rows: () => dms[2] && dms[3],
       bounded: () => dms[0] < 2.5 * dms[1] + 150,
+    });
+  }
+
+  // --- review 3 of 1.35.4 (RES3-1): the paths the maps give in a scan, DS_ALIAS_CHARS (4 M characters) as the configs' keys —
+  // past them a map gives nothing more ------------------------------------------------------------------------------------------
+  {
+    const BUDGET = 4 * 1024 * 1024; // (DS_ALIAS_CHARS)
+    // a `./*` key's 16 conditions, each a target of `chars` characters with one `*` — the first `first` when given
+    const conds = (chars, first) => {
+      const o = {};
+      for (let i = 0; i < 16; i++) { const head = "./t" + i + "/"; o["c" + i] = i === 0 && first ? first : head + "a".repeat(chars - head.length - 1) + "*"; }
+      return o;
+    };
+    // what a subpath's paths spend, as the scan counts them: the package's folder, a `/`, each target without its `./`, the
+    // match in its `*`'s place
+    const cost = (map, sub) => Object.values(map).reduce((n, t) => n + "packages/ui".length + 1 + t.length - 2 - 1 + sub.length, 0);
+    // a page of [name, spec]: each import and each tag on a line of its own (a line is read up to DS_LINE_MAX, 2,000
+    // characters — 403 tags on one cut the last whatever the budget)
+    const tall = (imports) => imports.map(([name, spec]) => "import { " + name + " } from \"" + spec + "\";").join("\n") +
+      "\nexport const Q = () => <>\n" + imports.map(([name]) => "  <" + name + " />").join("\n") + "\n</>;\n";
+    // the first condition reaches the kit (`kit/components/<sub>.tsx` — a place the guess never names), fifteen of 1,000
+    // characters spend about 15,200 a subpath; one page asks MapFirst, 150 subpaths of its own, MapMid (the 152nd), 250 more,
+    // MapLast (the 403rd) — one scan's budget, so the same map asked MapFirst and MapLast alone, in a scan of its own, settles both
+    const MAP = conds(1000, "./kit/components/*.tsx");
+    const kit = (tag, names, imports) => {
+      const p = project(tag, { "package.json": WORKSPACE, "packages/ui/package.json": js({ name: "@acme/ui", exports: { "./*": MAP } }) });
+      for (const [file, name] of names) write(p, "packages/ui/kit/components/" + file + ".tsx", glow([name]));
+      write(p, "apps/web/page.tsx", tall(imports));
+      return p;
+    };
+    const spend = (from, n) => Array.from({ length: n }, (_, k) => ["A" + (from + k), "@acme/ui/s" + (from + k)]);
+    const asked = [["MapFirst", "@acme/ui/first"]].concat(spend(0, 150), [["MapMid", "@acme/ui/mid"]], spend(150, 250), [["MapLast", "@acme/ui/last"]]);
+    // (the characters spent before the 152nd and the 403rd ask, by the scan's own count)
+    const before = (name) => asked.slice(0, asked.findIndex(([n]) => n === name)).reduce((n, [, spec]) => n + cost(MAP, spec.slice("@acme/ui/".length)), 0);
+    const spentBefore = [before("MapMid"), before("MapLast")];
+    let spent = [], calm = [], err = null;
+    try {
+      spent = seeded(kit("map-budget", [["first", "MapFirst"], ["mid", "MapMid"], ["last", "MapLast"]], asked)).filter((n) => /^Map(?:First|Mid|Last)$/.test(n));
+      calm = seeded(kit("map-budget-calm", [["first", "CalmMapFirst"], ["last", "CalmMapLast"]], [["CalmMapFirst", "@acme/ui/first"], ["CalmMapLast", "@acme/ui/last"]])).filter((n) => /^CalmMap/.test(n));
+    } catch (e) { err = e.constructor.name + ": " + String(e.message).slice(0, 120); }
+    all("1.35.4 review 3: the paths a workspace package's `exports` map gives are budgeted in a scan (DS_ALIAS_CHARS, 4 M characters, as the configs' keys) — one page asking 403 subpaths through a `./*` key of 16 conditions, fifteen of 1,000 characters: the candidates asked 1st and 152nd (within the budget) are settled through the map, the 403rd (past it) is not — the map gives it nothing more, and the guess names none of its files —; the same map asked the 1st and the last alone settles both (got " + js({ spent, calm, err, spentBefore }) + ")", {
+      scanned: () => err === null,
+      spend: () => spentBefore[0] < 0.6 * BUDGET && spentBefore[1] > 1.4 * BUDGET,
+      within: () => spent.includes("MapFirst") && spent.includes("MapMid"),
+      past: () => !spent.includes("MapLast"),
+      calm: () => calm.includes("CalmMapFirst") && calm.includes("CalmMapLast"),
+    });
+
+    // what it keeps: 50 page folders, each asking 200 subpaths of its own (10,000 in all) through a `./*` key of 16 targets of
+    // 1,000 characters; the calm twin's are of 8 (its paths, under 4 M characters, all within the budget) — each scan in a
+    // fresh process, its peak resident set: hard's within ×1.5 the calm one's (every distinct folder and subpath kept its
+    // sixteen 1 KB keys: measured ×2.6 — 388 MB against 150, three copies of this file at once the same —, with the budget
+    // ×0.8 — 121 against 150 —; 11.7 MB of pages ran a scan out of a 4 GB heap)
+    const kept = (tag, chars) => {
+      const map = conds(chars), p = project("map-kept-" + tag, { "package.json": WORKSPACE, "packages/ui/package.json": js({ name: "@acme/ui", exports: { "./*": map } }) });
+      write(p, "packages/ui/src/components/moving.tsx", glow(["MapMoving"]));
+      let chars0 = 0;
+      for (let d = 0; d < 50; d++) {
+        const subs = Array.from({ length: 200 }, (_, k) => "p" + d + "s" + k);
+        for (const s of subs.concat("components/moving")) chars0 += cost(map, s);
+        write(p, "apps/web/p/f" + d + "/page.tsx", tall([["MapMoving", "@acme/ui/components/moving"]].concat(subs.map((s, k) => ["A" + k, "@acme/ui/" + s]))));
+      }
+      return [p, chars0];
+    };
+    const [hard, hardChars] = kept("hard", 1000), [soft, softChars] = kept("soft", 8);
+    const PROBE = path.join(tmp, "dsexp-scan-probe.js");
+    fs.writeFileSync(PROBE, ["\"use strict\";", "// one scan in a fresh process: its time, its peak resident set (KB), whether it settles MapMoving",
+      "const S = require(process.argv[2]);", "const t0 = Date.now(), r = S.designSystemReport(process.argv[3]);",
+      "console.log(JSON.stringify({ ms: Date.now() - t0, rss: process.resourceUsage().maxRSS, moving: r.missing.some((m) => m.name === \"MapMoving\") }));"].join("\n") + "\n");
+    const scanIn = (p) => {
+      const r = spawnSync(process.execPath, [PROBE, path.join(__dirname, "lib", "spec.js"), p], { cwd: p, env: Object.assign({}, process.env), encoding: "utf8", timeout: 120000 });
+      let j = null;
+      try { j = JSON.parse(r.stdout); } catch { /* no JSON: the check says so */ }
+      return { code: r.status, ms: j ? j.ms : null, mb: j ? Math.round(j.rss / 1024) : null, moving: !!(j && j.moving), err: j ? "" : String(r.stderr || r.error || "").slice(0, 200) };
+    };
+    const mem = remeasure(() => { const h = scanIn(hard), s = scanIn(soft); return [h.mb, s.mb, h, s]; }, (s) => s[0] != null && s[1] != null && s[0] < 1.5 * s[1]);
+    all("1.35.4 review 3: what the maps' paths keep is bounded — 10,000 distinct subpaths from 50 page folders through a `./*` key of sixteen 1,000-character targets peak within ×1.5 the resident set of the same pages with 8-character targets (whose paths stay within the budget), each scan in a fresh process (got " + js({ mb: mem.slice(0, 2), hard: mem[2], soft: mem[3], tries: mem.tries, chars: [hardChars, softChars] }) + ")", {
+      exits: () => mem[2].code === 0 && mem[3].code === 0,
+      settled: () => mem[2].moving && mem[3].moving,
+      calmWithin: () => softChars < BUDGET && hardChars > 30 * BUDGET,
+      bounded: () => mem[0] != null && mem[1] != null && mem[0] < 1.5 * mem[1],
     });
   }
 };
