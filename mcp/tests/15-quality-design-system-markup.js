@@ -13,6 +13,8 @@
 // binding comes from a component file of the scan, whoever won the name (a second install, a `$lib` import, an app's own
 // `Table.svelte`) — another component of the name (a sibling file, a folder below, elsewhere) is none of it (shadcn-svelte's
 // `Pane as ResizablePane` beside another Pane); the `as` preference is one binding's: across files, the results order.
+// Review 4: a component file that lost its own name to another is no row — its binding's `as` names stand for it where
+// their name is free (`popover/root.tsx` beside `dialog/root.tsx`); a component folder's index is a component file.
 
 const fs = require("fs");
 const path = require("path");
@@ -461,6 +463,46 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
     });
   }
 
+  // --- review 4 of 1.35.4: a component file that lost its own name to another is no row — its binding's `as` names the page
+  // renders stand for it where their name is free; a component FOLDER's index is a component file too ------------------------
+  {
+    const listed = (p) => { const r = S.designSystemReport(p); return r.missing.map((m) => m.name + " " + m.path).sort().concat(r.limits.length ? ["limits " + js(r.limits)] : []); };
+    const fn = (n) => L(["export default function " + n + "({ children }) { return <div>{children}</div>; }"]);
+    const REACT = { "package.json": deps(["react", "next"]), "tsconfig.json": js({ compilerOptions: { paths: { "@/*": ["./src/*"] } } }) };
+    // kits whose part files are named generically (`dialog/root.tsx`, `popover/root.tsx`): only the shortest path keeps the
+    // `root` and `content` names — the other kits' barrels give theirs under the kit's name with `as` (shadcn-svelte's shape)
+    const kitTsx = (k, K) => ({ [UI + k + "/root.tsx"]: fn("Root"), [UI + k + "/content.tsx"]: fn("Content"),
+      [UI + k + "/index.ts"]: L(["import Root from \"./root\";", "import Content from \"./content\";", "export { Root, Content, Root as " + K + ", Content as " + K + "Content };"]) });
+    const SVK = "src/lib/components/ui/";
+    const kitSvelte = (k, K) => ({ [SVK + k + "/root.svelte"]: part(k + "-root"), [SVK + k + "/content.svelte"]: part(k + "-content"),
+      [SVK + k + "/index.ts"]: L(["import Root from \"./root.svelte\";", "import Content from \"./content.svelte\";", "export { Root, Content, Root as " + K + ", Content as " + K + "Content };"]) });
+    // a two-name barrel over component FOLDERS (`card/index.tsx`), imported relatively or through `@/…`
+    const folders = (spec) => Object.assign({}, REACT, {
+      [UI + "kit/card/index.tsx"]: fn("Card"), [UI + "kit/card-content/index.tsx"]: fn("CardContent"),
+      [UI + "kit/index.ts"]: L(["import Root from \"" + spec("card") + "\";", "import Content from \"" + spec("card-content") + "\";", "export { Root, Content, Root as Card, Content as CardContent };"]),
+      "src/app/page.tsx": L(["import * as Kit from \"@/components/ui/kit\";", "export default function P() { return <Kit.Root><Kit.Content /></Kit.Root>; }"]) });
+    const got = {
+      react: listed(project("r4-generic-react", Object.assign({}, REACT, kitTsx("dialog", "Dialog"), kitTsx("popover", "Popover"), kitTsx("tooltip", "Tooltip"), {
+        "src/app/page.tsx": L(["import { Dialog, DialogContent } from \"@/components/ui/dialog\";", "import { Popover, PopoverContent } from \"@/components/ui/popover\";",
+          "import { Tooltip, TooltipContent } from \"@/components/ui/tooltip\";",
+          "export default function P() { return <><Dialog><DialogContent /></Dialog><Popover><PopoverContent /></Popover><Tooltip><TooltipContent /></Tooltip></>; }"]) }))),
+      svelte: listed(project("r4-generic-svelte", Object.assign({ "package.json": deps(["@sveltejs/kit", "svelte"]), "tsconfig.json": js({ extends: "./.svelte-kit/tsconfig.json" }),
+        ".svelte-kit/tsconfig.json": js({ compilerOptions: { paths: { $lib: ["../src/lib"], "$lib/*": ["../src/lib/*"] } } }) }, kitSvelte("dialog", "Dialog"), kitSvelte("popover", "Popover"), {
+        "src/routes/+page.svelte": L(["<script lang=\"ts\">", "\timport { Dialog, DialogContent } from \"$lib/components/ui/dialog/index.js\";",
+          "\timport { Popover, PopoverContent } from \"$lib/components/ui/popover/index.js\";", "</script>", "", "<Dialog><DialogContent>a</DialogContent></Dialog>", "<Popover><PopoverContent>b</PopoverContent></Popover>"]) }))),
+      folderRel: listed(project("r4-folder-rel", folders((f) => "./" + f))),
+      folderAlias: listed(project("r4-folder-alias", folders((f) => "@/components/ui/kit/" + f))),
+    };
+    const FOLDERS = ["Card " + UI + "kit/card/index.tsx", "CardContent " + UI + "kit/card-content/index.tsx"];
+    all("1.35.4 review 4: a component file that lost its own name to another is no row — of its binding's names, those given with `as` that the page renders stand for it where their name is free: kits of generically named part files (`dialog/root.tsx`, `popover/root.tsx`, `tooltip/root.tsx`, each barrel `export { Root, Content, Root as Popover, Content as PopoverContent }`) list dialog's Root and Content (the shortest paths) and Popover, PopoverContent, Tooltip, TooltipContent (dialog's own names stay its files' rows), in .tsx and in .svelte; a two-name barrel over component FOLDERS (`import Root from \"./card\"` → card/index.tsx), relative or through `@/…`, lists the folders' Card and CardContent, no bare part (got " + js(got) + ")", {
+      react: () => js(got.react) === js(["Content " + UI + "dialog/content.tsx", "Popover " + UI + "popover/index.ts", "PopoverContent " + UI + "popover/index.ts", "Root " + UI + "dialog/root.tsx",
+        "Tooltip " + UI + "tooltip/index.ts", "TooltipContent " + UI + "tooltip/index.ts"]),
+      svelte: () => js(got.svelte) === js(["Content " + SVK + "dialog/content.svelte", "Popover " + SVK + "popover/index.ts", "PopoverContent " + SVK + "popover/index.ts", "Root " + SVK + "dialog/root.svelte"]),
+      folderRel: () => js(got.folderRel) === js(FOLDERS),
+      folderAlias: () => js(got.folderAlias) === js(FOLDERS),
+    });
+  }
+
   // --- what it costs: a binding's names are one group, never a copy once a candidate ------------------------------------------
   {
     // (review 2 of 1.35.4: each candidate's other names were the binding's whole list filtered, 500 candidates × N names a
@@ -506,11 +548,13 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
     });
     // (…and when its names are RENDERED: each rendered candidate asked its whole group for a row — one binding under
     // 12,000 lower-case names and 500 rendered ones took ×31 the same names a binding each; past DS_ALIAS_NAMES a group
-    // asks none, review 2)
-    const rbody = (hostile) => {
+    // asks none, review 2. Review 3's rule walks each rendered candidate's group once — ×5 uncapped on one file, under
+    // this check's 150 ms of slack: eight such files, review 4)
+    const RK = 8;
+    const rbody = (hostile, k) => {
       const names = [];
-      for (let i = 0; i < 12000; i++) names.push((hostile ? "RRRRRR" : "R" + pad(i)) + " as a" + pad(i));
-      for (let i = 0; i < 500; i++) names.push((hostile ? "RRRRRR" : "R" + pad(12000 + i)) + " as N" + pad(i));
+      for (let i = 0; i < 12000; i++) names.push((hostile ? "RRRRRR" : "R" + pad(i)) + " as a" + k + pad(i));
+      for (let i = 0; i < 500; i++) names.push((hostile ? "RRRRRR" : "R" + pad(12000 + i)) + " as N" + k + pad(i));
       const out = ["import R from \"./r\";"];
       for (let s = 0; s < names.length; s += 15000) {
         const chunk = names.slice(s, s + 15000), lines = ["export {"];
@@ -522,10 +566,12 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
     };
     const rside = (hostile) => {
       const d = project("cost-group-rendered-" + (hostile ? "hard" : "soft"), { "package.json": deps(["react"]) });
-      write(d, UI + "kita.tsx", rbody(hostile));
-      const ns = Array.from({ length: 500 }, (_, i) => "N" + pad(i)), rows = [];
-      for (let s = 0; s < 500; s += 50) rows.push(ns.slice(s, s + 50));
-      write(d, "src/app/pa.tsx", rows.map((q) => "import { " + q.join(", ") + " } from \"../components/ui/kita\";").join("\n") + "\nexport const P = () => <>\n" + rows.map((q) => q.map((n) => "<" + n + " />").join("")).join("\n") + "\n</>;\n");
+      for (let k = 0; k < RK; k++) {
+        write(d, UI + "kit" + k + ".tsx", rbody(hostile, k));
+        const ns = Array.from({ length: 500 }, (_, i) => "N" + k + pad(i)), rows = [];
+        for (let s = 0; s < 500; s += 50) rows.push(ns.slice(s, s + 50));
+        write(d, "src/app/p" + k + ".tsx", rows.map((q) => "import { " + q.join(", ") + " } from \"../components/ui/kit" + k + "\";").join("\n") + "\nexport const P = () => <>\n" + rows.map((q) => q.map((n) => "<" + n + " />").join("")).join("\n") + "\n</>;\n");
+      }
       return d;
     };
     const rhard = rside(true), rsoft = rside(false);
@@ -536,9 +582,9 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
       return s;
     };
     const rg = remeasure(rsample, (s) => s.ms[0] < 2 * s.ms[1] + 150);
-    all("1.35.4 review 2: …and when the names are rendered — one binding under 12,000 lower-case names and 500 rendered ones costs no more than twice the same names a binding each (×31 when each rendered candidate asked the whole group for a row: past DS_ALIAS_NAMES names a group asks none), and both list the 500 (got " + js(rg) + ")", {
+    all("1.35.4 review 2: …and when the names are rendered — eight files each giving one binding under 12,000 lower-case names and 500 rendered ones cost no more than twice the same names a binding each (a rendered candidate's group walked past DS_ALIAS_NAMES names: ×31 a file when each asked the whole group for a row, ×5 once a candidate — review 4), and both list the 4,000 (got " + js(rg) + ")", {
       time: () => rg.ms[0] < 2 * rg.ms[1] + 150,
-      rows: () => rg.totals[0] === rg.totals[1] && rg.totals[0] >= 500,
+      rows: () => rg.totals[0] === rg.totals[1] && rg.totals[0] >= 500 * RK,
     });
   }
 

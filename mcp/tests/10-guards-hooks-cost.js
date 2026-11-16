@@ -283,7 +283,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     // 16 K, 97.9 ms at 64 K: a spike in the one 64 K run. Each size is now the FASTEST of its runs, the two sizes run in turns, a
     // pair more while the bound misses — five at most: a spike lengthens a run, never the fastest of five, and a loaded machine
     // slows both sizes alike. Linear is ×4, quadratic ×16; the old patterns took seconds at 64 K.)
-    // (1.35.4 review 3: 8× + 5 ms still missed under the pre-push shape — the check and both suites at once: approvalGuardDecision
+    // (1.35.4 review 3: 8× + 5 ms still missed with the check and both suites run at once: approvalGuardDecision
     // passed by 0.04 ms, 22.29 → 183.28 ms against 183.32, and failed at 5.2 → 76.5 ms — over a natural ×6 unloaded, 7.2 → 43.8 ms.
     // The bound is 12× + 20 ms: a quadratic reader is ×16 and seconds at 64 K, past it by hundreds of ms.)
     const time = (f, s) => { const t = process.hrtime.bigint(); f(s); return Number(process.hrtime.bigint() - t) / 1e6; };

@@ -2012,10 +2012,11 @@ function markupRegions(text, rel) {
     const l = lines[i];
     let k = 0, sc = "", mk = "", gt = -2; // gt: where the last opening tag's `>` was found on this line (-1: none is left)
     // (the opening tag's end, from `k` — its first `>` outside a quote (each closed by its own mark alone: `"it's"`) and
-    // outside a `{…}` (Svelte's, Astro's expressions), never an arrow's `=>`: `v-if="count > 0"`, `split('<br/>')`,
-    // `set:html={n > 0 ? a : b}` end nothing — the quotes followed from the tag itself, an apostrophe in the text before
-    // it opens none (reviews 2 and 3 of 1.35.4). Once a line where it is known — a line of openers with no `>` after them
-    // was scanned to its end for each, quadratic, review 1 — and a tag's text is passed once it is read: linear)
+    // outside a `{…}` (Svelte's, Astro's expressions): `v-if="count > 0"`, `split('<br/>')`, `set:html={n > 0 ? a : b}`
+    // end nothing — the quotes followed from the tag itself, an apostrophe in the text before it opens none (reviews 2
+    // and 3 of 1.35.4; an arrow stands in quotes or braces, so a bare `=>` ends the tag as HTML's parser ends it, review
+    // 4). Once a line where it is known — a line of openers with no `>` after them was scanned to its end for each,
+    // quadratic, review 1 — and a tag's text is passed once it is read: linear)
     const tagEnd = () => {
       if (gt === -1 || gt >= k) return gt;
       let open = 0, braces = 0;
@@ -2025,7 +2026,7 @@ function markupRegions(text, rel) {
         if (c === 34 || c === 39 || c === 96) open = c;
         else if (c === 123) braces++;
         else if (c === 125) { if (braces > 0) braces--; }
-        else if (c === 62 && braces === 0 && l.charCodeAt(x - 1) !== 61) return (gt = x);
+        else if (c === 62 && braces === 0) return (gt = x);
       }
       return (gt = -1);
     };
@@ -2367,14 +2368,16 @@ function exportsMap(exp) {
   return { exact, patterns };
 }
 // Every path a key's value may lead to — any condition's (what the module MAY be, as the guess's two keys are; Chakra's
-// `dev` too) — kept without its `./`: a condition object's keys up to its `default` (none after it is ever reached), a
-// list's entries up to the first target Node takes (one it refuses, a `null` or an object that may match nothing are
-// passed, as its resolver passes them), DS_EXPORT_DEPTH deep, DS_EXPORT_TARGETS of them, none longer than DS_PATH_CHARS.
-// → what Node's resolver may make of `t`, three ways (reviews 1 to 3 of 1.35.4): REACH_ENDS — it resolves, whatever the
-// conditions: a list stops at it —; REACH_NONE — it may give nothing (an object none of whose conditions match): Node
-// tries the object's next key, a list its next entry —; REACH_NULL — it may give `null` or a target Node refuses: a list's
-// next entry. An object ends a list when its `default` resolves and no branch before it may give `null` (a nested object
-// that matches nothing gives nothing, so its `default` is still reached); a list ends at an entry that resolves.
+// `dev` too) — kept without its `./`: a condition object's keys up to its `default` (past it while the `default` may give
+// nothing: Node goes on to the next key), a list's entries up to the first target Node takes (one it refuses, a `null` or
+// an object that may match nothing are passed, as its resolver passes them), DS_EXPORT_DEPTH deep, DS_EXPORT_TARGETS of
+// them, none longer than DS_PATH_CHARS.
+// → what Node's resolver may make of `t`, three ways (reviews 1 to 4 of 1.35.4): REACH_ENDS — it resolves, whatever the
+// conditions: a list stops at it —; REACH_NONE — it may give nothing (an object none of whose conditions match, a list
+// none of whose entries resolves or gives `null`): Node tries the object's next key, a list its next entry —; REACH_NULL —
+// it may give `null` or a target Node refuses (an empty list too): a list's next entry. An object ends a list when its
+// `default` resolves and no branch before it may give `null` (a nested object or list that matches nothing gives
+// nothing, so its `default` is still reached); a list ends at an entry that resolves.
 const REACH_NULL = 0, REACH_NONE = 1, REACH_ENDS = 2;
 function reachTargets(t, out, depth) {
   if (typeof t === "string") {
@@ -2383,12 +2386,20 @@ function reachTargets(t, out, depth) {
     return ok ? REACH_ENDS : REACH_NULL;
   }
   if (t === null || typeof t !== "object" || depth >= DS_EXPORT_DEPTH) return REACH_NULL;
-  if (Array.isArray(t)) { for (const v of t) if (reachTargets(v, out, depth + 1) === REACH_ENDS) return REACH_ENDS; return REACH_NULL; }
+  if (Array.isArray(t)) {
+    let worst = t.length ? REACH_NONE : REACH_NULL;
+    for (const v of t) {
+      const r = reachTargets(v, out, depth + 1);
+      if (r === REACH_ENDS) return REACH_ENDS;
+      if (r === REACH_NULL) worst = REACH_NULL;
+    }
+    return worst;
+  }
   let nullable = false;
   for (const k in t) {
     const r = reachTargets(t[k], out, depth + 1);
     if (r === REACH_NULL) nullable = true;
-    if (k === "default") return nullable ? REACH_NULL : r;
+    if (k === "default" && r !== REACH_NONE) return nullable ? REACH_NULL : r;
   }
   return nullable ? REACH_NULL : REACH_NONE;
 }
@@ -2788,18 +2799,26 @@ function scanCode(root, withComponents = true) {
   // name (`Card`), whoever won the name elsewhere — another app's `card.svelte`, an app's own `Table.svelte`; the module
   // resolved as an import is, `$lib/…` too (review 3 of 1.35.4: asked of the row that won the name, a second install or
   // an alias import listed the bare parts again). Of its names that are no such alias, a bare one gives way to one given
-  // with `as` the page renders too — within the binding alone: across files, the first file's row stands, review 3)
-  const componentKeys = new Set(files.map((c) => moduleKey(c.path)));
-  const fromComponent = new Map(); // (once a folder and a module)
-  const isComponentModule = (r, from) => {
-    if (from == null) return false;
+  // with `as` the page renders too — within the binding alone: across files, the first file's row stands, review 3).
+  // (A component file that lost its own name to another — `popover/root.tsx` beside `dialog/root.tsx` — is no row: of its
+  // binding's names, those given with `as` the page renders stand for it where their name is free, `Popover`; its bare
+  // ones stay none, review 4)
+  const ownRow = new Map(); // a component file's module → whether it holds its own name's row
+  for (const c of files) { const mk = moduleKey(c.path); ownRow.set(mk, ownRow.get(mk) === true || byKey.get(c.key) === c); }
+  const rowOf = (k) => (ownRow.has(k) ? ownRow.get(k) : ownRow.get(k + "/index"));
+  const fromComponent = new Map(); // (once a folder and a module) → true: its file holds its row · false: a component file without one · undefined
+  const sourceRow = (r, from) => {
+    if (from == null) return undefined;
     const dir = r.path.slice(0, Math.max(0, r.path.lastIndexOf("/")));
     const mk = dir + "\n" + from;
     if (!fromComponent.has(mk)) {
-      let yes = false;
-      if (from[0] === ".") { const src = inProject(dir, from); const k = src == null ? null : moduleKey(src); yes = k != null && (componentKeys.has(k) || componentKeys.has(k + "/index")); }
-      else if (placed) { const at = placeOf(from, r.path, placed); yes = at != null && [...at.keys].some((k) => componentKeys.has(k) || componentKeys.has(k + "/index")); }
-      fromComponent.set(mk, yes);
+      let st;
+      if (from[0] === ".") { const src = inProject(dir, from); st = src == null ? undefined : rowOf(moduleKey(src)); }
+      else if (placed) {
+        const at = placeOf(from, r.path, placed);
+        for (const k of at ? at.keys : []) { const s = rowOf(k); if (s === true) { st = true; break; } if (s === false) st = false; }
+      }
+      fromComponent.set(mk, st);
     }
     return fromComponent.get(mk);
   };
@@ -2809,7 +2828,8 @@ function scanCode(root, withComponents = true) {
     for (const { name, also, aliased, from } of r.found.candidates) {
       if (!rendered(name)) continue;
       const others = also.filter((n) => n !== name);
-      if (others.length && isComponentModule(r, from)) continue;
+      const src = others.length ? sourceRow(r, from) : undefined;
+      if (src === true || (src === false && !aliased)) continue;
       if (!aliased && others.some((n) => byName.has(n) && byName.get(n).aliased && rendered(n))) continue;
       add(r, name);
     }

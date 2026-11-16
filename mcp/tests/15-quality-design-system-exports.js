@@ -7,8 +7,9 @@
 // match's in it too — a many-star target in a capped heap), a key's targets reached once (timed), each folder its own
 // manifest's map, the file Node's own require.resolve picks, and (review 1) a list that ends at an object whose `default` resolves
 // — review 2: when no branch before it may give `null` (Node's import.meta.resolve too); review 3: a nested object that matches
-// nothing gives nothing, its `default` still reached —; a default import's lookup, timed; (review 3) the paths the maps give,
-// budgeted in a scan — counted, and in memory.
+// nothing gives nothing, its `default` still reached; review 4: a nested list alike, and the key after a `default` that may
+// give nothing —; a default import's lookup, timed; (review 3) the paths the maps give, budgeted in a scan — counted, and in
+// memory.
 
 const fs = require("fs");
 const path = require("path");
@@ -379,6 +380,12 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       "./nested": [{ node: { import: F("nest-first") }, default: F("nest-def") }, F("nest-after")],
       "./empty": [{ import: {}, default: F("empty-def") }, F("empty-after")],
       "./types": [{ types: { import: F("types-first") }, default: F("types-def") }, F("types-after")],
+      // (review 4: a list none of whose entries resolves or gives `null` gives nothing too — its object's `default` still
+      // reached —, one holding a `null` gives `null`; a `default` that may give nothing sends Node on to the next key)
+      "./unlist": [{ import: [{ worker: F("ul-first") }], default: F("ul-def") }, F("ul-after")],
+      "./nlist": [{ node: [{ import: F("nl-first") }], default: F("nl-def") }, F("nl-after")],
+      "./mixlist": [{ import: [null, { worker: F("ml-first") }], default: F("ml-def") }, F("ml-after")],
+      "./afterdef": { default: { browser: F("ad-first") }, node: F("ad-node") },
     };
     // (a file's name is never the name it holds: a component folder's file gives a row of its own name — `ends-first.tsx`, EndsFirst)
     const pascal = (f) => f.replace(/(?:^|-)([a-z])/g, (_, c) => c.toUpperCase()) + "Glow";
@@ -405,7 +412,8 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     try { listed = seeded(p).filter((n) => asked.has(n)); } catch (e) { err = e.constructor.name + ": " + String(e.message).slice(0, 120); }
     // (review 1's lists, review 2's, review 3's: each check of its own)
     const R2 = ["./inull", "./rnull", "./rempty", "./rrefused", "./ract"], R3 = ["./nested", "./empty", "./types"];
-    const R1 = Object.keys(LISTS).filter((k) => !R2.includes(k) && !R3.includes(k));
+    const R4 = ["./unlist", "./nlist", "./mixlist", "./afterdef"];
+    const R1 = Object.keys(LISTS).filter((k) => !R2.includes(k) && !R3.includes(k) && !R4.includes(k));
     const namesOf = (keys) => new Set(keys.flatMap((k) => filesIn(LISTS[k]).map(pascal)));
     const of = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
     const esmOf = (keys) => (esmResolve ? of(esm, keys) : {});
@@ -450,6 +458,21 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       esm: () => !esmResolve || js(esm3) === js({ "./nested": "NestFirstGlow", "./empty": "EmptyDefGlow", "./types": "TypesDefGlow" }),
       nodeListed: () => Object.values(node3).concat(Object.values(esm3)).every((n) => listed.includes(n) && !CUT3.includes(n)),
       exactly: () => js(listed3) === js(["EmptyDefGlow", "NestDefGlow", "NestFirstGlow", "TypesDefGlow", "TypesFirstGlow"]),
+    });
+    // review 4: a list whose entries can each give only nothing gives nothing — [{import: [{worker: a}], default: b}, c] and
+    // [{node: [{import: a}], default: b}, c] never reach c —; one holding a `null` gives `null` — [{import: [null, {worker:
+    // a}], default: b}, c] reaches c under `import` —; and {default: {browser: a}, node: b} reaches b, Node's next key
+    const CUT4 = ["UlAfterGlow", "NlAfterGlow"];
+    const listed4 = listed.filter((n) => namesOf(R4).has(n)), node4 = of(node, R4), esm4 = esmOf(R4);
+    all("1.35.4 review 4: in a target list, a nested list none of whose entries resolves or gives `null` gives nothing — [{import: [{worker: a}], default: b}, c] and [{node: [{import: a}], default: b}, c] list a and b, never c —, one holding a `null` gives `null` ([{import: [null, {worker: a}], default: b}, c] reaches c, as Node's import.meta.resolve does), and a `default` that may give nothing sends Node on to the next key ({default: {browser: a}, node: b} lists b); Node's require.resolve and import.meta.resolve each pick a listed file, never a cut one (got " + js({ listed: listed4, node: node4, esm: esmResolve ? esm4 : "no import.meta.resolve here: that check skipped" }) + ")", {
+      scanned: () => err === null,
+      ends: () => CUT4.every((n) => !listed.includes(n)),
+      nullGoesOn: () => listed.includes("MlAfterGlow"),
+      afterDefault: () => listed.includes("AdNodeGlow"),
+      node: () => js(node4) === js({ "./unlist": "UlDefGlow", "./nlist": "NlDefGlow", "./mixlist": "MlDefGlow", "./afterdef": "AdNodeGlow" }),
+      esm: () => !esmResolve || js(esm4) === js({ "./unlist": "UlDefGlow", "./nlist": "NlFirstGlow", "./mixlist": "MlAfterGlow", "./afterdef": "AdNodeGlow" }),
+      nodeListed: () => Object.values(node4).concat(Object.values(esm4)).every((n) => listed.includes(n) && !CUT4.includes(n)),
+      exactly: () => js(listed4) === js(["AdFirstGlow", "AdNodeGlow", "MlAfterGlow", "MlDefGlow", "MlFirstGlow", "NlDefGlow", "NlFirstGlow", "UlDefGlow", "UlFirstGlow"]),
     });
   }
 

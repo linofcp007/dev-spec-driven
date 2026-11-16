@@ -170,7 +170,7 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     };
     //   the gate: a file that binds no factory is read once — 40 pages of 120 lines of `a(`×1,000 against `ax`×1,000 (ungated
     //   ×6: ~650 against ~110 ms, the soft side's own matching ×2; gated ~1.1×). 1.35.4 review 3: the best of two missed
-    //   under the pre-push shape ([1686, 481] ms; [78, 59] alone) — each side is the best of three; 3× + 300 ms instead would
+    //   with the check and both suites run at once ([1686, 481] ms; [78, 59] alone) — each side is the best of three; 3× + 300 ms instead would
     //   not see the gate gone (642 against 630 ms)
     const gh = pages("gate-hard", 40, "", lines("a(".repeat(1000), 120)), gs = pages("gate-soft", 40, "", lines("ax".repeat(1000), 120));
     const gms = remeasure(pair(gh, gs, 3), (s) => s[0] < 2 * s[1] + 100);

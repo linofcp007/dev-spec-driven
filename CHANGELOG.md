@@ -30,9 +30,10 @@ files and the calls that render, and opens its files in parallel where an open i
   where its manifest's `exports` says, read as Node reads it: the subpath's own key (as written), else the pattern with
   the longest part before its `*`, then the longest key — the `*` standing for any text, `/` included; a key of two
   `*`s is none; every target a condition can lead to (`import`, `require`, `types`, `source`, Chakra's `dev` — up to
-  `default`), a list's entries up to the first Node takes (an object ends it when its `default` resolves and no branch
-  before it may give `null` — a nested object that matches nothing gives nothing, so the `default` is still reached —,
-  and so does a list that ends at a target); `null` excludes
+  `default`, and past it while the `default` may give nothing, as Node goes on), a list's entries up to the first Node
+  takes (an object ends it when its `default` resolves and no branch before it may give `null` — a nested object or list
+  that matches nothing gives nothing, so the `default` is still reached —, and so does a list that ends at a target);
+  `null` excludes
   the subpath, never a shorter pattern instead; an `index` target is its folder. The 1.35.3 reading stays beside it (the
   subpath and the subpath below `src/`): the map only adds. A map of more than 500 keys or mixing subpaths with
   conditions is not read; a target nested deeper than 8, past a key's first 16, or longer than 1,024 characters once its
@@ -50,9 +51,11 @@ files and the calls that render, and opens its files in parallel where an open i
   through its own stars too (its own `export { X } from` hides them only where the query starts). A barrel's name for a
   binding it gives under more than one name, and that comes from a component file of the project, is that file's row
   (`import Root from "./card.svelte"; export { Root, Root as Card }`, shadcn-svelte's barrels, imported relatively or
-  through `$lib/…`: `Card` stays, `Root` is no row of its own, whatever other app or file holds a `Card` too); of two
-  names it renders for one binding of a package's, the one given with `as` is kept (`Pane as ResizablePane`) — between
-  different files the first one's row stands.
+  through `$lib/…`: `Card` stays, `Root` is no row of its own, whatever other app or file holds a `Card` too) — and
+  when that file lost its own name to another (kits of generically named parts, `popover/root.tsx` beside
+  `dialog/root.tsx`), its names given with `as` that the page renders stand for it where their name is free
+  (`Popover`, `PopoverContent`); of two names it renders for one binding of a package's, the one given with `as` is
+  kept (`Pane as ResizablePane`) — between different files the first one's row stands.
 - **The markup files settle too.** An `.mdx`, `.vue`, `.svelte` or `.astro` file is read for what it renders — the
   components its script imports (MDX's top-level `import`, a Vue or Svelte `<script>` block's — `setup`, `lang="ts"` —,
   an Astro file's front matter) rendered in its markup (`<FadeIn>`, `<Card.Header>`, Vue's `<my-button>` as `MyButton`)
@@ -84,8 +87,8 @@ controls rendered through its `compositions/*` alias, and six parts of toast's `
 names — `Root`, `Title`, `Description`… —, listed knowingly), ant-design loses `ConfigProvider.ConfigContext` (a context
 its demos read through its own `"antd": ["./components/index.ts"]`), Laravel's Vue starter gains `Toaster` (through
 `@/*` → `./resources/js/*`) and shadcn-svelte three parts of a namespace, listed knowingly (`Content`, `List`, `Trigger`
-of `docs/src/lib/components/doc-tabs/index.ts`, as 1.35.3 lists the same shape in `.tsx`) — ten on a checkout that ran
-`svelte-kit sync`, where `$lib` resolves.
+of `docs/src/lib/components/doc-tabs/index.ts`, as 1.35.3 lists the same shape in `.tsx`) — nine on a checkout that ran
+`svelte-kit sync`, where `$lib` resolves (drawer's `NestedRoot` is its file's row, `DrawerNested`).
 
 Still a row to add by hand: a component no file of the project renders where the reader sees it; a name rendered only
 past a bound, or by a default import under another local name in a file that writes none of the names asked; an alias
@@ -100,10 +103,12 @@ asks; a component a markup file renders with no import (Nuxt's auto-imports, MDX
 `wp.element.createElement`, Vue 2's `render(h)`), a factory's first argument written with a cast (`X as Y`, `X!`) or in
 parentheses, compiled CommonJS (`(0, _jsxRuntime.jsx)(X)`), and a candidate a
 factory renders only in a `.ts` file when the project asks no weak name (reading every `.ts` file for it took a Vue
-and a Svelte kit's report ×6 for no row). Still listed, knowingly: what 1.35.3 listed so.
+and a Svelte kit's report ×6 for no row). Still listed, knowingly: what 1.35.3 listed so, and a barrel's other name for
+a binding it takes through another barrel (`import { Card } from "./card"` where `card/index.ts` re-exports
+`card.tsx`: `export { Card, Card as Root }` lists `Root` — the import is asked of the module it names alone).
 
 ### Tests
-- `node mcp/test.js` 2429 assertions, `node cli/test-cli.js` 663 (was 2369 / 663). The guard's 64 KB lexer bound
+- `node mcp/test.js` 2431 assertions, `node cli/test-cli.js` 663 (was 2369 / 663). The guard's 64 KB lexer bound
   is a ratio to the same case at 16 KB (the faster of two runs, 8× + 300 ms; linear is ×4), no longer an absolute 2 s that missed once under the
   pre-push gate's parallel run; the design-system scan's hostile lines, its renders project, review 3's four shapes and
   markers (1.35) and the guard's pre-filter readers are timed as ratios too — against twins of the same size measured
