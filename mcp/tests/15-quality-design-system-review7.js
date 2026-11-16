@@ -174,14 +174,24 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
   // --- a stylesheet's lines: linear, strings, Less, parentheses --------------------------------------------------------------------------
   {
     // one line of 240K characters whose tail a `.` cannot cross (U+2028, U+2029, a stray CR): the value is never matched
+    // — each against its calm twin, the same file with a letter for the separator (a tail every pattern crosses), in a project
+    // of its own, read at the same moment: a ratio holds on a loaded machine where a time does not (1.35.4 review 2: the
+    // absolute 1.5 s it replaces)
     const hostile = (sep) => "--a:" + " ".repeat(120000) + "x".repeat(120000) + sep + "z";
-    const cases = { "tokens.css": hostile(String.fromCharCode(0x2028)), "_variables.scss": "$a:" + hostile(String.fromCharCode(0x2029)).slice(4), "globals.css": ":root{" + hostile("\r") + "}" };
-    const timed = Object.entries(cases).map(([name, text], i) => {
-      const p = project("linear-" + i);
+    const sheet = (sep) => ({ "tokens.css": hostile(sep || String.fromCharCode(0x2028)), "_variables.scss": "$a:" + hostile(sep || String.fromCharCode(0x2029)).slice(4), "globals.css": ":root{" + hostile(sep || "\r") + "}" });
+    const cases = sheet(), calmCases = sheet("y");
+    const linear = (s) => s.ms < 3 * s.calm + 300;
+    const lines = Object.entries(cases).map(([name, text], i) => {
+      const p = project("linear-" + i), c = project("linear-calm-" + i);
       write(p, "src/styles/" + name, text + "\n--b: 2px;\n");
-      const t = remeasure(() => { const t0 = Date.now(); const r = S.designSystemReport(p); return { ms: Date.now() - t0, limits: r.limits.length }; }, (s) => s.ms < 1500);
-      return t.ms < 1500 && t.limits === 0;
+      write(c, "src/styles/" + name, calmCases[name] + "\n--b: 2px;\n");
+      const t = remeasure(() => {
+        const t0 = Date.now(); const r = S.designSystemReport(p); const t1 = Date.now(); const w = S.designSystemReport(c);
+        return { ms: t1 - t0, calm: Date.now() - t1, limits: r.limits.length, calmLimits: w.limits.length };
+      }, linear);
+      return [name, t.ms, t.calm, t.limits, t.calmLimits, t.tries];
     });
+    const timed = lines.map(([, ms, calm, limits, calmLimits]) => linear({ ms, calm }) && limits === 0 && calmLimits === 0);
     // a `/*` inside a quoted string opens no comment
     const q = project("quoted");
     write(q, "src/app/globals.css", "@import \"tailwindcss\";\n@source \"../components/*.tsx\";\n@source '../lib/*.ts';\n" + PROPS(6, "tw") + "/* a real one: --hidden: 1px; */\n:root { --after: 2px; }\n");
@@ -198,8 +208,8 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     // a stylesheet's identifiers are its author's: listed as written
     const w = project("names");
     write(w, "src/styles/tokens.css", ":root {\n  --a1b2c3d4e5: 4px;\n  --mdc-outlined-text-field-disabled-outline-color: 4px;\n  --gray-900: #111;\n  --space-2xl: 4rem;\n}\n");
-    all("1.35 review 7: a token file's line is read whole in linear time — 240K characters whose tail a `.` cannot cross (U+2028, U+2029, a stray CR) took 56 s through `\\s*:\\s*(.*)$` —, with no bound said; a `/*` inside a quoted string opens no comment (Tailwind 4's `@source \"../components/*.tsx\"`, sass-glob's `@import \"mixins/*\"`), a real comment still hides its text; a .less file's `@name:` is a token; a `name:` inside the parentheses a statement opened is a parameter or a map's key, so a mixin's `$border: $background,` no longer shadows `$border: 1px solid #ccc` — an unmatched `(` in a string costs one statement; a lone `;` on the next line ends a declaration; a quoted string as a block's or a file's last declaration is shown blank; a stylesheet's own identifiers are listed as written, a hashed `--a1b2c3d4e5` and a 47-character name alike — review 8: only a JSON key is asked to be words (got " +
-      js({ timed, quoted, forms, leaked, names: tokensOf(w) }) + ")", {
+    all("1.35 review 7: a token file's line is read whole in linear time — 240K characters whose tail a `.` cannot cross (U+2028, U+2029, a stray CR) took 56 s through `\\s*:\\s*(.*)$` —, with no bound said: within 3× + 0.3 s of its calm twin (a letter for the separator) read at the same moment (1.35.4 review 2: a ratio, no longer an absolute 1.5 s); a `/*` inside a quoted string opens no comment (Tailwind 4's `@source \"../components/*.tsx\"`, sass-glob's `@import \"mixins/*\"`), a real comment still hides its text; a .less file's `@name:` is a token; a `name:` inside the parentheses a statement opened is a parameter or a map's key, so a mixin's `$border: $background,` no longer shadows `$border: 1px solid #ccc` — an unmatched `(` in a string costs one statement; a lone `;` on the next line ends a declaration; a quoted string as a block's or a file's last declaration is shown blank; a stylesheet's own identifiers are listed as written, a hashed `--a1b2c3d4e5` and a 47-character name alike — review 8: only a JSON key is asked to be words (got " +
+      js({ timed, lines, quoted, forms, leaked, names: tokensOf(w) }) + ")", {
       linear: () => js(timed) === js([true, true, true]),
       quoted: () => js(quoted) === js({ "$brand": "#1d4ed8", "$sep": "", "$gap": "8px", "$pad": "4px", "$more": "1px", "--tw0": "0px", "--tw1": "1px", "--tw2": "2px", "--tw3": "3px", "--tw4": "4px", "--tw5": "5px", "--after": "2px" }),
       less: () => forms["@primary-color"] === "#1890ff" && forms["@font"] === "" && forms["@link-color"] === "@primary-color" && !("@media" in forms) && !("@import" in forms),

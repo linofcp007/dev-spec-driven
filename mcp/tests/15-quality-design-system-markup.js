@@ -6,7 +6,9 @@
 // bound; and the markup reader gives up in linear time (markupComments' openers looked for once past a place). Review 1 of
 // 1.35.4: a tag that closes itself opens nothing (`<template #trailing />`, `<script src="…" />`); a barrel's candidate it
 // also exports under a name that is a row is none of its own (shadcn-svelte's `Root as Card` through a synced `$lib`); an
-// opening tag's end is looked for once a line where it is known.
+// opening tag's end is looked for once a line where it is known. Review 2: a `/>` closes its tag only when the quotes before
+// it are paired (`text.split('<br/>')`); a barrel's other name for a binding is its row only in the barrel's own folder, the
+// names given with `as` first (shadcn-svelte's `Pane as ResizablePane` beside another Pane); a binding's names, one group.
 
 const fs = require("fs");
 const path = require("path");
@@ -26,6 +28,8 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
   const UI = "src/components/ui/";
   // every name the report finds (each project below holds fewer than its 50 rows)
   const found = (r) => r.missing.map((m) => m.name).sort();
+  // a Svelte 5 part as shadcn-svelte writes one: its props spread on one element
+  const part = (cls) => L(["<script lang=\"ts\">", "  let { children, ...rest } = $props();", "</script>", "", "<div class=\"" + cls + "\" {...rest}>{@render children?.()}</div>"]);
 
   // --- what each format's script imports and its markup renders settles a component file's names -------------------------------------
   {
@@ -131,6 +135,49 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
     });
   }
 
+  // --- review 2 of 1.35.4: a `/>` closes its tag only when the quotes between the tag's name and it are paired ---------------
+  {
+    // a template-first .vue whose nested <template>'s attribute holds a `/>` — `text.split('<br/>')`, `split(/<br\/>/)`: the
+    // first `>` after the tag's name, with a `/` before it — closes nothing: the nested template opens, its `</template>`
+    // closes it (not the root), and the tag rendered after it in the root template counts (BrShown, RxShown settle, as
+    // CtlShown does beside `'<br>'`; the <style> after the script stays unread: StyleOnly renders nothing). A tag whose
+    // attributes hold paired quotes of both kinds still closes itself: `<template v-if="mode === 'a'" #trailing />` in a
+    // template-first .vue (its `<script setup>` read: QuotedShown settles), `<script src='./setup.js' lang="ts" />` at the
+    // top level (the one-line <script> after it read: SrcShown settles)
+    const p = project("selfclose-quotes", { "package.json": deps(["vue"]) });
+    const SHOWN = ["BrShown", "RxShown", "SqShown", "CtlShown", "QuotedShown", "SrcShown", "LoneShown", "AstroLone"];
+    write(p, UI + "kit.tsx", L(["import { motion } from \"framer-motion\";", "import { Box } from \"./box\";"].concat(SHOWN.concat(["StyleOnly"]).map((n) => "export const " + n + " = motion(Box);"))));
+    const nested = (name, attrs) => L(["<template>", "  <UCard>", "    <template " + attrs + ">", "      <p>{{ line }}</p>", "    </template>", "    <" + name + " />", "  </UCard>", "</template>", "",
+      "<script setup lang=\"ts\">", "import { " + name + ", StyleOnly } from \"@/components/ui/kit\";", "</script>", "", "<style scoped>", ".a::after { content: \"<StyleOnly />\"; }", "</style>"]);
+    write(p, "src/pages/Br.vue", nested("BrShown", "v-for=\"(line, i) in text.split('<br/>')\" :key=\"i\""));
+    write(p, "src/pages/Rx.vue", nested("RxShown", "v-for=\"(line, i) in text.split(/<br\\/>/)\" :key=\"i\""));
+    // (the value in single quotes, after a double-quoted one: the double quotes before the `/>` are paired, the single not)
+    write(p, "src/pages/Sq.vue", nested("SqShown", ":key=\"i\" v-for='(line, i) in text.split(/<br\\/>/)'"));
+    write(p, "src/pages/Ctl.vue", nested("CtlShown", "v-for=\"(line, i) in text.split('<br>')\" :key=\"i\""));
+    write(p, "src/pages/Quoted.vue", L(["<template>", "  <UCard>", "    <template v-if=\"mode === 'a'\" #trailing />", "    <QuotedShown />", "  </UCard>", "</template>", "",
+      "<script setup lang=\"ts\">", "import { QuotedShown } from \"@/components/ui/kit\";", "</script>"]));
+    write(p, "src/pages/Src.vue", L(["<script src='./setup.js' lang=\"ts\" />", "<script setup>import { SrcShown } from \"@/components/ui/kit\";</script>", "<template>", "  <SrcShown />", "</template>"]));
+    // (a quote is closed by its own mark alone: one of the other kind inside — `it's` in a double-quoted value, `"it's"` in
+    // an Astro expression's template — opens nothing; counted apart, each mark's count was odd: held open, review 2)
+    write(p, "src/pages/Lone.vue", L(["<template>", "  <UCard>", "    <template v-if=\"note !== `it's`\" #trailing />", "    <LoneShown />", "  </UCard>", "</template>", "",
+      "<script setup lang=\"ts\">", "import { LoneShown } from \"@/components/ui/kit\";", "</script>"]));
+    write(p, "src/pages/lone.astro", L(["---", "import { AstroLone } from \"@/components/ui/kit\";", "---", "<script is:inline set:html={`console.log(\"it's\")`} />", "<AstroLone />"]));
+    const report = S.designSystemReport(p);
+    const got = found(report), has = (n) => got.includes(n);
+    all("1.35.4 review 2: a `/>` closes its tag only when the quotes between the tag's name and it are paired — a template-first .vue's nested `<template v-for=\"(line, i) in text.split('<br/>')\" :key=\"i\">` (and `split(/<br\\/>/)`, double- or single-quoted) opens, its `</template>` closes it and not the root: the tag rendered after it in the root template settles (BrShown, RxShown, SqShown — CtlShown beside `'<br>'`), the <style> after the script stays unread (no StyleOnly) —; a tag whose quotes are paired still closes itself: `<template v-if=\"mode === 'a'\" #trailing />` (QuotedShown, its script read) and a top-level `<script src='./setup.js' lang=\"ts\" />` (SrcShown) (got " + js({ got, limits: report.limits }) + ")", {
+      splitBr: () => has("BrShown"),
+      regexBr: () => has("RxShown"),
+      singleQuoted: () => has("SqShown"),
+      control: () => has("CtlShown"),
+      styleUnread: () => !has("StyleOnly"),
+      quotedSelfClose: () => has("QuotedShown"),
+      quotedSrc: () => has("SrcShown"),
+      loneQuote: () => has("LoneShown") && has("AstroLone"),
+      exact: () => js(got) === js(["AstroLone", "BrShown", "CtlShown", "Kit", "LoneShown", "QuotedShown", "RxShown", "SqShown", "SrcShown"]),
+      limits: () => report.limits.length === 0,
+    });
+  }
+
   // --- a namespace's part through a barrel: listed alike from a .tsx and a .svelte page (1.35.3's barrel rule, knowingly) -------------
   {
     const tabs = (ext, page) => {
@@ -156,7 +203,6 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
     // `prepare`) has written .svelte-kit/tsconfig.json; never on a fresh clone. Card and CardContent are rows (the .svelte
     // files'), Root and Content the same bindings under other names: none, synced or not. A barrel name given once —
     // `export { default as Toaster } from "./Sonner.vue"`, the Laravel Vue starter's — stays a row beside Sonner.vue's own
-    const part = (cls) => L(["<script lang=\"ts\">", "  let { children, ...rest } = $props();", "</script>", "", "<div class=\"" + cls + "\" {...rest}>{@render children?.()}</div>"]);
     const kit = (synced) => project("barrel-alias-" + (synced ? "synced" : "clone"), Object.assign({
       "package.json": deps(["@sveltejs/kit", "svelte"]),
       "tsconfig.json": js({ extends: "./.svelte-kit/tsconfig.json", compilerOptions: { strict: true } }),
@@ -180,6 +226,157 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
       noBareParts: () => !rows(rs).some((r) => /^(?:Root|Content) /.test(r)),
       clone: () => js(rows(rc)) === js(CARD),
       once: () => rows(rt).includes("Toaster " + UI + "sonner/index.ts") && rt.limits.length === 0,
+    });
+  }
+
+  // --- review 2 of 1.35.4: a barrel's other name for a binding is that binding's row only in the barrel's own folder; the names
+  // given with `as` are taken before the bare ones ------------------------------------------------------------------------------
+  {
+    // every row the report lists, `name path` — and its limits, when it says any
+    const listed = (p) => { const r = S.designSystemReport(p); return r.missing.map((m) => m.name + " " + m.path).sort().concat(r.limits.length ? ["limits " + js(r.limits)] : []); };
+    // shadcn-svelte's resizable barrel, verbatim (its registry's ui/resizable/index.ts): paneforge's Pane and the parts' files,
+    // each exported bare and then under the kit's name — `Pane as ResizablePane` is no file's name —, on a developer's
+    // checkout (.svelte-kit/tsconfig.json as `svelte-kit sync` writes it)
+    const RZ = "src/lib/components/ui/resizable/";
+    const SVK = {
+      "package.json": deps(["@sveltejs/kit", "svelte", "paneforge"]),
+      "tsconfig.json": js({ extends: "./.svelte-kit/tsconfig.json", compilerOptions: { strict: true } }),
+      ".svelte-kit/tsconfig.json": js({ compilerOptions: { paths: { $lib: ["../src/lib"], "$lib/*": ["../src/lib/*"] } } }),
+      [RZ + "index.ts"]: L(["import { Pane } from \"paneforge\";", "import Handle from \"./resizable-handle.svelte\";", "import PaneGroup from \"./resizable-pane-group.svelte\";", "",
+        "export {", "\tPaneGroup,", "\tPane,", "\tHandle,", "\t//", "\tPaneGroup as ResizablePaneGroup,", "\tPane as ResizablePane,", "\tHandle as ResizableHandle,", "};"]),
+      [RZ + "resizable-handle.svelte"]: part("handle"),
+      [RZ + "resizable-pane-group.svelte"]: part("pane-group"),
+    };
+    const NAMED = L(["<script lang=\"ts\">", "\timport { ResizablePaneGroup, ResizablePane, ResizableHandle } from \"$lib/components/ui/resizable/index.js\";", "</script>", "",
+      "<ResizablePaneGroup direction=\"horizontal\">", "\t<ResizablePane>One</ResizablePane>", "\t<ResizableHandle />", "\t<ResizablePane>Two</ResizablePane>", "</ResizablePaneGroup>"]);
+    const DOCS = L(["<script lang=\"ts\">", "\timport * as Resizable from \"$lib/components/ui/resizable/index.js\";", "</script>", "",
+      "<Resizable.PaneGroup direction=\"horizontal\">", "\t<Resizable.Pane>One</Resizable.Pane>", "\t<Resizable.Handle />", "</Resizable.PaneGroup>"]);
+    const svk = (tag, files) => listed(project("follow-" + tag, Object.assign({}, SVK, files)));
+    // the same shape in a Next.js app: react-resizable-panels' Panel and PanelGroup, bare and then the kit's names
+    const NEXT = { "package.json": deps(["react", "next", "react-resizable-panels", "@radix-ui/react-dialog", "picker-kit"]), "tsconfig.json": js({ compilerOptions: { paths: { "@/*": ["./src/*"] } } }) };
+    const PANELS = L(["import { Panel, PanelGroup } from \"react-resizable-panels\";", "export { Panel, PanelGroup, Panel as ResizablePanel, PanelGroup as ResizablePanelGroup };"]);
+    const next = (tag, files) => listed(project("follow-" + tag, Object.assign({}, NEXT, files)));
+    const got = {
+      // (a) another component named Pane elsewhere in the project — none of this binding's; the same app without it
+      foreign: svk("foreign", { "src/lib/components/Pane.svelte": part("pane"), "src/routes/+page.svelte": NAMED }),
+      control: svk("control", { "src/routes/+page.svelte": NAMED }),
+      foreignPanel: next("foreign-panel", { [UI + "resizable/index.ts"]: PANELS, "src/components/panel.tsx": L(["export function Panel({ children }) { return <section>{children}</section>; }"]),
+        "src/app/page.tsx": L(["import { ResizablePanel, ResizablePanelGroup } from \"@/components/ui/resizable\";", "import { Panel } from \"@/components/panel\";",
+          "export default function P() { return <ResizablePanelGroup><ResizablePanel /><Panel /></ResizablePanelGroup>; }"]) }),
+      // (b) both names of a binding rendered, neither a file's, the bare one listed first: the kit's by name, the bare one
+      // through the docs' namespace; radix's parts re-exported `export { Root, …, Root as Dialog, … } from`
+      both: svk("both", { "src/routes/+page.svelte": NAMED, "src/routes/docs/+page.svelte": DOCS }),
+      dialog: next("dialog", { [UI + "dialog/index.ts"]: L(["export { Root, Trigger, Root as Dialog, Trigger as DialogTrigger } from \"@radix-ui/react-dialog\";"]),
+        "src/app/page.tsx": L(["import { Dialog, DialogTrigger } from \"@/components/ui/dialog\";", "import * as D from \"@/components/ui/dialog\";",
+          "export default function P() { return <><Dialog><DialogTrigger /></Dialog><D.Root><D.Trigger /></D.Root></>; }"]) }),
+      // (d) a barrel at the kit's root and another Panel in a folder BELOW it: none of the binding's either — a sibling's
+      // row is the binding's only when it is the barrel's own or its source file's (review 2: the folder's subfolders were
+      // taken for the binding's, and ResizablePanel was lost)
+      subPanel: next("sub-panel", { [UI + "index.ts"]: L(["import { Panel } from \"react-resizable-panels\";", "export { Panel, Panel as ResizablePanel };"]),
+        [UI + "sidebar/panel.tsx"]: L(["export function Panel({ children }) { return <section>{children}</section>; }"]),
+        "src/app/page.tsx": L(["import { ResizablePanel } from \"@/components/ui\";", "export default function P() { return <ResizablePanel />; }"]) }),
+    };
+    // (c) another folder's barrel, whose Panel the page renders through a namespace — exported bare, or given with `as` —,
+    // in a folder whose path sorts before resizable/'s (`pick/`: read first) or after it (`pickerpanels/`)
+    const PICKERS = { bare: L(["import { Panel } from \"picker-kit\";", "export { Panel };"]), as: L(["import { PickerPanel } from \"picker-kit\";", "export { PickerPanel as Panel };"]) };
+    for (const [kind, barrel] of Object.entries(PICKERS)) for (const dir of ["pick", "pickerpanels"]) {
+      got[kind + "-" + dir] = next("order-" + kind + "-" + dir, { [UI + "resizable/index.ts"]: PANELS, [UI + dir + "/index.ts"]: barrel,
+        "src/app/page.tsx": L(["import { ResizablePanel, ResizablePanelGroup } from \"@/components/ui/resizable\";", "import * as Picker from \"@/components/ui/" + dir + "\";",
+          "export default function P() { return <ResizablePanelGroup><ResizablePanel /><Picker.Panel /></ResizablePanelGroup>; }"]) });
+    }
+    const RESIZABLE = ["ResizableHandle " + RZ + "resizable-handle.svelte", "ResizablePane " + RZ + "index.ts", "ResizablePaneGroup " + RZ + "resizable-pane-group.svelte"];
+    const RP = ["ResizablePanel " + UI + "resizable/index.ts", "ResizablePanelGroup " + UI + "resizable/index.ts"];
+    const order = (kind) => ["pick", "pickerpanels"].every((dir) => js(got[kind + "-" + dir]) === js(["Panel " + UI + dir + "/index.ts"].concat(RP)));
+    all("1.35.4 review 2: a barrel's other name for a binding is that binding's row only in the barrel's own folder, and the names given with `as` are taken before the bare ones — shadcn-svelte's resizable barrel verbatim (`import { Pane } from \"paneforge\"; export { PaneGroup, Pane, Handle, PaneGroup as ResizablePaneGroup, Pane as ResizablePane, Handle as ResizableHandle }`) rendered as `<ResizablePane>` lists ResizablePane beside another component named Pane elsewhere (src/lib/components/Pane.svelte: the rows of the app without it, and its own) — ResizablePanel beside an app's own panel.tsx alike —; both names of a binding rendered, the bare one listed first (`<Resizable.Pane>` and `<ResizablePane>`; radix's `Root` / `Root as Dialog` re-exported `from`): the `as` name is listed, the bare one not; another folder's barrel whose Panel is rendered (bare or given with `as`) changes nothing whether its path sorts before resizable/ (`pick/`) or after it (`pickerpanels/`) (got " + js(got) + ")", {
+      foreign: () => js(got.foreign) === js(["Pane src/lib/components/Pane.svelte"].concat(RESIZABLE)),
+      control: () => js(got.control) === js(RESIZABLE),
+      foreignPanel: () => js(got.foreignPanel) === js(["Panel src/components/panel.tsx"].concat(RP)),
+      both: () => js(got.both) === js(RESIZABLE),
+      dialog: () => js(got.dialog) === js(["Dialog " + UI + "dialog/index.ts", "DialogTrigger " + UI + "dialog/index.ts"]),
+      subPanel: () => js(got.subPanel) === js(["Panel " + UI + "sidebar/panel.tsx", "ResizablePanel " + UI + "index.ts"]),
+      orderBare: () => order("bare"),
+      orderAs: () => order("as"),
+    });
+  }
+
+  // --- what it costs: a binding's names are one group, never a copy once a candidate ------------------------------------------
+  {
+    // (review 2 of 1.35.4: each candidate's other names were the binding's whole list filtered, 500 candidates × N names a
+    // file — 8 component files and 8 component folders' barrels, each exporting one imported binding under ~13,000 names
+    // (`RRRRRR as NF000000, …`, lines of 100 to 252K, a new `export {` every 150 lines), took ×4.4 to ×5.7 the same bytes
+    // with a binding per name (`R00000 as NF000000`), whose groups are of one: the soft side copies nothing. The group shared:
+    // ×0.8 to ×0.9. Nothing is rendered: both sides list the 8 files' own rows)
+    const pad = (i) => String(i).padStart(5, "0");
+    const lists = (hostile, tag) => {
+      const out = ["import R from \"./r\";"];
+      for (let i = 0, len = 0; len < 252 * 1024;) {
+        const list = ["export {"];
+        for (let l = 0; l < 150 && len < 252 * 1024; l++) {
+          const row = [];
+          for (let j = 0; j < 100; j++, i++) row.push((hostile ? "RRRRRR" : "R" + pad(i)) + " as N" + tag + pad(i));
+          const line = "  " + row.join(", ") + ",";
+          list.push(line);
+          len += line.length + 1;
+        }
+        list.push("};");
+        out.push(list.join("\n"));
+      }
+      return out.join("\n") + "\n";
+    };
+    const side = (hostile) => {
+      const d = project("cost-group-" + (hostile ? "hard" : "soft"), { "package.json": deps(["react"]) });
+      for (let k = 0; k < 8; k++) { write(d, UI + "kit" + k + ".tsx", lists(hostile, "F" + k)); write(d, UI + "bar" + k + "/index.ts", lists(hostile, "B" + k)); }
+      return d;
+    };
+    const hard = side(true), soft = side(false);
+    // (a sample: each side's least of three runs, the two in turn, and the rows each listed)
+    const timedRows = (p) => { const t0 = Date.now(), r = S.designSystemReport(p); return [Date.now() - t0, found(r)]; };
+    const sample = () => {
+      const s = { ms: [Infinity, Infinity], rows: null };
+      for (let r = 0; r < 3; r++) { const h = timedRows(hard), e = timedRows(soft); s.ms = [Math.min(s.ms[0], h[0]), Math.min(s.ms[1], e[0])]; s.rows = [h[1], e[1]]; }
+      return s;
+    };
+    const g = remeasure(sample, (s) => s.ms[0] < 2 * s.ms[1] + 150);
+    const KITS = Array.from({ length: 8 }, (_, k) => "Kit" + k);
+    all("1.35.4 review 2: a binding's names are one group a file, never copied once a candidate — 8 component files and 8 barrels each exporting one imported binding under ~13,000 names (`RRRRRR as NF000000, …`, 252K) cost no more than twice the same bytes with a binding per name (×4.4 to ×5.7 when each of the 500 candidates filtered the whole list), and both list the 8 files' own rows (got " + js(g) + ")", {
+      time: () => g.ms[0] < 2 * g.ms[1] + 150,
+      rows: () => js(g.rows[0]) === js(KITS) && js(g.rows[1]) === js(KITS),
+    });
+    // (…and when its names are RENDERED: each rendered candidate asked its whole group for a row — one binding under
+    // 12,000 lower-case names and 500 rendered ones took ×31 the same names a binding each; past DS_ALIAS_NAMES a group
+    // asks none, review 2)
+    const rbody = (hostile) => {
+      const names = [];
+      for (let i = 0; i < 12000; i++) names.push((hostile ? "RRRRRR" : "R" + pad(i)) + " as a" + pad(i));
+      for (let i = 0; i < 500; i++) names.push((hostile ? "RRRRRR" : "R" + pad(12000 + i)) + " as N" + pad(i));
+      const out = ["import R from \"./r\";"];
+      for (let s = 0; s < names.length; s += 15000) {
+        const chunk = names.slice(s, s + 15000), lines = ["export {"];
+        for (let l = 0; l < chunk.length; l += 100) lines.push("  " + chunk.slice(l, l + 100).join(", ") + ",");
+        lines.push("};");
+        out.push(lines.join("\n"));
+      }
+      return out.join("\n") + "\n";
+    };
+    const rside = (hostile) => {
+      const d = project("cost-group-rendered-" + (hostile ? "hard" : "soft"), { "package.json": deps(["react"]) });
+      write(d, UI + "kita.tsx", rbody(hostile));
+      const ns = Array.from({ length: 500 }, (_, i) => "N" + pad(i)), rows = [];
+      for (let s = 0; s < 500; s += 50) rows.push(ns.slice(s, s + 50));
+      write(d, "src/app/pa.tsx", rows.map((q) => "import { " + q.join(", ") + " } from \"../components/ui/kita\";").join("\n") + "\nexport const P = () => <>\n" + rows.map((q) => q.map((n) => "<" + n + " />").join("")).join("\n") + "\n</>;\n");
+      return d;
+    };
+    const rhard = rside(true), rsoft = rside(false);
+    const rtimed = (p) => { const t0 = Date.now(), r = S.designSystemReport(p); return [Date.now() - t0, r.missingTotal]; };
+    const rsample = () => {
+      const s = { ms: [Infinity, Infinity], totals: null };
+      for (let r = 0; r < 3; r++) { const h = rtimed(rhard), e = rtimed(rsoft); s.ms = [Math.min(s.ms[0], h[0]), Math.min(s.ms[1], e[0])]; s.totals = [h[1], e[1]]; }
+      return s;
+    };
+    const rg = remeasure(rsample, (s) => s.ms[0] < 2 * s.ms[1] + 150);
+    all("1.35.4 review 2: …and when the names are rendered — one binding under 12,000 lower-case names and 500 rendered ones costs no more than twice the same names a binding each (×31 when each rendered candidate asked the whole group for a row: past DS_ALIAS_NAMES names a group asks none), and both list the 500 (got " + js(rg) + ")", {
+      time: () => rg.ms[0] < 2 * rg.ms[1] + 150,
+      rows: () => rg.totals[0] === rg.totals[1] && rg.totals[0] >= 500,
     });
   }
 

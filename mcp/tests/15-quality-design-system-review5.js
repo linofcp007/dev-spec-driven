@@ -188,18 +188,29 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
       "    <i className=\"text-[#00ff00]\" />", "  </div>", ");", ""].join("\n"));
     write(p, "src/shop/Lead.tsx", ["/* the old brand was \"#111111\" */ export const c = \"#222222\";", "/* a note */ /* another */ export const d = \"#333333\";", ""].join("\n"));
     const got = rawOf(p, f.slug, "src/shop/");
-    // a line of both comment kinds, back to back: read once
+    // a line of both comment kinds, back to back: read once — against its calm twin, the same files with the openers spelled
+    // out of reach (`<!-_->/ **/`: no comment opens, each line is read as it stands — more text for the raw values' patterns
+    // than the hard side's, which is all comment), read at the same moment: a ratio holds on a loaded machine where a time
+    // does not (1.35.4 review 2: the absolute 1 s missed at 1,329 ms in a plain full run)
     const line = Array.from({ length: 180 }, () => "<!---->/**/").join(""); // 1,980 characters
-    const g = feature(p, "Slow", "src/slow/");
-    for (let i = 0; i < 13; i++) write(p, "src/slow/f" + i + ".tsx", Array.from({ length: 120 }, () => line).join("\n") + "\n");
-    const t = remeasure(() => { const t0 = Date.now(); const v = S.designSystemReport(p, { name: g.slug }); return { ms: Date.now() - t0, files: v.viewFiles }; }, (s) => s.ms < 1000);
-    all("1.35 review 5: raw values — a <style> named in a `//` comment, a JSDoc line, a JSX comment or an HTML comment opens no block (the file's next lines are still read); `<style` alone on its line opens one whose tag ends lines below — a block when it ends in `>`, none when it ends in `/>`; a `/* … */` at a line's start is a comment and what follows it is read; a line of 180 `<!---->/**/` is read once (13 files × 120 lines under 1 s — a `/*` right where a comment ended had dropped the cached \"none left\") (got " +
-      js({ got, slow: [t.ms, t.files] }) + ")", {
+    const calmLine = Array.from({ length: 180 }, () => "<!-_->/ **/").join(""); // as many
+    const g = feature(p, "Slow", "src/slow/"), c = feature(p, "Calm", "src/calm/");
+    for (let i = 0; i < 13; i++) {
+      write(p, "src/slow/f" + i + ".tsx", Array.from({ length: 120 }, () => line).join("\n") + "\n");
+      write(p, "src/calm/f" + i + ".tsx", Array.from({ length: 120 }, () => calmLine).join("\n") + "\n");
+    }
+    const linear = (s) => s.ms < 3 * s.calm + 300;
+    const t = remeasure(() => {
+      const t0 = Date.now(); const v = S.designSystemReport(p, { name: g.slug }); const t1 = Date.now(); const w = S.designSystemReport(p, { name: c.slug });
+      return { ms: t1 - t0, calm: Date.now() - t1, files: v.viewFiles, calmFiles: w.viewFiles };
+    }, linear);
+    all("1.35 review 5: raw values — a <style> named in a `//` comment, a JSDoc line, a JSX comment or an HTML comment opens no block (the file's next lines are still read); `<style` alone on its line opens one whose tag ends lines below — a block when it ends in `>`, none when it ends in `/>`; a `/* … */` at a line's start is a comment and what follows it is read; a line of 180 `<!---->/**/` is read once (13 files × 120 lines within 3× + 0.3 s of their calm twin read at the same moment — a `/*` right where a comment ended had dropped the cached \"none left\": 22 s) — 1.35.4 review 2: a ratio, the absolute 1 s missed at 1,329 ms under a full run's load (got " +
+      js({ got, slow: [t.ms, t.files], calm: [t.calm, t.calmFiles], tries: t.tries }) + ")", {
       named: () => js(got.filter((x) => x.startsWith("Named"))) === js(["Named.tsx:6 #654321", "Named.tsx:6 p-[13px]"]),
       html: () => js(got.filter((x) => x.startsWith("page"))) === js(["page.html:2 #abcdef"]),
       alone: () => js(got.filter((x) => x.startsWith("Alone"))) === js(["Alone.jsx:6 margin: 13px", "Alone.jsx:11 #00ff00"]),
       lead: () => js(got.filter((x) => x.startsWith("Lead"))) === js(["Lead.tsx:1 #222222", "Lead.tsx:2 #333333"]),
-      linear: () => t.ms < 1000 && t.files === 13,
+      linear: () => linear(t) && t.files === 13 && t.calmFiles === 13,
     });
   }
 };

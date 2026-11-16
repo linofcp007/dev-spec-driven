@@ -215,28 +215,43 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
 
   // --- review 1: bounded time on hostile input -------------------------------------------------------------------------------------------
   {
-    const p = path.join(tmp, "proj-dse-hostile");
-    S.initProject(p, ["ui"], "en");
     const long = (ch, n) => Array.from({ length: n + 1 }).join(ch);
-    write(p, REG, "# DS\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| Button | `src/components/Button.tsx` | " + long(">", 80000) + "x |  |\n" + long(" ", 80000) + "\n| Card | x |  |  |\n");
-    write(p, "src/styles/tokens.css", ":root { --x: a" + long(" ", 200000) + "b; }\n");
-    const f = S.createFeature(p, { name: "Price Tag", tracks: ["ui"], summary: "x" });
-    fs.writeFileSync(path.join(f.dir, "requirements.md"), REQ);
-    fs.writeFileSync(path.join(f.dir, "design.md"), design(["| Reuse | " + long("(", 80000) + " | x |", "| Reuse | Button | y |"]));
-    approveBefore(p, f.slug, "design");
-    const timed = (fn) => remeasure(() => { const t = Date.now(); const v = fn(); return { ms: Date.now() - t, v }; }, (s) => s.ms < 4000);
-    const doc = timed(() => (S.specDoctor(p, f.slug).checks || []).find((c) => c.id === "ui-design-system"));
-    const rep = timed(() => S.designSystemReport(p));
-    // 100 unknown rows against 500 forty-character names: only the first rows pay a name comparison
+    // The hostile project and its calm twin — the same files, each hostile run spelled in letters (a run no trailing-run
+    // replace, no flag and no blank-run pattern has anything to give up on), read at the same moment: a ratio holds on a
+    // loaded machine where a time does not (1.35.4 review 2: the absolute 4 s it replaces)
+    const hostileProject = (tag, gt, blank, paren) => {
+      const p = path.join(tmp, "proj-dse-" + tag);
+      S.initProject(p, ["ui"], "en");
+      write(p, REG, "# DS\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| Button | `src/components/Button.tsx` | " + long(gt, 80000) + "x |  |\n" + long(blank, 80000) + "\n| Card | x |  |  |\n");
+      write(p, "src/styles/tokens.css", ":root { --x: a" + long(blank, 200000) + "b; }\n");
+      const f = S.createFeature(p, { name: "Price Tag", tracks: ["ui"], summary: "x" });
+      fs.writeFileSync(path.join(f.dir, "requirements.md"), REQ);
+      fs.writeFileSync(path.join(f.dir, "design.md"), design(["| Reuse | " + long(paren, 80000) + " | x |", "| Reuse | Button | y |"]));
+      approveBefore(p, f.slug, "design");
+      return { p, f };
+    };
+    const h = hostileProject("hostile", ">", " ", "("), c = hostileProject("hostile-calm", "q", "q", "q");
+    const linear = (s) => s.ms < 3 * s.calm + 300;
+    const timed = (hard, calm, holds = linear) => remeasure(() => { const t0 = Date.now(); const v = hard(); const t1 = Date.now(); const w = calm(); return { ms: t1 - t0, calm: Date.now() - t1, v, w }; }, holds);
+    const dsOf = (q) => (S.specDoctor(q.p, q.f.slug).checks || []).find((x) => x.id === "ui-design-system");
+    const doc = timed(() => dsOf(h), () => dsOf(c));
+    const rep = timed(() => S.designSystemReport(h.p), () => S.designSystemReport(c.p));
+    // 100 unknown rows against 500 forty-character names: only the first rows (DS_NEAR_ROWS, 30) pay a name comparison — each
+    // ~30 ms here, so the twin pays the SAME ones: its first 30 rows are the hard side's, its other 70 name listed components.
+    // Every row paying (100 against 30) is 3.3× the twin: within 1.5× + 0.3 s holds that apart
     const names = Array.from({ length: 500 }, (_, i) => "Component" + String(i).padStart(4, "0") + long("x", 27));
-    write(p, REG, "# DS\n\n| Component | Path |\n|---|---|\n" + names.map((n) => "| " + n + " | x |").join("\n") + "\n");
-    fs.writeFileSync(path.join(f.dir, "design.md"), design(Array.from({ length: 100 }, (_, i) => "| Reuse | Komponent" + String(i).padStart(4, "0") + long("x", 27) + " | y |")));
-    const many = timed(() => (S.specDoctor(p, f.slug).checks || []).find((c) => c.id === "ui-design-system"));
-    all("1.35 review 1: bounded time — a registry cell of 80,000 `>`, an 80,000-blank line in the registry, a usage cell of 80,000 `(`, a 200,000-blank token value and 100 unknown rows against 500 long names are each read in well under 4 s (they took 5 to 39 s) (got " +
-      js({ doc: [doc.ms, doc.v && doc.v.status], rep: [rep.ms, rep.v.ok], many: [many.ms, many.v && many.v.status, many.v && (many.v.detail.match(/did you mean/g) || []).length] }) + ")", {
-      doctor: () => doc.ms < 4000 && doc.v.status === "pass",
-      report: () => rep.ms < 4000 && rep.v.ok === true,
-      many: () => many.ms < 4000 && many.v.status === "warn" && /disagree in 100 rows/.test(many.v.detail),
+    const unknown = (i) => "| Reuse | Komponent" + String(i).padStart(4, "0") + long("x", 27) + " | y |";
+    for (const q of [h, c]) write(q.p, REG, "# DS\n\n| Component | Path |\n|---|---|\n" + names.map((n) => "| " + n + " | x |").join("\n") + "\n");
+    fs.writeFileSync(path.join(h.f.dir, "design.md"), design(Array.from({ length: 100 }, (_, i) => unknown(i))));
+    fs.writeFileSync(path.join(c.f.dir, "design.md"), design(Array.from({ length: 100 }, (_, i) => (i < 30 ? unknown(i) : "| Reuse | " + names[i * 5] + " | y |"))));
+    const near = (s) => s.ms < 1.5 * s.calm + 300;
+    const many = timed(() => dsOf(h), () => dsOf(c), near);
+    const view = (t, extra) => [t.ms, t.calm, t.tries].concat(extra);
+    all("1.35 review 1: bounded time — a registry cell of 80,000 `>`, an 80,000-blank line in the registry, a usage cell of 80,000 `(`, a 200,000-blank token value are each read within 3× + 0.3 s of a calm twin read at the same moment (the same files, each run in letters), and 100 unknown rows against 500 long names within 1.5× + 0.3 s of a twin whose first 30 rows are the same and the rest name listed components — only those 30 pay a name comparison (they took 5 to 39 s) — 1.35.4 review 2: ratios, no longer an absolute 4 s (got [ms, twin ms, tries, …] " +
+      js({ doc: view(doc, [doc.v && doc.v.status]), rep: view(rep, [rep.v.ok]), many: view(many, [many.v && many.v.status, many.v && (many.v.detail.match(/did you mean/g) || []).length, many.w && many.w.status]) }) + ")", {
+      doctor: () => linear(doc) && doc.v.status === "pass",
+      report: () => linear(rep) && rep.v.ok === true,
+      many: () => near(many) && many.v.status === "warn" && /disagree in 100 rows/.test(many.v.detail),
     });
   }
 

@@ -108,21 +108,31 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
 
   // --- a block's scope is decided once: nested at-rules, linear ---------------------------------------------------------------------------
   {
+    // (each against its calm twin, the same file with a `;` for each at-rule's `{` — as long, its 15,000 declarations at the
+    // top, main.css's under :root alone: no nest of blocks to walk —, in a project of its own, read at the same moment: a ratio
+    // holds on a loaded machine where a time does not — 1.35.4 review 2, the absolute 1.5 s it replaces)
     const body = (open) => open.repeat(20000) + "--a:1px;--b:1px;--c:1px;--d:1px;--e:1px;".repeat(3000);
-    const cases = { "src/styles/globals.css": body("@m{"), "src/styles/_variables.scss": body("@m{"), "src/styles/variables.less": body("@m{"), "src/styles/main.css": ":root{" + body("@media x{") };
-    const timed = Object.entries(cases).map(([rel, text], i) => {
-      const p = project("nested-" + i);
+    const sheets = (open, media) => ({ "src/styles/globals.css": body(open), "src/styles/_variables.scss": body(open), "src/styles/variables.less": body(open), "src/styles/main.css": ":root{" + body(media) });
+    const cases = sheets("@m{", "@media x{"), calmCases = sheets("@m;", "@media x;");
+    const linear = (s) => s.ms < 3 * s.calm + 300;
+    const nested = Object.entries(cases).map(([rel, text], i) => {
+      const p = project("nested-" + i), c = project("nested-calm-" + i);
       write(p, rel, text);
-      const t = remeasure(() => { const t0 = Date.now(); const r = S.designSystemReport(p); return { ms: Date.now() - t0, tokens: r.found.tokens }; }, (s) => s.ms < 1500);
-      return t.ms < 1500 && t.tokens === 5;
+      write(c, rel, calmCases[rel]);
+      const t = remeasure(() => {
+        const t0 = Date.now(); const r = S.designSystemReport(p); const t1 = Date.now(); const w = S.designSystemReport(c);
+        return { ms: t1 - t0, calm: Date.now() - t1, tokens: r.found.tokens, calmTokens: w.found.tokens };
+      }, linear);
+      return [rel, t.ms, t.calm, t.tokens, t.calmTokens, t.tries];
     });
+    const timed = nested.map(([, ms, calm, tokens, calmTokens]) => linear({ ms, calm }) && tokens === 5 && calmTokens === 5);
     // …and it is the block's own answer a declaration reads: a property right inside an at-rule inside :root is page-wide,
     // one inside an at-rule at the top is not
     const q = project("at-rule-scope");
     write(q, "src/a/main.css", ":root {\n  @supports (color: red) {\n" + Array.from({ length: 5 }, (_, i) => "    --in" + i + ": 1px;").join("\n") + "\n  }\n}\n");
     write(q, "src/b/main.css", "@supports (color: red) {\n" + Array.from({ length: 5 }, (_, i) => "  --out" + i + ": 1px;").join("\n") + "\n}\n");
     const scope = S.designSystemReport(q).found.sources;
-    all("1.35 review 8: whether a block declares for the whole page is decided ONCE, when it opens — 20,000 nested at-rules before 15,000 declarations took 16 s when every declaration walked the open blocks outward (a globals.css, a _variables.scss, a variables.less, a main.css under :root) —, an at-rule taking its parent's answer: a property right inside `@supports` inside :root is page-wide, one inside `@supports` at the top is not (got " + js({ timed, scope }) + ")", {
+    all("1.35 review 8: whether a block declares for the whole page is decided ONCE, when it opens — 20,000 nested at-rules before 15,000 declarations took 16 s when every declaration walked the open blocks outward (a globals.css, a _variables.scss, a variables.less, a main.css under :root): within 3× + 0.3 s of a calm twin with no block open, read at the same moment (1.35.4 review 2: a ratio, no longer an absolute 1.5 s) —, an at-rule taking its parent's answer: a property right inside `@supports` inside :root is page-wide, one inside `@supports` at the top is not (got [file, ms, calm ms, tokens, calm tokens, tries] " + js({ timed, nested, scope }) + ")", {
       linear: () => js(timed) === js([true, true, true, true]),
       scope: () => js(scope) === js(["src/a/main.css"]),
     });

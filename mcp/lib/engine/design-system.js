@@ -743,6 +743,7 @@ function exportedComponents(text) {
   const declared = new Set(); // the names declared as a component (a part's too: `Card.Header`)
   const classes = new Set(); // …those declared as a component CLASS: what a class below them may extend
   const imported = new Set(); // the names an `import` clause holds (a superset: its every word), a `require`'s
+  const importedFrom = new Map(); // …and the module each comes from (a barrel's binding: whose row its other names are — 1.35.4)
   const react = new Set(); // …the ones that name React itself, `React` aside: `import * as R from "react"`
   const aliases = []; // [name, the name it stands on — one the file imports or declares] — settled once the whole file is read
   const applies = []; // [name, the name a function is applied to, curried?]: `withRouter(Nav)`, `withStyles(styles)(Cell)`
@@ -987,6 +988,8 @@ function exportedComponents(text) {
       }
       const words = clause.slice(0, end === -1 ? clause.length : end).match(RE_IDENTIFIERS) || [];
       for (const w of words) imported.add(w);
+      const spec = end === -1 ? null : /^["']([^"']*)["']/.exec(clause.slice(end));
+      if (spec) for (const w of words) importedFrom.set(w, spec[1]);
       // (the names of an import of `react` name React: `import * as R from "react"` — `R.forwardRef(…)` is its wrapper)
       if (end !== -1 && /^["']react["']/.test(clause.slice(end))) for (const w of words) react.add(w);
       continue;
@@ -1154,11 +1157,21 @@ function exportedComponents(text) {
   // (the other names the file gives the same binding under — `export { Root, Root as Card }`, shadcn-svelte's barrels:
   // a candidate is no row of its own when one of them is a row already — scanCode; review 1 of 1.35.4, a SvelteKit
   // checkout listed 75 bare parts, `Root`, `Content`, `Link`, beside `Card`, `CardContent`)
+  const DS_ALIAS_NAMES = 16; // a binding's names asked of one another (the corpus: 3 at most)
   const byBinding = new Map();
   const bind = (b, name) => { if (!byBinding.has(b)) byBinding.set(b, []); byBinding.get(b).push(name); };
   for (let k = 0; k < exportedOwn; k++) bind(exported[k][1], exported[k][0]);
   for (const [name, binding] of reexported) bind("\n" + binding, name);
-  for (const c of candidates) c.also = c.binding == null ? [] : (byBinding.get(c.binding) || []).filter((n) => n !== c.name);
+  // (the group itself, its own name in it — once a binding, never filtered once a name: quadratic, review 2 —, and none
+  // past DS_ALIAS_NAMES names: a group of 12,000 was walked once a rendered name, review 2; aliased: a name given with
+  // `as`, the kit's own — `Root as Card` — before a bare one, review 2; from: the module the binding comes from — its
+  // other names' row must be that module's, review 2)
+  for (const c of candidates) {
+    const group = c.binding == null ? null : byBinding.get(c.binding);
+    c.also = group && group.length <= DS_ALIAS_NAMES ? group : [];
+    c.aliased = c.binding != null && c.name !== (c.local != null ? c.local : c.binding.slice(c.binding.lastIndexOf("\n") + 1));
+    c.from = c.binding == null ? null : c.local != null ? importedFrom.get(c.local) || null : c.binding.slice(1, c.binding.lastIndexOf("\n"));
+  }
   return { names, more, weak, locals, candidates, defaultName, view };
 }
 // --- what the project's files tell of a component file's names (1.35.3) ------------------------------------------------------------
@@ -2001,6 +2014,17 @@ function markupRegions(text, rel) {
     // (the opening tag's end, from `k` — once a line where it is known: a line of openers with no `>` after them was
     // scanned to its end for each, quadratic, review 1 of 1.35.4)
     const tagEnd = () => { if (gt === -1 || gt >= k) return gt; gt = styleTagEnd(l, k); return gt; };
+    // (are two places of the line outside any quote — is a `/>` the tag's own, not an attribute's (`split('<br/>')`)? A
+    // quote is closed by its own mark alone: `"it's"`, `{`a "b"`}` — counting each mark apart was wrong there, review 2 of
+    // 1.35.4. The line's quotes followed once, when first asked: linear)
+    let qs = null;
+    const paired = (a, b) => {
+      if (!qs) {
+        qs = new Uint8Array(l.length + 1);
+        for (let x = 0, open = 0; x < l.length; x++) { const c = l.charCodeAt(x); if (open === 0 ? c === 34 || c === 39 || c === 96 : c === open) open = open === 0 ? c : 0; qs[x + 1] = open === 0 ? 0 : 1; }
+      }
+      return qs[a] === 0 && qs[b] === 0;
+    };
     while (k < l.length) {
       if (mode === "script" || mode === "raw") {
         const e = l.indexOf(closer, k);
@@ -2019,7 +2043,7 @@ function markupRegions(text, rel) {
       if (m[1]) { back = mode; mode = "raw"; closer = "-->"; continue; }
       // (a tag that closes itself opens nothing — `<template #trailing />`, the empty slot eslint-plugin-vue writes so, held
       // a .vue template open to the file's end, its `<script>` read as markup: review 1 of 1.35.4 —, `<script src="…" />`)
-      const g = mode === "markup" && ext === "vue" && m[2] ? -1 : tagEnd(), closes = g > 0 && l[g - 1] === "/";
+      const g = mode === "markup" && ext === "vue" && m[2] ? -1 : tagEnd(), closes = g > 0 && l[g - 1] === "/" && paired(k, g);
       if (mode === "markup" && ext === "vue") { if (m[2]) { if (--depth === 0) mode = "top"; } else if (!closes) depth++; continue; }
       if (closes) { k = g + 1; continue; }
       if (mode === "top" && m[2] === "template") { mode = "markup"; depth = 1; } else {
@@ -2161,6 +2185,7 @@ const DS_TS_TARGETS = 10; // targets kept of a pattern
 // a path a config or a map writes, at most (Linux's PATH_MAX is 4,096, Windows' MAX_PATH 260): past it a config tells
 // nothing and a map's target names no file — each import built its keys from it again (review 1 of 1.35.4)
 const DS_PATH_CHARS = 1024;
+const DS_ALIAS_CHARS = 4 * 1024 * 1024; // the keys the configs give in a scan, in characters (review 2 of 1.35.4)
 const UNKNOWN = Symbol("unknown"), MISSING = Symbol("missing"); // what a config left unread may have written; no file there
 const RE_ROOTED = /^(?:\/|[A-Za-z]:\/)/;
 const CONFIG_DIR = "${configDir}";
@@ -2203,8 +2228,9 @@ function aliasReader(configs, absRoot, realRoot) {
   const tableOf = (obj, from) => {
     const t = { exact: new Map(), stars: [], from };
     for (const [k, v] of Object.entries(record(obj) ? obj : {})) {
-      const targets = (Array.isArray(v) ? v : []).filter((x) => typeof x === "string").slice(0, DS_TS_TARGETS).map(slash);
-      if (k.length > DS_PATH_CHARS || targets.some((x) => x.length > DS_PATH_CHARS)) return UNKNOWN;
+      const all = (Array.isArray(v) ? v : []).filter((x) => typeof x === "string");
+      if (k.length > DS_PATH_CHARS || all.some((x) => x.length > DS_PATH_CHARS)) return UNKNOWN; // (any target: review 2)
+      const targets = all.slice(0, DS_TS_TARGETS).map(slash);
       const s = k.indexOf("*");
       if (s === -1) t.exact.set(k, targets);
       else if (t.stars.push({ prefix: k.slice(0, s), suffix: k.slice(s + 1), targets }) > DS_TS_STARS) return UNKNOWN;
@@ -2235,7 +2261,7 @@ function aliasReader(configs, absRoot, realRoot) {
     const apply = (r) => { if (r.paths !== undefined) paths = r.paths; if (r.base !== undefined) base = r.base; };
     for (const e of typeof c.extends === "string" ? [c.extends] : Array.isArray(c.extends) ? c.extends : []) {
       if (typeof e !== "string") continue;
-      if (budget.n-- <= 0) { apply({ paths: UNKNOWN, base: UNKNOWN }); break; }
+      if (budget.n-- <= 0 || e.length > DS_PATH_CHARS) { apply({ paths: UNKNOWN, base: UNKNOWN }); break; } // (a path no file system holds: review 2)
       const p = slash(e);
       // (a package's config — `@tsconfig/*`, a workspace's `@repo/typescript-config/…` — writes nothing of the project's)
       if (!p.startsWith("./") && !p.startsWith("../")) { if (RE_ROOTED.test(p)) apply({ paths: UNKNOWN, base: UNKNOWN }); continue; }
@@ -2265,13 +2291,20 @@ function aliasReader(configs, absRoot, realRoot) {
     tables.set(leaf, t);
     return t;
   };
-  // (once a governing folder and a spec: the pages of one app ask the same specs from many folders)
+  // (once a governing folder and a spec: the pages of one app ask the same specs from many folders; DS_ALIAS_CHARS of keys
+  // in a scan, past them the configs tell nothing more — every distinct spec kept up to ten 1 KB keys: 9.5 MB of pages
+  // ran a scan out of memory, review 2 of 1.35.4)
   const said = new Map();
+  let built = 0;
   return (dirs, spec, nSegs) => {
     const leaf = dirs.find((d) => configs.has(d));
     if (leaf === undefined) return [];
     const sk = leaf + "\n" + spec;
-    if (!said.has(sk)) said.set(sk, keysOf(leaf, spec, nSegs));
+    if (!said.has(sk)) {
+      const ks = built > DS_ALIAS_CHARS ? [] : keysOf(leaf, spec, nSegs);
+      for (const k of ks) built += k.length;
+      said.set(sk, ks);
+    }
     return said.get(sk);
   };
   function keysOf(leaf, spec, nSegs) {
@@ -2332,8 +2365,8 @@ function exportsMap(exp) {
 // Every path a key's value may lead to — any condition's (what the module MAY be, as the guess's two keys are; Chakra's
 // `dev` too) — kept without its `./`: a condition object's keys up to its `default` (none after it is ever reached), a
 // list's entries up to the first target Node takes (one it refuses, a `null` or an object that may match nothing are
-// passed, as its resolver passes them; an object whose `default` resolves ends it — `default` always matches: review 1
-// of 1.35.4), DS_EXPORT_DEPTH deep, DS_EXPORT_TARGETS of them, none longer than DS_PATH_CHARS. → whether a list ends at `t`.
+// passed, as its resolver passes them; an object whose branches all resolve up to its `default` ends it — `default` always
+// matches: reviews 1 and 2 of 1.35.4; a list that ends at a target ends the one around it), DS_EXPORT_DEPTH deep, DS_EXPORT_TARGETS of them, none longer than DS_PATH_CHARS. → whether a list ends at `t`.
 function reachTargets(t, out, depth) {
   if (typeof t === "string") {
     const ok = t.startsWith("./") && !refused(t.slice(2));
@@ -2342,7 +2375,10 @@ function reachTargets(t, out, depth) {
   }
   if (t === null || typeof t !== "object" || depth >= DS_EXPORT_DEPTH) return false;
   if (Array.isArray(t)) { for (const v of t) if (reachTargets(v, out, depth + 1)) return true; return false; } // (a list that ends at a target ends the one around it)
-  for (const k in t) { const ok = reachTargets(t[k], out, depth + 1); if (k === "default") return ok; }
+  // (it ends a list only when every branch up to its `default` resolves: a condition before it that gives nothing — a
+  // `null`, a target Node refuses — sends Node on to the list's next entry, review 2 of 1.35.4)
+  let all = true;
+  for (const k in t) { all = reachTargets(t[k], out, depth + 1) && all; if (k === "default") return all; }
   return false;
 }
 // (a key's targets, reached once whatever the lookups — a cost guard, timed)
@@ -2435,12 +2471,14 @@ function settle(results, scripts, markups, read, places) {
       // (the file's base name is the last segment of where the module resolves — `import X from "../"` is its folder's —,
       // or its folder's for an index: of EVERY place the module may be — a config's target, a package's map, named its own
       // way, 1.35.4 —, each place with its own base: a target's base under the guess's folder is a place TypeScript never
-      // resolves to, review 1 of 1.35.4)
+      // resolves to, review 1 of 1.35.4; the keys grouped by base once a place, each base's files walked once — once a key,
+      // 400 packages of one name took ×26, review 2)
+      if (!at.bases) { at.bases = new Map(); for (const k of at.keys) { const b = keyBase(k); if (!at.bases.has(b)) at.bases.set(b, { keys: new Set() }); at.bases.get(b).keys.add(k); } }
       let n = 0;
-      for (const k of at.keys) {
-        const list = byBase.get(keyBase(k)) || [];
+      for (const [b, of] of at.bases) {
+        const list = byBase.get(b) || [];
         n += list.length;
-        for (const path of list) { const pk = keys.get(path); if (defaults.has(path) && (pk === k || pk.startsWith(k + "/"))) out.push([path, defaults.get(path) + rest]); }
+        for (const path of list) if (defaults.has(path) && pointsTo(keys.get(path), of)) out.push([path, defaults.get(path) + rest]);
       }
       return n;
     }
@@ -2725,8 +2763,25 @@ function scanCode(root, withComponents = true) {
   // review 1 of 1.35.3, `export { default as FiltersToggle } from "./toggle"`)
   const add = (r, name) => { const key = dsKey(name); if (key && !byKey.has(key)) byKey.set(key, { name, key, path: r.path, index: false, route: false }); };
   for (const r of results) for (const name of r.found.names) if (!verdict.dropped.has(r.path + "\n" + name)) add(r, name);
-  // (a candidate the file also gives under a name that is a row already is that row under another name — 1.35.4)
-  for (const r of results) for (const { name, also } of r.found.candidates) if (verdict.rendered.has(r.path + "\n" + name) && !also.some((n) => byKey.has(dsKey(n)))) add(r, name);
+  // (a candidate the file also gives under another name that is a row already — THIS binding's row: one the file gave
+  // itself, or the row of the file the binding comes from, `import Root from "./card.svelte"` and its `Card`; another
+  // component of that name — elsewhere, in a folder below — is none of this binding's, review 2 of 1.35.4 — is that row
+  // under another name; the names given with `as` first, the kit's own over the bare ones)
+  const sameRow = (r, name, also, from) => {
+    const src = from != null && from[0] === "." ? inProject(r.path.slice(0, Math.max(0, r.path.lastIndexOf("/"))), from) : null;
+    const key = src == null ? null : moduleKey(src);
+    return also.some((n) => {
+      if (n === name) return false;
+      const row = byKey.get(dsKey(n));
+      if (row == null) return false;
+      if (row.path === r.path) return true;
+      const rk = key == null ? null : moduleKey(row.path);
+      return rk != null && (rk === key || rk === key + "/index");
+    });
+  };
+  for (const pass of [true, false]) for (const r of results) for (const { name, also, aliased, from } of r.found.candidates) {
+    if (aliased === pass && verdict.rendered.has(r.path + "\n" + name) && !sameRow(r, name, also, from)) add(r, name);
+  }
   const take = (file, list) => {
     sources.push(file.rel);
     for (const t of list) {

@@ -45,7 +45,6 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     return { p, slug: f.slug, dir: f.dir, approvals };
   };
   const dsCheck = (g, slug) => (S.specDoctor(g.p, slug || g.slug).checks || []).find((c) => c.id === "ui-design-system") || null;
-  const timed = (fn) => remeasure(() => { const t = Date.now(); const v = fn(); return { ms: Date.now() - t, v }; }, (s) => s.ms < 4000);
 
   // --- after a feature's own finish: every reader of its design knows the row is its own -----------------------------------------------
   for (const size of ["m", "l"]) {
@@ -118,15 +117,23 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     // a hostile registry through a written finish: an 80,000-blank run that is NOT at the text's end (a `\s+$` replace rescans it
     // from every blank), then 80,000 empty lines, then the table the row joins
     const HOSTILE = "# Design System\n\n" + long(" ", 80000) + "x\n" + long("\n", 80000) + COMPONENTS;
-    const h = ready("hostile-end", "s", HOSTILE);
+    // …against its calm twin, the same finish of a registry whose runs are letters (80,000 of them, then 80,000 lines of one),
+    // at the same moment: a ratio holds on a loaded machine where a time does not (1.35.4 review 2: the absolute 4 s it replaces)
+    const CALM = "# Design System\n\n" + long("q", 80000) + "x\n" + long("q\n", 80000) + COMPONENTS;
+    const h = ready("hostile-end", "s", HOSTILE), hc = ready("hostile-end-calm", "s", CALM);
     // (every sample appends to the hostile text: the registry is put back first — a second sample on the file the first one
     // wrote would register nothing, and measure nothing)
-    const slow = timed(() => { write(h.p, REG, HOSTILE); return S.finishFeature(h.p, h.slug, { write: true }); });
-    all("1.35 review 2: a written finish reads the registry again under the lock, past the call's read cache — a row another process writes after the call's first read of the file (here: as the call takes the roadmap lock) is kept beside the one finish adds; a registry holding an 80,000-blank run and 80,000 empty lines before its table is appended to in bounded time (got " +
-      js({ wroteAfter, registered: fin.designSystem && fin.designSystem.registered, names, slow: [slow.ms, slow.v.designSystem && slow.v.designSystem.registered] }) + ")", {
+    const linear = (s) => s.ms < 3 * s.calm + 300;
+    const slow = remeasure(() => {
+      write(h.p, REG, HOSTILE); write(hc.p, REG, CALM);
+      const t0 = Date.now(); const v = S.finishFeature(h.p, h.slug, { write: true }); const t1 = Date.now(); const w = S.finishFeature(hc.p, hc.slug, { write: true });
+      return { ms: t1 - t0, calm: Date.now() - t1, v, w };
+    }, linear);
+    all("1.35 review 2: a written finish reads the registry again under the lock, past the call's read cache — a row another process writes after the call's first read of the file (here: as the call takes the roadmap lock) is kept beside the one finish adds; a registry holding an 80,000-blank run and 80,000 empty lines before its table is appended to in bounded time — within 3× + 0.3 s of the same finish on its calm twin (letters for the runs) at the same moment, 1.35.4 review 2: a ratio, no longer an absolute 4 s (got " +
+      js({ wroteAfter, registered: fin.designSystem && fin.designSystem.registered, names, slow: [slow.ms, slow.v.designSystem && slow.v.designSystem.registered], calm: [slow.calm, slow.w.designSystem && slow.w.designSystem.registered], tries: slow.tries }) + ")", {
       injected: () => wroteAfter > 0,
       both: () => js(fin.designSystem.registered) === js(["PriceTag"]) && js(names) === js(["Button", "Card", "Badge", "PriceTag"]),
-      bounded: () => slow.ms < 4000 && js(slow.v.designSystem.registered) === js(["PriceTag"]) && E.designSystemRegistry(path.join(h.p, ".specs")).keys.has("pricetag"),
+      bounded: () => linear(slow) && js(slow.v.designSystem.registered) === js(["PriceTag"]) && E.designSystemRegistry(path.join(h.p, ".specs")).keys.has("pricetag") && js(slow.w.designSystem.registered) === js(["PriceTag"]),
     });
   }
 

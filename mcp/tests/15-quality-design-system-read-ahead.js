@@ -233,19 +233,22 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const pre = path.join(d, "refuse-workers.js");
     fs.writeFileSync(pre, "if (!require(\"worker_threads\").isMainThread) throw new Error(\"preload refuses worker threads\");\n");
     const refusedEnv = Object.assign(env("on"), { NODE_OPTIONS: "--require \"" + pre.split(path.sep).join("/") + "\"" });
-    const [early, abandon, stall, base, failing, refused] = await Promise.all([child("early"), child("abandon"), child("stall"), child("early", "off"), child("failing"),
-      runNode([CHILD, ENGINE, "refused", path.join(d, "files")], { env: refusedEnv, cwd: d, killMs: 40000 })]);
+    // (…against its twin, the same read of all 400 files with no NODE_OPTIONS, at the same moment: a stall adds AHEAD_STALL_MS
+    // to the read whatever the load, so "no stall" is within 1.5× the twin's time + 1 s, never an absolute figure — 1.35.4
+    // review 2)
+    const [early, abandon, stall, base, failing, refused, plain] = await Promise.all([child("early"), child("abandon"), child("stall"), child("early", "off"), child("failing"),
+      runNode([CHILD, ENGINE, "refused", path.join(d, "files")], { env: refusedEnv, cwd: d, killMs: 40000 }), child("refused")]);
     const said = (x) => { try { return JSON.parse(x.stdout.trim().split("\n").pop()); } catch { return null; } };
-    const [e1, a1, s1, b1, f1, r1] = [early, abandon, stall, base, failing, refused].map(said);
+    const [e1, a1, s1, b1, f1, r1, p1] = [early, abandon, stall, base, failing, refused, plain].map(said);
     const brief = (x, y) => ({ code: x.code, killed: x.killed, ms: x.ms, said: y, stderr: x.stderr.slice(0, 200) });
-    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (its source throws) is heard — the process lives on and every file comes, in order; a NODE_OPTIONS preload that refuses worker threads reaches none (no stall) (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(stall, s1), base: brief(base, b1), failing: brief(failing, f1), refused: brief(refused, r1) }) + ")", {
+    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (its source throws) is heard — the process lives on and every file comes, in order; a NODE_OPTIONS preload that refuses worker threads reaches none (no stall: 1.35.4 review 2 — within 1.5× + 1 s of the same read with no NODE_OPTIONS at the same moment, no longer an absolute 1.8 s) (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(stall, s1), base: brief(base, b1), failing: brief(failing, f1), refused: brief(refused, r1), plain: brief(plain, p1) }) + ")", {
       failing: () => failing.code === 0 && !failing.killed && f1 != null && f1.same && f1.made === 8,
-      refused: () => refused.code === 0 && !refused.killed && r1 != null && r1.same && r1.made === 8 && r1.took < 1800,
+      refused: () => refused.code === 0 && !refused.killed && r1 != null && r1.same && r1.made === 8 && plain.code === 0 && p1 != null && p1.same && p1.made === 8 && r1.took < 1.5 * p1.took + 1000,
       early: () => early.code === 0 && !early.killed && e1.same && e1.made === 8 && e1.exited === 8 && e1.exitMs < 5000,
       base: () => base.code === 0 && b1.same && b1.made === 0,
       abandon: () => abandon.code === 0 && !abandon.killed && a1.same && a1.made === 8 && abandon.ms < 3 * base.ms + 5000,
       stall: () => stall.code === 0 && !stall.killed && s1.same && s1.made === 8 && s1.took >= 1800 && s1.took < 15000 && s1.exited === 8,
-      quiet: () => [early, abandon, stall, base].every((x) => x.stderr === ""),
+      quiet: () => [early, abandon, stall, base, plain].every((x) => x.stderr === ""),
     });
   }
 
@@ -306,13 +309,17 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     // what a worker would print: NODE_OPTIONS' --require reaches a worker thread — its output must stay out of stdout (the MCP
     // server's channel) and stderr —, a `-r` on the command line must not reach one (a worker's execArgv is its own). Each run
     // its own folder of preloads: a.js marks marks-a.txt (and writes to stdout / stderr) in each worker it runs in, b.js marks-b.txt
+    // in each worker it runs in — and, in the main thread, marks-w.txt once per Worker the process constructs (worker_threads'
+    // own constructor, as the (b) child's): the proof the CLI and the server DID read ahead, without which "no preload reaches
+    // a worker" and "exits by itself" would hold of a run that started none (1.35.4 review 2)
     const preloads = (tag) => {
       const d = path.join(tmp, "proj-ahead-preload-" + tag);
       fs.mkdirSync(d, { recursive: true });
       fs.writeFileSync(path.join(d, "a.js"), L(["\"use strict\";", "const wt = require(\"worker_threads\"), fs = require(\"fs\"), path = require(\"path\");",
         "if (!wt.isMainThread) { fs.appendFileSync(path.join(__dirname, \"marks-a.txt\"), \"a\\n\"); process.stdout.write(\"LEAK-OUT\\n\"); process.stderr.write(\"LEAK-ERR\\n\"); }"]));
       fs.writeFileSync(path.join(d, "b.js"), L(["\"use strict\";", "const wt = require(\"worker_threads\"), fs = require(\"fs\"), path = require(\"path\");",
-        "if (!wt.isMainThread) fs.appendFileSync(path.join(__dirname, \"marks-b.txt\"), \"b\\n\");"]));
+        "if (!wt.isMainThread) fs.appendFileSync(path.join(__dirname, \"marks-b.txt\"), \"b\\n\");",
+        "else { const Real = wt.Worker; wt.Worker = class extends Real { constructor(src, o) { super(src, o); fs.appendFileSync(path.join(__dirname, \"marks-w.txt\"), \"w\\n\"); } }; }"]));
       const marks = (n) => { try { return fs.readFileSync(path.join(d, "marks-" + n + ".txt"), "utf8").split("\n").filter(Boolean).length; } catch { return 0; } };
       return { d, argv: ["-r", path.join(d, "b.js")], env: { NODE_OPTIONS: "--require \"" + path.join(d, "a.js").split(path.sep).join("/") + "\"" }, marks };
     };
@@ -345,10 +352,11 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const lines = srv.stdout.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } });
     const scanReply = lines.find((m) => m && m.id === 2);
     const brief = (x) => ({ code: x.code, killed: x.killed, ms: x.ms, out: x.stdout.length, head: x.stdout.slice(0, 40), err: x.stderr.slice(0, 120) });
-    all("1.35.4: `dev-spec design-system --json` with its reads ahead (DEV_SPEC_TEST_AHEAD=on) exits 0 by itself, about as soon as in sequence, printing the same JSON and nothing else; the MCP server answers spec_scan {designSystem} read ahead, then the next request, and exits once its stdin ends; no preload reaches a worker — neither the shell's NODE_OPTIONS one (it would write to stdout and stderr in each worker thread: the workers' env holds no NODE_OPTIONS, review 1 of 1.35.4) nor a `-r` of the command line — and nothing reaches either one's stdout or stderr (got " + js({ off: brief(off), on: brief(on), pre: brief(pre), marksA: preCli.marks("a"), marksB: preCli.marks("b"), server: Object.assign(brief(srv), { ids: srv.ids, marksA: preServer.marks("a"), marksB: preServer.marks("b") }) }) + ")", {
+    all("1.35.4: `dev-spec design-system --json` with its reads ahead (DEV_SPEC_TEST_AHEAD=on) exits 0 by itself, about as soon as in sequence, printing the same JSON and nothing else; the MCP server answers spec_scan {designSystem} read ahead, then the next request, and exits once its stdin ends; no preload reaches a worker — neither the shell's NODE_OPTIONS one (it would write to stdout and stderr in each worker thread: the workers' env holds no NODE_OPTIONS, review 1 of 1.35.4) nor a `-r` of the command line — and nothing reaches either one's stdout or stderr — 1.35.4 review 2: and both DID read ahead, the CLI and the server each constructing 8 workers or more (a pool for each read: 16) — counted by the command line's `-r` in the main thread —, else every check above holds of a run that started none (got " + js({ off: brief(off), on: brief(on), pre: brief(pre), marksA: preCli.marks("a"), marksB: preCli.marks("b"), workers: preCli.marks("w"), server: Object.assign(brief(srv), { ids: srv.ids, marksA: preServer.marks("a"), marksB: preServer.marks("b"), workers: preServer.marks("w") }) }) + ")", {
       exits: () => [off, on, pre].every((x) => x.code === 0 && !x.killed),
       json: () => jOff && jOn && jPre && jOff.ok === true && js(jOn) === js(jOff) && js(jPre) === js(jOff) && jOff.missingTotal === 320,
       quiet: () => [off, on, pre].every((x) => x.stderr === "" && !/LEAK/.test(x.stdout)),
+      readAhead: () => preCli.marks("w") >= 8 && preServer.marks("w") >= 8,
       noPreloadInWorkers: () => preCli.marks("a") === 0,
       ownArgv: () => preCli.marks("b") === 0,
       prompt: () => on.ms < 3 * off.ms + 3000,

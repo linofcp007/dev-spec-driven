@@ -20,8 +20,9 @@ files and the calls that render, and opens its files in parallel where an open i
   spelled like a scope (`@components/*`), Nx's library entries (`"@acme/ui": ["libs/ui/src/index.ts"]`, the library's
   folder), SvelteKit's generated `$lib` (on a checkout that ran `svelte-kit sync`) and a monorepo's `../../shared/src/*`
   now settle what the project renders. What the config adds never takes the guess's place. 100 config files are read
-  in a scan at most, 32 `extends` entries from one config, 100 `*` patterns; a config past them, one with a key, a target
-  or a `baseUrl` longer than 1,024 characters, or one this scan cannot read as TypeScript would (not JSON once its
+  in a scan at most, 32 `extends` entries from one config, 100 `*` patterns, 4 M characters of keys the configs give in
+  a scan; a config past them, one with a key, a target, a `baseUrl` or an `extends` longer than 1,024 characters, or one
+  this scan cannot read as TypeScript would (not JSON once its
   comments are out, a rooted path, one above the project, a link out of it) tells nothing — its folder keeps 1.35.3's
   reading, without a word —; a pattern's first 10 targets are kept. (1.35.3's review 3 had taken a first reading out:
   it took a `..` target as text, had no bound and fell short of TypeScript's rules — each is answered.)
@@ -29,7 +30,8 @@ files and the calls that render, and opens its files in parallel where an open i
   where its manifest's `exports` says, read as Node reads it: the subpath's own key (as written), else the pattern with
   the longest part before its `*`, then the longest key — the `*` standing for any text, `/` included; a key of two
   `*`s is none; every target a condition can lead to (`import`, `require`, `types`, `source`, Chakra's `dev` — up to
-  `default`), a list's entries up to the first Node takes (an object whose `default` resolves ends it); `null` excludes
+  `default`), a list's entries up to the first Node takes (an object whose branches all resolve up to its `default`
+  ends it, and so does a list that ends at a target); `null` excludes
   the subpath, never a shorter pattern instead; an `index` target is its folder. The 1.35.3 reading stays beside it (the
   subpath and the subpath below `src/`): the map only adds. A map of more than 500 keys or mixing subpaths with
   conditions is not read; a target nested deeper than 8, past a key's first 16, or longer than 1,024 characters once its
@@ -45,14 +47,17 @@ files and the calls that render, and opens its files in parallel where an open i
   reaches, a name passed on, a candidate compared —; past them it ends without a word. Over-approximated knowingly, as a
   folder's files are: a name two stars pass on is followed into both, and a file reached through a star is followed
   through its own stars too (its own `export { X } from` hides them only where the query starts). A barrel's name for a
-  binding it also gives under a name that is a row already is that row (`export { Root, Root as Card }`, shadcn-svelte's
-  barrels: `Card` stays, `Root` is no row of its own).
+  binding it also gives under a name that is that binding's row already — the barrel's own, or the row of the file the
+  binding comes from — is that row (`import Root from "./card.svelte"; export { Root, Root as Card }`, shadcn-svelte's
+  barrels: `Card` stays, `Root` is no row of its own; another component of the same name elsewhere is none of it); of
+  two names it renders for one binding, the one given with `as` is kept (`Pane as ResizablePane`).
 - **The markup files settle too.** An `.mdx`, `.vue`, `.svelte` or `.astro` file is read for what it renders — the
   components its script imports (MDX's top-level `import`, a Vue or Svelte `<script>` block's — `setup`, `lang="ts"` —,
   an Astro file's front matter) rendered in its markup (`<FadeIn>`, `<Card.Header>`, Vue's `<my-button>` as `MyButton`)
   — never in fenced code or an inline code span, a comment (`<!-- -->`, `{/* */}`), front matter, a `<style>`, a Vue
   block but its template, or an Astro `<script>` (a client script); a tag that closes itself on its line opens nothing
-  (`<template #trailing />` — one whose `/>` stands on a later line still does). Read after every script file, within the same 5,000 files and 32 MB — so a docs site of MDX whose
+  (`<template #trailing />`; a `/>` in a quoted value is none — one whose `/>` stands on a later line, or that holds a
+  `>` outside quotes before it, still opens). Read after every script file, within the same 5,000 files and 32 MB — so a docs site of MDX whose
   components come through its framework (Docusaurus's `@theme`) reads them for no row: about ×2 its report.
 - **A call that renders a name is a render** — what a tag compiles to: React's `createElement(X, …)`
   (`React.createElement`, imported under any name, a `require("react")`), Preact's `h(X)` / `createElement(X)`, Vue's
@@ -96,8 +101,8 @@ factory renders only in a `.ts` file when the project asks no weak name (reading
 and a Svelte kit's report ×6 for no row). Still listed, knowingly: what 1.35.3 listed so.
 
 ### Tests
-- `node mcp/test.js` 2414 assertions, `node cli/test-cli.js` 663 (was 2369 / 663). The guard's 64 KB lexer bound
-  is a ratio to the same case at 16 KB (8× + 100 ms, linear is ×4), no longer an absolute 2 s that missed once under the
+- `node mcp/test.js` 2423 assertions, `node cli/test-cli.js` 663 (was 2369 / 663). The guard's 64 KB lexer bound
+  is a ratio to the same case at 16 KB (the faster of two runs, 8× + 300 ms; linear is ×4), no longer an absolute 2 s that missed once under the
   pre-push gate's parallel run; the design-system scan's hostile lines, its renders project, review 3's four shapes and
   markers (1.35) and the guard's pre-filter readers are timed as ratios too — against twins of the same size measured
   at the same moment, or the fastest of up to five 16 K / 64 K runs — where absolute times missed under a full suite's

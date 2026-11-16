@@ -2,10 +2,12 @@
 // The design-system registry — 1.35.4: what an import names: the governing tsconfig / jsconfig `paths` and `baseUrl`.
 // The nearest tsconfig.json, else jsconfig.json, above the file, read through `extends` as TypeScript reads it — and what
 // this scan cannot read so tells nothing; the reading's bounds (100 configs read, 32 links, 100 patterns, 10 targets, 1,024
-// characters a path), its cost; a default import's places, each with its own base.
+// characters a path — review 2: an `extends`, every target of a pattern —, 4 M characters of keys in a scan), its cost; a
+// default import's places, each with its own base.
 
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
@@ -333,18 +335,78 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const sized = (head, n, tail, step = "a/") => { const room = n - head.length - tail.length; return head + step.repeat(Math.floor(room / step.length)) + "/".repeat(room % step.length) + tail; };
     const f = { "package.json": REACT }, lengths = [];
     for (const [n, tag] of [[1024, "Pos"], [1025, "Neg"]]) {
-      const target = sized("./", n, "*"), key = sized("@", n, "/*"), base = sized("./", n, "", "a/../");
-      lengths.push(target.length, key.length, base.length);
+      const target = sized("./", n, "*"), key = sized("@", n, "/*"), base = sized("./", n, "", "a/../"), ext = sized("./", n, "base.json", "./");
+      lengths.push(target.length, key.length, base.length, ext.length);
       // one long target on a key of its own: the kit the config's OTHER, short, key reaches
       kase(f, "l-target" + n, { compilerOptions: { paths: { "@long/*": [target], "@sh/*": ["./sh/*"] } } }, [["sh/components/k.tsx", "LongTarget" + n + tag]], "@sh/components/k");
       // a long key beside the short one; a long baseUrl that folds back to its own folder (the short key's target below it)
       kase(f, "l-key" + n, { compilerOptions: { paths: { [key]: ["./a/*"], "@sh/*": ["./sh/*"] } } }, [["sh/components/k.tsx", "LongKey" + n + tag]], "@sh/components/k");
       kase(f, "l-base" + n, { compilerOptions: { baseUrl: base, paths: { "@sh/*": ["./sh/*"] } } }, [["sh/components/k.tsx", "LongBase" + n + tag]], "@sh/components/k");
+      // (review 2) a long `extends` — `./` steps that fold back to the folder's own base.json, which is there —; the long
+      // target as a pattern's 11th, past the ten kept (every target is measured, not the ten kept alone)
+      kase(f, "l-ext" + n, { extends: ext, compilerOptions: { paths: { "@sh/*": ["./sh/*"] } } }, [["sh/components/k.tsx", "LongExt" + n + tag]], "@sh/components/k",
+        { "base.json": js({ compilerOptions: { strict: true } }) });
+      kase(f, "l-eleventh" + n, { compilerOptions: { paths: { "@long/*": Array.from({ length: 10 }, (_, i) => "./e" + i + "/*").concat([target]), "@sh/*": ["./sh/*"] } } },
+        [["sh/components/k.tsx", "LongEleventh" + n + tag]], "@sh/components/k");
     }
     const got = seeded(project("long-paths", f));
     const IN = ["LongTarget1024Pos", "LongKey1024Pos", "LongBase1024Pos"], OUT = ["LongTarget1025Neg", "LongKey1025Neg", "LongBase1025Neg"];
+    const IN2 = ["LongExt1024Pos", "LongEleventh1024Pos"], OUT2 = ["LongExt1025Neg", "LongEleventh1025Neg"];
     all("1.35.4 review 1: a key, a target or a baseUrl longer than DS_PATH_CHARS (1,024 characters: no file system holds such a path, and each import resolved it again) makes the config tell nothing — one target of 1,025 characters on a key of its own and the kit the config's other, short, key reaches is not settled through it; a long key, a long baseUrl the same —, one of 1,024 is read (got " + js({ got: among(got, IN.concat(OUT)), lengths }) + ")",
-      Object.assign(verdicts(got, IN, OUT), { lengths: js(lengths) === js([1024, 1024, 1024, 1025, 1025, 1025]) }));
+      Object.assign(verdicts(got, IN, OUT), { lengths: js(lengths) === js([1024, 1024, 1024, 1024, 1025, 1025, 1025, 1025]) }));
+    all("1.35.4 review 2: an `extends` longer than DS_PATH_CHARS makes the config tell nothing too — 1,025 characters of `./` steps to the folder's own base.json, which is there, and the kit the config's own short key reaches is not settled; 1,024 is read —, and so does a pattern's 11th target of 1,025 characters, past the ten it keeps (every target is measured before ten are kept); an 11th of 1,024 leaves the config read (got " + js({ got: among(got, IN2.concat(OUT2)), lengths: lengths.filter((_, i) => i % 4 === 3) }) + ")",
+      verdicts(got, IN2, OUT2));
+  }
+
+  // --- review 2 of 1.35.4 (RES-2): the keys the configs give in a scan, DS_ALIAS_CHARS (4 M characters) — past them they tell nothing --
+  {
+    // a `*` key's ten targets: the first one reaches the kit, nine of 1,020 characters end in `/index` (two keys each — the
+    // entry and its folder: about 18,500 characters a spec); one page asks BudgetFirst, 200 specs of its own, BudgetMid (the
+    // 202nd: some 3.7 M characters before it), 100 specs more, BudgetLast (the 303rd: some 5.6 M before it) — one scan's
+    // budget, so the same config asked BudgetFirst and BudgetLast alone, in a scan of its own, settles both. (Each tag on a
+    // line of its own: a line is read up to DS_LINE_MAX, 2,000 characters — 303 tags on one cut BudgetLast whatever the budget.)
+    const longT = (i) => { const head = "./t" + i + "/", tail = "*/index"; return head + "a".repeat(1020 - head.length - tail.length) + tail; };
+    const cfg = { compilerOptions: { paths: { "*": ["./kit/components/*"].concat(Array.from({ length: 9 }, (_, i) => longT(i + 1))) } } };
+    const spend = (from, n) => Array.from({ length: n }, (_, k) => [["S" + (from + k)], "s" + (from + k)]);
+    const tall = (imports) => imports.map(([names, spec]) => "import { " + names.join(", ") + " } from \"" + spec + "\";").join("\n") +
+      "\nexport const Q = () => <>\n" + imports.flatMap(([names]) => names).map((n) => "  <" + n + " />").join("\n") + "\n</>;\n";
+    const sf = { "package.json": REACT }, cf = { "package.json": REACT };
+    kase(sf, "spent", cfg, [["kit/components/first.tsx", "BudgetFirst"], ["kit/components/mid.tsx", "BudgetMid"], ["kit/components/last.tsx", "BudgetLast"]], [],
+      { "q.tsx": tall([[["BudgetFirst"], "first"]].concat(spend(0, 200), [[["BudgetMid"], "mid"]], spend(200, 100), [[["BudgetLast"], "last"]])) });
+    kase(cf, "calm", cfg, [["kit/components/first.tsx", "CalmFirst"], ["kit/components/last.tsx", "CalmLast"]], [], { "q.tsx": tall([[["CalmFirst"], "first"], [["CalmLast"], "last"]]) });
+    const spent = seeded(project("alias-budget", sf)), calm = seeded(project("alias-budget-calm", cf));
+    all("1.35.4 review 2: the keys the configs give are budgeted in a scan (DS_ALIAS_CHARS, 4 M characters) — one page asking 302 specs through a `*` key of nine 1,020-character targets ending in `/index`: the candidates asked 1st and 202nd (within the budget) are settled, the 303rd (past it) is not; the same config asked the 1st and the last alone settles both (got " + js({ spent: among(spent, ["BudgetFirst", "BudgetMid", "BudgetLast"]), calm: among(calm, ["CalmFirst", "CalmLast"]), target: longT(1).length }) + ")",
+      Object.assign(verdicts(spent, ["BudgetFirst", "BudgetMid"], ["BudgetLast"]), verdicts(calm, ["CalmFirst", "CalmLast"], []), { target: longT(1).length === 1020 }));
+
+    // what it keeps: 50 page folders, each asking 200 bare specs of its own (10,000 in all) through a `*` key of ten targets
+    // of 1,020 characters ending in `/index`; the calm twin's targets are of 14 (its keys, under 3 M characters, all within
+    // the budget) — each scan in a fresh process, its peak resident set: hard's within ×1.5 the calm one's (every distinct
+    // spec kept its ten 1 KB keys: measured ×2.9 — 448 MB against 152 —, with the budget ×0.8; 9.5 MB of pages ran a scan
+    // out of a 4 GB heap)
+    const kept = (tag, chars) => {
+      const files = { "package.json": REACT, "src/components/ui/kit.tsx": "export const Moving = motion(Box);\n" };
+      const targets = Array.from({ length: 10 }, (_, i) => { const head = "./t" + i + "/", tail = "*/index"; return head + "a".repeat(chars - head.length - tail.length) + tail; });
+      files["tsconfig.json"] = { compilerOptions: { paths: { "*": targets } } };
+      for (let d = 0; d < 50; d++) files["p/f" + d + "/page.tsx"] = tall([[["Moving"], "../../src/components/ui/kit"]].concat(Array.from({ length: 200 }, (_, k) => [["A" + k], "p" + d + "s" + k])));
+      return project("alias-kept-" + tag, files);
+    };
+    const hard = kept("hard", 1020), soft = kept("soft", 14);
+    const PROBE = path.join(tmp, "dsa-scan-probe.js");
+    fs.writeFileSync(PROBE, L(["\"use strict\";", "// one scan in a fresh process: its time, its peak resident set (KB), whether it settles Moving",
+      "const S = require(process.argv[2]);", "const t0 = Date.now(), r = S.designSystemReport(process.argv[3]);",
+      "console.log(JSON.stringify({ ms: Date.now() - t0, rss: process.resourceUsage().maxRSS, moving: r.missing.some((m) => m.name === \"Moving\") }));"]));
+    const scanIn = (p) => {
+      const r = spawnSync(process.execPath, [PROBE, path.join(__dirname, "lib", "spec.js"), p], { cwd: p, env: Object.assign({}, process.env), encoding: "utf8", timeout: 120000 });
+      let j = null;
+      try { j = JSON.parse(r.stdout); } catch { /* no JSON: the check says so */ }
+      return { code: r.status, ms: j ? j.ms : null, mb: j ? Math.round(j.rss / 1024) : null, moving: !!(j && j.moving), err: j ? "" : String(r.stderr || r.error || "").slice(0, 200) };
+    };
+    const mem = remeasure(() => { const h = scanIn(hard), s = scanIn(soft); return [h.mb, s.mb, h, s]; }, (s) => s[0] != null && s[1] != null && s[0] < 1.5 * s[1]);
+    all("1.35.4 review 2: what the configs' keys keep is bounded — 10,000 distinct bare specs through a `*` key of ten 1,020-character targets ending in `/index` peak within ×1.5 the resident set of the same pages with 14-character targets, each scan in a fresh process (got " + js({ mb: mem.slice(0, 2), hard: mem[2], soft: mem[3], tries: mem.tries }) + ")", {
+      exits: mem[2].code === 0 && mem[3].code === 0,
+      settled: mem[2].moving && mem[3].moving,
+      bounded: mem[0] != null && mem[1] != null && mem[0] < 1.5 * mem[1],
+    });
   }
 
   // --- a default import: each place the module may be with its own base ----------------------------------------------------------

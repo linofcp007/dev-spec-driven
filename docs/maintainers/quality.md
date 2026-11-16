@@ -799,10 +799,14 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     config tell NOTHING: it keeps 1.35.3's reading (an abstention where TypeScript's reading cannot be reproduced).
     Memoised per governing folder (`tables` — a cost guard, timed), a config's own table once a FILE (`owned` /
     `tableAt` — review 1: sixty folders over one chain of thirty configs rebuilt every table, 52 s), the keys once a
-    governing folder and a spec (`said`). The keys are ADDED before the package lookup and the guess, both unchanged. A
+    governing folder and a spec (`said`), DS_ALIAS_CHARS of them in a scan (review 2: every distinct spec kept up to ten
+    1 KB keys — 9.5 MB of pages ran a scan out of memory; past it the configs tell nothing more); an `extends` longer than
+    DS_PATH_CHARS is UNKNOWN too, and every target is measured, not the first ten alone (review 2). The keys are ADDED before the package lookup and the guess, both unchanged. A
     default import looks up EACH key of the place with its own base (`lookup`, `keyBase`): a config's target, a map's,
     need not share the guess's last segment — and a target's base under the guess's folder is a place TypeScript never
-    resolves to (review 1: the union of bases checked against the union of keys settled such a file). Review 3 of 1.35.3 had taken a first reading out
+    resolves to (review 1: the union of bases checked against the union of keys settled such a file). The keys are
+    grouped by base once a place (`at.bases`), each base's files walked once against its own keys (review 2: once a key,
+    400 packages of one name × 1,000 pages took ×26). Review 3 of 1.35.3 had taken a first reading out
     (a `..` target as text, no bound, short of TypeScript's rules three ways — a `*` catch-all returned early, two configs
     in a folder, the first key not the longest); each is answered by a rule and a fixture.
   - **A workspace package's `exports` map** (`exportsMap`, `reachTargets`, `targetsOf`, `exportedPaths`, `refused`): read
@@ -814,7 +818,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     on `/` and `\`); a key's value alone decides (`null`: nothing, never a shorter pattern). Its targets: a string that
     starts `./` with no refused segment; a condition object's branches up to its `default`, any condition (what the module
     MAY be: Chakra's `dev`); a list to its first accepted entry (a refused one, a `null`, an object that resolves nothing
-    passed — Node's code, not its spec prose; an object whose `default` resolves ends it, review 1); DS_EXPORT_DEPTH (a
+    passed — Node's code, not its spec prose; an object whose branches all resolve up to its `default` ends it — a
+    condition before it that gives nothing sends Node on —, and a list that ends at a target ends the one around it,
+    reviews 1 and 2); DS_EXPORT_DEPTH (a
     crash guard: 100,000 nested lists overflowed), DS_EXPORT_TARGETS; every `*` replaced, a target the match would make
     longer than DS_PATH_CHARS not taken (review 1: 200,000 `*`s × a long subpath ran a scan out of memory); an index
     target is its folder. Kept up to DS_MAP_CHARS of manifests (a memory bound). The bare `.`, `main`, `module`, `source`
@@ -845,7 +851,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     `stripFencedCode` would be wrong), inline code spans (`backtickRuns`), front matter, `<!-- -->` / `{/* */}` across
     lines, `<style>`, a Vue block but its script and root `<template>` (its depth counted; a tag that closes itself —
     `<template #trailing />`, the empty slot eslint-plugin-vue writes, `<script src="…" />` — opens nothing: review 1, a
-    template before the script held to the file's end), an Astro `<script>` (a client script). An opening tag's end is
+    template before the script held to the file's end — when the opener and its `/>` stand outside any quote, the
+    line's quotes followed once, each closed by its own mark alone: `split('<br/>')` in an attribute is no end, and
+    `"note !== `it's`"` opens no second quote, review 2), an Astro `<script>` (a client script). An opening tag's end is
     looked for once a line where it is known (`tagEnd`: a line of openers with no `>` after them was quadratic, review 1). In `.vue` alone a kebab tag with a dash is the component Vue resolves (`<my-button>` → MyButton; one word,
     `<card>`, needs Vue's own element list: never). Read after every script, one queue, the same counters (markups first
     or counted apart lost a script's reading).
@@ -861,12 +869,17 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     made its source ESM, a preload ran in it — one that refused workers stalled each pool 2 s, one that wrote to fd 1
     wrote into an MCP server's JSON-RPC: review 1), and a worker's 'error' is heard (`w.on("error", stop)` — unheard,
     it is thrown on the main thread and ends an MCP server once the scan has answered).
-  - **A barrel's other names** (exportedComponents' `also`): a candidate the file also gives under another name — the same
-    local (`export { Root, Root as Card }`), the same re-exported binding — is no row of its own when one of those names
-    is a row already (review 1 of 1.35.4: on a SvelteKit checkout that ran `svelte-kit sync`, `$lib` resolves through
-    `.svelte-kit/tsconfig.json` and shadcn-svelte's barrels listed 75 bare parts, `Root`, `Content`, `Link`, beside `Card`,
+  - **A barrel's other names** (exportedComponents' `also`, `aliased`; scanCode's `sameRow`): a candidate the file also
+    gives under another name — the same local (`export { Root, Root as Card }`), the same re-exported binding — is no row
+    of its own when one of those names is THIS binding's row already — the barrel's own, or the row of the file the
+    binding comes from (`from`: `import Root from "./card.svelte"`, whose row is `Card`) — (review 2: a row anywhere —
+    another `Pane` of the project — dropped `Pane as ResizablePane`, and a folder's rows were no better: a `Panel` below
+    a root barrel dropped `ResizablePanel`); the names given with `as` are taken first (review 2: in shadcn-svelte's
+    order, bare names first, the bare one had won); a binding given more than DS_ALIAS_NAMES (16) names asks none of
+    them (the corpus has 3 at most; 12,000 names were walked once a rendered candidate, ×31). Review 1 of 1.35.4: on a SvelteKit checkout
+    that ran `svelte-kit sync`, `$lib` resolves through `.svelte-kit/tsconfig.json` and shadcn-svelte's barrels listed 75 bare parts, `Root`, `Content`, `Link`, beside `Card`,
     `CardContent` — the fresh clones of the corpus have no `.svelte-kit`, and the first measure of `$lib` was made on
-    them). A name given once stays (`export { default as Toaster } from "./Sonner.vue"`; Gutenberg's
+    them. A name given once stays (`export { default as Toaster } from "./Sonner.vue"`; Gutenberg's
     barrel names for its inserter listbox's parts — a guard on every barrel name for a component file's default lost
     seven of its public names).
   What it cannot see, said in the user docs: a name no file renders where the reader sees it (a kit consumed elsewhere;
@@ -1798,8 +1811,21 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `tagEnd`, and a barrel's other names (`also`). Two MEDIUMs the skeptics made LOW (a self-closing `<template>`, a
   line's trailing blanks trimmed once a call) and the LOWs worth a line were fixed too — a default import's base
   paired with its own key, an object's `default` ending a target list, a list's closing line read on, the workers'
-  env without NODE_OPTIONS (a preload reached them), a broken ternary's condition taken for the factory's type —; the
-  rest is said (a root entry other than `src/index`, a cast in a factory's argument, the follow's over-approximation in
+  env without NODE_OPTIONS (a preload reached them) —; the rest is said (a root entry other than `src/index`, a cast in a factory's argument, the follow's over-approximation in
   star targets, the markup cost of an MDX docs site). Two absolute times of earlier releases that miss under a parallel
   run became ratios. Lesson, again: the corpus measures what a fresh clone holds — a generated file a developer's
   checkout always has (`.svelte-kit/`, `.next/types`) changes what a reader of configs sees.
+- **1.35.4 review 2** (the short round the owner chose: four fresh reviewers on the fix commit 0a1782d, review 1's repro
+  tools replayed against it — every review-1 finding fixed — and a skeptic for each HIGH / MEDIUM) — no HIGH; 3 MEDIUM,
+  two made by review 1's fixes: the default import's pairing walked each base's files once a KEY (×26 on 400 packages of
+  one name), and the barrel rule asked whether a sibling name was a row ANYWHERE (another `Pane` dropped
+  `ResizablePane`; in shadcn-svelte's order the bare name won); the third older — the keys a config gives, bounded a
+  spec, not a scan (memory out on 9.5 MB of pages). Fixed: `at.bases`, `sameRow` (a sibling's row must be the
+  binding's own — the barrel's, or its source file's: the barrel's folder, the first answer, still took a `Panel` below
+  it) + the `as` names first, DS_ALIAS_CHARS. LOWs fixed too: an object ends a target list only when every branch up to `default` resolves, a
+  `/>` closes a tag only outside quotes (the line's quotes followed, each closed by its own mark: counting each mark
+  apart, the first answer, missed `"it's"`), an `extends` and every target measured against DS_PATH_CHARS, a binding's
+  names kept as one group and none asked past 16, the read-ahead test proving again that the CLI and the server
+  start workers, and the remaining absolute times of the design-system tests made ratios. Lesson: a fix that pairs or
+  groups (review 1's per-key loop, its "a row already" test) is a new rule — ask it of the place it replaces AND of
+  the project around it (another component of the same name, a hundred packages of one name).

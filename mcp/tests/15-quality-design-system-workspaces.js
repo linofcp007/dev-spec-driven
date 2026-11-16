@@ -308,14 +308,21 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     const hostile = ["export const A" + blank + "y", "export default Foo" + blank + "x", "function" + blank + "(", "export const B: " + "<".repeat(900) + blank, "export const C =" + blank + LS + blank + LS,
       "const D = Aaaa." + "Bbbb.".repeat(300) + blank + "x", "class E" + blank + "x", "import" + blank + "x"];
     // (an `export {` that never closes takes the lines after it, as a list would: the component stands before them)
-    write(h, "src/components/ui/hostile.tsx", "export function Survivor() { return null; }\n" + Array.from({ length: 140 }, (_, i) => hostile[i % hostile.length]).join("\n") + "\nexport {" + " a,".repeat(600) + "\n");
+    // Its calm twin `hc`: the SAME files, each hostile line a plain one as long (a `//` comment: no pattern has anything to give
+    // up on in it), scanned at the same moment — a ratio holds on a loaded machine where a time does not (1.35.4 review 2: the
+    // absolute 1 s it replaces; a pattern that backtracks costs seconds)
+    const hc = project("exp-hostile-calm", { "package.json": deps(["react"]) });
+    const plain = (l) => (l.length < 16 ? "q".repeat(l.length) : "const q = 1; // " + "x".repeat(l.length - 16));
+    const both = (rel, head, lines) => { write(h, rel, head + lines.join("\n") + "\n"); write(hc, rel, head + lines.map(plain).join("\n") + "\n"); };
+    both("src/components/ui/hostile.tsx", "export function Survivor() { return null; }\n", Array.from({ length: 140 }, (_, i) => hostile[i % hostile.length]).concat(["export {" + " a,".repeat(600)]));
     // (six files of each: with a pattern that backtracks, ONE costs 0.4 – 0.7 s — a line is read up to 2,000 characters — and
     // the files a scan may read would cost minutes)
     for (let i = 0; i < 6; i++) {
-      write(h, "src/components/ui/alias" + i + ".tsx", "import Aaaa from \"x\";\n" + Array.from({ length: 128 }, () => "const D = Aaaa" + wide + "x").join("\n") + "\n"); // a value that is ALMOST another component's name
-      write(h, "src/components/ui/byname" + i + ".tsx", Array.from({ length: 128 }, () => "export default Foo" + wide + "x").join("\n") + "\n"); // …almost a default export by name
+      both("src/components/ui/alias" + i + ".tsx", "import Aaaa from \"x\";\n", Array.from({ length: 128 }, () => "const D = Aaaa" + wide + "x")); // a value that is ALMOST another component's name
+      both("src/components/ui/byname" + i + ".tsx", "", Array.from({ length: 128 }, () => "export default Foo" + wide + "x")); // …almost a default export by name
     }
-    const ms = remeasure(() => { const t0 = Date.now(); const r = S.designSystemReport(h); return [Date.now() - t0, r.missing.map((c) => c.name).join(",")]; }, (s) => s[0] < 1000);
+    const linear = (s) => s[0] < 3 * s[2] + 300;
+    const ms = remeasure(() => { const t0 = Date.now(); const r = S.designSystemReport(h); const t1 = Date.now(); S.designSystemReport(hc); return [t1 - t0, r.missing.map((c) => c.name).join(","), Date.now() - t1]; }, linear);
     // a New component a feature's file exports beside the file's own: the finish writes its path — its OWN file when it has
     // one, and no path for a file outside a component folder (the scan would never find it there)
     const f = project("exp-finish", { "package.json": deps(["react"]) });
@@ -326,7 +333,7 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     const newOnes = S.designSystemReport(f, { name: feat.slug }).newComponents.map((c) => c.name + "=" + c.path);
     const fin = S.finishFeature(f, feat.slug, { write: true });
     const row = rd(f, REG).split("\n").filter((l) => /PriceBadge/.test(l));
-    all("1.35.1: component files are read for what else they export, the shorter path first, up to 1,000 files and 4 MB — past either the PROJECT report says so (`limits`: component-files, in EN / PT / ES) and is never in sync, a feature's report says nothing of it, and at exactly the bound none does (review 1: at 500 files a project of 520 could never be in sync again, and 500 files of 256K cost seconds on every scan); one file gives 500 components at most, said too, and a name it exports twice counts once; an `export {` that never closes is given up after 200 lines — what follows it is read; files of lines a pattern must give up on (a run of blanks before a stray character — after a name that is almost an alias, almost a default export —, a line a `.` cannot cross, an annotation that never closes) are read in linear time; and a New component a feature's file exports beside the file's own is registered with that file's path, not a dash — its own file's when it has one, none for a file outside a component folder (got " +
+    all("1.35.1: component files are read for what else they export, the shorter path first, up to 1,000 files and 4 MB — past either the PROJECT report says so (`limits`: component-files, in EN / PT / ES) and is never in sync, a feature's report says nothing of it, and at exactly the bound none does (review 1: at 500 files a project of 520 could never be in sync again, and 500 files of 256K cost seconds on every scan); one file gives 500 components at most, said too, and a name it exports twice counts once; an `export {` that never closes is given up after 200 lines — what follows it is read; files of lines a pattern must give up on (a run of blanks before a stray character — after a name that is almost an alias, almost a default export —, a line a `.` cannot cross, an annotation that never closes) are read in linear time — within 3× + 0.3 s of their calm twin (each such line a plain one as long) scanned at the same moment (1.35.4 review 2: a ratio, no longer an absolute 1 s; ms: [hostile ms, names, twin ms]); and a New component a feature's file exports beside the file's own is registered with that file's path, not a dash — its own file's when it has one, none for a file outside a component folder (got " +
       js({ over: [over.found.components, over.limits], featureLimits, at: [at.found.components, at.limits], heavy, said: said.map((s) => typeof s === "string" && s.includes("1000")),
         bounded: [boundedRep.missingTotal, boundedRep.limits, bounded.has("AfterTheList"), exact.missingTotal, exact.limits], ms, newOnes, registered: fin.designSystem && fin.designSystem.registered, row }) + ")", {
       over: () => over.found.components === 2001 && js(over.limits) === js([{ code: "component-files", read: 1000 }]) && over.truncated === true && over.inSync === false,
@@ -336,7 +343,7 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
       said: () => said.every((s) => typeof s === "string" && s.includes("1000")) && new Set(said).size === 3,
       perFile: () => boundedRep.missingTotal === 503 && js(boundedRep.limits) === js([{ code: "component-files", read: 2 }]) && exact.missingTotal === 501 && exact.limits.length === 0, // Many + its first 500, Open, AfterTheList
       list: () => bounded.has("AfterTheList"),
-      linear: () => ms[0] < 1000 && ms[1] === "Alias0,Alias1,Alias2,Alias3,Alias4,Alias5,Byname0,Byname1,Byname2,Byname3,Byname4,Byname5,Hostile,Survivor",
+      linear: () => linear(ms) && ms[1] === "Alias0,Alias1,Alias2,Alias3,Alias4,Alias5,Byname0,Byname1,Byname2,Byname3,Byname4,Byname5,Hostile,Survivor",
       path: () => js(newOnes) === js(["PriceBadge=src/components/price/wrap.tsx", "PriceRow=src/components/price/price-row.tsx", "PriceNote=null"]),
       row: () => fin.designSystem && js(fin.designSystem.registered) === js(["PriceBadge", "PriceRow", "PriceNote"]) && row.length === 1 && row[0].includes("`src/components/price/wrap.tsx`") && row[0].includes("_From: " + feat.slug + "_"),
     });
