@@ -28,6 +28,8 @@ line each under "Unconfirmed (below 80)"; then `trace_check {name}` (`matrix: tr
 package as above and dispatch, in one message, one final-mode `dev-spec-driven:spec-reviewer` on the most capable model and
 one on each panel model not already it (`model` on each), instead of reviewing yourself; merge their findings, then verify
 each merged finding once (`subagent-execution.md` → Review on more than one model). Ledger `Final review: ×N (requested …)`.
+Without a subagent tool: review yourself as above, say the panel was not run, and ledger `Final review: ×1 (requested …) —
+inline, the panel was not run`.
 
 **converge** — the feature AC by AC against the code: `spec_status` + `trace_check {name, code: true}` (+ on a finished
 feature `spec_drift {name}`: its changed files go to the reviewer, the baseline only says that they changed), then

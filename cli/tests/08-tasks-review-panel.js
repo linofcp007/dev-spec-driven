@@ -42,6 +42,24 @@ exports.run = ({ ok, all, runIn, tmp, require, __dirname }) => {
     });
   }
 
+  { // 1.36.0 review 1 (RP-4): a stray separator at either end of the word is no empty name; an empty word stays refused
+    const p = path.join(tmp, "rp-word");
+    SD.initProject(p, ["core"], "en");
+    const lead = runIn(["init", "--review-models", " opus,sonnet", "--project", p]);
+    const leadMeta = meta(p).reviewModels;
+    runIn(["init", "--review-models", "off", "--project", p]);
+    const trail = runIn(["init", "--review-models", "opus,sonnet,", "--project", p]);
+    const trailMeta = meta(p).reviewModels;
+    runIn(["init", "--review-models", "off", "--project", p]);
+    const blank = runIn(["init", "--review-models", "", "--project", p]);
+    all("1.36.0 review 1 (RP-4): init --review-models ' opus,sonnet' and 'opus,sonnet,' store opus, sonnet; '' still exits 1 with nothing written (got " +
+      js([lead, leadMeta, trail, trailMeta, blank, meta(p)]) + ")", {
+      lead: () => lead.code === 0 && js(leadMeta) === '["opus","sonnet"]' && lead.out.includes(RM.on("opus, sonnet", false)),
+      trail: () => trail.code === 0 && js(trailMeta) === '["opus","sonnet"]',
+      blank: () => blank.code === 1 && blank.out.includes(RM.bad("")) && !("reviewModels" in meta(p)),
+    });
+  }
+
   { // next-action: the finish step's sentence (EN, PT — the feature's language); doctor / next-action --json carry the engine's reviewPanel
     const PASS = 'node -e "process.exit(0)"';
     const CLASS = "# Classification: x\n\n## Mode\nSpec\n\n## Active Tracks\ncore\n\n## Signals\n- none, plain feature\n\n## Blast Radius\nLow; only the login page.\n\n## Compliance Tags\nnone\n";

@@ -2389,11 +2389,13 @@ const REVIEW_MODELS_MAX = 3;
 const RE_MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}(?:\[[A-Za-z0-9]{1,8}\])?$/;
 const REVIEW_RESERVED = new Set(["inherit", "default", "diverse", "off", "none"]); // directives, never a model
 // spec_init {reviewModels} (an array) / `init --review-models` (a word: "opus,sonnet", "diverse", "off") → undefined (not given) |
-// {off} | {diverse} | {models} | {error} — 2–3 distinct names (compared case-insensitively), stored as given.
+// {off} | {diverse} | {models} | {error} — 2–3 distinct names (compared case-insensitively), stored as given. The CLI word's names
+// are its runs between commas / spaces (a stray separator at either end is no empty name — 1.36.0 review 1); a word with none is
+// refused, as before. A refused array is echoed as JSON: ["opus,sonnet"] must not print like the example it breaks.
 function reviewModelsInput(v, lang) {
   if (v === undefined || v === null) return undefined;
-  const list = Array.isArray(v) ? v : typeof v === "string" ? v.split(/[\s,]+/) : null;
-  const bad = () => ({ error: i18n.msg(normalizeLang(lang)).reviewModels.bad(Array.isArray(v) ? v.join(",") : String(v)) });
+  const list = Array.isArray(v) ? v : typeof v === "string" ? v.match(/[^\s,]+/g) : null;
+  const bad = () => ({ error: i18n.msg(normalizeLang(lang)).reviewModels.bad(Array.isArray(v) ? JSON.stringify(v) : String(v)) });
   if (!list || list.some((w) => typeof w !== "string")) return bad();
   const low = list.map((w) => w.toLowerCase());
   if (!list.length || (list.length === 1 && (low[0] === "off" || low[0] === "none"))) return { off: true };

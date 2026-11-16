@@ -713,7 +713,7 @@ exports.run = async ({
       ["subagent-execution: the task reviewer on another model", sub, /this ONE reviewer runs on the first panel model that differs from the implementer's/],
       ["subagent-execution: the 'reviewer is sure' row kept", sub, /"The reviewer is sure — skip the verifier"/],
       ["subagent-execution: no vote", sub, /"The models disagree — take the majority" \| There is no vote/],
-      ["critic-review §1: the gate critics on the panel", critic, /at size l, critics A and B on the panel's first two models \(a third model adds a third critic\); at s, m or no size, one critic per model\. The cold read stays one/],
+      ["critic-review §1: the cold read stays one", critic, /The cold read stays one, on the session's model; xs stays as above/],
       ["spec-review branch: fresh reviewers per model", review, /one final-mode `dev-spec-driven:spec-reviewer` on the most capable model and one on each panel model not already it/],
       ["spec-review converge: every model's ✅", review, /an AC is ✅ only when every model says ✅, every ❌ still verified/],
       ["spec-doctor --deep", rd("commands", "spec-doctor.md"), /`reviewPanel` in this result.*critic-review\.md` §1/],
@@ -723,6 +723,50 @@ exports.run = async ({
     ];
     all("1.36 review panel: the prose protocol — subagent-execution.md's section (merge, verify each merged finding once, the panel adds models, the requested-models ledger line, the collapse paths), critic-review §1, spec-review branch / converge, spec-doctor, spec-setup, spec-finish, the READMEs' spec_init row; no agent file knows the panel (got agents " + JSON.stringify(agents) + ")",
       Object.assign(Object.fromEntries(rows.map(([k, text, re]) => [k, () => re.test(text)])), { agentsUnaware: () => agents.length === 0 }));
+
+    // 1.36.0 review 1 (RP-1): ONE rule for the gate critics in every file that states it — the panel ADDS critics (the size
+    // table's on the session's model, plus one on each panel model not already it), and verify-once is the code reviews' rule:
+    // the gate critics' merged findings go to the user (critic-review.md §3, no verifier). Before: §1 / spec-doctor put the
+    // critics ON the panel's models and init's note verified every merged finding, gate findings included.
+    const integ = rd("INTEGRATIONS.md"), on = (l) => S.msg(l).reviewModels.on("opus, sonnet", false);
+    const rp1 = [
+      ["critic-review §1: the panel ADDS critics", critic, /\*\*A review panel\*\* \([^)]*\) ADDS gate critics: the table's critics as they are, on the session's model, plus one gate critic on each panel model not already the session's — an explicit `model` on each, in the same message\. The cold read stays one/],
+      ["critic-review §1: no 'on its models' re-assignment", critic, /^(?![\s\S]*puts the gate critics on its models)/],
+      ["critic-review §3: merged findings to the user, no verifier", critic, /the merged findings go to the user, never to a verifier — gates have no verifier \(verifying each merged finding once is the code reviews' rule\)/],
+      ["spec-doctor --deep: the panel ADDS critics, no verifier", rd("commands", "spec-doctor.md"), /`reviewPanel` in this result \(`meta\.reviewModels`\) ADDS gate critics: the critics above as they are, on the session's model, plus one on each panel model not already the session's \(`model` on each\); their merged findings go to the user, no verifier — `critic-review\.md` §1, §3/],
+      ["subagent-execution: what it covers — the gate critics added", sub, /the gate critics are the size table's, on the session's model, plus one on each panel model not already the session's/],
+      ["subagent-execution: verify-once scoped to the code reviews", sub, /\*\*Then verify each MERGED finding once\*\* \(§6\) in the code reviews — the final \/ branch review and converge; the gate critics' merged findings go to the user \(`references\/critic-review\.md` §3: gates have no verifier\)/],
+      ["subagent-execution: the Model selection row", sub, /\| Review panel \(`reviewPanel`\) \| adds its models to the final review, converge and the gate critics — one reviewer each, beside the row's own model \(the gate critics': the session's\), never in place of it \|/],
+      ["INTEGRATIONS: the row", integ, /the gate critics once per model — the panel adds models, never replaces the review's own; the gate critics' findings go to the user, no verifier\)/],
+      ["init's note (en)", on("en"), /the branch review before merge, converge and the deep review's gate critics also run on each panel model — the panel adds models, never replaces the review's own \(the gate critics': the session's model\) —; the branch review's and converge's findings are merged and each verified once, the gate critics' merged findings go to the user \(gates have no verifier\)/],
+      ["init's note (pt)", on("pt"), /a revisão do ramo antes do merge, o converge e os críticos do gate da revisão profunda correm também em cada modelo do painel — o painel acrescenta modelos, nunca substitui o da própria revisão \(o dos críticos do gate: o modelo da sessão\) —; os achados da revisão do ramo e do converge são reunidos e cada um é verificado uma vez, os achados reunidos dos críticos do gate vão para o utilizador \(os gates não têm verificador\)/],
+      ["init's note (es)", on("es"), /la revisión de la rama antes del merge, el converge y los críticos del gate de la revisión profunda se ejecutan también en cada modelo del panel — el panel añade modelos, nunca sustituye el de la propia revisión \(el de los críticos del gate: el modelo de la sesión\) —; los hallazgos de la revisión de la rama y del converge se combinan y cada uno se verifica una vez, los hallazgos combinados de los críticos del gate van al usuario \(los gates no tienen verificador\)/],
+    ];
+    all("1.36.0 review 1 (RP-1): one rule for the gate critics with a review panel — critic-review.md §1 / §3, spec-doctor.md, subagent-execution.md (what it covers, the verify-once scope, the Model selection row), INTEGRATIONS.md and init's note (EN, PT, ES): the panel ADDS critics beside the session's model; the gate critics' merged findings go to the user, no verifier (failing: " +
+      JSON.stringify(rp1.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(rp1.map(([k, text, re]) => [k, () => re.test(text)])));
+
+    // 1.36.0 review 1 (RP-2): the task reviewer never drops below its row's tier (never haiku; none → sonnet), and the cost
+    // text says where the task reviews go (diverse + a sonnet implementer → opus). (RP-3): every path that runs the panel
+    // review — the collapsed host, the inline host — ledgers a `Final review: ×N` line, the finish sentence's exit, and
+    // spec-finish.md names that exit too.
+    const rp23 = [
+      ["RP-2 subagent-execution §5: at least standard, none → sonnet", sub, /this ONE reviewer runs on the first panel model that differs from the implementer's and is at least standard \(never `haiku`, below the task reviewer's floor — Model selection\) — a second model's eyes at no extra dispatch\. None, or none the host can dispatch \(Claude Code: an alias\), → `sonnet`, as without a panel/],
+      ["RP-2 subagent-execution: what it covers — at least standard", sub, /its ONE reviewer runs on the first panel model other than the implementer's, at least standard — §5\)/],
+      ["RP-2 subagent-execution: the Task reviewer row", sub, /\| Task reviewer \|[^|\n]*with a review panel, the first panel model other than the implementer's that is at least standard \(never `haiku`; none → `sonnet`\) \|/],
+      ["RP-2 subagent-execution: the Cost bullet", sub, /and the task reviews move to a panel model \(§5\): with `diverse` and a `sonnet` implementer, every task review runs on `opus` \(no extra dispatch, the priciest tier\)/],
+      ["RP-2 init's note (en)", on("en"), /The task reviewer runs on a panel model other than the implementer's, never below sonnet's tier — with diverse and a sonnet implementer, every task review runs on opus\./],
+      ["RP-2 init's note (pt)", on("pt"), /nunca abaixo do nível do sonnet — com diverse e um implementador sonnet, cada revisão de tarefa corre em opus\./],
+      ["RP-2 init's note (es)", on("es"), /nunca por debajo del nivel de sonnet — con diverse y un implementador sonnet, cada revisión de tarea se ejecuta en opus\./],
+      ["RP-3 subagent-execution: resume on any form", sub, /\*\*Resume:\*\* the ledger already has a `Final review: ×N` line since the last task \(any of its forms, below too\)/],
+      ["RP-3 subagent-execution: the collapsed form", sub, /\(`Final review: ×2 \(requested opus, sonnet\) — the host ran one model`\)/],
+      ["RP-3 subagent-execution: no 'review ×2 requested' form", sub, /^(?![\s\S]*"review ×2 requested)/],
+      ["RP-3 subagent-execution: the inline form", sub, /review inline and say the panel was not run — ledger `Final review: ×1 \(requested opus, sonnet\) — inline, the panel was not run`, so a resumed session doesn't run it again/],
+      ["RP-3 spec-review: the inline form", review, /Without a subagent tool: review yourself as above, say the panel was not run, and ledger `Final review: ×1 \(requested …\) — inline, the panel was not run`/],
+      ["RP-3 spec-finish: the ledger exit", rd("commands", "spec-finish.md"), /the branch review on every model comes first — unless the ledger already has its `Final review: ×N` line since the last task/],
+      ["RP-3 the sentence's exit names the same line", S.msg("en").next.reviewBranch("x", "opus, sonnet"), /unless the ledger already has its "Final review: ×N" line since the last task/],
+    ];
+    all("1.36.0 review 1 (RP-2, RP-3): the task reviewer at least standard (never haiku; none → sonnet) and the cost text saying where the task reviews go (subagent-execution §5, the row, the Cost bullet, init's note EN / PT / ES); every panel path ledgers a `Final review: ×N` line (the collapsed host, the inline host — subagent-execution, spec-review) and spec-finish.md names the sentence's exit (failing: " +
+      JSON.stringify(rp23.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(rp23.map(([k, text, re]) => [k, () => re.test(text)])));
   }
 
   { // 1.36 the fast check (meta.fastCheck, warn only) — the loop is prose the agent follows: run it ALONE after each small edit, clean
