@@ -206,14 +206,14 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       "const Real = wt.Worker, made = [];",
       "wt.Worker = class extends Real {",
       "  constructor(src, o) {",
-      "    super(scenario === \"stall\" && made.length === 3 ? \"setTimeout(() => {}, 120000);\" : src, o);",
+      "    super(scenario === \"stall\" && made.length === 3 ? \"setTimeout(() => {}, 120000);\" : scenario === \"failing\" && made.length === 3 ? \"throw new Error('worker fails');\" : src, o);",
       "    const rec = { exited: false }; made.push(rec); this.on(\"exit\", () => { rec.exited = true; });",
       "  }",
       "};",
       "const E = require(engine);",
       "const files = fs.readdirSync(dir).sort().map((n) => path.join(dir, n));",
       "const ref = files.map((f) => E.readFileHead(f, 64));",
-      "const take = scenario === \"stall\" || scenario === \"failing\" ? files.length : 40;",
+      "const take = scenario === \"stall\" || scenario === \"failing\" || scenario === \"refused\" ? files.length : 40;",
       "const t0 = Date.now(), h = E.readFileHeads(files, 64), got = [];",
       "for (let i = 0; i < take; i++) got.push(h.next());",
       "const took = Date.now() - t0;",
@@ -227,18 +227,20 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     ]));
     const env = (mode) => Object.assign({}, process.env, { DEV_SPEC_TEST_AHEAD: mode });
     const child = (scenario, mode = "on") => runNode([CHILD, ENGINE, scenario, path.join(d, "files")], { env: env(mode), cwd: d, killMs: 40000 });
-    // (a worker that fails on its own — a NODE_OPTIONS preload that refuses worker threads: its 'error' must be heard, or it
-    // is thrown on the main thread and ends the process — an MCP server's too — once the read is over)
+    // (a worker that fails on its own — its source throws: its 'error' must be heard, or it is thrown on the main thread and
+    // ends the process — an MCP server's too — once the read is over; and a NODE_OPTIONS preload that refuses worker threads
+    // never reaches one: no stall — the workers' env holds no NODE_OPTIONS, review 1 of 1.35.4)
     const pre = path.join(d, "refuse-workers.js");
     fs.writeFileSync(pre, "if (!require(\"worker_threads\").isMainThread) throw new Error(\"preload refuses worker threads\");\n");
-    const failingEnv = Object.assign(env("on"), { NODE_OPTIONS: "--require \"" + pre.split(path.sep).join("/") + "\"" });
-    const [early, abandon, stall, base, failing] = await Promise.all([child("early"), child("abandon"), child("stall"), child("early", "off"),
-      runNode([CHILD, ENGINE, "failing", path.join(d, "files")], { env: failingEnv, cwd: d, killMs: 40000 })]);
+    const refusedEnv = Object.assign(env("on"), { NODE_OPTIONS: "--require \"" + pre.split(path.sep).join("/") + "\"" });
+    const [early, abandon, stall, base, failing, refused] = await Promise.all([child("early"), child("abandon"), child("stall"), child("early", "off"), child("failing"),
+      runNode([CHILD, ENGINE, "refused", path.join(d, "files")], { env: refusedEnv, cwd: d, killMs: 40000 })]);
     const said = (x) => { try { return JSON.parse(x.stdout.trim().split("\n").pop()); } catch { return null; } };
-    const [e1, a1, s1, b1, f1] = [early, abandon, stall, base, failing].map(said);
+    const [e1, a1, s1, b1, f1, r1] = [early, abandon, stall, base, failing, refused].map(said);
     const brief = (x, y) => ({ code: x.code, killed: x.killed, ms: x.ms, said: y, stderr: x.stderr.slice(0, 200) });
-    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (a NODE_OPTIONS preload that refuses worker threads) is heard — the process lives on and every file comes, in order (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(stall, s1), base: brief(base, b1), failing: brief(failing, f1) }) + ")", {
+    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (its source throws) is heard — the process lives on and every file comes, in order; a NODE_OPTIONS preload that refuses worker threads reaches none (no stall) (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(stall, s1), base: brief(base, b1), failing: brief(failing, f1), refused: brief(refused, r1) }) + ")", {
       failing: () => failing.code === 0 && !failing.killed && f1 != null && f1.same && f1.made === 8,
+      refused: () => refused.code === 0 && !refused.killed && r1 != null && r1.same && r1.made === 8 && r1.took < 1800,
       early: () => early.code === 0 && !early.killed && e1.same && e1.made === 8 && e1.exited === 8 && e1.exitMs < 5000,
       base: () => base.code === 0 && b1.same && b1.made === 0,
       abandon: () => abandon.code === 0 && !abandon.killed && a1.same && a1.made === 8 && abandon.ms < 3 * base.ms + 5000,
@@ -343,15 +345,15 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const lines = srv.stdout.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } });
     const scanReply = lines.find((m) => m && m.id === 2);
     const brief = (x) => ({ code: x.code, killed: x.killed, ms: x.ms, out: x.stdout.length, head: x.stdout.slice(0, 40), err: x.stderr.slice(0, 120) });
-    all("1.35.4: `dev-spec design-system --json` with its reads ahead (DEV_SPEC_TEST_AHEAD=on) exits 0 by itself, about as soon as in sequence, printing the same JSON and nothing else; the MCP server answers spec_scan {designSystem} read ahead, then the next request, and exits once its stdin ends; a worker's own output (a NODE_OPTIONS preload that writes to stdout and stderr in each worker thread: it ran, a mark a worker) reaches neither one's stdout nor its stderr, and a `-r` preload of the command line reaches no worker (got " + js({ off: brief(off), on: brief(on), pre: brief(pre), marksA: preCli.marks("a"), marksB: preCli.marks("b"), server: Object.assign(brief(srv), { ids: srv.ids, marksA: preServer.marks("a"), marksB: preServer.marks("b") }) }) + ")", {
+    all("1.35.4: `dev-spec design-system --json` with its reads ahead (DEV_SPEC_TEST_AHEAD=on) exits 0 by itself, about as soon as in sequence, printing the same JSON and nothing else; the MCP server answers spec_scan {designSystem} read ahead, then the next request, and exits once its stdin ends; no preload reaches a worker — neither the shell's NODE_OPTIONS one (it would write to stdout and stderr in each worker thread: the workers' env holds no NODE_OPTIONS, review 1 of 1.35.4) nor a `-r` of the command line — and nothing reaches either one's stdout or stderr (got " + js({ off: brief(off), on: brief(on), pre: brief(pre), marksA: preCli.marks("a"), marksB: preCli.marks("b"), server: Object.assign(brief(srv), { ids: srv.ids, marksA: preServer.marks("a"), marksB: preServer.marks("b") }) }) + ")", {
       exits: () => [off, on, pre].every((x) => x.code === 0 && !x.killed),
       json: () => jOff && jOn && jPre && jOff.ok === true && js(jOn) === js(jOff) && js(jPre) === js(jOff) && jOff.missingTotal === 320,
       quiet: () => [off, on, pre].every((x) => x.stderr === "" && !/LEAK/.test(x.stdout)),
-      ranInWorkers: () => preCli.marks("a") >= 8,
+      noPreloadInWorkers: () => preCli.marks("a") === 0,
       ownArgv: () => preCli.marks("b") === 0,
       prompt: () => on.ms < 3 * off.ms + 3000,
       server: () => srv.code === 0 && !srv.killed && js(srv.ids) === js([1, 2, 3]) && lines.every((m) => m && m.jsonrpc === "2.0") && scanReply.result && !scanReply.result.isError,
-      serverQuiet: () => srv.stderr === "" && !/LEAK/.test(srv.stdout) && preServer.marks("a") >= 8 && preServer.marks("b") === 0,
+      serverQuiet: () => srv.stderr === "" && !/LEAK/.test(srv.stdout) && preServer.marks("a") === 0 && preServer.marks("b") === 0,
     });
   }
 

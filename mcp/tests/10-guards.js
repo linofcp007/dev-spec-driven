@@ -1200,11 +1200,14 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     // it was an absolute 2 s, missed at 2.5 s once under the pre-push gate's parallel run), with a 10 s ceiling.
     const r3Cases = (n) => ["$(".repeat(n / 2), BS.repeat(n), "`".repeat(n), "<<EOF" + NL.repeat(n / 2), "$'" + BS.repeat(n), '"$('.repeat(n / 3), "${".repeat(n / 2),
       "${$(".repeat(n / 4), "a<<b ".repeat(n / 5) + NL + "x", '@"' + NL + "$(".repeat(n / 2), "`$(".repeat(n / 3), ("x" + NL).repeat(n / 2)];
-    const r3Time = (c) => { const t0 = Date.now(); sh("dev-spec " + c); sh("dev-spec " + c, "PowerShell"); sh("cmd /c \"dev-spec " + c + "\""); return Date.now() - t0; };
-    const r3Linear = (s) => s.every(([big, small]) => big < 8 * small + 100 && big < 10000);
+    // (each the faster of two runs, and 300 ms of slack: a case of 8 ms at 16 KB measured 247 ms at 64 KB once under a full
+    // suite's load — quadratic, a case worth the check is seconds at 64 KB)
+    const r3Once = (c) => { const t0 = Date.now(); sh("dev-spec " + c); sh("dev-spec " + c, "PowerShell"); sh("cmd /c \"dev-spec " + c + "\""); return Date.now() - t0; };
+    const r3Time = (c) => Math.min(r3Once(c), r3Once(c));
+    const r3Linear = (s) => s.every(([big, small]) => big < 8 * small + 300 && big < 10000);
     const r3Times = remeasure(() => { const small = r3Cases(16 * 1024); return r3Cases(64 * 1024).map((c, i) => [r3Time(c), r3Time(small[i])]); },
       r3Linear); // 1.26: measured once more on a timing-only miss
-    ok(r3Linear(r3Times), "feature F2 review R3: the lexer stays linear on 64 KB of $( / \\ / ` / heredocs / $' / \"$( / ${ / here-strings (each within 8× + 100 ms of the same case at 16 KB, under 10 s; got [64 KB, 16 KB] " + JSON.stringify(r3Times) + " ms)");
+    ok(r3Linear(r3Times), "feature F2 review R3: the lexer stays linear on 64 KB of $( / \\ / ` / heredocs / $' / \"$( / ${ / here-strings (each, the faster of two runs, within 8× + 300 ms of the same case at 16 KB, under 10 s; got [64 KB, 16 KB] " + JSON.stringify(r3Times) + " ms)");
 
     // R9: a heredoc body is data — skipped (<<'EOF', <<"EOF", <<\EOF, <<-EOF), read only for $( ) / `…` when unquoted, or as the
     // script when fed to a shell (bash <<EOF, sh <<<); what follows the terminator is a command again.

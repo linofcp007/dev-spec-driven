@@ -793,11 +793,16 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     rooted one). A read resolves the REAL path (`realpathSync.native`) and asks `isInsideDir(realRoot, …)` —
     `projectFileInside` checks the last link alone, and an `extends` crosses folders the walk never entered (a hidden
     `.svelte-kit/tsconfig.json`). UNKNOWN anywhere in the chain — not JSON once its comments are out, a link out of the
-    project, past DS_TS_CONFIGS reads (100), DS_TS_LINKS entries (32), DS_TS_STARS patterns (100) — makes the folder's
+    project, past DS_TS_CONFIGS reads (100), DS_TS_LINKS entries (32), DS_TS_STARS patterns (100), a key, a target or a
+    `baseUrl` longer than DS_PATH_CHARS (1,024: no file system holds such a path, and each import built keys from it
+    again — review 1, 240 KB of targets took 500 pages 114 s) — makes the folder's
     config tell NOTHING: it keeps 1.35.3's reading (an abstention where TypeScript's reading cannot be reproduced).
-    Memoised per governing folder (`tables` — a cost guard, timed). The keys are ADDED before the package lookup and
-    the guess, both unchanged. A default import looks up the base of EVERY key of the place (`lookup`, `keyBase`): a
-    config's target, a map's, need not share the guess's last segment. Review 3 of 1.35.3 had taken a first reading out
+    Memoised per governing folder (`tables` — a cost guard, timed), a config's own table once a FILE (`owned` /
+    `tableAt` — review 1: sixty folders over one chain of thirty configs rebuilt every table, 52 s), the keys once a
+    governing folder and a spec (`said`). The keys are ADDED before the package lookup and the guess, both unchanged. A
+    default import looks up EACH key of the place with its own base (`lookup`, `keyBase`): a config's target, a map's,
+    need not share the guess's last segment — and a target's base under the guess's folder is a place TypeScript never
+    resolves to (review 1: the union of bases checked against the union of keys settled such a file). Review 3 of 1.35.3 had taken a first reading out
     (a `..` target as text, no bound, short of TypeScript's rules three ways — a `*` catch-all returned early, two configs
     in a folder, the first key not the longest); each is answered by a rule and a fixture.
   - **A workspace package's `exports` map** (`exportsMap`, `reachTargets`, `targetsOf`, `exportedPaths`, `refused`): read
@@ -808,19 +813,26 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     then the longest key, its match free to hold `/` but no refused segment (`.`, `..`, `node_modules`, `%`-encoded, split
     on `/` and `\`); a key's value alone decides (`null`: nothing, never a shorter pattern). Its targets: a string that
     starts `./` with no refused segment; a condition object's branches up to its `default`, any condition (what the module
-    MAY be: Chakra's `dev`); a list to its first accepted entry (a refused one, a `null`, an object passed — Node's code,
-    not its spec prose); DS_EXPORT_DEPTH (a crash guard: 100,000 nested lists overflowed), DS_EXPORT_TARGETS; every `*`
-    replaced; an index target is its folder. Kept up to DS_MAP_CHARS of manifests (a memory bound). The bare `.`, `main`,
-    `module`, `source` are never read: the folder already covers them. The map ADDS keys beside the subpath and `src/`.
+    MAY be: Chakra's `dev`); a list to its first accepted entry (a refused one, a `null`, an object that resolves nothing
+    passed — Node's code, not its spec prose; an object whose `default` resolves ends it, review 1); DS_EXPORT_DEPTH (a
+    crash guard: 100,000 nested lists overflowed), DS_EXPORT_TARGETS; every `*` replaced, a target the match would make
+    longer than DS_PATH_CHARS not taken (review 1: 200,000 `*`s × a long subpath ran a scan out of memory); an index
+    target is its folder. Kept up to DS_MAP_CHARS of manifests (a memory bound). The bare `.`, `main`, `module`, `source`
+    are never read: the folder covers them for a name looked for, but the FOLLOW starts at `src/index` / `index` alone
+    (another root entry is a row by hand — review 1). The map ADDS keys beside the subpath and `src/`.
   - **What a module's own file passes on** (`filesOf`, `passesOf`, `closureOf`, `through`, `reach`, `look`; `mains`): the
     follow starts at the files the module IS (a key's own, `<key>/index`, a package root's `src/index`) and goes on
     through `export { … } from` links and `export *` closures to the file that declares the name; the evidence is noted
     there, under the name it exports. A file's re-exports are read once (the files read before the search are prefilled),
     up to DS_PASS_FILES / DS_PASS_CHARS of its own; a closure is indexed once a file (a walk once a name was quadratic:
     90,000 steps on Chakra, 6,063 indexed); a query is memoised once a file, a name and a tail; DS_PASS_STEPS is charged
-    where the work happens — a named entry indexed, a module a star or a link reaches (1 + its keys + its files, checked
-    BEFORE it is followed), each candidate a lookup compares. A file's own explicit link hides its stars (ES's
-    ResolveExport), a star never passes a default, a cycle ends at a file seen. The follow is NOT filtered by the search's
+    where the work happens — every star or link looked at (`step`: one of no project's module too — review 1, such stars
+    were walked free in every closure that reached them, 83 s), a named entry indexed, a module a star or a link reaches
+    (1 + its keys + its files, checked BEFORE it is followed), each candidate a lookup compares; a file's identical stars
+    are kept once; an answer is kept once a [path, name] (`once` — review 1: a name passed on by many links to one place
+    gave as many copies, each copied into every importing folder's answer: memory out). A file's own explicit link hides
+    its stars where the query starts (ES's ResolveExport applies it in every star target too: there the follow
+    over-approximates, knowingly — review 1), a star never passes a default, a cycle ends at a file seen. The follow is NOT filtered by the search's
     names (Gutenberg's `__experimentalTreeGridItem as TreeGridItem` was lost by a guard); the prefilter (`wanted`) gains
     the namespaces (`export * as NS`) the files read before the search pass on, and nothing a file read later passes on
     (a verdict must not depend on the order). No name is ASKED because a file passes it on.
@@ -831,8 +843,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     trimmed of its indent (prettier-plugin-svelte indents a block's); its MARKUP to the tag loop with the comparison guard
     off (in markup a word before a tag is text). Never read: fenced code (`fenceStep` — MDX has no indented code, so
     `stripFencedCode` would be wrong), inline code spans (`backtickRuns`), front matter, `<!-- -->` / `{/* */}` across
-    lines, `<style>`, a Vue block but its script and root `<template>` (its depth counted), an Astro `<script>` (a client
-    script). In `.vue` alone a kebab tag with a dash is the component Vue resolves (`<my-button>` → MyButton; one word,
+    lines, `<style>`, a Vue block but its script and root `<template>` (its depth counted; a tag that closes itself —
+    `<template #trailing />`, the empty slot eslint-plugin-vue writes, `<script src="…" />` — opens nothing: review 1, a
+    template before the script held to the file's end), an Astro `<script>` (a client script). An opening tag's end is
+    looked for once a line where it is known (`tagEnd`: a line of openers with no `>` after them was quadratic, review 1). In `.vue` alone a kebab tag with a dash is the component Vue resolves (`<my-button>` → MyButton; one word,
     `<card>`, needs Vue's own element list: never). Read after every script, one queue, the same counters (markups first
     or counted apart lost a script's reading).
   - **Read ahead** (`readFileHeads`, files.js): the exports read and the usage queue take their files through it — the
@@ -842,7 +856,19 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     worker silent for AHEAD_STALL_MS, or none that starts, leaves the rest to readFileHead. The text is readFileHead's
     exactly (the same bounded read, `decodeText`, the same cut, the same order). Why: on Windows with on-access
     antivirus an OPEN costs ~0.65 ms (stat 47 µs; no read API helps — only fewer or overlapped opens); 5,000 files read
-    in sequence took 3.2 s, sixteen at a time 0.64 s. Where opens are fast the probe never starts a worker.
+    in sequence took 3.2 s, sixteen at a time 0.64 s. Where opens are fast the probe never starts a worker. The workers'
+    env holds no NODE_OPTIONS (`execArgv: []` keeps no flag, but a worker reads NODE_OPTIONS again: `--input-type=module`
+    made its source ESM, a preload ran in it — one that refused workers stalled each pool 2 s, one that wrote to fd 1
+    wrote into an MCP server's JSON-RPC: review 1), and a worker's 'error' is heard (`w.on("error", stop)` — unheard,
+    it is thrown on the main thread and ends an MCP server once the scan has answered).
+  - **A barrel's other names** (exportedComponents' `also`): a candidate the file also gives under another name — the same
+    local (`export { Root, Root as Card }`), the same re-exported binding — is no row of its own when one of those names
+    is a row already (review 1 of 1.35.4: on a SvelteKit checkout that ran `svelte-kit sync`, `$lib` resolves through
+    `.svelte-kit/tsconfig.json` and shadcn-svelte's barrels listed 75 bare parts, `Root`, `Content`, `Link`, beside `Card`,
+    `CardContent` — the fresh clones of the corpus have no `.svelte-kit`, and the first measure of `$lib` was made on
+    them). A name given once stays (`export { default as Toaster } from "./Sonner.vue"`; Gutenberg's
+    barrel names for its inserter listbox's parts — a guard on every barrel name for a component file's default lost
+    seven of its public names).
   What it cannot see, said in the user docs: a name no file renders where the reader sees it (a kit consumed elsewhere;
   past a bound; a default import under another local name in a file that writes none of the names asked; an alias only
   a config's `references`, a package's config, `package.json`'s `imports` or a bundler's alias writes; a name passed on
@@ -1757,6 +1783,23 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   catches: the export list's lookahead re-scanned its growing text for each new line and its lines were read again by
   the next `export {` (quadratic on a file of lists that never close) — a list's lines are now its entries, read once;
   the prototypes' code came without the file's comments, written back from the designs. Rejected after measuring:
-  reading every `.ts` file for candidates (×5 to ×8 on Vue / Svelte kits, no row), following SvelteKit's `$lib` from
-  markup (+75 part rows), a guard on the follow by the search's names (lost a real lower-case alias), a cross-call
-  cache (breaks the one-call read-cache rule).
+  reading every `.ts` file for candidates (×5 to ×8 on Vue / Svelte kits, no row), a guess of SvelteKit's `$lib` from
+  markup (+75 part rows — the config reader came to follow it anyway, through `.svelte-kit/tsconfig.json`: review 1),
+  a guard on the follow by the search's names (lost a real lower-case alias), a cross-call cache (breaks the one-call
+  read-cache rule).
+- **1.35.4 review 1** (eight fresh reviewers, one dimension each — the five items, the read-ahead, a corpus of 19 + 13
+  more public repositories, the docs and tests — and a skeptic for each HIGH / MEDIUM) — no HIGH; 7 MEDIUM, every one
+  made by this release: costs no bound bounded — a config's long targets resolved again for each import (AL-1) and its
+  chain's tables rebuilt for each governing folder (AL-2), a map target's `*`s × a long subpath (EXP-1), stars of no
+  project's module walked free in every closure (RX-1) and an answer copied once a link into every importing folder
+  (RX-2), a line of block openers with no `>` (MK-2) —, and shadcn-svelte's barrels listing 75 bare parts on a
+  checkout that ran `svelte-kit sync` (CORPUS-1: the corpus's fresh clones have no `.svelte-kit`). The fixes: DS_PATH_CHARS,
+  a table once a file, keys once a folder and a spec, a step for every star and link, answers once a [path, name],
+  `tagEnd`, and a barrel's other names (`also`). Two MEDIUMs the skeptics made LOW (a self-closing `<template>`, a
+  line's trailing blanks trimmed once a call) and the LOWs worth a line were fixed too — a default import's base
+  paired with its own key, an object's `default` ending a target list, a list's closing line read on, the workers'
+  env without NODE_OPTIONS (a preload reached them), a broken ternary's condition taken for the factory's type —; the
+  rest is said (a root entry other than `src/index`, a cast in a factory's argument, the follow's over-approximation in
+  star targets, the markup cost of an MDX docs site). Two absolute times of earlier releases that miss under a parallel
+  run became ratios. Lesson, again: the corpus measures what a fresh clone holds — a generated file a developer's
+  checkout always has (`.svelte-kit/`, `.next/types`) changes what a reader of configs sees.

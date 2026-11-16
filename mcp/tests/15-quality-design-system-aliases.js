@@ -1,7 +1,8 @@
 "use strict";
 // The design-system registry — 1.35.4: what an import names: the governing tsconfig / jsconfig `paths` and `baseUrl`.
 // The nearest tsconfig.json, else jsconfig.json, above the file, read through `extends` as TypeScript reads it — and what
-// this scan cannot read so tells nothing; the reading's bounds (100 configs read, 32 links, 100 patterns, 10 targets), its cost.
+// this scan cannot read so tells nothing; the reading's bounds (100 configs read, 32 links, 100 patterns, 10 targets, 1,024
+// characters a path), its cost; a default import's places, each with its own base.
 
 const fs = require("fs");
 const path = require("path");
@@ -43,6 +44,11 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     return o;
   };
   const among = (got, names) => got.filter((n) => names.includes(n));
+  // a timed pair for remeasure(): both scans, the hard one first → [hard ms, soft ms, hard settles Moving, soft settles Moving]
+  const pair = (hard, soft) => () => {
+    const t0 = Date.now(); const h = S.designSystemReport(hard); const t1 = Date.now(); const s = S.designSystemReport(soft);
+    return [t1 - t0, Date.now() - t1, h.missing.some((m) => m.name === "Moving"), s.missing.some((m) => m.name === "Moving")];
+  };
 
   // --- real-world configs: what each settles, and what it must not -----------------------------------------------------------
   {
@@ -321,6 +327,46 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     });
   }
 
+  // --- a path no file system holds: a key, a target or a baseUrl longer than DS_PATH_CHARS (1,024) tells nothing -----------------
+  {
+    // (a string of n characters: `head`, `step` over and over — `a/`, or `a/../`, a step that folds back —, `/` to the length, `tail`)
+    const sized = (head, n, tail, step = "a/") => { const room = n - head.length - tail.length; return head + step.repeat(Math.floor(room / step.length)) + "/".repeat(room % step.length) + tail; };
+    const f = { "package.json": REACT }, lengths = [];
+    for (const [n, tag] of [[1024, "Pos"], [1025, "Neg"]]) {
+      const target = sized("./", n, "*"), key = sized("@", n, "/*"), base = sized("./", n, "", "a/../");
+      lengths.push(target.length, key.length, base.length);
+      // one long target on a key of its own: the kit the config's OTHER, short, key reaches
+      kase(f, "l-target" + n, { compilerOptions: { paths: { "@long/*": [target], "@sh/*": ["./sh/*"] } } }, [["sh/components/k.tsx", "LongTarget" + n + tag]], "@sh/components/k");
+      // a long key beside the short one; a long baseUrl that folds back to its own folder (the short key's target below it)
+      kase(f, "l-key" + n, { compilerOptions: { paths: { [key]: ["./a/*"], "@sh/*": ["./sh/*"] } } }, [["sh/components/k.tsx", "LongKey" + n + tag]], "@sh/components/k");
+      kase(f, "l-base" + n, { compilerOptions: { baseUrl: base, paths: { "@sh/*": ["./sh/*"] } } }, [["sh/components/k.tsx", "LongBase" + n + tag]], "@sh/components/k");
+    }
+    const got = seeded(project("long-paths", f));
+    const IN = ["LongTarget1024Pos", "LongKey1024Pos", "LongBase1024Pos"], OUT = ["LongTarget1025Neg", "LongKey1025Neg", "LongBase1025Neg"];
+    all("1.35.4 review 1: a key, a target or a baseUrl longer than DS_PATH_CHARS (1,024 characters: no file system holds such a path, and each import resolved it again) makes the config tell nothing — one target of 1,025 characters on a key of its own and the kit the config's other, short, key reaches is not settled through it; a long key, a long baseUrl the same —, one of 1,024 is read (got " + js({ got: among(got, IN.concat(OUT)), lengths }) + ")",
+      Object.assign(verdicts(got, IN, OUT), { lengths: js(lengths) === js([1024, 1024, 1024, 1025, 1025, 1025]) }));
+  }
+
+  // --- a default import: each place the module may be with its own base ----------------------------------------------------------
+  {
+    // an exact key sends `@/components/brand` to identity/logo/index.tsx — the one file TypeScript resolves it to —, and the
+    // guess's folder for the same spec, src/components/brand/, holds a logo/index.tsx too: the target's base (`logo`) under
+    // the guess's folder is no place the module is; the guess's own key still settles its folder's index (`@/components/mark`).
+    // (the page renders a candidate too — DefGlow, as Nx's renders NxGlow: a file that writes no name asked is never viewed)
+    const def = seeded(project("default-pairs", {
+      "package.json": REACT,
+      "tsconfig.json": { compilerOptions: { paths: { "@/components/brand": ["./src/components/identity/logo/index.tsx"], "@/*": ["./src/*"] } } },
+      "src/components/identity/logo/index.tsx": L(["const BrandLogo = makeLogo(config);", "export default BrandLogo;"]),
+      "src/components/brand/logo/index.tsx": L(["const OldLogo = makeLogo(other);", "export default OldLogo;"]),
+      "src/components/mark/index.tsx": L(["const MarkLogo = makeMark(config);", "export default MarkLogo;"]),
+      "src/components/ui/glow.tsx": G("DefGlow"),
+      "src/app/page.tsx": L(["import Brand from \"@/components/brand\";", "import Mark from \"@/components/mark\";", "import { DefGlow } from \"@/components/ui/glow\";",
+        "export default function P() { return <><Brand /><Mark /><DefGlow /></>; }"]),
+    }));
+    all("1.35.4 review 1: a default import pairs each place the module may be with its own base — an exact key to identity/logo/index.tsx settles BrandLogo, the guess's src/components/brand/logo/index.tsx (the target's base under another key's folder) is no place TypeScript resolves to: OldLogo is not seeded; the guess's own folder's index still settles MarkLogo (got " + js(among(def, ["BrandLogo", "OldLogo", "MarkLogo"])) + ")",
+      verdicts(def, ["BrandLogo", "MarkLogo"], ["OldLogo"]));
+  }
+
   // --- what it costs: a config's table is built once a governing folder ---------------------------------------------------------
   {
     // hard: a tsconfig.json over 31 links with 100 patterns, 1,000 page folders each asking it 31 names (31,000 asks); soft:
@@ -337,14 +383,52 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       for (let d = 0; d < 1000; d++) files["src/pages/p" + d + "/page.tsx"] = text;
       return project("cost-" + tag, files);
     };
-    const hard = cost("hard", true), soft = cost("soft", false);
-    const ms = remeasure(() => {
-      const t0 = Date.now(); const h = S.designSystemReport(hard); const t1 = Date.now(); const s = S.designSystemReport(soft);
-      return [t1 - t0, Date.now() - t1, h.missing.some((m) => m.name === "Moving"), s.missing.some((m) => m.name === "Moving")];
-    }, (s) => s[0] < 2 * s[1] + 150);
+    const ms = remeasure(pair(cost("hard", true), cost("soft", false)), (s) => s[0] < 2 * s[1] + 150);
     all("1.35.4: a governing config's table is built once a folder — 31 links and 100 patterns asked 31,000 times cost within twice the same pages with no config (got " + js(ms) + ")", {
       bounded: ms[0] < 2 * ms[1] + 150,
       settled: ms[2] && ms[3],
+    });
+  }
+
+  // --- what it costs: an import's keys once a governing folder and a spec; a config's table once a file -----------------------
+  {
+    // hard: 500 page folders each asking 20 bare specs (`lib<k>`, one segment: no guess beside the key) through a `*` key of
+    // 10 targets of 1,000 characters (within DS_PATH_CHARS); soft: the same pages, targets of one segment — the keys' memo
+    // keeps hard within a bound of soft (each import resolved the ten targets again: 240 KB of them took 500 pages 114 s)
+    const long = (tag, segs) => {
+      const files = { "package.json": REACT, "src/components/ui/kit.tsx": "export const Moving = motion(Box);\n" };
+      files["tsconfig.json"] = { compilerOptions: { paths: { "*": Array.from({ length: 10 }, (_, i) => "./t" + i + "/" + "a/".repeat(segs) + "*") } } };
+      const text = page([[["Moving"], "../../components/ui/kit"]].concat(Array.from({ length: 20 }, (_, k) => [["A" + k], "lib" + k])));
+      for (let d = 0; d < 500; d++) files["src/pages/p" + d + "/page.tsx"] = text;
+      return project("cost-long-" + tag, files);
+    };
+    const lk = remeasure(pair(long("hard", 497), long("soft", 0)), (s) => s[0] < 2 * s[1] + 150);
+    all("1.35.4 review 1: an import's keys are built once a governing folder and a spec — 500 page folders asking 20 bare specs through a `*` key of 10 targets of 1,000 characters cost within twice the same pages with targets of one segment (got " + js(lk) + ")", {
+      bounded: lk[0] < 2 * lk[1] + 150,
+      settled: lk[2] && lk[3],
+    });
+    // hard: 60 folders, each with a tsconfig.json extending the end of one chain of 31 configs that write 2,000 exact keys
+    // each; soft: the same with one key each — a config's table is built once a file (each folder rebuilt the table of every
+    // config of its chain: 68 folders over 31 configs of 12,000 keys took 52 s)
+    const chain = (tag, keys) => {
+      const files = { "package.json": REACT, "src/components/ui/kit.tsx": "export const Moving = motion(Box);\n" };
+      for (let c = 0; c < 31; c++) {
+        const paths = {};
+        for (let k = 0; k < keys; k++) paths["@k" + c + "_" + k] = ["./a"];
+        files["cfg/c" + c + ".json"] = Object.assign(c ? { extends: "./c" + (c - 1) + ".json" } : {}, { compilerOptions: { paths } });
+      }
+      for (let l = 0; l < 60; l++) {
+        files["l" + l + "/tsconfig.json"] = { extends: "../cfg/c30.json" };
+        files["l" + l + "/page.tsx"] = page([[["Moving"], "../src/components/ui/kit"], [["X"], "lib/x"]]);
+      }
+      return project("cost-chain-" + tag, files);
+    };
+    // (hard reads 1.2 MB of configs that soft does not, once: a wider bound than the keys' — measured ×1.2 to ×2.7 with the
+    // memo, ×9 to ×27 without it, six runs at once)
+    const ch = remeasure(pair(chain("hard", 2000), chain("soft", 1)), (s) => s[0] < 4 * s[1] + 300);
+    all("1.35.4 review 1: a config's table is built once a file, not once a governing folder — 60 folders extending one chain of 31 configs of 2,000 exact keys each cost within four times the same with one key each (got " + js(ch) + ")", {
+      bounded: ch[0] < 4 * ch[1] + 300,
+      settled: ch[2] && ch[3],
     });
   }
 };

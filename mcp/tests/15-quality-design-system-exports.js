@@ -3,12 +3,14 @@
 // also where the map says — its own key (as written), else the pattern with the longest part before its `*`, then the
 // longest key; every condition's target up to `default`, a list's first target Node takes; `null` excludes (never a
 // shorter pattern instead), an index target is its folder, a default import by its target's own name — and the guess stays
-// beside it. Its bounds (500 keys, 8 deep, 16 targets, 4 MB of kept manifests), a key's targets reached once (timed),
-// each folder its own manifest's map, and the file Node's own require.resolve picks.
+// beside it. Its bounds (500 keys, 8 deep, 16 targets, 4 MB of kept manifests; review 1: a path of 1,024 characters, the
+// match's in it too — a many-star target in a capped heap), a key's targets reached once (timed), each folder its own
+// manifest's map, the file Node's own require.resolve picks, and (review 1) a list that ends at an object whose `default` resolves.
 
 const fs = require("fs");
 const path = require("path");
 const { createRequire } = require("module");
+const { spawn } = require("child_process");
 
 exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
@@ -261,6 +263,135 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       rows: () => rows[0] && rows[1],
       size: () => hardText.length === softText.length && hardText.length < 256 * 1024,
       memo: () => mms[0] < 2.5 * mms[1] + 150,
+    });
+  }
+
+  // --- review 1 of 1.35.4 (EXP-1): a path the map writes past 1,024 characters names no file — a target, or what the match makes it --
+  {
+    // Each long target is padded with a run of `/` — the scan folds a `//` as Node does (DEP0166) — so the file it would
+    // name IS there: past the bound it is not taken all the same, and the bound alone decides (`at` 1,000 characters kept,
+    // `past` 1,100 not; a pattern's 980 + the match — `near` 984 taken, FAR 1,040 not —; two `*`s 980 + twice the match —
+    // `ab` 984 taken, TWO 1,040 not: counted once it would be 1,010). A list still ends at a target past it (Node takes it).
+    const pad = (head, tail, len) => head + "/".repeat(len - head.length - tail.length) + tail;
+    const KIT = "src/components/kit/";
+    const FAR = "far-" + "a".repeat(56), TWO = "two-" + "b".repeat(26);
+    const LONG_MAP = {
+      "./at": "./" + pad(KIT, "at.tsx", 998),
+      "./past": "./" + pad(KIT, "past.tsx", 1098),
+      "./head": ["./" + pad(KIT, "head.tsx", 1098), "./" + KIT + "next.tsx"],
+      "./p/*": "./" + pad(KIT, "*.tsx", 980),
+      "./q/*": "./" + pad("src/components/", "*/*.tsx", 980),
+    };
+    const lengths = [LONG_MAP["./at"], LONG_MAP["./past"], LONG_MAP["./head"][0], LONG_MAP["./p/*"], LONG_MAP["./q/*"]].map((t) => t.length);
+    const p = project("paths", { "package.json": WORKSPACE, "packages/long/package.json": js({ name: "@acme/long", exports: LONG_MAP }) });
+    const FILES = [["at", "AtGlow"], ["past", "PastGlow"], ["head", "HeadGlow"], ["next", "NextGlow"], ["near", "NearGlow"], [FAR, "FarGlow"]];
+    for (const [f, n] of FILES) write(p, "packages/long/" + KIT + f + ".tsx", glow([n]));
+    write(p, "packages/long/src/components/ab/ab.tsx", glow(["TwoNearGlow"]));
+    write(p, "packages/long/src/components/" + TWO + "/" + TWO + ".tsx", glow(["TwoFarGlow"]));
+    const LONG_PAGES = [["AtGlow", "at"], ["PastGlow", "past"], ["HeadGlow", "head"], ["NextGlow", "head"], ["NearGlow", "p/near"], ["FarGlow", "p/" + FAR],
+      ["TwoNearGlow", "q/ab"], ["TwoFarGlow", "q/" + TWO]];
+    LONG_PAGES.forEach(([name, sub], i) => write(p, "apps/web/l" + i + ".tsx", page(name, "@acme/long/" + sub, i)));
+    const asked = new Set(LONG_PAGES.map(([n]) => n));
+    let listed = [], err = null, said = null;
+    try { listed = seeded(p).filter((n) => asked.has(n)); said = S.designSystemReport(p).limits; } catch (e) { err = e.constructor.name + ": " + String(e.message).slice(0, 120); }
+    const yes = (n) => listed.includes(n), no = (n) => !listed.includes(n);
+    all("1.35.4 review 1: a target the map writes past 1,024 characters (DS_PATH_CHARS) is not kept — 1,100 of them, though its `//`s fold to a file that is there — and a pattern's target the match would make longer is not taken, its every `*` counted (980 + 2 × 30); a target of 1,000 characters and the matches that stay under the bound still give their files; a list still ends at a target past the bound, as Node takes it — each without a word (got " + js({ listed, err, said, lengths }) + ")", {
+      scanned: () => err === null,
+      lengths: () => js(lengths) === js([1000, 1100, 1100, 982, 982]),
+      silent: () => js(said) === "[]",
+      kept: () => yes("AtGlow") && yes("NearGlow") && yes("TwoNearGlow"),
+      pastKept: () => no("PastGlow"),
+      pastInList: () => no("HeadGlow") && no("NextGlow"),
+      pastTaken: () => no("FarGlow"),
+      everyStar: () => no("TwoFarGlow"),
+      exactly: () => js(listed) === js(["AtGlow", "NearGlow", "TwoNearGlow"]),
+    });
+  }
+
+  // --- review 1 of 1.35.4 (EXP-1): the reviewer's many-star manifest — a `./*` target of 200,000 `*`s, 10 imports of 1,900-character
+  // subpaths (every `*` × the match: 380 MB a lookup — it ran the scan out of a 4 GB heap) — scanned by the CLI in a heap of 256 MB --
+  {
+    const CLI = path.join(__dirname, "..", "cli", "dev-spec.js");
+    // a node process → { code, signal, killed, stdout, stderr, ms } — killed after killMs (a hang FAILS, never waits forever)
+    const runNode = (args, { env, cwd, killMs }) => new Promise((resolve) => {
+      const t0 = Date.now();
+      const ch = spawn(process.execPath, args, { env, cwd, stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "", stderr = "", killed = false;
+      ch.stdout.on("data", (d) => { stdout += d; });
+      ch.stderr.on("data", (d) => { stderr += d; });
+      const timer = setTimeout(() => { killed = true; ch.kill(); }, killMs);
+      ch.on("close", (code, signal) => { clearTimeout(timer); resolve({ code, signal, killed, stdout, stderr, ms: Date.now() - t0 }); });
+    });
+    const p = project("stars", { "package.json": WORKSPACE });
+    const manifest = js({ name: "@acme/ui", exports: { "./*": "./" + "*".repeat(200000) } });
+    write(p, "packages/ui/package.json", manifest);
+    write(p, "packages/ui/src/components/glow/glow.tsx", glow(["FooGlow"]));
+    // (and a package whose `./*` target is of a normal length: it still gives its file)
+    write(p, "packages/calm/package.json", js({ name: "@acme/calm", exports: { "./*": "./src/components/glow/*.tsx" } }));
+    write(p, "packages/calm/src/components/glow/calm.tsx", glow(["CalmGlow"]));
+    const lines = Array.from({ length: 10 }, (_, i) => "import { FooGlow as F" + i + " } from \"@acme/ui/" + String.fromCharCode(97 + i) + i + "x".repeat(1900) + "\";");
+    lines.push("import { CalmGlow } from \"@acme/calm/calm\";", "export const P = () => <><CalmGlow />" + Array.from({ length: 10 }, (_, i) => "<F" + i + " />").join("") + "</>;");
+    write(p, "apps/web/page.tsx", lines.join("\n") + "\n");
+    const r = await runNode(["--max-old-space-size=256", CLI, "design-system", "--json"], { env: Object.assign({}, process.env, { SPEC_PROJECT_DIR: p }), cwd: p, killMs: 120000 });
+    let j = null;
+    try { j = JSON.parse(r.stdout); } catch { /* no JSON: the check says so */ }
+    const rows = j && Array.isArray(j.missing) ? j.missing.map((m) => m.name).sort() : null;
+    all("1.35.4 review 1: the reviewer's many-star manifest — a `./*` target of 200,000 `*`s (" + manifest.length + " characters) and 10 imports of 1,900-character subpaths — is scanned by `dev-spec design-system --json` in a heap of 256 MB: it exits 0 (it ran a 4 GB heap out of memory, exit 134), the many-star target naming no file and the normal-length one giving its row (got " + js({ code: r.code, signal: r.signal, killed: r.killed, ms: r.ms, rows, err: r.stderr.slice(0, 200) }) + ")", {
+      exits: () => r.code === 0 && !r.killed,
+      json: () => j !== null && j.ok === true,
+      normal: () => rows.includes("CalmGlow"),
+      noFile: () => !rows.includes("FooGlow"),
+    });
+  }
+
+  // --- review 1 of 1.35.4 (EXP-3): in a list, an object whose `default` resolves ends it — `default` always matches -------------------
+  {
+    // [{default: a}, b]: Node never reaches b, under any conditions; [{import: a}, b]: b where `import` is not one (require);
+    // a `default` that resolves through another object ends it too, one that may match nothing (`{import}`), a `null` and a
+    // target Node refuses do not; an object of `import` and `default` ends it with both its targets. And Node's own
+    // require.resolve picks, for each, a file the scan lists — never one it cuts.
+    const K = "./src/components/kit/", F = (f) => K + f + ".tsx";
+    const LISTS = {
+      "./ends": [{ default: F("ends-first") }, F("ends-after")],
+      "./goes": [{ import: F("goes-first") }, F("goes-after")],
+      "./deep": [{ default: { default: F("deep-first") } }, F("deep-after")],
+      "./may": [{ default: { import: F("may-first") } }, F("may-after")],
+      "./nulls": [{ default: null }, F("null-after")],
+      "./refused": [{ default: "./../up.tsx" }, F("ref-after")],
+      "./both": [{ import: F("both-import"), default: F("both-default") }, F("both-after")],
+      // (a list that ends at a target ends the one around it: a list in a list, a list under `default`)
+      "./inlist": [[F("in-first"), F("in-second")], F("in-after")],
+      "./deflist": [{ default: [F("dl-first")] }, F("dl-after")],
+    };
+    // (a file's name is never the name it holds: a component folder's file gives a row of its own name — `ends-first.tsx`, EndsFirst)
+    const pascal = (f) => f.replace(/(?:^|-)([a-z])/g, (_, c) => c.toUpperCase()) + "Glow";
+    const filesIn = (v) => typeof v === "string" ? (v.startsWith(K) ? [v.slice(K.length, -4)] : []) : v && typeof v === "object" ? Object.values(v).flatMap(filesIn) : [];
+    const manifest = js({ name: "@acme/lists", exports: LISTS });
+    const p = project("lists", { "package.json": WORKSPACE, "packages/lists/package.json": manifest });
+    const base = path.join(tmp, "dsexp-lists-node"), nm = path.join(base, "node_modules", "@acme", "lists");
+    write(nm, "package.json", manifest);
+    write(base, "probe.js", "\n");
+    const req = createRequire(path.join(base, "probe.js"));
+    const asked = new Set(), node = {};
+    Object.entries(LISTS).forEach(([key, value], i) => {
+      const files = filesIn(value), spec = "@acme/lists/" + key.slice(2);
+      for (const f of files) { write(p, "packages/lists/" + K.slice(2) + f + ".tsx", glow([pascal(f)])); write(nm, K.slice(2) + f + ".tsx", glow([pascal(f)])); asked.add(pascal(f)); }
+      write(p, "apps/web/list" + i + ".tsx", "import { " + files.map(pascal).join(", ") + " } from \"" + spec + "\";\nexport const L" + i + " = () => <>" + files.map((f) => "<" + pascal(f) + " />").join("") + "</>;\n");
+      try { node[key] = pascal(path.basename(fs.realpathSync.native(req.resolve(spec)), ".tsx")); } catch (e) { node[key] = e.code || e.constructor.name; }
+    });
+    let listed = [], err = null;
+    try { listed = seeded(p).filter((n) => asked.has(n)); } catch (e) { err = e.constructor.name + ": " + String(e.message).slice(0, 120); }
+    const CUT = ["EndsAfterGlow", "DeepAfterGlow", "BothAfterGlow", "InSecondGlow", "InAfterGlow", "DlAfterGlow"];
+    all("1.35.4 review 1: in a target list, an object whose `default` resolves ends it as Node's resolver does (`default` always matches) — [{default: a}, b] never b, a `default` resolving through another object either — while an object that may match nothing (`{import}`, `{default: {import}}`), a `default: null` and a `default` Node refuses pass on to the next entry, and `{import, default}` gives both before it ends; Node's require.resolve picks a listed file for each list, never a cut one (got " + js({ listed, err, node }) + ")", {
+      scanned: () => err === null,
+      ends: () => listed.includes("EndsFirstGlow") && !listed.includes("EndsAfterGlow"),
+      deep: () => listed.includes("DeepFirstGlow") && !listed.includes("DeepAfterGlow"),
+      both: () => listed.includes("BothImportGlow") && listed.includes("BothDefaultGlow") && !listed.includes("BothAfterGlow"),
+      goesOn: () => ["GoesFirstGlow", "GoesAfterGlow", "MayFirstGlow", "MayAfterGlow", "NullAfterGlow", "RefAfterGlow"].every((n) => listed.includes(n)),
+      nested: () => listed.includes("InFirstGlow") && listed.includes("DlFirstGlow") && !["InSecondGlow", "InAfterGlow", "DlAfterGlow"].some((n) => listed.includes(n)),
+      node: () => js(node) === js({ "./ends": "EndsFirstGlow", "./goes": "GoesAfterGlow", "./deep": "DeepFirstGlow", "./may": "MayAfterGlow", "./nulls": "NullAfterGlow", "./refused": "RefAfterGlow", "./both": "BothDefaultGlow", "./inlist": "InFirstGlow", "./deflist": "DlFirstGlow" }),
+      nodeListed: () => Object.values(node).every((n) => listed.includes(n) && !CUT.includes(n)),
+      exactly: () => js(listed) === js(["BothDefaultGlow", "BothImportGlow", "DeepFirstGlow", "DlFirstGlow", "EndsFirstGlow", "GoesAfterGlow", "GoesFirstGlow", "InFirstGlow", "MayAfterGlow", "MayFirstGlow", "NullAfterGlow", "RefAfterGlow"]),
     });
   }
 };

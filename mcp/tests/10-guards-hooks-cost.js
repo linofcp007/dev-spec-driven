@@ -220,7 +220,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
   // timeout, and a timed-out PreToolUse hook doesn't block the call — the guard-down behind it went through. The same shape in the edit
   // guard's path words (`=a=a…`), its `find … -delete` pre-filter (`find find …`), the guarded-file regexes (`.specs/.specs/…` in a
   // Write path) and `[\\/]+$` trims. Timed by SHAPE, never by milliseconds: each reader on a hostile input of n and 4n characters — a
-  // linear scan ~4×, the old ones ~16× (2.8 s at 64 K for the dot glob) — bounded at 8× or a 50 ms floor, measured once more on a miss.
+  // linear scan ~4×, the old ones ~16× (2.8 s at 64 K for the dot glob) — bounded at 8× + 5 ms, each size the fastest of up to five runs.
   {
     const E = require("./lib/engine/index.js");
     const PR = require("./lib/probe.js");
@@ -279,14 +279,23 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       ["the approval hook's decide, Bash (echo x > GUARDI~1/… )", (s) => AH.decide(js({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "echo x > " + s } })),
         "GUARDI~1/", "BASELI~1.JSO"],
     ];
+    // (1.35.4 review 1: ONE run of each size, bounded at max(50 ms, 8×), missed under the pre-push gate's parallel run — 6.1 ms at
+    // 16 K, 97.9 ms at 64 K: a spike in the one 64 K run. Each size is now the FASTEST of its runs, the two sizes run in turns, a
+    // pair more while the bound misses — five at most: a spike lengthens a run, never the fastest of five, and a loaded machine
+    // slows both sizes alike. Linear is ×4, quadratic ×16 — the bound 8× + 5 ms; the old patterns took seconds at 64 K.)
     const time = (f, s) => { const t = process.hrtime.bigint(); f(s); return Number(process.hrtime.bigint() - t) / 1e6; };
+    const linear = (x) => x.t4 <= 8 * x.t1 + 5;
     const shape = {};
+    let slowest = null; // the reader nearest its bound: [name, ms at 16 K, ms at 64 K, runs]
     for (const [name, f, unit, tail] of READERS) {
       const small = rep(unit, 16000, tail), big = rep(unit, 64000, tail);
-      const s = remeasure(() => { f(small); return { t1: time(f, small), t4: time(f, big) }; }, (x) => x.t4 <= Math.max(50, 8 * x.t1));
-      shape[name + " — " + s.t1.toFixed(1) + " ms at 16 K, " + s.t4.toFixed(1) + " ms at 64 K"] = s.t4 <= Math.max(50, 8 * s.t1);
+      f(small);
+      const best = { t1: Infinity, t4: Infinity };
+      const s = remeasure(() => { best.t1 = Math.min(best.t1, time(f, small)); best.t4 = Math.min(best.t4, time(f, big)); return { t1: best.t1, t4: best.t4 }; }, linear, 5);
+      shape[name + " — " + s.t1.toFixed(1) + " ms at 16 K, " + s.t4.toFixed(1) + " ms at 64 K (the fastest of " + s.tries + ")"] = linear(s);
+      if (!slowest || s.t4 / (8 * s.t1 + 5) > slowest[2] / (8 * slowest[1] + 5)) slowest = [name, +s.t1.toFixed(2), +s.t4.toFixed(2), s.tries];
     }
-    all("review 8 (ds-security 3): every guard pre-filter scan is linear — 4× the input costs ≤ 8× the time (or ≤ 50 ms) on the hostile inputs that ran the approval hook past its timeout", shape);
+    all("review 8 (ds-security 3): every guard pre-filter scan is linear — 4× the input costs ≤ 8× the time + 5 ms (1.35.4 review 1: each size the fastest of up to five runs, the sizes in turns) on the hostile inputs that ran the approval hook past its timeout (got, nearest its bound: " + js(slowest) + ")", shape);
 
     // …and each answers as the pattern it replaced (kept here, on short inputs only): the same answer on random texts of the characters
     // that matter — the path words a superset (an extra candidate only adds a check; none of the old ones is lost, at the 8-word cap too).

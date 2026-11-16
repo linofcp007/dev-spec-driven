@@ -1011,10 +1011,16 @@ function aheadPool(files, chars, fail) {
   try {
     if (fail) throw new Error("no worker (DEV_SPEC_TEST_AHEAD=fail)");
     wt = require("worker_threads");
+    // (the workers run fixed Node-core code: no NODE_OPTIONS of the shell's — `execArgv: []` keeps none of the flags, but
+    // a worker reads NODE_OPTIONS again from its env: `--input-type=module` made its source ESM, a `--require` preload ran
+    // in it — one that refuses worker threads stalled each pool 2 s, one that writes to fd 1 wrote into an MCP server's
+    // JSON-RPC: review 1 of 1.35.4)
+    const env = Object.assign({}, process.env);
+    for (const name of Object.keys(env)) if (name.toUpperCase() === "NODE_OPTIONS") delete env[name]; // (Windows: any case)
     for (let j = 0; j < W; j++) {
       const { port1, port2 } = new wt.MessageChannel();
       ports.push(port1);
-      const w = new wt.Worker(AHEAD_SRC, { eval: true, execArgv: [], stdout: true, stderr: true,
+      const w = new wt.Worker(AHEAD_SRC, { eval: true, execArgv: [], env, stdout: true, stderr: true,
         workerData: { files, port: port2, sab: st.buffer, max: chars * 4, j, W, window: AHEAD_WINDOW }, transferList: [port2] });
       w.unref();
       // (a worker that fails on its own — a NODE_OPTIONS preload that refuses worker threads, out of memory — emits

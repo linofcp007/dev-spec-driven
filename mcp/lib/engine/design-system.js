@@ -1051,8 +1051,8 @@ function exportedComponents(text) {
       if (from) for (const entry of b.list.split(",")) {
         const words = entry.trim().split(/\s+/);
         if (!words[0] || words[0] === "type") continue;
-        if (words[1] === "as" && words[2] && words[2] !== "default") reexported.push(words[2]);
-        else if (!words[1] && from[1][0] !== ".") reexported.push(words[0]);
+        if (words[1] === "as" && words[2] && words[2] !== "default") reexported.push([words[2], from[1] + "\n" + words[0]]);
+        else if (!words[1] && from[1][0] !== ".") reexported.push([words[0], from[1] + "\n" + words[0]]);
       }
       continue;
     }
@@ -1127,11 +1127,11 @@ function exportedComponents(text) {
   // part hung on an imported component, a re-export under a name of its own. Each name once, DS_EXPORT_NAMES of them.
   const candidates = [];
   let full = false;
-  const candidate = (name, local) => {
+  const candidate = (name, local, binding) => {
     if (seen.has(name) || !RE_COMPOUND_NAME.test(name) || plain.has(local)) return;
     if (candidates.length >= DS_EXPORT_NAMES) { more = full = true; return; }
     seen.add(name);
-    candidates.push({ name, local });
+    candidates.push({ name, local, binding });
   };
   // (each owner's parts that are neither a component nor a literal, settled once — never once an exported name: 2,090
   // names of a root with 4,000 statics were 8 million names asked)
@@ -1143,14 +1143,22 @@ function exportedComponents(text) {
   };
   for (let k = 0; k < exportedOwn; k++) {
     const [name, local] = exported[k];
-    if (!declared.has(local)) candidate(name, local);
+    if (!declared.has(local)) candidate(name, local, local);
     // (the parts hung on what it stands on too, as its components' are: `PopRoot.Provider = …; export const Popover =
     // PopRoot` — review 2 of 1.35.3; a name that can take no part — lower case, an `_` — asks none: every part it asked
     // was turned down unseen, and 6,000 such names × 5,000 parts took 13.6 s, review 3)
     if (!RE_NAME_SEGMENT.test(name)) continue;
     for (let owner = local, d = 0; owner != null && d <= DS_ALIAS_PASSES && !full; owner = stands.get(owner), d++) for (const key of looseOf(owner)) candidate(name + "." + key, owner + "." + key);
   }
-  for (const name of reexported) candidate(name, null);
+  for (const [name, binding] of reexported) candidate(name, null, "\n" + binding);
+  // (the other names the file gives the same binding under — `export { Root, Root as Card }`, shadcn-svelte's barrels:
+  // a candidate is no row of its own when one of them is a row already — scanCode; review 1 of 1.35.4, a SvelteKit
+  // checkout listed 75 bare parts, `Root`, `Content`, `Link`, beside `Card`, `CardContent`)
+  const byBinding = new Map();
+  const bind = (b, name) => { if (!byBinding.has(b)) byBinding.set(b, []); byBinding.get(b).push(name); };
+  for (let k = 0; k < exportedOwn; k++) bind(exported[k][1], exported[k][0]);
+  for (const [name, binding] of reexported) bind("\n" + binding, name);
+  for (const c of candidates) c.also = c.binding == null ? [] : (byBinding.get(c.binding) || []).filter((n) => n !== c.name);
   return { names, more, weak, locals, candidates, defaultName, view };
 }
 // --- what the project's files tell of a component file's names (1.35.3) ------------------------------------------------------------
@@ -1255,6 +1263,7 @@ function usesOf(view) {
   const { code, plain, tpl } = view;
   const rendered = new Set(), contexts = new Set(), providers = new Set(), members = new Set(), imports = new Map();
   let named = null, stars = null;
+  const starSeen = new Set(); // (a file's identical stars kept once — a Set: a list's `includes` was quadratic in them, review 1 of 1.35.4)
   const locals = [], pass = (exported, spec, name) => { if (!named) named = new Map(); named.set(exported, { spec, name }); };
   for (let i = 0; i < plain.length; i++) {
     if (tpl[i]) continue;
@@ -1278,10 +1287,10 @@ function usesOf(view) {
     }
     if (l[0] === "e" && l.startsWith("export")) {
       const star = RE_EXPORT_STAR.exec(l);
-      if (star) { if (star[1]) pass(star[1], star[2], "*"); else (stars || (stars = [])).push(star[2]); } else if (RE_EXPORT_LIST.test(l)) {
+      if (star) { if (star[1]) pass(star[1], star[2], "*"); else if (!starSeen.has(star[2])) { starSeen.add(star[2]); (stars || (stars = [])).push(star[2]); } } else if (RE_EXPORT_LIST.test(l)) {
         // (the list over lines, to its first `}` — DS_EXPORT_LIST_LINES at most: its lines are its entries, read once and
-        // never again as lines of their own; one that never closes passes nothing and is given up, as the export reader
-        // gives one up — linear)
+        // never again as lines of their own — but the line it closes on, read on as one: code may follow its `}`, review 1
+        // of 1.35.4 —; one that never closes passes nothing and is given up, as the export reader gives one up — linear)
         let list = l, k = i;
         for (let more = l; !more.includes("}") && k + 1 < code.length && k < i + DS_EXPORT_LIST_LINES;) { more = code[++k]; list += " " + more; }
         const close = list.indexOf("}");
@@ -1293,7 +1302,7 @@ function usesOf(view) {
             if (from) pass(exported, from[1], w[0]); else locals.push([exported, w[0]]);
           }
         }
-        i = k;
+        i = close !== -1 && k > i ? k - 1 : k;
       } else { const d = RE_EXPORT_DEFAULT_NAME.exec(l.trimEnd()); if (d) locals.push(["default", d[1]]); }
     }
     if (l[0] === "c" || l[0] === "l" || l[0] === "v" || l[0] === "e") {
@@ -1331,13 +1340,15 @@ function usesOf(view) {
     };
     for (let i = 0; i < plain.length; i++) {
       const p = plain[i];
+      let end = -1; // (where the line's text ends — once a line: each call's rest was trimmed again, review 1 of 1.35.4)
       for (const m of p.matchAll(RE_FACTORY_CALL)) {
         if (m[2] === undefined ? !fns.has(m[1]) : !(spaces.has(m[1]) && spaces.get(m[1]).has(m[2]))) continue;
-        const rest = p.slice(m.index + m[0].length);
+        const at = m.index + m[0].length, rest = p.slice(at);
         let name = first(rest, i);
+        if (end === -1) end = p.trimEnd().length;
         // (the call's line ends at its `(`: its first argument is the first line below with text — a formatter's break of a
         // long call; each run of blank lines lies below one line alone: linear)
-        if (name == null && rest.trim() === "") for (let k = i + 1; k < plain.length; k++) if (plain[k].trim() !== "") { name = first(plain[k], k); break; }
+        if (name == null && at >= end) for (let k = i + 1; k < plain.length; k++) if (plain[k].trim() !== "") { name = first(plain[k], k); break; }
         if (name != null) typeInto(name, rendered, providers);
       }
     }
@@ -1986,7 +1997,10 @@ function markupRegions(text, rel) {
   let mode = ext === "vue" ? "top" : "markup", back = mode, closer = "", depth = 0;
   for (; i < n; i++) {
     const l = lines[i];
-    let k = 0, sc = "", mk = "";
+    let k = 0, sc = "", mk = "", gt = -2; // gt: where the last opening tag's `>` was found on this line (-1: none is left)
+    // (the opening tag's end, from `k` — once a line where it is known: a line of openers with no `>` after them was
+    // scanned to its end for each, quadratic, review 1 of 1.35.4)
+    const tagEnd = () => { if (gt === -1 || gt >= k) return gt; gt = styleTagEnd(l, k); return gt; };
     while (k < l.length) {
       if (mode === "script" || mode === "raw") {
         const e = l.indexOf(closer, k);
@@ -2003,13 +2017,17 @@ function markupRegions(text, rel) {
       if (!m) break;
       k = m.index + m[0].length;
       if (m[1]) { back = mode; mode = "raw"; closer = "-->"; continue; }
-      if (mode === "top" && m[2] === "template") { mode = "markup"; depth = 1; } else if (mode === "markup" && ext === "vue") { if (m[2]) { if (--depth === 0) mode = "top"; } else depth++; continue; } else {
+      // (a tag that closes itself opens nothing — `<template #trailing />`, the empty slot eslint-plugin-vue writes so, held
+      // a .vue template open to the file's end, its `<script>` read as markup: review 1 of 1.35.4 —, `<script src="…" />`)
+      const g = mode === "markup" && ext === "vue" && m[2] ? -1 : tagEnd(), closes = g > 0 && l[g - 1] === "/";
+      if (mode === "markup" && ext === "vue") { if (m[2]) { if (--depth === 0) mode = "top"; } else if (!closes) depth++; continue; }
+      if (closes) { k = g + 1; continue; }
+      if (mode === "top" && m[2] === "template") { mode = "markup"; depth = 1; } else {
         back = mode;
         mode = m[2] === "script" && ext !== "astro" ? "script" : "raw";
         closer = "</" + m[2];
       }
       // (what the block holds starts after its opening tag's `>` — when the line holds it: its attributes may go on below)
-      const g = styleTagEnd(l, k);
       if (g !== -1) k = g + 1;
     }
     script[i] = sc.trimStart();
@@ -2140,6 +2158,9 @@ const DS_TS_CONFIGS = 100; // config files read for `paths` in a scan (each once
 const DS_TS_LINKS = 32; // `extends` entries followed from one governing config (depth and width alike)
 const DS_TS_STARS = 100; // `*` patterns a config's `paths` may hold — past them it tells nothing
 const DS_TS_TARGETS = 10; // targets kept of a pattern
+// a path a config or a map writes, at most (Linux's PATH_MAX is 4,096, Windows' MAX_PATH 260): past it a config tells
+// nothing and a map's target names no file — each import built its keys from it again (review 1 of 1.35.4)
+const DS_PATH_CHARS = 1024;
 const UNKNOWN = Symbol("unknown"), MISSING = Symbol("missing"); // what a config left unread may have written; no file there
 const RE_ROOTED = /^(?:\/|[A-Za-z]:\/)/;
 const CONFIG_DIR = "${configDir}";
@@ -2177,21 +2198,28 @@ function aliasReader(configs, absRoot, realRoot) {
     return v;
   };
   // a written `paths` → { exact: Map, stars: [{ prefix, suffix, targets }], from } (an object's own keys; none for
-  // anything else) | UNKNOWN (past DS_TS_STARS)
+  // anything else) | UNKNOWN (past DS_TS_STARS; a key or a target longer than DS_PATH_CHARS — no file system holds such
+  // a path, and each import resolved it again: review 1 of 1.35.4, 240 KB of targets took 500 pages 114 s)
   const tableOf = (obj, from) => {
     const t = { exact: new Map(), stars: [], from };
     for (const [k, v] of Object.entries(record(obj) ? obj : {})) {
       const targets = (Array.isArray(v) ? v : []).filter((x) => typeof x === "string").slice(0, DS_TS_TARGETS).map(slash);
+      if (k.length > DS_PATH_CHARS || targets.some((x) => x.length > DS_PATH_CHARS)) return UNKNOWN;
       const s = k.indexOf("*");
       if (s === -1) t.exact.set(k, targets);
       else if (t.stars.push({ prefix: k.slice(0, s), suffix: k.slice(s + 1), targets }) > DS_TS_STARS) return UNKNOWN;
     }
     return t;
   };
+  // (a config's own table, once a file — not once a governing folder it is extended from: review 1 of 1.35.4, 68 folders
+  // over one chain of 31 configs rebuilt every table, 52 s)
+  const owned = new Map();
+  const tableAt = (rel, obj, dir) => { if (!owned.has(rel)) owned.set(rel, tableOf(obj, dir)); return owned.get(rel); };
   // a written `baseUrl` → { dir } | { leaf } (`${configDir}…`: the governing config's folder) | { dir: null } (not a
-  // string: none) | UNKNOWN (rooted, out of the project)
+  // string: none) | UNKNOWN (rooted, out of the project, longer than DS_PATH_CHARS)
   const baseOf = (v, dir) => {
     if (typeof v !== "string") return { dir: null };
+    if (v.length > DS_PATH_CHARS) return UNKNOWN;
     const p = slash(v);
     if (p.startsWith(CONFIG_DIR)) return { leaf: p.slice(CONFIG_DIR.length) };
     const d = RE_ROOTED.test(p) || p.includes("${") ? null : inProject(dir, p);
@@ -2220,7 +2248,7 @@ function aliasReader(configs, absRoot, realRoot) {
       stack.delete(to);
     }
     const o = Object(c.compilerOptions);
-    if (Object.prototype.hasOwnProperty.call(o, "paths")) paths = tableOf(o.paths, dir);
+    if (Object.prototype.hasOwnProperty.call(o, "paths")) paths = tableAt(rel, o.paths, dir);
     if (Object.prototype.hasOwnProperty.call(o, "baseUrl")) base = baseOf(o.baseUrl, dir);
     return { paths, base };
   };
@@ -2237,9 +2265,18 @@ function aliasReader(configs, absRoot, realRoot) {
     tables.set(leaf, t);
     return t;
   };
+  // (once a governing folder and a spec: the pages of one app ask the same specs from many folders)
+  const said = new Map();
   return (dirs, spec, nSegs) => {
-    const leaf = dirs.find((d) => configs.has(d)), out = [];
-    const t = leaf === undefined ? null : tableOfLeaf(leaf);
+    const leaf = dirs.find((d) => configs.has(d));
+    if (leaf === undefined) return [];
+    const sk = leaf + "\n" + spec;
+    if (!said.has(sk)) said.set(sk, keysOf(leaf, spec, nSegs));
+    return said.get(sk);
+  };
+  function keysOf(leaf, spec, nSegs) {
+    const out = [];
+    const t = tableOfLeaf(leaf);
     if (!t) return out;
     let targets = t.exact.get(spec), star = null;
     if (!targets) {
@@ -2265,7 +2302,7 @@ function aliasReader(configs, absRoot, realRoot) {
       if (rel != null) out.push(moduleKey(rel));
     }
     return out;
-  };
+  }
 }
 // --- a workspace package's `exports` map (1.35.4) ---------------------------------------------------------------------------
 const DS_EXPORT_KEYS = 500; // a map's keys read: a map with more is not read (the guess alone)
@@ -2295,30 +2332,36 @@ function exportsMap(exp) {
 // Every path a key's value may lead to — any condition's (what the module MAY be, as the guess's two keys are; Chakra's
 // `dev` too) — kept without its `./`: a condition object's keys up to its `default` (none after it is ever reached), a
 // list's entries up to the first target Node takes (one it refuses, a `null` or an object that may match nothing are
-// passed, as its resolver passes them), DS_EXPORT_DEPTH deep, DS_EXPORT_TARGETS of them. → whether a list ends at `t`.
+// passed, as its resolver passes them; an object whose `default` resolves ends it — `default` always matches: review 1
+// of 1.35.4), DS_EXPORT_DEPTH deep, DS_EXPORT_TARGETS of them, none longer than DS_PATH_CHARS. → whether a list ends at `t`.
 function reachTargets(t, out, depth) {
   if (typeof t === "string") {
     const ok = t.startsWith("./") && !refused(t.slice(2));
-    if (ok && out.length < DS_EXPORT_TARGETS) out.push(t.slice(2));
+    if (ok && out.length < DS_EXPORT_TARGETS && t.length <= DS_PATH_CHARS) out.push(t.slice(2));
     return ok;
   }
   if (t === null || typeof t !== "object" || depth >= DS_EXPORT_DEPTH) return false;
-  if (Array.isArray(t)) { for (const v of t) if (reachTargets(v, out, depth + 1)) break; return false; }
-  for (const k in t) { reachTargets(t[k], out, depth + 1); if (k === "default") break; }
+  if (Array.isArray(t)) { for (const v of t) if (reachTargets(v, out, depth + 1)) return true; return false; } // (a list that ends at a target ends the one around it)
+  for (const k in t) { const ok = reachTargets(t[k], out, depth + 1); if (k === "default") return ok; }
   return false;
 }
 // (a key's targets, reached once whatever the lookups — a cost guard, timed)
 const targetsOf = (entry) => { if (entry.targets === null) { entry.targets = []; reachTargets(entry.value, entry.targets, 0); } return entry.targets; };
 // → the paths in its package a subpath (as written) may be by the map: its own key's, else the first pattern's — every
 // `*` standing for what the subpath has there, `/` included —; none when that key is `null`, when no key matches (never a
-// shorter pattern than the one that does) or when the match holds a segment Node refuses (`@acme/ui/x/../y`)
+// shorter pattern than the one that does) or when the match holds a segment Node refuses (`@acme/ui/x/../y`); a target
+// that the match would make longer than DS_PATH_CHARS names no file (its `*`s × the match: review 1 of 1.35.4, 200,000 of
+// them ran a scan out of memory)
 function exportedPaths(map, sub) {
   const m = "./" + sub;
   if (map.exact.has(m)) return targetsOf(map.exact.get(m));
   const p = map.patterns.find((q) => m.length >= q.len && m.startsWith(q.base) && m.endsWith(q.trail));
   if (!p) return [];
   const match = m.slice(p.base.length, m.length - p.trail.length);
-  return refused(match) ? [] : targetsOf(p.entry).map((t) => t.split("*").join(match));
+  if (refused(match)) return [];
+  const out = [];
+  for (const t of targetsOf(p.entry)) { const parts = t.split("*"); if (t.length + (parts.length - 1) * (match.length - 1) <= DS_PATH_CHARS) out.push(parts.join(match)); }
+  return out;
 }
 function projectPlaces(manifests, roots, configs, absRoot, realRoot) {
   const aliasKeys = aliasReader(configs, absRoot, realRoot);
@@ -2391,12 +2434,13 @@ function settle(results, scripts, markups, read, places) {
     if (imported === "default") {
       // (the file's base name is the last segment of where the module resolves — `import X from "../"` is its folder's —,
       // or its folder's for an index: of EVERY place the module may be — a config's target, a package's map, named its own
-      // way, 1.35.4)
+      // way, 1.35.4 —, each place with its own base: a target's base under the guess's folder is a place TypeScript never
+      // resolves to, review 1 of 1.35.4)
       let n = 0;
-      for (const last of new Set([...at.keys].map(keyBase))) {
-        const list = byBase.get(last) || [];
+      for (const k of at.keys) {
+        const list = byBase.get(keyBase(k)) || [];
         n += list.length;
-        for (const path of list) if (defaults.has(path) && pointsTo(keys.get(path), at)) out.push([path, defaults.get(path) + rest]);
+        for (const path of list) { const pk = keys.get(path); if (defaults.has(path) && (pk === k || pk.startsWith(k + "/"))) out.push([path, defaults.get(path) + rest]); }
       }
       return n;
     }
@@ -2439,9 +2483,14 @@ function settle(results, scripts, markups, read, places) {
     passes.set(s.rel, e);
     return e;
   };
-  // (every operation of the follow is charged to the one bound: a module a star or a link reaches — 1, its keys, its
-  // files —, a name a file passes on, once a closure it is in, and the candidates a lookup compares)
+  // (every operation of the follow is charged to the one bound: a star or a link looked at — one of no project's module
+  // too: walked free in every closure that reached it, 83 s, review 1 of 1.35.4 —, a module it reaches — 1, its keys,
+  // its files —, a name a file passes on, once a closure it is in, and the candidates a lookup compares)
+  const step = () => ++spent.steps <= DS_PASS_STEPS;
   const reach = (at) => { spent.steps += 1 + at.keys.size + filesOf(at).length; return spent.steps <= DS_PASS_STEPS; };
+  // (a [path, name] once: a name passed on by many links to one place gave as many copies, each copied again into every
+  // importing folder's answer — memory out, review 1 of 1.35.4)
+  const once = (pairs) => { const seen = new Set(), out = []; for (const p of pairs) { const k = p[0] + "\n" + p[1]; if (!seen.has(k)) { seen.add(k); out.push(p); } } return out; };
   const look = (at, imported, rest, out) => { spent.steps += lookup(at, imported, rest, out); };
   const closureOf = (s) => {
     if (closures.has(s.rel)) return closures.get(s.rel);
@@ -2452,6 +2501,7 @@ function settle(results, scripts, markups, read, places) {
       spent.steps += e.named.size;
       for (const [name, via] of e.named) { if (!c.names.has(name)) c.names.set(name, []); c.names.get(name).push([f, via]); }
       for (const spec of e.stars) {
+        if (!step()) break;
         const at = placed(spec, f.rel);
         if (!at) continue;
         if (!reach(at)) break;
@@ -2476,6 +2526,7 @@ function settle(results, scripts, markups, read, places) {
       const c = own || head === "default" ? null : closureOf(f);
       if (c) look(c.at, head, tail, out);
       for (const [g, via] of own ? [[f, own]] : c ? c.names.get(head) || [] : []) {
+        if (!step()) break;
         const at = placed(via.spec, g.rel);
         if (!at) continue;
         if (!reach(at)) break;
@@ -2483,8 +2534,9 @@ function settle(results, scripts, markups, read, places) {
         for (const h of at.files) { const k = h.rel + "\n" + via.name + "\n" + tail; if (!seen.has(k)) { seen.add(k); todo.push([h, via.name, tail]); } }
       }
     }
-    passed.set(root, out);
-    return out;
+    const uniq = once(out);
+    passed.set(root, uniq);
+    return uniq;
   };
   const tell = (rel, uses) => {
     const file = rel.slice(rel.lastIndexOf("/") + 1);
@@ -2514,8 +2566,9 @@ function settle(results, scripts, markups, read, places) {
       if (targets.has(tk)) return targets.get(tk);
       const at = placed(imp.spec, rel), out = [];
       if (at) { lookup(at, imp.name, rest, out); for (const f of filesOf(at)) for (const x of through(f, imp.name, rest)) out.push(x); }
-      targets.set(tk, out);
-      return out;
+      const uniq = once(out);
+      targets.set(tk, uniq);
+      return uniq;
     };
     for (const n of uses.rendered) for (const [path, name] of resolve(n)) note(path, name, "rendered");
     if (!tests) for (const n of uses.called) for (const [path, name] of resolve(n)) note(path, name, "called");
@@ -2672,7 +2725,8 @@ function scanCode(root, withComponents = true) {
   // review 1 of 1.35.3, `export { default as FiltersToggle } from "./toggle"`)
   const add = (r, name) => { const key = dsKey(name); if (key && !byKey.has(key)) byKey.set(key, { name, key, path: r.path, index: false, route: false }); };
   for (const r of results) for (const name of r.found.names) if (!verdict.dropped.has(r.path + "\n" + name)) add(r, name);
-  for (const r of results) for (const { name } of r.found.candidates) if (verdict.rendered.has(r.path + "\n" + name)) add(r, name);
+  // (a candidate the file also gives under a name that is a row already is that row under another name — 1.35.4)
+  for (const r of results) for (const { name, also } of r.found.candidates) if (verdict.rendered.has(r.path + "\n" + name) && !also.some((n) => byKey.has(dsKey(n)))) add(r, name);
   const take = (file, list) => {
     sources.push(file.rel);
     for (const t of list) {

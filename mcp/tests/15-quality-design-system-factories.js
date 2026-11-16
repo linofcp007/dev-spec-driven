@@ -6,7 +6,8 @@
 // any case, type arguments aside, on the first line below with text when the call breaks after its `(`; a provider's
 // (`X.Provider`) as `<X.Provider>` is. Not a render: a function of the same name from elsewhere, cloneElement / memo /
 // forwardRef, a first argument that is no name. A `.ts` file is still read only when a weak name is asked (a said limit);
-// a markup file's script is read whatever is asked. What it costs: the pass is gated, its heads and look-below linear.
+// a markup file's script is read whatever is asked. What it costs: the pass is gated, its heads and look-below linear,
+// a line's end found once a line (review 1 of 1.35.4).
 
 const fs = require("fs");
 const path = require("path");
@@ -186,6 +187,16 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       gate: () => gms[0] < 2 * gms[1] + 100,
       lookBehind: () => lms[0] < 2.5 * lms[1] + 150,
       lookBelow: () => bms[0] < 2.5 * bms[1] + 150,
+    });
+    //   the end of a line's text, found once a line — review 1 of 1.35.4: each bound call's rest was trimmed again, and a
+    //   line of m calls above s trailing blanks cost m × s (×4 to ×5 here) —: 128 lines of `h(`×500 and 1,000 blanks in
+    //   pages that bind `h`, against the same lines of `hx(`×333 and 1,001 blanks (heads that are no factory: no first
+    //   argument read, no end of the line asked)
+    const th = pages("trail-hard", 16, "import { h } from \"vue\";\n", lines("h(".repeat(500) + " ".repeat(1000), 128), ["react", "vue"]);
+    const ts = pages("trail-soft", 16, "import { h } from \"vue\";\n", lines("hx(".repeat(333) + " ".repeat(1001), 128), ["react", "vue"]);
+    const tms = remeasure(pair(th, ts), (s) => s[0] < 2 * s[1] + 100);
+    all("1.35.4 review 1: a line of calls to a bound factory above trailing blanks costs what the same line of heads that are no factory costs — the end of the line's text is found once a line, never each call's rest trimmed again (16 pages of 128 lines of `h(`×500 and 1,000 blanks: no slower than the same lines of `hx(`×333 and 1,001 blanks) (got " + js({ tms }) + ")", {
+      trailingBlanks: () => tms[0] < 2 * tms[1] + 100,
     });
   }
 };

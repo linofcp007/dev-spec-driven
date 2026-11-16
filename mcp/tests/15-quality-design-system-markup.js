@@ -3,7 +3,10 @@
 // components its SCRIPT imports (MDX's ESM, a Vue / Svelte <script> block, Astro's front matter) in its MARKUP — never in
 // fenced code, a code span, a comment, front matter, a <style>, a Vue block but its template, or an Astro <script>; a Vue
 // kebab-case tag is its component; a namespace's part alike in .tsx and .svelte; read after every script, within the same
-// bound; and the markup reader gives up in linear time (markupComments' openers looked for once past a place).
+// bound; and the markup reader gives up in linear time (markupComments' openers looked for once past a place). Review 1 of
+// 1.35.4: a tag that closes itself opens nothing (`<template #trailing />`, `<script src="…" />`); a barrel's candidate it
+// also exports under a name that is a row is none of its own (shadcn-svelte's `Root as Card` through a synced `$lib`); an
+// opening tag's end is looked for once a line where it is known.
 
 const fs = require("fs");
 const path = require("path");
@@ -100,6 +103,34 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
     });
   }
 
+  // --- review 1 of 1.35.4: a tag that closes itself opens nothing ---------------------------------------------------------------------
+  {
+    // a .vue with its template first (element-plus and vuetify write most so) holding an empty slot closed on itself — what
+    // eslint-plugin-vue's html-self-closing writes of `<template #trailing></template>` —, then its `<script setup>`, then a
+    // <style> naming a tag: the script is read (its candidate settles), the style is not (its tag renders nothing). The
+    // script-first twin: the template closes, the <style> after it stays unread. And a self-closed `<script src="…" />` at the
+    // top level, before the file's real <script> on one line: it waits for no `</script>`
+    const p = project("selfclose", { "package.json": deps(["vue"]) });
+    write(p, UI + "kit.tsx", L(["import { motion } from \"framer-motion\";", "import { Box } from \"./box\";"].concat(
+      ["SlotFirst", "StyledFirst", "SlotSecond", "StyledSecond", "AfterSrc"].map((n) => "export const " + n + " = motion(Box);"))));
+    write(p, "src/pages/Home.vue", L(["<template>", "  <UCard>", "    <template #trailing />", "    <SlotFirst />", "  </UCard>", "</template>", "",
+      "<script setup lang=\"ts\">", "import { SlotFirst, StyledFirst } from \"@/components/ui/kit\";", "</script>", "",
+      "<style scoped>", ".a::after { content: \"<StyledFirst />\"; }", "</style>"]));
+    write(p, "src/pages/Second.vue", L(["<script setup lang=\"ts\">", "import { SlotSecond, StyledSecond } from \"@/components/ui/kit\";", "</script>", "",
+      "<template>", "  <UCard>", "    <template #trailing />", "    <SlotSecond />", "  </UCard>", "</template>", "",
+      "<style scoped>", ".a::after { content: \"<StyledSecond />\"; }", "</style>"]));
+    write(p, "src/pages/Src.vue", L(["<script src=\"./setup.js\" />", "<script setup>import { AfterSrc } from \"@/components/ui/kit\";</script>", "<template>", "  <AfterSrc />", "</template>"]));
+    const report = S.designSystemReport(p);
+    const got = found(report), has = (n) => got.includes(n);
+    all("1.35.4 review 1: a tag that closes itself opens nothing — a template-first .vue's `<template #trailing />` leaves its template's depth as it was: the `<script setup>` after it is read (SlotFirst settles), the <style> after that is not (StyledFirst renders nothing); the script-first twin's <style> stays unread too (no StyledSecond); a top-level `<script src=\"./setup.js\" />` waits for no `</script>`: the one-line <script> after it is read (AfterSrc settles) (got " + js({ got, limits: report.limits }) + ")", {
+      templateFirst: () => has("SlotFirst") && !has("StyledFirst"),
+      scriptFirst: () => has("SlotSecond") && !has("StyledSecond"),
+      srcScript: () => has("AfterSrc"),
+      exact: () => js(got) === js(["AfterSrc", "Kit", "SlotFirst", "SlotSecond"]),
+      limits: () => report.limits.length === 0,
+    });
+  }
+
   // --- a namespace's part through a barrel: listed alike from a .tsx and a .svelte page (1.35.3's barrel rule, knowingly) -------------
   {
     const tabs = (ext, page) => {
@@ -115,6 +146,40 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
     all("1.35.4: a markup file's dotted tag through its script's namespace import (`<DocTabs.List>`, `import * as DocTabs from \"…/index.js\"`) settles a barrel's re-export under a name of its own — the rows a .tsx page gives the same tree (1.35.3's barrel rule: `export { default as List }` is listed, knowingly) (got " + js({ svelte, tsx }) + ")", {
       svelte: () => js(svelte) === js(["DocTabs", "DocTabsList", "List", "Root"]),
       alike: () => js(svelte) === js(tsx),
+    });
+  }
+
+  // --- review 1 of 1.35.4: a barrel's candidate it also exports under a name that is a row is no row of its own ------------------------
+  {
+    // shadcn-svelte's convention: card/index.ts imports each part's file and exports it twice, `Root` and `Root as Card`;
+    // a page renders `<Card.Root>` through `$lib` — followed on a developer's checkout, where `svelte-kit sync` (dev, build,
+    // `prepare`) has written .svelte-kit/tsconfig.json; never on a fresh clone. Card and CardContent are rows (the .svelte
+    // files'), Root and Content the same bindings under other names: none, synced or not. A barrel name given once —
+    // `export { default as Toaster } from "./Sonner.vue"`, the Laravel Vue starter's — stays a row beside Sonner.vue's own
+    const part = (cls) => L(["<script lang=\"ts\">", "  let { children, ...rest } = $props();", "</script>", "", "<div class=\"" + cls + "\" {...rest}>{@render children?.()}</div>"]);
+    const kit = (synced) => project("barrel-alias-" + (synced ? "synced" : "clone"), Object.assign({
+      "package.json": deps(["@sveltejs/kit", "svelte"]),
+      "tsconfig.json": js({ extends: "./.svelte-kit/tsconfig.json", compilerOptions: { strict: true } }),
+      "src/lib/components/ui/card/card.svelte": part("card"),
+      "src/lib/components/ui/card/card-content.svelte": part("card-content"),
+      "src/lib/components/ui/card/index.ts": L(["import Root from \"./card.svelte\";", "import Content from \"./card-content.svelte\";", "",
+        "export {", "\tRoot,", "\tContent,", "\t//", "\tRoot as Card,", "\tContent as CardContent,", "};"]),
+      "src/routes/+page.svelte": L(["<script lang=\"ts\">", "\timport * as Card from \"$lib/components/ui/card/index.js\";", "</script>", "",
+        "<Card.Root>", "\t<Card.Content />", "</Card.Root>"]),
+    }, synced ? { ".svelte-kit/tsconfig.json": js({ compilerOptions: { paths: { $lib: ["../src/lib"], "$lib/*": ["../src/lib/*"] } } }) } : {}));
+    const rs = S.designSystemReport(kit(true)), rc = S.designSystemReport(kit(false));
+    const rows = (r) => r.missing.map((m) => m.name + " " + m.path).sort();
+    const toaster = project("barrel-once", { "package.json": deps(["vue"]) });
+    write(toaster, UI + "sonner/index.ts", L(["export { default as Toaster } from \"./Sonner.vue\";"]));
+    write(toaster, UI + "sonner/Sonner.vue", L(["<script setup lang=\"ts\">", "import { Toaster as Sonner } from \"vue-sonner\";", "</script>", "", "<template>", "  <Sonner class=\"toaster\" />", "</template>"]));
+    write(toaster, "src/layouts/AppLayout.vue", L(["<script setup lang=\"ts\">", "import { Toaster } from \"@/components/ui/sonner\";", "</script>", "", "<template>", "  <main><slot /></main>", "  <Toaster />", "</template>"]));
+    const rt = S.designSystemReport(toaster);
+    const CARD = ["Card src/lib/components/ui/card/card.svelte", "CardContent src/lib/components/ui/card/card-content.svelte"];
+    all("1.35.4 review 1: a barrel's candidate it also exports under a name that is a row is no row of its own — shadcn-svelte's card/index.ts (`export { Root, Content, Root as Card, Content as CardContent }`) rendered as `<Card.Root><Card.Content />` through a synced SvelteKit `$lib` (.svelte-kit/tsconfig.json as `svelte-kit sync` writes it) lists Card and CardContent, never Root or Content — the rows of a fresh clone; a barrel name given once (`export { default as Toaster } from \"./Sonner.vue\"`, rendered as `<Toaster />`) is still listed (got " + js({ synced: [rows(rs), rs.limits], clone: [rows(rc), rc.limits], once: [rows(rt), rt.limits] }) + ")", {
+      synced: () => js(rows(rs)) === js(CARD) && rs.limits.length === 0,
+      noBareParts: () => !rows(rs).some((r) => /^(?:Root|Content) /.test(r)),
+      clone: () => js(rows(rc)) === js(CARD),
+      once: () => rows(rt).includes("Toaster " + UI + "sonner/index.ts") && rt.limits.length === 0,
     });
   }
 
@@ -188,5 +253,35 @@ exports.run = async ({ all, S, tmp, remeasure }) => {
     }
     all("1.35.4: the markup reader gives up in linear time — `{/**/}` and `<!---->` runs on one line, each with the other opener at its end (a comment's opener looked for once past a place, none left kept: no slower than the two in turn), an unclosed `<!--` in a Vue template, `<template ` and kebab runs, `<script ></script><style ></style>` in a .svelte, `{/*` in an .astro, backticks and fence lines in an .mdx (no slower than the same files spelled out of reach) (got " + js(ms) + ")",
       Object.fromEntries(Object.keys(SHAPES).map((k) => [k, () => ms[k][0] < 2.5 * ms[k][1] + 150])));
+
+    // (review 1 of 1.35.4: a line of block openers with no `>` after them — each opener's tag end was looked for to the
+    // line's end again, quadratic: 40 files of one 256K line, ×44 to ×200 the same files spelled out of reach. Its end is
+    // looked for once a line where it is known; each opener's own work stays — ×3 to ×8 its soft line's cost, a line of
+    // none —, so the bound is ×15. A .svelte's `<script </script `, an .astro's `<style </style `, a .vue's top-level
+    // `<a </a `; each file imports the candidate before the line and renders it after: both sides list it)
+    const wrap = { svelte: ["<script>" + IMP + "</script>\n", "\n<MotionBox />\n"], astro: ["---\n" + IMP + "\n---\n", "\n<MotionBox />\n"],
+      vue: ["<script setup>" + IMP + "</script>\n", "\n<template><MotionBox /></template>\n"] };
+    const wide = (name, ext, body) => {
+      const d = project("cost-" + name, { "package.json": deps(["react"]) });
+      write(d, UI + "kit.tsx", L(["export const MotionBox = motion(Box);"]));
+      for (let k = 0; k < 40; k++) write(d, "src/pages/w" + String(k).padStart(2, "0") + "." + ext, wrap[ext][0] + body + wrap[ext][1]);
+      return d;
+    };
+    const OPENERS = { svelteScripts: ["svelte", rep("<script </script ", N)], astroStyles: ["astro", rep("<style </style ", N)], vueTop: ["vue", rep("<a </a ", N)] };
+    // (a sample: each side's least of three runs, the two in turn, and the rows each listed)
+    const listedIn = (p) => { const t0 = Date.now(), r = S.designSystemReport(p); return [Date.now() - t0, found(r)]; };
+    const wideSample = (hard, soft) => {
+      const s = { ms: [Infinity, Infinity], rows: null };
+      for (let r = 0; r < 3; r++) { const h = listedIn(hard), e = listedIn(soft); s.ms = [Math.min(s.ms[0], h[0]), Math.min(s.ms[1], e[0])]; s.rows = [h[1], e[1]]; }
+      return s;
+    };
+    const wideMs = {};
+    for (const [name, [ext, body]] of Object.entries(OPENERS)) {
+      const hard = wide(name + "-hard", ext, body), easy = wide(name + "-soft", ext, outOfReach(body));
+      wideMs[name] = remeasure(() => wideSample(hard, easy), (s) => s.ms[0] < 15 * s.ms[1] + 300);
+    }
+    all("1.35.4 review 1: an opening tag's end is looked for once a line where it is known — 40 files of one 256K line of `<script </script ` (.svelte), `<style </style ` (.astro) and `<a </a ` at a .vue's top level, no slower than ×15 the same files spelled out of reach (each opener's own work, ×3 to ×8; quadratic was ×44 to ×200), and both sides list the candidate rendered after the line (got " + js(wideMs) + ")",
+      Object.assign(Object.fromEntries(Object.keys(OPENERS).map((k) => [k, () => wideMs[k].ms[0] < 15 * wideMs[k].ms[1] + 300])),
+        Object.fromEntries(Object.keys(OPENERS).map((k) => [k + "Rows", () => js(wideMs[k].rows[0]) === js(["Kit", "MotionBox"]) && js(wideMs[k].rows[1]) === js(wideMs[k].rows[0])]))));
   }
 };

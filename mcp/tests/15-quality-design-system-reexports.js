@@ -4,7 +4,8 @@
 // exported again), any script the module is (a file barrel, `x/index`, a workspace package's `src/index`); a file's own link
 // hides its stars, a star never passes a default, cycles end; the follow's bounds (files and characters read, one bound of
 // steps) end it without a word; a namespace a barrel passes on widens the search, nothing else does; an `export {` that
-// never closes is given up in linear time.
+// never closes is given up in linear time. Review 1: a star or a link of no project's module is charged where it is looked
+// at, a file's same star is read once, the follow's answer holds a [path, name] once, the line a list closes on is read on.
 
 const fs = require("fs");
 const path = require("path");
@@ -200,10 +201,13 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       write(p, "src/app/page.tsx", L(rows.map((q) => "import { " + q.join(", ") + " } from \"@/ui\";").concat(["// Moving", "export const P = () => <>"], rows.map((q) => q.map((n) => "<" + n + " />").join("")), ["</>;"])));
       late(p);
     }));
-    // a module's keys and files are charged where a star or a link reaches it: 300 folders of one package name
+    // a module's keys and files are charged where a star or a link reaches it: 300 folders of one package name (the stars
+    // each spelled apart — `@x/ui`, `@x/ui/`, `@x/ui//`…, the same root: one star written twice is read once, review 1 of
+    // 1.35.4)
+    const apart = (spec, n) => Array.from({ length: n }, (_, i) => "export * from \"" + spec + "/".repeat(i) + "\";\n").join("");
     const keysOf = (n, links) => (p) => {
       for (let i = 0; i < 300; i++) write(p, "packages/p" + i + "/ui/package.json", js({ name: "@x/ui" }));
-      if (!links) write(p, "src/ui.ts", "export * from \"@x/ui\";\n".repeat(n) + "export * from \"./components/ui/kit\";\n");
+      if (!links) write(p, "src/ui.ts", apart("@x/ui", n) + "export * from \"./components/ui/kit\";\n");
       else {
         write(p, "src/ui.ts", Array.from({ length: n }, (_, i) => "export * from \"./p/b" + i + "\";").join("\n") + "\n");
         for (let i = 0; i < n; i++) write(p, "src/p/b" + i + ".ts", i + 1 < n ? "export { Moving } from \"@x/ui\";\n" : "export { Moving } from \"../components/ui/kit\";\n");
@@ -217,7 +221,7 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     // …and its files: 150 folders of one package name, each with its `src/index.ts` (the files the root import is)
     const filesOfModule = (n) => (p) => {
       for (let i = 0; i < 150; i++) { write(p, "packages/q" + i + "/ui/package.json", js({ name: "@y/ui" })); write(p, "packages/q" + i + "/ui/src/index.ts", "export {};\n"); }
-      write(p, "src/ui.ts", "export * from \"@y/ui\";\n".repeat(n) + "export * from \"./components/ui/kit\";\n");
+      write(p, "src/ui.ts", apart("@y/ui", n) + "export * from \"./components/ui/kit\";\n");
       write(p, "src/app/page.tsx", L(["import { Moving } from \"@/ui\";", "export const P = () => <Moving />;"]));
     };
     r.modFiles300 = rowsOf(boundProject("mod-files-300", filesOfModule(300)));
@@ -320,6 +324,118 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       widen: () => wms[0] * 1.5 < wms[1],
       unclosed: () => ums[0] < 2.5 * ums[1] + 150,
       files: () => fms[0] < 2.5 * fms[1] + 150,
+    });
+  }
+
+  // --- the line an `export {` list over lines closes on is read on as a line of its own -----------------------------------------
+  {
+    // (the list that never closes keeps giving its lines up — its last, 200 lines below it, too: a star there is not read)
+    const filler = Array.from({ length: 199 }, (_, i) => "  X" + i + ",");
+    const got = {
+      // a weak component rendered only after the `}` (no formatter writes it so: hand-formatted code)
+      code: rowsOf(project("r1-close-code", { [KIT]: kit,
+        "src/app/page.tsx": L(["import { MotionBox } from \"@/components/ui/kit\";", "const a = 1, b = 2;", "export {", "  a,", "  b }; export const P = () => <MotionBox />;"]) })),
+      // …and after its `from "…";`
+      from: rowsOf(project("r1-close-from", { [KIT]: kit,
+        "src/app/page.tsx": L(["import { Late } from \"@/components/ui/kit\";", "export {", "  Glide,", "} from \"@/components/ui/kit\"; export const P = () => <Late />;"]) })),
+      unclosedLast: rowsOf(project("r1-unclosed-last", { [KIT]: kit, "src/ui.ts": L(["export {"].concat(filler, ["export * from \"./components/ui/kit\";"])),
+        "src/app/page.tsx": page(["import { MotionBox } from \"@/ui\";"], "<MotionBox />") })),
+    };
+    all("1.35.4 review 1: the line a list over lines closes on is read on as a line of its own — `export {`, `a,` and `b }; export const P = () => <MotionBox />;` over three lines settle MotionBox (lost when the list's lines were all skipped), as a `} from \"…\"; export const P = () => <Late />;` closing line settles Late (Glide, only passed on, stays out) —; a list that never closes still gives up its DS_EXPORT_LIST_LINES lines, the last too (a star 200 lines below its `export {` is not read) (got " + js(got) + ")", {
+      code: () => has(got.code, "MotionBox") && !has(got.code, "Glide"),
+      from: () => has(got.from, "Late") && !has(got.from, "Glide"),
+      unclosedLast: () => !has(got.unclosedLast, "MotionBox"),
+    });
+  }
+
+  // --- what the follow charges: a star or a link of no project's module where it is looked at, a star written again once -----
+  {
+    const bound = (tag, build) => {
+      const p = project("r1-bound-" + tag, { [KIT]: L(["export const Moving = motion(Box);", "export const Late = motion(Box);"]) });
+      build(p);
+      write(p, "src/late.ts", L(["export { Late } from \"./components/ui/kit\";"]));
+      write(p, "src/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/late-page.tsx", L(["import { Late } from \"@/late\";", "export const Q = () => <Late />;"]));
+      return p;
+    };
+    // a hub of 1,000 stars of no project's module (one-segment bare names: `export * from "a0"`, `"a1"`… — or one of them
+    // written 1,000 times) and then the kit's, starred by n barrels, each asked from a page of its own: every closure looks
+    // at the hub's stars (≈ 1,000 steps a barrel)
+    const hubOf = (n, same) => (p) => {
+      write(p, "src/n/hub.ts", Array.from({ length: 1000 }, (_, i) => "export * from \"a" + (same ? "" : i) + "\";\n").join("") + "export * from \"../components/ui/kit\";\n");
+      for (let j = 0; j < n; j++) {
+        write(p, "src/n/m" + j + ".ts", "export * from \"./hub\";\n");
+        write(p, "src/app/p" + j + ".tsx", L(["import { Moving } from \"@/n/m" + j + "\";", "export const P = () => <Moving />;"]));
+      }
+    };
+    // 250 links of no project's module (`export { Moving } from "a0"`, `"a1"`…) a barrel stars, followed for r member tags
+    // of one page (`<Moving.A0 />`…: each a query of its own, 250 links looked at)
+    const linksOf = (r) => (p) => {
+      write(p, "src/ui.ts", Array.from({ length: 250 }, (_, i) => "export * from \"./l/l" + i + "\";\n").join(""));
+      for (let i = 0; i < 250; i++) write(p, "src/l/l" + i + ".ts", "export { Moving } from \"a" + i + "\";\n");
+      write(p, "src/app/page.tsx", L(["import { Moving } from \"@/ui\";", "export const P = () => <>"].concat(Array.from({ length: r }, (_, j) => "<Moving.A" + j + " />"), ["</>;"])));
+    };
+    const r = {
+      stars60: rowsOf(bound("stars-60", hubOf(60, false))), stars120: rowsOf(bound("stars-120", hubOf(120, false))),
+      same120: rowsOf(bound("same-120", hubOf(120, true))),
+      links300: rowsOf(bound("links-300", linksOf(300))), links600: rowsOf(bound("links-600", linksOf(600))),
+    };
+    const view = Object.fromEntries(Object.entries(r).map(([k, rows]) => [k, ["Moving", "Late"].filter((n) => has(rows, n))]));
+    all("1.35.4 review 1: a star or a link of no project's module is charged to DS_PASS_STEPS where it is looked at (each was walked free in every closure that reached it: 83 s) — a hub of 1,000 one-segment stars (`export * from \"a0\"`…) asked through 60 barrels leaves room for a later query, through 120 none (Moving, starred after them, still settled); 250 such links (`export { Moving } from \"a0\"`…) followed for 300 member tags leave room, for 600 none —; the same star written 1,000 times is read once (120 barrels: room left) (got " + js(view) + ")", {
+      stars: () => has(r.stars60, "Late") && !has(r.stars120, "Late") && has(r.stars120, "Moving"),
+      same: () => has(r.same120, "Late"),
+      links: () => has(r.links300, "Late") && !has(r.links600, "Late"),
+    });
+  }
+
+  // --- what it costs: stars of no project's module walked by many closures; one name passed on to one place by many links ----
+  {
+    // (both scans of a pair, the hard one first → [hard ms, soft ms, …whether hard names each of `a`, …soft each of `b`] —
+    // the report's missing rows: the registry is never written)
+    const named = (rep, name) => rep.missing.some((m) => m.name === name);
+    const pair = (hard, soft, a, b) => () => {
+      const t0 = Date.now(); const h = S.designSystemReport(hard); const t1 = Date.now(); const s = S.designSystemReport(soft);
+      return [t1 - t0, Date.now() - t1].concat(a.map((n) => named(h, n)), b.map((n) => named(s, n)));
+    };
+    // hard: 16 files each of the same 1,000 distinct stars of no project's module (`export * from "a0"`… — a file's own
+    // stars all different: none read once for another), a hub starring the kit and them, 400 barrels starring the hub, each
+    // asked from pages of 100 imports; soft: the same files of `const a0 = 1;` lines — every star charged, hard ends at
+    // DS_PASS_STEPS (Late lost, Moving settled first) within twice soft (each of the 400 closures walked the 16,000 free)
+    const stars = (tag, hard) => {
+      const p = project("r1-cost-stars-" + tag, { [KIT]: L(["export const Moving = motion(Box);", "export const Late = motion(Box);"]) });
+      const hub = ["export * from \"../components/ui/kit\";"];
+      for (let k = 0; k < 16; k++) {
+        write(p, "src/lib/h" + k + ".ts", L(Array.from({ length: 1000 }, (_, i) => hard ? "export * from \"a" + i + "\";" : "const a" + i + " = 1;")));
+        hub.push("export * from \"./h" + k + "\";");
+      }
+      write(p, "src/lib/hub.ts", L(hub));
+      for (let i = 0; i < 400; i++) write(p, "src/lib/m" + i + ".ts", "export * from \"./hub\";\n");
+      for (let j = 0; j < 4; j++) {
+        const ids = Array.from({ length: 100 }, (_, k) => j * 100 + k);
+        write(p, "src/app/p" + j + "/page.tsx", L(ids.map((i) => "import { Moving as M" + i + " } from \"@/lib/m" + i + "\";").concat(["// Moving", "export const P = () => <>"], ids.map((i) => "<M" + i + " />"), ["</>;"])));
+      }
+      write(p, "src/late.ts", L(["export { Late } from \"./components/ui/kit\";"]));
+      write(p, "src/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/late-page.tsx", L(["import { Late } from \"@/late\";", "export const Q = () => <Late />;"]));
+      return p;
+    };
+    const sh = stars("hard", true), ss = stars("soft", false);
+    const sms = remeasure(pair(sh, ss, ["Moving", "Late"], ["Late"]), (s) => s[0] < 2 * s[1] + 150);
+    // hard: 300 files declaring Foo under src/components/c<i>/, 300 links each `export { Foo } from "../components"`, a
+    // barrel starring them, 400 pages each in a folder of its own importing Foo from it; soft: the links pass Bar — the
+    // follow's answer holds each [path, name] once (300 links × 300 files gave 90,000 copies of 300 pairs, each copied again
+    // into every folder's answer: memory out at 4,800 folders)
+    const replay = (tag, hard) => {
+      const p = project("r1-cost-replay-" + tag);
+      for (let i = 0; i < 300; i++) write(p, "src/components/c" + i + "/foo.tsx", "export const Foo = motion(Box);\n");
+      for (let i = 0; i < 300; i++) write(p, "src/links/l" + i + ".ts", "export { " + (hard ? "Foo" : "Bar") + " } from \"../components\";\n");
+      write(p, "src/ui.ts", Array.from({ length: 300 }, (_, i) => "export * from \"./links/l" + i + "\";\n").join(""));
+      for (let i = 0; i < 400; i++) write(p, "src/pages/p" + i + "/page.tsx", "import { Foo } from \"@/ui\";\nexport default function P() { return <Foo />; }\n");
+      return p;
+    };
+    const rms = remeasure(pair(replay("hard", true), replay("soft", false), [], []), (s) => s[0] < 2 * s[1] + 150);
+    all("1.35.4 review 1: what the follow costs — 400 barrels over a hub of 16 files of 1,000 distinct stars of no project's module end at DS_PASS_STEPS (Moving settled, the later Late not; the soft twin settles Late) within twice the same files of `const` lines; 400 page folders importing Foo through 300 links of `export { Foo } from \"../components\"` (300 files declare it) cost within twice the same links passing Bar — the follow's answer holds each [path, name] once (got " + js({ sms, rms }) + ")", {
+      stars: () => sms[0] < 2 * sms[1] + 150,
+      settled: () => sms[2] && !sms[3] && sms[4],
+      replay: () => rms[0] < 2 * rms[1] + 150,
     });
   }
 };
