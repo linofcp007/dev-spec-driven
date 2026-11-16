@@ -947,6 +947,109 @@ function readFileHead(file, maxChars) {
     if (fd !== null) try { fs.closeSync(fd); } catch { /* already closed */ }
   }
 }
+// Many files' heads, in order (1.35.4) → { next(): the next file's head — readFileHead's text, or null —, stop(): the
+// caller is done (always call it: a caller may stop early) }. Where an open is slow — Windows with on-access antivirus
+// scanning each file it opens, ~0.65 ms a file, and the design-system scan opens up to 5,000 a report: 3.2 s of opens on
+// mantine, 0.9 s four at a time — the first AHEAD_PROBE files are read in sequence and timed; when they average
+// AHEAD_SLOW_US or more and AHEAD_MIN files remain, AHEAD_WORKERS worker threads open the rest in parallel, worker j the
+// files j, j + W, …, each at most AHEAD_WINDOW files ahead of the one taken (what it holds in memory). A worker that gives
+// nothing for AHEAD_STALL_MS — or none that starts — leaves the rest to readFileHead, in sequence. What the caller gets
+// never depends on it: the same bytes (one bounded read of the file's first maxChars × 4), decoded the same way
+// (decodeText), cut the same way, in the same order. DEV_SPEC_TEST_AHEAD (tests only): "on" — the pool for any list past
+// the probe —, "off", "fail" — no worker starts.
+const AHEAD_PROBE = 32, AHEAD_MIN = 64, AHEAD_SLOW_US = 200, AHEAD_WORKERS = 8, AHEAD_WINDOW = 4, AHEAD_STALL_MS = 2000;
+// (the worker: st[0] says stop; st[1 + 2j] counts the files worker j gave, st[2 + 2j] the ones taken of them)
+const AHEAD_SRC = [
+  "const { workerData: d } = require('worker_threads');",
+  "const fs = require('fs');",
+  "const st = new Int32Array(d.sab), j = d.j, made = 1 + 2 * j, took = 2 + 2 * j, buf = Buffer.allocUnsafe(d.max);",
+  "for (let k = j, n = 0; k < d.files.length && !Atomics.load(st, 0); k += d.W, n++) {",
+  "  for (let t = Atomics.load(st, took); n - t >= d.window && !Atomics.load(st, 0); t = Atomics.load(st, took)) Atomics.wait(st, took, t, 1000);",
+  "  if (Atomics.load(st, 0)) break;",
+  "  let out = null, fd = null;",
+  "  try {",
+  "    fd = fs.openSync(d.files[k], 'r');",
+  "    let n = 0;",
+  "    while (n < d.max) { const r = fs.readSync(fd, buf, n, d.max - n, null); if (r <= 0) break; n += r; }",
+  "    out = new Uint8Array(n); out.set(buf.subarray(0, n));",
+  "  } catch { out = null; } finally { if (fd !== null) try { fs.closeSync(fd); } catch {} }",
+  "  d.port.postMessage(out, out ? [out.buffer] : []);",
+  "  Atomics.add(st, made, 1); Atomics.notify(st, made);",
+  "}",
+].join("\n");
+function readFileHeads(files, maxChars) {
+  const chars = Math.max(1, Math.floor(maxChars) || 1);
+  const mode = process.env.DEV_SPEC_TEST_AHEAD;
+  let k = 0, spent = 0n, pool = null;
+  const next = () => {
+    if (pool) return pool.take();
+    if (k >= AHEAD_PROBE) return readFileHead(files[k++], chars);
+    const t0 = process.hrtime.bigint();
+    const text = readFileHead(files[k++], chars);
+    spent += process.hrtime.bigint() - t0;
+    if (k === AHEAD_PROBE && files.length - k >= AHEAD_MIN && mode !== "off" && (mode === "on" || mode === "fail" || spent >= BigInt(AHEAD_PROBE * AHEAD_SLOW_US * 1000))) pool = aheadPool(files.slice(k), chars, mode === "fail");
+    return text;
+  };
+  return { next, stop: () => { if (pool) pool.stop(); } };
+}
+// → { take() — the next file's head, in order —, stop() } over AHEAD_WORKERS workers (a pool is made for AHEAD_MIN files or
+// more); none that starts reads in sequence
+function aheadPool(files, chars, fail) {
+  let wt = null;
+  const W = AHEAD_WORKERS, workers = [], ports = [];
+  const st = new Int32Array(new SharedArrayBuffer(4 * (1 + 2 * W)));
+  let taken = 0, broken = false, stopped = false;
+  const stop = () => {
+    broken = true;
+    if (stopped) return;
+    stopped = true;
+    Atomics.store(st, 0, 1);
+    for (let j = 0; j < W; j++) Atomics.notify(st, 2 + 2 * j);
+    for (const w of workers) w.terminate().catch(() => { /* gone */ });
+    for (const p of ports) p.close();
+  };
+  try {
+    if (fail) throw new Error("no worker (DEV_SPEC_TEST_AHEAD=fail)");
+    wt = require("worker_threads");
+    // (the workers run fixed Node-core code: no NODE_OPTIONS of the shell's — `execArgv: []` keeps none of the flags, but
+    // a worker reads NODE_OPTIONS again from its env: `--input-type=module` made its source ESM, a `--require` preload ran
+    // in it — one that refuses worker threads stalled each pool 2 s, one that writes to fd 1 wrote into an MCP server's
+    // JSON-RPC: review 1 of 1.35.4)
+    const env = Object.assign({}, process.env);
+    for (const name of Object.keys(env)) if (name.toUpperCase() === "NODE_OPTIONS") delete env[name]; // (Windows: any case)
+    for (let j = 0; j < W; j++) {
+      const { port1, port2 } = new wt.MessageChannel();
+      ports.push(port1);
+      const w = new wt.Worker(AHEAD_SRC, { eval: true, execArgv: [], env, stdout: true, stderr: true,
+        workerData: { files, port: port2, sab: st.buffer, max: chars * 4, j, W, window: AHEAD_WINDOW }, transferList: [port2] });
+      w.unref();
+      // (a worker that fails on its own — a NODE_OPTIONS preload that refuses worker threads, out of memory — emits
+      // 'error' on the main thread: unheard, it is thrown there and ends the process, an MCP server's too, once the scan
+      // has answered. Heard, it stops the pool: the read in progress has fallen back after AHEAD_STALL_MS)
+      w.on("error", stop);
+      workers.push(w);
+    }
+  } catch {
+    stop();
+  }
+  const take = () => {
+    const i = taken++, j = i % W, made = 1 + 2 * j;
+    while (!broken) {
+      const seen = Atomics.load(st, made);
+      const m = wt.receiveMessageOnPort(ports[j]);
+      if (m) {
+        Atomics.add(st, 2 + 2 * j, 1);
+        Atomics.notify(st, 2 + 2 * j);
+        if (m.message == null) return null;
+        const text = decodeText(Buffer.from(m.message.buffer, m.message.byteOffset, m.message.length));
+        return text.length > chars ? text.slice(0, chars) : text;
+      }
+      if (Atomics.wait(st, made, seen, AHEAD_STALL_MS) === "timed-out" && Atomics.load(st, made) === seen) stop();
+    }
+    return readFileHead(files[i], chars);
+  };
+  return { take, stop };
+}
 function readRaw(file) {
   if (CTX.DRY_RUN) { const e = dryEntry(file); if (e) return e.dir ? null : e.text; } // what the dry run wrote
   const k = CTX.READ_CACHE ? readCacheKey(file) : null;
@@ -1140,6 +1243,6 @@ module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensu
   writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, specsWriteBlock, gateRefusal, LOCK_FILE, withFeatureLock,
   featureLocked, featureBusyResult, withMoveLock, renameDirSync, removeLinkEntry, moveDirOrBusy, LOCK_IGNORE_LINES,
   ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel, shapeError, withReadCache,
-  readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, decodeText, existsCached,
+  readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, readFileHeads, decodeText, existsCached,
   existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
   FOLD_CASE, toPosix, isInsideDir, writeInsideProject, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO, __link };

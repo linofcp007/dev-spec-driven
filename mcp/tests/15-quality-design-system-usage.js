@@ -213,7 +213,8 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const asked = big("bound-asked", L(["export const MotionBox = motion(Box);", "export function Kit() { return <div />; }"]));
     S.scaffoldSteeringFile(asked, "design-system.md");
     const ra = S.designSystemReport(asked);
-    // a `.ts` file renders nothing: read only when a weak name is asked (one it may CALL) — 129 of them, a candidate alone
+    // a `.ts` file holds no JSX — what it renders goes through a factory call (1.35.4) —: read only when a weak name is asked
+    // (one it may CALL) — 129 of them, a candidate alone
     // asked (none read: half the time at most), then a weak one too; and a weak one a `.ts` file calls is none
     const ts = (tag, kit) => {
       const d = project("bound-ts-" + tag, { "package.json": deps(["react"]) });
@@ -232,7 +233,7 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     write(kit, UI + "index.ts", L(["export { Root as Dialog } from \"@radix-ui/react-dialog\";"]));
     write(kit, "src/app/page.tsx", L(["import { Dialog } from \"@/components/ui\";", "export const P = () => <Dialog />;"]));
     const rb = S.designSystemReport(kit);
-    all("1.35.3: the project's other script files are read up to 5,000 files and 32 MB — the files that may hold JSX first — and the search ends there WITHOUT A WORD (evidence looked for, as the global stylesheets are: a name only the rest renders stands as its file's rules leave it, and the report is in sync); a `.ts` file — it renders nothing — is read only when a weak name is asked, and then a weak one it calls is none; a component folder's barrel counts apart from the component files (1,000 of them and a barrel: nothing said, its re-export settled) (got " + js({ asked: [ra.limits, ra.inSync, ra.missingTotal], ts: tms, barrel: [rb.limits, rb.missingTotal, rb.missing.some((m) => m.name === "Dialog")] }) + ")", {
+    all("1.35.3: the project's other script files are read up to 5,000 files and 32 MB — the files that may hold JSX first — and the search ends there WITHOUT A WORD (evidence looked for, as the global stylesheets are: a name only the rest renders stands as its file's rules leave it, and the report is in sync); a `.ts` file — it holds no JSX: what it renders goes through a factory call — is read only when a weak name is asked, and then a weak one it calls is none; a component folder's barrel counts apart from the component files (1,000 of them and a barrel: nothing said, its re-export settled) (got " + js({ asked: [ra.limits, ra.inSync, ra.missingTotal], ts: tms, barrel: [rb.limits, rb.missingTotal, rb.missing.some((m) => m.name === "Dialog")] }) + ")", {
       silent: () => ra.limits.length === 0 && ra.inSync === true && ra.missingTotal === 0 && !/MotionBox/.test(fs.readFileSync(path.join(asked, ".specs/steering/design-system.md"), "utf8")),
       ts: () => tms[0] * 2 < tms[1] && tms[2] === "Kit,MotionBox",
       barrel: () => rb.limits.length === 0 && rb.missingTotal === 1001 && rb.missing.some((m) => m.name === "Dialog"),
@@ -306,9 +307,10 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
   // --- review 2 of 1.35.3 -----------------------------------------------------------------------------------------------------------
   {
     const p = project("review2", { "package.json": js({ name: "kit-root", private: true, dependencies: { react: "1" } }) });
-    // `~/…` into a nested app's `app/` (React Router's `~/*` → `./app/*`): from its root (a tsconfig.json there — its
-    // `paths` are not read, review 3) and with a package.json alone; an alias spelled like a scope (`@components/…`) or
-    // a bare name of one segment settles nothing — rows by hand
+    // `~/…` into a nested app's `app/` (React Router's `~/*` → `./app/*`): from its root (a tsconfig.json there) and with a
+    // package.json alone; an alias spelled like a scope (`@components/…`) settles through the root config's `paths` (1.35.4:
+    // it had settled nothing, a row by hand — review 3 of 1.35.3 had taken the reading out); a bare name of one segment
+    // still settles nothing (that config writes no `baseUrl`)
     write(p, "tsconfig.json", js({ compilerOptions: { paths: { "@components/*": ["src/components/*"] } } }));
     write(p, UI + "exact-kit.tsx", L(["export const ExactGlow = motion(Base);"]));
     write(p, "src/app/exact.tsx", L(["import { ExactGlow } from \"kit-exactly\";", "export const E = () => <ExactGlow />;"]));
@@ -438,8 +440,8 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const bars = project("review2-barrels", { "package.json": deps(["react"]) });
     for (let i = 0; i < 1001; i++) write(bars, UI + "b" + String(i).padStart(4, "0") + "/index.ts", "export { X" + i + " } from \"@acme/x\";\n");
     const barLimits = S.designSystemReport(bars).limits;
-    all("1.35.3 review 2 / 3: `~/…` into a nested app's `app/` (from its root: a tsconfig.json — whose `paths` are not read —, a package.json; `@/…` and a bare path into a root's `app/` too; both aliases into a root's own folder and its `src/` — the project's own folder a root without a manifest, a folder that is no root none), a `#…` import — an alias spelled like a scope (`@components/…`) and a bare name of one segment settle nothing —, the root package and an unscoped workspace package by their names; `React.use(X)` reads a context, a comparison before a `>` is no tag; a provider's tag that names a candidate part, or a part hung on the root's local name in its own file, is that part; an instance (`new QueryClient()`) is never a name; a workspace name behind 520 manifests is found (its folder in capitals), an example of the same name never takes a package's place whichever import asks first, every folder named like it is one of its; a tsconfig.json beside 300 manifests spends none of the names read. Workspaces: a root that looks like a library (`npm init`'s `name` + `main`, a named root, a `main`) keeps the first guessed level — never the second; a private root (named, or with a script's `main`) keeps both; a pnpm negation narrows the patterns written after it; a negation of `**` and two-`*` names is matched in linear time; 1,001 barrels say the files read (got " + js({ got, crowdGot, dupGot, tscGot, bareGot, ws, nms, barLimits }) + ")", {
-      names: () => js(got) === js(["Core", "CoreGlow", "HashGlow", "Kit", "Popover", "Popover.Provider", "RemixGlow", "RemixKit", "RootGlow", "Tip", "Tip.Provider", "TipGroup",
+    all("1.35.3 review 2 / 3: `~/…` into a nested app's `app/` (from its root: a tsconfig.json, a package.json; `@/…` and a bare path into a root's `app/` too; both aliases into a root's own folder and its `src/` — the project's own folder a root without a manifest, a folder that is no root none), a `#…` import — an alias spelled like a scope (`@components/…`) settles through the root config's `paths` (1.35.4), a bare name of one segment settles nothing (no `baseUrl`) —, the root package and an unscoped workspace package by their names; `React.use(X)` reads a context, a comparison before a `>` is no tag; a provider's tag that names a candidate part, or a part hung on the root's local name in its own file, is that part; an instance (`new QueryClient()`) is never a name; a workspace name behind 520 manifests is found (its folder in capitals), an example of the same name never takes a package's place whichever import asks first, every folder named like it is one of its; a tsconfig.json beside 300 manifests spends none of the names read. Workspaces: a root that looks like a library (`npm init`'s `name` + `main`, a named root, a `main`) keeps the first guessed level — never the second; a private root (named, or with a script's `main`) keeps both; a pnpm negation narrows the patterns written after it; a negation of `**` and two-`*` names is matched in linear time; 1,001 barrels say the files read (got " + js({ got, crowdGot, dupGot, tscGot, bareGot, ws, nms, barLimits }) + ")", {
+      names: () => js(got) === js(["AtGlow", "Core", "CoreGlow", "HashGlow", "Kit", "Popover", "Popover.Provider", "RemixGlow", "RemixKit", "RootGlow", "Tip", "Tip.Provider", "TipGroup",
         "RrGlow", "RrKit", "ExactKit", "JsGlow", "JsKit", "AppGlow", "AtKit", "BareGlow", "BareKit", "NearKit", "NextGlow", "NextKit", "T3Glow", "T3Kit", "Chain", "S2", "S2.Part", "Shadow", "Theme", "Shell"].sort()),
       crowd: () => crowdGot.includes("CrowdGlow"),
       dup: () => ["DupGlow", "RevGlow", "AGlow", "BGlow"].every((n) => dupGot.includes(n)) && !dupGot.includes("ExGlow"),

@@ -368,34 +368,52 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     const hostile = ["export const A = f(</" + "a".repeat(1900), "export const B = f(" + "</a ".repeat(480), "export const C = f(</a" + wide + "x", "A(".repeat(990), "export const D = f(" + "(A ".repeat(600), "export const E = f((A" + wide + "x",
       "@a(".repeat(600), "@" + "a.".repeat(900), "export const F = (" + "a,".repeat(900), "export const G = (a" + "<".repeat(900), "Object.assign(A, {" + "B:".repeat(900), "A.B =" + wide + "x", BT.repeat(1999), "'" + BT + "'".repeat(990),
       "  render" + wide + "x", "  a ".repeat(480) + "render", "const {" + "a,".repeat(900), "import(" + wide + "x", "export default Object.assign(" + wide + "x"];
-    for (let i = 0; i < 6; i++) write(h, UI + "hostile" + i + ".tsx", "export function Survivor" + i + "() { return null; }\n" + Array.from({ length: 120 }, (_, k) => hostile[k % hostile.length]).join("\n") + "\n");
+    const hostileFile = (i, line) => "export function Survivor" + i + "() { return null; }\n" + Array.from({ length: 120 }, (_, k) => line(hostile[k % hostile.length])).join("\n") + "\n";
+    // (a plain line as long as a hostile one: a twin's — no pattern of the scan has anything to give up on in it)
+    const plain = (l) => (l.length < 16 ? "q".repeat(l.length) : "const q = 1; // " + "x".repeat(l.length - 16));
+    for (let i = 0; i < 6; i++) write(h, UI + "hostile" + i + ".tsx", hostileFile(i, (l) => l));
     // what review 1 of 1.35.2 found: parts × exported names (2,000 × 2,090, in lists of 190: 500 names are kept, and said), the entries of an
     // `Object.assign` each asked of the whole statement (4,000 entries in one of 20,000 lines), a destructuring that never closes
-    write(h, UI + "product.tsx", "function A() { return null; }\n" + Array.from({ length: 2000 }, (_, i) => "A.B" + i + " = A;").join("\n") + "\n" + Array.from({ length: 11 }, (_, g) => "export {\n" + Array.from({ length: 190 }, (_, i) => "  A as A" + (g * 190 + i) + ",").join("\n") + "\n};").join("\n") + "\n");
-    write(h, UI + "statics.tsx", "function A() { return null; }\n" + Array.from({ length: 4000 }, (_, i) => "A.S" + i + " = \"x\";").join("\n") + "\n" + Array.from({ length: 11 }, (_, g) => "export {\n" + Array.from({ length: 190 }, (_, i) => "  A as A" + (g * 190 + i) + ",").join("\n") + "\n};").join("\n") + "\n");
-    write(h, UI + "entries.tsx", "function A() { return null; }\nexport const K = Object.assign(A, {\n" + "  B: wrap(() => 1),\n".repeat(4000) + "});\n" + "  step();\n".repeat(20000));
-    for (let i = 0; i < 6; i++) write(h, UI + "open" + i + ".tsx", "let{\n".repeat(60000));
+    const beside = {};
+    beside[UI + "product.tsx"] = "function A() { return null; }\n" + Array.from({ length: 2000 }, (_, i) => "A.B" + i + " = A;").join("\n") + "\n" + Array.from({ length: 11 }, (_, g) => "export {\n" + Array.from({ length: 190 }, (_, i) => "  A as A" + (g * 190 + i) + ",").join("\n") + "\n};").join("\n") + "\n";
+    beside[UI + "statics.tsx"] = "function A() { return null; }\n" + Array.from({ length: 4000 }, (_, i) => "A.S" + i + " = \"x\";").join("\n") + "\n" + Array.from({ length: 11 }, (_, g) => "export {\n" + Array.from({ length: 190 }, (_, i) => "  A as A" + (g * 190 + i) + ",").join("\n") + "\n};").join("\n") + "\n";
+    beside[UI + "entries.tsx"] = "function A() { return null; }\nexport const K = Object.assign(A, {\n" + "  B: wrap(() => 1),\n".repeat(4000) + "});\n" + "  step();\n".repeat(20000);
+    for (let i = 0; i < 6; i++) beside[UI + "open" + i + ".tsx"] = "let{\n".repeat(60000);
     // a statement's extent has no cap: a wrapped component whose JSX stands 4,000 lines below its `=`
-    write(h, UI + "long.tsx", "export const Long = observer(function Long() {\n" + "  step();\n".repeat(4000) + "  return <div />;\n});\n");
+    beside[UI + "long.tsx"] = "export const Long = observer(function Long() {\n" + "  step();\n".repeat(4000) + "  return <div />;\n});\n";
     // rush.json at a manifest's read, of what a comment and a comma reader must give up on
-    write(h, "rush.json", "{ \"projects\": [" + ("," + " ".repeat(100)).repeat(1200) + "/".repeat(60000) + "\"" + BS.repeat(60000) + "\n");
+    beside["rush.json"] = "{ \"projects\": [" + ("," + " ".repeat(100)).repeat(1200) + "/".repeat(60000) + "\"" + BS.repeat(60000) + "\n";
+    // Its twins, each scanned at the same moment as it — a ratio holds on a loaded machine where a time does not (the absolute
+    // 1 s missed at 1.8 s under a full suite's load, 1.35.4). `hc`: the SAME project, each hostile line a plain one as long
+    // (1.35.4 review 1: the twin held the six hostile files alone — ~15 ms against the whole project's ~400, a bound of 0.5 s
+    // and noise); `hcc`: hc with each line of the files beside them a plain one too — those files are cost guards of their own
+    // (a destructuring that never closes re-read 200 lines a line: 3 s), which a twin holding them as well times against itself
+    const hc = project("hostile-calm", { "package.json": deps(["react"]) }), hcc = project("hostile-calmer", { "package.json": deps(["react"]) });
+    for (let i = 0; i < 6; i++) { write(hc, UI + "hostile" + i + ".tsx", hostileFile(i, plain)); write(hcc, UI + "hostile" + i + ".tsx", hostileFile(i, plain)); }
+    for (const [rel, text] of Object.entries(beside)) { write(h, rel, text); write(hc, rel, text); write(hcc, rel, text.split("\n").map(plain).join("\n")); }
     // what review 3 of 1.35.2 found: every unclosed `render(` of a line asked the 60 lines below for the one that closes its
     // list (16 files of 256K: 8.8 s a scan) — a line's open lists are followed down ONCE. In a project of its own: the files
     // above are the 4 MB a scan reads.
     const hr = project("renders", { "package.json": deps(["react"]) });
-    for (let i = 0; i < 4; i++) write(hr, UI + "renders" + i + ".tsx", "export class Renders" + i + " extends Base {\n" + (" ".repeat(1000) + "render(".repeat(140) + "\n").repeat(128) + "}\n");
-    write(hr, UI + "renders4.tsx", "export class Renders4 extends Base {\n" + "  render(\n".repeat(25000) + "}\n");
+    const renders = {};
+    for (let i = 0; i < 4; i++) renders[UI + "renders" + i + ".tsx"] = "export class Renders" + i + " extends Base {\n" + (" ".repeat(1000) + "render(".repeat(140) + "\n").repeat(128) + "}\n";
+    renders[UI + "renders4.tsx"] = "export class Renders4 extends Base {\n" + "  render(\n".repeat(25000) + "}\n";
     // what review 4 of 1.35.2 found: the blank lines below the `)` that closes them read once for every unclosed `render(` above
     // it (minutes a scan); a line that starts inside a template asked as a statement, its extent the file's (quadratic)
-    write(hr, UI + "renders5.tsx", "export class Renders5 extends B {\n" + (" " + "render(".repeat(284) + "\n").repeat(8) + ")\n" + "\n".repeat(230000) + "}\n");
-    write(hr, UI + "renders6.tsx", "const a = " + BT + "\n" + (BT + "A.B=f()" + BT + "\n").repeat(25000) + BT + ";\n");
+    renders[UI + "renders5.tsx"] = "export class Renders5 extends B {\n" + (" " + "render(".repeat(284) + "\n").repeat(8) + ")\n" + "\n".repeat(230000) + "}\n";
+    renders[UI + "renders6.tsx"] = "const a = " + BT + "\n" + (BT + "A.B=f()" + BT + "\n").repeat(25000) + BT + ";\n";
+    // (its twin, scanned at the same moment — 1.35.4 review 1: an absolute 1 s, 911 ms once under a full suite's load: the same
+    // files with `render(` spelled `xrend(` and renders6's backticks apostrophes — no `render` list left open, no line that
+    // starts inside a template)
+    const hrx = project("renders-x", { "package.json": deps(["react"]) });
+    for (const [rel, text] of Object.entries(renders)) { write(hr, rel, text); write(hrx, rel, text.split("render(").join("xrend(").split(BT).join("'")); }
     // the lines of blanks below a `)` are read DS_DECL_LINES deep: sixty lines of `render(` that one `)` closes, then 250,000
     // blank ones — read sixty times over without the bound. Against the SAME files with `x(` for `render(`, scanned at the same
     // moment: a ratio holds on a loaded machine where a time does not (about 1 with the bound, 5 without)
     const blanks = (word) => { const d = project("blanks-" + word, { "package.json": deps(["react"]) }); for (let i = 0; i < 4; i++) write(d, UI + "blanks" + i + ".tsx", "export class Blanks" + i + " extends B {\n" + ("  " + word + "(\n").repeat(60) + "  )\n" + "\n".repeat(250000) + "}\n"); return d; };
     const hb = blanks("render"), hx = blanks("x");
     const bms = remeasure(() => { const t0 = Date.now(); const r = S.designSystemReport(hb); const t1 = Date.now(); S.designSystemReport(hx); return [t1 - t0, Date.now() - t1, r.missingTotal, js(r.limits)]; }, (s) => s[0] < 2.5 * s[1] + 50);
-    const rms = remeasure(() => { const t0 = Date.now(); const r = S.designSystemReport(hr); return [Date.now() - t0, r.missingTotal, js(r.limits)]; }, (s) => s[0] < 1000);
+    const rms = remeasure(() => { const t0 = Date.now(); const r = S.designSystemReport(hr); const t1 = Date.now(); S.designSystemReport(hrx); return [t1 - t0, r.missingTotal, js(r.limits), Date.now() - t1]; }, (s) => s[0] < 3 * s[3] + 300);
     // the parts' room (DS_EXPORT_NAMES): a component exported twice — by name and as the default — is expanded once (its
     // 300 parts took the room of the next component's, and nothing said so); parts that DO run out of room are said — here
     // 300 keys hung on a root and on the alias that stands on it: 600 asked, 300 names
@@ -420,11 +438,15 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     const seeded = registry(hd).components.map((c) => c.name);
     const room = [registry(hp).components.map((c) => c.name).filter((x) => !/^Icons\.P\d+$/.test(x)).sort().join(","), roomy.missingTotal, js(roomy.limits), cut.missingTotal, js(cut.limits),
       seeded.filter((x) => !/^(?:Dup|DRoot)\.K\d+$/.test(x)).sort().join(","), ["Dup.K", "DRoot.K"].map((p) => seeded.filter((x) => x.startsWith(p)).length).join("/"), dups.missingTotal, js(dups.limits)];
-    const ms = remeasure(() => { const t0 = Date.now(); const r = S.designSystemReport(h); return [Date.now() - t0, r.missing.map((c) => c.name).filter((x) => !/^A\d|^A\./.test(x)).sort().join(","), js(r.limits), r.missingTotal]; }, (s) => s[0] < 1000);
-    all("1.35.2: files of lines each new pattern must give up on (a closing tag that never closes, runs of calls and of `(A`, decorators, parameter lists, an `Object.assign` and a destructuring that never close, 1,999 backticks, a `render` after 1,900 blanks) are read in linear time, a statement's extent has no cap (JSX 4,000 lines below its `=` is found), 2,000 parts under 2,000 exported names give the 500 names a file keeps — said — and not four million, the 4,000 entries of an `Object.assign` are not each asked of its 20,000-line statement, a destructuring that never closes is given up once, and a rush.json that is no JSON costs nothing and is said; four files of 128 lines of 140 unclosed `render(` each, one of 25,000 lines of one, one of eight such lines over 230,000 blank ones, four of sixty such lines over 250,000 blank ones (no slower than the same files with `x(`) and one of 25,000 lines that each close a template and open the next cost no more (each line's lists are followed down once, sixty lines deep); two names that stand on each other are followed eight deep, not for ever; a component exported by name AND as the default takes its 300 parts once — the next component's part keeps its room —, and the same 200 keys on a root and on its alias are 200 parts of each, 501 statics that are no component spend no room, parts that run out of room (300 keys on a root, 300 more on its alias) are said (got " + js(ms) + " " + js(rms) + " " + js(bms) + " " + js(room) + ")", {
-      linear: () => ms[0] < 1000,
+    // (the hostile project against hc — the hostile lines' cost — and hc against hcc — the cost of the files beside them —, the
+    // three scanned one after the other: quadratic, any of them is seconds)
+    const tamed = (s) => s[0] < 2 * s[4] + 300 && s[4] < 3 * s[5] + 300;
+    const ms = remeasure(() => { const t0 = Date.now(); const r = S.designSystemReport(h); const t1 = Date.now(); S.designSystemReport(hc); const t2 = Date.now(); S.designSystemReport(hcc); return [t1 - t0, r.missing.map((c) => c.name).filter((x) => !/^A\d|^A\./.test(x)).sort().join(","), js(r.limits), r.missingTotal, t2 - t1, Date.now() - t2]; }, tamed);
+    all("1.35.2: files of lines each new pattern must give up on (a closing tag that never closes, runs of calls and of `(A`, decorators, parameter lists, an `Object.assign` and a destructuring that never close, 1,999 backticks, a `render` after 1,900 blanks) are read in linear time — the project within 2× + 0.3 s of its twin with each hostile line a plain one as long, scanned at the same moment (1.35.4 review 1) —, a statement's extent has no cap (JSX 4,000 lines below its `=` is found), 2,000 parts under 2,000 exported names give the 500 names a file keeps — said — and not four million, the 4,000 entries of an `Object.assign` are not each asked of its 20,000-line statement, a destructuring that never closes is given up once, and a rush.json that is no JSON costs nothing and is said — those files within 3× + 0.3 s of a twin of theirs with each line a plain one as long; four files of 128 lines of 140 unclosed `render(` each, one of 25,000 lines of one, one of eight such lines over 230,000 blank ones, four of sixty such lines over 250,000 blank ones (no slower than the same files with `x(`) and one of 25,000 lines that each close a template and open the next cost no more (each line's lists are followed down once, sixty lines deep) — within 3× + 0.3 s of the same files with `xrend(` and no template; two names that stand on each other are followed eight deep, not for ever; a component exported by name AND as the default takes its 300 parts once — the next component's part keeps its room —, and the same 200 keys on a root and on its alias are 200 parts of each, 501 statics that are no component spend no room, parts that run out of room (300 keys on a root, 300 more on its alias) are said (got [hostile ms, …, its twin ms, the plain twin ms] " + js(ms) + " [renders ms, …, its twin ms] " + js(rms) + " " + js(bms) + " " + js(room) + ")", {
+      linear: () => ms[0] < 2 * ms[4] + 300,
+      beside: () => ms[4] < 3 * ms[5] + 300,
       read: () => ms[3] > 500 && /"component-files"/.test(ms[2]) && /"workspace-manifests","read":0/.test(ms[2]),
-      renders: () => rms[0] < 1000 && rms[1] === 7 && rms[2] === "[]" && bms[0] < 2.5 * bms[1] + 50 && bms[2] === 4 && bms[3] === "[]",
+      renders: () => rms[0] < 3 * rms[3] + 300 && rms[1] === 7 && rms[2] === "[]" && bms[0] < 2.5 * bms[1] + 50 && bms[2] === 4 && bms[3] === "[]",
       room: () => room[0] === "Card,Card.Header,CycA,CycB,Cycle,Icons" && room[1] === 306 && room[2] === "[]" && room[3] === 500 && /"component-files"/.test(room[4]) &&
         room[5] === "After2,After2.Part,DRoot,Dup,Next3,Next3.Part,Sized" && room[6] === "200/200" && room[7] === 407 && room[8] === "[]" &&
         /"component-files"/.test(js(odd.limits)),

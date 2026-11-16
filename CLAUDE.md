@@ -14,8 +14,8 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
   server). Never add a `.github/workflows/` for this project, never open PRs — merge locally and push.
   No user-facing text may steer users toward PRs or CI (a test scans the prose; CHANGELOG is exempt).
 - **Zero runtime dependencies.** The MCP server and all scripts use only Node core (`fs`, `path`, `os`,
-  `string_decoder`, `child_process`, `crypto`, `module` — the compile cache —, built-in `fetch`). No `npm
-  install` required. Keep it that way.
+  `string_decoder`, `child_process`, `crypto`, `module` — the compile cache —, `worker_threads` — files.js's
+  readFileHeads, 1.35.4 —, built-in `fetch`). No `npm install` required. Keep it that way.
 - Specs always live in `.specs/` (no alternate directory detection).
 
 ## Topic map
@@ -165,7 +165,7 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(2369 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(2431 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
 `node cli/test-cli.js` adds 663 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its

@@ -232,33 +232,44 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     });
   }
 
-  // --- linear, each pattern on its own (a bound of 1.5 s where the old pattern took 4 s or more) -----------------------------------------------
+  // --- linear, each pattern on its own (the old pattern took 4 s or more) ---------------------------------------------------------------------
+  // Each against its calm twin — the same files, the shape taken out of each line, as long — read at the same moment: a ratio
+  // holds on a loaded machine where a time does not (1.35.4 review 1: the absolute 1.5 s missed at 1.7 s and 2.0 s under the
+  // pre-push gate's parallel run). The twin's lines touch none of the patterns' runs: no colon before the blanks, letters
+  // for the digits, blanks for the variants' colons, letters for the marker's dots.
   {
     const p = project("linear");
     write(p, REG, "# DS\n\n| Token | Value | Use |\n|---|---|---|\n| --brand | #1d4ed8 | brand |\n");
     const block = (line) => Array.from({ length: 120 }, () => line).join("\n") + "\n";
     const shapes = {
-      "decl-line": ["tsx", "a:" + long(" ", 1990) + "b"], // RE_DECL_LINE — a declaration-shaped line of a .tsx: the blank run after the colon
-      "size-literal": ["css", "margin: " + long("9", 1980)], // RE_SIZE_LITERAL — a digit run with no unit
-      "tw-digits": ["tsx", "<b className=\"p-[" + long("9", 1970) + "\" />"], // RE_TW_SIZE — the number inside the brackets
-      "tw-variants": ["tsx", "<b className=\"" + long("a:", 985) + "zz\" />"], // RE_TW_SIZE — variant prefixes that lead to no size utility
+      "decl-line": ["tsx", "a:" + long(" ", 1990) + "b", "a;" + long(" ", 1990) + "b"], // RE_DECL_LINE — a declaration-shaped line of a .tsx: the blank run after the colon
+      "size-literal": ["css", "margin: " + long("9", 1980), "margin: " + long("a", 1980)], // RE_SIZE_LITERAL — a digit run with no unit
+      "tw-digits": ["tsx", "<b className=\"p-[" + long("9", 1970) + "\" />", "<b className=\"p-[" + long("a", 1970) + "\" />"], // RE_TW_SIZE — the number inside the brackets
+      "tw-variants": ["tsx", "<b className=\"" + long("a:", 985) + "zz\" />", "<b className=\"" + long("a ", 985) + "zz\" />"], // RE_TW_SIZE — variant prefixes that lead to no size utility
     };
+    const linear = (s) => s.ms < 3 * s.calm + 300;
     const times = {};
-    for (const [name, [ext, line]] of Object.entries(shapes)) {
-      const f = feature(p, "Slow " + name, "src/" + name + "/");
-      for (let i = 0; i < 13; i++) write(p, "src/" + name + "/f" + i + "." + ext, block(line));
-      const t = remeasure(() => { const t0 = Date.now(); const v = S.designSystemReport(p, { name: f.slug }); return { ms: Date.now() - t0, files: v.viewFiles }; }, (s) => s.ms < 1500);
-      times[name] = [t.ms, t.files];
+    for (const [name, [ext, line, calm]] of Object.entries(shapes)) {
+      const f = feature(p, "Slow " + name, "src/" + name + "/"), g = feature(p, "Calm " + name, "src/" + name + "-calm/");
+      for (let i = 0; i < 13; i++) { write(p, "src/" + name + "/f" + i + "." + ext, block(line)); write(p, "src/" + name + "-calm/f" + i + "." + ext, block(calm)); }
+      times[name] = remeasure(() => {
+        const t0 = Date.now(); const v = S.designSystemReport(p, { name: f.slug }); const t1 = Date.now(); const w = S.designSystemReport(p, { name: g.slug });
+        return { ms: t1 - t0, calm: Date.now() - t1, files: v.viewFiles, calmFiles: w.viewFiles };
+      }, linear);
     }
-    // the registry's marker lines: a value of 3,990 dots, 250 times (a trailing-run replace was quadratic on each)
-    write(p, REG, "# DS\n\n" + Array.from({ length: 250 }, () => "_Token sources: " + long(".", 3990) + "x_").join("\n") + "\n\n" + HEAD + "| Button | x |  |  |\n");
-    const markers = remeasure(() => { const t0 = Date.now(); const r = registry(p); return { ms: Date.now() - t0, n: r.components.length }; }, (s) => s.ms < 500);
-    all("1.35 review 3: each pattern is linear on its own — 13 view files of 120 hostile lines for the declaration-shaped line, the size literal, the Tailwind number and the Tailwind variants are each read in under 1.5 s (each took 4 s or more with the pattern it replaced), and 250 marker lines of 3,990 dots in under 0.5 s (4.6 s) (got " + js({ times, markers }) + ")", {
-      declLine: () => times["decl-line"][0] < 1500 && times["decl-line"][1] === 13,
-      sizeLiteral: () => times["size-literal"][0] < 1500 && times["size-literal"][1] === 13,
-      twDigits: () => times["tw-digits"][0] < 1500 && times["tw-digits"][1] === 13,
-      twVariants: () => times["tw-variants"][0] < 1500 && times["tw-variants"][1] === 13,
-      markers: () => markers.ms < 500 && markers.n === 1,
+    // the registry's marker lines: a value of 3,990 dots, 250 times (a trailing-run replace was quadratic on each) — against
+    // 250 of as many letters, in a project of their own
+    const MARKS = (ch) => "# DS\n\n" + Array.from({ length: 250 }, () => "_Token sources: " + long(ch, 3990) + "x_").join("\n") + "\n\n" + HEAD + "| Button | x |  |  |\n";
+    write(p, REG, MARKS("."));
+    const q = project("linear-calm");
+    write(q, REG, MARKS("a"));
+    const markers = remeasure(() => { const t0 = Date.now(); const r = registry(p); const t1 = Date.now(); const c = registry(q); return { ms: t1 - t0, calm: Date.now() - t1, n: r.components.length, calmN: c.components.length }; }, linear);
+    all("1.35 review 3: each pattern is linear on its own — 13 view files of 120 hostile lines for the declaration-shaped line, the size literal, the Tailwind number and the Tailwind variants are each read within 3× + 0.3 s of their calm twin (the same files with the shape taken out of each line) read at the same moment (each took 4 s or more with the pattern it replaced), and 250 marker lines of 3,990 dots within 3× + 0.3 s of 250 of letters (4.6 s) — 1.35.4 review 1: ratios, the absolute 1.5 s missed under load (got " + js({ times, markers }) + ")", {
+      declLine: () => linear(times["decl-line"]) && times["decl-line"].files === 13 && times["decl-line"].calmFiles === 13,
+      sizeLiteral: () => linear(times["size-literal"]) && times["size-literal"].files === 13 && times["size-literal"].calmFiles === 13,
+      twDigits: () => linear(times["tw-digits"]) && times["tw-digits"].files === 13 && times["tw-digits"].calmFiles === 13,
+      twVariants: () => linear(times["tw-variants"]) && times["tw-variants"].files === 13 && times["tw-variants"].calmFiles === 13,
+      markers: () => linear(markers) && markers.n === 1 && markers.calmN === 1,
     });
   }
 };

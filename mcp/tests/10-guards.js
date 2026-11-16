@@ -1196,12 +1196,18 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     ok(r3Bad.length === 0 && r3NoBad.length === 0,
       "feature F2 review R3: the lexer reads the tool's shell — Bash \\⏎ continuation, \\x escapes, $'…' (ANSI-C), PowerShell's backtick (escape and `⏎), cmd's ^; launchers with value options (sudo -u, doas -u, exec -a, node -r / --require, timeout -s) and bin runners (npm exec / x, pnpm dlx, yarn dlx, bunx, bun x, deno run, env -S, npx -c), \"$( )\", a substitution / variable / redirection before the program → caught; npm install / run, yarn add, echo $'…', # and <# #> comments, a quoted commit message, a PowerShell here-string → not (got " +
       JSON.stringify([r3Bad, r3NoBad]) + ")");
-    const n64 = 64 * 1024;
-    const r3Times = remeasure(() => ["$(".repeat(n64 / 2), BS.repeat(n64), "`".repeat(n64), "<<EOF" + NL.repeat(n64 / 2), "$'" + BS.repeat(n64), '"$('.repeat(n64 / 3), "${".repeat(n64 / 2),
-      "${$(".repeat(n64 / 4), "a<<b ".repeat(n64 / 5) + NL + "x", '@"' + NL + "$(".repeat(n64 / 2), "`$(".repeat(n64 / 3), ("x" + NL).repeat(n64 / 2)]
-      .map((c) => { const t0 = Date.now(); sh("dev-spec " + c); sh("dev-spec " + c, "PowerShell"); sh("cmd /c \"dev-spec " + c + "\""); return Date.now() - t0; }),
-      (s) => s.every((t) => t < 2000)); // 1.26: measured once more on a timing-only miss
-    ok(r3Times.every((t) => t < 2000), "feature F2 review R3: the lexer stays linear on 64 KB of $( / \\ / ` / heredocs / $' / \"$( / ${ / here-strings (each < 2 s, got " + JSON.stringify(r3Times) + " ms)");
+    // Each case at 64 KB against the same case at 16 KB, timed side by side: linear is ×4, quadratic ×16 — a RATIO (1.35.4;
+    // it was an absolute 2 s, missed at 2.5 s once under the pre-push gate's parallel run), with a 10 s ceiling.
+    const r3Cases = (n) => ["$(".repeat(n / 2), BS.repeat(n), "`".repeat(n), "<<EOF" + NL.repeat(n / 2), "$'" + BS.repeat(n), '"$('.repeat(n / 3), "${".repeat(n / 2),
+      "${$(".repeat(n / 4), "a<<b ".repeat(n / 5) + NL + "x", '@"' + NL + "$(".repeat(n / 2), "`$(".repeat(n / 3), ("x" + NL).repeat(n / 2)];
+    // (each the faster of two runs, and 300 ms of slack: a case of 8 ms at 16 KB measured 247 ms at 64 KB once under a full
+    // suite's load — quadratic, a case worth the check is seconds at 64 KB)
+    const r3Once = (c) => { const t0 = Date.now(); sh("dev-spec " + c); sh("dev-spec " + c, "PowerShell"); sh("cmd /c \"dev-spec " + c + "\""); return Date.now() - t0; };
+    const r3Time = (c) => Math.min(r3Once(c), r3Once(c));
+    const r3Linear = (s) => s.every(([big, small]) => big < 8 * small + 300 && big < 10000);
+    const r3Times = remeasure(() => { const small = r3Cases(16 * 1024); return r3Cases(64 * 1024).map((c, i) => [r3Time(c), r3Time(small[i])]); },
+      r3Linear); // 1.26: measured once more on a timing-only miss
+    ok(r3Linear(r3Times), "feature F2 review R3: the lexer stays linear on 64 KB of $( / \\ / ` / heredocs / $' / \"$( / ${ / here-strings (each, the faster of two runs, within 8× + 300 ms of the same case at 16 KB, under 10 s; got [64 KB, 16 KB] " + JSON.stringify(r3Times) + " ms)");
 
     // R9: a heredoc body is data — skipped (<<'EOF', <<"EOF", <<\EOF, <<-EOF), read only for $( ) / `…` when unquoted, or as the
     // script when fed to a shell (bash <<EOF, sh <<<); what follows the terminator is a command again.

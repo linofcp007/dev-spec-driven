@@ -3,6 +3,118 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.35.4] — 2026-11-16
+
+What 1.35.3 left to add by hand, and what it cost. The code scan follows an import where the project's own tools send
+it — the governing tsconfig's aliases, a workspace package's `exports` map, a barrel's re-exports —, reads the markup
+files and the calls that render, and opens its files in parallel where an open is slow.
+
+### Changed
+- **A project's `tsconfig.json` / `jsconfig.json` is read for its aliases.** An import is followed through the config
+  that governs its file — the nearest folder above it holding a `tsconfig.json`, else a `jsconfig.json` —, read the way
+  TypeScript reads it: comments, trailing commas, a BOM; an exact key before any `*` pattern, then the longest prefix (a
+  suffix too: `*.svg`); every target, relative to `baseUrl` when one is written, else to the folder of the config that
+  wrote `paths`; `extends` (a path or a list, the later winning, the config's own options last; a child's `paths`
+  replace its parent's; a package's config writes nothing of the project's), `${configDir}`; with no pattern that fits,
+  a name of two segments or more below `baseUrl`. So Laravel's starter kits (`@/*` → `./resources/js/*`), an alias
+  spelled like a scope (`@components/*`), Nx's library entries (`"@acme/ui": ["libs/ui/src/index.ts"]`, the library's
+  folder), SvelteKit's generated `$lib` (on a checkout that ran `svelte-kit sync`) and a monorepo's `../../shared/src/*`
+  now settle what the project renders. What the config adds never takes the guess's place. 100 config files are read
+  in a scan at most, 32 `extends` entries from one config, 100 `*` patterns, 4 M characters of keys the configs give in
+  a scan; a config past them, one with a key, a target, a `baseUrl` or an `extends` longer than 1,024 characters, or one
+  this scan cannot read as TypeScript would (not JSON once its
+  comments are out, a rooted path, one above the project, a link out of it) tells nothing — its folder keeps 1.35.3's
+  reading, without a word —; a pattern's first 10 targets are kept. (1.35.3's review 3 had taken a first reading out:
+  it took a `..` target as text, had no bound and fell short of TypeScript's rules — each is answered.)
+- **A workspace package's `exports` map is read.** A subpath of a workspace package (`@ark-ui/react/dialog`) is also
+  where its manifest's `exports` says, read as Node reads it: the subpath's own key (as written), else the pattern with
+  the longest part before its `*`, then the longest key — the `*` standing for any text, `/` included; a key of two
+  `*`s is none; every target a condition can lead to (`import`, `require`, `types`, `source`, Chakra's `dev` — up to
+  `default`, and past it while the `default` may give nothing, as Node goes on), a list's entries up to the first Node
+  takes (an object ends it when its `default` resolves and no branch before it may give `null` — a nested object or list
+  that matches nothing gives nothing, so the `default` is still reached —, and so does a list that ends at a target);
+  `null` excludes
+  the subpath, never a shorter pattern instead; an `index` target is its folder. The 1.35.3 reading stays beside it (the
+  subpath and the subpath below `src/`): the map only adds. A map of more than 500 keys or mixing subpaths with
+  conditions is not read; a target nested deeper than 8, past a key's first 16, or longer than 1,024 characters once its
+  `*`s are filled is not taken; maps are kept up to 4 MB of manifests, and 4 M characters of keys they give in a scan. A package's root entry (`main`, the map's `.`) is
+  not read: a name is looked for in all of its folder, and the follow below starts at its `src/index` or `index`.
+- **A re-export is followed to the file that declares the name** — through any script the import resolves to (a
+  component folder's `index.ts` or not, a workspace package's `src/index`): `export { A, B as C, default as D } from`,
+  `export * from`, `export * as NS from`, a name imported and exported again; a file's own `export { X } from` hides its
+  stars, a star never passes a default; chains and cycles. The evidence goes to the declaring file's own name
+  (`export { Root as Dialog }` and `<Dialog />` settle `Root`). Chakra's parts rendered as `<Card.Root>` through
+  `@chakra-ui/react` → `export *` → `export * as Card from "./namespace"` → `CardRoot as Root` are found. The follow
+  reads up to 2,000 files and 8 MB of its own and is charged 100,000 steps — every star and link looked at, a module it
+  reaches, a name passed on, a candidate compared —; past them it ends without a word. Over-approximated knowingly, as a
+  folder's files are: a name two stars pass on is followed into both, and a file reached through a star is followed
+  through its own stars too (its own `export { X } from` hides them only where the query starts). A barrel's name for a
+  binding it gives under more than one name, and that comes from a component file of the project, is that file's row
+  (`import Root from "./card.svelte"; export { Root, Root as Card }`, shadcn-svelte's barrels, imported relatively or
+  through `$lib/…`: `Card` stays, `Root` is no row of its own, whatever other app or file holds a `Card` too) — and
+  when that file lost its own name to another (kits of generically named parts, `popover/root.tsx` beside
+  `dialog/root.tsx`), its names given with `as` that the page renders stand for it where their name is free
+  (`Popover`, `PopoverContent`); of two names it renders for one binding of a package's, the one given with `as` is
+  kept (`Pane as ResizablePane`) — between different files the first one's row stands.
+- **The markup files settle too.** An `.mdx`, `.vue`, `.svelte` or `.astro` file is read for what it renders — the
+  components its script imports (MDX's top-level `import`, a Vue or Svelte `<script>` block's — `setup`, `lang="ts"` —,
+  an Astro file's front matter) rendered in its markup (`<FadeIn>`, `<Card.Header>`, Vue's `<my-button>` as `MyButton`)
+  — never in fenced code or an inline code span, a comment (`<!-- -->`, `{/* */}`), front matter, a `<style>`, a Vue
+  block but its template, or an Astro `<script>` (a client script); a tag that closes itself on its line opens nothing
+  (`<template #trailing />`, `<template v-if="count > 0" #x />`, Astro's `<script set:html={a > b ? x : y} />`: a tag
+  ends at its first `>` outside quotes and `{…}` — one whose `/>` stands on a later line still opens). Read after every script file, within the same 5,000 files and 32 MB — so a docs site of MDX whose
+  components come through its framework (Docusaurus's `@theme`) reads them for no row: about ×2 its report.
+- **A call that renders a name is a render** — what a tag compiles to: React's `createElement(X, …)`
+  (`React.createElement`, imported under any name, a `require("react")`), Preact's `h(X)` / `createElement(X)`, Vue's
+  `h(X)` and `createVNode(X)`, and each library's `/jsx-runtime` / `/jsx-dev-runtime` `jsx` / `jsxs` / `jsxDEV` — when
+  the function is the library's own. Its first argument is the type as written (`UI.Card`; `Ctx.Provider` is a
+  provider's), with type arguments, on the line below when the call breaks after its `(`, a lower-case name too (a
+  factory is given a value). Not a render: a function of the same name from elsewhere (`const h = …`, Vue 2's
+  `render(h)`, `document.createElement`, `hastscript`'s `h`), `cloneElement(el)`, `memo(X)` / `forwardRef(fn)`.
+- **Faster where an open is slow.** The scan's two long reads (the component files, the project's other files) are read
+  ahead in worker threads (Node core) when their first 32 files average 200 µs an open or more — Windows with on-access
+  antivirus takes about 0.65 ms a file, and a big project opens 5,000 —: the same bytes, decoded and cut the same way,
+  in the same order; where opens are fast nothing changes. The workers run without the shell's `NODE_OPTIONS` (no
+  preload of it reaches them); one that fails, or gives nothing for 2 s, leaves the rest to be read in sequence. The
+  other files are viewed for what the search reads alone.
+  On 19 public repositories, with all of the above read too, the project report takes ×0.3 to ×0.6 the time of
+  1.35.3's on the big ones (gutenberg 6.9 → 3.3 s, mantine 6.1 → 1.9 s, mui 7.5 → 4.4 s, shadcn/ui 4.7 → 1.7 s, chakra
+  3.6 → 1.0 s, primer 1.2 → 0.45 s — the corpus in all 43 → 20 s); a kit of `.svelte` / `.vue` files now reads them:
+  shadcn-svelte 0.2 → 0.8 s, nuxt/ui 0.1 → 0.35 s.
+
+On those 19 repositories 15 lists are unchanged; chakra-ui gains 261 rows (the parts above, its compositions' editor
+controls rendered through its `compositions/*` alias, and six parts of toast's `.tsx` namespace under their short
+names — `Root`, `Title`, `Description`… —, listed knowingly), ant-design loses `ConfigProvider.ConfigContext` (a context
+its demos read through its own `"antd": ["./components/index.ts"]`), Laravel's Vue starter gains `Toaster` (through
+`@/*` → `./resources/js/*`) and shadcn-svelte three parts of a namespace, listed knowingly (`Content`, `List`, `Trigger`
+of `docs/src/lib/components/doc-tabs/index.ts`, as 1.35.3 lists the same shape in `.tsx`) — nine on a checkout that ran
+`svelte-kit sync`, where `$lib` resolves (drawer's `NestedRoot` is its file's row, `DrawerNested`).
+
+Still a row to add by hand: a component no file of the project renders where the reader sees it; a name rendered only
+past a bound, or by a default import under another local name in a file that writes none of the names asked; an alias
+written only in a config that `references` names (Vite's `tsconfig.app.json` beside a `tsconfig.json` that writes
+none), in a package's config reached by a non-relative `extends` (Docusaurus's `@site/*`), in `package.json`'s
+`imports` or in a bundler's own alias (`resolve.alias`) with no tsconfig mirror; a subpath whose map target re-exports
+from elsewhere through CommonJS (`module.exports = require("./x")`); a name passed on under another name by a file
+that is neither a component file nor a component folder's barrel, rendered only by files that write no name the search
+asks; a component a markup file renders with no import (Nuxt's auto-imports, MDX components given through
+`mdx-components.tsx`), a one-word lower-case Vue tag (`<card>`), a Pug template, a dynamic component (`<component
+:is>`, `<svelte:component>`); a factory not imported from its library (`const e = React.createElement`, a global
+`wp.element.createElement`, Vue 2's `render(h)`), a factory's first argument written with a cast (`X as Y`, `X!`) or in
+parentheses, compiled CommonJS (`(0, _jsxRuntime.jsx)(X)`), and a candidate a
+factory renders only in a `.ts` file when the project asks no weak name (reading every `.ts` file for it took a Vue
+and a Svelte kit's report ×6 for no row). Still listed, knowingly: what 1.35.3 listed so, and a barrel's other name for
+a binding it takes through another barrel (`import { Card } from "./card"` where `card/index.ts` re-exports
+`card.tsx`: `export { Card, Card as Root }` lists `Root` — the import is asked of the module it names alone).
+
+### Tests
+- `node mcp/test.js` 2431 assertions, `node cli/test-cli.js` 663 (was 2369 / 663). The guard's 64 KB lexer bound
+  is a ratio to the same case at 16 KB (the faster of two runs, 8× + 300 ms; linear is ×4), no longer an absolute 2 s that missed once under the
+  pre-push gate's parallel run; the design-system scan's hostile lines, its renders project, review 3's four shapes and
+  markers (1.35) and the guard's pre-filter readers are timed as ratios too — against twins of the same size measured
+  at the same moment, or the fastest of up to five 16 K / 64 K runs — where absolute times missed under a full suite's
+  load.
+
 ## [1.35.3] — 2026-11-15
 
 What 1.35.2 left to add by hand, and what it listed knowingly. Both were what a reader of ONE file's text cannot know:

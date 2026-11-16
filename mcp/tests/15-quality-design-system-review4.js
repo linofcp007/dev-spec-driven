@@ -276,21 +276,28 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     write(p, REG, "# DS\n\n| Token | Value | Use |\n|---|---|---|\n| --brand | #1d4ed8 | brand |\n");
     const line = Array.from({ length: 142 }, () => "<!---->").join("") + Array.from({ length: 333 }, () => "a/*").join(""); // 1,993 characters
     const block = Array.from({ length: 120 }, () => line).join("\n") + "\n";
+    // (its calm twin: the same files, each opener spelled out of reach — `<!-_-->`, `a/_`: no comment opens, no `/*` is
+    // there to skip —, read at the same moment: a ratio holds on a loaded machine where a time does not — 1.35.4 review 2)
+    const calmBlock = Array.from({ length: 120 }, () => Array.from({ length: 142 }, () => "<!-_-->").join("") + Array.from({ length: 333 }, () => "a/_").join("")).join("\n") + "\n";
+    const linear = (s) => s.ms < 3 * s.calm + 300;
     const times = {};
     for (const ext of ["tsx", "vue"]) {
-      const f = feature(p, "Slow " + ext, "src/" + ext + "/");
-      for (let i = 0; i < 13; i++) write(p, "src/" + ext + "/f" + i + "." + ext, block);
-      const t = remeasure(() => { const t0 = Date.now(); const v = S.designSystemReport(p, { name: f.slug }); return { ms: Date.now() - t0, files: v.viewFiles }; }, (s) => s.ms < 1500);
-      times[ext] = [t.ms, t.files];
+      const f = feature(p, "Slow " + ext, "src/" + ext + "/"), g = feature(p, "Calm " + ext, "src/" + ext + "-calm/");
+      for (let i = 0; i < 13; i++) { write(p, "src/" + ext + "/f" + i + "." + ext, block); write(p, "src/" + ext + "-calm/f" + i + "." + ext, calmBlock); }
+      const t = remeasure(() => {
+        const t0 = Date.now(); const v = S.designSystemReport(p, { name: f.slug }); const t1 = Date.now(); const w = S.designSystemReport(p, { name: g.slug });
+        return { ms: t1 - t0, calm: Date.now() - t1, files: v.viewFiles, calmFiles: w.viewFiles };
+      }, linear);
+      times[ext] = [t.ms, t.files, t.calm, t.calmFiles, t.tries];
     }
     const q = project("seed-cap");
     for (let i = 0; i < 505; i++) write(q, "src/components/C" + String(i).padStart(3, "0") + ".tsx", COMP);
     const seeded = S.scaffoldSteeringFile(q, "design-system.md");
     const reg = registry(q);
-    all("1.35 review 4: withoutComments is linear on a line of 142 `<!---->` and 333 `a/*` (a `/*` that opens nothing was skipped again after every comment: 13 files × 120 lines took 3.4 s) — under 1.5 s in a .tsx and in a .vue; the seed writes the 500 components the registry's reader reads with their details, never more (got " +
+    all("1.35 review 4: withoutComments is linear on a line of 142 `<!---->` and 333 `a/*` (a `/*` that opens nothing was skipped again after every comment: 13 files × 120 lines took 3.4 s) — within 3× + 0.3 s of their calm twin read at the same moment, in a .tsx and in a .vue (1.35.4 review 2: a ratio, no longer an absolute 1.5 s a loaded machine can miss); the seed writes the 500 components the registry's reader reads with their details, never more (got [ms, files, calm ms, calm files, tries] " +
       js({ times, seeded: seeded.seeded, read: [reg.components.length, reg.total.components] }) + ")", {
-      tsx: () => times.tsx[0] < 1500 && times.tsx[1] === 13,
-      vue: () => times.vue[0] < 1500 && times.vue[1] === 13,
+      tsx: () => linear({ ms: times.tsx[0], calm: times.tsx[2] }) && times.tsx[1] === 13 && times.tsx[3] === 13,
+      vue: () => linear({ ms: times.vue[0], calm: times.vue[2] }) && times.vue[1] === 13 && times.vue[3] === 13,
       seedCap: () => seeded.seeded.components === 500 && reg.components.length === 500 && reg.total.components === 500,
     });
   }
