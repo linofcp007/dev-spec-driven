@@ -620,6 +620,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   images, so it is no mode of the code reviewer (which keeps CLAUDE.md and reads the diff).
 - **1.36** — the review panel dispatches the same agents with a `model` each; no agent file, hook or matcher changed (the
   SubagentStop matcher still gates the implementer and the simplifier only — a reviewer reports no run).
+- **1.36.0 review 1 (FC-6)** — the observe hook passes `tool` for a PowerShell run (the line gains `"tool": "PowerShell"`; a
+  Bash run's line is unchanged): the PowerShell tool's passes are logged only with an explicit exit code while its failures
+  always are, so the fast check read "failed on its last run" after an unlogged pass — its note now says why
+  (tasks-and-evidence.md → The fast check).
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.

@@ -23,7 +23,8 @@
  *
  * Cheap and silent, like every dev-spec hook: it exits at once unless the tool is Bash and the project has a .specs/ dev-spec
  * owns; the engine is loaded only when the command's text appears in a feature's tasks.md or in meta.checks (a plain text
- * pre-filter), and then it only appends one JSON line {command, exitCode, at, event, session} to a git-ignored, size-bounded
+ * pre-filter), and then it only appends one JSON line {command, exitCode, at, event, session, tool?} (tool: "PowerShell" for
+ * a PowerShell run, 1.36 review 1 — none for a Bash one) to a git-ignored, size-bounded
  * log (.specs/<feature>/.execution/observed.jsonl; .specs/.execution/observed.jsonl for a project check). It prints nothing,
  * never blocks, and exits 0 on any error, a malformed / empty / oversized payload, or an irrelevant event.
  */
@@ -180,6 +181,9 @@ function decide(raw) {
       exitCode,
       event: event || (failure ? "PostToolUseFailure" : "PostToolUse"),
       session: typeof payload.session_id === "string" ? payload.session_id : undefined,
+      // a PowerShell run is marked (`tool`): its passes are logged only with an explicit exit code, so a logged failure may hide a
+      // later pass — the fast check's note says so (1.36 review 1 FC-6). A Bash run's line is unchanged.
+      tool: strict ? payload.tool_name : undefined,
     });
   }
   return null;

@@ -1333,7 +1333,7 @@ function gitEvidence(ev) {
 // ---------------------------------------------------------------------------
 // harness-observed evidence. In Claude Code the plugin's hooks/observe-hook.js (PostToolUse and PostToolUseFailure,
 // matcher Bash) sees every Bash run: a run of a task's runnable _Verify:_ command (or the " && " join of a task's commands) or
-// of a project check (roadmap.json meta.checks) is appended — one JSON line {command, exitCode, at, event, session} — to a
+// of a project check (roadmap.json meta.checks) is appended — one JSON line {command, exitCode, at, event, session, tool?} — to a
 // git-ignored, size-bounded log: .specs/<feature>/.execution/observed.jsonl for a task's command, .specs/.execution/
 // observed.jsonl for a project check's (a dot folder is never a feature; both .execution/ folders ignore themselves).
 // spec_complete_task / `done` and spec_finish {evidence} stamp every reported run `observed: true | false` from that log
@@ -1606,6 +1606,9 @@ function observeRun(projectDir, run) {
   const entry = { command: key, exitCode: code, at: typeof run.at === "string" && Number.isFinite(Date.parse(run.at)) ? run.at : new Date().toISOString() };
   if (typeof run.event === "string" && run.event) entry.event = run.event.slice(0, 40);
   if (typeof run.session === "string" && run.session) entry.session = run.session.slice(0, 200);
+  // the tool that ran it, when the hook names one — the PowerShell tool's (its passes are logged only with an explicit exit code: the
+  // fast check's note says so, 1.36 review 1 FC-6)
+  if (typeof run.tool === "string" && run.tool) entry.tool = run.tool.slice(0, 40);
   const targets = [];
   for (const f of featureDirs(pdir).filter((x) => !x.archived).slice(0, OBSERVED_MAX_FEATURES)) {
     const text = readIfExists(path.join(f.dir, "tasks.md"));
@@ -1736,11 +1739,15 @@ function writeChecks(projectDir, nc) {
 // latest run of it against the dates of the feature's planned files (fastCheckStatus) — a note, never a refusal (a file date
 // only ever warns). Being a meta.checks entry it is a finish check too (suite-evidence): the gate on the final code.
 // ---------------------------------------------------------------------------
-// A command that REWRITES files (--fix, --write, a formatter without --check) is never a fast check: run after each edit it would
-// change the code — and the tests — under the task.
+// A command that REWRITES files is never a fast check: run after each edit it would change the code — and the tests — under the
+// task. The rule, word by word (a heuristic — the docs say it as such): a `--fix` (`--fix=…`) or `--write` word, or a formatter —
+// a `*fmt` / `*format` program or subcommand (gofmt, cargo fmt, ruff format, dotnet format, clang-format; never a flag, an `@alias`
+// or a check-named script: check-fmt, check:fmt, fmt:check) — with no check flag (--check / -check / --check-…, -l, -d, --diff,
+// --dry-run, --verify-no-changes). 1.36 review 1 (FC-4 / T3): `gofmt -l`, `shfmt -d`, `make check-fmt`, `dune build @fmt` were
+// refused, `ruff format .`, `dotnet format`, `clang-format -i` accepted.
 const RE_FIXER_FLAG = /(?<![\w-])--(?:fix|write)(?![\w-])/;
-const RE_FORMATTER = /(?<![\w./-])[\w-]*fmt(?![\w:.-])/i;
-const RE_CHECK_FLAG = /(?<![\w-])--?check(?![\w-])/;
+const RE_FORMATTER = /(?<![\w./@-])(?<!check[:_-])(?!-|check[-_:])[\w-]*(?:fmt|format)(?![\w:.-])/i;
+const RE_CHECK_FLAG = /(?<![\w-])(?:--?check(?:-[\w-]+)?|-[ld]|--diff|--dry-run|--verify-no-changes)(?![\w-])/;
 const fixerCommand = (cmd) => RE_FIXER_FLAG.test(cmd) || (RE_FORMATTER.test(cmd) && !RE_CHECK_FLAG.test(cmd));
 const FAST_SKEW_MS = 5 * 60 * 1000; // a log entry or a file date further ahead is ignored (another machine's clock)
 // roadmap.json meta.fastCheck → null (none set) · { name, command } · { invalid: the stored value, why: "missing" | "guardian" |
@@ -1798,13 +1805,18 @@ function setFastCheck(projectDir, name) {
 // A task the fast check judges: a CODE task — its _Implements:_ names a file (taskMarkers drops the template's [slot]) — of a
 // feature that is no spike. Any other task carries no `fastCheck` (next_task, the brief, complete_task).
 const fastTask = (block, state) => !!block && !(isRecord(state) && state.kind === "spike") && taskMarkers(block).implements.length > 0;
-// The fast check at a code task → null (no valid fast check, or not a code task) · { check, command, status, runs, clean, at? }.
+// The fast check at a code task → null (no valid fast check, or not a code task) · { check, command, status, runs, clean, at?,
+// partial?, pwsh? }.
 // status (stable): clean · stale (a planned file is newer than its latest run) · failed (its latest run failed) · missing (no run
 // of it in the project log) · unknown (no harness log at all — an MCP-only client: no note). Its latest run: the project log's
 // newest entry that runs the fast command (runProvesVerify — the check as ONE command: `tsc && npm test` is no run of it; > 5 min
 // ahead ignored); its edits: the newest date of the feature's planned files (baselineFiles of the active tasks — the set
-// suiteCodeStamp hashes, bounded; a missing file or one dated > 5 min ahead ignored). runs / clean: its runs since the feature's
-// previous tick (else its tasks approval, else its creation) — what a tick records on its run (`fast`) for metrics.
+// suiteCodeStamp hashes, bounded; a missing file or one dated > 5 min ahead ignored) and of the task's OWN _Implements:_ files,
+// always — past that set's cap (1.36 review 1 FC-1: BASELINE_CAP keeps the first files in task order, so a later task's own file
+// fell outside it and its edit read clean). partial (stable): the planned set stopped at its cap — no other status, no note.
+// pwsh: its latest run came from Claude Code's PowerShell tool, whose passes are logged only with an explicit exit code (the
+// observe hook marks those runs `tool`) — the note says so (FC-6). runs / clean: its runs since the feature's previous tick (else
+// its tasks approval, else its creation) — what a tick records on its run (`fast`) for metrics.
 function fastCheckStatus(projectDir, dir, block, state) {
   const fc = fastCheckOf(projectDir);
   if (!fc || fc.invalid !== undefined || !fastTask(block, state)) return null;
@@ -1814,22 +1826,26 @@ function fastCheckStatus(projectDir, dir, block, state) {
   const runs = [];
   for (const e of readObservedLog(observedLogFile(projectDir, null))) {
     const t = Date.parse(e.at);
-    if (Number.isFinite(t) && t <= horizon && isFast(e.command)) runs.push({ t, exitCode: e.exitCode, at: e.at });
+    if (Number.isFinite(t) && t <= horizon && isFast(e.command)) runs.push({ t, exitCode: e.exitCode, at: e.at, pwsh: e.tool === "PowerShell" });
   }
   let last = null;
   for (const r of runs) if (!last || r.t >= last.t) last = r;
   const root = path.resolve(projectDir);
   let edited = -Infinity;
-  for (const rel of baselineFiles(root, activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "").files) {
-    try { const m = fs.statSync(path.resolve(root, rel)).mtimeMs; if (m <= horizon && m > edited) edited = m; } catch { /* missing: no edit */ }
-  }
+  const date = (rel) => { try { const m = fs.statSync(path.resolve(root, rel)).mtimeMs; if (m <= horizon && m > edited) edited = m; } catch { /* missing: no edit */ } };
+  const planned = baselineFiles(root, activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "");
+  planned.files.forEach(date);
+  const own = baselineFiles(root, taskMarkers(block).implements.map((p) => stripEnds(p.trim(), isBacktickUnit).trim())); // implementsRefs' reading
+  own.files.forEach(date);
+  const partial = planned.truncated; // (a task's own folder past the cap is part of the planned set: cut there too)
   const status = !last ? (observedAny(projectDir) ? "missing" : "unknown") : last.t < edited ? "stale" : last.exitCode === 0 ? "clean" : "failed";
   const st = isRecord(state) ? state : {};
   const ap = isObj(st.approvals) && isObj(st.approvals.tasks) ? timeOf(st.approvals.tasks.at) : null;
   const since = Math.max(timeOf(st.lastTickAt) || -Infinity, ap || -Infinity);
   const from = since > -Infinity ? since : timeOf(st.createdAt) || -Infinity;
   const win = runs.filter((r) => r.t > from);
-  return { check: fc.name, command: fc.command, status, runs: win.length, clean: win.filter((r) => r.exitCode === 0).length, ...(last ? { at: last.at } : {}) };
+  return { check: fc.name, command: fc.command, status, runs: win.length, clean: win.filter((r) => r.exitCode === 0).length, ...(last ? { at: last.at } : {}),
+    ...(partial ? { partial: true } : {}), ...(last && last.pwsh ? { pwsh: true } : {}) };
 }
 // init / spec_upgrade, while no fast check is set: the first candidate the project's root manifests suggest (scan.js
 // fastCheckCandidates) → { name, command, from, note } | null — offered, never set (it must pass on the base branch: it becomes a

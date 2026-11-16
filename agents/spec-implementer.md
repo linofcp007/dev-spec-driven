@@ -83,7 +83,8 @@ commit lacks the earlier tasks and the failing tests you are to make green: repo
    - **Project checks** (listed in the brief's definition of done — `roadmap.json → meta.checks`): run each one and
      report its command, exit code and output tail; nothing that passed before your task may fail after it.
    - **Fast check** (the brief names one — `roadmap.json → meta.fastCheck`, a type check or a linter that answers in
-     seconds): after each small edit run it **on its own** (never chained — `tsc && npm test` is no run of it), fix what it
+     seconds): after each small edit run it **on its own** (never chained or piped — `tsc && npm test` or
+     `tsc | head -40` is no run of it), fix what it
      reports before the next edit, and repeat; it must exit 0 after your LAST edit, before you run the `_Verify:_`. On an
      `_Expect: fail_` task your new test must still pass it: it fails on an assertion or "not implemented", never on a type
      or lint error — add the stub the test calls.
