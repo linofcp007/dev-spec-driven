@@ -27,7 +27,8 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
   decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize;
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
-function __link(E) { ({ fastCheckStatus, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+let guardLevel, protectOnTick, protectedCount; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
+function __link(E) { ({ guardLevel, protectOnTick, protectedCount, fastCheckStatus, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -354,6 +355,25 @@ function taskWaves(blocks, tracks) {
   }
   return { waves, cycles: dependencyCycles(g, true), blocked: stuckTasks(g) };
 }
+// The open tasks that can START now — what next_task, next --batch or the waves could hand out first (1.36: their exact _Implements:_
+// files unlock a protected test, protect.js): a task WITH _Depends:_ once every dependency is done; of the tasks without one, the first
+// open task in tasks order and, when it is [P], the rest of its run of [P] tasks in its section — taskWaves' first ready set, without
+// packing the waves. → [numbers] in tasks order.
+function readyTasks(blocks) {
+  const g = taskDepGraph(blocks);
+  const out = [];
+  let run = null; // the first run of open tasks declaring no _Depends:_ — its section while it is a [P] run, false once it is closed
+  for (const i of g.order) {
+    const b = blocks[i];
+    if (b.done) continue;
+    if (g.specs[i].declared) { if (!g.waitsOn(i).length) out.push(b.number); continue; }
+    if (run === false) continue;
+    if (run !== null && !(b.parallel && run.phase === b.phase && run.checkpoint === b.checkpoint)) { run = false; continue; }
+    out.push(b.number);
+    run = b.parallel ? { phase: b.phase, checkpoint: b.checkpoint } : false;
+  }
+  return out;
+}
 // complete_task: the task's _Depends:_ that are not done in the active view (its own number aside), ascending.
 function openDependenciesOf(tasksText, tracks, task) {
   const spec = taskDependsSpec(task);
@@ -629,6 +649,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     state.lastTickAt = now; // spec_finish's suite-evidence needs every project check run AFTER the last tick
     // when this task was ticked (state.ticks[n]) — the roadmap forecasts' completion times; a hand-broken ticks value is left alone
     if (state.ticks === undefined || isRecord(state.ticks)) state.ticks = { ...(state.ticks || {}), [key]: now };
+    protectOnTick(projectDir, state, task); // 1.36 guard tests: its exact _Implements:_ tests re-baselined, its _Verify:_ tests listed
   }
   if (ev || ticks) writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2)); // one write, before the tick
   let updated = text;
@@ -1772,6 +1793,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // 1.36 the fast check (meta.fastCheck) of an OPEN code task: the definition of done's loop line, and its status — done --run runs
   // it first unless it is clean
   const fast = block.done ? null : fastCheckStatus(projectDir, dir, block, state);
+  // 1.36 guard tests: an open task's definition of done says a protected test changes only when its _Implements:_ names it (the count:
+  // the feature's list)
+  const protectedN = !block.done && guardLevel(projectDir) === "tests" ? protectedCount(state) : null;
   const deps = briefDependencies(activeBlocks, block); // its _Depends:_ and where each stands
 
   const md = i18n.renderBrief({
@@ -1802,6 +1826,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     expectFail,
     projectChecks: checks,
     fastCheck: fast ? { check: fast.check, command: fast.command } : null,
+    protectedTests: protectedN,
     globalConstraints: globalConstraints(tasksText),
     decisions: dec.items,
     decisionsOmitted: dec.omitted,
@@ -1858,6 +1883,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (expectFail) res.expect = "fail"; // B5 (kept with write:true, like verify): the run must exit non-zero
   if (checks.length) res.projectChecks = checks; // [{name, command}] the definition of done names
   if (fast) res.fastCheck = { check: fast.check, command: fast.command, status: fast.status }; // 1.36 (stable; identifiers only)
+  if (protectedN != null) res.protectedTests = protectedN; // 1.36 guard tests: the feature's protected test files (a count)
   if (deps.length) res.dependsOn = deps.map((d) => ({ number: d.number, status: d.status })); // 1.14 F3 (kept with write:true: identifiers only)
   if (dec.items.length) res.decisions = dec.items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, affects: x.affects })); // 1.14 C2
   if (dec.omitted.length) res.decisionsOmitted = dec.omitted;
@@ -1880,7 +1906,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     if (res.reuse) res.refs.reuse = { entries: res.reuse.entries.length, files: res.reuse.files };
     if (res.designSystem) res.refs.designSystem = res.designSystem.components.map((c) => c.name); // the names only
     // KEPT (identifiers the controller and done --run act on): verify, expect, projectChecks, dependsOn, gated / gateError,
-    // preflight, uiReview, fastCheck (1.36) — only the quoted spec text below goes.
+    // preflight, uiReview, fastCheck (1.36), protectedTests (1.36) — only the quoted spec text below goes.
     for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse", "designSystem"]) delete res[k];
   }
   return res;
@@ -2228,4 +2254,6 @@ module.exports = { parseTasks, taskDescription, nextTask, taskDependsSpec, taskS
   taskBlocks, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
   changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers,
   taskMarkers, malformedMarkers, suspiciousVerify, RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections,
-  taskBrief, RE_THEMATIC_BREAK, appendTasks, __link };
+  taskBrief, RE_THEMATIC_BREAK, appendTasks,
+  readyTasks, // 1.36 guard tests (protect.js): the tasks that can start now — their exact _Implements:_ files unlock a protected test
+  __link };

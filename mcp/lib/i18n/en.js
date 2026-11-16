@@ -624,6 +624,7 @@ Tracks: ${label}. Tick before calling the feature done.`,
     guardianBaseline: "write or remove .guardian/baseline.json — the findings dev-guardian's gate accepts as known",
     guardianBaselineUpdate: "run dev-guardian's `baseline update` — it accepts every current finding as known, this feature's included, and the gate stops reporting them",
     guardianCli: "run dev-guardian's gate with a DEV_GUARDIAN_CLI or CLAUDE_CONFIG_DIR of its own — another dev-guardian would answer it",
+    unprotect: (file, feature) => `lift the protection of the test ${file} ('${feature}') — an agent could then change or delete it`,
     lower: (from, to) => `lower the approval guard from ${from} to ${to}`,
     revoke: (phase, feature) => `revoke the approval of the ${phase} phase of '${feature}'`,
     approve: (phase, feature) => `approve the ${phase} phase of '${feature}'`,
@@ -730,6 +731,7 @@ ${a.summary || "[one line: the bug being fixed]"}
 ## Phase: Fix
 - [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output); add guard test T-02 (it passes already)
   - _Requirements: US-1.AC-1_
+  - _Implements: [the test file T-01 goes in]_
   - _Verify: [command that runs T-01]_
   - _Expect: fail_
 - [ ] 2. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
@@ -1409,6 +1411,7 @@ const msg = {
       finishChecks: "'finishChecks' must be an object",
       signoffs: "'signoffs' must be an object", // 1.14 B3 (role sign-offs)
       unticks: "'unticks' must be an array", // 1.16 U1 (undone ticks)
+      protectedTests: "'protectedTests' must be an object (its 'files' an object, its 'lifts' an array)", // 1.36 guard tests
     },
     depend: {
       // ROADMAP.md / .html "Needs attention": a dependsOn naming no feature (a stale or hand-edited roadmap.json entry)
@@ -1603,6 +1606,8 @@ const msg = {
       removed: (f) => `Removed '${f}' ✓`,
       wouldRemove: (slug, dir, n, entries) => `Would permanently delete '${slug}': ${dir} (${n} file(s): ${entries})`,
       confirmHint: (slug) => `Nothing deleted. Re-run with --yes to confirm — or archive it instead: ${DEV_SPEC} feature archive ${slug}`,
+      // feature protect (1.36): one lift record — in force, ended, or a lift a later record ended
+      protectLift: (file, by, day, reason, ended, active) => ended ? `  lift ended: ${file} — by ${by}, ${day}` : `  ${active ? "lifted" : "lifted (ended since)"}: ${file} — by ${by}, ${day}: "${reason}"`,
       missingValue: (flag) => `missing value for --${flag}`,
       unknownFlag: (flag, suggestion) => `unknown option ${flag}` + (suggestion ? ` — did you mean ${suggestion}?` : ".") + " Run `" + DEV_SPEC + " help` for the options.",
       unknownRules: (tool, known) => `unknown tool '${tool}'. Known: ${known}`,
@@ -2117,7 +2122,7 @@ const msg = {
       forced: (list) => `dev-spec guard: code changes are covered only by a FORCED tasks approval (${list}) — its checks were failing when it was approved.`,
       on: "Guard mode ON — Write/Edit on code files outside .specs/ asks for confirmation while no feature has approved, unfinished tasks (roadmap.json meta.guard). Test files are allowed while a feature's test plan is approved and the feature is unfinished (Phase 4 writes the failing tests before the tasks gate), and every code file while a spike is under way (its prototype).",
       off: "Guard mode OFF — code edits are not gated.",
-      badValue: (v) => `--guard takes on, off or scope (got '${v}').`,
+      badValue: (v) => `--guard takes on, off, scope or tests (got '${v}').`,
     },
     // the human approval guard (hooks/approval-hook.js, PreToolUse · roadmap.json meta.approvalGuard off|ask|deny ·
     // spec_init {approvalGuard} · `dev-spec init --approval-guard`). `ask` is read by the USER (the permission prompt), `deny` by
@@ -2185,6 +2190,8 @@ const msg = {
       phases: (list) => `Phases to approve, in order: ${list}.`,
       // what a spec_feature remove deletes (remove's preview: wouldDelete.files)
       removeSize: (n, rel) => `This deletes ${rel} for good — ${n} file${n === 1 ? "" : "s"}.`,
+      // a spec_feature unprotect (1.36 guard tests): the reason the agent gives, as it would be recorded
+      unprotect: (reason) => `Reason given: "${reason}". An agent may then change or delete this test until you protect it again.`,
       approveTitle: "Approve",
       approveDesc: "Tick it to record this; leave it unticked (or decline) to refuse.",
       noteTitle: "Note",
@@ -3256,12 +3263,48 @@ const msg = {
     },
     scopeGuard: {
       on: "Guard mode SCOPE — Write/Edit on a code file outside .specs/ asks unless an open task of an approved feature names it in _Implements:_ (the file, its folder or a glob; test files excepted), and asks for every code edit while no feature has approved, unfinished tasks (roadmap.json meta.guard: \"scope\"). Test files are allowed while a feature's test plan is approved and the feature is unfinished (Phase 4 writes the failing tests before the tasks gate), and every code file while a spike is under way (its prototype).",
-      ask: (file, features, hint) => `dev-spec guard (scope): ${file} is not in the plan — no open task of ${features} names it in _Implements:_. ${hint} (Guard mode is scope — ${DEV_SPEC} init --guard on allows every code file while tasks are approved; --guard off disables it.)`,
+      ask: (file, features, hint, level = "scope") => `dev-spec guard (scope): ${file} is not in the plan — no open task of ${features} names it in _Implements:_. ${hint} (Guard mode is ${level} — ${DEV_SPEC} init --guard on allows every code file while tasks are approved; --guard off disables it.)`,
       hint: {
         "same-folder": (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — same folder as ${ref}) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
         nearby: (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — it plans ${ref} nearby) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
         next: (n, slug) => `Add it to the _Implements:_ of task ${n} (${slug}, the next open task) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
       },
+    },
+    // 1.36 protected tests (roadmap.json meta.guard "tests" · spec_feature {action: "protect" | "unprotect"} · `dev-spec feature
+    // protect|unprotect`). `ask` is read by the USER (the permission prompt), `deny` by the AGENT (+ `denyUser`, the line the user sees).
+    // The "dev-spec guard (tests)" prefix, _Implements:_, _Verify:_, meta keys and the commands stay English.
+    protectedTests: {
+      on: `Guard mode TESTS — the scope guard, plus protected tests: once a feature's tasks are approved, the test files present then (and those a ticked task names in _Implements:_ or runs in its _Verify:_) are protected — editing, removing or moving one asks unless a task that can start now names it in _Implements:_, and is refused under meta.approvalGuard deny. Only the user lifts one: ${DEV_SPEC} feature unprotect <feature> <file> --reason "…".`,
+      unguarded: "The protected tests are listed in each feature's .state.json — only the approval guard (init --approval-guard ask|deny) keeps an agent from editing that list.",
+      whyFile: (slug, day) => `it is one of ${slug}'s protected tests${day ? ` (recorded ${day})` : ""}`,
+      whyFolder: (n, first) => `it holds ${n} protected test(s), e.g. ${first}`,
+      current: (list) => `The tasks that can start now — ${list} — don't name it in _Implements:_.`,
+      noCurrent: "No task that can start now names it in _Implements:_.",
+      planHint: (n, slug) => ` To plan the change, add it to the _Implements:_ of task ${n} (${slug}) and re-approve the tasks phase.`,
+      ask: (file, why, current, planHint, lift) => `dev-spec guard (tests): ${file} is a protected test — ${why}. ${current} A task that makes a test pass changes the code, not the test: confirm only if you want this test changed.${planHint} To allow it for the feature, lift it yourself: ${lift}. (Guard mode is tests — ${DEV_SPEC} init --guard scope stops protecting tests.)`,
+      deny: (file, why) => `dev-spec guard (tests): refused — ${file} is a protected test (${why}), and a protected test changes only by the user's decision (meta.approvalGuard: deny). Do not change it another way (a shell command, a script, git): stop, report the test and why you would change it, and let the user decide.`,
+      denyUser: (file, cmd) => `dev-spec guard refused an agent's edit of the protected test ${file}. To allow it yourself: ${cmd}`,
+      snapshotNote: (n, cap) => `Protected tests: ${n} test file(s) recorded — editing, removing or moving one now asks unless a task that can start now names it in _Implements:_.` + (cap ? ` Only the first ${cap} were recorded (the list is capped).` : ""),
+      briefDod: (n) => `Protected tests (meta.guard tests${n ? ` — ${n} file(s) on this feature's list` : ""}): edit, rename or delete an existing test file only when THIS task's _Implements:_ names it; make a red test green by fixing the code, never the test. If the guard asks or refuses, stop and report NEEDS_CONTEXT naming the test — never route around it (a shell command, a script, git).`,
+      via: { approval: "the tasks approval", protect: "feature protect" },
+      listNote: (slug, n, day, via, added) => `${slug} — ${n} protected test file(s)` + (day ? ` since ${day}${via ? ` (${via})` : ""}` : "") + `; ${added} added now.`,
+      unlifted: (file) => `The lift of ${file} ended — it is protected again.`,
+      truncated: (cap) => `The list reached its cap (${cap} files): the tests past it are not protected.`,
+      notEnforced: `The guard reads the list only at guard tests (${DEV_SPEC} init --guard tests).`,
+      lifted: (file, slug, listed) => `Lifted the protection of ${file} (${slug}): it may change until ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (It was not on the feature's protected list.)"),
+      err: {
+        fileRequired: `unprotect needs the test file: ${DEV_SPEC} feature unprotect <feature> <file> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
+        reasonRequired: "unprotect needs a reason (one line, at most 500 characters): why this protected test may change.",
+        notATest: (file) => `${file} is not a test file (by its name or its folder) — only test files are protected.`,
+        outside: (file) => `${file} is outside the project.`,
+      },
+      finishWarn: (slug, list, more) => `Protected tests of ${slug} changed with no recorded reason (no task re-baselined them, no lift covers them): ${list}${more ? ` and ${more} more` : ""} — check each change is intended (a test made to pass is a weakened test); if it is, record it: ${DEV_SPEC} feature unprotect ${slug} <file> --reason "…".`,
+      changed: (file) => `${file} (changed)`,
+      deleted: (file) => `${file} (deleted)`,
+      summaryHead: "## Protected tests",
+      summaryLine: (n, k) => `${n} protected test file(s); ${k} changed with no recorded reason.`,
+      summaryLift: (file, by, reason) => `- lifted: ${file} — by ${by}: "${reason}"`,
+      doctorMissing: (slug) => `guard tests: ${slug} has approved tasks but no protected-tests snapshot (its tasks were approved before the level was set) — take one: ${DEV_SPEC} feature protect ${slug}.`,
     },
 
     // the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).

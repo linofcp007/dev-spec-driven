@@ -629,6 +629,7 @@ Tracks: ${label}. Marca antes de dar la función por terminada.`,
     guardianBaseline: "escribir o borrar .guardian/baseline.json — los findings que el gate de dev-guardian acepta como conocidos",
     guardianBaselineUpdate: "ejecutar el `baseline update` de dev-guardian — acepta como conocidos todos los findings actuales, incluidos los de la funcionalidad, y el gate deja de informarlos",
     guardianCli: "ejecutar el gate de dev-guardian con un DEV_GUARDIAN_CLI o CLAUDE_CONFIG_DIR propio — respondería otro dev-guardian",
+    unprotect: (file, feature) => `levantar la protección de la prueba ${file} ('${feature}') — un agente podría entonces cambiarla o borrarla`,
     lower: (from, to) => `bajar la guardia de aprobaciones de ${from} a ${to}`,
     revoke: (phase, feature) => `revocar la aprobación de la fase ${phase} de '${feature}'`,
     approve: (phase, feature) => `aprobar la fase ${phase} de '${feature}'`,
@@ -732,6 +733,7 @@ ${a.summary || "[una línea: el bug a corregir]"}
 ## Fase: Corrección
 - [ ] 1. [US1] Escribir la prueba de regresión T-01 y verla fallar por la razón correcta (pegar la salida); añadir la prueba de protección T-02 (ya pasa)
   - _Requirements: US-1.AC-1_
+  - _Implements: [el fichero de prueba donde va T-01]_
   - _Verify: [comando que ejecuta T-01]_
   - _Expect: fail_
 - [ ] 2. [US1] Corregir la causa raíz — un cambio, no un paquete; la prueba de protección T-02 sigue en verde
@@ -1365,6 +1367,7 @@ const msg = {
       finishChecks: "'finishChecks' debe ser un objeto",
       signoffs: "'signoffs' debe ser un objeto",
       unticks: "'unticks' debe ser un array",
+      protectedTests: "'protectedTests' debe ser un objeto (su 'files' un objeto, su 'lifts' un array)",
     },
     depend: {
       // "Necesita atención" de ROADMAP.md / .html: un dependsOn que no nombra ninguna función
@@ -1548,6 +1551,7 @@ const msg = {
       removed: (f) => `'${f}' eliminada ✓`,
       wouldRemove: (slug, dir, n, entries) => `Esto eliminaría '${slug}' definitivamente: ${dir} (${n} fichero(s): ${entries})`,
       confirmHint: (slug) => `No se ha eliminado nada. Vuelve a ejecutar con --yes para confirmar — o archívala: ${DEV_SPEC} feature archive ${slug}`,
+      protectLift: (file, by, day, reason, ended, active) => ended ? `  levantamiento terminado: ${file} — por ${by}, ${day}` : `  ${active ? "levantada" : "levantada (terminada después)"}: ${file} — por ${by}, ${day}: "${reason}"`,
       missingValue: (flag) => `falta el valor de --${flag}`,
       unknownFlag: (flag, suggestion) => `opción desconocida ${flag}` + (suggestion ? ` — ¿quizás ${suggestion}?` : ".") + " Las opciones están en `" + DEV_SPEC + " help`.",
       unknownRules: (tool, known) => `herramienta desconocida '${tool}'. Conocidas: ${known}`,
@@ -2017,7 +2021,7 @@ const msg = {
       forced: (list) => `dev-spec guard: los cambios de código solo están cubiertos por una aprobación FORZADA de las tareas (${list}) — sus comprobaciones fallaban cuando se aprobó.`,
       on: "Modo guardia ACTIVADO — Write/Edit en ficheros de código fuera de .specs/ pide confirmación mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard). Los ficheros de prueba se permiten mientras el plan de pruebas de una función sin terminar esté aprobado (la Fase 4 escribe las pruebas que fallan antes del gate de las tareas), y todo fichero de código mientras un spike esté en curso (su prototipo).",
       off: "Modo guardia DESACTIVADO — los cambios de código no se controlan.",
-      badValue: (v) => `--guard admite on, off o scope (recibido '${v}').`,
+      badValue: (v) => `--guard admite on, off, scope o tests (recibido '${v}').`,
     },
     approvalGuard: {
       on: {
@@ -2071,6 +2075,7 @@ const msg = {
       waiver: (reason, expires) => "Excepción: " + [reason ? `"${reason}"` : null, expires ? `hasta el ${expires}` : null].filter(Boolean).join(" ") + ".",
       phases: (list) => `Fases a aprobar, en orden: ${list}.`,
       removeSize: (n, rel) => `Esto borra ${rel} para siempre — ${n} fichero${n === 1 ? "" : "s"}.`,
+      unprotect: (reason) => `Motivo indicado: "${reason}". Un agente podrá entonces cambiar o borrar esta prueba hasta que vuelvas a protegerla.`,
       approveTitle: "Aprobar",
       approveDesc: "Márcalo para registrarlo; déjalo sin marcar (o rechaza) para no aprobar.",
       noteTitle: "Nota",
@@ -3045,12 +3050,45 @@ const msg = {
     },
     scopeGuard: {
       on: "Modo guardia SCOPE (alcance) — Write/Edit en un fichero de código fuera de .specs/ pide confirmación salvo que una tarea sin terminar de una función aprobada lo nombre en _Implements:_ (el fichero, su carpeta o un glob; ficheros de prueba exceptuados), y la pide en todo cambio de código mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard: \"scope\"). Los ficheros de prueba se permiten mientras el plan de pruebas de una función sin terminar esté aprobado (la Fase 4 escribe las pruebas que fallan antes del gate de las tareas), y todo fichero de código mientras un spike esté en curso (su prototipo).",
-      ask: (file, features, hint) => `dev-spec guard (scope): ${file} no está en el plan — ninguna tarea sin terminar de ${features} lo nombra en _Implements:_. ${hint} (El modo guardia está en scope — ${DEV_SPEC} init --guard on permite todo fichero de código mientras haya tareas aprobadas; --guard off lo desactiva.)`,
+      ask: (file, features, hint, level = "scope") => `dev-spec guard (scope): ${file} no está en el plan — ninguna tarea sin terminar de ${features} lo nombra en _Implements:_. ${hint} (El modo guardia está en ${level} —${DEV_SPEC} init --guard on permite todo fichero de código mientras haya tareas aprobadas; --guard off lo desactiva.)`,
       hint: {
         "same-folder": (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — misma carpeta que ${ref}) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-review ${slug} converge (spec_append_tasks).`,
         nearby: (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — planifica ${ref}, cerca) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-review ${slug} converge (spec_append_tasks).`,
         next: (n, slug) => `Añádelo al _Implements:_ de la tarea ${n} (${slug}, la siguiente tarea sin terminar) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-review ${slug} converge (spec_append_tasks).`,
       },
+    },
+    protectedTests: {
+      on: `Modo guardia TESTS — el guardia de alcance, más pruebas protegidas: una vez aprobadas las tareas de una función, los ficheros de prueba que existían entonces (y los que una tarea marcada nombra en _Implements:_ o ejecuta en su _Verify:_) quedan protegidos — editar, borrar o mover uno pide confirmación salvo que una tarea que puede empezar ya lo nombre en _Implements:_, y se rechaza con meta.approvalGuard deny. Solo el usuario levanta la protección de uno: ${DEV_SPEC} feature unprotect <función> <fichero> --reason "…".`,
+      unguarded: "Las pruebas protegidas se listan en el .state.json de cada función — solo el guardia de aprobaciones (init --approval-guard ask|deny) impide que un agente edite esa lista.",
+      whyFile: (slug, day) => `es una de las pruebas protegidas de ${slug}${day ? ` (registrada el ${day})` : ""}`,
+      whyFolder: (n, first) => `contiene ${n} prueba(s) protegida(s), p. ej. ${first}`,
+      current: (list) => `Las tareas que pueden empezar ya — ${list} — no la nombran en _Implements:_.`,
+      noCurrent: "Ninguna tarea que pueda empezar ya la nombra en _Implements:_.",
+      planHint: (n, slug) => ` Para planificar el cambio, añádela al _Implements:_ de la tarea ${n} (${slug}) y vuelve a aprobar la fase tasks.`,
+      ask: (file, why, current, planHint, lift) => `dev-spec guard (tests): ${file} es una prueba protegida — ${why}. ${current} Una tarea que hace pasar una prueba cambia el código, no la prueba: confirma solo si de verdad quieres cambiar esta prueba.${planHint} Para permitirlo en esta función, levanta tú la protección: ${lift}. (El modo guardia está en tests — ${DEV_SPEC} init --guard scope deja de proteger las pruebas.)`,
+      deny: (file, why) => `dev-spec guard (tests): rechazado — ${file} es una prueba protegida (${why}), y una prueba protegida solo cambia por decisión del usuario (meta.approvalGuard: deny). No la cambies por otra vía (un comando de shell, un script, git): detente, indica la prueba y por qué la cambiarías, y deja que el usuario decida.`,
+      denyUser: (file, cmd) => `dev-spec guard rechazó la edición, por un agente, de la prueba protegida ${file}. Para permitirla tú: ${cmd}`,
+      snapshotNote: (n, cap) => `Pruebas protegidas: ${n} fichero(s) de prueba registrado(s) — editar, borrar o mover uno ahora pide confirmación salvo que una tarea que puede empezar ya lo nombre en _Implements:_.` + (cap ? ` Solo se registraron los primeros ${cap} (la lista tiene un límite).` : ""),
+      briefDod: (n) => `Pruebas protegidas (meta.guard tests${n ? ` — ${n} fichero(s) en la lista de esta función` : ""}): edita, renombra o borra un fichero de prueba existente solo cuando el _Implements:_ de ESTA tarea lo nombra; pon en verde una prueba roja arreglando el código, nunca la prueba. Si el guardia pide confirmación o lo rechaza, detente e informa NEEDS_CONTEXT nombrando la prueba — nunca lo esquives (un comando de shell, un script, git).`,
+      via: { approval: "la aprobación de las tareas", protect: "feature protect" },
+      listNote: (slug, n, day, via, added) => `${slug} — ${n} fichero(s) de prueba protegido(s)` + (day ? ` desde el ${day}${via ? ` (${via})` : ""}` : "") + `; ${added} añadido(s) ahora.`,
+      unlifted: (file) => `El levantamiento de la protección de ${file} terminó — vuelve a estar protegida.`,
+      truncated: (cap) => `La lista alcanzó su límite (${cap} ficheros): las pruebas que pasan de él no están protegidas.`,
+      notEnforced: `El guardia solo lee la lista con el modo guardia tests (${DEV_SPEC} init --guard tests).`,
+      lifted: (file, slug, listed) => `Protección de ${file} levantada (${slug}): puede cambiar hasta ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (No estaba en la lista de pruebas protegidas de la función.)"),
+      err: {
+        fileRequired: `unprotect necesita el fichero de prueba: ${DEV_SPEC} feature unprotect <función> <fichero> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
+        reasonRequired: "unprotect necesita un motivo (una línea, como mucho 500 caracteres): por qué puede cambiar esta prueba protegida.",
+        notATest: (file) => `${file} no es un fichero de prueba (por su nombre o su carpeta) — solo se protegen los ficheros de prueba.`,
+        outside: (file) => `${file} está fuera del proyecto.`,
+      },
+      finishWarn: (slug, list, more) => `Pruebas protegidas de ${slug} cambiadas sin motivo registrado (ninguna tarea las volvió a registrar, ningún levantamiento las cubre): ${list}${more ? ` y ${more} más` : ""} — comprueba que cada cambio es intencionado (una prueba cambiada para pasar es una prueba debilitada); si lo es, regístralo: ${DEV_SPEC} feature unprotect ${slug} <fichero> --reason "…".`,
+      changed: (file) => `${file} (cambiada)`,
+      deleted: (file) => `${file} (borrada)`,
+      summaryHead: "## Pruebas protegidas",
+      summaryLine: (n, k) => `${n} fichero(s) de prueba protegido(s); ${k} cambiado(s) sin motivo registrado.`,
+      summaryLift: (file, by, reason) => `- protección levantada: ${file} — por ${by}: "${reason}"`,
+      doctorMissing: (slug) => `guard tests: ${slug} tiene tareas aprobadas pero ningún registro de pruebas protegidas (sus tareas se aprobaron antes de fijar el modo) — regístralo: ${DEV_SPEC} feature protect ${slug}.`,
     },
 
     // registro de decisiones (decisions.md, spec_decide) y el tipo spike (investigar → decidir).

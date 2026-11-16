@@ -13,8 +13,12 @@
  * tasks gets `permissionDecision: "ask"` with a localized reason — the human confirms or declines.
  * meta.guard === "scope" (spec_init {guard: "scope"} / `dev-spec init --guard scope`) also asks, once tasks are
  * approved, for a code file no open task names in `_Implements:_` (the file, a folder above it or a glob; test files excepted),
- * naming the task to add it to. At both levels a test file is allowed while a feature has an approved test plan and is
- * unfinished (Phase 4), and any code file while a spike is under way (its prototype) — spec.guardCheck decides.
+ * naming the task to add it to. meta.guard === "tests" (1.36) is scope plus PROTECTED tests: a test file on a feature's list (the
+ * tests present at its tasks approval, the ones a tick recorded) asks unless a task that can start now names it exactly in
+ * `_Implements:_` — and is refused (permissionDecision deny + the user's systemMessage) under meta.approvalGuard deny. At every level
+ * a test file is allowed while a feature has an approved test plan and is unfinished (Phase 4), and any code file while a spike is
+ * under way (its prototype) — a protected test aside — spec.guardCheck decides. Every target is checked and the STRICTEST answer
+ * is printed: deny > a protected test's ask > the scope ask.
  *
  * It NEVER blocks on its own trouble: a malformed payload, a broken roadmap.json or any internal error exits 0
  * silently. It is cheap: guard off costs one small file read (the engine is loaded only when the guard is on),
@@ -84,12 +88,12 @@ function pathWords(command, max = 8) {
 }
 
 // The user's default (the environment variable DEV_SPEC_GUARD_DEFAULT, e.g. from Claude Code's settings.json `env`):
-// on / scope turns the guard on for a project whose roadmap.json leaves meta.guard unset. The engine (spec.guardLevel) reads
+// on / scope / tests turns the guard on for a project whose roadmap.json leaves meta.guard unset. The engine (spec.guardLevel) reads
 // the same variable.
 function userGuardDefault() {
   for (const n of ["DEV_SPEC_GUARD_DEFAULT"]) {
     const v = typeof process.env[n] === "string" ? process.env[n].trim() : "";
-    if (v && !/^\$\{[^}]*\}$/.test(v)) return /^(?:on|true|yes|1|scope)$/i.test(v);
+    if (v && !/^\$\{[^}]*\}$/.test(v)) return /^(?:on|true|yes|1|scope|tests)$/i.test(v);
   }
   return false;
 }
@@ -112,7 +116,7 @@ function guardOn(dir) {
     const j = probe().readJsonFile(path.join(dir, ".specs", "roadmap.json"));
     if (!j || typeof j !== "object" || Array.isArray(j)) return false;
     const meta = j.meta && typeof j.meta === "object" && !Array.isArray(j.meta) ? j.meta : {};
-    return meta.guard === true || meta.guard === "scope" || (meta.guard === undefined && userGuardDefault());
+    return meta.guard === true || meta.guard === "scope" || meta.guard === "tests" || (meta.guard === undefined && userGuardDefault());
   } catch {
     return false; // missing (no user default), unreadable or broken → the guard stays out of the way
   }
@@ -149,9 +153,11 @@ function decide(raw) {
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const targets = target ? [target] : spec.shellWriteTargets(command, tool === "PowerShell" ? "ps" : "bash");
   let note = null;
+  let best = null; // the strictest answer of every target (1.36): deny > a protected test's ask > any other ask — one ask on another
+  const rank = (r) => (r.decision === "deny" ? 3 : r.decision === "ask" ? (r.why === "protected-test" ? 2 : 1) : 0); // file must not hide it
   const s0 = spec.sessionProject({ cwd, anchors });
   for (const t of targets) {
-    // the session's project and the nearest one above the file (a monorepo's package) — each guarded one decides; the first ask wins
+    // the session's project and the nearest one above the file (a monorepo's package) — each guarded one decides
     const abs = local(t) ? spec.sessionPath(s0 || { root: cwd || process.cwd() }, t, cwd) : null;
     const own = abs ? spec.sessionProject({ cwd: path.dirname(abs), anchors }) : null;
     const seen = new Set();
@@ -159,11 +165,13 @@ function decide(raw) {
       if (!s || seen.has(s.project)) continue;
       seen.add(s.project);
       const r = spec.guardCheck(s.project, spec.sessionPath(s, t, cwd), s.project);
-      if (r.decision === "ask") {
-        return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: r.reason } };
-      }
+      if (rank(r) > (best ? rank(best) : 0)) best = r;
       if (r.note && !note) note = r.note;
     }
+  }
+  if (best) {
+    return Object.assign({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: best.decision, permissionDecisionReason: best.reason } },
+      best.userNote ? { systemMessage: best.userNote } : {});
   }
   // Allowed by a FORCED approval only: say so to the user (systemMessage never changes the permission flow) — once a session (it
   // was printed on every code edit). Keyed by the payload's session_id: a marker in the OS temp folder holding the

@@ -11,7 +11,9 @@ this, not after. With a review panel (`spec_next_action`'s `reviewPanel`), the b
    **blockers** and stop: failing doctor checks, open or unverified tasks, project checks without a passing run on the
    current code (`suite-evidence`), pending approvals, an artifact changed since its approval, placeholders, a bugfix's
    root cause. Show the warnings too — each one deserves a decision (code the feature repeats from elsewhere: reuse it, or
-   say why the copy is deliberate; raw colours or sizes where the design system has tokens: use the token, or say why not).
+   say why the copy is deliberate; raw colours or sizes where the design system has tokens: use the token, or say why not;
+   a protected test changed with no recorded reason — guard tests: check the change is intended, a test made to pass is a
+   weakened test; if it is, the user records it with the `feature unprotect` line the warning gives).
 2. **Verify fresh, now** — the full suite and every check the report lists for the active tracks. With project checks set,
    record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}`, or
    `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" finish <feature> --run` (`--run` given: run that). No shell? Ask the user to
@@ -27,7 +29,8 @@ this, not after. With a review panel (`spec_next_action`'s `reviewPanel`), the b
    **A green run is evidence, not the sign-off:** after the run, show it and ask. A ready written finish also records
    the drift baseline — finish again after last-minute code changes — and, on a +ui feature of a project with a design-system
    registry, adds the design's New components to `.specs/steering/design-system.md` (`designSystem.registered`): a change to
-   commit with the feature. Forced approvals appear under "Waived gates".
+   commit with the feature. Forced approvals appear under "Waived gates", a feature's protected tests (what changed, the
+   lifts) under "Protected tests".
 4. Offer exactly two options: **1. merge into the base branch locally** (fast-forward when possible, the summary as the
    message; a feature on its own branch: `git switch <base>`, then `git merge <name>`) **· 2. keep the branch as it is.**
    Run only the one the user picks; after a merge, the full suite again. Pushing is a separate step the user approves.

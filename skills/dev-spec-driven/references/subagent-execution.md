@@ -174,6 +174,11 @@ command (`spec_complete_task` records the run you pass it, and refuses a failed 
   the task's files** (`_Implements:_`) is a plan question: add a converge task for it (`spec_append_tasks` with that file
   in `_Implements:_` — the human approves the changed tasks) and run it first, or tell the implementer to go ahead (with
   `meta.guard: "scope"` the edit then asks the user) or to create locally — never let it edit that file silently.
+  One about a **protected test** (`meta.guard: "tests"`, 1.36 — the guard asked about, or refused, an edit of a test the plan
+  approved) is the same plan question, never a workaround: the test changes only when a task that can start now names it
+  exactly in `_Implements:_` (a converge task, approved by the human) or the user lifts it (`feature unprotect <f> <file>
+  --reason …` — theirs to run); a red test turns green by fixing the code. When you plan a task that extends an existing
+  test file, name that file in its `_Implements:_` from the start (a folder or a glob never unlocks one).
 - **BLOCKED** → context problem: more context, same model. Needs more reasoning: re-dispatch one tier
   up. Too big: split it (ledger a ruling). **The spec is wrong** (a test that can't be right, an AC that
   contradicts the design): stop — this is a phase problem, not an implementation one.
@@ -427,8 +432,8 @@ commit each, a review of the pass):
    never a test, a contract, a dependency or code the feature didn't write — runs the covering tests after each change,
    commits each one alone, and ends its report with a `## Final runs` section: the project checks (or the full suite)
    and the changed tasks' `_Verify:_` on the final code, one line each. In Claude Code the SubagentStop hook sends back
-   a DONE whose `## Final runs` lacks a project check or shows a run that fails. **Guard mode** (`meta.guard` on or
-   `scope`): once every task is done no open task covers an edit, so each edit of the pass asks the user — tell them
+   a DONE whose `## Final runs` lacks a project check or shows a run that fails. **Guard mode** (`meta.guard` on,
+   `scope` or `tests`): once every task is done no open task covers an edit, so each edit of the pass asks the user — tell them
    before you dispatch, and dispatch the simplifier in the foreground (Claude Code: `run_in_background: false`) so those
    questions reach them; a handful of approvals, never a reason to lower the guard.
 2. Package `SIMPLIFY_BASE..HEAD` (as in §4) and dispatch `dev-spec-driven:spec-reviewer` in **simplify** mode with the

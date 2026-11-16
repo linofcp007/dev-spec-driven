@@ -246,9 +246,14 @@ const OPERATIONS = [
   {
     // remove needs confirm (the CLI's --yes); flow: action 'flow' (the CLI's third word is read as it too)
     id: "feature", tool: "spec_feature", cli: ["feature"], engine: "manageFeature",
-    args: { action: { mcp: "action", pos: 0 }, name: { mcp: "name", pos: 1 }, newName: { mcp: "newName", pos: 2 }, confirm: SWITCH("confirm", "--yes"), flow: { mcp: "flow", cli: "--flow" } },
-    internal: { mcp: ["preview"] }, // 1.23 (remove): the folder the user was asked about
-    call: (S, dir, o) => S.manageFeature(dir, o.action, o.name, o.newName, { confirm: o.confirm, flow: o.flow, preview: o.preview }),
+    args: { action: { mcp: "action", pos: 0 }, name: { mcp: "name", pos: 1 }, newName: { mcp: "newName", pos: 2 }, confirm: SWITCH("confirm", "--yes"), flow: { mcp: "flow", cli: "--flow" },
+      // 1.36 guard tests — protect / unprotect: the test file (the CLI's third word too: the engine reads file, else newName's word) ·
+      // unprotect's reason (one line, required)
+      file: { mcp: "file", cli: "--file" }, reason: { mcp: "reason", cli: "--reason" } },
+    // 1.23 (remove): the folder the user was asked about · 1.36 (unprotect): the user's answer over elicitation, the checks before asking
+    internal: { mcp: ["preview", "confirmation", "dryRun"] },
+    call: (S, dir, o) => S.manageFeature(dir, o.action, o.name, o.newName, { confirm: o.confirm, flow: o.flow, preview: o.preview,
+      file: o.file, reason: o.reason, confirmation: o.confirmation, dryRun: o.dryRun }),
   },
   {
     // the engine refuses a path outside the project; text: 1.16 C4 (the CLI: --text or stdin); dryRun: 1.25

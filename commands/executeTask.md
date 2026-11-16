@@ -17,7 +17,8 @@ Use the **dev-spec-driven** skill, Phase 6 (Execute). Target: $ARGUMENTS
    never make them fail artificially.
 3. **Search before you write** — reuse, else extend, else create: the design's Reuse & Integration, then the codebase by
    concept and synonyms. Stay inside the task's `_Implements:_` files: a unit elsewhere is a plan change
-   (`spec_append_tasks`; the scope guard asks), and a refactor you notice is filed, not done —
+   (`spec_append_tasks`; the scope guard asks) — never edit an existing test your task's `_Implements:_` doesn't name
+   (`guard tests` protects them) —, and a refactor you notice is filed, not done —
    `spec_roadmap_edit {kind: "backlog", action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>"}`.
 4. **A +ui task that changes what renders** (size m / l or none): once its `_Verify:_` is green, the visual review — the
    build captured beside the design's reference, state by state, judged by `dev-spec-driven:spec-ui-reviewer` from the

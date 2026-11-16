@@ -700,10 +700,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     const gOnStr = await c1Call("spec_init", { projectDir: c1Dir("guard-str"), guard: "ON" });
     const gOffStr = await c1Call("spec_init", { projectDir: c1Dir("guard-str"), guard: "off" });
     const gBool = await c1Call("spec_init", { projectDir: c1Dir("guard-str"), guard: true });
-    ok(initTool.inputSchema.properties.guard.type === "string" && initTool.inputSchema.properties.guard.enum.join() === "on,off,scope" && initTool.inputSchema.properties.stopCheck.type === "boolean" &&
+    ok(initTool.inputSchema.properties.guard.type === "string" && initTool.inputSchema.properties.guard.enum.join() === "on,off,scope,tests" && initTool.inputSchema.properties.stopCheck.type === "boolean" &&
       gOnStr.p.guard === true && /Guard mode ON/.test(gOnStr.p.guardNote) && gOffStr.p.guard === false && gBool.p.guard === true &&
       list.result.tools.every((t) => Object.values(t.inputSchema.properties || {}).every((s) => !Array.isArray(s.type))),
-      "C1 spec_init advertises guard as a string enum on | off | scope (any case; the booleans true / false read as on / off) and stopCheck as a boolean; no tool property has a list-valued type");
+      "C1 spec_init advertises guard as a string enum on | off | scope | tests (any case; the booleans true / false read as on / off) and stopCheck as a boolean; no tool property has a list-valued type");
     // guard true keeps today's behavior; scope with nothing approved asks like true; a forced approval's note rides along; PT; the CLI's value.
     await c1Call("spec_init", { projectDir: pSc, guard: true });
     const gTrue = S.guardCheck(pSc, "lib/util.py", pSc);

@@ -2,7 +2,7 @@
 
 /**
  * dev-spec-driven engine — the edit guard, the stop gate and the human approval guard.
- * Guard mode (meta.guard: on | scope — hooks/guard-hook.js), the end-of-turn stop gate (hooks/stop-hook.js: a "done"
+ * Guard mode (meta.guard: on | scope | tests — hooks/guard-hook.js; tests' protected tests: protect.js), the end-of-turn stop gate (hooks/stop-hook.js: a "done"
  * claim with unverified recent ticks is sent back) and the human approval guard (meta.approvalGuard — hooks/
  * approval-hook.js: a pure decision over one PreToolUse payload, with its shell lexer). The lexer reads CLI_SWITCHES (the CLI's
  * boolean switches) from mcp/lib/probe.js, where the CLI reads it before the engine loads (1.30); the facade's is this module's export.
@@ -32,7 +32,7 @@ const { mayShortName, shortNamesRead, winPathTrim, longPath, realPathLoose } = r
 let activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords, existingFeature,
   expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher, guessLang,
   implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
-  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
+  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
@@ -41,10 +41,11 @@ let approvedContentSame, proofIncomplete; // gates.js (the guard's stale tasks a
 let folderHoldsCode; // scan.js — a folder a command removes or moves as a whole, read for code (the edit guard)
 let builtinStopGate; // markdown.js — the stop gate's lists of every language from the corpus (stopPatterns)
 let guardianShellActions, guardianGuardFilter; // guardian.js — dev-guardian's gate rules (1.30), read through the hook points below
-function __link(E) { ({ builtinStopGate, folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
+let protectedTestDecision; // protect.js — 1.36 guard tests: an edit of a protected test (guardCheck)
+function __link(E) { ({ protectedTestDecision, builtinStopGate, folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
-  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
+  isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, projectChecks, projectLang, readIfExists, readJson,
   readRoadmap, readState, replaceHtmlCommentSpans, resolveTask, roadmapPath, safeReaddir, specsRoot, spikeInfo,
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
@@ -77,8 +78,11 @@ function guardEnabled(projectDir) {
 // next_action's and finish's own test (approvedContentSame, gates.js): trailing whitespace, final blank lines or a
 // "\r\r\n" file normalized to LF are no edit.
 // meta.guard "scope": once tasks are approved, a code file must also be in the plan — scopeGuardDecision.
+// meta.guard "tests" (1.36): scope, plus protected tests (protect.js protectedTestDecision) — read from every unfinished feature that
+// holds a list, BEFORE the stale / tests-phase / spike answers; a test under .specs/<feature>/tests/ is one too (no "specs" allow).
 // A FOLDER holding code is a code target too (guardFolderCode): `rm -rf src`, `Remove-Item -Recurse src`, `find src -delete`, `mv src
 // old`, `rm -rf src/*` remove or move the code in it (review 8 C14: they passed while `sed -i src/util.js` asked).
+// Each feature's tasks.md is parsed ONCE per call (its active blocks — the protected tests' and the scope guard's reading).
 function guardCheck(projectDir, filePath, cwd) {
   const pdir = path.resolve(projectDir);
   const level = guardLevel(pdir);
@@ -101,18 +105,24 @@ function guardCheck(projectDir, filePath, cwd) {
   }
   // Case-folded where the filesystem folds case: `.SPECS/x.ts` IS the spec folder on Windows/macOS.
   const rel = toPosix(path.relative(pdir, abs));
-  if (rel.split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
-  if (!isCodeFile(rel) && !guardFolderCode(pdir, abs)) return allow("not-code");
+  // guard tests: a feature's own failing tests (.specs/<feature>/tests/) are protected tests too — never waved through as "specs"
+  const specsTest = level === "tests" && /^\.specs\/[^/]+\/tests(?:\/|$)/.test(FOLD_CASE ? rel.toLowerCase() : rel);
+  if (!specsTest && rel.split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
+  if (!isCodeFile(rel) && !guardFolderCode(pdir, abs)) return allow(specsTest ? "specs" : "not-code");
   const root = specsRoot(pdir);
   const covering = [], forced = [], pending = [], stale = [], spikes = [], testing = [];
-  const texts = new Map(); // feature → tasks.md (the scope level reads its open tasks' _Implements:_)
+  const texts = new Map(); // feature → tasks.md, for a feature with open tasks
+  const blocksOf = new Map(); // feature → its active task blocks (parsed once: the scope guard and the protected tests read them)
+  const states = new Map(); // feature → its .state.json as read (guard tests: the protected lists, the lifts)
   for (const name of safeReaddir(root).sort()) {
     if (!isFeatureFolder(name, root)) continue; // _archive, steering, dot folders are not features
     const dir = path.join(root, name);
     const st = readJson(statePath(dir)).data;
+    states.set(name, st);
     const approvals = isObj(st) && isObj(st.approvals) ? st.approvals : {};
     const tasksText = readIfExists(path.join(dir, "tasks.md"));
-    const tasks = tasksText == null ? [] : parseTasks(activeTasks(tasksText, detectTracks(dir)));
+    const tasks = tasksText == null ? [] : taskBlocks(activeTasks(tasksText, detectTracks(dir)) || "");
+    blocksOf.set(name, tasks);
     const unfinished = !tasks.length || tasks.some((t) => !t.done);
     // A spike has no tasks gate (question → investigate → decide): while it is undecided or has open investigation tasks its
     // prototype work is covered — never listed as "awaiting approval" (approve refuses a spike's tasks phase).
@@ -133,10 +143,17 @@ function guardCheck(projectDir, filePath, cwd) {
     else if (isObj(ap) && ap.forced) forced.push(name);
     else covering.push(name);
   }
-  // scope: the plan is every approved feature's open tasks (a forced approval's too — noted when it is the only cover, as below).
-  if (level === "scope" && (covering.length || forced.length)) {
+  // tests: a protected test asks (deny under meta.approvalGuard deny) unless a task that can start now of a covering / forced feature
+  // names it exactly, or a lift is in force — its list read from EVERY feature with open tasks (a stale or pending one too)
+  if (level === "tests") {
+    const pt = protectedTestDecision(pdir, abs, rel, { holders: [...texts.keys()], unlockers: covering.concat(forced), blocks: blocksOf, states });
+    if (pt) return pt;
+  }
+  if (specsTest) return allow("specs");
+  // scope / tests: the plan is every approved feature's open tasks (a forced approval's too — noted when it is the only cover, as below).
+  if ((level === "scope" || level === "tests") && (covering.length || forced.length)) {
     // A spike never overrides the approved features' plan here: scope's point is that code outside it asks.
-    return scopeGuardDecision(pdir, abs, covering.concat(forced), texts, allow, covering.length ? {} : { forced, note: G.forced(forced.join(", ")) });
+    return scopeGuardDecision(pdir, abs, covering.concat(forced), blocksOf, allow, covering.length ? {} : { forced, note: G.forced(forced.join(", ")) }, level);
   }
   if (covering.length) return allow("approved", { covering });
   if (forced.length) return allow("forced", { covering: forced, forced, note: G.forced(forced.join(", ")) });
@@ -1600,9 +1617,10 @@ function approvalGatedTracks(list) {
   }
   return out;
 }
-// The edit guard's strength (meta.guard): off < on < scope.
-const guardRank = (g) => (g === "scope" ? 2 : g === true ? 1 : 0);
-const guardName = (g) => (g === "scope" ? "scope" : g === true ? "on" : "off");
+// The edit guard's strength (meta.guard), weakest first: off < on < scope < tests (1.36: tests — scope plus protected tests).
+const GUARD_LEVELS = [false, true, "scope", "tests"];
+const guardRank = (g) => Math.max(0, GUARD_LEVELS.indexOf(g));
+const guardName = (g) => (g === "scope" || g === "tests" ? g : g === true ? "on" : "off");
 // spec_init / `init` settings → the GUARD-DOWN actions among them (what weakens a protection the approval guard stands for;
 // raising or adding is never one). ch = { approvalGuard, evidence, stopCheck, guard, roles (a validated map), checks ({name:
 // command | ""}) } — the values the call would set; meta = the project's roadmap.json meta, or undefined when it can't be read
@@ -1615,8 +1633,10 @@ function initGuardDowns(ch, level, meta) {
   if (ch.evidence === "reported" && (!known || m.evidence === "observed")) out.push({ setting: "evidence", from: known ? "observed" : null, to: "reported" });
   if (ch.stopCheck === false && (!known || m.stopCheck !== false)) out.push({ setting: "stopCheck", from: known ? "on" : null, to: "off" });
   if (ch.guard !== undefined) {
-    const cur = known ? (m.guard === true || m.guard === "scope" ? m.guard : false) : null;
-    if (cur === null ? ch.guard !== "scope" : guardRank(ch.guard) < guardRank(cur)) out.push({ setting: "guard", from: cur === null ? null : guardName(cur), to: guardName(ch.guard) });
+    // the EFFECTIVE level (1.36): meta.guard, else the user's DEV_SPEC_GUARD_DEFAULT — `init --guard scope` under a default of tests
+    // lowers it as surely as from a meta.guard of tests
+    const cur = !known ? null : m.guard === undefined ? userDefaults().guard || false : GUARD_LEVELS.includes(m.guard) ? m.guard : false;
+    if (cur === null ? ch.guard !== "tests" : guardRank(ch.guard) < guardRank(cur)) out.push({ setting: "guard", from: cur === null ? null : guardName(cur), to: guardName(ch.guard) });
   }
   if (ch.roles) {
     const cur = known ? approvalRolesFrom(m.approvalRoles) : null;
@@ -1671,6 +1691,11 @@ function cliApprovalAction(args, level, meta) {
     }
     // `feature remove <name>` without --yes only previews what it would delete.
     if (cmd === "feature" && String(pos[1] || "").toLowerCase() === "remove" && approvalTruthy(fl.yes)) return [Object.assign({ kind: "remove", feature: approvalStr(pos[2]) }, base)];
+    // `feature unprotect <name> <file> --reason "…"` (1.36 guard tests): lifting a protected test's protection is the user's decision
+    if (cmd === "feature" && String(pos[1] || "").toLowerCase() === "unprotect") {
+      return [Object.assign({ kind: "guard-down", setting: "unprotect", feature: approvalStr(pos[2]), file: approvalStr(pos[3] !== undefined ? pos[3] : fl.file),
+        reason: approvalStr(fl.reason) }, base)];
+    }
     // `merge-state <base> <ours> <theirs> [<path>]` — git's merge driver — writes its merge into <ours>: run by an
     // agent on a .state.json (its approvals) or on .specs/roadmap.json (this guard), it is a hand edit of them. Git runs the driver
     // inside `git merge` on its own temp files (never through the Bash tool); --install / --uninstall / --check write no state.
@@ -2019,8 +2044,14 @@ function mcpApprovalAction(tool, ti, level, meta) {
     return [Object.assign({ kind: "approve", feature: approvalStr(ti.name), phase: approvalStr(ti.phase), through: approvalStr(ti.through),
       role: approvalStr(ti.role), by: approvalStr(ti.by), force: ti.force === true }, approvalExtras(ti.revoke === true, ti.reason, ti.expires), base)];
   }
-  // spec_feature remove without confirm: true only previews what it would delete; archive / rename / restore / flow aren't approvals.
-  if (tool === "spec_feature") return String(approvalStr(ti.action) || "").toLowerCase() === "remove" && ti.confirm === true ? [Object.assign({ kind: "remove", feature: approvalStr(ti.name) }, base)] : [];
+  // spec_feature remove without confirm: true only previews what it would delete; archive / rename / restore / flow / protect aren't
+  // approvals. unprotect (1.36 guard tests) lifts a protected test's protection: the user's decision.
+  if (tool === "spec_feature") {
+    const act = String(approvalStr(ti.action) || "").toLowerCase();
+    if (act === "remove" && ti.confirm === true) return [Object.assign({ kind: "remove", feature: approvalStr(ti.name) }, base)];
+    if (act === "unprotect") return [Object.assign({ kind: "guard-down", setting: "unprotect", feature: approvalStr(ti.name), file: approvalStr(ti.file), reason: approvalStr(ti.reason) }, base)];
+    return [];
+  }
   // spec_add_track {remove: true} turning off +tdd / +ai (the gates they carry); adding a track is never one.
   if (tool === "spec_add_track") {
     // (`track`: the schema's string; an array, or a `tracks` key, read too — a superset)
@@ -2049,7 +2080,12 @@ function approvalCommand(a, cli) {
     if (a.setting === "track") words.push("add-track", name(a.feature), ...(Array.isArray(a.tracks) ? a.tracks : []).map((t) => word(t, "<track>")), "--remove");
     else if (a.setting === "evidence") words.push("init", "--evidence", "reported");
     else if (a.setting === "stopCheck") words.push("init", "--stop-check", "off");
-    else if (a.setting === "guard") words.push("init", "--guard", a.to === "on" ? "on" : "off");
+    else if (a.setting === "guard") words.push("init", "--guard", ["on", "scope", "tests"].includes(a.to) ? a.to : "off"); // the level asked for (1.36: scope printed off)
+    else if (a.setting === "unprotect") { // 1.36 guard tests: the lift, its file and reason only when plainly safe to paste
+      const file = safe(typeof a.file === "string" ? a.file.replace(/\\/g, "/") : a.file, /^[\p{L}\p{N} _.@+,:/()~-]{1,400}$/u);
+      words.push("feature", "unprotect", name(a.feature), file ? (/[^\p{L}\p{N}_.@+,:/~-]/u.test(file) ? '"' + file + '"' : file) : "<file>",
+        "--reason", "\"" + (safe(a.reason, /^[\p{L}\p{N} _.,:;@+()/-]{1,200}$/u) || "<reason>") + "\"");
+    }
     else if (a.setting === "roles") {
       const map = isObj(a.to) ? a.to : {};
       words.push("init", "--roles", Object.keys(map).length ? '"' + Object.entries(map).map(([p, r]) => p + "=" + r.join("+")).join(",") + '"' : "none");
@@ -2157,7 +2193,7 @@ function approvalGuardDecision(payload, level, opts = {}) {
   // Shown as text (the prompt, the agent's context): one line each, bounded.
   const show = (v) => (v == null ? v : (() => { const s = String(v).replace(/[\u0000-\u001f\u007f]+/g, " "); return s.length > 80 ? s.slice(0, 79) + "…" : s; })());
   const list = actions.map((a) => A.action(Object.assign({}, a, { feature: show(a.feature), phase: show(a.phase), through: show(a.through), role: show(a.role), by: show(a.by),
-    name: show(a.name), removed: Array.isArray(a.removed) ? a.removed.map(show) : a.removed })));
+    name: show(a.name), removed: Array.isArray(a.removed) ? a.removed.map(show) : a.removed, file: show(a.file), reason: show(a.reason) })));
   const text = [...new Set(list)].join("; ");
   const force = actions.some((a) => a.force);
   const cli = typeof opts.cli === "string" && opts.cli ? opts.cli : i18n.DEV_SPEC_SCRIPT;
@@ -2299,7 +2335,7 @@ const STOP_TASKS_SHOWN = 8; // task numbers listed per feature in the reason
 const STOP_REPORT_MAX = 256 * 1024; // bytes of an implementer's report read
 const STOP_WINDOW = 3; // words before a claim, in its sentence, looked at for a negator / condition
 
-// roadmap.json meta.guard → false | true | "scope" (anything else: off); unset → the user's GUARD_DEFAULT, else off.
+// roadmap.json meta.guard → false | true | "scope" | "tests" (anything else: off); unset → the user's GUARD_DEFAULT, else off.
 // The user's default applies to a dev-spec project only (isDevSpecDir): roadmap.json without meta.guard, or no roadmap.json in a
 // .specs/ dev-spec owns (steering/, a generated ROADMAP.md or a feature folder with its .state.json or classification.md — a project
 // made before roadmap.json) — never a folder
@@ -2311,16 +2347,16 @@ function guardLevel(projectDir) {
   const g = isObj(l.rm.meta) ? l.rm.meta.guard : undefined;
   if (g === undefined) {
     const d = userDefaults().guard;
-    return (d === true || d === "scope") && isDevSpecDir(path.resolve(projectDir)) ? d : false;
+    return d && GUARD_LEVELS.includes(d) && isDevSpecDir(path.resolve(projectDir)) ? d : false;
   }
-  return g === true ? true : g === "scope" ? "scope" : false;
+  return g !== false && GUARD_LEVELS.includes(g) ? g : false;
 }
-// spec_init {guard} / `init --guard`: true | "on" → true, false | "off" → false, "scope" → "scope" (strings case-insensitive);
-// anything else → undefined (unchanged).
+// spec_init {guard} / `init --guard`: true | "on" → true, false | "off" → false, "scope" → "scope", "tests" → "tests" (strings
+// case-insensitive); anything else → undefined (unchanged).
 function guardInput(v) {
   if (v === true || v === false) return v;
   const s = typeof v === "string" ? v.trim().toLowerCase() : "";
-  return s === "on" ? true : s === "off" ? false : s === "scope" ? "scope" : undefined;
+  return s === "on" ? true : s === "off" ? false : s === "scope" || s === "tests" ? s : undefined;
 }
 // roadmap.json meta.stopCheck — the evidence gate is ON unless it is exactly false (spec_init {stopCheck} / `init --stop-check`);
 // not a boolean (unset) → the user's STOP_CHECK option, else on. An unreadable roadmap.json: the user's option too, else
@@ -2994,19 +3030,19 @@ function simplifierStopCheck(pdir, message, cl, res) {
 // The scope guard's decision for a code file once some feature has approved, unfinished tasks (guardCheck, level "scope"):
 // allowed when an OPEN task of one of those features names it in _Implements:_ — the file itself (implementsKey: anchors,
 // backticks, ./ and case where the file system folds it dropped), a folder above it, or a glob matching it — and for a test
-// file (tests are planned by T-ID in test-plan.md, not in _Implements:_); otherwise "ask", naming the likely task: one that
-// plans a file in the same folder, else the nearest folder, else the next open task. Text reads only.
-function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
+// file (tests are planned by T-ID in test-plan.md, not in _Implements:_ — at level tests a PROTECTED test was decided before, in
+// guardCheck); otherwise "ask", naming the likely task: one that plans a file in the same folder, else the nearest folder, else the
+// next open task. Text reads only. blocksOf: each feature's active task blocks (guardCheck parsed them); level: "scope" | "tests".
+function scopeGuardDecision(pdir, abs, features, blocksOf, allow, extra, level) {
   const rel = toPosix(path.relative(pdir, abs));
   const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
   const key = fold(rel);
-  if (isTestFile(rel)) return allow("test-file", { level: "scope", covering: features, ...extra });
+  if (isTestFile(rel)) return allow("test-file", { level, covering: features, ...extra });
   const usable = (k) => !!k && k !== "." && !/^\[.*\]$/.test(k) && !/^(?:tbd|todo|n\/?a|none|-+|…|\.{3})$/i.test(k) && !k.split("/").includes("..");
   const open = [];
   let scheduled = null; // the first feature's next task by next_task's rule (_Depends:_ all done)
   for (const name of features) {
-    const dir = path.join(specsRoot(pdir), name);
-    const blocks = taskBlocks(activeTasks(texts.get(name) || "", detectTracks(dir)) || "");
+    const blocks = blocksOf.get(name) || [];
     const sn = scheduled ? null : taskSchedule(blocks).next;
     if (sn) scheduled = { feature: name, number: sn.number };
     for (const b of blocks) {
@@ -3022,7 +3058,7 @@ function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
   }
   const covers = (r) => (r.glob ? globMatcher(r.key)(key) : r.key === key || key.startsWith(r.key + "/"));
   const hit = open.find((t) => t.refs.some(covers));
-  if (hit) return allow("in-scope", { level: "scope", covering: features, task: { feature: hit.feature, number: hit.number }, ...extra });
+  if (hit) return allow("in-scope", { level, covering: features, task: { feature: hit.feature, number: hit.number }, ...extra });
   // The likely task: a planned file (or a glob's literal folders) in the same folder, else the longest shared folder prefix.
   const globBase = (k) => { const parts = k.split("/"), lit = []; for (let i = 0; i < parts.length - 1 && !/[*?{]/.test(parts[i]); i++) lit.push(parts[i]); return lit.join("/") || "."; };
   const folderOf = (r) => (r.glob ? globBase(r.key) : path.posix.dirname(r.key));
@@ -3042,10 +3078,10 @@ function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
     : next ? S.hint.next(next.number, next.feature) : "";
   const pick = likely ? likely.t : next;
   const list = (xs) => xs.slice(0, 3).join(", ") + (xs.length > 3 ? ", …" : "");
-  return { guard: true, level: "scope", decision: "ask", why: "out-of-scope", file: rel, covering: features,
+  return { guard: true, level, decision: "ask", why: "out-of-scope", file: rel, covering: features,
     ...(pick ? { likely: { feature: pick.feature, number: pick.number, via: likely ? (likely.score === Infinity ? "same-folder" : "nearby") : "next" } } : {}),
     ...(extra.forced ? { forced: extra.forced } : {}),
-    reason: S.ask(rel, list(features), hint).replace(/ {2,}/g, " ") + (extra.note ? " " + extra.note : "") };
+    reason: S.ask(rel, list(features), hint, level).replace(/ {2,}/g, " ") + (extra.note ? " " + extra.note : "") };
 }
 
 module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, APPROVAL_SHELL_TOOLS, CLI_SWITCHES,
@@ -3055,5 +3091,6 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, AP
   reviewModelsInput, reviewModelsSetting, setReviewModels, // 1.36 the review panel (meta.reviewModels)
   stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, recordSpecEdit, stopCheck, devSpecGlob,
   guardTargetPath, SESSION_MAX_UP, worktreeProject, sessionProject, sessionPath, readStopReport, approvalEditTargets,
+  approvalCommand, // 1.36 guard tests: the lift line a protected test's ask names (protect.js) — the approval guard's own builder
   // the shell's file operations, fed scripts, MCP file tools, the edit guard on the shell
   APPROVAL_WRITERS_OTHER, braceExpand, PS_FILE_ALIASES, PS_FILE_CMDLETS, shellWriteTargets, __link };

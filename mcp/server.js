@@ -63,7 +63,7 @@ const TOOLS = [
       properties: {
         tracks: { type: "array", items: TRACK_ITEM, description: "Tracks the project uses ('core' always included)." },
         lang: { type: "string", enum: LANG_ENUM, description: "Project language (default en): pt = European, pt-BR = Brazilian Portuguese." },
-        guard: { type: "string", enum: ["on", "off", "scope"], description: "on = a code edit asks while no feature has approved, unfinished tasks; scope = also a file no open task names in _Implements:_; off." },
+        guard: { type: "string", enum: ["on", "off", "scope", "tests"], description: "on = a code edit asks while no feature has approved, unfinished tasks; scope = also a file no open task names in _Implements:_; tests = scope + protected tests; off." },
         evidence: { type: "string", enum: ["reported", "observed"], description: "observed = a runnable _Verify:_ counts only from a run the harness saw or the CLI made; reported (default)." },
         stopCheck: { type: "boolean", description: "The end-of-turn evidence gate (on by default)." },
         approvalGuard: { type: "string", enum: [...spec.APPROVAL_GUARD_LEVELS], description: "ask = an agent's approval asks the user first; deny = only the human approves; off (default)." },
@@ -248,8 +248,8 @@ const TOOLS = [
   {
     name: "spec_feature",
     description:
-      "A feature's lifecycle: archive (to .specs/_archive/, out of the roadmap — reversible), restore, rename (folder, slug and every reference), flow (the phase order) or remove (deletes .specs/<slug>/ — needs `confirm: true` and the user's consent; without confirm nothing is deleted and the result lists what would be; prefer archive). The roadmap (and SPECS.md) are regenerated; a folder another process is updating is never moved (`busy`).",
-    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename", "restore", "flow"] }, name: { type: "string" }, newName: { type: "string", description: "rename: the new name." }, flow: { type: "string", enum: [...spec.FLOWS], description: "flow: the phase order." }, confirm: { type: "boolean", description: "remove: must be true (deletion is permanent)." }, projectDir: PROJECT_DIR }, required: ["action", "name"] },
+      "A feature's lifecycle: archive (to .specs/_archive/, out of the roadmap — reversible), restore, rename (folder, slug and every reference), flow (the phase order) or remove (deletes .specs/<slug>/ — needs `confirm: true` and the user's consent; without confirm nothing is deleted and the result lists what would be; prefer archive). protect / unprotect: guard tests' protected tests (unprotect a `file` needs a `reason` and the user's consent). The roadmap (and SPECS.md) are regenerated; a folder another process is updating is never moved (`busy`).",
+    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename", "restore", "flow", "protect", "unprotect"] }, name: { type: "string" }, newName: { type: "string", description: "rename: the new name." }, flow: { type: "string", enum: [...spec.FLOWS], description: "flow: the phase order." }, confirm: { type: "boolean", description: "remove: must be true (deletion is permanent)." }, file: { type: "string" }, reason: { type: "string" }, projectDir: PROJECT_DIR }, required: ["action", "name"] },
   },
   {
     name: "spec_import",
@@ -737,6 +737,13 @@ async function elicitApproval(toolName, args, pol, flight, progressToken) {
     if (Array.isArray(pre.failing) && pre.failing.length) details.push(E.forced(pre.failing.join(", ")));
     else if (!pre.revoke && !pre.chain) details.push(E.gatePasses);
     if (pre.waiver) details.push(E.waiver(pre.waiver.reason, pre.waiver.expires));
+  } else if (toolName === "spec_feature" && String(args.action || "").trim().toLowerCase() === "unprotect") {
+    // 1.36 guard tests — a lift's own checks first (a test file inside the project, a reason): a call refused anyway is answered as it
+    // is, nobody is asked; the question quotes the reason the engine will record (one line), bounded
+    const pre = runTool(toolName, args, { dryRun: true });
+    if (!pre || pre.ok === false || !pre.dryRun) return pre;
+    const why = String(pre.reason || "");
+    details.push(E.unprotect(why.length > 200 ? why.slice(0, 199) + "…" : why));
   } else if (toolName === "spec_feature") {
     // remove's own preview (no confirm): a feature that doesn't exist is answered as it is — nobody is asked
     const pre = runTool(toolName, { action: "remove", name: args.name, projectDir: args.projectDir });

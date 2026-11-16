@@ -43,6 +43,7 @@ let designSystemRegistry, designSystemCheck, designSystemGated; // quality.js �
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.reviewModels)
 let fastCheckOf; // evidence.js — the fast check (1.36, meta.fastCheck): doctor's fast-check warn
+let guardLevel, protectedTestsDoctor; // guards.js · protect.js — 1.36 guard tests: doctor's protected-tests warn
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
 function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
@@ -69,7 +70,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
-  designSystemRegistry, designSystemCheck, designSystemGated, reviewModelsSetting, fastCheckOf } = E); }
+  designSystemRegistry, designSystemCheck, designSystemGated, reviewModelsSetting, fastCheckOf, guardLevel, protectedTestsDoctor } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -134,7 +135,7 @@ function designSaveCheck(projectDir, name) {
 // other tool's MCP config `env`, or a shell). Deliberately NOT plugin.json `userConfig`: it opens a configuration dialog on every
 // install / enable, and an older Claude Code that validates option fields strictly would refuse to load the plugin.
 // Keys: DEFAULT_LANG (the language a NEW project gets — newProjectLang), STOP_CHECK (the end-of-turn evidence gate while
-// meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope while meta.guard is unset). hooks/guard-hook.js and
+// meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope | tests while meta.guard is unset). hooks/guard-hook.js and
 // hooks/stop-hook.js read the same variables raw (their cheap pre-checks).
 function userOptionRaw(key) {
   for (const name of ["DEV_SPEC_" + key]) {
@@ -893,6 +894,10 @@ const DOCTOR_CHECKS = [
   // 1.36: meta.fastCheck names no valid check (a hand edit, its check renamed), dev-guardian's gate or a command that rewrites files —
   // no fast check runs: a project setting, so its own entry (one line, never one per feature's evidence)
   { id: "fast-check", run: (c) => { const f = fastCheckOf(c.projectDir); return f && f.invalid !== undefined ? { status: "warn", detail: c.fm.fastCheck.doctorInvalid(f.invalid, f.why) } : null; } },
+  // 1.36 guard tests: a feature with approved, open tasks at level tests and no snapshot (feature protect takes one), a truncated one,
+  // or the approval guard off (the list lives in .state.json, which only that guard keeps agents from editing)
+  { id: "protected-tests", applies: (c) => guardLevel(c.projectDir) === "tests" && !!c.approvals.tasks && c.blocks.some((b) => !b.done),
+    run: (c) => protectedTestsDoctor(c.projectDir, c.slug, c.state, c.lang) },
   // Steering: present is not enough — a steering file that is still its template steers nothing (named, with its count).
   { id: "steering", run: (c) => {
     const missing = CORE_STEERING.filter((f) => !fs.existsSync(path.join(c.root, "steering", f)));

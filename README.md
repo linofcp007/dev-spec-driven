@@ -161,7 +161,7 @@ are yours to type, so their descriptions stay out of its context. As a plugin th
 | report | `/spec-status` | Tracks, phase, tasks, verification — of one feature or all |
 | | `/roadmap [depend \| backlog \| milestone]` | Progress, dependencies, ETAs, milestones → `.specs/ROADMAP.md` (`--html`) |
 | | `/spec-report [catalog \| drift \| metrics \| changelog \| export]` | The living catalog, drift since finish, metrics and a retro, release notes, stakeholder exports |
-| setup | `/spec-setup [init \| guard \| statusline \| superpowers \| templates \| tracks]` | `.specs/` and steering, guard mode, the status line, superpowers precedence, your templates and tracks |
+| setup | `/spec-setup [init \| guard \| statusline \| superpowers \| templates \| tracks]` | `.specs/` and steering, guard mode (`tests`: the tests the plan approved change only when a task names them), the status line, superpowers precedence, your templates and tracks |
 | | `/spec-upgrade` | After a plugin update: audit `.specs/` against the current rules, then the safe migrations |
 | aliases | `/ds` · `/dss` · `/dsx` | `/spec` · `/spec-status` · `/executeTask` |
 
@@ -309,7 +309,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (32 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine: 25 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
+│   ├── lib/engine/                   ← the engine: 26 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← localized content (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)

@@ -270,6 +270,15 @@ review findings — is in History at the end.
   `forcedApprovalList`: doctor's `waiver-expired` (both doctors), ROADMAP.md (EXPIRED), `spec_finish` `waivers` + a warning +
   the merge summary's "Waived gates". With roles the approval carries the STRICTEST counted waiver (`strictestWaiver()`: the
   earliest expiry, else the first — the completing sign-off's own included; each role's record keeps its own). Metrics count `revokedApprovals` and `untickedTasks`.
+- **Lifts of protected tests (1.36, guard tests)** sit beside waivers: a waiver records why a GATE was forced, a lift why ONE
+  protected test may change — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect` (`reason` required:
+  `reasonInput()`; no expiry — it lasts until `feature protect <f> <file>`), `{file, at, by, reason, confirmed?}` in
+  `.state.json → protectedTests.lifts`, a guard-down of the approval guard, listed by `spec_finish` (`protectedTests.lifted`, the
+  merge summary's "Protected tests" block). **The snapshot hook:** `approvePhase` records the feature's protected tests at its
+  FIRST complete tasks approval at level tests — inside `if (!so || so.complete)`, before the one `writeFileAtomic` (a dry run
+  returns earlier, a role's waiting sign-off takes none), from the walk the facade made before the lock (`opts.protectWalk` —
+  `approveThrough` passes it to each phase); a re-approval or a revoke + approve keeps the first (tasks-and-evidence.md →
+  Protected tests).
 - **MCP-only surfaces** — `spec_stop_check {message, agent?}` = `stopCheck()` (= `dev-spec stop-check --json`);
   `spec_log {name, gitLog, max?}` = `taskCommits()` over git log TEXT the client supplies — the server never runs a
   command (`dev-spec log` runs git itself; `log <f> - --max N` passes the window too). An empty `gitLog` / `message` is a value (`EMPTY_OK` — mcp.md → Argument validation).
@@ -514,6 +523,8 @@ here. "r5 review" is 1.23's fifth review.
   was refused; `waiver.badExpires` now says UTC.
 - **1.24 review 6 (E7)** — with roles, the completing sign-off kept its own waiver (one with no expiry) and another role's
   expiring waiver was lost — doctor never warned `waiver-expired`, finish never said expired: `strictestWaiver()`.
+- **1.36** — a protected test's lift (guard tests) joins the waivers as the user's recorded decision; the tasks approval takes
+  the protected-tests snapshot (the walk outside the lock — the design walked under it, and a concurrent call answered busy).
 
 ### Approvals the user confirmed over MCP, and the dry run
 - **1.21 F1b** — `confirmed` and the dry run.

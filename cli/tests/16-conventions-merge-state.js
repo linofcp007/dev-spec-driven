@@ -103,6 +103,28 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, runAsync, tmp, CLI }) => {
       runField: () => ms.code === 0 && s1 && js(s1.evidence["1"].fast) === js(fast) && s1.evidence["1"].history.some((h) => js(h.fast) === js(fast)),
     });
   }
+  // 1.36 guard tests: protectedTests merges by its own rule — files file by file (a one-sided re-baseline or addition comes through; both
+  // sides changed one → ours, NO conflict: finish hashes the content again), at / via the earlier snapshot's, truncated either side's,
+  // the lifts united by identity (a lift and its end each a record)
+  {
+    const st = (pt) => ({ lang: "en", tracks: ["core"], protectedTests: pt });
+    const lift = (file, at, extra) => ({ file, at, by: "u", ...(extra || {}) });
+    const base = { at: T(1), via: "approval", files: { "test/a.test.js": "aaaa", "test/b.test.js": "bbbb", "test/c.test.js": "cccc" } };
+    const ours = { at: T(1), via: "approval", files: { "test/a.test.js": "a-ours", "test/b.test.js": "b-ours", "test/c.test.js": "cccc" }, lifts: [lift("test/x.test.js", T(2), { reason: "r" })] };
+    const theirs = { at: T(0), via: "protect", truncated: true, files: { "test/a.test.js": "aaaa", "test/b.test.js": "b-theirs", "test/c.test.js": "c-theirs", "test/new.test.js": "nnnn" },
+      lifts: [lift("test/y.test.js", T(3), { reason: "s" }), lift("test/x.test.js", T(4), { revoked: true })] };
+    const so = put("o-pt", st(ours));
+    const m = runIn(["merge-state", put("b-pt", st(base)), so, put("t-pt", st(theirs)), ".specs/login/.state.json"]);
+    const r = parse(so);
+    const pt = r && r.protectedTests;
+    all("1.36 guard tests: merge-state merges protectedTests — a one-sided re-baseline (c) or addition (new) comes through, ours kept where both re-baselined (b) with NO conflict, the earlier snapshot's at / via, truncated from either side, both sides' lifts and ends united by identity in time order (got " +
+      js([m.code, pt]) + ")", {
+      clean: () => m.code === 0 && !("mergeConflicts" in r),
+      files: () => js(pt.files) === js({ "test/a.test.js": "a-ours", "test/b.test.js": "b-ours", "test/c.test.js": "c-theirs", "test/new.test.js": "nnnn" }),
+      earlier: () => pt.at === T(0) && pt.via === "protect", truncated: () => pt.truncated === true,
+      lifts: () => js(pt.lifts.map((l) => [l.file, l.at, !!l.revoked])) === js([["test/x.test.js", T(2), false], ["test/y.test.js", T(3), false], ["test/x.test.js", T(4), true]]),
+    });
+  }
 
   // --- with git: --install / --uninstall, then a real merge of two branches (skipped without git — the Docker images have it)
   const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });

@@ -109,8 +109,8 @@ A guardrail on the approve paths, like the approval hook — not a sandbox.
 - **What is asked.** While `meta.approvalGuard` is `ask` or `deny`, a client that declares `capabilities.elicitation` in form
   mode (`clientElicits`: `{}` or `{form: {…}}`, not `{url: {…}}` alone) is asked (`elicitation/create`) before an AGENT's
   approval runs — the calls the approval hook guards, by the same `spec.approvalGuardDecision()`: `spec_approve` (approve,
-  revoke, `through`, force / waiver), `spec_feature` remove, `spec_init` lowering a protection, `spec_add_track {remove:
-  true}` dropping +tdd / +ai.
+  revoke, `through`, force / waiver), `spec_feature` remove, `spec_feature` unprotect (1.36 — a protected test's lift),
+  `spec_init` lowering a protection, `spec_add_track {remove: true}` dropping +tdd / +ai.
 - **`approvalPolicy()`** (server.js): nothing is asked with the guard off, for a projectDir runTool refuses, or at `ask` under
   `SPEC_MCP_APPROVAL_HOOK=on` (the plugin's hook asks — never twice); `deny` holds even there (a call that reaches the server
   got past no hook). Without elicitation `ask` runs and `deny` refuses (`humanRequired: true`; `command`, with `{plain:
@@ -118,7 +118,10 @@ A guardrail on the approve paths, like the approval hook — not a sandbox.
 - **The question** (`msg.elicit`, the feature's language): the action `summary`, naming the slug the engine resolves
   (`opts.resolveFeature`), never the raw argument, plus the gate from a **dry run** (`spec.approvePhase(…, {dryRun: true})` —
   gates-and-approvals.md → the dry run); a remove's says how much it deletes (`elicit.removeSize`). A gate that refuses
-  anyway, an error or a fast-forward with nothing to do is answered as it is — NOBODY is asked. `requestedSchema`: `approve`
+  anyway, an error or a fast-forward with nothing to do is answered as it is — NOBODY is asked. An unprotect (1.36) is checked by
+  its own dry run first (`spec_feature {…, dryRun}`: a test file inside the project, a reason — `reason-required` / `not-a-test` /
+  … answer as they are) and its question quotes the reason the engine would record (one line, ≤ 200 characters shown —
+  `elicit.unprotect`); an approve records the lift with `confirmed`. `requestedSchema`: `approve`
   (boolean, default false, required) + `note` (≤ 500).
 - **Only `action: "accept"` with `content.approve === true` runs the call**, recording `confirmation` {via: "elicitation", at,
   note?} as `confirmed` (`confirmationOf()`, gates.js — never a tool argument) and passing `preview`, what the dry run judged:
@@ -255,6 +258,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   diverse or [])" in the settings sentence: +109 characters (44,123 → 44,232); the design's described property was +214.
   The fast check's `spec_init {fastCheck}` is a bare `{type: "string"}` plus "`fastCheck` (a check run after each edit)": +73
   (44,232 → 44,305); the design's two described properties (with a block-mode gate, cut) were ~+160.
+  The protected tests (guard tests): `spec_init {guard}` gains `tests` in its enum and "tests = scope + protected tests" in its
+  description; `spec_feature` gains `protect` / `unprotect`, bare `file` / `reason` properties and one clause: +227 (44,305 →
+  44,532); the design's described properties were ~+507.
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.
@@ -282,6 +288,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.24 r6 A-I8** — a remove's question says how much it deletes (`elicit.removeSize`).
 - **1.25.1 review 7** — the Known limit (`SPEC_MCP_APPROVAL_HOOK=on` at `ask` with the hook not running) documented, not
   changed: eliciting there would ask twice without a hook→server handshake.
+- **1.36** — `spec_feature` unprotect (a protected test's lift, guard tests) is asked like a removal, after its own dry run (a
+  refusal anyway asks nobody); its question quotes the reason; the internals `confirmation` and `dryRun` joined spec_feature's.
 
 ### Argument validation
 - **1.12** — the MCP accepted `Design` / `PT`; `foldEnumArgs` keeps it so.

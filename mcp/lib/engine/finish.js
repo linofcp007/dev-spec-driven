@@ -37,7 +37,8 @@ let DESIGN_SYSTEM_FILE; // quality.js — the registry's file name (a rename fol
 let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian, accepted gaps
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
 let phaseFile; // state.js — the file a phase writes (tasks: an xs change's change.md)
-function __link(E) { ({ phaseFile, duplicationReport, designSystemFinish, DESIGN_SYSTEM_FILE, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+let protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines; // protect.js — 1.36 guard tests: protect / unprotect, finish's check
+function __link(E) { ({ protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, phaseFile, duplicationReport, designSystemFinish, DESIGN_SYSTEM_FILE, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   enumArg, errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
@@ -249,6 +250,11 @@ function finishFeature(projectDir, name, opts = {}) {
     warnings.push((dup.counts.existing ? F.duplicates(dup.counts.existing, top.map(pair).join("; "), dup.counts.within, slug) : F.duplicatesWithin(dup.counts.within, slug)) + part + over);
     duplicates = Object.assign({ existing: dup.counts.existing, within: dup.counts.within, top }, dup.partial ? { partial: dup.partial } : {});
   }
+  // 1.36 guard tests: the feature's protected tests hashed again — a change no recorded hash (a snapshot, a tick re-baseline of any live
+  // feature) and no lift explains is a warning (git-free: every surface), never a blocker; the merge summary lists them.
+  const protectedTests = protectedTestsFinish(projectDir, state);
+  const ptWarn = protectedFinishWarning(protectedTests, slug, lng);
+  if (ptWarn) warnings.push(ptWarn);
 
   // What only a human (or a fresh run) can confirm — the track-gated "done" checks.
   const checks = [F.checkSuite];
@@ -298,6 +304,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const decLines = decisionSummaryLines(dir, lng); // decisions.md
   if (decLines.length) body.push(...decLines, "");
   if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), ""); // the waived gates
+  if (protectedTests) body.push(...protectedSummaryLines(protectedTests, lng), ""); // 1.36 guard tests: the list, what changed, the lifts
   body.push(F.prChecks, ...checks.map((c) => "- [ ] " + c), "");
   const specFiles = ["requirements.md", "change.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE] // a change's one file
     .filter((x) => fs.existsSync(path.join(dir, x)));
@@ -338,6 +345,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (branch) res.branch = branch; // {name, base, commit, at, current, exists} — option 1 merges `name` into `base` locally
   if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
   if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats, partial? (1.30)} — spec_scan {duplicates: true} lists all
+  if (protectedTests) res.protectedTests = protectedTests; // 1.36: {count, unexplained: [{file, status: changed | deleted}], lifted: [{file, by, at, reason}]}
   // 1.35: {raw: {total, counts: {color, size}, top}, registered (New components this call added to the registry), unregistered,
   // note? (the localized line, when it added some)} — only when there is something to say; spec_scan {designSystem: true, name}
   // lists the raw values
@@ -985,7 +993,7 @@ function removePreview(projectDir, name) {
 
 // The actions are spec_feature's enum, exactly — no hidden alias (a CLI-only `feature delete` used to remove a folder
 // the MCP tool refused to, and the help never named it).
-const FEATURE_ACTIONS = ["remove", "archive", "rename", "restore", "flow"];
+const FEATURE_ACTIONS = ["remove", "archive", "rename", "restore", "flow", "protect", "unprotect"];
 function manageFeature(projectDir, action, name, arg, opts = {}) {
   // the MCP enum's refusal, in its words (the CLI passes its first word as typed); none is no action either
   const act = enumArg("action", FEATURE_ACTIONS, action == null ? "" : action, () => projectLang(projectDir), { blankGiven: true });
@@ -1004,6 +1012,8 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
       return restoreFeature(projectDir, name);
     case "flow": // opts.flow (MCP `flow`), else the positional value (CLI `feature flow <name> <flow>`)
       return setFeatureFlowLocked(projectDir, name, opts.flow != null ? opts.flow : arg);
+    case "protect": case "unprotect": // 1.36 guard tests (protect.js): opts.file (MCP `file`, CLI --file), else the CLI's third word
+      return protectTests(projectDir, act.value, name, opts.file != null ? opts.file : arg, { reason: opts.reason, confirmation: opts.confirmation, dryRun: opts.dryRun });
   }
   return null; // (unreachable: enumArg answered every other value)
 }

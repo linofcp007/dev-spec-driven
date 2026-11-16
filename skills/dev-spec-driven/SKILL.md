@@ -144,7 +144,7 @@ concept and synonyms — reuse, else extend, else create; a refactor outside the
 - `meta.fastCheck`: run it alone after each small edit; clean before `_Verify:_`.
 
 Blocked → pause and discuss; don't improvise outside the design. A gap a test or a measurement shows sends you back
-to that phase; a wrong "green" test is a plan change with approval — never edit a test to pass. Decisions and
+to that phase; a wrong "green" test is a plan change with approval — never edit a test to pass (`guard tests` enforces it). Decisions and
 discoveries go to `decisions.md` (`spec_decide`). In Claude Code a Stop hook returns a "done" without passing
 evidence: run the check or say what is unverified.
 

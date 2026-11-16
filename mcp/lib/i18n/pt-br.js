@@ -43,6 +43,7 @@ const PTBR_OVERRIDES = [
   // +dist: a race condition is a "condição de corrida" in Brazil too — never the "corrida" (a run) → "executada" rule
   ["Condições de corrida", "Condições de corrida"], ["condições de corrida", "condições de corrida"], ["condição de corrida", "condição de corrida"],
   ["caminho/ficheiro.test.js", "caminho/arquivo.test.js"], // an example path inside a _Verify:_ placeholder
+  ["[o ficheiro de teste onde fica o T-01]", "[o arquivo de teste onde fica o T-01]"], // the bugfix task 1 _Implements:_ slot (1.36)
   ["<ficheiro>", "<arquivo>"], ["<artefacto>", "<artefato>"], // placeholders inside a path / URI
   ["Põe-no a falhar", "Faça-o falhar"],
   [") e regista essa execução", ") e registre essa execução"],

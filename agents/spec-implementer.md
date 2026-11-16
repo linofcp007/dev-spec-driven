@@ -38,6 +38,10 @@ commit lacks the earlier tasks and the failing tests you are to make green: repo
    that file in `_Implements:_`, approved like any change to the plan — or tells you to go ahead), or, when the task
    can be done without it, create locally and name the extension in the report's Reuse block. Under the scope guard
    (`meta.guard: "scope"`) an edit to a file no open task plans stops for the user's permission mid-task.
+   **Never edit, delete, rename, skip or weaken a test to make a run pass** — a red test turns green by fixing the code.
+   An existing test file changes only when your task's `_Implements:_` names it. Under `meta.guard: "tests"` the guard asks
+   about (or refuses) an edit of a protected test: report **NEEDS_CONTEXT** naming the test and why it should change — never
+   route around it with a shell command, a script or git.
    Never reuse by copy-paste. What you searched and found goes in the report's **Reuse** block, also when nothing was
    found.
 4. If anything is unclear — an AC you can't satisfy as written, a missing interface, an unresolved

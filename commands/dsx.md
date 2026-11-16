@@ -13,7 +13,8 @@ file is the whole procedure. Should it be unreadable, these rules still hold:
 - +tdd: the **micro-cycle**, one behaviour at a time — the test first, watch it fail for the right reason, the minimal
   code, refactor only on green.
 - Stay inside the task's `_Implements:_` files: a change elsewhere is a plan change (the scope guard asks — add a task with
-  `spec_append_tasks`); a refactor you notice goes to the backlog, not into the task.
+  `spec_append_tasks`); never edit an existing test the task's `_Implements:_` doesn't name; a refactor you notice goes to
+  the backlog, not into the task.
 - Tick with `spec_complete_task {evidence}` — the `_Verify:_` command itself and its exit code. No shell to run it? Don't
   tick: ask the user for the output (or `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`).
 

@@ -500,9 +500,9 @@ exports.run = async ({
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-setup.md"), dRef("tooling-reference.md")]; // 1.26: /spec-guard + /spec-init → /spec-setup guard | init
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;
-    ok(d5Schema.type === "string" && d5Schema.enum.join() === "on,off,scope" &&
-      d5Docs.every((t) => !/guard: (?:true|false)\b|`true` \/ `"scope"`|`true` \/ `false`/.test(t) && /"on"/.test(t) && /"off"/.test(t) && /"scope"/.test(t)),
-      "full review D5: /spec-setup (guard, init) and the tooling reference pass guard as \"on\" / \"off\" / \"scope\" (the schema's string enum)");
+    ok(d5Schema.type === "string" && d5Schema.enum.join() === "on,off,scope,tests" &&
+      d5Docs.every((t) => !/guard: (?:true|false)\b|`true` \/ `"scope"`|`true` \/ `false`/.test(t) && /"on"/.test(t) && /"off"/.test(t) && /"scope"/.test(t) && /"tests"/.test(t)),
+      "full review D5: /spec-setup (guard, init) and the tooling reference pass guard as \"on\" / \"off\" / \"scope\" / \"tests\" (the schema's string enum)");
     // D6: spec_approve's description lists every execution check (suite-evidence; a spike's spike / decision), one line.
     const d6Desc = list.result.tools.find((t) => t.name === "spec_approve").description;
     // (1.26: the per-phase check lists left the description and /approve — a refusal names its failing check ids; /approve still

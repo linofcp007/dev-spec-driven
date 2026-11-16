@@ -118,7 +118,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   if (userLang) lang = userLang;
   // Both writes go to roadmap.json (one read-modify-write under the roadmap lock): refuse on a broken one before
   // creating anything.
-  const guardValue = guardInput(opts.guard); // true | false | "scope" — anything else leaves the guard unchanged
+  const guardValue = guardInput(opts.guard); // true | false | "scope" | "tests" — anything else leaves the guard unchanged
   const setsGuard = guardValue !== undefined;
   const setsStop = typeof opts.stopCheck === "boolean"; // roadmap.json meta.stopCheck (the end-of-turn evidence gate)
   // roadmap.json meta.evidence — "reported" (the default) | "observed"; anything else is refused before any write.
@@ -196,7 +196,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     created,
     skipped,
     note: i18n.msg(lng).initNote,
-    guard: guardLevel(projectDir), // the CURRENT guard state (true | false | "scope"), whether or not this call changed it
+    guard: guardLevel(projectDir), // the CURRENT guard state (true | false | "scope" | "tests"), whether or not this call changed it
     stopCheck: stopCheckEnabled(projectDir), // the CURRENT end-of-turn evidence gate state (on unless meta.stopCheck is false)
     // the CURRENT project checks (meta.checks) {name: command}, whether or not this call changed them
     checks: Object.fromEntries(projectChecks(projectDir).checks.map((c) => [c.name, c.command])),
@@ -209,7 +209,9 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   // which of the reported values come from the user's DEV_SPEC_* defaults (the project sets none of them itself).
   const fromUser = userDefaultsApplied(projectDir, { lang: userLang });
   if (Object.keys(fromUser).length) res.userDefaults = fromUser;
-  if (setsGuard) res.guardNote = res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
+  if (setsGuard) res.guardNote = res.guard === "tests" ? i18n.msg(lng).protectedTests.on : res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
+  // 1.36 guard tests: the protected lists live in each feature's .state.json — with the approval guard off an agent may edit them
+  if (res.guard === "tests" && res.approvalGuard === "off") res.protectedTestsWarning = i18n.msg(lng).protectedTests.unguarded;
   if (setsStop) res.stopCheckNote = i18n.msg(lng).stopGate[res.stopCheck ? "on" : "off"];
   if (approvalGuard) res.approvalGuardNote = res.approvalGuard === "off" ? i18n.msg(lng).approvalGuard.off : i18n.msg(lng).approvalGuard.on[res.approvalGuard];
   if (evMode) res.evidenceNote = i18n.msg(lng).observed[res.evidence === "observed" ? "on" : "off"];

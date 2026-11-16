@@ -337,6 +337,35 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   says when the project is over it. dev-spec counts windows of code lines, dev-guardian measures with jscpd — close, not
   identical.
 
+## Protected tests (`meta.guard: "tests"`, 1.36)
+
+A test made to pass is a weakened test. At guard level `tests` (`init --guard tests`) the tests the plan was approved
+against stay as they were unless the plan or the user says otherwise:
+
+- **What is protected** — the feature's `.state.json → protectedTests`: the test files present at its FIRST complete tasks
+  approval (`.specs/<feature>/tests/` too; a content hash each, at most 2,000 — past them doctor warns), and at each tick the
+  test files the task names exactly in `_Implements:_` (their content then is the authorised one — the bugfix's red test,
+  task 1's `_Implements: [the test file T-01 goes in]_`) and the test files its `_Verify:_` runs. An untick never removes one.
+  A new test file stays editable until a tick records it.
+- **The edit** (Claude Code's guard hook) — editing, removing or moving a protected test asks unless a task that can START
+  NOW names it exactly in `_Implements:_` (never a folder, a glob or `_Makes green:_`) or the user lifted it; refused under
+  `meta.approvalGuard: deny`. If it asks or refuses, the task reports NEEDS_CONTEXT naming the test — never a shell command,
+  a script or git around it.
+- **The lift** — `dev-spec feature unprotect <feature> <file> --reason "…"` (`spec_feature {action: "unprotect", file,
+  reason}`): the user's decision — with the approval guard on, an agent's call asks or is refused; `feature protect <feature>
+  <file>` ends it. `feature protect <feature>` adds the tests present now (it never re-hashes a recorded one).
+- **At finish** (every surface, git-free) — each protected test is hashed again: one whose content matches no hash a live
+  feature recorded for it (its snapshot, a tick of any feature) and that no lift covers is a **warning** naming it (changed /
+  deleted) and a "Protected tests" block in the merge summary — never a blocker: check each change is intended, then record it
+  with a lift.
+- **Defence in depth** — the hook prevents (Claude Code), finish detects what got past it (a confirmed prompt, a script, a
+  git command, another client), dev-guardian's test-integrity scan reads the diff for weakened assertions (`.only`, skips,
+  removed checks — in new tests too), and the independent reviewer sees every test file a task changed outside its
+  `_Implements:_`. Known limits: tests in ignored, hidden or linked folders, outside the project folder or past the cap are
+  not listed; new test-support files (conftest.py, setup files, mocks) stay editable; a git command or a script is not read
+  by the hook (finish names the result); a merge from the main branch lists teammates' test changes; an untick re-opens its
+  task — a task that can start now naming the test may edit it again, and its re-tick records the new content.
+
 ## Evidence the harness observed (Claude Code)
 
 A reported run is what the agent SAYS it ran. In Claude Code the plugin's `hooks/observe-hook.js` (PostToolUse and
