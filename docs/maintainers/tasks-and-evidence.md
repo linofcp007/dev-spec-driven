@@ -434,8 +434,12 @@ Engine: the `B5` block of `engine/evidence.js`.
   `taskDependsSpec(block)` → `{declared, numbers, invalid}`. The numbers name tasks of the SAME tasks.md, read on ONE view — the
   ACTIVE tasks (`activeTasks()`) — with resolveTask's duplicate rule: n is done once EVERY task numbered n is; a number no active
   task carries never is. **Without `_Depends:_` nothing changes** (the same next task, no new fields).
-- **`taskSchedule(blocks)` is THE next-task rule** → `{next, skipped, blocked, graph}`: the first open task in tasks order (only the
-  task resolveTask answers for its number) whose dependencies are done. **Tasks order:** by SECTION in file order (`taskSections()`:
+- **`taskSchedule(blocks, hold?)` is THE next-task rule** → `{next, skipped, blocked, graph}`: the first open task in tasks order (only
+  the task resolveTask answers for its number) whose dependencies are done — never one of `hold`'s numbers (passed over, never
+  `skipped`: +port's fence, port.js `portSchedule` — spec_next_task, next_action's implement step, the status line and `next
+  --batch` pass the tasks it holds; spec_next_task then carries `gated` / `heldBy` and, nothing else startable while the anchor
+  holding them is ticked but unverified, its run as the `note` — gates-and-approvals.md → Bugfix and finish; 1.36.0 review 1).
+  **Tasks order:** by SECTION in file order (`taskSections()`:
   a phase heading and its closing checkpoint), then by number — `taskDepGraph`'s `order`, which the waves use too; parseTasks' public
   list stays by number. `skipped` / `blocked` `[{number, waitsOn}]`: open tasks that wait / can never start as things stand (Kahn's
   walk, `stuckTasks()`: a cycle, a dependency no task carries, or waiting on such a task — only when some task declares
@@ -871,6 +875,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
   tick's open `_Depends:_`); doctor's `port-verify` warns about a task after the baseline whose `_Depends:_` never reaches it.
+- **1.36.0 review 1 (INT-2)** — `taskSchedule`'s `hold`: with the baseline ticked but unverified, spec_next_task, next_action and
+  the status line served the task the fence refuses (an inline /executeTask wrote the port's code before the baseline was
+  verified). The brief's default task and complete_task's `next` stay taskSchedule's (the brief carries `gated`, the refusal
+  names the anchor's run).
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks
   {depends}`; a tasks.md without `_Depends:_` behaves exactly as before it.
 - **1.24 r6 D6** — tasks order by section: by number alone, a task spec_append_tasks put into an EARLIER phase (`{heading}`, numbered

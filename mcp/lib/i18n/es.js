@@ -1759,6 +1759,7 @@ const msg = {
       wUnknownRefLine: (line, ref) => `tasks.md, línea ${line}: la referencia _Requirements:_ '${ref}' no corresponde a ningún criterio importado — se conserva tal cual`,
       wCarried: (list) => `copiado tal cual, sin correspondencia con historias o criterios (revísalo): ${list}`,
       wNoRefs: "las tareas importadas no tienen referencias _Requirements:_ — añádelas para que trace_check asocie cada AC a una tarea",
+      wPortNoFence: (slug) => `+port: el tasks.md importado no tiene tarea de línea base ni verificación diferencial, así que la barrera no retiene nada — deja que add_track las escriba: ${DEV_SPEC} add-track ${slug} port --remove y después ${DEV_SPEC} add-track ${slug} port (añadidas tras las tareas importadas: mueve la línea base al principio — references/port-patterns.md)`,
       wNoTasks: "el origen no tiene tasks.md — se conservó el tasks.md del scaffold (los _Requirements:_ / _Makes green:_ de la plantilla limitados a los criterios importados)",
       taskAcPlaceholder: "[un criterio importado que prueba esta tarea]",
       taskTestPlaceholder: "[la prueba planificada que esta tarea pone en verde]",
@@ -2374,6 +2375,10 @@ const msg = {
       dependsEscape: (list, b) => `un _Depends:_ que nunca llega a la línea base (tarea ${b}): ${list} — una oleada puede empezarlas antes; añádele ${b}`,
       recheck: (d, list, slug) => `la verificación diferencial (tarea ${d}) no ha vuelto a pasar desde que una tarea posterior se marcó o se volvió a ejecutar (${list}) — ejecútala de nuevo sobre el código final: ${DEV_SPEC} done ${slug} ${d} --run`,
       fence: (list) => `marcadas antes de que pasara la tarea [PORT] a la que esperan (entre paréntesis): ${list} — una tarea movida, +port quitado y añadido de nuevo, o una casilla marcada a mano; compruébalas contra la línea base y la verificación diferencial`,
+      verifyOrder: (d, b) => `la verificación diferencial (tarea ${d}) está antes de la línea base (tarea ${b}), así que no retiene nada — muévela después de las tareas del port`,
+      naHeld: (n, a, slug, runnable) => `La tarea ${n} espera a la tarea ${a} (+port — primero portar, después mejorar): la tarea ${a} está marcada pero no verificada, y solo una ejecución correcta de su _Verify:_ abre la barrera — ` +
+        (runnable ? `ejecútalo y regístralo: ${DEV_SPEC} done ${slug} ${a} --run.` : `aún no tiene un _Verify:_ ejecutable: escribe su comando en tasks.md (un cambio del plan, aprobado de nuevo) y después ${DEV_SPEC} done ${slug} ${a} --run.`),
+      naRecheck: (d, list, slug) => `La verificación diferencial (tarea ${d}) no ha vuelto a pasar desde que una tarea posterior se marcó o se volvió a ejecutar (${list}): ejecútala primero de nuevo sobre el código final — ${DEV_SPEC} done ${slug} ${d} --run —, después las verificaciones del proyecto y /spec-finish ${slug} (la nueva ejecución es actividad de tarea: las verificaciones del proyecto ejecutadas antes tendrían que volver a ejecutarse).`,
     },
 
     markerSyntax: {

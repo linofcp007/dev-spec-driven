@@ -1759,6 +1759,7 @@ const msg = {
       wUnknownRefLine: (line, ref) => `tasks.md, linha ${line}: a referência _Requirements:_ '${ref}' não corresponde a nenhum critério importado — mantida como estava`,
       wCarried: (list) => `copiado tal como estava, sem correspondência com histórias ou critérios (revê-o): ${list}`,
       wNoRefs: "as tarefas importadas não têm referências _Requirements:_ — acrescenta-as para o trace_check associar cada AC a uma tarefa",
+      wPortNoFence: (slug) => `+port: o tasks.md importado não tem tarefa de linha de base nem verificação diferencial, por isso a barreira não retém nada — deixa o add_track escrevê-las: ${DEV_SPEC} add-track ${slug} port --remove e depois ${DEV_SPEC} add-track ${slug} port (acrescentadas depois das tarefas importadas: move a linha de base para o início — references/port-patterns.md)`,
       wNoTasks: "a origem não tem tasks.md — foi mantido o tasks.md do scaffold (os _Requirements:_ / _Makes green:_ do template limitados aos critérios importados)",
       taskAcPlaceholder: "[um critério importado que esta tarefa prova]",
       taskTestPlaceholder: "[o teste planeado que esta tarefa põe a verde]",
@@ -2374,6 +2375,10 @@ const msg = {
       dependsEscape: (list, b) => `um _Depends:_ que nunca chega à linha de base (tarefa ${b}): ${list} — uma vaga pode começá-las antes dela; acrescenta-lhe ${b}`,
       recheck: (d, list, slug) => `a verificação diferencial (tarefa ${d}) não voltou a passar desde que uma tarefa depois dela foi marcada ou executada de novo (${list}) — corre-a de novo sobre o código final: ${DEV_SPEC} done ${slug} ${d} --run`,
       fence: (list) => `marcadas antes de a tarefa [PORT] por que esperam (entre parênteses) ter passado: ${list} — uma tarefa movida, o +port desligado e ligado de novo, ou uma caixa marcada à mão; verifica-as contra a linha de base e a verificação diferencial`,
+      verifyOrder: (d, b) => `a verificação diferencial (tarefa ${d}) está antes da linha de base (tarefa ${b}), por isso não retém nada — move-a para depois das tarefas do porte`,
+      naHeld: (n, a, slug, runnable) => `A tarefa ${n} espera pela tarefa ${a} (+port — primeiro o porte, depois as melhorias): a tarefa ${a} está marcada mas não verificada, e só uma execução bem-sucedida do seu _Verify:_ abre a barreira — ` +
+        (runnable ? `corre-o e regista-o: ${DEV_SPEC} done ${slug} ${a} --run.` : `ainda não tem um _Verify:_ executável: escreve o comando no tasks.md (uma alteração do plano, aprovado de novo) e depois ${DEV_SPEC} done ${slug} ${a} --run.`),
+      naRecheck: (d, list, slug) => `A verificação diferencial (tarefa ${d}) não voltou a passar desde que uma tarefa depois dela foi marcada ou executada de novo (${list}): corre-a primeiro de novo sobre o código final — ${DEV_SPEC} done ${slug} ${d} --run —, depois as verificações do projeto e /spec-finish ${slug} (a nova execução é atividade de tarefa: verificações do projeto corridas antes dela teriam de correr outra vez).`,
     },
 
     markerSyntax: {

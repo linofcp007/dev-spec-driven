@@ -22,7 +22,8 @@ let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, 
   toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs, unknownTracksError, withTrackBlocks,
   writeFileAtomic, appendSpecText, flatText, specNameText, importSteering, isDryRun, IMPORT_TOOLS, STEERING_IMPORT_TOOLS, withDryRun;
 let today; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ today, BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
+let portAnchored, taskBlocks; // port.js · tasks.js — an imported plan of a +port feature with no fence warns (1.36 review 1)
+function __link(E) { ({ portAnchored, taskBlocks, today, BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
   isInsideDir, isLtUnit, isPackTrack, isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf,
   packRequirementsBlock, packTaskBlock, parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE,
@@ -581,6 +582,11 @@ function importRun(projectDir, tool, source, opts) {
       const fitted = withPackTasks(fitTemplateTasks(cur, readIfExists(reqFile) || "", readIfExists(path.join(cr.dir, "test-plan.md")), lng));
       if (fitted !== orig) writeFileAtomic(tp, fitted);
     }
+  }
+  // +port: the imported plan replaced the scaffold's — its baseline and differential check with it, and the [PORT] criteria with the
+  // requirements: a plan with no anchor holds nothing (the track is recorded, so add_track adds nothing) — said, with the way out
+  if (model.tasks && cr.tracks.includes("port") && !portAnchored(taskBlocks(readIfExists(path.join(cr.dir, "tasks.md")) || ""), readIfExists(reqFile) || "")) {
+    warnings.push(W.wPortNoFence(cr.slug));
   }
   // fluidplan: the settled decisions → decisions.md, in spec_decide's format (its header, D-n entries — decisionLog reads
   // them back). An _Affects:_ AC the requirements don't define (none should) is left out rather than written as a phantom.

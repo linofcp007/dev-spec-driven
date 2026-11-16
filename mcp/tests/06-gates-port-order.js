@@ -2,6 +2,8 @@
 // +port's execution gate (1.36 — port first, improve later): the fence of the two [PORT] anchors (the baseline, the differential check) on
 // spec_complete_task and the brief, an unverified / verify-less anchor, the anchors' fallbacks, the brief's port rule; doctor's port-verify (the
 // size matrix, the tasks approval's probe, baselineLate, a _Depends:_ escape) and the runs — port-recheck (spec_finish blocks), port-fence.
+// 1.36.0 review 1: a verify-less anchor's note tick, the fence audit past the 5-run history, D's rule (its heading's last citing task), a D
+// listed before B, spec_next_task / next_action / the status line over held tasks, next_action's re-check step before the finish.
 
 const fs = require("fs");
 const path = require("path");
@@ -65,7 +67,7 @@ ${MAIN}
 `;
   const mk = (name, o = {}) => {
     const p = path.join(tmp, "p36g-" + name);
-    S.initProject(p, ["core"], "en");
+    S.initProject(p, ["core"], "en", o.init || {});
     handRoadmap(p);
     const f = S.createFeature(p, "Port fixture", ["port"], "", undefined, "en", undefined, o.size ? { size: o.size } : {});
     fill(f.dir, ["classification.md", "requirements.md", "design.md"]);
@@ -260,6 +262,167 @@ ${MAIN}
       () => chk(dn, "port-verify").status === "warn", () => !refused.ok, () => (refused.failing || []).includes("port-verify"), () => forced.ok,
       () => chk(dmApproved, "port-verify").status === "warn", () => chk(dmApproved, "port-verify").detail === P.noVerify("#5") + " " + P.approvedAlready,
       () => good.ok && !(good.failing || []).includes("port-verify"), () => fresh.ok && !chk(df, "port-verify").status,
+    ]);
+    // (T2) the probe is the tasks approval's at size m / l only: at s and with no size a differential check with no _Verify:_ line approves
+    // the tasks (port-verify a warn, never among the failing checks)
+    const NOD = TASKS().replace("  - _Verify: node verify-5.js_\n", "");
+    // (size s: one story — the plan cites its criteria only)
+    const as = mk("s-nod", { size: "s", tasks: NOD.replace("US-1.AC-3, US-1.AC-4", "US-1.AC-2").replace("US-2.AC-1, ", "") }), an = mk("none-nod", { tasks: NOD });
+    approveBefore(as.p, as.slug, "tasks");
+    approveBefore(an.p, an.slug, "tasks");
+    const okS = S.approvePhase(as.p, as.slug, "tasks", "t"), okN = S.approvePhase(an.p, an.slug, "tasks", "t");
+    all("1.36 review 1 (T2): at size s and with no size a differential check without a _Verify:_ line approves the tasks — port-verify warns, never among the failing checks (got " +
+      js([okS.ok, okS.failing, okN.ok, okN.failing, chk(S.specDoctor(as.p, as.slug), "port-verify").status]) + ")", [
+      () => okS.ok && !okS.forced, () => okN.ok && !okN.forced, () => chk(S.specDoctor(as.p, as.slug), "port-verify").status === "warn",
+      () => chk(S.specDoctor(an.p, an.slug), "port-verify").detail === P.noVerify("#5") + " " + P.approvedAlready,
+    ]);
+  }
+
+  { // 1.36 review 1 (PORT-1): a [PORT] task without a runnable _Verify:_ — its [slot] left, or its line deleted — never opens the fence, whatever
+    // ticks it: a note ticks it (the verify-less evidence rule) and the next task stays held, naming it; the same for the differential check
+    // (the improvements stay held); a passing run of a runnable _Verify:_ opens it
+    const SLOT_OLD = "  - _Verify: [command that runs the OLD implementation on the corpus and compares it with the baseline]_\n";
+    const sl = mk("slot-note", { bVerify: SLOT_OLD }), nv = mk("nov-note", { bVerify: "" });
+    const sN = sl.done(1, { summary: "baseline recorded" }), s2 = sl.done(2, run(2));
+    const nN = nv.done(1, { summary: "baseline recorded" }), n2 = nv.done(2, run(2));
+    const dv = mk("d-note", { tasks: TASKS().replace("  - _Verify: node verify-5.js_\n", "") });
+    dv.done(1, run(1));
+    tick();
+    for (const n of [2, 3, 4]) dv.done(n, run(n));
+    const dN = dv.done(5, { summary: "compared by hand" }), d6 = dv.done(6, run(6));
+    const ctl = mk("run-opens");
+    const c1 = ctl.done(1, run(1)), c2 = ctl.done(2, run(2));
+    all("1.36 review 1 (PORT-1): a baseline whose _Verify:_ is still its [slot], or has none, ticked with a note opens nothing (the next task refused, heldBy [1], unverified); a differential check without one, ticked with a note, keeps the improvements held; a passing run opens the fence (got " +
+      js([sN.ok, s2.heldBy, nN.ok, n2.heldBy, dN.ok, d6.heldBy, c2.ok]) + ")", [
+      () => sN.ok, () => s2.gated === "port-order" && js(s2.heldBy) === "[1]" && s2.error === G.portHeldUnverified(2, 1, sl.slug),
+      () => nN.ok, () => n2.gated === "port-order" && js(n2.heldBy) === "[1]",
+      () => dN.ok, () => d6.gated === "port-order" && js(d6.heldBy) === "[5]" && d6.error === G.portHeldUnverified(6, 5, dv.slug),
+      () => c1.ok && c1.verified, () => c2.ok && c2.verified,
+    ]);
+  }
+
+  { // 1.36 review 1 (PORT-2): the fence audit never flags honest work, however often an anchor is re-run — its evidence history keeps 5 runs, so
+    // once it is full the anchor's first pass is unknown (no task is flagged for being ticked before it); a checkbox ticked by hand still is
+    const inOrder = (x) => { for (const n of [1, 2, 3, 4, 5]) { tick(); x.done(n, run(n)); } };
+    const fence = (x) => chk(S.specDoctor(x.p, x.slug), "port-fence");
+    // G: the brief's 'after' rule — the differential check re-run after each improvement, then after a fix round
+    const g = mk("audit-g");
+    inOrder(g);
+    for (const n of [6, 7]) { tick(); g.done(n, run(n)); tick(); g.done(5, run(5)); }
+    for (let k = 0; k < 3; k++) { tick(); g.done(5, run(5)); }
+    // H: one improvement, then the differential check re-run five times, the baseline five times; then task 7 ticked by hand
+    const h = mk("audit-h");
+    inOrder(h);
+    tick();
+    h.done(6, run(6));
+    for (let k = 0; k < 5; k++) { tick(); h.done(5, run(5)); }
+    for (let k = 0; k < 5; k++) { tick(); h.done(1, run(1)); }
+    const hClean = fence(h);
+    fs.writeFileSync(path.join(h.f.dir, "tasks.md"), rd(h.f.dir, "tasks.md").replace("- [ ] 7. ", "- [x] 7. "));
+    // J: a flaky differential check — four failing re-runs, then a passing one
+    const j = mk("audit-j");
+    inOrder(j);
+    tick();
+    j.done(6, run(6));
+    for (let k = 0; k < 4; k++) { tick(); j.done(5, run(5, 1)); }
+    tick();
+    j.done(5, run(5));
+    all("1.36 review 1 (PORT-2): port-fence stays quiet after the differential check is re-run past its 5-run history (re-run after each improvement and a fix round; five re-runs after one; four failed re-runs and a pass); a checkbox ticked by hand after it is still named (got " +
+      js([fence(g), hClean, fence(h), fence(j)]) + ")", [
+      () => !fence(g).status, () => !hClean.status, () => fence(h).status === "warn" && fence(h).detail === P.fence("#7 (#1)"), () => !fence(j).status,
+    ]);
+  }
+
+  { // 1.36 review 1 (PORT-4, PORT-5): the differential check is the last task under its heading that cites a [PORT] criterion — a task written
+    // after it in its section waits for it, one before it is the port's —; listed before the baseline it holds nothing (the baseline holds every
+    // task after it, nothing before it is held) and port-verify names the order
+    const DSEC = `# Tasks: D rule\n\n${LEAD}\n- [ ] 1. [US1] Record the baseline\n  - _Requirements: US-1.AC-36, US-1.AC-37_\n  - _Verify: node verify-1.js_\n\n` +
+      "## Story US-1 (P1 — MVP)\n- [ ] 2. [US1] Port the parser\n  - _Requirements: US-1.AC-1_\n  - _Verify: node verify-2.js_\n\n" +
+      `${MAIN}\n- [ ] 3. [US1] Prepare the corpus runner\n  - _Requirements: US-1.AC-2_\n  - _Verify: node verify-3.js_\n` +
+      "- [ ] 4. [US1] Differential check over the corpus\n  - _Requirements: US-1.AC-36, US-1.AC-37_\n  - _Verify: node verify-4.js_\n" +
+      "- [ ] 5. [US1] Clearer error messages\n  - _Requirements: US-1.AC-1_\n  - _Verify: node verify-5.js_\n";
+    const x = mk("d-rule", { tasks: DSEC });
+    x.done(1, run(1));
+    tick();
+    const t2 = x.done(2, run(2)), t3 = x.done(3, run(3)), h5 = x.done(5, run(5)), b5 = S.taskBrief(x.p, x.slug, 5), b3 = S.taskBrief(x.p, x.slug, 3);
+    const dp = chk(S.specDoctor(x.p, x.slug), "port-verify");
+    const EARLY = `# Tasks: Early\n\n${MAIN}\n- [ ] 1. [US1] Differential check\n  - _Requirements: US-1.AC-36, US-1.AC-37_\n  - _Verify: node verify-1.js_\n\n` +
+      "## Phase: Setup\n- [ ] 2. [shared] Set up\n  - _Verify: node verify-2.js_\n\n" +
+      `${LEAD}\n- [ ] 3. [US1] Record the baseline\n  - _Requirements: US-1.AC-36, US-1.AC-37_\n  - _Verify: node verify-3.js_\n\n` +
+      "## Story US-1 (P1 — MVP)\n- [ ] 4. [US1] Port it\n  - _Requirements: US-1.AC-1_\n  - _Verify: node verify-4.js_\n";
+    const e = mk("early", { tasks: EARLY });
+    const eb1 = S.taskBrief(e.p, e.slug, 1), eb4 = S.taskBrief(e.p, e.slug, 4), e2 = e.done(2, run(2)), e1 = e.done(1, run(1)), e4 = e.done(4, run(4));
+    const ev = chk(S.specDoctor(e.p, e.slug), "port-verify");
+    all("1.36 review 1 (PORT-4, PORT-5): a task written after the differential check in its section waits for it (heldBy [4], portRole 'after'), one before it is the port's; port-verify names task 4 as the check; a differential check listed before the baseline holds nothing — the tasks before the baseline tick, the one after waits for the baseline alone — and port-verify names the order (got " +
+      js([t3.ok, h5.heldBy, b5.portRole, b3.portRole, dp.detail, eb1.gated, e2.ok, e1.ok, e4.heldBy, eb4.portRole, ev]) + ")", [
+      () => t2.ok && t3.ok, () => h5.gated === "port-order" && js(h5.heldBy) === "[4]", () => b5.portRole === "after" && b5.differential === 4, () => b3.portRole === "port",
+      () => dp.status === "pass" && dp.detail === P.verifyOk(1, 4, "#5"), () => !eb1.gated && !("portRole" in eb1), () => e2.ok, () => e1.ok,
+      () => e4.gated === "port-order" && js(e4.heldBy) === "[3]", () => eb4.portRole === "port", () => ev.status === "warn" && ev.detail === P.verifyOrder(1, 3),
+    ]);
+  }
+
+  { // 1.36 review 1 (INT-2): spec_next_task, next_action and the status line never send the agent to a task the fence holds — the held ones are
+    // passed over (gated, heldBy); nothing else can start while the anchor holding them is ticked but not verified: next_action's step is that
+    // anchor's run (verify — the gate's own way out), its note on next_task; with no runnable _Verify:_, its plan change first
+    // every phase approved (next_action reaches the tasks), the baseline's _Implements:_ file there (a ticked task's file is traced)
+    const approveAll = (x) => {
+      approveBefore(x.p, x.slug, "execution");
+      fs.mkdirSync(path.join(x.p, "tests", "baseline"), { recursive: true });
+      fs.writeFileSync(path.join(x.p, "tests", "baseline", "cases.json"), "[]\n");
+      return x;
+    };
+    const B1 = approveAll(mk("held-b"));
+    const u1 = B1.done(1, { command: "node verify-1.js --record", exitCode: 0, summary: "ok" });
+    const nt = S.nextTask(B1.p, B1.slug), na = S.nextAction(B1.p, B1.slug), sl = S.statusLine(B1.p);
+    const D1 = approveAll(mk("held-d"));
+    for (const n of [1, 2, 3, 4]) { tick(); D1.done(n, run(n)); }
+    D1.done(5, { summary: "compared by hand" });
+    const ntD = S.nextTask(D1.p, D1.slug), naD = S.nextAction(D1.p, D1.slug);
+    const V1 = approveAll(mk("held-nov", { bVerify: "" }));
+    V1.done(1, { summary: "baseline recorded" });
+    const naV = S.nextAction(V1.p, V1.slug);
+    // a task listed before the baseline that tasks order serves after a held one (one section: by number) — served; --batch never adds a held one
+    const SKIP = "# Tasks: Skip\n\n## Phase A\n- [ ] 5. [P] Write the docs page\n  - _Implements: docs/a.md_\n  - _Verify: node verify-5.js_\n" +
+      "- [ ] 1. Record the baseline\n  - _Requirements: US-1.AC-36_\n  - _Verify: node verify-1.js_\n" +
+      "- [ ] 2. [P] Port it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n  - _Implements: src/b.js_\n  - _Verify: node verify-2.js_\n" +
+      "- [ ] 3. Compare\n  - _Requirements: US-1.AC-37_\n  - _Verify: node verify-3.js_\n";
+    const K = approveAll(mk("held-skip", { tasks: SKIP }));
+    K.done(1, { summary: "recorded by hand" });
+    const ntK = S.nextTask(K.p, K.slug, { batch: true }), naK = S.nextAction(K.p, K.slug);
+    all("1.36 review 1 (INT-2): the baseline ticked unverified — next_task serves nothing (gated port-order, heldBy [1], the note names its run), next_action's step is verify with that run, the status line says verify task 1; the differential check likewise (heldBy [5]); a baseline with no runnable _Verify:_ asks for its command first; a task before the baseline is served past a held one, alone in --batch (got " +
+      js([u1.verified, nt, na.step, sl.next, ntD.heldBy, naD.step, naV.recommendation, ntK.next, ntK.batch, naK.step]) + ")", [
+      () => u1.ok && u1.verified === false, () => nt.next === null && nt.gated === "port-order" && js(nt.heldBy) === "[1]", () => nt.note === P.naHeld(2, 1, B1.slug, true),
+      () => na.step === "verify" && na.recommendation === P.naHeld(2, 1, B1.slug, true), () => js(sl.next) === js({ step: "verify", task: 1 }),
+      () => ntD.next === null && js(ntD.heldBy) === "[5]" && ntD.note === P.naHeld(6, 5, D1.slug, true), () => naD.step === "verify" && naD.recommendation === P.naHeld(6, 5, D1.slug, true),
+      () => naV.step === "verify" && naV.recommendation === P.naHeld(2, 1, V1.slug, false),
+      () => ntK.next && ntK.next.number === 5 && ntK.gated === "port-order" && js(ntK.heldBy) === "[1]", () => js((ntK.batch || []).map((b) => b.number)) === "[5]",
+      () => naK.step === "implement" && /#5/.test(naK.recommendation),
+    ]);
+  }
+
+  { // 1.36 review 1 (INT-3): all ticked with the differential check not passed again since a task after it — next_action's step is that run
+    // (verify), before the review panel's finish sentence and the project checks (they run once); an unverified tick comes first; the status
+    // line says it too; once re-run, the finish step (the panel first, the checks' hint after)
+    const x = mk("recheck-order", { init: { checks: { tc: "node tc.js" }, reviewModels: ["opus", "sonnet"] } });
+    approveBefore(x.p, x.slug, "execution");
+    fs.mkdirSync(path.join(x.p, "tests", "baseline"), { recursive: true });
+    fs.writeFileSync(path.join(x.p, "tests", "baseline", "cases.json"), "[]\n");
+    for (const n of [1, 2, 3, 4, 5, 6]) { tick(); x.done(n, run(n)); }
+    tick();
+    x.done(7, { command: "node verify-7.js --fast", exitCode: 0, summary: "ok" }); // a run of another command: ticked, unverified
+    const naU = S.nextAction(x.p, x.slug);
+    tick();
+    x.done(7, run(7));
+    const naR = S.nextAction(x.p, x.slug), slR = S.statusLine(x.p);
+    tick();
+    x.done(5, run(5));
+    const naF = S.nextAction(x.p, x.slug), NX = S.msg("en").next;
+    const panelAt = (naF.recommendation || "").indexOf(NX.reviewBranch(x.slug, "opus, sonnet")), doneAt = (naF.recommendation || "").indexOf(NX.allDone(x.slug));
+    all("1.36 review 1 (INT-3): next_action — an unverified improvement first (verify #7), then the differential check's re-run (verify, its own text: no panel sentence, no project-checks hint) and the status line's verify task 5; re-run, the finish step: the panel's branch review first, then the finish text and the checks' hint (got " +
+      js([naU.step, naR.step, naR.recommendation, slR.next, naF.step, panelAt, doneAt]) + ")", [
+      () => naU.step === "verify" && /\b7\b/.test(naU.recommendation) && !naU.recommendation.includes(P.naRecheck(5, "#6, #7", x.slug)),
+      () => naR.step === "verify" && naR.recommendation === P.naRecheck(5, "#6, #7", x.slug), () => js(slR.next) === js({ step: "verify", task: 5 }),
+      () => naF.step === "finish" && panelAt === 0 && doneAt > panelAt, () => naF.recommendation.includes("finish " + x.slug + " --run"),
     ]);
   }
 };

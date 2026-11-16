@@ -4,13 +4,16 @@
  * dev-spec-driven engine — +port (1.36): port first, improve later.
  * The fence a +port plan's two anchors draw over tasks.md (portAnchors): B, the baseline — the first task under the track's lead
  * template heading (the one naming its Behaviour Baseline section), else the first task citing a [PORT] criterion — and D, the
- * differential check — the last task under its other template heading, else the last citing task. Every task listed after B (D
- * included) waits for B, every task listed after D waits for D; nothing before B is held; B == D: everything after waits for it.
- * An anchor opens the fence only ticked AND verified (taskVerification: no reason, not nothingToVerify — an unverified or a
- * verify-less tick opens nothing). portTask: the gate complete_task and the brief apply (`gated: "port-order"`, `heldBy` — checked
- * before anything is recorded; the brief carries it, so `done --run` runs nothing) and the brief's portRole; portPlanCheck /
+ * differential check — the last task under its other template heading that cites a [PORT] criterion, else the first task under it,
+ * else the last citing task. Every task listed after B (D included) waits for B, every task listed after D waits for D; nothing before
+ * B is held; B == D (a D listed before B counts as none): everything after waits for it. An anchor opens the fence only ticked AND
+ * verified with a runnable _Verify:_ (taskVerification: no reason — an unverified tick, or any tick of a [PORT] task without a runnable
+ * _Verify:_, opens nothing). portTask: the gate complete_task and the brief apply (`gated: "port-order"`, `heldBy` — checked
+ * before anything is recorded; the brief carries it, so `done --run` runs nothing) and the brief's portRole; portSchedule: the next
+ * task with the held ones passed over (spec_next_task, next_action, the status line); portPlanCheck /
  * portPlanProbe: doctor's port-verify and the tasks approval's probe at size m / l; portRunState: the re-check of D after the
- * improvements (doctor port-recheck, spec_finish's port-recheck blocker) and the fence audit (doctor port-fence) — read from what
+ * improvements (doctor port-recheck, spec_finish's port-recheck blocker, next_action's step before the finish) and the fence audit
+ * (doctor port-fence) — read from what
  * .state.json already holds (the evidence `at` and `history`, `ticks`): no state, no merge rule of its own.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
@@ -18,10 +21,10 @@
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let blockPosition, designReuseGated, duplicateTaskNumbers, extractAcIds, isRecord, normTaskHeading, ownEvidence, readIfExists, taskDependsSpec,
-  taskMarkers, taskProse, taskVerification, trackAcIds, trackSectionTable, trackTaskHeadings;
-function __link(E) { ({ blockPosition, designReuseGated, duplicateTaskNumbers, extractAcIds, isRecord, normTaskHeading, ownEvidence, readIfExists,
-  taskDependsSpec, taskMarkers, taskProse, taskVerification, trackAcIds, trackSectionTable, trackTaskHeadings } = E); }
+let blockPosition, designReuseGated, duplicateTaskNumbers, EVIDENCE_HISTORY, extractAcIds, isRecord, normTaskHeading, ownEvidence, readIfExists,
+  taskDependsSpec, taskMarkers, taskProse, taskSchedule, taskVerification, trackAcIds, trackSectionTable, trackTaskHeadings;
+function __link(E) { ({ blockPosition, designReuseGated, duplicateTaskNumbers, EVIDENCE_HISTORY, extractAcIds, isRecord, normTaskHeading, ownEvidence,
+  readIfExists, taskDependsSpec, taskMarkers, taskProse, taskSchedule, taskVerification, trackAcIds, trackSectionTable, trackTaskHeadings } = E); }
 
 // +port applies to a plain feature (a bugfix refuses it; a spike / a change has no track)
 const portOn = (kind, tracks) => (kind || "feature") === "feature" && Array.isArray(tracks) && tracks.includes("port");
@@ -41,8 +44,16 @@ function portAnchors(blocks, reqText) {
   const cites = (x) => acs.size > 0 && [...extractAcIds(taskProse(x).join(" "))].some((id) => acs.has(id));
   let b = under.indexOf("lead");
   if (b < 0) b = blocks.findIndex(cites);
-  let d = under.lastIndexOf("main");
+  // D: the last task under the differential check's heading citing a [PORT] criterion (the template's does — a task written after it
+  // in its section is never the check), else the first task under that heading, else the last citing task
+  const mains = under.map((u, i) => (u === "main" ? i : -1)).filter((i) => i >= 0);
+  let d = -1;
+  for (let k = mains.length - 1; k >= 0 && d < 0; k--) if (cites(blocks[mains[k]])) d = mains[k];
+  if (d < 0 && mains.length) d = mains[0];
   if (d < 0) for (let i = blocks.length - 1; i >= 0; i--) if (cites(blocks[i])) { d = i; break; }
+  // a differential check listed before the baseline compares nothing yet: read as absent (B == D — every task after the baseline
+  // waits for it, nothing before it is held); port-verify names the order (early: its index)
+  if (d >= 0 && d < b) return { b, d: b, early: d };
   return { b, d };
 }
 // the anchors, distinct, in file order
@@ -52,7 +63,9 @@ function evidenceView(blocks, evidence, rule) {
   const ev = isRecord(evidence) ? evidence : {};
   const dups = new Set(duplicateTaskNumbers(blocks));
   return { rec: (x) => ownEvidence(ev, x, dups.has(x.number)), open: (x) => {
-    if (!x.done) return false;
+    // a [PORT] task without a runnable _Verify:_ (taskMarkers drops a [slot]) never opens the fence: a note ticks it, and taskVerification
+    // passes a verify-less task on a note (with one, no reason means a passing run of it)
+    if (!x.done || !taskMarkers(x).verify.length) return false;
     const v = taskVerification(ev, x, dups.has(x.number), rule);
     return !v.reason && !v.nothingToVerify;
   } };
@@ -94,20 +107,42 @@ function portHeldNumbers(dir, kind, tracks, blocks, evidence, rule) {
   const closed = anchorList(b, d).find((i) => !view.open(blocks[i]));
   return closed === undefined ? new Set() : new Set(blocks.slice(closed + 1).map((x) => x.number));
 }
+// The next task with the fence applied (1.36 review 1 — spec_next_task, next_action, the status line): taskSchedule's, the tasks the
+// fence holds passed over → { sch: taskSchedule's result, held: null | { number: the first open task it passed over, heldBy, anchor:
+// the first of them, ticked: that anchor is ticked (unverified: only its run opens the fence), runnable: it has a runnable _Verify:_,
+// hold: the numbers the fence holds (next --batch never adds one) } }.
+function portSchedule(dir, kind, tracks, blocks, evidence, rule) {
+  const sch = taskSchedule(blocks);
+  if (!sch.next || !portOn(kind, tracks)) return { sch, held: null };
+  const { b, d } = portAnchors(blocks, readIfExists(path.join(dir, "requirements.md")));
+  const view = evidenceView(blocks, evidence, rule);
+  const closed = b < 0 ? [] : anchorList(b, d).filter((i) => !view.open(blocks[i]));
+  const by = closed.filter((i) => i < blockPosition(blocks, sch.next));
+  if (!by.length) return { sch, held: null };
+  const a = blocks[by[0]], hold = new Set(blocks.slice(by[0] + 1).map((x) => x.number));
+  return { sch: taskSchedule(blocks, hold),
+    held: { number: sch.next.number, heldBy: by.map((i) => blocks[i].number), anchor: a.number, ticked: a.done, runnable: taskMarkers(a).verify.length > 0, hold } };
+}
 
 // Is the plan's fence complete: both anchors there — two tasks, the baseline listed first —, each with a runnable _Verify:_
-// (taskMarkers drops a [slot])? → { ok, both, b, d, noVerify: [n…] }
+// (taskMarkers drops a [slot])? → { ok, both, b, d, early, noVerify: [n…] } (early: a differential check listed before the baseline)
 function portPlan(blocks, reqText) {
-  const { b, d } = portAnchors(blocks, reqText);
+  const { b, d, early } = portAnchors(blocks, reqText);
   const noVerify = anchorList(b, d).filter((i) => !taskMarkers(blocks[i]).verify.length).map((i) => blocks[i].number);
   const both = b >= 0 && d > b;
-  return { ok: both && !noVerify.length, both, b, d, noVerify };
+  return { ok: both && !noVerify.length, both, b, d, early, noVerify };
+}
+// port-verify's detail for an incomplete fence: a differential check listed before the baseline, no pair of anchors, an anchor
+// without a runnable _Verify:_
+function planGap(p, blocks, lng) {
+  const P = i18n.msg(lng).port;
+  return p.early != null ? P.verifyOrder(blocks[p.early].number, blocks[p.b].number) : !p.both ? P.verifyMissing : P.noVerify(numList(p.noVerify, lng));
 }
 // The tasks approval's probe at size m / l (designReuseGated) — [[ok, detail]], [] elsewhere.
 function portPlanProbe(blocks, reqText, kind, tracks, size, lng) {
   if (!portOn(kind, tracks) || !designReuseGated(kind, size)) return [];
-  const p = portPlan(blocks, reqText), P = i18n.msg(lng).port;
-  return [[p.ok, !p.both ? P.verifyMissing : P.noVerify(numList(p.noVerify, lng))]];
+  const p = portPlan(blocks, reqText);
+  return [[p.ok, planGap(p, blocks, lng)]];
 }
 // doctor's port-verify (phase 5) over the ACTIVE tasks → { status, detail }. The fence incomplete (portPlan): a FAIL at size m / l
 // (the approval refuses it) unless the tasks are approved already (then a warn — never a phase failed retroactively), a warn at s /
@@ -118,7 +153,7 @@ function portPlanCheck(blocks, reqText, kind, size, approved, lng) {
   const P = i18n.msg(lng).port;
   const p = portPlan(blocks, reqText);
   if (!p.ok) {
-    const detail = (!p.both ? P.verifyMissing : P.noVerify(numList(p.noVerify, lng))) + (approved ? " " + P.approvedAlready : "");
+    const detail = planGap(p, blocks, lng) + (approved ? " " + P.approvedAlready : "");
     return { status: designReuseGated(kind, size) && !approved ? "fail" : "warn", detail };
   }
   const B = blocks[p.b].number, warns = [];
@@ -150,6 +185,10 @@ const runsOf = (rec) => (!isRecord(rec) ? [] : Array.isArray(rec.history) && rec
 // a run that ticks its task: exit 0 — an _Expect: fail_ run (expected "fail"): a red one
 const ticking = (r) => r.exitCode != null && (r.expected === "fail" ? r.exitCode !== 0 : r.exitCode === 0);
 const firstPass = (rec) => earliest(runsOf(rec).filter(ticking).map((r) => ms(r.at)));
+// an anchor's first pass, as the fence audit reads it: its first passing run on record — unknown once its bounded history is full (the
+// runs before the window, its true first pass among them, are gone: -Infinity, no task is flagged for being ticked before it; one with
+// no record of when still is) — re-running an anchor (the brief asks it after each improvement) never flags honest work
+const anchorPass = (rec) => (runsOf(rec).length >= EVIDENCE_HISTORY ? -Infinity : firstPass(rec));
 // when a done task was first ticked: its first ticking run, else its note, else its tick (NaN: no record of when — a checkbox
 // edited by hand)
 function firstTick(rec, tick) {
@@ -181,7 +220,7 @@ function portRunState(blocks, reqText, evidence, ticks, rule) {
     if (later.length) recheck = { d: blocks[d].number, tasks: later };
   }
   const anchors = anchorList(b, d);
-  const passed = new Map(anchors.map((i) => [i, firstPass(view.rec(blocks[i]))]));
+  const passed = new Map(anchors.map((i) => [i, anchorPass(view.rec(blocks[i]))]));
   const fence = [];
   blocks.forEach((x, i) => {
     if (!x.done) return;
@@ -206,5 +245,14 @@ function portFinishRecheck(blocks, reqText, evidence, ticks, rule, lng, slug) {
   const r = portRunState(blocks, reqText, evidence, ticks, rule);
   return r && r.recheck ? i18n.msg(lng).port.recheck(r.recheck.d, numList(r.recheck.tasks, lng), slug) : null;
 }
+// next_action's and the status line's step before the finish (1.36 review 1): that blocker pending → { d, text } (re-run the
+// differential check first, then the project checks — the re-run is task activity), or null
+function portRecheckNext(blocks, reqText, evidence, ticks, rule, lng, slug) {
+  const r = portRunState(blocks, reqText, evidence, ticks, rule);
+  return r && r.recheck ? { d: r.recheck.d, text: i18n.msg(lng).port.naRecheck(r.recheck.d, numList(r.recheck.tasks, lng), slug) } : null;
+}
+// Does a plan draw the fence at all (a baseline anchor)? — spec_import warns when an imported tasks.md of a +port feature doesn't.
+const portAnchored = (blocks, reqText) => portAnchors(blocks, reqText).b >= 0;
 
-module.exports = { portOn, portTask, portHeldNumbers, portPlanProbe, portPlanCheck, portRunChecks, portFinishRecheck, __link };
+module.exports = { portOn, portTask, portHeldNumbers, portSchedule, portPlanProbe, portPlanCheck, portRunChecks, portFinishRecheck, portRecheckNext,
+  portAnchored, __link };

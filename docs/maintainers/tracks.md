@@ -301,12 +301,12 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
 - **Two task headings.** Its `TRACK_TASK_PLAN` entries carry `lead: true` (the baseline — `text.trackTasks.port.leadHeading`)
   and `implements` / `verify` slot names (`text.trackTasks.port.slots`): `LAYOUTS.tasks` renders the lead part FIRST (before
   Setup; at size s before the story) and the main part with the other blocks; `trackTasks` with no `part` renders both, the
-  lead first (spec_add_track); `withTrackBlocks` puts the lead section before a project template's first task section
-  (`splitLeadSection`, `beforeFirstTaskSection` — templates-imports-exports.md). `renderTrackTaskHeadings` collects EVERY
+  lead first (spec_add_track); `withTrackBlocks` puts the lead section before the outermost level-2 section holding a project
+  template's first task, else appends it (`splitLeadSection`, `beforeFirstTaskSection` — templates-imports-exports.md). `renderTrackTaskHeadings` collects EVERY
   heading of a track's block, so both are +port's (activeTasks drops both once it is off); every other track has one.
 - **The fence** — engine/port.js (gates-and-approvals.md → Bugfix and finish): the anchors are read from the plan — the lead
-  heading is the one naming Behaviour Baseline's strict names, the other is the differential check's — never a list of
-  heading texts.
+  heading is the one naming Behaviour Baseline's strict names, the other is the differential check's (its last task citing a
+  `[PORT]` criterion) — never a list of heading texts.
 - **No generic or context tier, no aliases, no overlap entry.** The cues: a network port and a schema migration (classifier
   section below).
 
@@ -940,6 +940,11 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   ("Port the API", "Rewrite the frontend in React", "Migrate our Spark jobs to Databricks…", a deprecation's migration guide,
   a plan's "the migration runs twice", two feature names), 112 literals and 21,801 frames — 30 literals lost the "substantial"
   note to it (that note needs no possible one). The placeholder corpus: 68 track sets, 1,723 texts (T10's bound 1,650 → 1,800).
+- **1.36.0 review 1** — PORT-3: a project template's tasks no longer land under the baseline's heading (the lead section goes
+  before the outermost level-2 section, else appended). PORT-4: D is its heading's last task citing a `[PORT]` criterion. PORT-6:
+  the classifier unchanged — the network cue reads a window around the word ("open port 8443", "port 80", "the TCP port"), so
+  "Update the port in docker-compose.yml", "a port field", "the port of Lisbon" still get the "Possible +port" note; widening the
+  cue was left out (a cue change needs the differential), the release notes say what the window covers.
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.

@@ -1,7 +1,7 @@
 "use strict";
 // The built-in +port track (1.36 — port first, improve later): registry, classifier (suggest-only verbs, technique names, the network /
-// schema cues), scaffolds (EN / PT / ES / pt-BR, sizes, +tdd — the baseline first), add_track / remove, a project template, the bugfix refusal,
-// legacy packs, views.
+// schema cues), scaffolds (EN / PT / ES / pt-BR, sizes, +tdd — the baseline first), add_track / remove, a project template (1.36.0 review 1:
+// Kiro-like, nested, under a level-1 heading), spec_import's no-fence warning, the bugfix refusal, legacy packs, views.
 
 const fs = require("fs");
 const path = require("path");
@@ -113,6 +113,30 @@ exports.run = async ({ ok, all, payload, rpc, S, tmp, require }) => {
     ]);
   }
 
+  { // 1.36 review 1 (PORT-7): spec_import of a source WITH tasks.md replaces the scaffold's plan — a +port feature whose imported plan has no
+    // baseline and no differential check holds nothing: a warning names it and the way to get both (another marker track: no such warning; a
+    // source without tasks.md keeps the scaffold's anchors, a source plan under the template's headings draws them: none)
+    const PLAIN = "# Implementation Plan\n\n- [ ] 1. Write the Go reader\n  - _Requirements: 1.1_\n- [ ] 2. Remove the Python importer\n  - _Requirements: 1.1_\n";
+    const [lead, main] = heads("en");
+    const FENCED = `# Implementation Plan\n\n${lead}\n\n- [ ] 1. Record the old importer's rows\n  - _Requirements: 1.1_\n\n${main}\n\n- [ ] 2. Compare the Go reader's rows with them\n  - _Requirements: 1.1_\n`;
+    const imw = (name, tr, tasks) => {
+      const p = d("imp-fence-" + name);
+      fs.mkdirSync(path.join(p, ".kiro", "specs", "ledger"), { recursive: true });
+      fs.writeFileSync(path.join(p, ".kiro", "specs", "ledger", "requirements.md"), "### Requirement 1\n\n**User Story:** As an accountant, I want the ledger importer moved to Go.\n\n" +
+        "#### Acceptance Criteria\n\n1. WHEN the new importer reads a ledger file THEN the system SHALL produce the same rows as the old one\n");
+      if (tasks) fs.writeFileSync(path.join(p, ".kiro", "specs", "ledger", "tasks.md"), tasks);
+      S.initProject(p, [], "en");
+      return S.importSpec(p, "kiro", ".kiro/specs/ledger", { tracks: [tr] });
+    };
+    const W = S.msg("en").importSpec.wPortNoFence("ledger");
+    const port = imw("port", "port", PLAIN), data = imw("data", "data", PLAIN), kept = imw("kept", "port", null), fenced = imw("fenced", "port", FENCED);
+    all("1.36 review 1 (PORT-7): an imported tasks.md of a +port feature with no baseline / differential check warns (the fence holds nothing, add-track's way to both); +data's import, a +port import keeping the scaffold's plan and one whose plan sits under the template's headings don't (got " +
+      js([port.warnings, data.warnings, kept.warnings, fenced.warnings]) + ")", [
+      () => port.ok && port.warnings.includes(W), () => data.ok && !data.warnings.some((w) => /\+port/.test(w)), () => kept.ok && !kept.warnings.includes(W),
+      () => fenced.ok && !fenced.warnings.includes(W),
+    ]);
+  }
+
   { // sizes: s — the baseline task 1, the core task 2, the differential check 3; Deferred Improvements left out (extended) with the comment;
     // m — the baseline first, before Setup
     const p = d("sizes");
@@ -171,6 +195,41 @@ exports.run = async ({ ok, all, payload, rpc, S, tmp, require }) => {
       () => L.slice(L.indexOf(lead) + 1, L.indexOf("## Phase 1 — Build")).every((l) => !/^#/.test(l)) && L[L.indexOf("## Phase 1 — Build") - 1] === "",
       () => L.indexOf("Team notes.") < L.indexOf(lead), () => L.indexOf(main) > L.indexOf("## Phase 2 — Ship"), () => taskLine(t, 4) === L.indexOf(main) + 1,
       () => next.next && next.next.number === 3,
+    ]);
+  }
+
+  { // 1.36 review 1 (PORT-3): the baseline's section goes before the OUTERMOST level-2 section holding the template's first task (a ## Phase over
+    // ### headings); none holds it — Kiro's tasks right under the title, a level-1 heading closing an earlier ## — it is appended (port-verify:
+    // baselineLate). Removing +port leaves every template task active; an import with the Kiro-like template keeps their references
+    const [lead] = heads("en");
+    const tpl = (name, body, imp) => {
+      const p = d("tpl-" + name);
+      S.initProject(p, ["core"], "en");
+      fs.mkdirSync(path.join(p, ".specs", "templates"), { recursive: true });
+      fs.writeFileSync(path.join(p, ".specs", "templates", "tasks.md"), body);
+      if (imp) {
+        fs.mkdirSync(path.join(p, ".kiro", "specs", "ledger"), { recursive: true });
+        fs.writeFileSync(path.join(p, ".kiro", "specs", "ledger", "requirements.md"), "### Requirement 1\n\n**User Story:** As an accountant, I want the ledger importer moved to Go.\n\n" +
+          "#### Acceptance Criteria\n\n1. WHEN the new importer reads a ledger file THEN the system SHALL produce the same rows as the old one\n2. IF a row is malformed THEN the system SHALL reject it with the same error\n");
+        const r = S.importSpec(p, "kiro", ".kiro/specs/ledger", { tracks: ["port"] });
+        return { r, t: r.ok ? rd(p, ".specs", "ledger", "tasks.md") : "" };
+      }
+      const f = S.createFeature(p, "Templated " + name, ["port"], "", undefined, "en");
+      const t = rd(f.dir, "tasks.md");
+      S.removeTrack(p, f.slug, "port");
+      return { t, L: t.split("\n"), left: S.statusFeature(p, f.slug).tasks.list.map((x) => x.number).join() };
+    };
+    const kiro = tpl("kiro", "# Implementation Plan\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1_\n- [ ] 2. Ship it\n  - _Requirements: US-1.AC-2_\n");
+    const nest = tpl("nest", "# Tasks: {{name}}\n\n## Phase 1\n\n### Setup\n- [ ] 1. Set it up\n\n### Ship\n- [ ] 2. Ship it\n\n## Phase 2\n- [ ] 3. Deploy it\n");
+    const h1 = tpl("h1", "## Notes\n\nTeam notes.\n\n# Plan\n\n- [ ] 1. Build it\n- [ ] 2. Ship it\n");
+    const im = tpl("import", "# Implementation Plan\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1_\n- [ ] 2. Ship it\n  - _Requirements: US-1.AC-2_\n", true);
+    const at = (x, l) => x.L.indexOf(l);
+    all("1.36 review 1 (PORT-3): a template's tasks never land in the baseline's section — Kiro-like (under the title) and under a level-1 heading it is appended, under a ## Phase holding ### headings it goes before that ## Phase; removing +port leaves every template task active; the import keeps their references (got " +
+      js([kiro.L.filter((l) => /^#/.test(l)), kiro.left, nest.L.filter((l) => /^#/.test(l)), nest.left, h1.left, im.r && im.r.warnings]) + ")", [
+      () => kiro.L[0] === "# Implementation Plan", () => at(kiro, lead) > at(kiro, "- [ ] 2. Ship it"), () => kiro.left === "1,2",
+      () => at(nest, lead) < at(nest, "## Phase 1") && at(nest, lead) > at(nest, "# Tasks: Templated nest"), () => nest.left === "1,2,3",
+      () => h1.L[0] === "## Notes" && at(h1, lead) > at(h1, "- [ ] 2. Ship it"), () => h1.left === "1,2",
+      () => im.r.ok && /- \[ \] 1\. Build it\n {2}- _Requirements: US-1\.AC-1_/.test(im.t) && /- \[ \] 2\. Ship it\n {2}- _Requirements: US-1\.AC-2_/.test(im.t),
     ]);
   }
 

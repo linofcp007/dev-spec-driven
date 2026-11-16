@@ -40,7 +40,7 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
 let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the tasks gate, the execution gate, its live views)
 let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
 let designSystemRegistry, designSystemCheck, designSystemGated; // quality.js — the design-system registry's check (1.35)
-let portOn, portPlanCheck, portPlanProbe, portRunChecks; // port.js — +port's fence (1.36)
+let portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext; // port.js — +port's fence (1.36; the last two: review 1)
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.reviewModels)
 let fastCheckOf; // evidence.js — the fast check (1.36, meta.fastCheck): doctor's fast-check warn
@@ -72,7 +72,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
   designSystemRegistry, designSystemCheck, designSystemGated, reviewModelsSetting, fastCheckOf, guardLevel, protectedTestsDoctor,
-  portOn, portPlanCheck, portPlanProbe, portRunChecks } = E); }
+  portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -467,11 +467,14 @@ const NEXT_STEPS = [
   { id: "fix", when: (x) => x.fails.length > 0, run: (x) => { x.step = "fix"; x.recommendation = x.nx.fixChecks(x.fails.map((c) => c.id).join(", "), x.slug); } },
   { id: "tasks", when: () => true, run: tasksStep },
 ];
-// (5) all tasks done (step "finish"): a ticked task without passing evidence → verify it (spec_finish would refuse), else drift since a
-// finish → decide, else spec_finish again (its baseline is stale), else — finished — project checks without a passing run since the
-// last task activity → verify (res.suite), else finished. The first whose `when(x, fin)` holds; none: finish it.
+// (5) all tasks done (step "finish"): a ticked task without passing evidence → verify it (spec_finish would refuse), else +port's
+// differential check not passed again since a task after it → verify (re-run it — before the project checks: the re-run is task
+// activity, so checks run first would run twice), else drift since a finish → decide, else spec_finish again (its baseline is stale),
+// else — finished — project checks without a passing run since the last task activity → verify (res.suite), else finished. The first
+// whose `when(x, fin)` holds; none: finish it.
 const FINISH_STEPS = [
   { id: "verify", when: (x, f) => f.vs.unverified.length > 0, run: verifyStep },
+  { id: "recheck", when: (x, f) => !!f.recheck, run: (x, f) => { x.step = "verify"; x.recommendation = f.recheck.text; } },
   { id: "drift", when: (x, f) => !!(f.dr && f.dr.drifted), run: driftStep },
   { id: "refinish", when: (x, f) => !!f.stale, run: refinishStep },
   { id: "verify-suite", when: (x, f) => !!(f.fin && f.suiteGap.length), run: verifySuiteStep },
@@ -549,8 +552,17 @@ function tasksStep(x) {
   const { ctx, nx, slug, lng, st } = x;
   const activeText = ctx.tasksActive;
   const tasks = parseTasks(activeText);
-  const sch = taskSchedule(taskBlocks(activeText || "")); // the next task whose _Depends:_ are all done
+  const blocks = taskBlocks(activeText || "");
+  // the next task whose _Depends:_ are all done — never one +port's fence holds (portSchedule, spec_next_task's rule)
+  const { sch, held } = portSchedule(x.dir, x.kind, x.tracks, blocks, st.evidence, evidenceRule(x.projectDir));
   const next = sch.next;
+  // 1.36 review 1: nothing else can start while the [PORT] task holding the rest is ticked but not verified — its run opens the fence
+  // (the step named the held task: implement → refused → implement)
+  if (!next && held && held.ticked) {
+    x.step = "verify";
+    x.recommendation = i18n.msg(lng).port.naHeld(held.number, held.anchor, slug, held.runnable);
+    return;
+  }
   // Open tasks, none of which can start (a cycle, a _Depends:_ naming no task): fix the dependencies — never "finish".
   const stuck = !next && tasks.some((t) => !t.done);
   x.step = next ? "implement" : stuck ? "fix" : tasks.length ? "finish" : "tasks";
@@ -576,7 +588,9 @@ function tasksStep(x) {
   // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
   // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
   const vs = ctx.vs;
-  const f = { activeText, stale, fin, dr, vs, day: (fin && dayOf(fin.at)) || "?", suiteGap: fin && !vs.unverified.length ? ctx.suite.missing : [] };
+  const f = { activeText, stale, fin, dr, vs, day: (fin && dayOf(fin.at)) || "?", suiteGap: fin && !vs.unverified.length ? ctx.suite.missing : [],
+    // +port: spec_finish's port-recheck blocker pending → { d, text } (1.36 review 1)
+    recheck: portOn(x.kind, x.tracks) ? portRecheckNext(blocks, ctx.reqs, vs.evidence, st.ticks, evidenceRule(x.projectDir), lng, slug) : null };
   const s = FINISH_STEPS.find((e) => e.when(x, f));
   if (s) s.run(x, f);
   // 1.36 a review panel (meta.reviewModels): the branch review on every model comes FIRST — before the optional simplify pass and
@@ -1511,8 +1525,10 @@ function statusTestsGate(pdir, dir, tracks, reads) {
 //   every phase approved: a FORCED approval whose gate still fails (approvalChecks re-run for the forced phases — next_action's
 //     doctor step for a forced approval), or a bugfix whose bug.md → Root Cause is still empty (the doctor's root-cause failure; the
 //     bugfix gate refuses every task after the one that writes it) → fix;
-//   tasks: none → tasks · the next startable one → implement · none startable → blocked;
-//   every task done: a tick not verified → verify · no finish baseline → finish · a baseline older than a change (staleFinish,
+//   tasks: none → tasks · the next startable one (+port: never one its fence holds) → implement · none startable → blocked (+port: the
+//     [PORT] task holding the rest ticked but not verified → verify it);
+//   every task done: a tick not verified → verify · +port's differential check not passed again since a task after it → verify it ·
+//     no finish baseline → finish · a baseline older than a change (staleFinish,
 //     state only — the _Implements:_ walk skipped) → finish (again) · a project check without a passing run since the last task
 //     activity (suiteStatus without the code hash) → verify · the execution sign-off missing or older than a change → sign-off ·
 //     else finished — the drift of the recorded files is NOT checked (next_action's `drift`), so the line never says "clean".
@@ -1572,10 +1588,14 @@ function statusNext(pdir, f, kind, lng, unverified, reads) { // reads: statusLin
   }
   if (!f.blocks.length) return { step: "tasks" };
   if (open.length) {
-    const nx = taskSchedule(f.blocks).next;
-    return nx ? { step: "implement", task: nx.number } : { step: "blocked" };
+    // never a task +port's fence holds — the [PORT] task holding the rest ticked but not verified: verify it (next_action's step)
+    const { sch, held } = portSchedule(f.dir, kind, f.tracks, f.blocks, st.evidence, evidenceRule(pdir));
+    return sch.next ? { step: "implement", task: sch.next.number } : held && held.ticked ? { step: "verify", task: held.anchor } : { step: "blocked" };
   }
   if (unverified.length) return { step: "verify", task: unverified[0] };
+  // +port: the differential check not passed again since a task after it (spec_finish's port-recheck) → re-run it first (next_action's)
+  const rc = portOn(kind, f.tracks) ? portRecheckNext(f.blocks, readIfExists(path.join(f.dir, "requirements.md")), st.evidence, st.ticks, evidenceRule(pdir), lng, f.slug) : null;
+  if (rc) return { step: "verify", task: rc.d };
   const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
   if (!fin) return { step: "finish" };
   if (staleFinish(pdir, st, "", { newFiles: false })) return { step: "finish", again: true };

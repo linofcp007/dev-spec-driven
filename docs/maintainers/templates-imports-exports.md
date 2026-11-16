@@ -28,10 +28,12 @@ is in History at the end.
   track (its marker on a real heading, the localized Testability Notes, its task-block heading; a test plan citing its
   criteria). Every other artifact, the bugfix and spike variants included, is written as the template says. A task block of
   TWO sections (+port, 1.36 — its baseline, then its differential check) puts its first one BEFORE the template's first task
-  section (`splitLeadSection` / `beforeFirstTaskSection`: before that section's heading, level ≥ 2 — or the first task itself
-  when no heading holds it) and appends the rest: nothing changes the code the baseline covers before it is recorded. Its tasks
-  keep the numbers after the template's own; next_task still serves the baseline first (tasks order is by section in file
-  order).
+  section (`splitLeadSection` / `beforeFirstTaskSection`: before the OUTERMOST level-2 heading holding the first task — a `##
+  Phase` over `### Story` headings —; appended when no level-2 heading holds it — tasks right under the title, Kiro's layout, or
+  a level-1 heading closing an earlier `##` —, where put before them it would take the template's tasks in: doctor's
+  `port-verify` then warns baselineLate) and appends the rest: nothing changes the code the baseline covers before it is
+  recorded. Its tasks keep the numbers after the template's own; next_task still serves the baseline first (tasks order is by
+  section in file order).
 - **Placeholder corpus:** `projectTemplateSets()` adds the templates' bracket texts, code-span slots and task lines (bug.md's
   join `bugTemplateSlots()`), so an untouched custom scaffold reads placeholder to doctor, approve and next_action. Scoped
   to the engine call's
@@ -83,7 +85,10 @@ is in History at the end.
   escaped before its slug is taken); every requirements.md line is comment-inert (`commentInert`, `inertBlock`); the
   track design and task blocks follow the body through `appendSpecText` (an open fence closed first); an archived twin
   slug is a warning (`createArchivedTwin`); the roadmap is refreshed ONCE, at the end (createFeature's
-  `{ refresh: false }`).
+  `{ refresh: false }`). A source's tasks.md replaces the scaffold's plan, and with it a built-in marker track's template tasks
+  (only a track pack's are re-added): for +port, an imported plan with no anchor (port.js `portAnchored`) warns
+  `importSpec.wPortNoFence` — the fence holds nothing, and add_track adds nothing to a track already on (its way: `add-track
+  <f> port --remove`, then `add-track <f> port`).
 - **No usable title** (a parser's `nameHint` slugifying to nothing, `# Добавить тёмную тему`) → its `nameFallback` (the
   file's stem, the folder, fp.id); inline text has none → `importSpec.noUsableTitle`.
 - **Dry run** (`dryRun: true`, CLI `--dry-run`): `importRun` inside `withDryRun` (conventions.md → The dry-run sink) — the
@@ -263,6 +268,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 ### Project templates
 - **1.36** — a two-section track block (+port) splits: its lead section before the template's first task section, the
   rest appended (a template's tasks.md had the baseline after Polish, so baseline-first was lost for every project with one).
+- **1.36.0 review 1 (PORT-3)** — the lead section went before the NEAREST heading of level ≥ 2 above the first task, else
+  before the task itself: a Kiro-like template (tasks under the title) had all its tasks under the baseline's heading, a `##
+  Phase` / `### Story` one its first phase's — removing +port hid them, and spec_import fitted their `_Requirements:_` to the
+  `[PORT]` criteria. Now the outermost level-2 section, else appended.
 - **1.14** — `.specs/templates/` introduced: a team's own scaffolds over the built-in i18n ones. `templates` and `exports`
   became reserved slugs; a feature created before 1.14 under either name stays a feature (the legacy exception).
 - **1.15** — `tracks` joined `RESERVED_SLUGS` (the project's track packs), with the same exception.
@@ -279,6 +288,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.25** — steering imported from Kiro / Cursor; the steering logic itself was left untouched.
 
 ### Import sources and the brownfield scan
+- **1.36.0 review 1 (PORT-7)** — a +port import of a source with tasks.md had no baseline, no differential check and no
+  `[PORT]` criterion (as +data has no `[DATA]` one — the existing pattern for built-in marker tracks), so no fence, and only
+  doctor's `port-verify` warned: `wPortNoFence` (a warning only; the plan stays the source's).
 - **1.14** — `spec_import`, with the same guarantees for every source. The section ("Import sources and flows") also held
   the design-first Flows, since moved to gates-and-approvals.md → Flows.
 - **1.17 (F)** — the `fluidplan` source, read at fluidplan 755d1b2 (EN / FR labels). **1.17 F review** — the plan's text is
