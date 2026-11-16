@@ -289,7 +289,8 @@ own git worktree, so they never share a working tree. Adapted from superpowers' 
    on its own `task-N` branch.
 3. **Merge one at a time** into the feature branch (fast-forward or rebase — never a merge that rewrites
    the others' work). After EACH merge, run the full suite; a conflict or a red suite takes that task out
-   of the batch: re-run it sequentially on the updated branch.
+   of the batch: re-run it sequentially on the updated branch. With a fast check (`meta.fastCheck`), run it once on its
+   own after the merges, before the ticks: the merged files are new, so every tick would read `stale` without it.
 4. Review each task's diff as usual (its own review package), complete each with its own evidence.
 5. Never run a batch across a `**Checkpoint:**`, and never in parallel with +ai prompt tasks.
 
@@ -372,6 +373,12 @@ resume rule's trust in the ledger doesn't cover a grant.
   checks it. At the end `/spec-finish` needs a passing run of each since the last task activity, on the code as it is
   now — a run older than an edit of the implementing files reads `code-changed` (`spec_finish {evidence}` or
   `dev-spec finish <f> --run`).
+- **The fast check** (`roadmap.json → meta.fastCheck`, one of the project checks; the brief's `fastCheck` {check, command,
+  status} on a code task): its definition of done has the implementer run it ON ITS OWN after each small edit, fix what it
+  reports, end clean after the last edit and before the `_Verify:_`, and report it as ``Fast check `<command>`: N runs →
+  exit 0`` — the command in a code span, so its exit code is never read as the `_Verify:_` run's (the SubagentStop gate).
+  `spec_complete_task` returns `fastCheck.status` at the tick (clean · stale · failed · missing · unknown — a note, never
+  a refusal): put it on the task's ledger line. `references/verification.md` → The fast check.
 - **+saas:** tasks with `_Emits metrics:_` must show the metric emitting in the report. The hot-path
   load test and observability validation stay feature-level "done" checks (run them at the end, as in
   inline Phase 6).

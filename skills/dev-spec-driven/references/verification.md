@@ -243,6 +243,48 @@ Task runs prove tasks; a feature is done when the **whole project's checks** pas
 
 Without `meta.checks` nothing changes: `/spec-finish` lists "run the full suite" among the fresh checks to confirm.
 
+### The fast check (`meta.fastCheck`, warn only)
+
+One project check — a type check or a linter that answers in seconds — named as the check to run **after each small
+edit**, so a type error is fixed the moment it appears, not at the `_Verify:_` or in review.
+
+- **Set it in one call:** `spec_init {checks: {"typecheck": "npx tsc --noEmit"}, fastCheck: "typecheck"}` (CLI `dev-spec
+  init --check typecheck="npx tsc --noEmit" --fast-check typecheck`); `fastCheck: ""` / `--fast-check off` switches it off,
+  and removing its check switches it off too. Refused before anything is written: a name that is no check after the call,
+  dev-guardian's gate (minutes, not seconds), a command that rewrites files (`--fix`, `--write`, a formatter without
+  `--check` — it would change the code and the tests under the task). A check named `off` or `none` can't be the fast check.
+- **Pick one that passes on the base branch:** it stays a project check, so `spec_finish` needs it passing on the final
+  code like the others — a linter that is already red on main gives no signal and blocks every finish.
+- **Offered, never set:** `init` and `spec_upgrade` return `fastCheckOffer` {name, command, from, note} when none is set
+  and the root manifests suggest one — a `typecheck` / `type-check` / `check-types` / `tsc` script of package.json (run with
+  the lockfile's runner), `npx tsc --noEmit` when tsconfig.json exists AND package.json lists typescript (else npx would
+  fetch a compiler), `cargo check`, `go vet ./...`, `ruff check .` (`[tool.ruff]`, ruff.toml), `mypy .` (`[tool.mypy]`,
+  mypy.ini). Never a lint script.
+- **The loop:** `spec_next_task` returns `fastCheck {check, command}` for a code task (one whose `_Implements:_` names a
+  file; never a spike's), the brief `fastCheck {check, command, status}` and a definition-of-done line: edit → run it **on
+  its own** (a chained `npx tsc --noEmit && npm test` is no run of it — the log matches the check as one command) → fix →
+  repeat, clean (exit 0) after the LAST edit, before the `_Verify:_`. A red (`_Expect: fail_`) task's test must still pass
+  it: it fails on an assertion or "not implemented", never on a type error — add the stub it calls.
+- **What is seen:** in Claude Code the observe hook logs each run in `.specs/.execution/observed.jsonl` (the Bash tool; the
+  PowerShell tool only with an explicit exit code); over an MCP-only client nothing is logged — `dev-spec done <feature> <n>
+  --run` runs it for you.
+- **At the tick:** `spec_complete_task` on a code task it ticks returns `fastCheck {check, status, runs, clean}` — status
+  (stable): `clean` · `stale` (a planned file of the feature — its tasks' `_Implements:_` files — is newer than the latest
+  run) · `failed` (the latest run failed) · `missing` (no run of it logged) · `unknown` (no harness log at all: no note).
+  `stale` / `failed` / `missing` add a note; the tick is never refused. `runs` / `clean` count its runs since the
+  feature's previous tick; the snapshot is stored on the tick's run (`fast`).
+- **`done --run`** runs it FIRST (`$ <command>   (fast check)`) while it isn't clean since the last edit — not when the
+  task's `_Verify:_` is the fast command itself (that run counts) — and logs it at its START (an edit made while it ran
+  reads stale); a failure or a run that couldn't happen is a warning, the `_Verify:_` runs anyway. The shell rules of
+  `finish --run` apply to it (POSIX syntax under cmd.exe, a pwsh script under a POSIX shell: refused before anything runs).
+- **Metrics:** `spec_metrics {name}` → `fastCheck {check, runs, clean, cleanRate, ticks, ticksClean}` (null with no tick
+  that recorded it); the project view counts the ticks (`fastTicks`, `fastTicksClean`) — never run totals (every feature
+  reads the same log).
+- **Known limits:** freshness is a file date (a clone or a checkout re-dates every file: a stale note, never a refusal); a
+  hook-logged run carries the time it ENDED, so an edit made while it ran reads clean (done --run stamps its start); test
+  files a task names only by T-ID are outside the planned files; after merging a parallel wave the merged files are new —
+  run the fast check once before the ticks.
+
 ### dev-guardian's gate — the check `guardian`
 
 With the sibling plugin **dev-guardian** (3.2.1 or later) installed, `spec_init {guardian: true}` (CLI `dev-spec init

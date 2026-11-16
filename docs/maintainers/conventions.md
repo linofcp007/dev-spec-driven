@@ -108,6 +108,9 @@ History at the end.
 - **`meta.reviewModels` (1.36) takes the default rule on purpose** — an ORDERED list (the first model leads), at most 3: never
   a set merge (a union of two panels could hold 4). One side changed it → that side; both changed it differently (another list,
   or off against a change) → a real conflict (cli/tests/16-conventions-merge-state.js).
+- **`meta.fastCheck` (1.36) is a plain value** (a check's name): the default rule — two different names conflict. A tick's
+  fast-check snapshot (`fast` {check, status, runs, clean}) is a RUN field (`runOf` keeps it): it travels with the run that wins
+  `evidence[n]`, no rule of its own.
 - **A real conflict** (anything else both sides changed differently — a meta scalar, an unknown key): ours kept, the conflict
   written INTO the file as a top-level `mergeConflicts` list (valid JSON; each once — `mergeCanon`), exit 1, and doctor fails
   `merge-conflicts` until someone picks the values and deletes the list. An unparseable side merges nothing (exit 1).

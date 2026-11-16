@@ -6,8 +6,8 @@ argument-hint: "init [tracks] [--lang en|pt|pt-BR|es] | guard on|off|scope | sta
 
 Args: $ARGUMENTS — the opt-in settings live in `.specs/roadmap.json → meta`; each call reports them back.
 
-**init `[tracks]`** — `spec_init {tracks, lang, guard?, checks?, approvalRoles?, stopCheck?, approvalGuard?, evidence?, reviewModels?}`
-(CLI `dev-spec init [tracks…] [--lang en|pt|pt-BR|es] [--check name="cmd"] [--roles …] [--approval-guard off|ask|deny] [--review-models …]`):
+**init `[tracks]`** — `spec_init {tracks, lang, guard?, checks?, approvalRoles?, stopCheck?, approvalGuard?, evidence?, fastCheck?, reviewModels?}`
+(CLI `dev-spec init [tracks…] [--lang en|pt|pt-BR|es] [--check name="cmd"] [--roles …] [--approval-guard off|ask|deny] [--fast-check <check>|off] [--review-models …]`):
 `.specs/steering/` with the files the tracks need — never over an existing file. Pass the user's `lang` (`pt` European,
 `pt-BR` Brazilian): every new feature inherits it. Settings, each only when the user wants it: `checks` — the project's
 check commands (`{"test": "npm test"}` — ask for the real ones, never guess), which `/spec-finish` then needs a passing
@@ -15,7 +15,10 @@ run of; `approvalRoles` — phases signed off per role; `stopCheck: false` — t
 `approvalGuard` `"ask"` / `"deny"` — an agent's approval asks the user or is refused; `evidence: "observed"` — only runs
 the harness saw count (suggest the approval guard with it); `guardian: true` (`--guardian`) — dev-guardian's gate as the
 check `guardian`, project-wide (every machine that finishes needs dev-guardian and its scanners): relay init's note — the
-user records the baseline now, on the base commit, and adds the `.gitignore` lines it names; `reviewModels`
+user records the baseline now, on the base commit, and adds the `.gitignore` lines it names; `fastCheck` (`--fast-check
+<check>|off`) — the check run on its own after each small edit (a type check that passes on the base branch: it stays a
+project check), named with its check in one call (`--check tc="npx tsc --noEmit" --fast-check tc`); relay init's
+`fastCheckOffer` when it gives one — never set it unasked; `reviewModels`
 (`--review-models opus,sonnet | diverse | off`) — a review panel: the branch review, converge and the gate critics once per
 model; relay init's note (each extra model costs a review dispatch). Then help fill each
 steering file with real content (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/steering-templates.md`). A team on branches: suggest the merge

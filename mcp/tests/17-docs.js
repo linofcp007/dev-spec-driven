@@ -725,6 +725,32 @@ exports.run = async ({
       Object.assign(Object.fromEntries(rows.map(([k, text, re]) => [k, () => re.test(text)])), { agentsUnaware: () => agents.length === 0 }));
   }
 
+  { // 1.36 the fast check (meta.fastCheck, warn only) — the loop is prose the agent follows: run it ALONE after each small edit, clean
+    // before the _Verify:_, the report line with the command in a code span; never described as a refusal
+    const rd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n").replace(/\s+/g, " ");
+    const ref = (f) => rd("skills", "dev-spec-driven", "references", f);
+    const ver = ref("verification.md"), sub = ref("subagent-execution.md"), impl = rd("agents", "spec-implementer.md");
+    const rows = [
+      ["SKILL.md: the one line", rd("skills", "dev-spec-driven", "SKILL.md"), /`meta\.fastCheck`: run it alone after each small edit; clean before `_Verify:_`\./],
+      ["verification: the section", ver, /### The fast check \(`meta\.fastCheck`, warn only\)/],
+      ["verification: one call", ver, /spec_init \{checks: \{"typecheck": "npx tsc --noEmit"\}, fastCheck: "typecheck"\}/],
+      ["verification: the statuses", ver, /`clean` · `stale` .*· `failed` .*· `missing` .*· `unknown`/],
+      ["verification: never refused", ver, /the tick is never refused/],
+      ["verification: base branch", ver, /\*\*Pick one that passes on the base branch:\*\*/],
+      ["subagent-execution: the report form", sub, /``Fast check `<command>`: N runs → exit 0``/],
+      ["subagent-execution: after a parallel merge", sub, /With a fast check \(`meta\.fastCheck`\), run it once on its own after the merges, before the ticks/],
+      ["spec-implementer: the loop", impl, /after each small edit run it \*\*on its own\*\* \(never chained/],
+      ["spec-implementer: the report line", impl, /``Fast check `npx tsc --noEmit`: 4 runs → exit 0``/],
+      ["spec-setup init", rd("commands", "spec-setup.md"), /`fastCheck` \(`--fast-check <check>\|off`\)/],
+      ["tooling-reference: spec_init", ref("tooling-reference.md"), /`fastCheck` \(1\.36 — the name of the project check run on its own after each small edit/],
+      ["tooling-reference: doctor", ref("tooling-reference.md"), /`fast-check` \(1\.36 — `meta\.fastCheck` names no project check/],
+      ...["README.md", "README.pt.md", "README.es.md"].map((f) => [f + ": spec_init's settings", rd(f), /\| `spec_init` \|[^|]*`fastCheck`/]),
+    ];
+    const refusal = [["verification", ver], ["subagent-execution", sub], ["spec-implementer", impl]].filter(([, t]) => /fast check[^.]{0,80}\b(?:refuses|blocks the tick)/i.test(t));
+    all("1.36 fast check: the prose — SKILL.md's line, verification.md's section (one call, the statuses, never a refusal, the base branch), subagent-execution's report form and parallel merge, spec-implementer's loop and report line, spec-setup, tooling-reference, the READMEs' spec_init row; nothing calls it a refusal (got " + JSON.stringify(refusal.map(([k]) => k)) + ")",
+      Object.assign(Object.fromEntries(rows.map(([k, text, re]) => [k, () => re.test(text)])), { noRefusal: () => refusal.length === 0 }));
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

@@ -179,7 +179,7 @@ calls the same engine:
 | Tool | Does |
 |---|---|
 | `spec_classify` | Phase 0: the tracks and a suggested size from a description (local keyword signals, EN / PT / ES — no model) |
-| `spec_init` | `.specs/` and the tracks' steering; project settings: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard`, `reviewModels` (the review panel) |
+| `spec_init` | `.specs/` and the tracks' steering; project settings: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard`, `fastCheck` (the check run after each edit), `reviewModels` (the review panel) |
 | `spec_create` | A feature for its tracks and `size` (`xs` = one `change.md`); `kind` bugfix · spike, `brownfield`, `flow: "design-first"`, `branch` |
 | `spec_import` | A Kiro, spec-kit or OpenSpec spec, a plan (Claude Code, Cursor, Codex ExecPlan, fluidplan) or BMAD docs as a feature — or Kiro steering / Cursor rules as steering; `dryRun` |
 | `spec_status` | A feature's kind, flow, tracks, phase, tasks and design sections; without `name`, every feature |

@@ -384,6 +384,42 @@ Engine: the `B5` block of `engine/evidence.js`.
   (PT "tarefa N", ES "tarea N"), and every task naming one of its T-IDs (`T-01` = `T-1`) or AC IDs — unless it names only another
   feature. +tdd red-first: a `_Makes green: T-xx_` task cited before the first commit touching a test file naming T-xx warns; a full
   `--max` window makes an unknowable order `outside-window`.
+- **The fast check (1.36, warn only)** — `roadmap.json → meta.fastCheck`: the NAME of one `meta.checks` entry the agent runs on its
+  own after each small edit (evidence.js, beside the project checks). **Set:** `spec_init {fastCheck}` / `init --fast-check
+  <name|off>` (`fastCheckInput`: `""` / off / none delete it — a check named off / none can't be one; a non-string is refused
+  before any write, `invalid-arguments` [fastCheck]); `fastPlan` runs under the roadmap lock after `checksPlanError`, against
+  `nc.merged` (the checks THIS call leaves — `--check tc="…" --fast-check tc` is one call): a name that is no valid check, the
+  guardian check (`isGuardianCheck`) or a command that rewrites files (`fixerCommand`: `--fix`, `--write`, a `*fmt` word without
+  `--check` / `-check`) is refused, nothing written; the stored one is checked again when this call replaces its check's command
+  and goes when this call removes its check (`cleared` note). `setFastCheck` sits between `setApprovalGuard` and
+  `setReviewModels`; init echoes `fastCheck` (the stored name or null) and `fastCheckNote` when it changed it. **Read:**
+  `fastCheckOf()` → null · `{name, command}` · `{invalid, why: missing | guardian | fixer}` (a hand edit) — doctor's own
+  project-level entry `fast-check` (warn, beside `observed-unguarded`; never one per feature's evidence). Not a guard-down:
+  nothing is enforced. **The status at a CODE task** (`fastTask`: `taskMarkers(b).implements` non-empty — the slot dropped —, no
+  spike): `fastCheckStatus()` reads the project log (`.specs/.execution/observed.jsonl`) for the latest run by its `at` of the fast
+  command (`runProvesVerify(…, [command])` — the check as ONE command; > 5 min ahead ignored, `FAST_SKEW_MS`) and the newest mtime
+  of the feature's planned files (`baselineFiles` of the active tasks, the set `suiteCodeStamp` hashes; missing files and dates
+  > 5 min ahead ignored) → `clean` · `stale` (run older than an edit) · `failed` · `missing` · `unknown` (`observedAny` false:
+  no harness log — no note). A file date is never a blocker (gates-and-approvals.md), so this only ever warns. No change to
+  `observeRun`, `readObservedLog` or the observe hook. **Surfaces:** `spec_next_task` → `fastCheck {check, command}` for a code
+  next task; the brief of an OPEN code task → `fastCheck {check, command, status}` (kept under `write: true`) and its
+  definition-of-done line after the project checks' (`fastCheck.briefDod` / `briefDodRed`: run it ALONE, the report form with
+  the command in a code span — `verifyRunCodes` then gives its exit code to that span, never to the `_Verify:_` run above);
+  `completeTask` judges it when the call TICKS a code task — before the first write (its window ends at the previous
+  `lastTickAt`) — returns `fastCheck {check, status, runs, clean}` with `fastCheck.tickNote` on stale / failed / missing, and
+  stores that snapshot on the tick's RUN (`ev.fast`; `runOf` keeps `fast`, so its history and the merge driver carry it; a
+  note-only tick stores none; `normalizeEvidence` never takes a caller's). No key on any other task, a re-check of a done task,
+  or a spike. **`done --run`** (cli/commands.js) runs it FIRST while `b.fastCheck.status` isn't clean — never when a `_Verify:_`
+  command proves it (that run is logged instead, at the run's start) — through `RUN.preRunRefusal` (finish --run's shell rules,
+  one helper of cli/run.js), logs it with `spec.observeRun(…, {event: "cli", at: <its START>})` (an edit it makes reads stale), and
+  only warns on a failure or a run that couldn't happen. **Metrics:** `featureMetrics` → `fastCheck {check, runs, clean,
+  cleanRate, ticks, ticksClean}` from each task's latest run carrying `fast` (the record, then its history); the project's
+  `totals.fastTicks` / `fastTicksClean` — never project run sums (each feature's window reads the same log). **The offer:**
+  scan.js `fastCheckCandidates()` (root files only — `projectFileInside`, `readFileHead`; no walk) → evidence.js
+  `fastCheckOffer()` `{name, command, from, note}` in init (none set and none given) and spec_upgrade (`upgradeLines`, UPGRADE.md).
+  Known limits: a hook-logged run's `at` is when it ENDED (an edit during it reads clean); a clone re-dates every file (stale
+  notes); test files planned only by T-ID are outside the planned set (finish's suite-evidence is the net); a lost log line
+  (a concurrent trim) can only lose evidence.
 - **Pipes** — `verifyPipeMasked()` (a small shell lexer) flags an unquoted single `|` (also `|&`, inside a subshell or a `bash -c` /
   `sh -c` / `pwsh -Command` / `cmd /c` script); never `||`, a quoted or escaped pipe (`\|`, `^|`), `>|`, one inside `$(…)` or
   backticks; only a `set -o pipefail` BEFORE the pipe (or `-o pipefail`) silences it. Surfaces: the brief's `verifyPipes`, `done
@@ -767,6 +803,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.33 review 7** — a base passed that still contains HEAD reads only the uncommitted work, yet the verdict said "the change since
   main checked": `uncommitted` → `diffBaseUncommitted`, its own line in EN / PT / ES. The rebased-then-merged start commit's wider
   read documented as a known cost.
+- **1.36** — the fast check (`meta.fastCheck`, The fast check above): the only per-edit signal was the agent's own habit — a type
+  error surfaced at the `_Verify:_`, in review or at finish, after several edits had piled on it (the owner's case study: a fast
+  check after each small change). The design's per-line content stamp (`codes` on every fast-check log line: the observe hook
+  hashing up to 8 features' planned files after each run) was cut before it shipped: measured ~3 s per run against the hook's
+  ~0.2 s, it could leave out the feature being worked on, stamped the main checkout's files for a worktree run, quartered the
+  shared log's capacity and fell back to time alone past 500 files — the tick-time date comparison costs nothing per run and
+  changes no hook. So was block mode (`meta.fastCheckGate`): bypassable by naming a no-op check, refusing every PowerShell-tool
+  session, and a file date may never block (gates-and-approvals.md).
 
 ### Task dependencies and execution waves
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks

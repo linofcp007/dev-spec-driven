@@ -215,6 +215,8 @@ function renderBrief(d, lang) {
   const B5 = MSG[normalizeLang(lang)]; // the red run, then the project checks (roadmap.json meta.checks)
   if (d.expectFail) push(`${++extra}. ${B5.redGreen.dodExpect}`);
   if ((d.projectChecks || []).length) push(`${++extra}. ${B5.projectChecks[d.expectFail ? "briefDodRed" : "briefDod"](d.projectChecks.map((c) => "`" + c.command + "` (" + c.name + ")").join(" · "))}`);
+  // 1.36 the fast check (roadmap.json meta.fastCheck) of a code task: the edit → run → fix loop (a red task: its stub keeps it green)
+  if (d.fastCheck) push(`${++extra}. ${B5.fastCheck[d.expectFail ? "briefDodRed" : "briefDod"](d.fastCheck.command)}`);
   if (task.checkpoint) push("", t.checkpoint, "**Checkpoint:** " + task.checkpoint);
 
   push("", t.report, t.reportTo(d.reportPath), "");

@@ -42,6 +42,7 @@ let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow wa
 let designSystemRegistry, designSystemCheck, designSystemGated; // quality.js — the design-system registry's check (1.35)
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.reviewModels)
+let fastCheckOf; // evidence.js — the fast check (1.36, meta.fastCheck): doctor's fast-check warn
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
 function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
@@ -68,7 +69,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
-  designSystemRegistry, designSystemCheck, designSystemGated, reviewModelsSetting } = E); }
+  designSystemRegistry, designSystemCheck, designSystemGated, reviewModelsSetting, fastCheckOf } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -889,6 +890,9 @@ const DOCTOR_CHECKS = [
   // an .execution/observed.jsonl forges an observed run: a warn naming the fix
   { id: "observed-unguarded", applies: (c) => evidenceMode(c.projectDir) === "observed" && approvalGuardLevel(c.projectDir) === "off",
     run: (c) => ({ status: "warn", detail: c.fm.observed.unguarded }) },
+  // 1.36: meta.fastCheck names no valid check (a hand edit, its check renamed), dev-guardian's gate or a command that rewrites files —
+  // no fast check runs: a project setting, so its own entry (one line, never one per feature's evidence)
+  { id: "fast-check", run: (c) => { const f = fastCheckOf(c.projectDir); return f && f.invalid !== undefined ? { status: "warn", detail: c.fm.fastCheck.doctorInvalid(f.invalid, f.why) } : null; } },
   // Steering: present is not enough — a steering file that is still its template steers nothing (named, with its count).
   { id: "steering", run: (c) => {
     const missing = CORE_STEERING.filter((f) => !fs.existsSync(path.join(c.root, "steering", f)));

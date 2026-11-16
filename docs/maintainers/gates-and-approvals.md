@@ -195,7 +195,11 @@ review findings — is in History at the end.
   design.md that exists now was created after it — a change.
 - **spec_metrics** reads `.state.json`, `.history/` and the artifacts (`createdAt` from createFeature, else approximated);
   `write` creates `retro.md` (writeIfAbsent). `rework` skips a same-content re-approval (still in `approvalsTotal`); a fingerprint-less
-  phase (tests) always counts.
+  phase (tests) always counts. 1.36: `fastCheck` {check, runs, clean, cleanRate, ticks, ticksClean} per feature — from the
+  snapshot a code task's tick stored on its run (`fast`), null without one — and the project's `fastTicks` / `fastTicksClean`
+  (ticks, never run sums: every feature's tick window reads the same project log). The fast check's own doctor warn,
+  `fast-check` (a stored name no fast check reads), is a project-level registry entry like `observed-unguarded`
+  (tasks-and-evidence.md → The fast check).
 - **Test-plan scaffold:** `scaffoldTestPlan()` writes the template rows only while requirements.md holds exactly the
   template's AC IDs (`i18n.templateAcIds()`); else one generic row per real AC — none at all: one row whose Covers cell is
   a slot (`acSlot`). spec_import warns (`wNoCriteriaAtAll`), re-plans after writing the requirements, and fits a kept

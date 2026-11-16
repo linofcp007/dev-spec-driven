@@ -253,6 +253,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.36** — four opt-in settings, each in its trimmed form: `TOOLS_LIST_CAP` 44,500 → 45,000. The review panel's
   `spec_init {reviewModels}` is a bare `{type: "array", items: {type: "string"}}` plus "`reviewModels` (2–3 review models,
   diverse or [])" in the settings sentence: +109 characters (44,123 → 44,232); the design's described property was +214.
+  The fast check's `spec_init {fastCheck}` is a bare `{type: "string"}` plus "`fastCheck` (a check run after each edit)": +73
+  (44,232 → 44,305); the design's two described properties (with a block-mode gate, cut) were ~+160.
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.

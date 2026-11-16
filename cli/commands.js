@@ -98,6 +98,7 @@ const VALUE_FLAG_SPECS = [
   ["check", { repeatable: true }], // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
   ["guardian", { values: "on off", optional: true }], // init --guardian [on|off] — a bare --guardian is on (= spec_init {guardian: true|false})
   ["approval-guard", { values: "@approval-guard" }], // init --approval-guard off|ask|deny (= spec_init {approvalGuard})
+  ["fast-check", { values: "off" }], // init --fast-check <check>|off (= spec_init {fastCheck}; a check's name is the project's) — 1.36
   ["review-models", { values: "diverse off" }], // init --review-models opus,sonnet|diverse|off (= spec_init {reviewModels}) — 1.36
   ["roles"], ["role"], ["through", { values: "@through" }], // init --roles …, approve --role <role> / --through <phase>
   ["since", { values: "last all" }], // changelog --since <ISO date|last|all>
@@ -568,7 +569,7 @@ const COMMANDS = [
   },
   {
     name: "init",
-    options: ["lang", "tracks", "guard", "stop-check", "check", "guardian", "approval-guard", "evidence", "roles", "review-models"],
+    options: ["lang", "tracks", "guard", "stop-check", "check", "guardian", "fast-check", "approval-guard", "evidence", "roles", "review-models"],
     args: ["@track..."],
     values: { evidence: "reported observed" },
     help: `  init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|pt-BR|es → project default)
@@ -582,6 +583,9 @@ const COMMANDS = [
                                   meta.checks, e.g. --check test="npm test" --check lint="npm run lint") — in every brief's definition of done
                                   --guardian [on|off]: dev-guardian's gate as the check 'guardian' (node .specs/guardian.cjs scan … — the
                                   installed dev-guardian); finish --run runs it (minutes; its scanners on every machine). off removes it
+                                  --fast-check <check>|off: the fast check (roadmap.json meta.fastCheck) — the project check run alone
+                                  after each small edit (a type check); briefs name it, done --run runs it first, a code task's tick
+                                  gets a note without a clean run since its last edit (e.g. --check tc="npm run typecheck" --fast-check tc)
                                   --roles requirements=product,design=tech+security: approvals by role (a listed phase is approved once
                                   every role signed its current content); --roles none clears them
                                   --approval-guard off|ask|deny: the human approval guard — an agent's approve (MCP or this CLI through
@@ -648,6 +652,8 @@ const COMMANDS = [
         if (r.observedWarning) log("  " + r.observedWarning); // observed evidence without the approval guard
         if (r.guardianNote) log("  " + r.guardianNote); // 1.29: --guardian on / off
         if (r.guardianOffer) log("  " + r.guardianOffer); // dev-guardian installed (or .guardian/) and no check runs it: offered, never set
+        if (r.fastCheckNote) log("  " + r.fastCheckNote); // 1.36: --fast-check set it / off, or its check was removed
+        if (r.fastCheckOffer) log("  " + r.fastCheckOffer.note); // 1.36: none set, the root manifests suggest one — offered, never set
         if (r.reviewModelsNote) log("  " + r.reviewModelsNote); // 1.36: --review-models set it, or the stored value is ignored
       });
     },
@@ -1034,7 +1040,8 @@ const COMMANDS = [
                                   Windows, never WSL's launcher; pwsh / powershell = PowerShell, run -NoProfile -NonInteractive -Command; --timeout <s>;
                                   a command that could not run records nothing); or --evidence "…" [--exit N] [--cmd "…"]
                                   A task marked _Expect: fail_ needs a FAILING run (its red test — a pass is refused); --run also
-                                  records the git commit (and whether the tree was dirty) when git is available`,
+                                  records the git commit (and whether the tree was dirty) when git is available; on a code task with a
+                                  fast check (roadmap.json meta.fastCheck) --run runs that first while it isn't clean since the last edit`,
     run(c) { // synchronous but for --run's commands: a refusal before them stays a synchronous one
       const { flags, pos, projectDir, on, out, fail, usage, die, log } = c;
       if (!pos[0] || pos[1] == null) usage("dev-spec done <feature> <task-number> [--run [--shell bash|pwsh|<path>] [--timeout <s>] | --evidence \"summary\" [--exit N] [--cmd \"command\"]]");
@@ -1102,11 +1109,32 @@ const COMMANDS = [
         }
         // A pipe masks the check's exit code (a pipeline reports its LAST command's): one hint line — it still runs.
         cmds.filter(spec.verifyPipeMasked).forEach((x) => say(M.verifyPipe.runHint(x)));
+        // 1.36 the fast check (meta.fastCheck) of a code task — b.fastCheck {check, command, status}, none on any other task: while it
+        // isn't clean since the last edit it runs FIRST, alone, logged in the project's log as the hook logs a Bash run (event "cli", at
+        // its START — an edit made while it ran reads stale). Warn only: a failure, or a fast check that could not run, says so and the
+        // _Verify:_ runs anyway. A _Verify:_ that IS the fast command runs it once (logged once it ran). The shell rules of finish
+        // --run's checks refuse it before anything runs (RUN.preRunRefusal — one rule).
+        const fc = b.fastCheck || null;
+        const isFast = (x) => !!fc && spec.runProvesVerify({ command: x }, [fc.command], projectDir);
+        const inVerify = cmds.some(isFast);
+        const fastFirst = fc && fc.status !== "clean" && !inVerify ? fc : null;
+        const fastRefused = fastFirst ? RUN.preRunRefusal([{ name: fc.check, command: fc.command }], sh, M, c.env) : null;
+        if (fastRefused) return fail(fastRefused);
         const git = GIT.gitState(projectDir); // the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it
-        runStartedAt = new Date().toISOString(); // the run's `at` is when it STARTED (an edit made meanwhile isn't tested)
         ranVerify = b.verify.slice(); // …and its verify stamp the _Verify:_ as it was then (edited meanwhile → stale-evidence)
         const passed = []; // each passing command's output — the record keeps one summary per command, not the last one's
+        const FC = M.fastCheck;
         return (async () => { // the commands run one after another — a timer of their own
+          if (fastFirst) {
+            const at = new Date().toISOString();
+            say("$ " + fc.command + "   (" + FC.label + ")");
+            const x = await RUN.runCommand(fc.command, sh, M, c.execOpts());
+            if (x.summary) say(x.summary.replace(/^/gm, "  "));
+            if (x.cantRun) say("  " + FC.cantRun(fc.command, x.cantRun.why));
+            else spec.observeRun(projectDir, { command: fc.command, exitCode: x.code, event: "cli", at, cwd: projectDir });
+            if (!x.cantRun && x.code !== 0) say("  " + FC.runFailed(fc.command, x.code));
+          } else if (fc && !inVerify) say("  " + FC.skipClean(fc.check)); // clean since the last edit: not run again
+          runStartedAt = new Date().toISOString(); // the run's `at` is when it STARTED (an edit made meanwhile isn't tested)
           for (const cmd of cmds) {
             say("$ " + cmd);
             const x = await RUN.runCommand(cmd, sh, M, c.execOpts());
@@ -1116,6 +1144,8 @@ const COMMANDS = [
             // the buffer, WSL's launcher) is refused and NOTHING is recorded — it used to be recorded as exit 1 (an _Expect: fail_
             // task was then ticked on a red run that never happened; a passing check recorded as failed).
             if (x.cantRun) return fail({ ok: false, couldNotRun: x.cantRun.code, error: M.runGate.taskRefused(cmd, x.cantRun.why) });
+            // the fast command as this task's _Verify:_: its run is the fast check's too (the log the tick reads)
+            if (isFast(cmd)) spec.observeRun(projectDir, { command: cmd, exitCode: x.code, event: "cli", at: runStartedAt, cwd: projectDir });
             // A crash is a failed check, but no red test (not failing "for the right reason"): refused, nothing recorded.
             if (x.crashed && b.expect === "fail") return fail({ ok: false, couldNotRun: "signal", error: M.runGate.taskRefused(cmd, M.runGate.why.signal(x.crashed)) });
             const code = x.code;
@@ -2236,7 +2266,7 @@ const HELP_FOOT = `  The project: --project <dir> (an existing folder — only i
          --md / --csv / --gherkin / --adr / --write (export)  --since <ISO date|last|all> / --write (changelog)
          --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)  --install / --uninstall / --check (merge-state)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
-         --review-models a,b[,c]|diverse|off (init)
+         --fast-check <check>|off / --review-models a,b[,c]|diverse|off (init)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1 — a usage error

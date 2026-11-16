@@ -461,6 +461,22 @@ function featureMetrics(projectDir, slug, dir) {
       passing += list.filter(isPass).length;
     }
   }
+  // 1.36 the fast check: each task's latest tick that recorded it (`fast` on its run — completeTask's) — its runs / clean runs since
+  // the tick before, and whether it was clean on the final code. Per feature only: the project log's runs are every feature's.
+  const fast = { runs: 0, clean: 0, ticks: 0, ticksClean: 0, check: null, at: -Infinity };
+  const nat = (v) => (Number.isSafeInteger(v) && v >= 0 ? v : 0); // a hand-edited count reads 0
+  for (const slot of Object.values(evidence)) {
+    for (const r of evidenceRecords(slot)) {
+      const s = [r, ...(Array.isArray(r.history) ? r.history.filter(isRecord).slice().reverse() : [])].find((h) => isRecord(h.fast));
+      if (!s) continue;
+      fast.ticks++;
+      if (s.fast.status === "clean") fast.ticksClean++;
+      fast.runs += nat(s.fast.runs);
+      fast.clean += Math.min(nat(s.fast.clean), nat(s.fast.runs));
+      const t = timeOf(s.at);
+      if (typeof s.fast.check === "string" && (fast.check === null || (t != null && t > fast.at))) { fast.check = s.fast.check; fast.at = t == null ? fast.at : t; }
+    }
+  }
   const changes = (state.changes || []).filter(isRecord);
   const reopened = changes.flatMap((c) => (Array.isArray(c.reopened) ? c.reopened : []));
   const openClarifications = chainArtifacts(dir, tracks, kind).reduce((s, a) => s + clarificationMarkers(readIfExists(path.join(dir, a.file)) || "").length, 0);
@@ -476,6 +492,9 @@ function featureMetrics(projectDir, slug, dir) {
     untickedTasks: Array.isArray(state.unticks) ? state.unticks.length : 0,
     changeRequests: changes.length, reopenedTasks: reopened.length, reopenedTasksUnique: new Set(reopened).size,
     evidence: { runs, passing, passRate: runs ? round1((passing / runs) * 100) : null },
+    // 1.36 (stable): null — no tick recorded the fast check (none set, or none since)
+    fastCheck: fast.ticks ? { check: fast.check, runs: fast.runs, clean: fast.clean, cleanRate: fast.runs ? round1((fast.clean / fast.runs) * 100) : null,
+      ticks: fast.ticks, ticksClean: fast.ticksClean } : null,
     tasks: { done, total: active.length },
     openClarifications,
   };
@@ -533,7 +552,10 @@ function metrics(projectDir, name, opts = {}) {
   const totals = { features: features.length, tasksDone: sum((m) => m.tasks.done), tasksTotal: sum((m) => m.tasks.total), forcedApprovals: sum((m) => m.forcedApprovals),
     batchApprovals: sum((m) => m.batchApprovals), // 1.14 B3
     changeRequests: sum((m) => m.changeRequests), reopenedTasks: sum((m) => m.reopenedTasks), openClarifications: sum((m) => m.openClarifications),
-    evidenceRuns: runs, evidencePassing: passing, evidencePassRate: runs ? round1((passing / runs) * 100) : null };
+    evidenceRuns: runs, evidencePassing: passing, evidencePassRate: runs ? round1((passing / runs) * 100) : null,
+    // 1.36: the code-task ticks that recorded the fast check, and those clean on the final code — counted per tick, never twice
+    // (no project run sums: every feature's tick window reads the same project log)
+    fastTicks: sum((m) => m.fastCheck && m.fastCheck.ticks), fastTicksClean: sum((m) => m.fastCheck && m.fastCheck.ticksClean) };
   // the project velocity (every feature's completions: the roadmap forecasts' rate — the archived ones' too)
   const now = (opts.now != null && timeOf(opts.now)) || Date.now();
   const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
@@ -564,6 +586,8 @@ function metricsLines(r) {
     if (r.batchApprovals) out.push(i18n.msg(r.lang).governance.batch(r.batchApprovals)); // 1.14 B3
     out.push(M.changes(r.changeRequests, r.reopenedTasks));
     out.push(r.evidence.runs ? M.evidence(r.evidence.passRate, r.evidence.passing, r.evidence.runs) : M.noRuns);
+    const fc = r.fastCheck; // 1.36
+    if (fc) out.push(i18n.msg(r.lang).fastCheck.metrics(fc.check, fc.runs, fc.clean, fc.cleanRate, fc.ticks, fc.ticksClean));
     out.push(M.tasks(r.tasks.done, r.tasks.total, r.openClarifications));
     if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // 1.14 B4
     if (r.warning) out.push("  ⚠ " + r.warning);
@@ -588,6 +612,7 @@ function metricsLines(r) {
     out.push(M.medianLeads([["requirements", reqLead], ["design", desLead], ["tasks", taskLead]].filter(([, s]) => s.n).map(([ph, s]) => `${M.phase[ph]} ${fmtHours(s.median)}`).join(" · ")));
   }
   out.push(M.totals(r.totals.tasksDone, r.totals.tasksTotal, r.totals.evidenceRuns ? `${r.totals.evidencePassRate}%` : "—", r.totals.evidenceRuns, r.totals.changeRequests, r.totals.reopenedTasks));
+  if (r.totals.fastTicks) out.push(i18n.msg(r.lang).fastCheck.metricsTotals(r.totals.fastTicks, r.totals.fastTicksClean)); // 1.36
   if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // 1.14 B4
   return out;
 }

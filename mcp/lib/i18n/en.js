@@ -2144,6 +2144,28 @@ const msg = {
         (command ? `Stop and ask the user to run it themselves, in their own terminal: ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
     },
+    // 1.36 the fast check (roadmap.json meta.fastCheck · spec_init {fastCheck} · `dev-spec init --fast-check`): ONE project check run on
+    // its own after each small edit — warn only. `meta.fastCheck`, `_Verify:_`, the flags and the check names stay English.
+    fastCheck: {
+      on: (name, cmd) => `Fast check ON (roadmap.json meta.fastCheck: ${name} — \`${cmd}\`): run it on its own after each small edit and before a task's _Verify:_ — next_task and the task brief name it; ${DEV_SPEC} done <feature> <n> --run runs it first while the code changed since its last run, and a code task ticked without a clean run since its last edit gets a note (never a refusal). Being a project check, spec_finish needs it passing on the final code too.`,
+      off: "Fast check OFF (roadmap.json meta.fastCheck).",
+      cleared: (name) => `The check '${name}' was removed, so the fast check is off too (roadmap.json meta.fastCheck).`,
+      badInput: (v) => `fastCheck takes the name of a project check (meta.checks), or "" / off to switch it off (got ${v}).`,
+      badName: (name, list) => `'${name}' is not a project check (meta.checks: ${list || "none"}) — add it in the same call: ${DEV_SPEC} init --check ${name}="<command>" --fast-check ${name} (spec_init {checks: {"${name}": "<command>"}, fastCheck: "${name}"}).`,
+      guardianNotFast: (name) => `'${name}' runs dev-guardian's gate — a scan of minutes, never a fast check. Name a check that answers in seconds (a type check, a linter).`,
+      fixer: (name, cmd) => `'${name}' (\`${cmd}\`) rewrites files (--fix, --write, a formatter without --check): run after each edit, it would change the code — and the tests — under the task. Give the fast check its check-only form (--check, no --fix).`,
+      briefDod: (cmd) => `After each small edit, run the fast check \`${cmd}\` ON ITS OWN (never chained — a \`${cmd} && …\` line is no run of it) and fix what it reports before the next edit; it must exit 0 after your LAST edit, before the _Verify:_. Report it as: Fast check \`${cmd}\`: N runs → exit <the last code>.`,
+      briefDodRed: (cmd) => `The fast check \`${cmd}\` must still pass with your new test — it fails on an assertion or "not implemented", never on a type or lint error: add the stub the test calls. Run it on its own after each edit; report it as: Fast check \`${cmd}\`: N runs → exit <the last code>.`,
+      tickNote: (n, name, cmd, status, slug) => `Task ${n}: the fast check ${name} (\`${cmd}\`) ${({ stale: "is older than the last edit of the planned files", failed: "failed on its last run", missing: "was never logged running" })[status]} — run it on its own now and fix what it reports (${DEV_SPEC} done ${slug} ${n} --run runs it first).${status === "missing" ? " The PowerShell tool is logged only with an explicit exit code: run it with the Bash tool, or through done --run." : ""}`,
+      label: "fast check",
+      skipClean: (name) => `fast check ${name}: clean since the last edit — not run again`,
+      runFailed: (cmd, code) => `the fast check \`${cmd}\` failed (exit ${code}) — fix it before the next edit; the task's _Verify:_ runs anyway, and the tick gets a note.`,
+      cantRun: (cmd, why) => `the fast check \`${cmd}\` could not run (${why}) — the task's _Verify:_ runs anyway.`,
+      metrics: (name, runs, clean, rate, ticks, ticksClean) => `  fast check (${name}): ${runs} run(s), ${clean} clean${rate == null ? "" : ` (${rate}%)`} · ${ticksClean} of ${ticks} code-task tick(s) after a clean run on the final code`,
+      metricsTotals: (ticks, ticksClean) => `  fast check: ${ticksClean} of ${ticks} code-task tick(s) after a clean run on the final code`,
+      doctorInvalid: (name, why) => `meta.fastCheck names '${name}', ${({ missing: "which is no project check (meta.checks)", guardian: "which runs dev-guardian's gate (a scan of minutes)", fixer: "whose command rewrites files (--fix, --write, a formatter without --check)" })[why]} — no fast check runs. Set another: ${DEV_SPEC} init --fast-check <check> (or off).`,
+      offer: (cmd, from, name, existing) => `A fast check after each small change catches type and lint errors in seconds: \`${cmd}\` (${from}). It must pass on the base branch — it becomes a project check spec_finish needs too. Offered, never set: ${existing ? `${DEV_SPEC} init --fast-check ${name}` : `${DEV_SPEC} init --check ${name}="${cmd}" --fast-check ${name}`}.`,
+    },
     // 1.36 the review panel (roadmap.json meta.reviewModels · spec_init {reviewModels} · `dev-spec init --review-models`). Model names,
     // `meta.reviewModels`, `diverse` and the slash commands stay English.
     reviewModels: {

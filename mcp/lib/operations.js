@@ -59,12 +59,14 @@ const OPERATIONS = [
       approvalGuard: { mcp: "approvalGuard", cli: "--approval-guard", parsed: true }, // off|ask|deny, checked
       evidence: { mcp: "evidence", cli: "--evidence", parsed: true }, // reported|observed, checked
       guardian: { mcp: "guardian", cli: "--guardian", parsed: true }, // 1.29: a bare --guardian / on → true, off → false (dev-guardian's gate)
+      // 1.36 the fast check: a meta.checks name, or "" / off / none — raw, the engine reads and checks both
+      fastCheck: { mcp: "fastCheck", cli: "--fast-check" },
       // 1.36 the review panel: an MCP array or the CLI's word (opus,sonnet | diverse | off) — raw, the engine reads and checks both
       reviewModels: { mcp: "reviewModels", cli: "--review-models" },
     },
     // undefined leaves each meta value as it is
     call: (S, dir, o) => S.initProject(dir, o.tracks, o.lang, { guard: o.guard, checks: o.checks, approvalRoles: o.approvalRoles,
-      stopCheck: o.stopCheck, approvalGuard: o.approvalGuard, evidence: o.evidence, guardian: o.guardian, reviewModels: o.reviewModels }),
+      stopCheck: o.stopCheck, approvalGuard: o.approvalGuard, evidence: o.evidence, guardian: o.guardian, fastCheck: o.fastCheck, reviewModels: o.reviewModels }),
   },
   {
     id: "classify", tool: "spec_classify", cli: ["classify"], engine: "classify",

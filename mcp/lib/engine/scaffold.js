@@ -33,6 +33,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
 let guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher; // guardian.js — 1.29 (init --guardian)
 let reviewModelsInput, reviewModelsSetting, setReviewModels; // guards.js — 1.36 the review panel (init --review-models)
+let fastCheckInput, fastPlan, setFastCheck, fastCheckOf, fastCheckOffer; // evidence.js — 1.36 the fast check (init --fast-check)
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, enumArg, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -52,7 +53,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher,
-  reviewModelsInput, reviewModelsSetting, setReviewModels } = E); }
+  reviewModelsInput, reviewModelsSetting, setReviewModels, fastCheckInput, fastPlan, setFastCheck, fastCheckOf, fastCheckOffer } = E); }
 
 // spec_import's source formats — its `tool` enum, each with the name its notes print — and those that write .specs/steering/
 // files, not a feature. The importers (import/) load on first use (engine/index.js LAZY); these lists are read as the surfaces
@@ -133,6 +134,9 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const roles = setsRoles ? validateApprovalRoles(opts.approvalRoles, normalizeLang(lang || projectLang(projectDir))) : null;
   if (roles && !roles.ok) return { ok: false, error: roles.error };
   const approvalGuard = approvalGuardInput(opts.approvalGuard); // "off" | "ask" | "deny" — anything else leaves it unchanged
+  // 1.36 the fast check (roadmap.json meta.fastCheck): a check's name, "" / off — its name is checked under the lock (fastPlan)
+  const fcIn = fastCheckInput(opts.fastCheck, lang || projectLang(projectDir));
+  if (fcIn && fcIn.error) return { ok: false, error: fcIn.error, code: "invalid-arguments", invalid: ["fastCheck"] };
   // 1.36 the review panel (roadmap.json meta.reviewModels): 2–3 model names, "diverse" or off — a bad value refused before any write
   const rmIn = reviewModelsInput(opts.reviewModels, lang || projectLang(projectDir));
   if (rmIn && rmIn.error) return { ok: false, error: rmIn.error, code: "invalid-arguments", invalid: ["reviewModels"] };
@@ -141,10 +145,15 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   // meta.checks can't be written (review 8: init was not atomic).
   const launcher = opts.guardian === true ? guardianLauncherOn(projectDir, normalizeLang(lang || projectLang(projectDir))) : {};
   if (launcher.refusal) return launcher.refusal;
-  if (lang || setsGuard || nc || setsRoles || setsStop || approvalGuard || evMode || rmIn) {
+  let fast = { write: undefined }; // what this call did to meta.fastCheck (fastPlan's answer)
+  if (lang || setsGuard || nc || setsRoles || setsStop || approvalGuard || evMode || fcIn || rmIn) {
     const meta = withRoadmapLock(projectDir, () => {
       const bad = roadmapError(projectDir) || (nc ? checksPlanError(projectDir, nc) : null);
       if (bad) return { ok: false, error: bad };
+      // the fast check against the checks this very call leaves (nc.merged): `--check tc="…" --fast-check tc` is one call
+      const fp = fcIn || nc ? fastPlan(projectDir, nc, fcIn, normalizeLang(lang || projectLang(projectDir))) : fast;
+      if (fp.error) return { ok: false, error: fp.error, code: "invalid-arguments", invalid: ["fastCheck"] };
+      fast = fp;
       // Seed/refresh the project language (single source of truth) if one was requested.
       if (lang) setRoadmapLang(projectDir, lang);
       // Guard mode (opt-in, roadmap.json meta.guard): independent of the tracks; idempotent.
@@ -154,6 +163,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
       if (nc) writeChecks(projectDir, nc);
       if (setsRoles) setApprovalRoles(projectDir, roles.map);
       if (approvalGuard) setApprovalGuard(projectDir, approvalGuard);
+      if (fast.write !== undefined) setFastCheck(projectDir, fast.write);
       if (rmIn) setReviewModels(projectDir, rmIn);
       return { ok: true };
     });
@@ -215,6 +225,13 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   // (on: + no baseline yet, record one now — the user's step — and the .gitignore lines the project lacks: guardianOnNote)
   if (setsGuardian) res.guardianNote = res.guardian ? guardianOnNote(projectDir, res.checks.guardian, lng) : i18n.msg(lng).guardian.off;
   else { const offer = guardianOffer(projectDir, lng); if (offer) res.guardianOffer = offer; }
+  // 1.36: the CURRENT fast check (meta.fastCheck as stored; null = none) — + a note when this call changed it (on / off / its check
+  // removed); while none is set and this call names none, the root manifests' candidate is offered — never set
+  const fcNow = fastCheckOf(projectDir), FC = i18n.msg(lng).fastCheck;
+  res.fastCheck = fcNow ? (fcNow.invalid !== undefined ? fcNow.invalid : fcNow.name) : null;
+  if (fast.cleared) res.fastCheckNote = FC.cleared(fast.cleared);
+  else if (fcIn) res.fastCheckNote = fcNow && fcNow.name ? FC.on(fcNow.name, fcNow.command) : FC.off;
+  if (!fcIn && !fcNow) { const offer = fastCheckOffer(projectDir, lng); if (offer) res.fastCheckOffer = offer; }
   // 1.36: the CURRENT review panel ([] = none) — + a note when this call set it, or when the stored value doesn't read (ignored)
   const rs = reviewModelsSetting(projectDir), RM = i18n.msg(lng).reviewModels;
   res.reviewModels = rs.models;

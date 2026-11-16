@@ -1,0 +1,326 @@
+"use strict";
+// Evidence — the fast check (1.36, roadmap.json meta.fastCheck, warn only): set by spec_init (checked against this call's checks, refused before any write), the tick-time status (the project log's latest run vs the planned files' dates), next_task / the brief / complete_task's keys, metrics, doctor, the offer.
+
+const fs = require("fs");
+const path = require("path");
+
+exports.run = async ({ ok, all, eq, rpc, payload, S, tmp }) => {
+  const js = JSON.stringify;
+  const call = async (name, args) => payload(await rpc("tools/call", { name, arguments: args }));
+  const FC = S.msg("en").fastCheck;
+  const PASS = 'node -e "process.exit(0)"';
+  const TC = "node tc.js"; // the fast check's command — the MCP tests run nothing, the CLI's do
+  const rmFile = (p) => path.join(p, ".specs", "roadmap.json");
+  const meta = (p) => { try { return JSON.parse(fs.readFileSync(rmFile(p), "utf8")).meta || {}; } catch { return null; } };
+  const setMeta = (p, patch) => { const rm = JSON.parse(fs.readFileSync(rmFile(p), "utf8")); rm.meta = { ...(rm.meta || {}), ...patch }; fs.writeFileSync(rmFile(p), js(rm, null, 2)); };
+  const bytes = (p) => fs.readFileSync(rmFile(p), "utf8");
+  const safe = (fn) => { try { return fn(); } catch (e) { return { threw: e.message }; } }; // a regression must FAIL, not crash the file
+  const logFile = (p) => path.join(p, ".specs", ".execution", "observed.jsonl");
+  // the project log as the observe hook writes it: [command, exitCode, at (ms)]
+  const writeLog = (p, lines) => {
+    fs.mkdirSync(path.dirname(logFile(p)), { recursive: true });
+    fs.writeFileSync(logFile(p), lines.map(([command, exitCode, at]) => js({ command, exitCode, at: new Date(at).toISOString(), event: "PostToolUse" }) + "\n").join(""));
+  };
+  const appendLog = (p, lines) => fs.appendFileSync(logFile(p), lines.map(([command, exitCode, at]) => js({ command, exitCode, at: new Date(at).toISOString(), event: "PostToolUse" }) + "\n").join(""));
+  const dated = (p, rels, ms) => rels.forEach((r) => fs.utimesSync(path.join(p, r), new Date(ms), new Date(ms)));
+  const project = (name, tasks, files) => {
+    const p = path.join(tmp, name);
+    S.initProject(p, ["core"], "en", { checks: { tc: TC, lint: "npm run lint" }, fastCheck: "tc" });
+    const f = S.createFeature(p, { name: "Login", tracks: ["core"] });
+    for (const rel of files) { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), "// " + rel + "\n"); }
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n## Phase 1\n\n" + tasks);
+    return { p, f };
+  };
+  const task = (n, title, lines) => `- [ ] ${n}. [US1] ${title}\n` + lines.map((l) => "  - " + l + "\n").join("");
+
+  { // spec_init {fastCheck}: a check of this very call (one call), echoed (the CURRENT one, always), off / none / "" delete it, the same value
+    // again writes nothing, alone it is stored too
+    const p = path.join(tmp, "proj-fc-init");
+    S.initProject(p, ["core"], "en");
+    S.createFeature(p, { name: "Login", tracks: ["core"] }); // no longer brand-new: init stamps nothing more
+    const plain0 = await call("spec_init", { projectDir: p });
+    const set = await call("spec_init", { checks: { tc: TC }, fastCheck: "tc", projectDir: p });
+    const setMeta1 = meta(p).fastCheck;
+    const past = new Date("2026-01-01T00:00:00Z");
+    fs.utimesSync(rmFile(p), past, past);
+    const again = S.initProject(p, [], null, { fastCheck: "tc" });
+    const kept = fs.statSync(rmFile(p)).mtimeMs === past.getTime();
+    const off = await call("spec_init", { fastCheck: "off", projectDir: p });
+    const offMeta = meta(p);
+    const alone = await call("spec_init", { fastCheck: " tc ", projectDir: p });
+    const aloneMeta = meta(p).fastCheck;
+    const none = S.initProject(p, [], null, { fastCheck: "NONE" });
+    const noneMeta = meta(p);
+    S.initProject(p, [], null, { fastCheck: "tc" });
+    const empty = await call("spec_init", { fastCheck: "", projectDir: p });
+    const emptyMeta = meta(p);
+    S.initProject(p, [], null, { fastCheck: "tc" });
+    const plain = await call("spec_init", { projectDir: p });
+    all("1.36 fast check: spec_init {fastCheck} names a check of the same call (checks + fastCheck at once), stored in meta.fastCheck and echoed as the CURRENT one with its note; the same value again writes nothing; off / NONE / \"\" delete it (note off); alone it is stored too; a call that names none echoes it without a note (got " +
+      js([set, off.fastCheck, offMeta, alone.fastCheck, none.fastCheckNote, empty.fastCheck, plain.fastCheck, plain.fastCheckNote]) + ")", {
+      noneEchoed: () => plain0.fastCheck === null && plain0.fastCheckNote === undefined,
+      oneCall: () => set.ok !== false && setMeta1 === "tc" && set.fastCheck === "tc" && js(set.checks) === js({ tc: TC }),
+      onNote: () => set.fastCheckNote === FC.on("tc", TC),
+      sameNoWrite: () => again.fastCheckNote === FC.on("tc", TC) && kept,
+      offDeletes: () => off.ok !== false && !("fastCheck" in offMeta) && off.fastCheck === null && off.fastCheckNote === FC.off,
+      aloneStored: () => alone.ok !== false && aloneMeta === "tc" && alone.fastCheck === "tc",
+      noneDeletes: () => none.fastCheckNote === FC.off && !("fastCheck" in noneMeta),
+      emptyDeletes: () => empty.ok !== false && !("fastCheck" in emptyMeta) && empty.fastCheckNote === FC.off,
+      plainEcho: () => plain.fastCheck === "tc" && plain.fastCheckNote === undefined,
+    });
+  }
+
+  { // refused before ANY write (invalid-arguments, invalid [fastCheck]): no such check, dev-guardian's gate, a command that rewrites files
+    // (--fix, --write, a formatter without --check); the stored fast check's command replaced by a fixer; a non-string (engine; the
+    // schema over MCP). A check-only formatter is fine.
+    const p = path.join(tmp, "proj-fc-refuse");
+    S.initProject(p, ["core"], "en", { checks: { tc: TC }, fastCheck: "tc" });
+    const before = bytes(p);
+    const refused = (r) => r.ok === false && r.code === "invalid-arguments" && js(r.invalid) === '["fastCheck"]';
+    const r = {
+      unknown: await call("spec_init", { fastCheck: "nope", guard: "on", projectDir: p }),
+      guardian: await call("spec_init", { checks: { guardian: PASS }, fastCheck: "guardian", projectDir: p }),
+      fix: await call("spec_init", { checks: { fx: "eslint --fix ." }, fastCheck: "fx", projectDir: p }),
+      write: S.initProject(p, [], null, { checks: { pw: "prettier --write ." }, fastCheck: "pw" }),
+      fmt: S.initProject(p, [], null, { checks: { fm: "cargo fmt" }, fastCheck: "fm" }),
+      replaced: S.initProject(p, [], null, { checks: { tc: "eslint --fix src" } }),
+      number: safe(() => S.initProject(p, [], null, { fastCheck: 5 })),
+      schema: await call("spec_init", { fastCheck: 5, projectDir: p }),
+    };
+    const after = bytes(p);
+    const fmtCheck = S.initProject(p, [], null, { checks: { fc: "cargo fmt --check" }, fastCheck: "fc" });
+    const fmtMeta = meta(p).fastCheck;
+    all("1.36 fast check: refused before anything is written — a name that is no check after this call's merge (beside a good setting: nothing lands), dev-guardian's gate, --fix / --write / a formatter without --check, the stored fast check's command replaced by a fixer, a non-string; `cargo fmt --check` is accepted (got " +
+      js(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, [v.ok, v.code, (v.error || v.threw || "").slice(0, 70)]]))) + ")", {
+      unknown: () => refused(r.unknown) && r.unknown.error === FC.badName("nope", "tc"),
+      guardian: () => refused(r.guardian) && r.guardian.error === FC.guardianNotFast("guardian"),
+      fix: () => refused(r.fix) && r.fix.error === FC.fixer("fx", "eslint --fix ."),
+      write: () => refused(r.write) && r.write.error === FC.fixer("pw", "prettier --write ."),
+      fmt: () => refused(r.fmt) && r.fmt.error === FC.fixer("fm", "cargo fmt"),
+      replaced: () => refused(r.replaced) && r.replaced.error === FC.fixer("tc", "eslint --fix src"),
+      number: () => refused(r.number) && r.number.error === FC.badInput("5"),
+      schema: () => r.schema.ok === false && r.schema.code === "invalid-arguments",
+      nothingWritten: () => after === before && meta(p).guard === undefined,
+      checkOnlyFormatter: () => fmtCheck.ok !== false && fmtMeta === "fc",
+    });
+  }
+
+  { // removing the fast check's own check removes the fast check too (cleared note); doctor's `fast-check` warns on a stored value no
+    // fast check reads (no such check, dev-guardian's gate, a fixer — a hand edit), never on a valid one
+    const p = path.join(tmp, "proj-fc-clear");
+    S.initProject(p, ["core"], "en", { checks: { tc: TC, lint: "npm run lint" }, fastCheck: "tc" });
+    const f = S.createFeature(p, { name: "Login", tracks: ["core"] });
+    const fastWarn = () => S.specDoctor(p, f.slug).checks.filter((c) => c.id === "fast-check");
+    const valid = fastWarn();
+    const cleared = await call("spec_init", { checks: { tc: "" }, projectDir: p });
+    const clearedMeta = meta(p);
+    const other = S.initProject(p, [], null, { checks: { lint: "" } }); // a call that removes ANOTHER check: nothing to clear
+    setMeta(p, { fastCheck: "gone" });
+    const missing = fastWarn();
+    setMeta(p, { checks: { guardian: PASS }, fastCheck: "guardian" });
+    const guardian = fastWarn();
+    setMeta(p, { checks: { fx: "eslint --fix ." }, fastCheck: "fx" });
+    const fixer = fastWarn();
+    all("1.36 fast check: removing its check clears meta.fastCheck (the cleared note); doctor warns fast-check (once) for a stored name that is no check, dev-guardian's gate or a fixer — never for a valid one (got " +
+      js([cleared.fastCheckNote, clearedMeta, valid, missing, guardian, fixer]) + ")", {
+      cleared: () => cleared.ok !== false && !("fastCheck" in clearedMeta) && cleared.fastCheck === null && cleared.fastCheckNote === FC.cleared("tc"),
+      otherNoNote: () => other.fastCheckNote === undefined,
+      validSilent: () => valid.length === 0,
+      missing: () => js(missing) === js([{ id: "fast-check", status: "warn", detail: FC.doctorInvalid("gone", "missing") }]),
+      guardian: () => guardian.length === 1 && guardian[0].detail === FC.doctorInvalid("guardian", "guardian"),
+      fixer: () => fixer.length === 1 && fixer[0].detail === FC.doctorInvalid("fx", "fixer"),
+    });
+  }
+
+  { // the status at a code task: the project log's LATEST run of the fast command (by its time; > 5 min ahead ignored; the check as ONE
+    // command) against the newest date of the feature's planned files (> 5 min ahead ignored)
+    const files = ["src/a.js", "src/b.js", "tests/a.test.js"];
+    const { p, f } = project("proj-fc-status",
+      task(1, "Code A", ["_Implements: src/a.js_", "_Verify: " + PASS + "_"]) + task(2, "Code B", ["_Implements: src/b.js_", "_Verify: " + PASS + "_"]) +
+      task(3, "Docs", ["_Verify: " + PASS + "_"]) + task(4, "Write T-01 red", ["_Implements: tests/a.test.js_", "_Verify: node -e \"process.exit(1)\"_", "_Expect: fail_"]), files);
+    const T0 = Date.now() - 600000;
+    dated(p, files, T0);
+    const st = () => { const b = S.taskBrief(p, f.slug, 1); return b.fastCheck ? b.fastCheck.status : "none"; };
+    const got = {};
+    got.unknown = st(); // no harness log at all
+    writeLog(p, [["npm run lint", 0, T0 + 10000]]);
+    got.missing = st();
+    writeLog(p, [[TC + " && npm test", 0, T0 + 10000]]);
+    got.chained = st();
+    writeLog(p, [[TC, 0, T0 + 10000]]);
+    got.clean = st();
+    dated(p, ["src/b.js"], T0 + 20000);
+    got.stale = st(); // ANY planned file of the feature, edited after the run
+    dated(p, ["src/b.js"], T0);
+    writeLog(p, [[TC, 0, T0 + 10000], [TC, 1, T0 + 30000]]);
+    got.failed = st();
+    writeLog(p, [[TC, 0, T0 + 10000], [TC, 1, Date.now() + 10 * 60000]]);
+    got.futureRun = st();
+    writeLog(p, [[TC, 0, T0 + 10000]]);
+    dated(p, ["src/a.js"], Date.now() + 3600000);
+    got.futureFile = st();
+    dated(p, ["src/a.js"], T0);
+    writeLog(p, [[TC, 0, T0 + 40000], [TC, 1, T0 + 10000]]); // an older run appended later (done --run logs its START time)
+    got.byTime = st();
+    fs.rmSync(path.join(p, "tests", "a.test.js"));
+    got.missingFile = st(); // a planned file not there is no edit
+    eq(got, { unknown: "unknown", missing: "missing", chained: "missing", clean: "clean", stale: "stale", failed: "failed", futureRun: "clean", futureFile: "clean", byTime: "clean", missingFile: "clean" },
+      "1.36 fast check: the status — unknown (no log at all) · missing (no run of the fast command; a chained `tc && test` line is none) · clean · stale (a planned file newer than the run) · failed (the latest run failed) — the latest by time (an older line appended later loses), a run or a file date > 5 min ahead ignored, a missing planned file no edit");
+    fs.writeFileSync(path.join(p, "tests", "a.test.js"), "// back\n");
+    dated(p, ["tests/a.test.js"], T0);
+    writeLog(p, [[TC, 0, T0 + 10000]]);
+    // the keys: next_task / the brief / write:true on a code task; none on a task naming no file; the red task's line
+    const next = await call("spec_next_task", { name: f.slug, projectDir: p });
+    const b1 = S.taskBrief(p, f.slug, 1);
+    const b1w = S.taskBrief(p, f.slug, 1, { write: true });
+    const b3 = S.taskBrief(p, f.slug, 3);
+    const b4 = await call("spec_task_brief", { name: f.slug, number: 4, includeBrief: true, projectDir: p });
+    S.completeTask(p, f.slug, 2, { command: PASS, exitCode: 0 });
+    const b2done = S.taskBrief(p, f.slug, 2);
+    const spike = S.createFeature(p, { name: "Probe", kind: "spike", question: "Does X scale?", timebox: "1d" });
+    fs.writeFileSync(path.join(spike.dir, "tasks.md"), "# Tasks\n\n" + task(1, "Prototype", ["_Implements: src/a.js_", "_Verify: " + PASS + "_"]));
+    const bSpike = S.taskBrief(p, spike.slug, 1);
+    const nSpike = S.nextTask(p, spike.slug);
+    all("1.36 fast check: next_task {check, command} and the brief {check, command, status} for an open CODE task — kept under write:true, its definition of done the loop line (a red task: the stub line instead); no key for a task naming no file, a done task or a spike's task (got " +
+      js([next.fastCheck, b1.fastCheck, b1w.fastCheck, b3.fastCheck, b4.fastCheck, b2done.fastCheck, bSpike.fastCheck, nSpike.fastCheck]) + ")", {
+      next: () => js(next.fastCheck) === js({ check: "tc", command: TC }),
+      brief: () => js(b1.fastCheck) === js({ check: "tc", command: TC, status: "clean" }),
+      briefDod: () => b1.brief.includes(FC.briefDod(TC)) && !b1.brief.includes(FC.briefDodRed(TC)),
+      writeKeeps: () => js(b1w.fastCheck) === js(b1.fastCheck) && b1w.brief === undefined,
+      docsNone: () => !("fastCheck" in b3) && !b3.brief.includes(FC.briefDod(TC)),
+      redLine: () => b4.fastCheck && b4.fastCheck.check === "tc" && b4.brief.includes(FC.briefDodRed(TC)) && !b4.brief.includes(FC.briefDod(TC)),
+      doneNone: () => !("fastCheck" in b2done),
+      spikeNone: () => !("fastCheck" in bSpike) && !("fastCheck" in nSpike),
+    });
+  }
+
+  { // the tick: complete_task carries {check, status, runs, clean} on a code task it TICKS, with a note while it isn't clean since the last
+    // edit (never for unknown: no log at all); none on a task naming no file, nor on a re-check of a done task
+    const files = ["src/a.js", "src/b.js", "src/c.js"];
+    const { p, f } = project("proj-fc-notes",
+      task(1, "Code A", ["_Implements: src/a.js_", "_Verify: " + PASS + "_"]) + task(2, "Code B", ["_Implements: src/b.js_", "_Verify: " + PASS + "_"]) +
+      task(3, "Code C", ["_Implements: src/c.js_", "_Verify: " + PASS + "_"]) + task(4, "Docs", ["_Verify: " + PASS + "_"]), files);
+    const T0 = Date.now() - 60000;
+    dated(p, files, T0);
+    const run = { command: PASS, exitCode: 0 };
+    const t1 = await call("spec_complete_task", { name: f.slug, number: 1, evidence: run, projectDir: p });
+    writeLog(p, [["npm run lint", 0, T0 + 1000]]);
+    const t2 = S.completeTask(p, f.slug, 2, run);
+    writeLog(p, [[TC, 0, T0 + 30000]]);
+    dated(p, ["src/c.js"], T0 + 50000);
+    const t3 = S.completeTask(p, f.slug, 3, run);
+    const nextDocs = S.nextTask(p, f.slug);
+    const t4 = await call("spec_complete_task", { name: f.slug, number: 4, evidence: run, projectDir: p });
+    const again = S.completeTask(p, f.slug, 1, run);
+    all("1.36 fast check: the tick's fastCheck {check, status, runs, clean} — unknown without a note, missing and stale with their note (the PowerShell hint on missing); next_task / complete_task carry none for a task naming no file, nor a re-check of a done task (got " +
+      js([t1.fastCheck, t1.note, t2.fastCheck, t3.fastCheck, nextDocs.fastCheck, t4.fastCheck, again.fastCheck]) + ")", {
+      unknown: () => t1.ok && js(t1.fastCheck) === js({ check: "tc", status: "unknown", runs: 0, clean: 0 }) && t1.note === undefined,
+      missing: () => t2.fastCheck.status === "missing" && t2.note === FC.tickNote(2, "tc", TC, "missing", f.slug) && /PowerShell/.test(t2.note),
+      stale: () => t3.fastCheck.status === "stale" && t3.note === FC.tickNote(3, "tc", TC, "stale", f.slug),
+      docsNext: () => nextDocs.next.number === 4 && !("fastCheck" in nextDocs),
+      docsTick: () => t4.ok && !("fastCheck" in t4),
+      recheck: () => again.ok && again.alreadyDone === true && !("fastCheck" in again),
+    });
+  }
+
+  { // the window and the record: runs / clean since the previous tick; the snapshot rides on the tick's RUN (`fast`, its history too — a
+    // re-check after it keeps it, a note-only tick records none); metrics per feature + the project's tick totals
+    const files = ["src/a.js", "src/b.js", "src/c.js"];
+    const { p, f } = project("proj-fc-window",
+      task(1, "Code A", ["_Implements: src/a.js_", "_Verify: " + PASS + "_"]) + task(2, "Code B", ["_Implements: src/b.js_", "_Verify: " + PASS + "_"]) +
+      task(3, "Code C", ["_Implements: src/c.js_"]) + task(4, "Docs", []), files);
+    dated(p, files, Date.now() - 600000);
+    const base = Date.now() + 2000; // after the feature's creation (the first window's start), inside the 5-min skew
+    writeLog(p, [[TC, 0, base], ["npm run lint", 1, base + 500], [TC, 0, base + 1000]]);
+    const run = { command: PASS, exitCode: 0 };
+    const t1 = S.completeTask(p, f.slug, 1, run);
+    const stFile = path.join(f.dir, ".state.json");
+    const st = JSON.parse(fs.readFileSync(stFile, "utf8"));
+    st.lastTickAt = new Date(base + 1500).toISOString(); // the tick, as of the log's clock
+    fs.writeFileSync(stFile, js(st, null, 2));
+    appendLog(p, [[TC, 0, base + 2000], [TC, 1, base + 3000], [TC, 1, base + 4000]]);
+    const t2 = S.completeTask(p, f.slug, 2, run);
+    S.completeTask(p, f.slug, 1, run); // a re-check after the tick: its run carries no snapshot
+    const t3 = S.completeTask(p, f.slug, 3, "checked by hand"); // a note-only tick: no run, no snapshot
+    const ev = JSON.parse(fs.readFileSync(stFile, "utf8")).evidence;
+    const m = S.metrics(p, f.slug);
+    const proj = S.metrics(p);
+    const lines = S.metricsLines(m), projLines = S.metricsLines(proj);
+    all("1.36 fast check: each tick counts the fast runs since the previous tick (2, then 3 with one clean), its snapshot on the tick's run (kept in the history past a re-check; none for a note-only tick); metrics {check, runs, clean, cleanRate, ticks, ticksClean} and the line; the project's fastTicks / fastTicksClean and its line (got " +
+      js([t1.fastCheck, t2.fastCheck, t3.fastCheck, ev["1"].fast, (ev["1"].history || []).map((h) => h.fast), ev["3"].fast, m.fastCheck, proj.totals.fastTicks, proj.totals.fastTicksClean]) + ")", {
+      tick1: () => js(t1.fastCheck) === js({ check: "tc", status: "clean", runs: 2, clean: 2 }),
+      tick2: () => js(t2.fastCheck) === js({ check: "tc", status: "failed", runs: 3, clean: 1 }) && t2.note === FC.tickNote(2, "tc", TC, "failed", f.slug),
+      onTheRun: () => js(ev["2"].fast) === js({ check: "tc", status: "failed", runs: 3, clean: 1 }) && ev["2"].history.some((h) => h.fast),
+      recheckKeeps: () => ev["1"].fast === undefined && ev["1"].history.some((h) => js(h.fast) === js({ check: "tc", status: "clean", runs: 2, clean: 2 })),
+      noteTick: () => t3.ok && t3.fastCheck && ev["3"].fast === undefined,
+      metrics: () => js(m.fastCheck) === js({ check: "tc", runs: 5, clean: 3, cleanRate: 60, ticks: 2, ticksClean: 1 }),
+      line: () => lines.includes(FC.metrics("tc", 5, 3, 60, 2, 1)),
+      totals: () => proj.totals.fastTicks === 2 && proj.totals.fastTicksClean === 1 && projLines.includes(FC.metricsTotals(2, 1)),
+      noTickNull: () => S.metrics(path.join(tmp, "proj-fc-clear"), "login").fastCheck === null,
+    });
+  }
+
+  { // the offer (init, spec_upgrade): what the ROOT manifests suggest — offered, never set; none while one is set or right after off
+    const mk = (name, files) => {
+      const p = path.join(tmp, name);
+      fs.mkdirSync(p, { recursive: true });
+      for (const [rel, text] of Object.entries(files)) fs.writeFileSync(path.join(p, rel), typeof text === "string" ? text : js(text));
+      return p;
+    };
+    const offerOf = (p, opts) => { const r = S.initProject(p, ["core"], "en", opts || {}); return r.fastCheckOffer || null; };
+    const TS = { devDependencies: { typescript: "5.6.0" } };
+    const pScript = mk("proj-fc-offer-script", { "package.json": { scripts: { typecheck: "tsc --noEmit" }, ...TS }, "tsconfig.json": "{}" });
+    const o = {
+      script: offerOf(pScript),
+      pnpm: offerOf(mk("proj-fc-offer-pnpm", { "package.json": { scripts: { "type-check": "tsc -p ." }, ...TS }, "pnpm-lock.yaml": "" })),
+      fixerScript: offerOf(mk("proj-fc-offer-fixer", { "package.json": { scripts: { typecheck: "eslint --fix ." }, ...TS }, "tsconfig.json": "{}" })),
+      tsNoDep: offerOf(mk("proj-fc-offer-tsnodep", { "package.json": { scripts: { lint: "eslint ." } }, "tsconfig.json": "{}" })),
+      tsDep: offerOf(mk("proj-fc-offer-tsdep", { "package.json": TS, "tsconfig.json": "{}" })),
+      cargo: offerOf(mk("proj-fc-offer-cargo", { "Cargo.toml": "[package]\nname = \"x\"\n" })),
+      go: offerOf(mk("proj-fc-offer-go", { "go.mod": "module x\n" })),
+      ruff: offerOf(mk("proj-fc-offer-ruff", { "pyproject.toml": "[project]\nname = \"x\"\n\n[tool.ruff]\nline-length = 100\n" })),
+      mypy: offerOf(mk("proj-fc-offer-mypy", { "mypy.ini": "[mypy]\n" })),
+      nothing: offerOf(mk("proj-fc-offer-none", { "README.md": "# x\n" })),
+      same: offerOf(mk("proj-fc-offer-same", { "package.json": { scripts: { typecheck: "tsc --noEmit" }, ...TS } }), { checks: { tsc: "npm run typecheck" } }),
+      taken: offerOf(mk("proj-fc-offer-taken", { "package.json": { scripts: { typecheck: "tsc --noEmit" }, ...TS } }), { checks: { typecheck: "npm test" } }),
+    };
+    const neverSet = meta(pScript).fastCheck === undefined && meta(pScript).checks === undefined;
+    const offAfter = S.initProject(pScript, [], null, { fastCheck: "off" });
+    S.initProject(pScript, [], null, { checks: { typecheck: "npm run typecheck" }, fastCheck: "typecheck" });
+    const whileSet = S.initProject(pScript, [], null, {});
+    const upWhileSet = S.specUpgrade(pScript); // the offer's own rule (init skips it already): none while one is set
+    const cmd = (x) => (x ? x.command : null);
+    all("1.36 fast check: the offer — a package.json typecheck script (the lockfile's runner; never one that rewrites files), else tsconfig.json → npx tsc --noEmit only when typescript is a dependency, Cargo.toml → cargo check, go.mod → go vet ./..., [tool.ruff] → ruff check ., mypy.ini → mypy .; nothing → none; a check already running it is named, a name taken by another command → fast; never set, never while one is set nor right after off (got " +
+      js(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v && [v.name, v.command, v.from]]))) + ")", {
+      script: () => cmd(o.script) === "npm run typecheck" && o.script.name === "typecheck" && o.script.from === 'package.json "typecheck"' &&
+        o.script.note === FC.offer("npm run typecheck", 'package.json "typecheck"', "typecheck", false),
+      pnpm: () => cmd(o.pnpm) === "pnpm run type-check",
+      fixerScript: () => cmd(o.fixerScript) === "npx tsc --noEmit",
+      tsNoDep: () => o.tsNoDep === null,
+      tsDep: () => cmd(o.tsDep) === "npx tsc --noEmit" && o.tsDep.from === "tsconfig.json",
+      cargo: () => cmd(o.cargo) === "cargo check", go: () => cmd(o.go) === "go vet ./...",
+      ruff: () => cmd(o.ruff) === "ruff check ." && o.ruff.from === "pyproject.toml [tool.ruff]", mypy: () => cmd(o.mypy) === "mypy .",
+      nothing: () => o.nothing === null,
+      same: () => o.same && o.same.name === "tsc" && o.same.note === FC.offer("npm run typecheck", 'package.json "typecheck"', "tsc", true),
+      taken: () => o.taken && o.taken.name === "fast",
+      neverSet: () => neverSet,
+      notAfterOff: () => offAfter.fastCheckOffer === undefined,
+      notWhileSet: () => whileSet.fastCheckOffer === undefined && upWhileSet.ok && upWhileSet.fastCheckOffer === undefined,
+    });
+    // spec_upgrade carries it, and its UPGRADE.md lists it (the runnable line made portable: a committed file)
+    const pu = mk("proj-fc-offer-upgrade", { "Cargo.toml": "[package]\nname = \"x\"\n" });
+    S.initProject(pu, ["core"], "en");
+    S.createFeature(pu, { name: "Login", tracks: ["core"] });
+    const rm = JSON.parse(fs.readFileSync(rmFile(pu), "utf8"));
+    delete rm.meta.specVersion; // a project of an earlier version: apply stamps it, so UPGRADE.md is written
+    fs.writeFileSync(rmFile(pu), js(rm, null, 2));
+    const audit = S.specUpgrade(pu);
+    const applied = S.specUpgrade(pu, { apply: true });
+    const md = (() => { try { return fs.readFileSync(path.join(pu, ".specs", "UPGRADE.md"), "utf8"); } catch { return ""; } })();
+    all("1.36 fast check: spec_upgrade offers it (fastCheckOffer, never set) and UPGRADE.md lists it as an item, its CLI line portable (got " +
+      js([audit.fastCheckOffer, applied.migrations && applied.migrations.report, md.slice(0, 200)]) + ")", {
+      audit: () => cmd(audit.fastCheckOffer) === "cargo check" && meta(pu).fastCheck === undefined,
+      md: () => md.includes("- [ ] " + S.portableCli(audit.fastCheckOffer.note)),
+    });
+  }
+};

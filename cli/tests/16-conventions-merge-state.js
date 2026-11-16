@@ -80,6 +80,29 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, runAsync, tmp, CLI }) => {
       js(rmBoth.r.mergeConflicts) === js([{ path: "meta.reviewModels", base: ["opus", "sonnet"], ours: ["sonnet", "opus"], theirs: ["opus", "haiku"] }]),
     offVsChange: () => rmOff.code === 1 && !("reviewModels" in rmOff.r.meta) && Array.isArray(rmOff.r.mergeConflicts) && rmOff.r.mergeConflicts[0].path === "meta.reviewModels",
   });
+  // 1.36 the fast check: meta.fastCheck is a plain value (the default rule — two different names conflict); a tick's `fast` snapshot is a
+  // RUN field, carried by the run that wins (evidence[n]: the later one, both sides having recorded the task) with no rule of its own
+  {
+    const doc = (v) => ({ meta: v === undefined ? { lang: "en" } : { lang: "en", fastCheck: v }, features: {} });
+    const fcMerge = (n, base, ours, theirs) => {
+      const o = put("o-fc" + n, doc(ours));
+      const m = runIn(["merge-state", put("b-fc" + n, doc(base)), o, put("t-fc" + n, doc(theirs)), ".specs/roadmap.json"]);
+      return { code: m.code, r: parse(o) };
+    };
+    const one = fcMerge(1, undefined, undefined, "tc"), both = fcMerge(2, "tc", "lint", "types");
+    const fast = { check: "tc", status: "clean", runs: 2, clean: 2 };
+    const rec = (at, extra) => { const r = { command: "npm test", exitCode: 0, at, cmdRule: 1, ...(extra || {}) }; return { ...r, task: "[US1] A", verify: "npm test", history: [r] }; };
+    const st = (ev) => ({ lang: "en", tracks: ["core"], evidence: ev });
+    const so = put("o-fcs", st({ 1: rec(T(4)) }));
+    const ms = runIn(["merge-state", put("b-fcs", st({})), so, put("t-fcs", st({ 1: rec(T(6), { fast }) })), ".specs/invoices/.state.json"]);
+    const s1 = parse(so);
+    all("1.36 fast check: merge-state takes meta.fastCheck by the default rule (one side's change through, two different names a conflict — ours kept) and a tick's `fast` rides with its run, the later one winning (got " +
+      js([one, both, ms.code, s1 && s1.evidence]) + ")", {
+      oneSide: () => one.code === 0 && one.r.meta.fastCheck === "tc" && !("mergeConflicts" in one.r),
+      conflict: () => both.code === 1 && both.r.meta.fastCheck === "lint" && js(both.r.mergeConflicts) === js([{ path: "meta.fastCheck", base: "tc", ours: "lint", theirs: "types" }]),
+      runField: () => ms.code === 0 && s1 && js(s1.evidence["1"].fast) === js(fast) && s1.evidence["1"].history.some((h) => js(h.fast) === js(fast)),
+    });
+  }
 
   // --- with git: --install / --uninstall, then a real merge of two branches (skipped without git — the Docker images have it)
   const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });

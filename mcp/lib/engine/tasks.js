@@ -26,7 +26,8 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
   briefReuse, briefDesignSystem, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
   decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize;
 let dayOf; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
+function __link(E) { ({ fastCheckStatus, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -74,6 +75,9 @@ function nextTask(projectDir, name, opts = {}) {
   // because they wait (skipped), the ones that can't start as things stand (blocked — a cycle, a _Depends:_ naming no task).
   if (sch.skipped.length) res.skipped = sch.skipped;
   if (sch.blocked.length) res.blocked = sch.blocked;
+  // 1.36 (stable): the fast check to run after each small edit of a CODE next task (roadmap.json meta.fastCheck) — none otherwise
+  const fast = next ? fastCheckStatus(projectDir, f.dir, next, readState(projectDir, f.slug)) : null;
+  if (fast) res.fastCheck = { check: fast.check, command: fast.command };
   if (!next && res.remaining) res.note = taskDepsBlockedNote(sch, f.slug, featureLang(projectDir, f.slug));
   if (opts.batch && next) res.batch = parallelBatch(text, opts.max, tracks);
   if (opts.waves) {
@@ -606,6 +610,10 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const cli = !!opts && opts.ranBy === "cli";
   const cliStart = cli ? runStartOf({ at: opts.startedAt }) : null;
   const ranVerify = cli && Array.isArray(opts.ranVerify) ? opts.ranVerify.filter((c) => typeof c === "string").join("\n").slice(0, 1000) : undefined;
+  // 1.36 the fast check (meta.fastCheck, warn only): judged when this call TICKS a code task — read BEFORE anything is written
+  // (its window ends at the previous tick: lastTickAt is stamped below). A tick with a run carries it on that run (`fast`: metrics).
+  const fast = !alreadyDone && !failed ? fastCheckStatus(projectDir, f.dir, task, state) : null;
+  if (fast && ev && ev.exitCode != null) ev.fast = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean };
   if (ev) { // every run is recorded — a failure too (never ticked), so a later note can't paper over it
     state.evidence = state.evidence || {};
     // Only THIS task's record is extended; another task's record under the same number is kept aside.
@@ -711,6 +719,12 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   if (!next && res.done < res.total) {
     if (sch.blocked.length) res.blocked = sch.blocked;
     res.note = [res.note, taskDepsBlockedNote(sch, f.slug, lng)].filter(Boolean).join(" ");
+  }
+  // 1.36 (stable): the fast check at this tick {check, status, runs, clean} — a note when it wasn't clean since the last edit (never
+  // for `unknown`: no harness log at all, an MCP-only client). Never a refusal.
+  if (fast) {
+    res.fastCheck = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean };
+    if (["stale", "failed", "missing"].includes(fast.status)) res.note = [res.note, i18n.msg(lng).fastCheck.tickNote(n, fast.check, fast.command, fast.status, f.slug)].filter(Boolean).join(" ");
   }
   return withObserved(res); // the observed stamp on every result
 }
@@ -1646,7 +1660,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const blockText = taskProse(block).join("\n");
   // A bugfix task carries the bug itself: bug.md's Reproduction and Root Cause (null while still unwritten).
   let bug = null;
-  const kind = readState(projectDir, slug).kind;
+  const state = readState(projectDir, slug);
+  const kind = state.kind;
   // The same gate complete_task applies — reported up front, so `done --run` refuses BEFORE running any command.
   const gate = bugfixGate(dir, kind, blocks, block, lng);
   if (kind === "bugfix") {
@@ -1754,6 +1769,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const pipes = verifyPipes(block);
   const expectFail = expectsFail(block); // _Expect: fail_ — the brief's Verification section says the run must fail
   const checks = projectChecks(projectDir).checks; // roadmap.json meta.checks — part of the definition of done
+  // 1.36 the fast check (meta.fastCheck) of an OPEN code task: the definition of done's loop line, and its status — done --run runs
+  // it first unless it is clean
+  const fast = block.done ? null : fastCheckStatus(projectDir, dir, block, state);
   const deps = briefDependencies(activeBlocks, block); // its _Depends:_ and where each stands
 
   const md = i18n.renderBrief({
@@ -1783,6 +1801,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     verifyPipes: pipes, // a pipe masks the check's exit code — the brief says so
     expectFail,
     projectChecks: checks,
+    fastCheck: fast ? { check: fast.check, command: fast.command } : null,
     globalConstraints: globalConstraints(tasksText),
     decisions: dec.items,
     decisionsOmitted: dec.omitted,
@@ -1838,6 +1857,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (pipes.length) res.verifyPipes = pipes; // stable: branch on it, never on the brief's text
   if (expectFail) res.expect = "fail"; // B5 (kept with write:true, like verify): the run must exit non-zero
   if (checks.length) res.projectChecks = checks; // [{name, command}] the definition of done names
+  if (fast) res.fastCheck = { check: fast.check, command: fast.command, status: fast.status }; // 1.36 (stable; identifiers only)
   if (deps.length) res.dependsOn = deps.map((d) => ({ number: d.number, status: d.status })); // 1.14 F3 (kept with write:true: identifiers only)
   if (dec.items.length) res.decisions = dec.items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, affects: x.affects })); // 1.14 C2
   if (dec.omitted.length) res.decisionsOmitted = dec.omitted;
@@ -1859,6 +1879,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // the nearby files (identifiers) and how many design entries the brief quotes — never the entries' text
     if (res.reuse) res.refs.reuse = { entries: res.reuse.entries.length, files: res.reuse.files };
     if (res.designSystem) res.refs.designSystem = res.designSystem.components.map((c) => c.name); // the names only
+    // KEPT (identifiers the controller and done --run act on): verify, expect, projectChecks, dependsOn, gated / gateError,
+    // preflight, uiReview, fastCheck (1.36) — only the quoted spec text below goes.
     for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse", "designSystem"]) delete res[k];
   }
   return res;

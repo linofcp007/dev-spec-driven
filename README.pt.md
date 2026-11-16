@@ -184,7 +184,7 @@ cliente MCP — chamam o mesmo motor:
 | Ferramenta | O que faz |
 |---|---|
 | `spec_classify` | Fase 0: os tracks e um tamanho sugerido a partir de uma descrição (sinais locais por palavras-chave, EN / PT / ES — sem modelo) |
-| `spec_init` | O `.specs/` e o steering dos tracks; definições do projeto: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard`, `reviewModels` (o painel de revisão) |
+| `spec_init` | O `.specs/` e o steering dos tracks; definições do projeto: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard`, `fastCheck` (a verificação corrida depois de cada edição), `reviewModels` (o painel de revisão) |
 | `spec_create` | Uma funcionalidade para os seus tracks e `size` (`xs` = um `change.md`); `kind` bugfix · spike, `brownfield`, `flow: "design-first"`, `branch` |
 | `spec_import` | Uma spec do Kiro, spec-kit ou OpenSpec, um plano (Claude Code, Cursor, ExecPlan do Codex, fluidplan) ou documentos BMAD como funcionalidade — ou o steering do Kiro / as regras do Cursor como steering; `dryRun` |
 | `spec_status` | O tipo, o fluxo, os tracks, a fase, as tarefas e as secções do design de uma funcionalidade; sem `name`, todas |

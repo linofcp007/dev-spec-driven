@@ -10,6 +10,7 @@
  *   runVerdict(run, sh, why, timeoutS) → { code, output, summary, cantRun, crashed? } — what the run proves
  *   runCommand(command, sh, M, opts) → Promise<the verdict + heldOpen, stdout, stderr> — both, as done --run / finish --run use them
  *   runChecks(feature, deps)         → Promise<{ ok, evidence } | a refusal> — finish --run's loop over meta.checks
+ *   preRunRefusal(checks, sh, M)     → a refusal | null — a project check the shell would misread (finish --run, done --run's fast check)
  *   runSummaries(parts)              → the evidence summary of several passing commands
  *   shellName(sh)                    → the shell a run uses, as a message names it
  *
@@ -170,6 +171,23 @@ function runSummaries(parts) {
   }).join("\n").slice(0, EVIDENCE_SUMMARY_MAX);
 }
 
+// Project checks ([{name, command}]) a shell would misread, refused before anything runs → { ok: false, error } | null: POSIX syntax
+// under the default cmd.exe (single quotes, $VAR — `node -e 'process.exit(1)'` exits 0 there), a pwsh script's `$…` / backticks
+// under a POSIX shell (expanded first: `exit $LASTEXITCODE` → `exit` → 0). ONE rule for finish --run's checks and done --run's
+// fast check (1.36). env: where ComSpec is read for the shell's name (the process's by default).
+function preRunRefusal(checks, sh, M, env) {
+  const spec = facade();
+  if (process.platform === "win32" && sh.shell === true) {
+    const posix = checks.map((c) => [c, spec.posixShellSyntax(c.command)]).find(([, k]) => k.length);
+    if (posix) return { ok: false, error: M.projectChecks.posixOnWindows(posix[0].name, posix[0].command, posix[1]) };
+  }
+  if (sh.posix) { // a POSIX shell would expand the pwsh script's `$…` first (done --run's rule)
+    const pw = checks.map((c) => [c, spec.posixPwshScript(c.command)]).find(([, k]) => k.length);
+    if (pw) return { ok: false, error: M.projectChecks.pwshInPosix(pw[0].name, pw[0].command, pw[1], shellName(sh, env)) };
+  }
+  return null;
+}
+
 // finish --run: every project check (meta.checks), in order, from the project root — the same shell rules as done --run (--shell /
 // DEV_SPEC_SHELL, POSIX syntax refused under cmd.exe, a pwsh script under a POSIX shell, the pipe hint). Every run is recorded, a
 // failure too; a check that could not run refuses the whole run (all-or-nothing, like spec_finish {evidence}). dev-guardian's gate
@@ -191,14 +209,8 @@ async function runChecks(feature, deps) {
   const sh = deps.resolveShell();
   if (sh.error) return { ok: false, couldNotRun: sh.error, error: sh.error === "wsl-exe" ? M.runGate.wslExe(sh.path) : M.runGate.noGitBash };
   if (sh.wsl) deps.say(M.runGate.wslBash(sh.shell)); // an explicit WSL launcher is used as given
-  if (process.platform === "win32" && sh.shell === true) {
-    const posix = checks.map((c) => [c, spec.posixShellSyntax(c.command)]).find(([, k]) => k.length);
-    if (posix) return { ok: false, error: M.projectChecks.posixOnWindows(posix[0].name, posix[0].command, posix[1]) };
-  }
-  if (sh.posix) { // a POSIX shell would expand the pwsh script's `$…` first (done --run's rule)
-    const pw = checks.map((c) => [c, spec.posixPwshScript(c.command)]).find(([, k]) => k.length);
-    if (pw) return { ok: false, error: M.projectChecks.pwshInPosix(pw[0].name, pw[0].command, pw[1], shellName(sh)) };
-  }
+  const refused = preRunRefusal(checks, sh, M);
+  if (refused) return refused;
   checks.map((c) => c.command).filter(spec.verifyPipeMasked).forEach((c) => deps.say(M.verifyPipe.runHint(c)));
   const lang = spec.featureLang(projectDir, fx.slug);
   // dev-guardian's gate (1.30): its launcher must be the one dev-spec writes — an earlier version's is replaced first, a missing or
@@ -238,4 +250,4 @@ async function runChecks(feature, deps) {
   return { ok: true, evidence };
 }
 
-module.exports = { execCommand, runVerdict, runCommand, runChecks, runSummaries, shellName, RUN_DRAIN_MS, MAX_OUTPUT, EVIDENCE_SUMMARY_MAX, CRASH_SIGNALS };
+module.exports = { execCommand, runVerdict, runCommand, runChecks, preRunRefusal, runSummaries, shellName, RUN_DRAIN_MS, MAX_OUTPUT, EVIDENCE_SUMMARY_MAX, CRASH_SIGNALS };

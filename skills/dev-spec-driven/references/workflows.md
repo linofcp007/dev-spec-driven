@@ -63,7 +63,7 @@ MCP prompts. Full table: `references/tooling-reference.md`.
   `spec_drift` (and a session-start line) reports what changed since. Decide with the user: update the spec
   (`spec_impact`, or a new feature with `_Supersedes:_`), fix the code, or accept and re-baseline.
 - **Metrics & retro (`spec_metrics`).** Lead times, rework, forced approvals, change requests, evidence pass rate,
-  velocity; `--write` drafts `retro.md` after finish — its steering/constitution amendments are proposals, never applied.
+  velocity, the fast check's clean runs and ticks (`meta.fastCheck`); `--write` drafts `retro.md` after finish — its steering/constitution amendments are proposals, never applied.
 - **Stakeholders.** `spec_export` — an offline, printable HTML/md document (`--gherkin`: `.feature` files, steps = the
   EARS clauses; `--tracker jira|linear`: an import CSV; `--adr`: the decision log as MADR files, ADR number = D-n);
   `spec_export {format: "changelog"}` — release notes (Added · Changed · Fixed), `--milestone`.
