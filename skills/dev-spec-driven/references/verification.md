@@ -343,17 +343,21 @@ A test made to pass is a weakened test. At guard level `tests` (`init --guard te
 against stay as they were unless the plan or the user says otherwise:
 
 - **What is protected** — the feature's `.state.json → protectedTests`: the test files present at its FIRST complete tasks
-  approval (`.specs/<feature>/tests/` too; a content hash each, at most 2,000 — past them doctor warns), and at each tick the
-  test files the task names exactly in `_Implements:_` (their content then is the authorised one — the bugfix's red test,
-  task 1's `_Implements: [the test file T-01 goes in]_`) and the test files its `_Verify:_` runs. An untick never removes one.
-  A new test file stays editable until a tick records it.
+  approval (the features' `.specs/<feature>/tests/` first, its own first, then the project's; a content hash each, at most
+  2,000 — past them doctor warns; a `feature protect` run before the approval doesn't replace it), and at a task's FIRST tick
+  the test files it names exactly in `_Implements:_` (their content then is the authorised one — the bugfix's red test,
+  task 1's `_Implements: [the test file T-01 goes in]_`) and the test files its `_Verify:_` runs. An untick never removes one,
+  and a re-tick never re-records one. A new test file stays editable until a tick records it.
 - **The edit** (Claude Code's guard hook) — editing, removing or moving a protected test asks unless a task that can START
-  NOW names it exactly in `_Implements:_` (never a folder, a glob or `_Makes green:_`) or the user lifted it; refused under
-  `meta.approvalGuard: deny`. If it asks or refuses, the task reports NEEDS_CONTEXT naming the test — never a shell command,
-  a script or git around it.
+  NOW names it exactly in `_Implements:_` (never a folder, a glob or `_Makes green:_`, never a task reopened by an untick or
+  a box unchecked by hand) or the user lifted it; refused under `meta.approvalGuard: deny`. It holds while the feature that
+  listed the test is unfinished — its tasks all ticked too, until its finish — and for every spelling of the path: a glob in
+  any folder, another case where the file system ignores case, a path through a link or junction. If it asks or refuses, the
+  task reports NEEDS_CONTEXT naming the test — never a shell command, a script or git around it.
 - **The lift** — `dev-spec feature unprotect <feature> <file> --reason "…"` (`spec_feature {action: "unprotect", file,
   reason}`): the user's decision — with the approval guard on, an agent's call asks or is refused; `feature protect <feature>
-  <file>` ends it. `feature protect <feature>` adds the tests present now (it never re-hashes a recorded one).
+  <file>` ends it, and so does that feature's finish (a later feature keeps the test protected; finishing the same feature
+  again names the change again). `feature protect <feature>` adds the tests present now (it never re-hashes a recorded one).
 - **At finish** (every surface, git-free) — each protected test is hashed again: one whose content matches no hash a live
   feature recorded for it (its snapshot, a tick of any feature) and that no lift covers is a **warning** naming it (changed /
   deleted) and a "Protected tests" block in the merge summary — never a blocker: check each change is intended, then record it
@@ -363,8 +367,9 @@ against stay as they were unless the plan or the user says otherwise:
   removed checks — in new tests too), and the independent reviewer sees every test file a task changed outside its
   `_Implements:_`. Known limits: tests in ignored, hidden or linked folders, outside the project folder or past the cap are
   not listed; new test-support files (conftest.py, setup files, mocks) stay editable; a git command or a script is not read
-  by the hook (finish names the result); a merge from the main branch lists teammates' test changes; an untick re-opens its
-  task — a task that can start now naming the test may edit it again, and its re-tick records the new content.
+  by the hook (finish names the result); a merge from the main branch lists teammates' test changes; an archived feature's
+  list and lifts are not read (restored, they are again); creating a link to a protected folder is not read — an edit through
+  it is.
 
 ## Evidence the harness observed (Claude Code)
 

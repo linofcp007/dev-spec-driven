@@ -491,4 +491,214 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       free: () => ticked.ok === true && free.decision !== "ask" && free.decision !== "deny",
     });
   }
+
+  { // +port, the differential check's half (1.36.0 review 1, T1): baseline 1 verified, port task 2 done, differential check 3 open —
+    // improvement 4 (ready by its _Depends: 2_) names a protected test: it sits after the open D, so it unlocks nothing until D's run
+    const pP = project("port-held-d", { approvalGuard: "ask" });
+    w(pP, "test/parser.test.js", "parser\n");
+    const fP = S.createFeature(pP, "Csv port", ["core", "port"], "", undefined, "en");
+    tasks(fP, "- [ ] 1. Record the baseline\n  - _Requirements: US-1.AC-36, US-1.AC-37_\n  - _Verify: node base.js_\n" +
+      "- [ ] 2. Port the parser\n  - _Requirements: US-1.AC-1_\n  - _Verify: node port.js_\n" +
+      "- [ ] 3. Differential check\n  - _Requirements: US-1.AC-36, US-1.AC-37_\n  - _Verify: node diff.js_\n" +
+      "- [ ] 4. Improve the parser's errors\n  - _Requirements: US-2.AC-1_\n  - _Depends: 2_\n  - _Implements: test/parser.test.js_\n  - _Verify: node imp.js_\n");
+    approveTasks(pP, "csv-port");
+    S.completeTask(pP, "csv-port", 1, { command: "node base.js", exitCode: 0 });
+    S.completeTask(pP, "csv-port", 2, { command: "node port.js", exitCode: 0 });
+    const ready = E.readyTasks(S.taskBlocks(fs.readFileSync(path.join(fP.dir, "tasks.md"), "utf8"))).join(",");
+    const held = g(pP, "test/parser.test.js");
+    const d = S.completeTask(pP, "csv-port", 3, { command: "node diff.js", exitCode: 0 });
+    const free = g(pP, "test/parser.test.js");
+    all("1.36 guard tests + port: a task after the OPEN differential check (4, ready by _Depends: 2_ — readyTasks lists 3 and 4) unlocks nothing: its protected test asks; D ticked with its run, task 4 unlocks it (got " + js({ ready, held: held.decision, d: d.ok, free: free.decision }) + ")", {
+      ready: () => ready === "3,4", held: () => held.decision === "ask" && held.why === "protected-test" && !held.current.some((t) => t.number === 4),
+      free: () => d.ok === true && free.decision !== "ask" && free.decision !== "deny",
+    });
+  }
+
+  { // 1.36.0 review 1 (PT-1): a reopened task with a tick record never unlocks its _Implements:_ test — a box unchecked by hand (ticks[n]
+    // kept) and an untick (an `unticks` entry; ticks[n] dropped) still ask; the re-tick keeps the recorded hash, so finish names the edit
+    const pR = project("reopen", { approvalGuard: "ask" });
+    w(pR, "src/cart.js", "c\n"); w(pR, "test/cart.test.js", "old\n");
+    const fR = S.createFeature(pR, "Cart", ["core"], "", undefined, "en");
+    tasks(fR, "- [ ] 1. Red test\n  - _Implements: test/cart.test.js_\n  - _Verify: node --test test/cart.test.js_\n- [ ] 2. Fix\n  - _Implements: src/cart.js_\n");
+    approveTasks(pR, "cart");
+    w(pR, "test/cart.test.js", "red T-01\n");
+    S.completeTask(pR, "cart", 1, { command: "node --test test/cart.test.js", exitCode: 0 });
+    const hRed = listOf(fR).files["test/cart.test.js"];
+    const tf = path.join(fR.dir, "tasks.md");
+    fs.writeFileSync(tf, fs.readFileSync(tf, "utf8").replace("- [x] 1.", "- [ ] 1.")); // unchecked by hand: no prompt, the approval current
+    const gHand = g(pR, "test/cart.test.js");
+    fs.writeFileSync(tf, fs.readFileSync(tf, "utf8").replace("- [ ] 1.", "- [x] 1."));
+    const undo = S.completeTask(pR, "cart", 1, null, { undo: true, reason: "redo the red test" });
+    const gUntick = g(pR, "test/cart.test.js");
+    w(pR, "test/cart.test.js", "weakened\n"); // the user confirmed the ask
+    const re = S.completeTask(pR, "cart", 1, { command: "node --test test/cart.test.js", exitCode: 0 });
+    const hRe = listOf(fR).files["test/cart.test.js"];
+    S.completeTask(pR, "cart", 2, { summary: "done" });
+    const fin = S.finishFeature(pR, "cart", {});
+    all("1.36 guard tests: a reopened task with a tick record unlocks nothing — unchecked by hand (ticks[n] kept) or unticked (unticks), its own _Implements:_ test still asks and it is not named as a task that can start now; its re-tick keeps the recorded hash and finish names the change (got " +
+      js([gHand.why, undo.ok, gUntick.why, re.ok, hRe === hRed, fin.protectedTests]) + ")", {
+      hand: () => gHand.decision === "ask" && gHand.why === "protected-test",
+      untick: () => undo.ok && gUntick.decision === "ask" && gUntick.why === "protected-test" && !gUntick.current.some((t) => t.number === 1),
+      kept: () => re.ok && typeof hRed === "string" && hRe === hRed,
+      finishNames: () => fin.protectedTests.unexplained.some((x) => x.file === "test/cart.test.js" && x.status === "changed"),
+    });
+  }
+
+  { // 1.36.0 review 1 (PT-2, T2): other spellings of a protected test at approvalGuard deny — a glob in a folder segment (the hook's shell
+    // readings), a [class], a case variant (by name or not: listed is folded membership), a path through a junction, a listed path holding
+    // brackets, a case variant of a listed test that is gone
+    const pG = project("spellings", { approvalGuard: "deny" });
+    w(pG, "src/cart.js", "c\n"); w(pG, "test/auth.test.js", "auth\n"); w(pG, "test/unit/deep.test.js", "deep\n"); w(pG, "src/cart.test.js", "colocated\n");
+    w(pG, "pkg/test_util.py", "def test_x(): pass\n"); w(pG, "app/[id]/page.test.js", "page\n"); w(pG, "test/gone.test.js", "gone\n");
+    const fG = S.createFeature(pG, "Cart", ["core"], "", undefined, "en");
+    tasks(fG, "- [ ] 1. Cart logic\n  - _Implements: src/cart.js_\n");
+    approveTasks(pG, "cart");
+    fs.unlinkSync(path.join(pG, "test", "gone.test.js"));
+    fs.symlinkSync(path.join(pG, "test"), path.join(pG, "t2"), "junction");
+    const hs = (cmd, toolName) => { const h = hookOut(hook(pG, toolName || "Bash", { command: cmd })); return (h && h.hookSpecificOutput && h.hookSpecificOutput.permissionDecision) || "silent"; };
+    const shell = { tesQ: hs("sed -i 's/a/b/' tes?/auth.test.js"), star: hs("sed -i 's/a/b/' */auth.test.js"), deep: hs("sed -i 's/x/y/' test/*/deep.test.js"),
+      cls: hs("rm [t]est/auth.test.js"), ps: hs("Set-Content -Path tes?/auth.test.js -Value x", "PowerShell"), link: hs("sed -i 's/a/b/' t2/auth.test.js") };
+    const d = (rel) => g(pG, rel).why;
+    const edits = { link: d("t2/auth.test.js"), brackets: d("app/[id]/page.test.js"), name: d("src/cart.TEST.js"), ext: d("src/cart.test.JS"), all: d("SRC/Cart.Test.Js"),
+      py: d("pkg/TEST_UTIL.PY"), gone: d("TEST/GONE.TEST.JS") };
+    const fold = E.FOLD_CASE;
+    all("1.36 guard tests: other spellings of a protected test are refused at deny — sed -i / Set-Content through a glob in a folder segment (tes?/, */, test/*/), rm [t]est/, an Edit or sed -i through a junction, a listed path holding brackets; where the file system folds case: a case variant by name (cart.TEST.js, .JS, TEST_UTIL.PY) and one of a listed test that is gone (got " +
+      js([shell, edits]) + ")", {
+      shellGlobs: () => shell.tesQ === "deny" && shell.star === "deny" && shell.deep === "deny" && shell.ps === "deny", cls: () => shell.cls === "deny",
+      link: () => shell.link === "deny" && edits.link === "protected-test", brackets: () => edits.brackets === "protected-test",
+      caseName: () => !fold || [edits.name, edits.ext, edits.all, edits.py].every((x) => x === "protected-test"), caseGone: () => !fold || edits.gone === "protected-test",
+    });
+  }
+
+  { // 1.36.0 review 1 (PT-3): in a project past the cap, the feature's own .specs/<f>/tests/ is walked FIRST — before the project's 2,000
+    // tests, and before another feature's (the same 2,000 moved into aaa, which sorts first) — then the project; `feature protect` alike
+    const pC = project("cap-feature", { approvalGuard: "ask" });
+    S.createFeature(pC, "Aaa", ["core"], "", undefined, "en");
+    for (let i = 0; i < 2000; i++) w(pC, "test/bulk/d" + (i % 20) + "/t" + String(i).padStart(4, "0") + ".test.js", "t" + i + "\n");
+    const fC = S.createFeature(pC, "Cart", ["core"], "", undefined, "en");
+    w(pC, ".specs/cart/tests/cart.red.test.js", "red\n");
+    tasks(fC, "- [ ] 1. A\n  - _Implements: src/cart.js_\n");
+    const again = () => { S.approvePhase(pC, "cart", "tasks", "me", { revoke: true }); setState(fC, { protectedTests: undefined }); };
+    const apProject = approveTasks(pC, "cart"); // the 2,000 in the project
+    const viaProjectCap = listOf(fC);
+    fs.mkdirSync(path.join(pC, ".specs", "aaa", "tests"), { recursive: true });
+    fs.renameSync(path.join(pC, "test", "bulk"), path.join(pC, ".specs", "aaa", "tests", "bulk")); // …now in feature aaa
+    w(pC, "test/p1.test.js", "p\n");
+    again();
+    const ap = approveTasks(pC, "cart");
+    const viaApproval = listOf(fC);
+    again();
+    const prot = S.manageFeature(pC, "protect", "cart", undefined, {});
+    const viaProtect = listOf(fC);
+    const red = ".specs/cart/tests/cart.red.test.js";
+    all("1.36 guard tests: past the 2,000-file cap the approving feature's own failing tests are listed (its .specs/<f>/tests/ first, then the other features', then the project) — 2,000 tests in the project, then in another feature; at the tasks approval and at `feature protect` (got " +
+      js([apProject.protectedTests, Object.keys(viaProjectCap.files || {}).includes(red), ap.protectedTests, Object.keys(viaApproval.files || {}).includes(red), prot.protectedTests, Object.keys(viaProtect.files || {}).includes(red)]) + ")", {
+      projectCap: () => apProject.protectedTests && apProject.protectedTests.count === 2000 && apProject.protectedTests.truncated === true && Object.keys(viaProjectCap.files).includes(red),
+      approval: () => ap.protectedTests && ap.protectedTests.count === 2000 && ap.protectedTests.truncated === true && Object.keys(viaApproval.files).includes(red),
+      protect: () => prot.ok && prot.protectedTests.truncated === true && Object.keys(viaProtect.files).includes(red),
+    });
+  }
+
+  { // 1.36.0 review 1 (PT-4): `feature protect` before the tasks approval never cancels its snapshot — the approval walks and merges
+    // add-only (the tests written in between listed), then marks the list via "approval"; a re-approval keeps it
+    const pE = project("early-protect", { approvalGuard: "ask" });
+    w(pE, "test/old.test.js", "old\n");
+    const fE = S.createFeature(pE, "Cart", ["core"], "", undefined, "en");
+    const early = S.manageFeature(pE, "protect", "cart", undefined, {});
+    w(pE, "test/cart.test.js", "red\n"); w(pE, ".specs/cart/tests/red.test.js", "red\n"); // Phase 4 writes the failing tests
+    tasks(fE, "- [ ] 1. A\n  - _Implements: src/cart.js_\n");
+    const ap = approveTasks(pE, "cart");
+    const after = listOf(fE);
+    w(pE, "test/later.test.js", "later\n");
+    S.approvePhase(pE, "cart", "tasks", "me", { revoke: true });
+    approveTasks(pE, "cart");
+    const again = listOf(fE);
+    all("1.36 guard tests: a protect run before the tasks approval — the approval still records the snapshot (the tests written since listed, add-only) and marks it via approval; a revoke and re-approval keeps it (got " +
+      js([early.protectedTests, ap.protectedTests, Object.keys(after.files || {}), after.via, Object.keys(again.files || {})]) + ")", {
+      early: () => early.ok && early.protectedTests.via === "protect" && early.protectedTests.count === 1,
+      snapshot: () => ap.protectedTests && ap.protectedTests.count === 3 && ["test/cart.test.js", ".specs/cart/tests/red.test.js"].every((k) => Object.keys(after.files).includes(k)),
+      marked: () => after.via === "approval", kept: () => !Object.keys(again.files).includes("test/later.test.js"),
+    });
+  }
+
+  { // 1.36.0 review 1 (PT-5): a lift ends with its feature — one recorded before its feature's finish no longer counts (gamma's protection
+    // kept), one recorded after it (a reopened feature) does; a protect <file> record (revoked) of a finished feature still ends an earlier lift
+    const pL = project("lift-ends", { approvalGuard: "ask" });
+    for (const n of ["auth", "b", "c"]) w(pL, "test/" + n + ".test.js", n + "\n");
+    const fGa = S.createFeature(pL, "Gamma", ["core"], "", undefined, "en");
+    tasks(fGa, "- [ ] 1. G\n  - _Implements: src/g.js_\n");
+    approveTasks(pL, "gamma");
+    const fAl = S.createFeature(pL, "Alpha", ["core"], "", undefined, "en");
+    setState(fAl, { finished: { at: "2026-01-02T00:00:00.000Z", files: {} }, protectedTests: { files: {}, lifts: [
+      { file: "test/auth.test.js", at: "2026-01-01T00:00:00.000Z", by: "u", reason: "intended" }, // before alpha's finish: ended
+      { file: "test/c.test.js", at: "2026-01-01T12:00:00.000Z", by: "u", revoked: true }, // alpha's protect <file>: ends beta's lift
+      { file: "test/b.test.js", at: "2026-01-03T00:00:00.000Z", by: "u", reason: "reopened" }] } }); // after the finish: in force
+    const fBe = S.createFeature(pL, "Beta", ["core"], "", undefined, "en");
+    setState(fBe, { protectedTests: { files: {}, lifts: [{ file: "test/c.test.js", at: "2026-01-01T06:00:00.000Z", by: "u", reason: "r" }] } });
+    const gAuth = g(pL, "test/auth.test.js"), gB = g(pL, "test/b.test.js"), gC = g(pL, "test/c.test.js");
+    all("1.36 guard tests: a lift ends with its feature — alpha's lift recorded before alpha's finish no longer allows gamma's protected test, one recorded after the finish does, and alpha's protect <file> record still ends beta's earlier lift (got " +
+      js([gAuth.why, gB.why, gC.why]) + ")", {
+      ended: () => gAuth.decision === "ask" && gAuth.why === "protected-test", afterFinish: () => gB.decision === "allow", revoked: () => gC.decision === "ask" && gC.why === "protected-test",
+    });
+  }
+
+  { // 1.36.0 review 1 (INT-1, PT-6, PT-7, PT-8): every task ticked, the feature unfinished — its listed test is still refused at deny; once
+    // its finish is recorded the list no longer counts. The approval question names the file `newName` carries. Finish's hashes are taken
+    // before the feature lock (the facade) and read under it
+    const pI = project("all-done", { approvalGuard: "deny" });
+    w(pI, "test/auth.test.js", "a\n");
+    const fI = S.createFeature(pI, "Login", ["core"], "", undefined, "en");
+    tasks(fI, "- [ ] 1. A\n  - _Implements: src/a.js_\n");
+    approveTasks(pI, "login");
+    S.completeTask(pI, "login", 1, { summary: "done" });
+    const gDone = g(pI, "test/auth.test.js");
+    const recorded = listOf(fI).files["test/auth.test.js"];
+    const seen = [];
+    const stub = E.protectHashFirst(function stubFinish(dir, name, opts) { seen.push(opts && opts.protectHashes ? js(opts.protectHashes) : null); return opts; });
+    stub(pI, "login", { write: true });
+    w(pI, "test/auth.test.js", "changed\n");
+    const handed = E.finishFeature(pI, "login", { protectHashes: { "test/auth.test.js": recorded } });
+    const rehashed = E.finishFeature(pI, "login", {});
+    S.createFeature(pI, "No List", ["core"], "", undefined, "en"); // no list: the facade finishes it as before (nothing hashed)
+    let noList;
+    try { noList = S.finishFeature(pI, "no-list", {}); } catch (e) { noList = { threw: e.message }; }
+    const facade = fs.readFileSync(path.join(__dirname, "lib", "spec.js"), "utf8");
+    setState(fI, { finished: { at: new Date().toISOString(), files: {} } });
+    const gFinished = g(pI, "test/auth.test.js");
+    const ask = (ti) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "mcp__plugin_dev-spec-driven_spec-driven__spec_feature", tool_input: ti }, "ask", { lang: "en" });
+    const qNew = ask({ action: "unprotect", name: "login", newName: "test/auth.test.js", reason: "r" }), qFile = ask({ action: "unprotect", name: "login", file: "test/auth.test.js", reason: "r" });
+    all("1.36 guard tests: every task ticked, no finish recorded — a listed test is still refused at deny (a protected test, not the generic ask); a recorded finish ends its list's protection; spec_feature unprotect's question names the file newName carries; finish's protected-test hashes are taken before the feature lock and read under it (got " +
+      js([gDone.decision, gDone.why, gFinished.why, qNew.reason && qNew.reason.slice(0, 90), seen, handed.protectedTests, rehashed.protectedTests]) + ")", {
+      allDone: () => gDone.decision === "deny" && gDone.why === "protected-test", finished: () => gFinished.why !== "protected-test",
+      newName: () => qNew.decision === "ask" && qNew.reason === qFile.reason && qNew.reason.includes("test/auth.test.js"),
+      prehashed: () => seen.length === 1 && seen[0] === js({ "test/auth.test.js": recorded }) && /finishFeature: protectHashFirst\(featureLocked\(finishFeature,/.test(facade),
+      handed: () => handed.protectedTests.unexplained.length === 0 && rehashed.protectedTests.unexplained.some((x) => x.file === "test/auth.test.js"),
+      noList: () => !noList.threw && noList.feature === "no-list" && !("protectedTests" in noList),
+    });
+  }
+
+  { // 1.36.0 review 1 (INT-4): the scope ask keeps the space before the CLI line in every language
+    eq(["en", "pt", "es"].map((l) => /\btests — node "[^"]+" init --guard on /.test(S.msg(l).scopeGuard.ask("src/b.js", "x", "h.", "tests"))),
+      [true, true, true], "1.36 guard tests: the scope ask reads '(… tests — node \"…\" init --guard on …' in EN, PT and ES (a space before the command)");
+  }
+
+  { // 1.36.0 review 1 (T2, the tick record's path forms): a quoted _Verify:_ test path is read as its file, an absolute _Implements:_ path
+    // inside the project as its project-relative one (both listed at the tick), and an absolute unprotect file lifts that test
+    const pF = project("path-forms", { approvalGuard: "ask" });
+    w(pF, "src/cart.js", "c\n");
+    const fF = S.createFeature(pF, "Cart", ["core"], "", undefined, "en");
+    const absImpl = path.join(pF, "test", "abs.test.js").split(path.sep).join("/");
+    tasks(fF, "- [ ] 1. Tests\n  - _Implements: src/cart.js, " + absImpl + "_\n  - _Verify: node --test \"test/q.test.js\"_\n");
+    approveTasks(pF, "cart");
+    w(pF, "test/q.test.js", "q\n"); w(pF, "test/abs.test.js", "abs\n"); // written after the snapshot: only the tick lists them
+    const tick = S.completeTask(pF, "cart", 1, { command: "node --test \"test/q.test.js\"", exitCode: 0 });
+    const files = listOf(fF).files || {};
+    const un = S.manageFeature(pF, "unprotect", "cart", path.join(pF, "test", "q.test.js"), { reason: "r" });
+    all("1.36 guard tests: the tick record reads a quoted _Verify:_ test path (\"test/q.test.js\") and an absolute _Implements:_ path inside the project (test/abs.test.js); `feature unprotect` takes an absolute file inside the project (got " +
+      js([tick.ok, Object.keys(files), un.ok, un.code, un.lifted && un.lifted.file]) + ")", {
+      quoted: () => tick.ok && typeof files["test/q.test.js"] === "string",
+      absImplements: () => typeof files["test/abs.test.js"] === "string",
+      absUnprotect: () => un.ok === true && un.lifted.file === "test/q.test.js",
+    });
+  }
 };

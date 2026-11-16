@@ -197,9 +197,12 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   features' plan). A tasks approval whose content no longer matches tasks.md is `stale` and covers nothing; one without a
   fingerprint counts; "changed" is next_action's `approvedContentSame` (gates-and-approvals.md → Approval fingerprints).
 - **Level tests (1.36)** — `guardCheck` asks engine/protect.js `protectedTestDecision` FIRST, before the stale / tests-phase /
-  spike / scope answers: a target on the list of any feature with open tasks (a stale or pending one too) asks — `why`
-  `protected-test`, `level` `tests` — unless a task that can start now of a covering or forced feature names it exactly in
-  `_Implements:_` or a lift is in force; **deny** when `meta.approvalGuard` is deny (the edit guard's only refusal — the
+  spike / scope answers: a target on the list of any feature with open tasks (a stale or pending one too) or with no finish
+  recorded (its tasks all ticked) asks — `why` `protected-test`, `level` `tests` — unless a task that can start now of a covering
+  or forced feature names it exactly in `_Implements:_` (never a reopened task with a tick record) or a lift is in force. The
+  target as the file system reads it: an existing one by its real path (a link, a junction, the on-disk case), a glob in ANY
+  segment (`tes?/`, `*/`, `[t]est/`), a case variant of a listed file by folded membership (tasks-and-evidence.md → Protected
+  tests → The decision); **deny** when `meta.approvalGuard` is deny (the edit guard's only refusal — the
   project declared the human's decisions the human's): `reason` for the agent (don't route around it), `userNote` for the user
   (the `!` lift line). `.specs/<feature>/tests/` is guarded there (never `allow("specs")`); a non-protected target goes on to
   the scope rule, whose answers carry the real `level`. **The hook** reads every target of a call and prints the STRICTEST
@@ -651,6 +654,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   allow; the hook now reads EVERY target and prints the strictest answer (the first ask won — `sed -i src/out.ts test/a.test.js`
   showed the scope ask and the protected test went through on a yes); tasks.md parsed once per call. The design's git readings
   (`git rm` / `checkout --` / `restore` of a protected test) were cut before shipping: git stays the user's, finish names the result.
+- **1.36.0 review 1** — level tests read only the last segment for a glob and named a file by `isTestFile` on its text path:
+  `sed -i … tes?/auth.test.js`, `rm [t]est/…`, `cart.TEST.js` and an edit through a junction passed at deny. The target is read
+  by its real path, a glob anywhere, folded membership; the lists of a feature whose tasks are all ticked count until its finish
+  (the generic ask had answered, under deny too).
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer
