@@ -47,6 +47,8 @@ Don't run Claude Code's built-in `/simplify` inside the pass (it applies everyth
 edit asks the user — say so first. `--subagents`: `dev-spec-driven:spec-simplifier`, under guard mode in the foreground
 (`run_in_background: false`). The report, `.specs/<feature>/.execution/simplify-report.md`: `## Baseline` · `## Changes`
 · `## Dropped` · `## Left alone` · `## Final runs` LAST — one line per run, `` - `<the exact command>` → exit 0 (212 passing) ``.
+On a **+port** feature: only after the differential check is ticked, only Deferred Improvements that keep the behaviour, its
+`_Verify:_` among the final runs.
 Then a simplify-mode `spec-reviewer`, after an inline pass too: a confirmed finding is **reverted** (`git revert <sha>`),
 never repaired; a revert that conflicts is aborted (`git revert --abort`) and stops the pass. Re-record each changed
 task's `_Verify:_` (`node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`) and the project checks,

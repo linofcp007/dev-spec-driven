@@ -43,6 +43,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   packs.js · templates.js      track packs (.specs/tracks/) · project templates (.specs/templates/)
   scaffold.js                  spec_init, spec_create, skeletons, steering stubs, spec_add_track, scoped steering, amendments
   tasks.js                     the tasks.md scanner (taskBlocks), markers, _Depends:_ + waves, next / complete / append, the brief
+  port.js                      +port's fence (1.36): the two [PORT] anchors, the gate complete / brief apply, port-verify, the re-check
   evidence.js                  the evidence gate (taskVerification), run shells, red → green, observed runs, project checks
   guardian.js                  dev-guardian's gate (the check `guardian`): the launcher, the CLI lookup, the verdict, its guard rules
   trace.js                     criterion blocks, the EARS linter, trace_check, the traceability matrix
@@ -266,6 +267,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   guardCheck reads it on every edit at level tests), kept out of guards.js (3,000+ lines) — guards.js only calls it (24 modules).
 
 ### The module rule
+- **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):
+  a concern of its own rather than ~200 more lines in tasks.js / doctor.js, which link its six entries at call time.
 - **1.18** — the split and the rule (load-time DAG, `__link(E)`, `CTX`). Measured (Windows, Node 24, p50 of 40 interleaved
   fresh processes; 1.17 → the first split → with the compile cache and the lazy pt-BR): guard hook 220 → 260 → 238 ms,
   `dev-spec status` 211 → 243 → 224, SessionStart 345 → 380 → 364, the stop hook on a "done" claim 252 → 284 → 231. The

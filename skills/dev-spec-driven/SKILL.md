@@ -45,7 +45,7 @@ Mirror the user's language everywhere — conversation, approval prompts, the ar
 switch. Pass `lang` to `spec_init` (the project default) and `spec_create`: `en`, `pt` (European Portuguese), `pt-BR`
 (Brazilian) or `es` — scaffolds and messages come back localized: fill the placeholders, don't translate them.
 `spec_classify` reads any Portuguese as `pt`: pick `pt-BR` from the user's wording (`langHint: "pt-BR"` hints it). IDs,
-task markers, tags (`[US1]`, `[P]`), track names, the section markers (`[SaaS]` … `[DATA]`) and
+task markers, tags (`[US1]`, `[P]`), track names, the section markers (`[SaaS]` … `[PORT]`) and
 `[NEEDS CLARIFICATION:]` never change.
 
 ## Core Principles
@@ -73,7 +73,7 @@ tool when, working without MCP: `references/tool-catalog.md`; tools, CLI, hooks,
 of the code is the user's `/spec-review`; a security / quality review of a diff, dev-guardian's `guardian-review` when
 installed.
 
-**Tracks** (`core` always): +tdd · +saas · +ai · +sec · +privacy · +dist · +api · +ui · +obs · +data · a team's pack
+**Tracks** (`core` always): +tdd · +saas · +ai · +sec · +privacy · +dist · +api · +ui · +obs · +data · +port · a team's pack
 in `.specs/tracks/` (`references/project-tracks.md`) — what each adds per phase: `references/track-checklists.md`.
 With superpowers installed, this workflow replaces its feature-work skills — never both on one feature.
 

@@ -99,6 +99,11 @@ const text = {
       ["Linhagem e Responsáveis", "- Origens → transformações → consumidores (um diagrama de linhagem ou o DAG do dbt) · o responsável por cada conjunto de dados e quem é avisado quando falha · o SLA de atualidade de que os consumidores dependem · o histórico que cada tabela guarda (dimensões de alteração lenta: o tipo 1 sobrescreve, o tipo 2 guarda versões)."],
       ["Retenção e Custo", "- A retenção por conjunto de dados e por camada de armazenamento (a zona bruta vs a curada; quente / morna / fria) — os dados pessoais seguem references/privacy-track.md · particionamento e clustering para que uma consulta leia só o que precisa · o custo esperado de armazenamento e de consultas por mês e o alerta quando se desvia."],
     ],
+    port: [
+      ["Linha de Base do Comportamento", "- O que se mantém: as saídas, os erros e os efeitos secundários (e a sua ordem) que o código antigo produz · o corpus — entradas reais gravadas, a suite de testes antiga, fixtures — e porque chega aos caminhos que importam · onde vive a linha de base (o seu caminho) · gravada a partir do código ANTIGO antes de mudar qualquer código que ela cobre, nunca regenerada a partir do código novo (references/port-patterns.md)."],
+      ["Verificação Diferencial", "- O comando que corre o código NOVO sobre o corpus e o compara com a linha de base GRAVADA (nunca com o código antigo a correr — continua a correr depois da passagem) · o que é normalizado (datas e horas, IDs gerados, uma ordem que o contrato não fixa, uma tolerância de vírgula flutuante) e porque nenhum é comportamento · como uma diferença é reportada · depois do porte, cada diferença intencional listada com o critério que a pede — nunca silenciada."],
+      ["Melhorias Adiadas", "- Cada limpeza ou mudança de comportamento notada durante o porte, escrita aqui em vez de feita — feita depois da verificação diferencial: numa tarefa posterior (listada depois dela), na passagem de simplificação (só limpezas que preservam o comportamento) ou numa feature seguinte."],
+    ],
   },
   // trackTasks — each built-in track's template tasks (none for +tdd — it only adds markers): the story heading and each task's
   // text, in the order of the layout's TRACK_TASK_PLAN (the criteria each task implements and makes green, its fixed markers).
@@ -184,6 +189,19 @@ const text = {
         "Backfill — o procedimento para um intervalo de datas (paralelismo, custo, uma execução de ensaio), ensaiado numa partição e comparado com uma execução única",
         "Linhagem, responsáveis e retenção — origens → transformações → consumidores documentados, um responsável por conjunto de dados, a retenção e o particionamento do design.md aplicados",
       ],
+    },
+    port: {
+      leadHeading: "História US-1 — Linha de Base do Comportamento (antes do porte)",
+      heading: "História US-1 — Verificação Diferencial (a prova do porte)",
+      tasks: [
+        "Gravar a linha de base do comportamento — correr a implementação ANTIGA sobre o corpus e guardar as suas saídas e erros como linha de base, antes de mudar qualquer código que ela cobre",
+        "Verificação diferencial — correr a implementação NOVA sobre o corpus e compará-la com a linha de base gravada; cada diferença é um erro ou uma diferença intencional listada com o seu critério",
+      ],
+      slots: {
+        baseline: "[caminho da linha de base gravada — as saídas antigas por caso do corpus]",
+        verifyOld: "[comando que corre a implementação ANTIGA sobre o corpus e a compara com a linha de base]",
+        verifyNew: "[comando que corre a implementação NOVA sobre o corpus e a compara com a linha de base gravada]",
+      },
     },
   },
   // requirements — the title, the Summary, then the user stories (size S: the one story) up to the core criteria; the active
@@ -303,6 +321,10 @@ Resultados que a feature deve atingir — negócio/UX, não implementação. Qua
         "SE o job for executado de novo para uma partição já carregada, ENTÃO O SISTEMA DEVE produzir o mesmo resultado que uma única execução, sem linhas duplicadas nem perdidas (uma reexecução e um backfill idempotentes).",
         "SE os dados mais recentes de [a tabela] forem mais antigos do que [o seu SLA de atualidade], ENTÃO O SISTEMA DEVE alertar [o responsável] e marcar a tabela como desatualizada para os seus consumidores.",
         "QUANDO o esquema de [a origem] mudar, O SISTEMA DEVE aceitar uma alteração aditiva e retrocompatível e DEVE rejeitar uma alteração incompatível (uma coluna removida ou renomeada, um tipo mais restrito) antes de qualquer linha chegar a [os consumidores].",
+      ],
+      port: [
+        "QUANDO a nova implementação processar [o corpus — as entradas gravadas, fixtures ou casos de teste antigos que guardam o comportamento atual], O SISTEMA DEVE produzir as mesmas saídas que a implementação antiga, caso a caso.",
+        "SE a implementação antiga rejeitar uma entrada de [o corpus] com um erro, ENTÃO O SISTEMA DEVE rejeitá-la com o mesmo código ou tipo de erro.",
       ],
     },
   },
@@ -529,6 +551,8 @@ Cada AC tem de aparecer em pelo menos uma célula "Cobre". Lacunas (com justific
       idempotentRerun: "uma partição reexecutada ou com backfill duas vezes fica com as mesmas linhas que uma execução — sem duplicados, sem lacunas",
       freshness: "uma partição mais antiga do que o SLA de atualidade: a verificação de atualidade falha e alerta o responsável",
       schemaChange: "compatibilidade de alterações de esquema: uma coluna opcional nova passa, uma coluna removida / renomeada ou um tipo mais restrito é rejeitado antes da carga",
+      differential: "verificação diferencial: a saída nova é igual à linha de base gravada em todos os casos do corpus",
+      differentialErrors: "verificação diferencial: cada caso do corpus que falha recebe o código ou tipo de erro da implementação antiga",
     },
   },
   // checklist — the items: the core four, +tdd's, then per marker track its sections item (n: the design sections to fill —
@@ -592,6 +616,11 @@ Tracks: ${label}. Marca antes de dar a feature por concluída.`,
       (n) => `DATA: ${n} secções obrigatórias de design preenchidas (sem TODO) — cada conjunto de dados tem um esquema, um responsável e uma regra de compatibilidade; cada verificação diz o que faz uma falha.`,
       "DATA: as verificações de qualidade de dados são executadas na ingestão e antes de publicar — uma linha errada fica em quarentena, nunca é carregada; o alerta de atualidade chega ao responsável.",
       "DATA: uma reexecução de partição e um backfill ensaiados com dados de tamanho real dão as mesmas linhas que uma execução; retenção e particionamento aplicados como desenhado.",
+    ],
+    port: [
+      (n) => `PORT: ${n} secções obrigatórias de design preenchidas (sem TODO) — o corpus indicado, o que é normalizado e porquê.`,
+      "PORT: a linha de base gravada a partir do código ANTIGO antes de começar o trabalho do porte — nunca regenerada a partir do código novo.",
+      "PORT: a verificação diferencial a verde na versão final sobre todo o corpus; cada diferença intencional listada com o critério que a pede.",
     ],
     saasLoadOnly: "SaaS: teste de carga cumpre o orçamento (caminho crítico).",
     done: ["Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos os gates de fase aprovados (`approve`)."],
@@ -1077,7 +1106,7 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' já existe.`,
       renameArchived: (slug) => `'${slug}' é o nome de uma feature arquivada (.specs/_archive/${slug}) — escolhe outro nome (com o mesmo nome, nenhuma das duas poderia ser arquivada nem restaurada).`,
       slugTaken: (slug, held, name) => `'${name}' chega à pasta .specs/${slug}/, que tem outra feature ('${held}') — o nome da pasta guarda só os primeiros 64 caracteres do nome. Nada foi alterado: usa um nome mais curto que difira dentro deles (para trabalhar em '${held}', usa o nome '${slug}').`,
-      badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
+      badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data | port",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
       noSpecs: (root) => `Não há .specs/ em ${root}`,
@@ -1312,6 +1341,7 @@ const msg = {
       unknown: (items, valid) => `Track${items.length > 1 ? "s" : ""} desconhecido${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (querias dizer '${u.suggestion}'?)` : "")).join(", ")}. Tracks válidos: ${valid}.`,
       cannotRemoveCore: "O 'core' está sempre ativo — não pode ser removido.",
       bugfixNeedsTdd: "Um bugfix é sempre test-first — não se pode remover o +tdd.",
+      portBugfix: "O +port não pode ir num bugfix: um bugfix muda o comportamento de propósito, um porte mantém-no igual — faz o porte numa feature própria (/spec) e corrige o bug antes ou depois dele.",
       notActive: (list) => `Não ativo: ${list} — nada a remover.`,
       removed: (list, slug) => `Tracks desativados: ${list}. Nenhum ficheiro foi apagado — os artefactos inativos ficam no sítio e voltam a contar se voltares a adicionar o track. Volta a correr /spec-doctor ${slug}.`,
       restoredSections: (list) => `O track removido cobria estas secções dos tracks que ficam — voltaram ao design.md, por preencher: ${list}.`,
@@ -1635,6 +1665,8 @@ const msg = {
       bugGateFirst: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher e nenhuma tarefa a escreve — só a tarefa ${first} pode ser concluída até a causa raiz estar escrita no bug.md (nenhuma correção antes da causa raiz).`,
       bugGateFix: (n) => `A tarefa ${n} ainda não pode ser concluída: torna o teste de regressão verde — é uma correção — e bug.md → Causa Raiz está por preencher. Escreve lá primeiro a causa raiz, com a evidência (nenhuma correção antes de a causa raiz estar escrita no bug.md).`,
       bugGateTicked: (n, rc) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz continua vazia — a tarefa ${rc} está marcada, mas o que ela entrega é essa secção. Escreve lá a causa raiz, com a evidência (nenhuma correção antes de a causa raiz estar escrita no bug.md).`,
+      portHeld: (n, a, slug) => `A tarefa ${n} espera pela tarefa ${a} (+port — primeiro o porte, depois as melhorias: o trabalho do porte espera pela linha de base, uma melhoria pela verificação diferencial). Nada foi registado. Marca primeiro a tarefa ${a} com a execução do seu _Verify:_ (${DEV_SPEC} done ${slug} ${a} --run); se a tarefa ${n} pertence antes dela, move-a para lá no tasks.md — uma alteração do plano, aprovado de novo.`,
+      portHeldUnverified: (n, a, slug) => `A tarefa ${n} espera pela tarefa ${a} (+port): a tarefa ${a} está marcada mas não verificada — só uma execução bem-sucedida do seu _Verify:_ abre a barreira (${DEV_SPEC} done ${slug} ${a} --run; uma tarefa [PORT] sem um _Verify:_ executável nunca a abre). Nada foi registado.`,
       rootCauseTaskEmpty: (n) => `A tarefa ${n} está marcada, mas bug.md → Causa Raiz continua vazia — escreve lá a causa raiz, com a evidência: as tarefas seguintes (o teste de regressão, a correção) continuam recusadas até estar escrita.`,
       fill: (file, what, hint) => `Preenche ${file} — ${what}; depois ${hint}.`,
       fillMissing: "ainda não existe",
@@ -2300,10 +2332,11 @@ const msg = {
         "SLIs & SLOs": "SLIs e SLOs", "Telemetry": "Telemetria", "Alerting & Runbooks": "Alertas e Runbooks", "Rollout & Rollback": "Lançamento e Reversão", "Health & Capacity": "Saúde e Capacidade",
         "Data Contracts & Schema Evolution": "Contratos de Dados e Evolução do Esquema", "Data Quality": "Qualidade dos Dados",
         "Pipeline Idempotency & Backfills": "Idempotência do Pipeline e Backfills", "Lineage & Ownership": "Linhagem e Responsáveis", "Retention & Cost": "Retenção e Custo",
+        "Behaviour Baseline": "Linha de Base do Comportamento", "Differential Check": "Verificação Diferencial", "Deferred Improvements": "Melhorias Adiadas",
       },
-      allFilled: { sec: "as 5 preenchidas", privacy: "as 6 preenchidas", dist: "as 5 preenchidas", api: "as 5 preenchidas", ui: "as 5 preenchidas", obs: "as 5 preenchidas", data: "as 5 preenchidas" },
+      allFilled: { sec: "as 5 preenchidas", privacy: "as 6 preenchidas", dist: "as 5 preenchidas", api: "as 5 preenchidas", ui: "as 5 preenchidas", obs: "as 5 preenchidas", data: "as 5 preenchidas", port: "as 3 preenchidas" },
       statusSections: { sec: (list) => `Secções de segurança: ${list}`, privacy: (list) => `Secções de privacidade: ${list}`, dist: (list) => `Secções de consistência de dados: ${list}`, api: (list) => `Secções do contrato da API: ${list}`, ui: (list) => `Secções da interface: ${list}`, obs: (list) => `Secções de operabilidade: ${list}`,
-        data: (list) => `Secções do pipeline de dados: ${list}` },
+        data: (list) => `Secções do pipeline de dados: ${list}`, port: (list) => `Secções do porte: ${list}` },
       finishChecks: {
         sec: ["+sec: SAST, auditoria de dependências e análise de segredos limpos numa execução local nova; todos os testes de casos de abuso a verde.",
           "+sec: modelo de ameaças revisto contra o código final — nenhum ponto de entrada ou fronteira de confiança novo sem mitigação."],
@@ -2319,6 +2352,8 @@ const msg = {
           "+obs: as métricas, os logs e os traces que o design indica vistos a ser emitidos pela versão final — nenhum dado pessoal nos logs nem nos traces."],
         data: ["+data: as verificações de qualidade de dados, uma reexecução de partição e um ensaio de backfill a verde numa execução nova com dados de tamanho real — as mesmas linhas que uma execução, as linhas erradas em quarentena.",
           "+data: cada conjunto de dados que o código final escreve corresponde ao seu contrato (esquema, responsável, SLA de atualidade) e à linhagem, retenção e particionamento do design.md."],
+        port: ["+port: a verificação diferencial a verde na versão final sobre todo o corpus — cada diferença que fica está listada no design.md com o critério que a pede.",
+          "+port: os ficheiros da linha de base sem alterações desde que a tarefa da linha de base foi marcada (o seu histórico git mais antigo do que as alterações do porte); cada Melhoria Adiada feita numa tarefa posterior ou ainda listada para depois."],
       },
       clarify: {
         secAccess: "Especifica o que recebe quem chama sem autenticação ou sem autorização (SE … ENTÃO O SISTEMA DEVE negar …) e o nível ASVS que a feature visa.",
@@ -2328,6 +2363,17 @@ const msg = {
         distDelivery: "Especifica a garantia de entrega (pelo menos uma vez) e como uma mensagem entregue duas vezes é detetada e aplicada uma só vez (chave de idempotência, inbox) — escreve-o como AC.",
         distFailure: "Especifica o que a feature faz quando cada dependência (base de dados, broker, API externa) está indisponível ou excede o tempo limite — como critérios SE … ENTÃO O SISTEMA DEVE.",
       },
+    },
+
+    port: {
+      verifyOk: (b, d, waiting) => `ordem do porte: a tarefa ${b} grava a linha de base, a tarefa ${d} verifica o código novo contra ela${waiting ? ` — ${waiting} esperam por ela` : ""}.`,
+      verifyMissing: "+port: nenhuma tarefa grava a linha de base e verifica o código novo contra ela — o porte precisa das duas, cada uma com um _Verify:_ executável (as tarefas [PORT] do modelo, ou tarefas que citam um critério [PORT] — references/port-patterns.md)",
+      noVerify: (list) => `uma tarefa [PORT] sem um _Verify:_ executável nunca abre a barreira: ${list}`,
+      approvedAlready: "(as tarefas já estão aprovadas — a sua próxima aprovação exige-o)",
+      baselineLate: (list, b) => `antes da linha de base (tarefa ${b}): ${list} — move a linha de base para o início, ou pode ser gravada a partir do código novo`,
+      dependsEscape: (list, b) => `um _Depends:_ que nunca chega à linha de base (tarefa ${b}): ${list} — uma vaga pode começá-las antes dela; acrescenta-lhe ${b}`,
+      recheck: (d, list, slug) => `a verificação diferencial (tarefa ${d}) não voltou a passar desde que uma tarefa depois dela foi marcada ou executada de novo (${list}) — corre-a de novo sobre o código final: ${DEV_SPEC} done ${slug} ${d} --run`,
+      fence: (list) => `marcadas antes de a tarefa [PORT] por que esperam (entre parênteses) ter passado: ${list} — uma tarefa movida, o +port desligado e ligado de novo, ou uma caixa marcada à mão; verifica-as contra a linha de base e a verificação diferencial`,
     },
 
     markerSyntax: {
@@ -3496,6 +3542,10 @@ const brief = {
       ],
     },
     metricsRule: "Cada métrica listada acima é mesmo emitida — mostra a evidência no relatório.",
+    portRules: {
+      port: () => "Tarefa do porte: mantém o comportamento exatamente — as mesmas saídas, erros e efeitos secundários que o código antigo. Uma limpeza ou mudança que notes vai para design.md → [PORT] Melhorias Adiadas, nunca para esta tarefa.",
+      after: (d) => `Depois do porte: a verificação diferencial (tarefa ${d}) continua a verde, salvo as diferenças que os critérios desta tarefa pedem — cada uma listada em design.md → [PORT] Verificação Diferencial com o ID do critério. Corre de novo o _Verify:_ da tarefa ${d} quando esta tarefa estiver feita.`,
+    },
     redRules: [
       "Esta é uma tarefa VERMELHA: escreve (ou mantém) os testes planeados exatamente como o plano de testes os descreve — nenhum código de produção e nenhuma correção nesta tarefa.",
       "Corre-os: têm de FALHAR pela razão certa — uma asserção ou \"não implementado\". Um ficheiro de teste, módulo ou script em falta, um erro de escrita ou um comando que não corre não é um teste vermelho (é recusado como tal).",

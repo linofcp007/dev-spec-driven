@@ -1,6 +1,6 @@
 # Project-defined tracks (track packs)
 
-Read on demand from `SKILL.md`. The built-in tracks are core, +tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs and +data. A team that needs
+Read on demand from `SKILL.md`. The built-in tracks are core, +tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data and +port. A team that needs
 its own domain rigor (+a11y, +mobile, +dbmigration, +compliance…) defines it as a **track pack**: a folder in
 `.specs/tracks/<name>/`. A valid pack behaves like a built-in *marker* track (+sec, +privacy) everywhere — it is
 classified, scaffolded, gated, traced, briefed, exported and removed the same way. Manage packs with `spec_tracks`
@@ -191,6 +191,10 @@ design, the task block, the test rows T-06…T-10 and `.specs/steering/mobile.md
   marker `DATA` — never `analytics`: a team's product-analytics pack (a tracking plan, event names) keeps its name. The same rule
   as above: such a pack from an earlier version is that feature's missing pack ("from before 1.21"), never the built-in track;
   rename it, or adopt the built-in one with `dev-spec add-track <feature> data`.
+- **Names reserved since 1.36.** 1.36 adds the built-in `+port` track (port first, improve later) and reserves `port` and the
+  marker `PORT` — no other word (a team's `migration` or `rewrite` pack keeps its name). The same rule as above: such a pack from
+  an earlier version is that feature's missing pack ("from before 1.36"), never the built-in track; rename it, or adopt the
+  built-in one with `dev-spec add-track <feature> port`.
 
 ## check — stable codes
 

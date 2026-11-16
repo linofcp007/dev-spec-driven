@@ -5,7 +5,7 @@
 Follow the spec-driven workflow in `AGENTS.md` (repo root). In short:
 
 - For non-trivial work, **plan before coding**. Classify the feature into composable tracks —
-  `core` always, plus `+tdd` / `+saas` / `+ai` / `+sec` / `+privacy` / `+dist` / `+api` / `+ui` / `+obs` / `+data` when warranted — then run requirements → design →
+  `core` always, plus `+tdd` / `+saas` / `+ai` / `+sec` / `+privacy` / `+dist` / `+api` / `+ui` / `+obs` / `+data` / `+port` when warranted — then run requirements → design →
   (tests/evals) → tasks → execute, with the user approving each phase.
 - Use the local engine for the mechanical steps (zero-dependency, no CI, no cost):
   `node cli/dev-spec.js classify|init|create|next-action|doctor|trace|ears|next|brief|done|impact|append-tasks|decide|finish|stop-check|evals`
@@ -16,7 +16,7 @@ Follow the spec-driven workflow in `AGENTS.md` (repo root). In short:
   commands as MCP prompts).
 - Artifacts live under `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable. Every task carries
   `_Requirements:_` and `_Verify: <command>_`, and `_Implements: <path>_` when it writes code (the files it creates or changes).
-  Mandatory +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data design sections must be filled. Run `dev-spec doctor <feature>` before advancing.
+  Mandatory +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data/+port design sections must be filled. Run `dev-spec doctor <feature>` before advancing.
 - Approvals are the user's: run `dev-spec approve <feature> <phase>` only after their explicit yes for that phase — it
   refuses while the phase's checks fail; `--force` only when the user explicitly accepts the failing checks (it stays
   flagged).

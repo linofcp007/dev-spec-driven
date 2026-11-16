@@ -27,6 +27,8 @@ A project track pack (`.specs/tracks/<name>/`) brings its own criteria, sections
 - **+data:** a row that breaks a data-quality rule quarantined and never loaded, a re-run / backfill of a partition with
   the same result as one run, a freshness alert to the owner, a breaking schema change rejected before it reaches the
   consumers (`US-1.AC-32..35`), plus the late-data rule (how late still counts).
+- **+port:** the new code gives the old code's output on every case of a NAMED corpus — recorded inputs, the old test
+  suite, fixtures — and the same error on a failing one (`US-1.AC-36..37`); every intended difference is a criterion of its own.
 - **+tdd:** make sure every AC is concrete enough to become a failing test — if it can't, rewrite it.
 
 ## Phase 2 — the mandatory design sections
@@ -72,6 +74,12 @@ re-runs, late-arriving data, the backfill procedure) · Lineage & Ownership (sou
 Retention & Cost (retention per layer — personal data per `references/privacy-track.md` —, partitioning, query cost). See
 `references/data-pipeline-patterns.md`.
 
+**+port adds 3 mandatory `[PORT]` sections** — Behaviour Baseline (what is kept, the corpus and why it reaches the paths that
+matter, where the baseline lives — recorded from the OLD code, never regenerated from the new) · Differential Check (the
+command that compares the NEW output with the RECORDED baseline, what is normalized and why, every intended difference with
+its criterion) · Deferred Improvements (each cleanup noticed during the port, written down instead of made). See
+`references/port-patterns.md`.
+
 **Sizes (`references/phase-guide.md` → Sizes).** Each track's sections carry a tier. At **size s** only the core
 tier is scaffolded and required; an extended section may stay out, or be answered by one line `n/a — <why it does not
 apply>` (4+ words):
@@ -87,6 +95,7 @@ apply>` (4+ words):
 | +ui | UI States · Accessibility | Design System Usage · Responsiveness & i18n · UI Performance Budget |
 | +obs | SLIs & SLOs · Telemetry · Rollout & Rollback | Alerting & Runbooks · Health & Capacity |
 | +data | Data Contracts & Schema Evolution · Data Quality · Pipeline Idempotency & Backfills | Lineage & Ownership · Retention & Cost |
+| +port | Behaviour Baseline · Differential Check | Deferred Improvements |
 
 **Two tracks asking the same thing** (any size): with +obs, `[SaaS] Observability` is answered in `[OBS] Telemetry` /
 `Alerting & Runbooks` and `[SaaS] Performance Budget` in `[OBS] SLIs & SLOs`. (+api with +dist keeps both: `[API] Pagination,
@@ -108,6 +117,7 @@ own sections hold them. **Filled means your own text:** the template's guidance 
   size m / l (or none) each UI task's visual review against the view's reference (`references/ui-review.md`).
   **+obs:** an alert in a staged failure, a rollback drill, fault injection. **+data:** data-quality checks on fixture
   batches, an idempotent re-run / backfill of a partition, the freshness alert, the schema-change compatibility check.
+  **+port:** the differential check over the whole corpus (a property: the same output, the same error, case by case).
   `references/test-patterns.md`, `references/data-pipeline-patterns.md`.
 - **+ai eval plan:** three sets — **golden** (50–200 representative inputs with expected quality), **adversarial**
   (injections, jailbreaks, out-of-scope, unsafe-elicitation, degenerate inputs — should refuse/degrade), **regression**
@@ -126,6 +136,11 @@ own sections hold them. **Filled means your own text:** the template's guidance 
 - +saas: `_Emits metrics: req_duration_ms{feature=X}_` + an observability task + (hot path) a load-test task
 - +ai: `_Affects evals: golden (maintain baseline)_` + a separate task per prompt change + a cost-monitoring task
 - brownfield / integration: `_Implements: path/to/file_` ties a task to a real source file (checked by `trace`)
+- +port: the FENCE — the baseline task first (recorded from the old code), the port's work, the differential check, then
+  the improvements. `spec_complete_task` refuses a task listed after the baseline until the baseline is ticked AND verified,
+  one listed after the differential check until it is (`gated: "port-order"`, `heldBy`); both need a runnable `_Verify:_`
+  (doctor `port-verify` — a fail at size m / l). A cleanup noticed during the port goes under `[PORT] Deferred Improvements`, never
+  into the port's task. `references/port-patterns.md`.
 
 ## Phase 6 — track-gated "done" checks before a feature is finished
 
@@ -142,5 +157,8 @@ own sections hold them. **Filled means your own text:** the template's guidance 
   visual review against its reference — passed, or why it was not run.
 - **+obs:** an alert fired in a staged failure and a rollback drill.
 - **+data:** the data-quality checks, a partition re-run and a backfill rehearsal on real-sized data — the same rows as one run.
+- **+port:** behaviour first — the differential check green on the final build, run AGAIN after the last improvement (doctor
+  `port-recheck`; `spec_finish` blocks until `done <f> <n> --run` of the differential check is newer than every later tick); the
+  baseline files unchanged since the baseline task; every Deferred Improvement made in a later task or still listed.
 
 `spec_finish` lists the same items as `checks` — only a fresh run or a human can confirm them.

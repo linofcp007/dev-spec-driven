@@ -783,6 +783,8 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const size = existed ? storedSize : change ? "xs" : si.size;
   const sizeNote = existed && si.size && si.size !== storedSize ? SZ.sizeKept(storedSize || "—", si.size) : null;
   const bugfix = (storedKind || askedKind) === "bugfix";
+  // +port (1.36) keeps behaviour, a bugfix changes it on purpose: refused before anything is written
+  if (bugfix && pt.named.includes("port")) return { ok: false, error: i18n.msg(inLang).tracks.portBugfix };
   const kindNote = storedKind && askedKind && askedKind !== storedKind ? i18n.msg(normalizeLang(lang || projectLang(projectDir))).kindKept(storedKind, askedKind) : null;
   const flowInfo = createFlow(projectDir, slug, dir, existed, storedKind || askedKind || "feature", opts && opts.flow, lang); // {error} | {flow, note, store}
   if (flowInfo.error) return { ok: false, error: flowInfo.error };
@@ -1524,6 +1526,7 @@ function addTrack(projectDir, name, track, opts = {}) {
   }
   const asked = pt.named.filter((t) => t !== "core");
   if (!asked.length) return { ok: false, error: errs(projectDir, slug).badTrack };
+  if (asked.includes("port") && readState(projectDir, slug).kind === "bugfix") return { ok: false, error: msg.tracks.portBugfix }; // 1.36: as on create
 
   const existing = detectTracks(dir);
   const fresh = asked.filter((t) => !existing.includes(t));

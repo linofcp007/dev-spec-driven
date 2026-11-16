@@ -261,6 +261,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   The protected tests (guard tests): `spec_init {guard}` gains `tests` in its enum and "tests = scope + protected tests" in its
   description; `spec_feature` gains `protect` / `unprotect`, bare `file` / `reason` properties and one clause: +227 (44,305 →
   44,532); the design's described properties were ~+507.
+  +port: 85 characters — `port` in `TRACK_ITEM` (spec_init, spec_create, spec_import) and in spec_classify's /
+  spec_add_track's lists, and "+port: one after an unverified [PORT] task" folded into spec_complete_task's bugfix
+  sentence (no sentence of its own).
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.

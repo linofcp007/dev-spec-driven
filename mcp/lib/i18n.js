@@ -18,7 +18,7 @@
  *
  * STABLE TOKENS — never translated, the tooling matches them literally:
  *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), every marker track's section marker ([SaaS], [AI], [SEC],
- *   [PRIVACY], [DIST], [API], [UI], [OBS], [DATA] — engine/tracks.js TRACK_MARKER, rendered in MARKER_TRACK_ORDER) and a
+ *   [PRIVACY], [DIST], [API], [UI], [OBS], [DATA], [PORT] — engine/tracks.js TRACK_MARKER, rendered in MARKER_TRACK_ORDER) and a
  *   track pack's own,
  *   story/parallel tags ([US1], [US2], [shared], [P]), the unfilled sentinel `> **TODO**`,
  *   `[NEEDS CLARIFICATION]`, the annotation tags `_Requirements:_ / _Makes green:_ /
@@ -219,6 +219,8 @@ function renderBrief(d, lang) {
   if (d.fastCheck) push(`${++extra}. ${B5.fastCheck[d.expectFail ? "briefDodRed" : "briefDod"](d.fastCheck.command)}`);
   // 1.36 guard tests (meta.guard "tests"): a protected test changes only when this task's _Implements:_ names it
   if (d.protectedTests != null) push(`${++extra}. ${B5.protectedTests.briefDod(d.protectedTests)}`);
+  // +port (1.36): a task of the port keeps the behaviour exactly; one after the differential check keeps it green (portRole)
+  if (d.portRole) push(`${++extra}. ${t.portRules[d.portRole](d.differential)}`);
   if (task.checkpoint) push("", t.checkpoint, "**Checkpoint:** " + task.checkpoint);
 
   push("", t.report, t.reportTo(d.reportPath), "");
@@ -279,6 +281,9 @@ const TRACK_TASK_PLAN = {
   obs: [{ ac: [29], green: true }, { ac: [28], green: true, after: "_Emits metrics: requests_total, request_duration_seconds, errors_total_" },
     { ac: [30], green: true }, { ac: [31], green: true }, { ac: [28, 29, 30, 31] }],
   data: [{ ac: [35], green: true }, { ac: [32, 34], green: true }, { ac: [33], green: true }, { ac: [33] }, { ac: [32, 33, 34, 35] }],
+  // +port (1.36): the baseline (`lead` — its own heading, the plan's FIRST task: tasks() puts it before every other) and the
+  // differential check, each with its _Implements:_ / _Verify:_ slots (text.trackTasks.port.slots).
+  port: [{ ac: [36, 37], lead: true, implements: "baseline", verify: "verifyOld" }, { ac: [36, 37], green: true, verify: "verifyNew" }],
 };
 const LAYOUTS = {
   // classification.md: a signal line per active track (signalTracks: +tdd, the marker tracks, then a project's packs — up to six
@@ -332,8 +337,9 @@ const LAYOUTS = {
     return secs.join("\n\n") + "\n" + extra + "\n" + D.footerSized(a.label, a.size) + "\n";
   },
 
-  // tasks.md, organized by user story: Setup, Foundational, US-1 (its core task and a parallel one), the active tracks' task blocks
-  // (trackTasks, numbered on), US-2, Polish. Size S: one core task (US-1's two criteria), then the track blocks (the
+  // tasks.md, organized by user story: a track block's lead part first (+port's baseline — 1.36), Setup, Foundational, US-1 (its core
+  // task and a parallel one), the active tracks' task blocks (trackTasks, numbered on), US-2, Polish. Size S: the lead part, one core
+  // task (US-1's two criteria), then the track blocks (the
   // engine keeps, per track, the tasks that implement a criterion — engine/scaffold.js trimTrackTasks); no setup / foundational /
   // US-2 / polish phases. +tdd: each template test made green by one task (_Makes green:_, templateTests of the tracks and size);
   // +saas: the latency metric on the first task that carries it; +ai: the golden baseline on the core task. The core task's
@@ -349,24 +355,27 @@ const LAYOUTS = {
     // one task line (numbered in order), its _Requirements:_ and — makesGreen — the _Makes green:_ of those criteria
     const task = (tags, text, acs, makesGreen) => `- [ ] ${++n}. ${tags} ${text}` + (acs ? `\n  - _Requirements: ${acs.join(", ")}_` : "") +
       (makesGreen ? greenLine(green, ...acs) : "");
-    const trackBlocks = () => {
+    // part "lead": the track blocks' lead part (+port's baseline), rendered FIRST — before Setup (size s: before the story), so
+    // nothing changes the code it covers before it is recorded; "main": the rest, after US-1. A track without a lead part: "".
+    const trackBlocks = (part) => {
       let out = "";
       for (const t of MARKER_TRACK_ORDER) {
         if (!a.tracks.includes(t)) continue;
-        const block = LAYOUTS.trackTasks(T, { track: t, start: n + 1, green });
+        const block = LAYOUTS.trackTasks(T, { track: t, start: n + 1, green, part });
         out += block;
         n += (block.match(/^- \[ \] \d+\./gm) || []).length;
       }
-      return out;
+      return part === "lead" && out ? out.slice(1) + "\n" : out; // a section of its own: no leading blank line, one after it
     };
     if (s) {
+      const lead = trackBlocks("lead");
       const story = `${K.story1}\n${task("[US1]", K.coreTask, ["US-1.AC-1", "US-1.AC-2"], true)}${metrics}${evals}${verify}\n**Checkpoint:** ${K.checkpoint1}\n`;
-      return `${K.title(a.name)}\n\n${K.introS(a.label)}\n\n${K.constraintsS}\n\n${story}${trackBlocks()}`;
+      return `${K.title(a.name)}\n\n${K.introS(a.label)}\n\n${K.constraintsS}\n\n${lead}${story}${trackBlocks("main")}`;
     }
-    let phases = `${K.setup}\n${task("[shared][P]", K.setupTask)}\n\n${K.foundational}\n${task("[shared]", K.foundationalTask, ["US-1.AC-1"])}${metrics}\n\n` +
+    let phases = `${trackBlocks("lead")}${K.setup}\n${task("[shared][P]", K.setupTask)}\n\n${K.foundational}\n${task("[shared]", K.foundationalTask, ["US-1.AC-1"])}${metrics}\n\n` +
       `${K.story1}\n${task("[US1]", K.coreTask, ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3"], true)}${evals}${verify}\n` +
       `${task("[US1][P]", K.parallelTask, ["US-1.AC-4"], true)}\n**Checkpoint:** ${K.checkpoint1}\n`;
-    phases += trackBlocks();
+    phases += trackBlocks("main");
     phases += `\n${K.story2}\n${task("[US2]", K.story2Task, ["US-2.AC-1"], true)}\n**Checkpoint:** ${K.checkpoint2}\n\n${K.polish}\n${task("[shared][P]", K.polishTask)}\n`;
     return `${K.title(a.name)}\n\n${K.intro(a.label)}\n\n${K.constraints}\n\n${phases}`;
   },
@@ -407,16 +416,23 @@ const LAYOUTS = {
   },
 
   // A track's template task block (TRACK_TASK_PLAN). Shared by tasks() and spec_add_track, so a feature escalated later gets
-  // the very same tasks. a = { track, start, green? } — green (templateTests) only on a greenfield +tdd scaffold.
+  // the very same tasks. a = { track, start, green?, part? } — green (templateTests) only on a greenfield +tdd scaffold; part
+  // "lead" (the plan's `lead` entries under text.leadHeading) | "main" (the others under text.heading) | none: both, the lead part
+  // first (spec_add_track, a project template). An entry's `implements` / `verify` name its slots (text.slots).
   trackTasks(T, a) {
     const plan = own(TRACK_TASK_PLAN, a.track), text = own(T.trackTasks, a.track);
     if (!plan || !text) return "";
     let n = a.start - 1;
-    return `\n## ${text.heading}\n` + plan.map((t, i) => {
-      const ids = t.ac.map((x) => "US-1.AC-" + x);
-      return `- [ ] ${++n}. [US1] ${text.tasks[i]}\n  - _Requirements: ${ids.join(", ")}_` + (t.before ? "\n  - " + t.before : "") +
-        (t.green ? greenLine(a.green, ...ids) : "") + (t.after ? "\n  - " + t.after : "") + "\n";
-    }).join("");
+    const part = (lead) => {
+      const items = plan.map((t, i) => [t, i]).filter(([t]) => !!t.lead === lead);
+      return !items.length ? "" : `\n## ${lead ? text.leadHeading : text.heading}\n` + items.map(([t, i]) => {
+        const ids = t.ac.map((x) => "US-1.AC-" + x);
+        return `- [ ] ${++n}. [US1] ${text.tasks[i]}\n  - _Requirements: ${ids.join(", ")}_` + (t.before ? "\n  - " + t.before : "") +
+          (t.green ? greenLine(a.green, ...ids) : "") + (t.after ? "\n  - " + t.after : "") +
+          (t.implements ? `\n  - _Implements: ${text.slots[t.implements]}_` : "") + (t.verify ? `\n  - _Verify: ${text.slots[t.verify]}_` : "") + "\n";
+      }).join("");
+    };
+    return a.part === "lead" ? part(true) : a.part === "main" ? part(false) : part(true) + part(false);
   },
 };
 

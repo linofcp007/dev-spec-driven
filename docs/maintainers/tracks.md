@@ -1,22 +1,22 @@
 # Tracks and the Phase 0 classifier
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
-The track registries, the built-in tracks (+tdd … +dist, +api, +ui, +obs, +data), track packs and the classifier's rules —
+The track registries, the built-in tracks (+tdd … +dist, +api, +ui, +obs, +data, +port), track packs and the classifier's rules —
 the user-visible reading of each track's keywords, cues and worked examples is the last rules section, "The classifier's
 signal rules, track by track". The rules come first; how they came to be — the releases and review findings — is in
 History at the end.
 
 ## The track model
-`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy`, `+dist`, `+api`, `+ui`, `+obs`, `+data` are independent and
+`core` is always on. `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy`, `+dist`, `+api`, `+ui`, `+obs`, `+data`, `+port` are independent and
 composable, chosen in Phase 0 by `spec_classify` (a keyword heuristic with negation and confidence) and confirmed by the
 human. The track set drives which artifacts / sections / loops apply. The agent's side is
 `skills/dev-spec-driven/references/classification-matrix.md` (the decision procedure, each track's "turn it on if" table;
 GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
 
 - **Tracks are data-driven registries — never a hard-coded `saas`/`ai` list.** `VALID_TRACKS` → `OPTIONAL_TRACKS`
-  (everything but core: the classifier's, add_track's and every per-track loop's list); `TRACK_MARKER` (`[SaaS]` … `[DATA]`
+  (everything but core: the classifier's, add_track's and every per-track loop's list); `TRACK_MARKER` (`[SaaS]` … `[PORT]`
   → `MARKER_TRACKS`, the tracks with mandatory design sections — every optional track but +tdd); `TRACK_SECTIONS`
-  (`SAAS_SECTIONS` … `DATA_SECTIONS` — the ONE table doctor `<track>-sections`, the design gate, status, the roadmap and the
+  (`SAAS_SECTIONS` … `PORT_SECTIONS` — the ONE table doctor `<track>-sections`, the design gate, status, the roadmap and the
   design-save hook read); `TRACK_STEERING` (the steering files a track brings); `SIGNALS` (the classifier's tables) — all in
   `engine/tracks.js`; the classifier code is `engine/classify.js`.
 - **Adding a track:** a built-in marker track needs `VALID_TRACKS` + its `SIGNALS` entry (EN / PT / ES), `TRACK_MARKER`,
@@ -37,7 +37,7 @@ GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
 - **The placeholder corpus.** `templateCorpus()` renders every set of at most two optional tracks plus all of them (the
   builders' only interplay is pairwise — quadratic, not 2^n) plus the sized builders, once, into
   `engine/corpus.generated.json` (`npm run build`; architecture.md → The build) — a new built-in track means a rebuild. T10
-  in 04-tracks-builtin.js bounds it relatively (≤ 1650 texts, ≤ 60× one all-tracks scaffold).
+  in 04-tracks-builtin.js bounds it relatively (≤ 1800 texts, ≤ 60× one all-tracks scaffold).
 - **Readers go through the accessors, never the constants.** The constants are the BUILT-IN tables; `allTracks()`
   (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`, `markerTracks()`,
   `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the track packs of the
@@ -291,6 +291,24 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
   animals: "a horse's lineage in the breeding report" stays none). A warehouse with data words (never tables / columns /
   queries) → keep, with the building's words → none; a backfill with partitions / a pipeline / dbt / history → keep, with a
   schema migration's words → generic; "into / from / via …" + `Snowflake` / `Redshift` → strong, their everyday senses → none.
+
+### +port
+- **Registries (1.36):** `[PORT]` (port first, improve later); `PORT_SECTIONS` Behaviour Baseline · Differential Check ·
+  Deferred Improvements (`tier: "extended"`) — the full names strict, the ordinary words (`baseline`, `improvements` + PT / ES)
+  `loose`; NO steering file (`TRACK_STEERING.port = []`); US-1.AC-36..37 (`TEMPLATE_ACS`); reserved `port` and the marker
+  `PORT` only — NO `TRACK_ALIASES` entry (each alias would become a reserved pack name: a team's `migration` / `rewrite` pack
+  keeps its name). Guide: `references/port-patterns.md`.
+- **Two task headings.** Its `TRACK_TASK_PLAN` entries carry `lead: true` (the baseline — `text.trackTasks.port.leadHeading`)
+  and `implements` / `verify` slot names (`text.trackTasks.port.slots`): `LAYOUTS.tasks` renders the lead part FIRST (before
+  Setup; at size s before the story) and the main part with the other blocks; `trackTasks` with no `part` renders both, the
+  lead first (spec_add_track); `withTrackBlocks` puts the lead section before a project template's first task section
+  (`splitLeadSection`, `beforeFirstTaskSection` — templates-imports-exports.md). `renderTrackTaskHeadings` collects EVERY
+  heading of a track's block, so both are +port's (activeTasks drops both once it is off); every other track has one.
+- **The fence** — engine/port.js (gates-and-approvals.md → Bugfix and finish): the anchors are read from the plan — the lead
+  heading is the one naming Behaviour Baseline's strict names, the other is the differential check's — never a list of
+  heading texts.
+- **No generic or context tier, no aliases, no overlap entry.** The cues: a network port and a schema migration (classifier
+  section below).
 
 ## Project-defined tracks — `.specs/tracks/<name>/` track packs
 - **What a pack is:** `track.json` (JSON with `//` / `/* */` comments — `stripJsonComments()`, one linear pass) + optional
@@ -762,6 +780,36 @@ Worked examples (what `spec_classify` answers):
 | A BI dashboard over the orders table · Load the orders table into the warehouse every night | `core +data` (weak-only; *possible +ui* for the dashboard) | BI dashboard / warehouse, table |
 | *Relatório de BI com backfill mensal* | `core +data` (weak-only) | relatório de BI, backfill |
 
+### +port — keywords, cues and worked examples
+
+**Suggest-only from its verbs (1.36).** A false +port costs more than any other track's — refused ticks, a fenced plan, an
+approval that fails at m / l, a lost xs size — and its verbs are in every feature text. So: **strong** = the technique names
+only — characterization tests, a golden master, the strangler fig, differential testing, a behaviour-preserving port /
+rewrite (*testes de caracterização, teste diferencial, figueira estranguladora · pruebas de caracterización, prueba
+diferencial*); **weak** = the verbs — port, reimplement, rewrite (rewriting / rewritten / rewrote: the inflections can't make
+them), migrate / migration (*portar, reimplementar, reescrever, reescrita, migrar, migração · reescribir, reescritura,
+migración*), ALL ONE concept (`redo`): together they count once, so a verb alone or several give a "Possible +port" note and
+never turn the track on — a team that wants one on learns it as strong in two corrections (Project signal overrides). No
+generic tier (refactor, upgrade, modernize, "replace … with" are any cleanup's words), no context tier (legacy, the same
+output, current behaviour). **Cues**, the first that fires decides: `port` right after an `open` / `tcp` / `udp` / `ssh` / `host`
+/ `firewall` / `default` / … word, or right before a number, `forwarding`, `scan`, `range`, `mapping`, `binding`, `and adapters`,
+`of call` → none (the window only: "Port the TCP proxy from C to Rust" keeps its note); `migrate` / `migration` (+ PT / ES) in a
+sentence about a schema, tables, columns, indexes, a database or a migration tool (Flyway, Liquibase, Alembic) → none.
+
+Worked examples (what `spec_classify` answers):
+
+| Description | Result | Signals |
+|---|---|---|
+| Add characterization tests before the rewrite of the billing engine | `core +tdd +port` | characterization test, rewrite (billing → +tdd) |
+| Strangler fig migration of the monolith's orders module | `core +tdd +port` | strangler fig, migration (+tdd's migration too) |
+| *Pruebas de caracterización antes de reescribir el importador* | `core +port` | pruebas de caracterización, reescribir |
+| Port the CSV importer from Python to Go | `core`, *possible +port* | port |
+| Port and rewrite the parser in Go | `core`, *possible +tdd / +port* | port (+ rewrite: one concept) |
+| Migrate customers from the legacy billing system to Stripe | `core +tdd`, *possible +port* | migrate (billing → +tdd) |
+| Open port 8443 on the load balancer · Forward port 80 to 8080 | `core` | — (a network port) |
+| Add a migration that renames the email column · Migrate the users table | `core +tdd` / `core` | — (a schema migration) |
+| Rename the variable in the parser, no functional change | `core`, *possible +tdd*, size xs | — (no +port keyword) |
+
 ## History
 How the rules above came to be, section by section — grep a release (`1.21`) or a finding id (`F2a`, `verify P1`, `r6`,
 `R9`) here. "The differential" replays a large input set through two or more engine commits and counts the track decisions
@@ -877,11 +925,28 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
 - **1.25.1** — `AI_SECTIONS`' fallback words became loose (an unmarked "## Fallbacks" — a payment processor's — answered the
   deleted [AI] section); `headingLeadMarkers` (a marker must lead the heading). The 1.25.1 review found this note still naming
   the constants 1.20 had replaced; 17-docs-identifiers.js now fails on any dead identifier.
+- **1.36** — +port, the twelfth built-in track (port first, improve later): a marker track, not a kind (it composes with +api,
+  +data…), three sections, two criteria, two template tasks under two headings (`renderTrackTaskHeadings` reads every heading of
+  a block since), no steering, no alias. Its classifier is suggest-only from its verbs: the design's verb tiers, context words
+  and a language-target cue would have turned +port on for "Rewrite the current behaviour of coupons so expired ones are
+  rejected" and "Migrate customers from the legacy billing system to Stripe", cost "Rename variables…, no functional change"
+  its xs, and dropped "Port the TCP proxy from C to Rust" on a sentence-wide network word. The pre-ship differential (v1.35.4
+  vs the change — tracks, suggested size, possible, notes, and every other track's signals, negated and confidence) over
+  71,368 inputs: 4,484 logged classify inputs of both suites, 15,912 test-file literals, 92 eval prompts and lines, a 50,880-frame
+  sweep (every other track's keyword beside 8 +port keywords in 3 frames). No other track's decision, signal, negation,
+  confidence or possible note changed; +port turned on for 13 literals (each naming a technique — the new tests' and a 1.17
+  label's "characterization tests") and 13,119 frames (a technique name in each), no logged input; the size moved only where
+  +port turned on (978 frames, m → l: three marker tracks, or +dist and another); a "Possible +port" note on 11 logged inputs
+  ("Port the API", "Rewrite the frontend in React", "Migrate our Spark jobs to Databricks…", a deprecation's migration guide,
+  a plan's "the migration runs twice", two feature names), 112 literals and 21,801 frames — 30 literals lost the "substantial"
+  note to it (that note needs no possible one). The placeholder corpus: 68 track sets, 1,723 texts (T10's bound 1,650 → 1,800).
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.
 - **1.15** — track packs in `.specs/tracks/<name>/`; `tracks` became a reserved slug (a `.specs/tracks/` holding a
   `.state.json` is a pre-1.15 feature).
+- **1.36** — `port` and the marker `PORT` reserved (`TRACK_RESERVED_SINCE`, `RE_PACK_MARKER_RESERVED`) — +port has no alias, so no
+  other team pack name became reserved.
 - **1.17 / 1.19 / 1.21** — each new built-in track reserved its name and aliases: a pre-1.17 `dist` pack, a pre-1.19 `api` /
   `rest`… pack, a pre-1.21 `etl` pack is a missing pack (`TRACK_RESERVED_SINCE`); 1.19 T review added the packs whose MARKER
   became a built-in's ('contracts' with `[API]`, 'ops' with `[OBS]`).
@@ -915,6 +980,7 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   `near` machinery and reuses +tdd's credit / charge rules, rather than a second matcher.
 
 ### The classifier's signal rules, track by track
+- **1.36** — +port's reading: technique names only on, its verbs one concept, the network and schema cues.
 - **1.21** — the list negation, +api's our-API + version rule and the public-API exception joined the reading.
 - **1.24** — the strong / weak additions of review 6 and "What follows 'no X' / 'without X'".
 - **1.25.1** — the named AI products and frameworks, "no more X", the insufficiency predicate.

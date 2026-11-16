@@ -83,11 +83,12 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
     // is off) come from the corpus: rendered, they loaded pt.js, es.js and the derived pt-BR into every English process that
     // lists features (50–65 ms). They are exactly the live i18n's, track × language; an English `list` loads no other language.
     const fileCorpus = JSON.parse(fs.readFileSync(path.join(libDir, "engine", E.CORPUS_FILE), "utf8"));
-    const headLive = (t, l) => { const m = I.msg(l).tracks.taskBlock(t, 1).match(/^#{1,6}\s.*$/m); return m ? E.normTaskHeading(m[0]) : null; };
+    // (1.36: every heading of the block — +port's has two)
+    const headLive = (t, l) => (I.msg(l).tracks.taskBlock(t, 1).match(/^#{1,6}\s.*$/gm) || []).map((h) => E.normTaskHeading(h));
     const headDiff = [];
     for (const t of E.VALID_TRACKS) {
-      const got = E.trackTaskHeadings(t), live = sorted(new Set(I.LANGS.map((l) => headLive(t, l)).filter(Boolean)));
-      for (const l of I.LANGS) if (headLive(t, l) !== null && !got.has(headLive(t, l))) headDiff.push([t, l]);
+      const got = E.trackTaskHeadings(t), live = sorted(new Set(I.LANGS.flatMap((l) => headLive(t, l))));
+      for (const l of I.LANGS) if (headLive(t, l).some((h) => !got.has(h))) headDiff.push([t, l]);
       if (js(sorted(got)) !== js(live) || js((fileCorpus.taskHeadings || {})[t]) !== js(live) || js(fresh.taskHeadings[t]) !== js(live)) headDiff.push([t, "set"]);
     }
     const proj22 = path.join(tmp, "p22-list-en");

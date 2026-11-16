@@ -12,7 +12,9 @@ Phase 6, opt-in.
   T-IDs as their test-plan row (keyed by the FIRST cell); the design sections naming it; `_Verify:_`, `verifyPipes` and `expect:
   "fail"`; Global Constraints; `projectChecks`; its steering (see Scoped steering); `decisions` (the decisions.md entries citing its
   IDs, ≤ 5 / 2000 characters); a `[SEC]` / `[PRIVACY]` task's track design sections; a bugfix's Reproduction + Root Cause (+
-  `gated` / `gateError` when the bugfix gate would refuse it); `dependsOn` (see Task dependencies); the loop's definition of done.
+  `gated` / `gateError` when the bugfix gate would refuse it — 1.36: or +port's, with `heldBy`, the `[PORT]` tasks it waits for);
+  `portRole` (`port` · `after`) + `differential` on a +port task (its definition-of-done rule, `brief.portRules`); `dependsOn` (see
+  Task dependencies); the loop's definition of done.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
   feature's `x/`; a T-ID is read by its number (T-01 = T-1); a file needs a boundary on both sides (US-1.AC-1 is not US-1.AC-10).
@@ -20,8 +22,8 @@ Phase 6, opt-in.
 - **A RED task's brief** (`_Expect: fail_`): its tests heading `BRIEF.testsRed` and definition of done `redRules`; its project-checks
   item is `projectChecks.briefDodRed` (only its new red tests may fail).
 - **`write: true`** writes `.specs/<f>/.execution/` (self-ignoring: `.gitignore` = `*`): the brief regenerated, `ledger.md` created
-  once and only ever appended by the controller. The result keeps identifiers (`refs`, `loop`, `inlineOnly`, `verify`, gate,
-  `dependsOn`, `preflight`), the quoted spec text only with `includeBrief`. The PostToolUse hook exits early on
+  once and only ever appended by the controller. The result keeps identifiers (`refs`, `loop`, `inlineOnly`, `verify`, gate —
+  `gated` / `gateError` / `heldBy` —, `portRole` / `differential`, `dependsOn`, `preflight`), the quoted spec text only with `includeBrief`. The PostToolUse hook exits early on
   `/.execution/` paths.
 - **`preflight` (1.31)** — a boolean on every brief of a task: true at size m / l or no size (`featureSize()`), false
   for an xs change (`isChangeDir()`), size s, a spike (its tasks exist to make the decision), an `inlineOnly` task and a
@@ -450,7 +452,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   `dependencyCycles(g, true)` (iterative Tarjan over the open tasks). Only a task's own `_Depends:_` takes it past an earlier
   section's checkpoint — the controller still stops at each. Every walk is linear and iterative (no recursion on a long chain).
 - **complete_task never refuses on dependencies** (a tick records what happened): open `_Depends:_` (`openDependenciesOf()`) →
-  `waitsOn` + `taskDeps.tickedEarly`. The bugfix gate stays the only refusal.
+  `waitsOn` + `taskDeps.tickedEarly`. The execution gates are the only refusals: the bugfix and +port gates, checked before
+  anything is recorded (the brief carries `gated`, so `done --run` runs nothing) — gates-and-approvals.md → Bugfix and finish.
 - **Doctor `task-deps`** (fail, `CHECK_PHASE` 5; the feature doctor and `spikeDoctor`; `taskDepsCheck()` → null when no task
   declares): an invalid token, a number no active task carries, a self-dependency, a cycle (`dependencyCycles(g, false)`, done tasks
   included). The tasks approval refuses on it (`approvalChecks` tasks → `task-deps`). `malformed-markers` reads "depends:" as a
@@ -620,7 +623,9 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   covering, forced, stale, pending — before the stale / tests-phase / spike answers); a listed test passes only when a lift is in
   force (the LATEST record per file across every feature's lifts: a lift until a `revoked` record) or a task that can start now
   (`readyTasks`, tasks.js: a task with `_Depends:_` all done, the first open undeclared task and its `[P]` run in one section —
-  taskWaves' first ready set without packing the waves) of a COVERING or FORCED feature names it exactly in `_Implements:_` (a
+  taskWaves' first ready set without packing the waves; never a task +port's fence holds — `portHeldNumbers`, port.js: every
+  task after the first anchor not ticked AND verified, a `[P]` task beside the open baseline included) of a COVERING or FORCED
+  feature names it exactly in `_Implements:_` (a
   folder or a glob never equals a file; `_Makes green:_` never unlocks). Else ask — deny under `meta.approvalGuard: deny`; the
   reason names the tasks that can start now, the plan hint (the first of them) and the lift line (guards.js `approvalCommand`).
 - **Lifts** — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect <f> <file> --reason …` (finish.js
@@ -864,6 +869,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   session, and a file date may never block (gates-and-approvals.md).
 
 ### Task dependencies and execution waves
+- **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
+  tick's open `_Depends:_`); doctor's `port-verify` warns about a task after the baseline whose `_Depends:_` never reaches it.
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks
   {depends}`; a tasks.md without `_Depends:_` behaves exactly as before it.
 - **1.24 r6 D6** — tasks order by section: by number alone, a task spec_append_tasks put into an EARLIER phase (`{heading}`, numbered

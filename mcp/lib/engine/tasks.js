@@ -28,7 +28,8 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
 let guardLevel, protectOnTick, protectedCount; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
-function __link(E) { ({ guardLevel, protectOnTick, protectedCount, fastCheckStatus, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+let portTask; // port.js — +port's fence (1.36)
+function __link(E) { ({ guardLevel, protectOnTick, protectedCount, fastCheckStatus, portTask, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -590,9 +591,11 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const state = readState(projectDir, f.slug);
   const bad = state.invalid; // readState refuses wrong-shape JSON (evidence/approvals/tracks/top level) — checked before any write
   if (bad) return { ok: false, error: bad };
-  // Bugfix iron law (bugfixGate): no fix before the root cause is written in bug.md. Checked before anything is
-  // recorded or ticked.
-  const gate = bugfixGate(f.dir, state.kind, blocks, task, lng);
+  // The execution gates, checked before anything is recorded or ticked: the bugfix iron law (bugfixGate — no fix before the root
+  // cause is written in bug.md) and +port's fence (1.36, port.js portTask — a task listed after a [PORT] anchor that is not ticked
+  // and verified waits for it: port first, improve later).
+  const gate = bugfixGate(f.dir, state.kind, blocks, task, lng) ||
+    (portTask(f.dir, state.kind, detectTracks(f.dir), blocks, task, state.evidence, evidenceRule(projectDir), lng, f.slug) || {}).gate;
   if (gate) return { ok: false, ...gate };
   const key = String(n);
   // every run {command, exitCode} is stamped observed: true | false (the harness's log) | "cli" (`done --run`), and
@@ -1683,8 +1686,10 @@ function taskBrief(projectDir, name, number, opts = {}) {
   let bug = null;
   const state = readState(projectDir, slug);
   const kind = state.kind;
-  // The same gate complete_task applies — reported up front, so `done --run` refuses BEFORE running any command.
-  const gate = bugfixGate(dir, kind, blocks, block, lng);
+  // The same gates complete_task applies — reported up front, so `done --run` refuses BEFORE running any command. +port (1.36): the
+  // fence, and the task's role in it (portRole — the definition of done's port rule).
+  const port = portTask(dir, kind, tracks, blocks, block, state.evidence, evidenceRule(projectDir), lng, slug);
+  const gate = bugfixGate(dir, kind, blocks, block, lng) || (port && port.gate);
   if (kind === "bugfix") {
     const bugText = readIfExists(path.join(dir, "bug.md")) || "";
     const sec = (syn) => (bugSectionFilled(bugText, syn) ? stripHtmlComments(extractSection(bugText, syn)).trim() : null);
@@ -1733,7 +1738,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const idHit = (s) => idNeedles.some((r) => r.test(s.title + "\n" + s.body));
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
   // … and a track pack's — its sections are the rigor its criteria were written for.
-  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
+  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", "port", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
   // search before you write: the design's Reuse & Integration entries naming this task's files / folders / ACs, and the
   // existing source files next to its _Implements:_ targets (names only; bounded).
   const reuse = briefReuse(projectDir, designText, mk.implements, acIds);
@@ -1827,6 +1832,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     projectChecks: checks,
     fastCheck: fast ? { check: fast.check, command: fast.command } : null,
     protectedTests: protectedN,
+    portRole: port && port.role, // +port (1.36)
+    differential: port && port.differential,
     globalConstraints: globalConstraints(tasksText),
     decisions: dec.items,
     decisionsOmitted: dec.omitted,
@@ -1878,7 +1885,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     uiReview: freshReviews && !expectFail && uiWork, // a red task renders nothing yet
   };
   if (bug) res.bug = bug;
-  if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });
+  if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error, ...(gate.heldBy ? { heldBy: gate.heldBy } : {}) }); // heldBy: +port's
+  if (port && port.role) Object.assign(res, { portRole: port.role, ...(port.differential != null ? { differential: port.differential } : {}) });
   if (pipes.length) res.verifyPipes = pipes; // stable: branch on it, never on the brief's text
   if (expectFail) res.expect = "fail"; // B5 (kept with write:true, like verify): the run must exit non-zero
   if (checks.length) res.projectChecks = checks; // [{name, command}] the definition of done names
@@ -1905,8 +1913,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // the nearby files (identifiers) and how many design entries the brief quotes — never the entries' text
     if (res.reuse) res.refs.reuse = { entries: res.reuse.entries.length, files: res.reuse.files };
     if (res.designSystem) res.refs.designSystem = res.designSystem.components.map((c) => c.name); // the names only
-    // KEPT (identifiers the controller and done --run act on): verify, expect, projectChecks, dependsOn, gated / gateError,
-    // preflight, uiReview, fastCheck (1.36), protectedTests (1.36) — only the quoted spec text below goes.
+    // KEPT (identifiers the controller and done --run act on): verify, expect, projectChecks, dependsOn, gated / gateError /
+    // heldBy, preflight, uiReview, fastCheck (1.36), protectedTests (1.36), portRole / differential (1.36) — only the quoted spec
+    // text below goes.
     for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse", "designSystem"]) delete res[k];
   }
   return res;
@@ -2251,7 +2260,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
 module.exports = { parseTasks, taskDescription, nextTask, taskDependsSpec, taskSchedule, dependencyCycles, taskWaves,
   taskDepsBlockedNote, taskDepsWaitList, taskDepsCheck, tasksRewrite, checkboxBytes, completeTask, reasonInput, taskLine,
   dropTrailingCr, RE_CHECKPOINT, scanTaskLines, indentOf, hasOutsideCode, backtickRuns, nextTaskNumber, taskPeerStamps,
-  taskBlocks, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
+  taskBlocks, unreadTaskLines, unreadTasksDetail, resolveTask, blockPosition, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
   changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers,
   taskMarkers, malformedMarkers, suspiciousVerify, RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections,
   taskBrief, RE_THEMATIC_BREAK, appendTasks,

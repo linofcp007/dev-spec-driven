@@ -26,9 +26,11 @@ const i18n = require("../i18n.js");
 let approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked, fileHash,
   FOLD_CASE, globMatcher, guardLevel, implementsRel, insideDirAlias, isCodeFile, isImplementsGlob, isObj, isTestFile, projectLang,
   readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic;
+let portHeldNumbers, detectTracks, specsRoot, evidenceRule; // port.js · tracks.js · core.js · evidence.js — a task +port's fence holds
 function __link(E) { ({ approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked,
   fileHash, FOLD_CASE, globMatcher, guardLevel, implementsRel, insideDirAlias, isCodeFile, isImplementsGlob, isObj, isTestFile, projectLang,
-  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic } = E); }
+  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic,
+  portHeldNumbers, detectTracks, specsRoot, evidenceRule } = E); }
 
 const PROTECT_MAX_FILES = 2000; // test files a snapshot records, at most (past them: `truncated` — doctor warns)
 const PROTECT_HASH_HEX = 16; // a file's content hash as recorded: fileHash's sha1 (CRLF-normalized), shortened
@@ -180,7 +182,8 @@ const liveStates = (projectDir) => featureDirs(projectDir).filter((f) => !f.arch
 // guardCheck (guards.js) at level tests — BEFORE its stale / tests-phase / spike / scope answers: is the target a listed test of an
 // unfinished feature (ctx.holders — every feature with open tasks: covering, forced, stale or pending), a folder holding one, or a
 // glob in its last segment matching one (or a folder holding one)? → null when none, or when every one is lifted (a lift in force of
-// any feature: ctx.states) or named EXACTLY in the _Implements:_ of a task that can start now (readyTasks) of a covering or forced
+// any feature: ctx.states) or named EXACTLY in the _Implements:_ of a task that can start now (readyTasks — never one +port's fence
+// holds: portHeldNumbers) of a covering or forced
 // feature (ctx.unlockers — a folder, a glob or _Makes green:_ never unlocks); else ask — deny under meta.approvalGuard deny, with the
 // user's line (userNote: the lift command). ctx.blocks: each feature's active task blocks, parsed once by guardCheck.
 function protectedTestDecision(pdir, abs, rel, ctx) {
@@ -206,9 +209,13 @@ function protectedTestDecision(pdir, abs, rel, ctx) {
   const lifted = activeLifts([...ctx.states.values()]);
   const root = path.resolve(pdir);
   const unlocked = new Set(), current = [];
+  let rule; // (the evidence rule, read once — only when a +port feature asks it)
   for (const name of ctx.unlockers) {
     const blocks = ctx.blocks.get(name) || [];
-    const ready = new Set(readyTasks(blocks));
+    const st = ctx.states.get(name), dir = path.join(specsRoot(pdir), name), tracks = detectTracks(dir);
+    if (tracks.includes("port") && rule === undefined) rule = evidenceRule(pdir);
+    const held = portHeldNumbers(dir, isObj(st) ? st.kind : undefined, tracks, blocks, isObj(st) ? st.evidence : undefined, rule);
+    const ready = new Set(readyTasks(blocks).filter((n) => !held.has(n)));
     for (const b of blocks) {
       if (b.done || !ready.has(b.number)) continue;
       current.push({ feature: name, number: b.number });

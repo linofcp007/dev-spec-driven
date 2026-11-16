@@ -24,7 +24,7 @@ file states the CURRENT rules first; its `## History` at the end keeps how they 
 - **`docs/maintainers/architecture.md`** — before adding or splitting an engine module, changing what a surface requires,
   the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) ·
   The module rule · The build · Config paths.
-- **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs, +data) or
+- **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs, +data, +port) or
   track packs: The track model · Project-defined tracks · Classifier gotchas · The classifier's signal rules, track by track.
 - **`docs/maintainers/languages.md`** — before adding or rewording ANY user-facing string, a translated heading or a
   language: Languages (EN / PT-PT / PT-BR / ES) · Localization gotchas.

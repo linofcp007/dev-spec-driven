@@ -467,4 +467,28 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       scope: () => !("protectedTests" in brScope) && !brScope.brief.includes(M().briefDod(2).slice(0, 30)),
     });
   }
+
+  { // +port and the protected tests (1.36, the two items met): a task the port's fence holds cannot start now — a [P] task beside
+    // the open baseline names a protected test in _Implements:_: it asks until the baseline is ticked AND verified, then it is free
+    const pP = project("port-held", { approvalGuard: "ask" });
+    w(pP, "test/parser.test.js", "parser\n");
+    const fP = S.createFeature(pP, "Csv port", ["core", "port"], "", undefined, "en");
+    tasks(fP, "- [ ] 1. [P] Record the baseline\n  - _Requirements: US-1.AC-36, US-1.AC-37_\n  - _Verify: node base.js_\n" +
+      "- [ ] 2. [P] Port the parser\n  - _Requirements: US-1.AC-1_\n  - _Implements: test/parser.test.js_\n");
+    approveTasks(pP, "csv-port");
+    const listed = Object.keys(listOf(fP).files || {}).includes("test/parser.test.js");
+    const ready = E.readyTasks(S.taskBlocks(fs.readFileSync(path.join(fP.dir, "tasks.md"), "utf8"))).join(",");
+    const held = g(pP, "test/parser.test.js");
+    const unverified = S.completeTask(pP, "csv-port", 1, undefined, { note: "UNVERIFIED: recorded by hand" });
+    const stillHeld = g(pP, "test/parser.test.js");
+    S.completeTask(pP, "csv-port", 1, undefined, { undo: true });
+    const ticked = S.completeTask(pP, "csv-port", 1, { command: "node base.js", exitCode: 0 });
+    const free = g(pP, "test/parser.test.js");
+    all("1.36 guard tests + port: a task +port's fence holds cannot start now — test/parser.test.js (in the snapshot), named by [P] task 2 beside the open baseline (task 1, which readyTasks also lists), asks; it still asks once the baseline is ticked unverified; ticked with its _Verify:_ run, task 2 unlocks it (got " + js({ listed, ready, held: held.decision, unverified: unverified.ok, stillHeld: stillHeld.decision, ticked: ticked.ok, free: free.decision || "allow" }) + ")", {
+      listed: () => listed, bothReady: () => ready === "1,2",
+      held: () => held.decision === "ask" && held.why === "protected-test",
+      unverified: () => stillHeld.decision === "ask",
+      free: () => ticked.ok === true && free.decision !== "ask" && free.decision !== "deny",
+    });
+  }
 };

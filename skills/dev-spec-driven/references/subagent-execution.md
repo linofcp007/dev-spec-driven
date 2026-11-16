@@ -97,7 +97,8 @@ test is not yours to rule on — see "Where autonomy stops".
 `spec_task_brief {name, number: N, write: true}` → the paths plus the task's identifiers (number and
 text, `loop`, `inlineOnly`, its `_Verify:_` command — with `verifyPipes` when one pipes and `expect: "fail"` on an
 `_Expect: fail_` task — the project checks `projectChecks`, `refs` — the AC/T IDs it cites — `unresolved` IDs, a
-bugfix `gated`), never the spec text the brief quotes: the brief never enters your context. The brief itself also
+bugfix's or +port's `gated` (+port: `heldBy`, the [PORT] tasks it waits for — never dispatch a gated brief; `portRole` and
+`differential` say which port rule its definition of done carries), never the spec text the brief quotes: the brief never enters your context. The brief itself also
 carries the decisions (`decisions.md`) that cite the task's ACs / T-IDs, and a **Reuse** section — the design's Reuse &
 Integration entries for the task's files, folders or ACs, and the existing source files next to its `_Implements:_`
 targets (`refs.reuse`: how many entries, the files) — where the implementer's search before writing starts
@@ -393,6 +394,12 @@ resume rule's trust in the ledger doesn't cover a grant.
   deterministic +ai tasks (schema validation, rate limits, fallback, cost circuit breaker) delegate
   normally, and their brief adds "run the eval harness afterwards". Cost and safety validation stay
   feature-level checks.
+- **+port:** port first, improve later. The baseline task runs first and the differential check before any improvement —
+  a brief with `gated: "port-order"` is never dispatched (in parallel mode either: a task that declares `_Depends:_` can join
+  an early wave, the tick is still refused). A task of the port (`portRole: "port"`) keeps the behaviour exactly; a cleanup
+  it notices goes under `[PORT] Deferred Improvements`. A task after the differential check (`portRole: "after"`) keeps it
+  green but for its own criteria's differences and runs it again when done — `/spec-finish` blocks (`port-recheck`) until the
+  differential check passed after the last such tick. The final review compares each ported unit with its old version.
 
 ## Final review
 
@@ -451,7 +458,9 @@ commit each, a review of the pass):
    passing run standing. (No project checks: nothing to record — `/spec-finish` asks for the full suite fresh. Never add
    checks to record a run.) Ledger `Simplify: N commits (a1b2c3d..e4f5a6b), M dropped, review clean`.
 
-Skip it for a small feature or a review with no deferred smells. `NO_CHANGES` is a fine result.
+Skip it for a small feature or a review with no deferred smells. `NO_CHANGES` is a fine result. On a **+port** feature the
+pass runs only once the differential check is ticked, takes from `[PORT] Deferred Improvements` only the behaviour-preserving
+cleanups, and its `## Final runs` include the differential check's `_Verify:_` (record it again — step 3).
 
 ## Closing
 

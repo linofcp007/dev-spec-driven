@@ -18,7 +18,7 @@ let acIndex, builtinTaskHeadings, closestName, existsCached, ghostMarkers, headi
 function __link(E) { ({ acIndex, builtinTaskHeadings, closestName, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName,
   noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf, dropTrailingCr } = E); }
 
-const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
+const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data", "port"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
 // Adding a track: VALID_TRACKS + its classifier SIGNALS; a MARKER track (mandatory design sections under a stable
 // [Marker]) also needs TRACK_MARKER, a sections table in TRACK_SECTIONS, TRACK_STEERING and its i18n builders
@@ -26,7 +26,7 @@ const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "ap
 const OPTIONAL_TRACKS = VALID_TRACKS.filter((t) => t !== "core");
 // The steering files a track brings (spec_init / add_track write them, the task brief lists them).
 const TRACK_STEERING = { tdd: ["testing-standards.md"], saas: ["scale.md", "observability.md", "cost.md"], ai: ["ai-strategy.md"], sec: ["security.md"], privacy: ["privacy.md"],
-  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"], obs: ["observability.md"], data: ["data.md"] };
+  dist: ["distributed.md"], api: ["api.md"], ui: ["ui.md"], obs: ["observability.md"], data: ["data.md"], port: [] }; // +port (1.36): no steering file
 
 // Track input from MCP or the CLI: an array or a string, EVERY element split on whitespace, commas and '+'
 // ("tdd,saas", "+saas +ai", ["tdd saas"]), case-insensitive, core implied. Unknown tokens are reported
@@ -66,6 +66,7 @@ const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd",
   // +data — never "analytics": a team's product-analytics pack (a tracking plan, event names) is another concern and keeps its name
   etl: "data", elt: "data", pipeline: "data", pipelines: "data", warehouse: "data", datawarehouse: "data", lakehouse: "data", dbt: "data",
   dataquality: "data", dataeng: "data" };
+// (+port has no alias: each one would become a reserved pack name — a team's `migration` or `rewrite` pack keeps its name)
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
@@ -133,7 +134,8 @@ function headingHasMarker(md, marker) {
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
 // language). MARKER_TRACKS drives every per-marker loop: detection, inactive sections/tasks, doctor, approve, status.
-const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]", obs: "[OBS]", data: "[DATA]" };
+const TRACK_MARKER = { saas: "[SaaS]", ai: "[AI]", sec: "[SEC]", privacy: "[PRIVACY]", dist: "[DIST]", api: "[API]", ui: "[UI]", obs: "[OBS]", data: "[DATA]",
+  port: "[PORT]" };
 const MARKER_TRACKS = Object.keys(TRACK_MARKER);
 // The AC IDs requirements.md defines as a track's criteria: under a heading carrying its marker ([SaaS] / [AI] — the
 // template's "#### [SaaS] Acceptance Criteria (EARS)", in any language) or with the marker in the criterion itself.
@@ -153,8 +155,10 @@ const normTaskHeading = (l) => l.replace(/^#{1,6}\s+/, "").replace(/\s+/g, " ").
 const TASK_HEADINGS = new Map();
 // A track's template task headings in every language (normalized, unique), rendered from the i18n tables — each language's
 // taskBlock. The pre-generated corpus holds them for the built-in tracks (renderCorpusData's taskHeadings).
+// EVERY heading of the block (1.36): +port's has two — the baseline's (it goes first) and the differential check's — and both are
+// the track's (activeTasks drops both once +port is off); every other track's block has one.
 function renderTrackTaskHeadings(tr) {
-  return [...new Set(i18n.LANGS.map((l) => (i18n.msg(l).tracks.taskBlock(tr, 1).match(/^#{1,6}\s.*$/m) || [""])[0]).filter(Boolean).map(normTaskHeading))];
+  return [...new Set(i18n.LANGS.flatMap((l) => i18n.msg(l).tracks.taskBlock(tr, 1).match(/^#{1,6}\s.*$/gm) || []).map(normTaskHeading))];
 }
 function trackTaskHeadings(tr) {
   if (isPackTrack(tr)) return new Set(); // a track pack's block is found by its marker (trackTaskHeadingIs)
@@ -431,10 +435,23 @@ const DATA_SECTIONS = [
     "retenção e custo", "retencao e custo", "retenção", "custo de armazenamento", "retención y coste", "retención y costo", "retención", "coste de almacenamiento"],
   loose: ["retention", "storage cost", "query cost", "retenção", "custo de armazenamento", "retención", "coste de almacenamiento"], tier: "extended" },
 ];
+// +port (1.36) — port first, improve later. The full names strict, the ordinary words `loose` (marker-bound): a core "## Baseline"
+// or "## Improvements" note never stands in for a deleted [PORT] section. Behaviour Baseline's strict names also tell +port's two
+// template task headings apart (engine/port.js — the baseline's heading names it). Deferred Improvements: optional at size s.
+const PORT_SECTIONS = [
+  { name: "Behaviour Baseline", syn: ["behaviour baseline", "behavior baseline", "linha de base do comportamento", "línea base del comportamiento",
+    "linea base del comportamiento", "baseline", "linha de base", "línea base", "linea base"],
+  loose: ["baseline", "linha de base", "línea base", "linea base"] },
+  { name: "Differential Check", syn: ["differential check", "differential testing", "verificação diferencial", "verificacao diferencial",
+    "verificación diferencial", "verificacion diferencial", "comparison with the baseline", "comparação com a linha de base", "comparación con la línea base"],
+  loose: ["comparison with the baseline", "comparação com a linha de base", "comparación con la línea base"] },
+  { name: "Deferred Improvements", syn: ["deferred improvements", "melhorias adiadas", "mejoras aplazadas", "mejoras diferidas", "improvements", "melhorias", "mejoras"],
+  loose: ["improvements", "melhorias", "mejoras"], tier: "extended" },
+];
 // The marker tracks' mandatory design sections — the ONE table doctor, approve, status, the roadmap and the design-save
 // check read (a marker track = a TRACK_MARKER entry + its table here).
 const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS, obs: OBS_SECTIONS,
-  data: DATA_SECTIONS };
+  data: DATA_SECTIONS, port: PORT_SECTIONS };
 // A section's `tier` (DATA in the tables above): "core" (absent = core) is mandatory at every size; "extended" is
 // optional at size S — absent, or answered by one "n/a — <reason>" line (sectionVerdict). A track pack's sections are all core.
 // sections two tracks both scaffold (DATA): when both tracks are on, a SIZED scaffold writes only the covering
@@ -1786,6 +1803,51 @@ const SIGNALS = {
       { kind: "sentence", on: ["parquet"], then: "none", edge: "letter",
         phrases: ["floor\\p{L}*", "laminate", "oak", "tiles?", "carpets?", "planks?", "hardwood", "varnish\\p{L}*", "square (?:feet|meters|metres)",
           "pavimentos?", "soalho", "pisos?", "madeira", "flutuante", "suelos?", "tarima", "laminado", "madera", "baldosas?", "alfombras?"] },
+    ],
+  },
+  // +port (1.36): port first, improve later — behaviour that exists, carried to new code (another language, framework or design) and
+  // proved the same on a corpus before anything is improved. SUGGEST-ONLY from its verbs: port, rewrite, reimplement, migrate (+ PT /
+  // ES) are everyday words of every feature text ("rewrite the copy", "migrate the users table"), so they are WEAK and ONE concept
+  // (`redo`) — they count once: alone, or together, only a "Possible +port" note, never the track on, never a lost xs size. STRONG:
+  // the technique names only — characterization tests, a golden master, the strangler fig, differential testing, a behaviour-preserving
+  // port / rewrite (+ PT / ES). No generic or context tier (refactor, upgrade, modernize, "replace … with", legacy, the same output
+  // are any cleanup's words). CUES: a network port and a schema migration are no port at all (no note).
+  port: {
+    strong: [
+      "characterization test", "characterisation test", "golden master", "golden-master", "strangler fig", "strangler-fig", "differential test",
+      "behaviour-preserving port", "behavior-preserving port", "behaviour-preserving rewrite", "behavior-preserving rewrite",
+      // PT (a phrase ending in -ção / -ión pluralizes that word only: the plural of its first word is listed)
+      "teste de caracterização", "testes de caracterização", "teste diferencial", "testes diferenciais", "figueira estranguladora",
+      "reescrita que preserva o comportamento", "porte que preserva o comportamento",
+      // ES
+      "prueba de caracterización", "pruebas de caracterización", "prueba diferencial", "pruebas diferenciales", "higuera estranguladora",
+      "reescritura que preserva el comportamiento",
+    ],
+    weak: [
+      "port", "reimplement", "re-implement", "reimplementation", "rewrite", "rewriting", "rewritten", "rewrote", "migrate", "migrating", "migration",
+      // PT / ES ("reimplementar", "migrar" — both languages)
+      "portar", "reimplementar", "reimplementação", "reescrever", "reescrita", "migrar", "migração", "reescribir", "reescritura", "reimplementación",
+      "migración",
+    ],
+    concepts: {
+      redo: ["port", "reimplement", "re-implement", "reimplementation", "rewrite", "rewriting", "rewritten", "rewrote", "migrate", "migrating", "migration",
+        "portar", "reimplementar", "reimplementação", "reescrever", "reescrita", "migrar", "migração", "reescribir", "reescritura", "reimplementación",
+        "migración"],
+    },
+    // CUES — the first rule that fires decides:
+    cues: [
+      // a network port is no port: "open port 8443", "forward port 80 to 8080", "the TCP port", "a port number / scan / range", the
+      // ports-and-adapters architecture, a ship's port of call — read right around the word only (never the sentence: "Port the TCP
+      // proxy from C to Rust" keeps its note)
+      { kind: "near", on: ["port"], then: "none",
+        after: { words: ["\\d+", "numbers?", "forwarding", "forwards?", "scans?", "scanning", "mappings?", "ranges?", "bindings?", "and adapters", "of call"], chars: 16 },
+        before: { words: ["tcp", "udp", "https?", "ssh", "serial", "usb", "open", "opens", "opened", "close", "closed", "listening", "listen on", "listens on",
+          "exposed?", "exposes", "host", "firewall", "network", "local", "default", "random", "free", "server", "container", "the same", "a different"], chars: 20 } },
+      // a schema migration is no port: "Add a migration that renames the email column", "migrate the users table", "run the migrations"
+      // in a sentence about a schema, its tables / columns / indexes or a migration tool
+      { kind: "sentence", on: ["migrate", "migrating", "migration", "migrar", "migração", "migración"], then: "none", edge: "letter",
+        phrases: ["schemas?", "columns?", "tables?", "indexes", "indices", "databases?", "alter table", "flyway", "liquibase", "alembic",
+          "esquemas?", "colunas?", "tabelas?", "índices?", "columnas?", "tablas?", "bases? de dados", "bases? de datos"] },
     ],
   },
 };
