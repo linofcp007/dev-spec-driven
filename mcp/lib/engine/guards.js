@@ -144,9 +144,11 @@ function guardCheck(projectDir, filePath, cwd) {
     else covering.push(name);
   }
   // tests: a protected test asks (deny under meta.approvalGuard deny) unless a task that can start now of a covering / forced feature
-  // names it exactly, or a lift is in force — its list read from EVERY feature with open tasks (a stale or pending one too)
+  // names it exactly, or a lift is in force — its list read from EVERY feature with open tasks (a stale or pending one too) or with no
+  // finish recorded (1.36.0 review 1: its tasks all ticked, before finish, the test was an ordinary ask — under deny too)
   if (level === "tests") {
-    const pt = protectedTestDecision(pdir, abs, rel, { holders: [...texts.keys()], unlockers: covering.concat(forced), blocks: blocksOf, states });
+    const holders = [...states.keys()].filter((n) => texts.has(n) || !(isObj(states.get(n)) && isObj(states.get(n).finished)));
+    const pt = protectedTestDecision(pdir, abs, rel, { holders, unlockers: covering.concat(forced), blocks: blocksOf, states });
     if (pt) return pt;
   }
   if (specsTest) return allow("specs");
@@ -2049,7 +2051,8 @@ function mcpApprovalAction(tool, ti, level, meta) {
   if (tool === "spec_feature") {
     const act = String(approvalStr(ti.action) || "").toLowerCase();
     if (act === "remove" && ti.confirm === true) return [Object.assign({ kind: "remove", feature: approvalStr(ti.name) }, base)];
-    if (act === "unprotect") return [Object.assign({ kind: "guard-down", setting: "unprotect", feature: approvalStr(ti.name), file: approvalStr(ti.file), reason: approvalStr(ti.reason) }, base)];
+    // (the file the engine lifts: `file`, else `newName` — manageFeature's `opts.file ?? arg`; 1.36.0 review 1: the question named none)
+    if (act === "unprotect") return [Object.assign({ kind: "guard-down", setting: "unprotect", feature: approvalStr(ti.name), file: approvalStr(ti.file != null ? ti.file : ti.newName), reason: approvalStr(ti.reason) }, base)];
     return [];
   }
   // spec_add_track {remove: true} turning off +tdd / +ai (the gates they carry); adding a track is never one.

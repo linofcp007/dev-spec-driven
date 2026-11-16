@@ -258,7 +258,7 @@ function finishFeature(projectDir, name, opts = {}) {
   }
   // 1.36 guard tests: the feature's protected tests hashed again — a change no recorded hash (a snapshot, a tick re-baseline of any live
   // feature) and no lift explains is a warning (git-free: every surface), never a blocker; the merge summary lists them.
-  const protectedTests = protectedTestsFinish(projectDir, state);
+  const protectedTests = protectedTestsFinish(projectDir, state, opts.protectHashes); // (hashed before the lock: the facade's protectHashFirst)
   const ptWarn = protectedFinishWarning(protectedTests, slug, lng);
   if (ptWarn) warnings.push(ptWarn);
 

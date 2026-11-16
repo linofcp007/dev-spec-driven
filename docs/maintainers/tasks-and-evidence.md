@@ -628,49 +628,73 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   shortened; null: unreadable or gone). `stateFromFile` refuses a wrong shape (`jsonShape.protectedTests`); protect.js `listOf`
   tolerates any shape on its own (guardCheck reads the file raw).
 - **The snapshot** — at a feature's FIRST complete tasks approval at level tests (`approvePhase`: `p === "tasks"`, the approval
-  complete — a role's waiting sign-off takes none; a fast-forward through tasks passes it on): the project's test files
-  (`walkProject` — hidden / `SCAN_IGNORE` folders skipped, links never followed; `isCodeFile && isTestFile`) and each live
-  feature's `.specs/<f>/tests/`, at most `PROTECT_MAX_FILES` (2,000 — `truncated` past them). **The walk runs OUTSIDE the feature
-  lock:** the facade wraps the locked approvePhase in `protectWalkFirst`, which walks only when this call may be that first
-  approval (phase or `through` tasks, no revoke, no dry run, level tests, no snapshot yet) and hands it in as `opts.protectWalk` —
-  never a tool argument; under the lock `protectOnApproval` merges it ADD-ONLY and keeps an existing snapshot (another process's,
-  taken while this one walked). The result: `protectedTests {count, at, truncated?}` + a note. Cost: linear (2,000 vs 200 test
-  files ≈ 10×, held ≤ 25× by a ratio test).
-- **The tick record** — `completeTask` (under the feature lock, a TICK at level tests — `protectOnTick`): each test file the task
-  names EXACTLY in `_Implements:_` is re-baselined (its content now is the authorised one: a planned change), each test file its
-  `_Verify:_` names (quotes off, a pytest `::node` / a `:line[:col]` suffix off, never a glob) joins the list when absent — never
-  re-hashed (a weakened listed test run by a `_Verify:_` keeps its record). An untick removes nothing. The bugfix tasks.md's task 1
-  carries `_Implements: [the test file T-01 goes in]_` (EN / PT / ES; the 1.21 F5 pin moved on purpose) so the red test is planned
-  for task 1, recorded at its tick, protected from task 2.
-- **The decision** (`protectedTestDecision`) — the target is a test file, a folder (lstat, never a link) or a glob in its last
-  segment (it matches a listed file or a folder above one); the lists read are every feature with open tasks (`holders`:
-  covering, forced, stale, pending — before the stale / tests-phase / spike answers); a listed test passes only when a lift is in
-  force (the LATEST record per file across every feature's lifts: a lift until a `revoked` record) or a task that can start now
-  (`readyTasks`, tasks.js: a task with `_Depends:_` all done, the first open undeclared task and its `[P]` run in one section —
-  taskWaves' first ready set without packing the waves; never a task +port's fence holds — `portHeldNumbers`, port.js: every
-  task after the first anchor not ticked AND verified, a `[P]` task beside the open baseline included) of a COVERING or FORCED
-  feature names it exactly in `_Implements:_` (a
-  folder or a glob never equals a file; `_Makes green:_` never unlocks). Else ask — deny under `meta.approvalGuard: deny`; the
-  reason names the tasks that can start now, the plan hint (the first of them) and the lift line (guards.js `approvalCommand`).
+  complete — a role's waiting sign-off takes none; a fast-forward through tasks passes it on): `protectWalk(projectDir, first)` —
+  each live feature's `.specs/<f>/tests/` FIRST (the approving feature's, `first`, before the others), then the project's test
+  files (`walkProject` — hidden / `SCAN_IGNORE` folders skipped, links never followed; `isCodeFile && isTestFile`), at most
+  `PROTECT_MAX_FILES` (2,000 — `truncated` past them; so a project past the cap still lists the feature's own failing tests).
+  **The walk runs OUTSIDE the feature lock:** the facade wraps the locked approvePhase in `protectWalkFirst`, which walks only when
+  this call may be that first approval (phase or `through` tasks, no revoke, no dry run, level tests, the list not `snapshotted`)
+  and hands it in as `opts.protectWalk` — never a tool argument; under the lock `protectOnApproval` merges it ADD-ONLY
+  (`withWalk`: a recorded hash and the list's first `at` kept) and marks the list `via: "approval"`. **"Snapshotted" is that
+  mark** (`snapshotted`: via "approval"), never `at` — a `feature protect` or a lift before the approval sets `at` too, and the
+  approval then recorded nothing; a re-approval or a revoke + approve keeps the marked list (another process's too, taken while
+  this one walked). The result: `protectedTests {count, at, truncated?}` + a note. Cost: linear (2,000 vs 200 test files ≈ 10×,
+  held ≤ 25× by a ratio test). `feature protect <f>` walks the same way (its own feature first).
+- **The tick record** — `completeTask` (under the feature lock, a TICK at level tests — `protectOnTick`, called BEFORE the tick
+  stamps `ticks[n]`): at the task's FIRST tick each test file it names EXACTLY in `_Implements:_` is re-baselined (its content
+  now is the authorised one: a planned change); a task with a tick record (`tickRecorded`: `ticks[n]` — a box unchecked by hand
+  keeps it — or an `unticks` entry, the untick drops `ticks[n]`) is a RE-tick, which keeps a recorded hash and only adds a file
+  not yet listed, so finish names an edit made while it was open. Each test file its `_Verify:_` names (quotes off, a pytest
+  `::node` / a `:line[:col]` suffix off, never a glob) joins the list when absent — never re-hashed (a weakened listed test run
+  by a `_Verify:_` keeps its record). An untick removes nothing. The bugfix tasks.md's task 1 carries `_Implements: [the test
+  file T-01 goes in]_` (EN / PT / ES; the 1.21 F5 pin moved on purpose) so the red test is planned for task 1, recorded at its
+  tick, protected from task 2.
+- **The decision** (`protectedTestDecision`) — an existing target is read by its REAL path (`realRel`: links and junctions
+  resolved, the on-disk case — `t2/auth.test.js` through a junction to test/ IS test/auth.test.js); nothing there, the text
+  path stands. The target is a glob when `*`, `?` or `[` appears ANYWHERE in it (`tes?/a.test.js`, `*/a.test.js`,
+  `test/*/a.test.js` — `globMatcher` on the whole path, matching a listed file or a folder above one; a `[class]` is also read
+  as one character, `RE_GLOB_CLASS`, since globMatcher reads `[` as itself and `app/[id]/x.test.js` must still match itself),
+  else a folder (lstat, never a link), else a file — decided by FOLDED membership in the lists, never by `isTestFile` (a case
+  variant of a listed file is that file: `cart.TEST.js`, `TEST_UTIL.PY` where the file system folds case). The lists read are
+  every feature with open tasks OR no finish recorded (`holders`: covering, forced, stale, pending, and a feature whose tasks
+  are all ticked until its `state.finished` — before the stale / tests-phase / spike answers); a listed test passes only when a
+  lift is in force (`activeLifts`, below) or a task that can start now (`readyTasks`, tasks.js: a task with `_Depends:_` all
+  done, the first open undeclared task and its `[P]` run in one section — taskWaves' first ready set without packing the waves;
+  never a task +port's fence holds — `portHeldNumbers`, port.js: every task after the first anchor not ticked AND verified, a
+  `[P]` task beside the open baseline included; never a reopened task with a tick record — `tickRecorded`, which is not named
+  as one either) of a COVERING or FORCED feature names it exactly in `_Implements:_` (a folder or a glob never equals a file;
+  `_Makes green:_` never unlocks). Else ask — deny under `meta.approvalGuard: deny`; the reason names the tasks that can start
+  now, the plan hint (the first of them) and the lift line (guards.js `approvalCommand`).
 - **Lifts** — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect <f> <file> --reason …` (finish.js
   `manageFeature` → `protectTests`): a test file (by name or folder; never a glob) inside the project, a reason (`reasonInput`: one
   line, ≤ 500); codes `file-required` · `reason-required` · `not-a-test` · `outside-project`; `dryRun` (the MCP server's check
   before it asks) writes nothing; `confirmation` → `confirmed`. A guard-down of the approval guard (claude-code-integration.md →
   Human approval guard). `protect <f>` adds the tests present now (walked before the lock, add-only; a list without a snapshot
   gets `at` / via protect); `protect <f> <file>` appends a `revoked` record when a lift is in force anywhere and adds the file when
-  absent — never re-hashes one. No expiry: a lift lasts until protect.
+  absent — never re-hashes one. **In force** (`activeLifts`, over the live features' states — `liveStates`): per file the
+  LATEST record across every feature's lifts — a lift until a `revoked` record follows it — and a lift ENDS WITH ITS FEATURE: a
+  non-revoked lift recorded at or before its own feature's `state.finished.at` is no record any more (finish's "record it"
+  advice explains this feature's change without unprotecting the test for every later feature); a lift recorded after a finish
+  (a reopened feature) counts until the next one; a `revoked` record of a finished feature still ends the lifts before it. No
+  expiry otherwise. So a RE-finish of the feature names that test again (its lift ended at the first finish).
 - **Finish** (`protectedTestsFinish`, after the gate-only return): each listed file hashed again — a hash matching NO record of
   any live feature (snapshot or tick) and no lift in force → `unexplained` {file, status: changed | deleted}; a lift explains a
   change (`lifted`). A warning naming the first 5 (+ how many more) and the merge summary's "Protected tests" block — never a
-  blocker (a change the user confirmed at the prompt is legitimate). `res.protectedTests` {count, unexplained, lifted}.
+  blocker (a change the user confirmed at the prompt is legitimate). `res.protectedTests` {count, unexplained, lifted}. **The
+  hashing runs OUTSIDE the feature lock** a write / evidence finish takes (2,000 files held it ~2 s, the MCP server's lock
+  wait): the facade wraps it in `protectHashFirst`, which hashes the listed files first and hands them in as
+  `opts.protectHashes` — never a tool argument; under the lock a file listed since is hashed there.
 - **Doctor** `protected-tests` (warn; level tests, a tasks approval, an open active task): no snapshot (`feature protect <f>`), a
   truncated one, the approval guard off. **The brief** of an open task at level tests: `protectedTests` (the list's count) and its
   definition-of-done line after the fast check's. **init** `--guard tests`: `protectedTests.on` and `protectedTestsWarning` while
   the approval guard is off.
 - **Known limits** (not findings): tests in ignored / hidden / linked folders, outside the project folder or past the cap are
   not listed; new test-support files (conftest.py, setup files, mocks) stay editable; a git command or a script (`node -e`) is
-  not read by the hook — finish names the result; a merge from main lists teammates' test changes; an untick re-opens its task, so
-  a task that can start now naming the test may edit it and its re-tick records the new content (the untick is in `unticks`).
+  not read by the hook — finish names the result; a merge from main lists teammates' test changes; an ARCHIVED feature's list and
+  lifts are not read (`liveStates`, guardCheck's feature folders — a restore reads them again, and its finish names what changed
+  meanwhile); creating a link or junction to a protected folder (`ln -s`, `mklink /J`, `New-Item -ItemType Junction`) is not read
+  — it edits no test, and an edit through it is read by the real path — nor is removing the junction itself (no code folder by
+  lstat).
 
 ## Harness-observed evidence
 - **Only as strong as the approval guard; not a security boundary.** The log is a file the agent can write: with
@@ -1007,6 +1031,20 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   prompt — replaced by the tick record, in the approval-guarded .state.json), lift expiry, init-time snapshotting (doctor names
   `feature protect`), finish's "planned" exemption (it hid a later weakening). The ready set is `readyTasks` ("the tasks that can
   start now" — never next_task's single next), the walk runs outside the feature lock, and the hook reads every target.
+- **1.36.0 review 1** — **PT-1** an untick (or a box unchecked by hand) reopened its task, which then unlocked its own red test,
+  and the re-tick recorded the weakened content — finish said nothing: `tickRecorded` (no unlock; the re-baseline at the FIRST
+  tick only, `protectOnTick` before `ticks[n]` is stamped). **PT-2** other spellings passed silently at deny — a glob in a folder
+  segment (`tes?/`, `*/`), `[t]est/`, a case variant (`cart.TEST.js` was "no test" by name), a path through a junction: a glob
+  anywhere, the real path, folded membership. **PT-3** past the 2,000-file cap the project walked first filled it and the
+  feature's own `.specs/<f>/tests/` was never listed: the features' tests first, the approving one first. **PT-4** a `feature
+  protect` before the approval set `at`, which read as "already snapshotted": the via "approval" mark. **PT-5** finish's "record
+  it" advice left a lift that unprotected the test for every later feature: a lift ends with its feature's finish. **INT-1 / PT-6**
+  once every task was ticked (before finish) the list stopped counting — under deny the edit got the generic ask: `holders` adds
+  the features with no finish recorded; archiving is a known limit. **PT-7** `spec_feature unprotect` with the file in `newName`
+  asked about no file (guards.js `mcpApprovalAction` reads `newName` as `manageFeature` does). **PT-8** finish hashed the list
+  inside the lock (~1.9 s at 2,000 files): `protectHashFirst`. **INT-4** PT / ES scope ask glued "—" to the CLI line. **T1 / T2**
+  fixtures: a task after +port's open differential check unlocks nothing; a case variant of a listed test that is gone asks; a
+  quoted `_Verify:_` path and an absolute `_Implements:_` / unprotect path are read.
 
 ### Harness-observed evidence
 - **1.14 F1** — the observe hook, the `observed` stamp, `meta.evidence` and reason `unobserved`. Its feature review: **R1** — an
