@@ -75,8 +75,8 @@ Unsure whether a change keeps the behaviour? Don't make it.
   DONE, never an exit code you didn't see.
 - **Never dispatch subagents** — no helpers, no reviewer: the review of the pass is the controller's.
 - Don't tick tasks and don't call `spec_complete_task` or `spec_finish` — the controller records the runs.
-- **Under guard mode** (`meta.guard` on or `scope`) each edit asks the user — every task is done, so no open task covers
-  it. That is expected: wait for the answer, never work around it.
+- **Under guard mode** (`meta.guard` on, `scope` or `tests`) each edit asks the user — every task is done, so no open task
+  covers it. That is expected: wait for the answer, never work around it. You never touch a test (`tests` protects them).
 - No destructive git operations (reset --hard, force push, rebase of shared history), no pushes.
 
 ## Report

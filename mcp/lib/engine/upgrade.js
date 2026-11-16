@@ -18,13 +18,14 @@ let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, cr
   staleFinish, stateFromFile, statePath, timeOf, trackLabel, unverifiedLabel, verificationStatus, withFeatureLock,
   withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot;
 let guardianOffer, guardianLauncherAudit; // guardian.js — 1.29 (1.30: the launcher's audit / rewrite): dev-guardian's gate offered (never set) when it is installed or the project has .guardian/
+let fastCheckOffer; // evidence.js — 1.36: the fast check the root manifests suggest (offered, never set)
 function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, CRITICAL_FLOW_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir,
   isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,
   maybeRefreshRoadmap, missingPackTracks, nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile,
   positionPhase, projectLang, readIfExists, readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError,
   savedTracks, scanTestCode, shortIdList, specDoctor, specsRoot, staleFinish, stateFromFile, statePath, timeOf, trackLabel,
-  unverifiedLabel, verificationStatus, withFeatureLock, withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot, guardianOffer, guardianLauncherAudit } = E); }
+  unverifiedLabel, verificationStatus, withFeatureLock, withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot, guardianOffer, guardianLauncherAudit, fastCheckOffer } = E); }
 
 // ---------------------------------------------------------------------------
 // Upgrade — after the plugin is updated. roadmap.json meta.specVersion records the dev-spec version that last
@@ -336,6 +337,9 @@ function specUpgrade(projectDir, opts = {}) {
   // offered, never set (its scan takes minutes and needs its scanners)
   const offer = guardianOffer(projectDir, lang);
   if (offer) res.guardianOffer = offer;
+  // 1.36: no fast check set, and the root manifests suggest one — offered ({name, command, from, note}), never set
+  const fast = fastCheckOffer(projectDir, lang);
+  if (fast) res.fastCheckOffer = fast;
   // …and one when the gate's launcher is not this version's (after apply: none — it was written)
   const launcher = guardianLauncherAudit(projectDir, lang, false);
   if (launcher) res.guardianLauncher = launcher;
@@ -422,6 +426,7 @@ function upgradeLines(r, lang = r.lang) {
   out.push(r.features.length ? U.summary(r.features.length, r.summary.blocked, r.summary.attention, r.summary.ok, r.archived) : U.noFeatures);
   if (r.guardianOffer) out.push("  ▲ " + r.guardianOffer); // 1.29: the project's own attention item
   if (r.guardianLauncher) out.push("  ▲ " + r.guardianLauncher); // 1.30: the gate's launcher
+  if (r.fastCheckOffer) out.push("  ▲ " + r.fastCheckOffer.note); // 1.36: the fast check offered (an object: its note printed)
   for (const g of ["blocked", "attention", "ok"]) {
     const list = r.features.filter((f) => f.group === g);
     if (!list.length) continue;
@@ -458,6 +463,7 @@ function renderUpgradeMd(r, lang, proj) {
   md += `**${r.features.length ? U.summary(r.features.length, r.summary.blocked, r.summary.attention, r.summary.ok, r.archived) : U.noFeatures}**\n`;
   if (r.guardianOffer) md += `\n- [ ] ${r.guardianOffer}\n`; // 1.29: the project's own attention item
   if (r.guardianLauncher) md += `\n- [ ] ${r.guardianLauncher}\n`; // 1.30: the gate's launcher
+  if (r.fastCheckOffer) md += `\n- [ ] ${r.fastCheckOffer.note}\n`; // 1.36: the fast check offered
   const mig = upgradeMigrationLines(r, lang);
   if (mig.length) md += `\n## ${M.migrations}\n\n` + mig.map((l) => `- ${l}`).join("\n") + "\n";
   for (const g of ["blocked", "attention", "ok"]) {

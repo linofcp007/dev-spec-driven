@@ -96,7 +96,7 @@ while no feature has approved, unfinished tasks — through Write / Edit or a Ba
 `.specs/` counts. `scope` also asks, once tasks are approved, for a code file no open task names. Only Claude Code runs it:
 
 ```powershell
-node "$plugin\cli\dev-spec.js" init --guard on    # or scope; off to disable — or /spec-setup guard, spec_init {guard}
+node "$plugin\cli\dev-spec.js" init --guard on    # or scope / tests; off to disable — or /spec-setup guard, spec_init {guard}
 ```
 
 **Observed evidence (the log is always on; the rule is opt-in).** A PostToolUse hook (`hooks/observe-hook.js` — Bash,
@@ -170,7 +170,7 @@ hooks, the MCP server and the commands), elsewhere in your shell or the MCP conf
 |---|---|---|
 | `DEV_SPEC_DEFAULT_LANG` | unset (= en) | The language of a NEW project (`en`, `pt`, `pt-BR`, `es`) — seeded into `meta.lang`, so it travels with the project |
 | `DEV_SPEC_STOP_CHECK` | on | `off` turns the end-of-turn evidence gate off where `meta.stopCheck` isn't set |
-| `DEV_SPEC_GUARD_DEFAULT` | off | Guard mode (`off` / `on` / `scope`) where `meta.guard` isn't set |
+| `DEV_SPEC_GUARD_DEFAULT` | off | Guard mode (`off` / `on` / `scope` / `tests`) where `meta.guard` isn't set |
 
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged* content) — install
 inside your repo. The `[ -f … ]` guard keeps commits working if the plugin folder later moves — and says so on every

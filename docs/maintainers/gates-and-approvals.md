@@ -119,6 +119,14 @@ review findings — is in History at the end.
   (`approvalInForceAt()`; `tests`, fingerprint-less, always counts) and a revocation of a phase back as it was. Stale → the
   step stays `finish` with `staleBaseline` {finishedAt, since, newFiles}, an older execution sign-off is asked again
   (`executionSignOffStale()`); with drift too → `drift` + `staleBaseline` (`nx.driftedStale`).
+- **The review panel (1.36).** Every doctor result (the lean one too) carries `reviewPanel` {models} while `meta.reviewModels`
+  names 2–3 models (doctor.js `reviewPanel`; none for an xs feature or a spike — tasks-and-evidence.md → Subagent-driven
+  execution); next_action copies the lean doctor's, never computes it again, and its early returns (an invalid state or
+  roadmap) carry none. At a `finish` step — the first one or a re-finish (`staleBaseline`) — the recommendation STARTS with
+  `next.reviewBranch`: the branch review on every model before the step's own text, i.e. before the optional simplify pass
+  and the project checks' line (a fix round from that review would make their runs stale). A hint on the step, never a
+  step: verify / drift / finished set their own step and carry none, so nothing can loop; the controller's ledger line says
+  whether the review ran (the engine reads no ledger).
 - **finish blockers** (stable ids, in order — the `execution` approval refuses on exactly these): `state`, `roadmap` (never
   inside `doctor`), `doctor`, `root-cause`, `placeholders` (anywhere in the chain), `changed-since-approval` (by content),
   `tasks` (none), `open-tasks`, `verification`, `suite-evidence` (`meta.checks`), `approval-gates` (a phase missing a role's
@@ -187,7 +195,11 @@ review findings — is in History at the end.
   design.md that exists now was created after it — a change.
 - **spec_metrics** reads `.state.json`, `.history/` and the artifacts (`createdAt` from createFeature, else approximated);
   `write` creates `retro.md` (writeIfAbsent). `rework` skips a same-content re-approval (still in `approvalsTotal`); a fingerprint-less
-  phase (tests) always counts.
+  phase (tests) always counts. 1.36: `fastCheck` {check, runs, clean, cleanRate, ticks, ticksClean} per feature — from the
+  snapshot a code task's tick stored on its run (`fast`), null without one — and the project's `fastTicks` / `fastTicksClean`
+  (ticks, never run sums: every feature's tick window reads the same project log). The fast check's own doctor warn,
+  `fast-check` (a stored name no fast check reads), is a project-level registry entry like `observed-unguarded`
+  (tasks-and-evidence.md → The fast check).
 - **Test-plan scaffold:** `scaffoldTestPlan()` writes the template rows only while requirements.md holds exactly the
   template's AC IDs (`i18n.templateAcIds()`); else one generic row per real AC — none at all: one row whose Covers cell is
   a slot (`acSlot`). spec_import warns (`wNoCriteriaAtAll`), re-plans after writing the requirements, and fits a kept
@@ -258,6 +270,15 @@ review findings — is in History at the end.
   `forcedApprovalList`: doctor's `waiver-expired` (both doctors), ROADMAP.md (EXPIRED), `spec_finish` `waivers` + a warning +
   the merge summary's "Waived gates". With roles the approval carries the STRICTEST counted waiver (`strictestWaiver()`: the
   earliest expiry, else the first — the completing sign-off's own included; each role's record keeps its own). Metrics count `revokedApprovals` and `untickedTasks`.
+- **Lifts of protected tests (1.36, guard tests)** sit beside waivers: a waiver records why a GATE was forced, a lift why ONE
+  protected test may change — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect` (`reason` required:
+  `reasonInput()`; no expiry — it lasts until `feature protect <f> <file>`), `{file, at, by, reason, confirmed?}` in
+  `.state.json → protectedTests.lifts`, a guard-down of the approval guard, listed by `spec_finish` (`protectedTests.lifted`, the
+  merge summary's "Protected tests" block). **The snapshot hook:** `approvePhase` records the feature's protected tests at its
+  FIRST complete tasks approval at level tests — inside `if (!so || so.complete)`, before the one `writeFileAtomic` (a dry run
+  returns earlier, a role's waiting sign-off takes none), from the walk the facade made before the lock (`opts.protectWalk` —
+  `approveThrough` passes it to each phase); a re-approval or a revoke + approve keeps the first (tasks-and-evidence.md →
+  Protected tests).
 - **MCP-only surfaces** — `spec_stop_check {message, agent?}` = `stopCheck()` (= `dev-spec stop-check --json`);
   `spec_log {name, gitLog, max?}` = `taskCommits()` over git log TEXT the client supplies — the server never runs a
   command (`dev-spec log` runs git itself; `log <f> - --max N` passes the window too). An empty `gitLog` / `message` is a value (`EMPTY_OK` — mcp.md → Argument validation).
@@ -440,6 +461,10 @@ here. "r5 review" is 1.23's fifth review.
 - **1.33** — two registry entries with no probe (warns, never in `GATES`): `critical-flows` (phase 2) and
   `critical-flow-tests` (phase 3), over one context view (`critical`); `approvePhase` stamps `critical: true` on the design
   and test-plan approvals (and their records) so an approval made before 1.33 is never flagged (quality.md → Critical flows).
+- **1.36** — doctor's `reviewPanel` {models} beside `size` (none for an xs feature or a spike) and next_action's finish-step
+  hint. The design appended the hint after the step's text, i.e. after the simplify clause and the project checks' line: the
+  order the protocol forbids (the simplify pass and the check runs come after the final review's fixes) — it is prepended. It
+  also covered only the first finish; a re-finish (new work after a finish) needs the panel review as much.
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12
@@ -498,6 +523,8 @@ here. "r5 review" is 1.23's fifth review.
   was refused; `waiver.badExpires` now says UTC.
 - **1.24 review 6 (E7)** — with roles, the completing sign-off kept its own waiver (one with no expiry) and another role's
   expiring waiver was lost — doctor never warned `waiver-expired`, finish never said expired: `strictestWaiver()`.
+- **1.36** — a protected test's lift (guard tests) joins the waivers as the user's recorded decision; the tasks approval takes
+  the protected-tests snapshot (the walk outside the lock — the design walked under it, and a concurrent call answered busy).
 
 ### Approvals the user confirmed over MCP, and the dry run
 - **1.21 F1b** — `confirmed` and the dry run.

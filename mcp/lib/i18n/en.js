@@ -624,6 +624,7 @@ Tracks: ${label}. Tick before calling the feature done.`,
     guardianBaseline: "write or remove .guardian/baseline.json — the findings dev-guardian's gate accepts as known",
     guardianBaselineUpdate: "run dev-guardian's `baseline update` — it accepts every current finding as known, this feature's included, and the gate stops reporting them",
     guardianCli: "run dev-guardian's gate with a DEV_GUARDIAN_CLI or CLAUDE_CONFIG_DIR of its own — another dev-guardian would answer it",
+    unprotect: (file, feature) => `lift the protection of the test ${file} ('${feature}') — an agent could then change or delete it`,
     lower: (from, to) => `lower the approval guard from ${from} to ${to}`,
     revoke: (phase, feature) => `revoke the approval of the ${phase} phase of '${feature}'`,
     approve: (phase, feature) => `approve the ${phase} phase of '${feature}'`,
@@ -730,6 +731,7 @@ ${a.summary || "[one line: the bug being fixed]"}
 ## Phase: Fix
 - [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output); add guard test T-02 (it passes already)
   - _Requirements: US-1.AC-1_
+  - _Implements: [the test file T-01 goes in]_
   - _Verify: [command that runs T-01]_
   - _Expect: fail_
 - [ ] 2. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
@@ -1231,6 +1233,8 @@ const msg = {
       approveTests: (slug, what) => `Phase 4, the hard gate: ${({ tdd: "write every planned test and confirm each fails for the right reason", ai: "write the deterministic tests and the eval harness, and record the baseline", both: "write every planned test (each failing for the right reason) and the eval harness, and record the baseline" })[what]} — /spec ${slug} tests; no implementation code until then. Then approve — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary. Optional, before it: /spec-review ${slug} simplify — a behaviour-preserving cleanup of the feature's own code, proven by its tests.`,
+      // 1.36 the review panel (meta.reviewModels), put BEFORE the finish step's text: the branch review on every model comes first
+      reviewBranch: (slug, list) => `Review panel (meta.reviewModels: ${list}): first the branch review on every model — /spec-review ${slug} branch, one fresh reviewer per model (in subagent execution: the final review) — unless the ledger already has its "Final review: ×N" line since the last task; then the optional simplify pass, the project checks and /spec-finish ${slug}.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /spec ${slug} tasks.`,
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). The baseline only says that they changed — /spec-review ${slug} converge reads the code AC by AC, from those files. Then decide: the spec is now wrong → /spec-change ${slug} impact (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
@@ -1407,6 +1411,7 @@ const msg = {
       finishChecks: "'finishChecks' must be an object",
       signoffs: "'signoffs' must be an object", // 1.14 B3 (role sign-offs)
       unticks: "'unticks' must be an array", // 1.16 U1 (undone ticks)
+      protectedTests: "'protectedTests' must be an object (its 'files' an object, its 'lifts' an array)", // 1.36 guard tests
     },
     depend: {
       // ROADMAP.md / .html "Needs attention": a dependsOn naming no feature (a stale or hand-edited roadmap.json entry)
@@ -1601,6 +1606,8 @@ const msg = {
       removed: (f) => `Removed '${f}' ✓`,
       wouldRemove: (slug, dir, n, entries) => `Would permanently delete '${slug}': ${dir} (${n} file(s): ${entries})`,
       confirmHint: (slug) => `Nothing deleted. Re-run with --yes to confirm — or archive it instead: ${DEV_SPEC} feature archive ${slug}`,
+      // feature protect (1.36): one lift record — in force, ended, or a lift a later record ended
+      protectLift: (file, by, day, reason, ended, active) => ended ? `  lift ended: ${file} — by ${by}, ${day}` : `  ${active ? "lifted" : "lifted (ended since)"}: ${file} — by ${by}, ${day}: "${reason}"`,
       missingValue: (flag) => `missing value for --${flag}`,
       unknownFlag: (flag, suggestion) => `unknown option ${flag}` + (suggestion ? ` — did you mean ${suggestion}?` : ".") + " Run `" + DEV_SPEC + " help` for the options.",
       unknownRules: (tool, known) => `unknown tool '${tool}'. Known: ${known}`,
@@ -2115,7 +2122,7 @@ const msg = {
       forced: (list) => `dev-spec guard: code changes are covered only by a FORCED tasks approval (${list}) — its checks were failing when it was approved.`,
       on: "Guard mode ON — Write/Edit on code files outside .specs/ asks for confirmation while no feature has approved, unfinished tasks (roadmap.json meta.guard). Test files are allowed while a feature's test plan is approved and the feature is unfinished (Phase 4 writes the failing tests before the tasks gate), and every code file while a spike is under way (its prototype).",
       off: "Guard mode OFF — code edits are not gated.",
-      badValue: (v) => `--guard takes on, off or scope (got '${v}').`,
+      badValue: (v) => `--guard takes on, off, scope or tests (got '${v}').`,
     },
     // the human approval guard (hooks/approval-hook.js, PreToolUse · roadmap.json meta.approvalGuard off|ask|deny ·
     // spec_init {approvalGuard} · `dev-spec init --approval-guard`). `ask` is read by the USER (the permission prompt), `deny` by
@@ -2142,6 +2149,36 @@ const msg = {
         (command ? `Stop and ask the user to run it themselves, in their own terminal: ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
     },
+    // 1.36 the fast check (roadmap.json meta.fastCheck · spec_init {fastCheck} · `dev-spec init --fast-check`): ONE project check run on
+    // its own after each small edit — warn only. `meta.fastCheck`, `_Verify:_`, the flags and the check names stay English.
+    fastCheck: {
+      on: (name, cmd) => `Fast check ON (roadmap.json meta.fastCheck: ${name} — \`${cmd}\`): run it on its own after each small edit and before a task's _Verify:_ — next_task and the task brief name it; ${DEV_SPEC} done <feature> <n> --run runs it first while the code changed since its last run, and a code task ticked without a clean run since its last edit gets a note (never a refusal). Being a project check, spec_finish needs it passing on the final code too.`,
+      off: "Fast check OFF (roadmap.json meta.fastCheck).",
+      cleared: (name) => `The check '${name}' was removed, so the fast check is off too (roadmap.json meta.fastCheck).`,
+      badInput: (v) => `fastCheck takes the name of a project check (meta.checks), or "" / off to switch it off (got ${v}).`,
+      badName: (name, list) => `'${name}' is not a project check (meta.checks: ${list || "none"}) — add it in the same call: ${DEV_SPEC} init --check ${name}="<command>" --fast-check ${name} (spec_init {checks: {"${name}": "<command>"}, fastCheck: "${name}"}).`,
+      guardianNotFast: (name) => `'${name}' runs dev-guardian's gate — a scan of minutes, never a fast check. Name a check that answers in seconds (a type check, a linter).`,
+      fixer: (name, cmd) => `'${name}' (\`${cmd}\`) rewrites files (--fix, --write, a formatter without --check): run after each edit, it would change the code — and the tests — under the task. Give the fast check its check-only form (--check, no --fix).`,
+      briefDod: (cmd) => `After each small edit, run the fast check \`${cmd}\` ON ITS OWN (never chained — a \`${cmd} && …\` line is no run of it) and fix what it reports before the next edit; it must exit 0 after your LAST edit, before the _Verify:_. Report it as: Fast check \`${cmd}\`: N runs → exit <the last code>.`,
+      briefDodRed: (cmd) => `The fast check \`${cmd}\` must still pass with your new test — it fails on an assertion or "not implemented", never on a type or lint error: add the stub the test calls. Run it on its own after each edit; report it as: Fast check \`${cmd}\`: N runs → exit <the last code>.`,
+      tickNote: (n, name, cmd, status, slug) => `Task ${n}: the fast check ${name} (\`${cmd}\`) ${({ stale: "is older than the last edit of the planned files", failed: "failed on its last run", missing: "was never logged running" })[status]} — run it on its own now and fix what it reports (${DEV_SPEC} done ${slug} ${n} --run runs it first).${status === "missing" ? " The PowerShell tool is logged only with an explicit exit code: run it with the Bash tool, or through done --run." : ""}`,
+      label: "fast check",
+      skipClean: (name) => `fast check ${name}: clean since the last edit — not run again`,
+      runFailed: (cmd, code) => `the fast check \`${cmd}\` failed (exit ${code}) — fix it before the next edit; the task's _Verify:_ runs anyway, and the tick gets a note.`,
+      cantRun: (cmd, why) => `the fast check \`${cmd}\` could not run (${why}) — the task's _Verify:_ runs anyway.`,
+      metrics: (name, runs, clean, rate, ticks, ticksClean) => `  fast check (${name}): ${runs} run(s), ${clean} clean${rate == null ? "" : ` (${rate}%)`} · ${ticksClean} of ${ticks} code-task tick(s) after a clean run on the final code`,
+      metricsTotals: (ticks, ticksClean) => `  fast check: ${ticksClean} of ${ticks} code-task tick(s) after a clean run on the final code`,
+      doctorInvalid: (name, why) => `meta.fastCheck names '${name}', ${({ missing: "which is no project check (meta.checks)", guardian: "which runs dev-guardian's gate (a scan of minutes)", fixer: "whose command rewrites files (--fix, --write, a formatter without --check)" })[why]} — no fast check runs. Set another: ${DEV_SPEC} init --fast-check <check> (or off).`,
+      offer: (cmd, from, name, existing) => `A fast check after each small change catches type and lint errors in seconds: \`${cmd}\` (${from}). It must pass on the base branch — it becomes a project check spec_finish needs too. Offered, never set: ${existing ? `${DEV_SPEC} init --fast-check ${name}` : `${DEV_SPEC} init --check ${name}="${cmd}" --fast-check ${name}`}.`,
+    },
+    // 1.36 the review panel (roadmap.json meta.reviewModels · spec_init {reviewModels} · `dev-spec init --review-models`). Model names,
+    // `meta.reviewModels`, `diverse` and the slash commands stay English.
+    reviewModels: {
+      on: (list, diverse) => `Review panel ON (meta.reviewModels: ${list}${diverse ? " — diverse" : ""}): the branch review before merge, the deep review's gate critics and converge run once per model — the panel adds models, never replaces the review's own —, their findings merged and each verified once; the task reviewer runs on a panel model other than the implementer's. Each extra model costs one more review dispatch per review it covers. Claude Code dispatches aliases only (opus, sonnet, haiku, fable): there, another name runs the review on one model.`,
+      off: "Review panel OFF (meta.reviewModels): each review runs on one model.",
+      bad: (v) => `reviewModels takes 2–3 different model names (e.g. opus,sonnet — each a letter or digit first, then letters, digits or . _ : / @ -, up to 128 characters; never inherit, default, diverse, off or none), diverse, or off (got '${v}').`,
+      ignored: (v) => `meta.reviewModels holds ${v}, which is not 2–3 different model names or "diverse" — ignored: each review runs on one model. Set it with spec_init {reviewModels: ["opus", "sonnet"]} (${DEV_SPEC} init --review-models opus,sonnet), or diverse / off.`,
+    },
     // human approvals over MCP elicitation (mcp/server.js: spec_approve, spec_feature remove, spec_init lowering a guard,
     // while meta.approvalGuard is ask | deny and the MCP client can ask its user — elicitation/create). `message` and the field
     // titles are read by the USER (the client's dialog); the refusals by the AGENT. list = approvalGuard.action's text.
@@ -2153,6 +2190,8 @@ const msg = {
       phases: (list) => `Phases to approve, in order: ${list}.`,
       // what a spec_feature remove deletes (remove's preview: wouldDelete.files)
       removeSize: (n, rel) => `This deletes ${rel} for good — ${n} file${n === 1 ? "" : "s"}.`,
+      // a spec_feature unprotect (1.36 guard tests): the reason the agent gives, as it would be recorded
+      unprotect: (reason) => `Reason given: "${reason}". An agent may then change or delete this test until you protect it again.`,
       approveTitle: "Approve",
       approveDesc: "Tick it to record this; leave it unticked (or decline) to refuse.",
       noteTitle: "Note",
@@ -3224,12 +3263,48 @@ const msg = {
     },
     scopeGuard: {
       on: "Guard mode SCOPE — Write/Edit on a code file outside .specs/ asks unless an open task of an approved feature names it in _Implements:_ (the file, its folder or a glob; test files excepted), and asks for every code edit while no feature has approved, unfinished tasks (roadmap.json meta.guard: \"scope\"). Test files are allowed while a feature's test plan is approved and the feature is unfinished (Phase 4 writes the failing tests before the tasks gate), and every code file while a spike is under way (its prototype).",
-      ask: (file, features, hint) => `dev-spec guard (scope): ${file} is not in the plan — no open task of ${features} names it in _Implements:_. ${hint} (Guard mode is scope — ${DEV_SPEC} init --guard on allows every code file while tasks are approved; --guard off disables it.)`,
+      ask: (file, features, hint, level = "scope") => `dev-spec guard (scope): ${file} is not in the plan — no open task of ${features} names it in _Implements:_. ${hint} (Guard mode is ${level} — ${DEV_SPEC} init --guard on allows every code file while tasks are approved; --guard off disables it.)`,
       hint: {
         "same-folder": (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — same folder as ${ref}) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
         nearby: (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — it plans ${ref} nearby) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
         next: (n, slug) => `Add it to the _Implements:_ of task ${n} (${slug}, the next open task) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
       },
+    },
+    // 1.36 protected tests (roadmap.json meta.guard "tests" · spec_feature {action: "protect" | "unprotect"} · `dev-spec feature
+    // protect|unprotect`). `ask` is read by the USER (the permission prompt), `deny` by the AGENT (+ `denyUser`, the line the user sees).
+    // The "dev-spec guard (tests)" prefix, _Implements:_, _Verify:_, meta keys and the commands stay English.
+    protectedTests: {
+      on: `Guard mode TESTS — the scope guard, plus protected tests: once a feature's tasks are approved, the test files present then (and those a ticked task names in _Implements:_ or runs in its _Verify:_) are protected — editing, removing or moving one asks unless a task that can start now names it in _Implements:_, and is refused under meta.approvalGuard deny. Only the user lifts one: ${DEV_SPEC} feature unprotect <feature> <file> --reason "…".`,
+      unguarded: "The protected tests are listed in each feature's .state.json — only the approval guard (init --approval-guard ask|deny) keeps an agent from editing that list.",
+      whyFile: (slug, day) => `it is one of ${slug}'s protected tests${day ? ` (recorded ${day})` : ""}`,
+      whyFolder: (n, first) => `it holds ${n} protected test(s), e.g. ${first}`,
+      current: (list) => `The tasks that can start now — ${list} — don't name it in _Implements:_.`,
+      noCurrent: "No task that can start now names it in _Implements:_.",
+      planHint: (n, slug) => ` To plan the change, add it to the _Implements:_ of task ${n} (${slug}) and re-approve the tasks phase.`,
+      ask: (file, why, current, planHint, lift) => `dev-spec guard (tests): ${file} is a protected test — ${why}. ${current} A task that makes a test pass changes the code, not the test: confirm only if you want this test changed.${planHint} To allow it for the feature, lift it yourself: ${lift}. (Guard mode is tests — ${DEV_SPEC} init --guard scope stops protecting tests.)`,
+      deny: (file, why) => `dev-spec guard (tests): refused — ${file} is a protected test (${why}), and a protected test changes only by the user's decision (meta.approvalGuard: deny). Do not change it another way (a shell command, a script, git): stop, report the test and why you would change it, and let the user decide.`,
+      denyUser: (file, cmd) => `dev-spec guard refused an agent's edit of the protected test ${file}. To allow it yourself: ${cmd}`,
+      snapshotNote: (n, cap) => `Protected tests: ${n} test file(s) recorded — editing, removing or moving one now asks unless a task that can start now names it in _Implements:_.` + (cap ? ` Only the first ${cap} were recorded (the list is capped).` : ""),
+      briefDod: (n) => `Protected tests (meta.guard tests${n ? ` — ${n} file(s) on this feature's list` : ""}): edit, rename or delete an existing test file only when THIS task's _Implements:_ names it; make a red test green by fixing the code, never the test. If the guard asks or refuses, stop and report NEEDS_CONTEXT naming the test — never route around it (a shell command, a script, git).`,
+      via: { approval: "the tasks approval", protect: "feature protect" },
+      listNote: (slug, n, day, via, added) => `${slug} — ${n} protected test file(s)` + (day ? ` since ${day}${via ? ` (${via})` : ""}` : "") + `; ${added} added now.`,
+      unlifted: (file) => `The lift of ${file} ended — it is protected again.`,
+      truncated: (cap) => `The list reached its cap (${cap} files): the tests past it are not protected.`,
+      notEnforced: `The guard reads the list only at guard tests (${DEV_SPEC} init --guard tests).`,
+      lifted: (file, slug, listed) => `Lifted the protection of ${file} (${slug}): it may change until ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (It was not on the feature's protected list.)"),
+      err: {
+        fileRequired: `unprotect needs the test file: ${DEV_SPEC} feature unprotect <feature> <file> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
+        reasonRequired: "unprotect needs a reason (one line, at most 500 characters): why this protected test may change.",
+        notATest: (file) => `${file} is not a test file (by its name or its folder) — only test files are protected.`,
+        outside: (file) => `${file} is outside the project.`,
+      },
+      finishWarn: (slug, list, more) => `Protected tests of ${slug} changed with no recorded reason (no task re-baselined them, no lift covers them): ${list}${more ? ` and ${more} more` : ""} — check each change is intended (a test made to pass is a weakened test); if it is, record it: ${DEV_SPEC} feature unprotect ${slug} <file> --reason "…".`,
+      changed: (file) => `${file} (changed)`,
+      deleted: (file) => `${file} (deleted)`,
+      summaryHead: "## Protected tests",
+      summaryLine: (n, k) => `${n} protected test file(s); ${k} changed with no recorded reason.`,
+      summaryLift: (file, by, reason) => `- lifted: ${file} — by ${by}: "${reason}"`,
+      doctorMissing: (slug) => `guard tests: ${slug} has approved tasks but no protected-tests snapshot (its tasks were approved before the level was set) — take one: ${DEV_SPEC} feature protect ${slug}.`,
     },
 
     // the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).

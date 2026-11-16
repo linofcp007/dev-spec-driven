@@ -34,7 +34,7 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
     () => gsJ.stopCheck === true, () => gsJ.guardNote === undefined, () => so.code === 0, () => /Evidence gate OFF/.test(so.out),
     () => soOff === false, () => sOn.code === 0, () => sOnJ, () => sOnJ.stopCheck === true, () => /Evidence gate ON/.test(sOnJ.stopCheckNote),
     () => metaC1(p1).stopCheck === true, () => sBad.code === 1, () => /--stop-check takes on or off \(got 'maybe'\)/.test(sBad.out),
-    () => gBad.code === 1, () => /--guard takes on, off or scope \(got 'strict'\)/.test(gBad.out), () => sPt.code === 0,
+    () => gBad.code === 1, () => gBad.out.includes(MSG("en").guardMode.badValue("strict")), () => sPt.code === 0,
     () => /Gate de evidência DESLIGADO/.test(sPt.out), () => /Modo guarda SCOPE \(âmbito\)/.test(sPt.out), () => sEs.code === 1,
     () => /--stop-check admite on u off \(recibido 'quizá'\)/.test(sEs.out),
   ]);

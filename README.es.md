@@ -168,7 +168,7 @@ en otros clientes MCP son los prompts del servidor.
 | informes | `/spec-status` | Tracks, fase, tareas, verificación — de una función o de todas |
 | | `/roadmap [depend \| backlog \| milestone]` | Progreso, dependencias, ETAs, hitos → `.specs/ROADMAP.md` (`--html`) |
 | | `/spec-report [catalog \| drift \| metrics \| changelog \| export]` | El catálogo vivo, el drift desde el cierre, métricas y una retrospectiva, notas de versión, exportaciones para stakeholders |
-| configurar | `/spec-setup [init \| guard \| statusline \| superpowers \| templates \| tracks]` | `.specs/` y steering, modo guardia, la línea de estado, la precedencia sobre superpowers, tus plantillas y tracks |
+| configurar | `/spec-setup [init \| guard \| statusline \| superpowers \| templates \| tracks]` | `.specs/` y steering, modo guardia (`tests`: las pruebas que el plan aprobó solo cambian cuando una tarea las nombra), la línea de estado, la precedencia sobre superpowers, tus plantillas y tracks |
 | | `/spec-upgrade` | Después de actualizar el plugin: audita `.specs/` frente a las reglas actuales y luego aplica las migraciones seguras |
 | atajos | `/ds` · `/dss` · `/dsx` | `/spec` · `/spec-status` · `/executeTask` |
 
@@ -187,7 +187,7 @@ cliente MCP — llaman al mismo motor:
 | Herramienta | Qué hace |
 |---|---|
 | `spec_classify` | Fase 0: los tracks y un tamaño sugerido a partir de una descripción (señales locales por palabras clave, EN / PT / ES — sin modelo) |
-| `spec_init` | `.specs/` y el steering de los tracks; ajustes del proyecto: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard` |
+| `spec_init` | `.specs/` y el steering de los tracks; ajustes del proyecto: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard`, `fastCheck` (la verificación ejecutada después de cada edición), `reviewModels` (el panel de revisión) |
 | `spec_create` | Una función para sus tracks y su `size` (`xs` = un `change.md`); `kind` bugfix · spike, `brownfield`, `flow: "design-first"`, `branch` |
 | `spec_import` | Una spec de Kiro, spec-kit u OpenSpec, un plan (Claude Code, Cursor, ExecPlan de Codex, fluidplan) o documentos BMAD como función — o el steering de Kiro / las reglas de Cursor como steering; `dryRun` |
 | `spec_status` | El tipo, el flujo, los tracks, la fase, las tareas y las secciones del diseño de una función; sin `name`, todas |
@@ -320,7 +320,7 @@ dev-spec-driven/                      ← raíz del plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 herramientas + prompts + recursos, sin dependencias)
 │   ├── servers.json                  ← registro MCP del plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← la fachada del motor (el único objeto que cargan el servidor, la CLI y los hooks)
-│   ├── lib/engine/                   ← el motor: 25 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
+│   ├── lib/engine/                   ← el motor: 26 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← contenido localizado (en · pt · es) + la derivación pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (uno por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (tu clave de API; --dry-run sin conexión)

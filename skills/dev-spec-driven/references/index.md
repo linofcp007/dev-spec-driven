@@ -43,7 +43,8 @@ the whole library.
 - `references/verification.md` — evidence before claims: the gate, `_Verify:_`, `_Expect: fail_`, reason codes, pipes,
   project checks, the Stop gate, what to do without a shell
 - `references/subagent-execution.md` — Phase 6 with subagents: brief → implementer → reviewer → verify the findings →
-  fix loop, ledger, checkpoints, the SubagentStop gate, the simplification pass, model selection, converge mode
+  fix loop, ledger, checkpoints, the SubagentStop gate, the simplification pass, model selection, converge mode, review
+  on more than one model (`meta.reviewModels`)
 - `references/test-patterns.md` — naming, T-IDs in test names, `_Expect: fail_`, AAA, table-driven and property-based
   tests, the micro-cycle, anti-patterns
 - `references/code-reuse-and-quality.md` — search before you write, reuse / extend / create, module boundaries, code

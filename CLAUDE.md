@@ -38,9 +38,9 @@ file states the CURRENT rules first; its `## History` at the end keeps how they 
   history · Team governance · Undo, revoke, waivers, MCP-only gates · Approvals the user confirmed over MCP, and the dry run ·
   Flows · Right-sized rigor · Bugfix and finish.
 - **`docs/maintainers/tasks-and-evidence.md`** — before changing tasks.md parsing, the task brief, `_Verify:_` / evidence /
-  `done --run`, `_Depends:_`, the stop gate, the scope guard or observed evidence: Subagent-driven execution · Evidence ·
-  Task dependencies and execution waves · Tasks: ONE scanner · End-of-turn evidence gate and scope guard ·
-  Harness-observed evidence.
+  `done --run`, `_Depends:_`, the stop gate, the scope guard, protected tests (guard tests) or observed evidence: Subagent-driven
+  execution · Evidence · Task dependencies and execution waves · Tasks: ONE scanner · End-of-turn evidence gate and scope guard ·
+  Protected tests · Harness-observed evidence.
 - **`docs/maintainers/lifecycle.md`** — before changing the catalog, `_Supersedes:_`, finish baselines / drift, archive /
   restore, a feature's git branch (`create --branch`), spec_upgrade, decisions, spikes, forecasts / overlaps or the generated
   roadmap files: Catalog, drift, restore · A feature's own git branch · Upgrade · Decisions and spikes · Forecasts and

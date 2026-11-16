@@ -41,6 +41,9 @@ let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the t
 let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
 let designSystemRegistry, designSystemCheck, designSystemGated; // quality.js — the design-system registry's check (1.35)
 let dayOf; // core.js — the local calendar date (today / dayOf)
+let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.reviewModels)
+let fastCheckOf; // evidence.js — the fast check (1.36, meta.fastCheck): doctor's fast-check warn
+let guardLevel, protectedTestsDoctor; // guards.js · protect.js — 1.36 guard tests: doctor's protected-tests warn
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
 function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
@@ -67,7 +70,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
-  designSystemRegistry, designSystemCheck, designSystemGated } = E); }
+  designSystemRegistry, designSystemCheck, designSystemGated, reviewModelsSetting, fastCheckOf, guardLevel, protectedTestsDoctor } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -132,7 +135,7 @@ function designSaveCheck(projectDir, name) {
 // other tool's MCP config `env`, or a shell). Deliberately NOT plugin.json `userConfig`: it opens a configuration dialog on every
 // install / enable, and an older Claude Code that validates option fields strictly would refuse to load the plugin.
 // Keys: DEFAULT_LANG (the language a NEW project gets — newProjectLang), STOP_CHECK (the end-of-turn evidence gate while
-// meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope while meta.guard is unset). hooks/guard-hook.js and
+// meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope | tests while meta.guard is unset). hooks/guard-hook.js and
 // hooks/stop-hook.js read the same variables raw (their cheap pre-checks).
 function userOptionRaw(key) {
   for (const name of ["DEV_SPEC_" + key]) {
@@ -421,6 +424,7 @@ function nextAction(projectDir, name, opts = {}) {
   if (x.depsBlocked) res.blocked = x.depsBlocked; // stable — the open tasks and the dependencies each waits on
   if (x.impactPhases.length) res.impact = { tool: "spec_impact", phases: x.impactPhases }; // what to run before re-approval
   if (x.missingApproved.length) res.missingApproved = x.missingApproved; // stable — approved artifacts that no longer exist
+  if (doc.reviewPanel) res.reviewPanel = doc.reviewPanel; // 1.36 (stable): the lean doctor's, never computed again
   const extras = x.approveExtras;
   if (extras && extras.missingRoles) res.missingRoles = extras.missingRoles; // stable — the roles to sign
   if ((extras && extras.signoffsComplete) || x.finishedComplete) res.signoffsComplete = true; // stable — every role signed, one re-signs to approve
@@ -572,6 +576,10 @@ function tasksStep(x) {
   const f = { activeText, stale, fin, dr, vs, day: (fin && dayOf(fin.at)) || "?", suiteGap: fin && !vs.unverified.length ? ctx.suite.missing : [] };
   const s = FINISH_STEPS.find((e) => e.when(x, f));
   if (s) s.run(x, f);
+  // 1.36 a review panel (meta.reviewModels): the branch review on every model comes FIRST — before the optional simplify pass and
+  // the project checks' runs (a fix round after them makes those runs stale) — at the first finish and a re-finish (the step stays
+  // "finish" only then: verify / drift / finished set their own). A hint added to the step, never a step of its own.
+  if (x.step === "finish" && x.doc.reviewPanel) x.recommendation = nx.reviewBranch(slug, x.doc.reviewPanel.models.join(", ")) + " " + x.recommendation;
   // with project checks configured (meta.checks), a plain /spec-finish is refused until each has a passing
   // run since the last task activity (or on the code as it is now: Ga3's code-changed) — say how to run and record them
   // (dev-spec finish <f> --run / spec_finish {evidence}); also on `drift`, whose "harmless → re-finish" needs that run.
@@ -883,6 +891,13 @@ const DOCTOR_CHECKS = [
   // an .execution/observed.jsonl forges an observed run: a warn naming the fix
   { id: "observed-unguarded", applies: (c) => evidenceMode(c.projectDir) === "observed" && approvalGuardLevel(c.projectDir) === "off",
     run: (c) => ({ status: "warn", detail: c.fm.observed.unguarded }) },
+  // 1.36: meta.fastCheck names no valid check (a hand edit, its check renamed), dev-guardian's gate or a command that rewrites files —
+  // no fast check runs: a project setting, so its own entry (one line, never one per feature's evidence)
+  { id: "fast-check", run: (c) => { const f = fastCheckOf(c.projectDir); return f && f.invalid !== undefined ? { status: "warn", detail: c.fm.fastCheck.doctorInvalid(f.invalid, f.why) } : null; } },
+  // 1.36 guard tests: a feature with approved, open tasks at level tests and no snapshot (feature protect takes one), a truncated one,
+  // or the approval guard off (the list lives in .state.json, which only that guard keeps agents from editing)
+  { id: "protected-tests", applies: (c) => guardLevel(c.projectDir) === "tests" && !!c.approvals.tasks && c.blocks.some((b) => !b.done),
+    run: (c) => protectedTestsDoctor(c.projectDir, c.slug, c.state, c.lang) },
   // Steering: present is not enough — a steering file that is still its template steers nothing (named, with its count).
   { id: "steering", run: (c) => {
     const missing = CORE_STEERING.filter((f) => !fs.existsSync(path.join(c.root, "steering", f)));
@@ -1353,12 +1368,22 @@ function doctorRun(projectDir, name, opts = {}) {
     verdict: fails.length ? "fail" : warns.length ? "warn" : "pass",
   };
   if (c.size) res.size = c.size; // 1.31: the deep review picks its reviewers by size (references/critic-review.md); absent = no size
+  const panel = reviewPanel(c);
+  if (panel) res.reviewPanel = panel; // 1.36 (stable): {models} — the reviews that run once per model; absent = one model each
   // only when the project has approval roles: {phase: {required, signed, missing, stale}} per pending phase that needs
   // roles, and {phase: [roles]} per approved phase lacking a role now required.
   if (g.rv.any) Object.assign(res, { pendingRoles: g.rv.pending, unsignedRoles: g.rv.unsigned });
   if (c.flow === "design-first") res.flow = "design-first"; // C3 (only then: the default flow's result is unchanged)
   if (c.steeringChanged.length) res.steeringChanged = c.steeringChanged; // 1.16 Q1 (stable): [{phase, approvedAt, files: [{file, change}]}]
   return { res, ctx: c };
+}
+// 1.36 the review panel (roadmap.json meta.reviewModels — guards.js reviewModelsSetting): {models} when the project names 2–3 models,
+// for every feature but an xs one (a change: right-sized rigor — critic-review.md's xs row reviews nothing by default). The engine
+// dispatches nothing: the controller runs the branch / final review, the gate critics and converge once per model
+// (references/subagent-execution.md → Review on more than one model). A spike never gets here (spikeDoctor).
+function reviewPanel(c) {
+  const { models } = reviewModelsSetting(c.projectDir);
+  return models.length && c.size !== "xs" ? { models } : null;
 }
 
 // ---------------------------------------------------------------------------

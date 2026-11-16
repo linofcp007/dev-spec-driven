@@ -12,8 +12,9 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isDirSafe, isInsideDir, isObj, isSlashUnit, listFeatures,
   projectLang, readDirCached, readFileHead, readIfExists, safeReaddir, specsRoot, stripEnd;
+let fixerCommand; // evidence.js — 1.36: a command that rewrites files is never offered as the fast check
 function __link(E) { ({ FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isDirSafe, isInsideDir, isObj, isSlashUnit,
-  listFeatures, projectLang, readDirCached, readFileHead, readIfExists, safeReaddir, specsRoot, stripEnd } = E); }
+  listFeatures, projectLang, readDirCached, readFileHead, readIfExists, safeReaddir, specsRoot, stripEnd, fixerCommand } = E); }
 
 // ---------------------------------------------------------------------------
 // Brownfield: heuristic local codebase scan + spec coverage (no model, no cost)
@@ -829,6 +830,37 @@ const MANIFEST_NAMES = new Set(["package.json", "requirements.txt", "requirement
   "build.sbt", "Package.swift", "stack.yaml", "cabal.project", "deps.edn", "project.clj", "shadow-cljs.edn", "Project.toml",
   "build.zig", "dune-project", "cpanfile", "Makefile.PL", "Build.PL", "pytest.ini", "phpunit.xml", "phpunit.xml.dist"]);
 const isManifestName = (name) => MANIFEST_NAMES.has(name) || /\.(?:csproj|psd1|cabal|nimble)$/i.test(name);
+// 1.36 the fast check's offer (evidence.js fastCheckOffer): what the project's ROOT manifests suggest as a check that answers in
+// seconds, read as the scan reads a root manifest (projectFileInside; a head, no walk) → [{ name, command, from }] in this order:
+// a package.json script typecheck / type-check / check-types / tsc (by the lockfile's runner; never one that rewrites files —
+// evidence.js fixerCommand) · tsconfig.json → `npx tsc --noEmit` ONLY when package.json lists typescript (npx would fetch a compiler
+// from the network) · Cargo.toml → cargo check · go.mod → go vet ./... · [tool.ruff] / ruff.toml → ruff check . · [tool.mypy] /
+// mypy.ini → mypy . — never a lint script (often red on the base branch, where a meta.checks entry blocks every finish).
+const FAST_SCRIPTS = ["typecheck", "type-check", "check-types", "tsc"];
+function fastCheckCandidates(projectDir) {
+  const root = path.resolve(projectDir);
+  let realRoot = root;
+  try { realRoot = fs.realpathSync.native(root); } catch { /* the text path stands */ }
+  const has = (f) => projectFileInside(realRoot, path.join(root, f));
+  const text = (f) => (has(f) ? readFileHead(path.join(root, f), SCAN_READ_BYTES) || "" : "");
+  let pj = null;
+  try { const t = text("package.json"); pj = t ? JSON.parse(t.charCodeAt(0) === 0xfeff ? t.slice(1) : t) : null; } catch { /* not JSON */ }
+  const scripts = isObj(pj) && isObj(pj.scripts) ? pj.scripts : {};
+  const listsTs = isObj(pj) && ["dependencies", "devDependencies"].some((k) => isObj(pj[k]) && Object.prototype.hasOwnProperty.call(pj[k], "typescript"));
+  const runner = has("pnpm-lock.yaml") ? "pnpm run" : has("yarn.lock") ? "yarn" : has("bun.lockb") || has("bun.lock") ? "bun run" : "npm run";
+  const out = [];
+  const script = FAST_SCRIPTS.find((k) => typeof scripts[k] === "string" && scripts[k].trim() && !fixerCommand(scripts[k]));
+  if (script) out.push({ name: "typecheck", command: runner + " " + script, from: `package.json "${script}"` });
+  else if (listsTs && has("tsconfig.json")) out.push({ name: "typecheck", command: "npx tsc --noEmit", from: "tsconfig.json" });
+  if (has("Cargo.toml")) out.push({ name: "check", command: "cargo check", from: "Cargo.toml" });
+  if (has("go.mod")) out.push({ name: "vet", command: "go vet ./...", from: "go.mod" });
+  const py = text("pyproject.toml");
+  const ruff = /^\[tool\.ruff\b/m.test(py) ? "pyproject.toml [tool.ruff]" : has("ruff.toml") ? "ruff.toml" : has(".ruff.toml") ? ".ruff.toml" : null;
+  const mypy = /^\[tool\.mypy\b/m.test(py) ? "pyproject.toml [tool.mypy]" : has("mypy.ini") ? "mypy.ini" : null;
+  if (ruff) out.push({ name: "lint", command: "ruff check .", from: ruff });
+  else if (mypy) out.push({ name: "typecheck", command: "mypy .", from: mypy });
+  return out.slice(0, 3);
+}
 const scanCounts = (rel, name) => (isCodeFile(rel) && !isTestFixture(rel)) || isManifestName(name);
 // monorepos: the manifests read BELOW the root too (apps/web/package.json, apps/api/pyproject.toml,
 // services/billing/go.mod) — a package's own manifest, never a per-folder build file (CMakeLists.txt, Makefile) — at most
@@ -1233,4 +1265,4 @@ function coverage(projectDir, opts = {}) {
 module.exports = { SCAN_IGNORE, CODE_EXT, TEST_EXTRA_EXT, GUARD_CODE_EXT, SCAN_TEXT_EXT, SCAN_READ_BYTES, COVERAGE_CAP,
   WALK_STOP, walkProject, gitignoreNegationTokens, gitignoreNegationReincludes, gitignoreDirPatterns, gitignoreRules,
   GITIGNORE_NESTED_MAX, isTestFile, testNamed, isTestFixture, isCodeFile, folderHoldsCode, NESTED_MANIFEST_CAP, MANIFEST_FIXTURE_DIRS,
-  scanCodebase, coverage, projectFileInside, __link };
+  scanCodebase, coverage, projectFileInside, fastCheckCandidates, __link };

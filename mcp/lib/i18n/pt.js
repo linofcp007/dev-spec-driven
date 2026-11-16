@@ -630,6 +630,7 @@ Tracks: ${label}. Marca antes de dar a feature por concluída.`,
     guardianBaseline: "escrever ou apagar .guardian/baseline.json — os findings que o gate do dev-guardian aceita como conhecidos",
     guardianBaselineUpdate: "correr o `baseline update` do dev-guardian — aceita como conhecidos todos os findings atuais, incluindo os da feature, e o gate deixa de os reportar",
     guardianCli: "correr o gate do dev-guardian com um DEV_GUARDIAN_CLI ou CLAUDE_CONFIG_DIR próprio — responderia outro dev-guardian",
+    unprotect: (file, feature) => `levantar a proteção do teste ${file} ('${feature}') — um agente poderia então alterá-lo ou apagá-lo`,
     lower: (from, to) => `baixar o guarda de aprovações de ${from} para ${to}`,
     revoke: (phase, feature) => `revogar a aprovação da fase ${phase} de '${feature}'`,
     approve: (phase, feature) => `aprovar a fase ${phase} de '${feature}'`,
@@ -733,6 +734,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 ## Fase: Correção
 - [ ] 1. [US1] Escrever o teste de regressão T-01 e vê-lo falhar pela razão certa (colar o output); acrescentar o teste de proteção T-02 (já passa)
   - _Requirements: US-1.AC-1_
+  - _Implements: [o ficheiro de teste onde fica o T-01]_
   - _Verify: [comando que executa o T-01]_
   - _Expect: fail_
 - [ ] 2. [US1] Corrigir a causa raiz — uma alteração, não um pacote; o teste de proteção T-02 continua verde
@@ -1215,6 +1217,7 @@ const msg = {
       approveTests: (slug, what) => `Fase 4, o gate rígido: ${({ tdd: "escreve todos os testes planeados e confirma que cada um falha pela razão certa", ai: "escreve os testes determinísticos e o harness de evals, e regista a baseline", both: "escreve todos os testes planeados (cada um a falhar pela razão certa) e o harness de evals, e regista a baseline" })[what]} — /spec ${slug} tests; nenhum código de implementação antes disso. Depois aprova — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa a tarefa #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `Todas as tarefas feitas — fecha a feature com /spec-finish ${slug} (spec_finish): relatório de prontidão + resumo do merge. Opcional, antes disso: /spec-review ${slug} simplify — uma limpeza do código da própria feature sem mudar o comportamento, provada pelos seus testes.`,
+      reviewBranch: (slug, list) => `Painel de revisão (meta.reviewModels: ${list}): primeiro a revisão do ramo em cada modelo — /spec-review ${slug} branch, um revisor novo por modelo (na execução por subagentes: a revisão final) — a não ser que o ledger já tenha a sua linha "Final review: ×N" desde a última tarefa; depois a passagem de simplificação opcional, as verificações do projeto e /spec-finish ${slug}.`,
       breakIntoTasks: (slug) => `Divide o design em tarefas — /spec ${slug} tasks.`,
       drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (${DEV_SPEC} drift ${slug}). A baseline só diz que mudaram — /spec-review ${slug} converge lê o código critério a critério, a partir desses ficheiros. Depois decide: a spec está agora errada → /spec-change ${slug} impact (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
       finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` +
@@ -1364,6 +1367,7 @@ const msg = {
       finishChecks: "'finishChecks' tem de ser um objeto",
       signoffs: "'signoffs' tem de ser um objeto",
       unticks: "'unticks' tem de ser um array",
+      protectedTests: "'protectedTests' tem de ser um objeto (o seu 'files' um objeto, o seu 'lifts' um array)",
     },
     depend: {
       // "Precisa de atenção" do ROADMAP.md / .html: um dependsOn que não nomeia nenhuma feature
@@ -1547,6 +1551,7 @@ const msg = {
       removed: (f) => `'${f}' removida ✓`,
       wouldRemove: (slug, dir, n, entries) => `Isto apagaria '${slug}' de vez: ${dir} (${n} ficheiro(s): ${entries})`,
       confirmHint: (slug) => `Nada foi apagado. Volta a correr com --yes para confirmar — ou arquiva-a: ${DEV_SPEC} feature archive ${slug}`,
+      protectLift: (file, by, day, reason, ended, active) => ended ? `  levantamento terminado: ${file} — por ${by}, ${day}` : `  ${active ? "levantado" : "levantado (terminado depois)"}: ${file} — por ${by}, ${day}: "${reason}"`,
       missingValue: (flag) => `falta o valor de --${flag}`,
       unknownFlag: (flag, suggestion) => `opção desconhecida ${flag}` + (suggestion ? ` — será ${suggestion}?` : ".") + " As opções estão em `" + DEV_SPEC + " help`.",
       unknownRules: (tool, known) => `ferramenta desconhecida '${tool}'. Conhecidas: ${known}`,
@@ -2016,7 +2021,7 @@ const msg = {
       forced: (list) => `dev-spec guard: as alterações de código só estão cobertas por uma aprovação FORÇADA das tarefas (${list}) — as verificações falhavam quando foi aprovada.`,
       on: "Modo guarda LIGADO — Write/Edit em ficheiros de código fora de .specs/ pede confirmação enquanto nenhuma feature tiver tarefas aprovadas por concluir (roadmap.json meta.guard). Os ficheiros de teste são permitidos enquanto o plano de testes de uma feature por concluir estiver aprovado (a Fase 4 escreve os testes a falhar antes do gate das tarefas), e todos os ficheiros de código enquanto um spike estiver em curso (o seu protótipo).",
       off: "Modo guarda DESLIGADO — as alterações de código não são controladas.",
-      badValue: (v) => `--guard aceita on, off ou scope (recebido '${v}').`,
+      badValue: (v) => `--guard aceita on, off, scope ou tests (recebido '${v}').`,
     },
     approvalGuard: {
       on: {
@@ -2037,6 +2042,32 @@ const msg = {
         (command ? `Pede ao utilizador que o execute ele próprio, no seu terminal: ${command}` : "Pede ao utilizador que faça ele próprio essa alteração, no seu editor ou terminal") +
         " — e espera por ele. Não tentes outra via (a ferramenta MCP, a CLI, um script ou uma edição dos ficheiros de .specs/). (meta.approvalGuard: deny.)",
     },
+    fastCheck: {
+      on: (name, cmd) => `Verificação rápida LIGADA (roadmap.json meta.fastCheck: ${name} — \`${cmd}\`): corre-a sozinha depois de cada pequena edição e antes do _Verify:_ de uma tarefa — o next_task e o brief da tarefa nomeiam-na; ${DEV_SPEC} done <feature> <n> --run corre-a primeiro enquanto o código tiver mudado desde a última execução, e uma tarefa de código marcada sem uma execução limpa desde a última edição recebe uma nota (nunca uma recusa). Sendo uma verificação do projeto, o spec_finish também precisa dela a passar no código final.`,
+      off: "Verificação rápida DESLIGADA (roadmap.json meta.fastCheck).",
+      cleared: (name) => `A verificação '${name}' foi removida, por isso a verificação rápida também fica desligada (roadmap.json meta.fastCheck).`,
+      badInput: (v) => `fastCheck aceita o nome de uma verificação do projeto (meta.checks), ou "" / off para a desligar (recebido ${v}).`,
+      badName: (name, list) => `'${name}' não é uma verificação do projeto (meta.checks: ${list || "nenhuma"}) — acrescenta-a na mesma chamada: ${DEV_SPEC} init --check ${name}="<comando>" --fast-check ${name} (spec_init {checks: {"${name}": "<comando>"}, fastCheck: "${name}"}).`,
+      guardianNotFast: (name) => `'${name}' corre o gate do dev-guardian — uma análise de minutos, nunca uma verificação rápida. Indica uma verificação que responda em segundos (uma verificação de tipos, um linter).`,
+      fixer: (name, cmd) => `'${name}' (\`${cmd}\`) reescreve ficheiros (--fix, --write, um formatador sem --check): corrida depois de cada edição, mudaria o código — e os testes — por baixo da tarefa. Dá à verificação rápida a sua forma que só verifica (--check, sem --fix).`,
+      briefDod: (cmd) => `Depois de cada pequena edição, corre a verificação rápida \`${cmd}\` SOZINHA (nunca encadeada — uma linha \`${cmd} && …\` não é uma execução dela) e corrige o que ela apontar antes da edição seguinte; tem de terminar com exit 0 depois da tua ÚLTIMA edição, antes do _Verify:_. No relatório: Verificação rápida \`${cmd}\`: N execuções → exit <o último código>.`,
+      briefDodRed: (cmd) => `A verificação rápida \`${cmd}\` tem de continuar a passar com o teu novo teste — ele falha numa asserção ou em "not implemented", nunca num erro de tipos ou de lint: acrescenta o stub que o teste chama. Corre-a sozinha depois de cada edição; no relatório: Verificação rápida \`${cmd}\`: N execuções → exit <o último código>.`,
+      tickNote: (n, name, cmd, status, slug) => `Tarefa ${n}: a verificação rápida ${name} (\`${cmd}\`) ${({ stale: "é anterior à última edição dos ficheiros planeados", failed: "falhou na última execução", missing: "nunca ficou registada a correr" })[status]} — corre-a sozinha agora e corrige o que ela apontar (${DEV_SPEC} done ${slug} ${n} --run corre-a primeiro).${status === "missing" ? " A ferramenta PowerShell só fica registada com um exit code explícito: corre-a com a ferramenta Bash, ou através do done --run." : ""}`,
+      label: "verificação rápida",
+      skipClean: (name) => `verificação rápida ${name}: limpa desde a última edição — não volta a correr`,
+      runFailed: (cmd, code) => `a verificação rápida \`${cmd}\` falhou (exit ${code}) — corrige-a antes da próxima edição; o _Verify:_ da tarefa corre na mesma, e a tarefa marcada recebe uma nota.`,
+      cantRun: (cmd, why) => `a verificação rápida \`${cmd}\` não pôde correr (${why}) — o _Verify:_ da tarefa corre na mesma.`,
+      metrics: (name, runs, clean, rate, ticks, ticksClean) => `  verificação rápida (${name}): ${runs} execução(ões), ${clean} limpa(s)${rate == null ? "" : ` (${rate}%)`} · ${ticksClean} de ${ticks} tarefa(s) de código marcada(s) depois de uma execução limpa no código final`,
+      metricsTotals: (ticks, ticksClean) => `  verificação rápida: ${ticksClean} de ${ticks} tarefa(s) de código marcada(s) depois de uma execução limpa no código final`,
+      doctorInvalid: (name, why) => `meta.fastCheck nomeia '${name}', ${({ missing: "que não é uma verificação do projeto (meta.checks)", guardian: "que corre o gate do dev-guardian (uma análise de minutos)", fixer: "cujo comando reescreve ficheiros (--fix, --write, um formatador sem --check)" })[why]} — não corre nenhuma verificação rápida. Define outra: ${DEV_SPEC} init --fast-check <verificação> (ou off).`,
+      offer: (cmd, from, name, existing) => `Uma verificação rápida depois de cada pequena alteração apanha erros de tipos e de lint em segundos: \`${cmd}\` (${from}). Tem de passar no ramo base — passa a ser uma verificação do projeto de que o spec_finish também precisa. Proposta, nunca ativada: ${existing ? `${DEV_SPEC} init --fast-check ${name}` : `${DEV_SPEC} init --check ${name}="${cmd}" --fast-check ${name}`}.`,
+    },
+    reviewModels: {
+      on: (list, diverse) => `Painel de revisão LIGADO (meta.reviewModels: ${list}${diverse ? " — diverse" : ""}): a revisão do ramo antes do merge, os críticos do gate da revisão profunda e o converge correm uma vez por modelo — o painel acrescenta modelos, nunca substitui o da própria revisão —, com os achados juntos e cada um verificado uma vez; o revisor de cada tarefa corre num modelo do painel diferente do do implementador. Cada modelo a mais custa mais um despacho de revisão por cada revisão que cobre. O Claude Code só despacha aliases (opus, sonnet, haiku, fable): aí, outro nome faz a revisão num só modelo.`,
+      off: "Painel de revisão DESLIGADO (meta.reviewModels): cada revisão corre num só modelo.",
+      bad: (v) => `reviewModels aceita 2–3 nomes de modelo diferentes (p. ex. opus,sonnet — cada um começa por uma letra ou um dígito, depois letras, dígitos ou . _ : / @ -, até 128 caracteres; nunca inherit, default, diverse, off ou none), diverse, ou off (recebido '${v}').`,
+      ignored: (v) => `meta.reviewModels contém ${v}, que não são 2–3 nomes de modelo diferentes nem "diverse" — ignorado: cada revisão corre num só modelo. Define-o com spec_init {reviewModels: ["opus", "sonnet"]} (${DEV_SPEC} init --review-models opus,sonnet), ou diverse / off.`,
+    },
     elicit: {
       message: (list, details) => `dev-spec: um agente pede para ${list}.` + (details ? " " + details : "") + " As aprovações são tuas: marca Aprovar só se aprovares isto.",
       gatePasses: "As verificações da fase passam.",
@@ -2044,6 +2075,7 @@ const msg = {
       waiver: (reason, expires) => "Exceção: " + [reason ? `"${reason}"` : null, expires ? `até ${expires}` : null].filter(Boolean).join(" ") + ".",
       phases: (list) => `Fases a aprovar, por ordem: ${list}.`,
       removeSize: (n, rel) => `Isto apaga ${rel} de vez — ${n} ficheiro${n === 1 ? "" : "s"}.`,
+      unprotect: (reason) => `Motivo indicado: "${reason}". Um agente pode então alterar ou apagar este teste até o voltares a proteger.`,
       approveTitle: "Aprovar",
       approveDesc: "Marca para registar; deixa em branco (ou recusa) para não aprovar.",
       noteTitle: "Nota",
@@ -3018,12 +3050,45 @@ const msg = {
     },
     scopeGuard: {
       on: "Modo guarda SCOPE (âmbito) — Write/Edit num ficheiro de código fora de .specs/ pede confirmação, a menos que uma tarefa por concluir de uma feature aprovada o nomeie em _Implements:_ (o ficheiro, a sua pasta ou um glob; ficheiros de teste excetuados), e pede-a em todas as alterações de código enquanto nenhuma feature tiver tarefas aprovadas por concluir (roadmap.json meta.guard: \"scope\"). Os ficheiros de teste são permitidos enquanto o plano de testes de uma feature por concluir estiver aprovado (a Fase 4 escreve os testes a falhar antes do gate das tarefas), e todos os ficheiros de código enquanto um spike estiver em curso (o seu protótipo).",
-      ask: (file, features, hint) => `dev-spec guard (scope): ${file} não está no plano — nenhuma tarefa por concluir de ${features} o nomeia em _Implements:_. ${hint} (O modo guarda está em scope — ${DEV_SPEC} init --guard on permite todos os ficheiros de código enquanto houver tarefas aprovadas; --guard off desliga-o.)`,
+      ask: (file, features, hint, level = "scope") => `dev-spec guard (scope): ${file} não está no plano — nenhuma tarefa por concluir de ${features} o nomeia em _Implements:_. ${hint} (O modo guarda está em ${level} —${DEV_SPEC} init --guard on permite todos os ficheiros de código enquanto houver tarefas aprovadas; --guard off desliga-o.)`,
       hint: {
         "same-folder": (n, slug, ref) => `Acrescenta-o ao _Implements:_ da tarefa ${n} (${slug} — mesma pasta que ${ref}) e volta a aprovar a fase tasks, ou planeia a alteração com /spec-review ${slug} converge (spec_append_tasks).`,
         nearby: (n, slug, ref) => `Acrescenta-o ao _Implements:_ da tarefa ${n} (${slug} — planeia ${ref}, ali perto) e volta a aprovar a fase tasks, ou planeia a alteração com /spec-review ${slug} converge (spec_append_tasks).`,
         next: (n, slug) => `Acrescenta-o ao _Implements:_ da tarefa ${n} (${slug}, a próxima tarefa por concluir) e volta a aprovar a fase tasks, ou planeia a alteração com /spec-review ${slug} converge (spec_append_tasks).`,
       },
+    },
+    protectedTests: {
+      on: `Modo guarda TESTS — o guarda de âmbito, mais testes protegidos: depois de aprovadas as tarefas de uma feature, os ficheiros de teste que existiam nesse momento (e os que uma tarefa marcada nomeia em _Implements:_ ou executa no _Verify:_) ficam protegidos — editar, remover ou mover um deles pede confirmação, a menos que uma tarefa que pode começar já o nomeie em _Implements:_, e é recusado com meta.approvalGuard deny. Só o utilizador levanta a proteção de um: ${DEV_SPEC} feature unprotect <feature> <ficheiro> --reason "…".`,
+      unguarded: "Os testes protegidos estão listados no .state.json de cada feature — só o guarda das aprovações (init --approval-guard ask|deny) impede um agente de editar essa lista.",
+      whyFile: (slug, day) => `é um dos testes protegidos de ${slug}${day ? ` (registado em ${day})` : ""}`,
+      whyFolder: (n, first) => `contém ${n} teste(s) protegido(s), p. ex. ${first}`,
+      current: (list) => `As tarefas que podem começar já — ${list} — não o nomeiam em _Implements:_.`,
+      noCurrent: "Nenhuma tarefa que pode começar já o nomeia em _Implements:_.",
+      planHint: (n, slug) => ` Para planear a alteração, acrescenta-o ao _Implements:_ da tarefa ${n} (${slug}) e volta a aprovar a fase tasks.`,
+      ask: (file, why, current, planHint, lift) => `dev-spec guard (tests): ${file} é um teste protegido — ${why}. ${current} Uma tarefa que faz um teste passar altera o código, não o teste: confirma só se queres mesmo alterar este teste.${planHint} Para o permitir nesta feature, podes levantar a proteção: ${lift}. (O modo guarda está em tests — ${DEV_SPEC} init --guard scope deixa de proteger os testes.)`,
+      deny: (file, why) => `dev-spec guard (tests): recusado — ${file} é um teste protegido (${why}), e um teste protegido só muda por decisão do utilizador (meta.approvalGuard: deny). Não o alteres por outra via (um comando de shell, um script, git): indica o teste e o motivo da alteração, e deixa o utilizador decidir.`,
+      denyUser: (file, cmd) => `dev-spec guard recusou a edição, por um agente, do teste protegido ${file}. Para a permitir: ${cmd}`,
+      snapshotNote: (n, cap) => `Testes protegidos: ${n} ficheiro(s) de teste registado(s) — editar, remover ou mover um deles passa a pedir confirmação, a menos que uma tarefa que pode começar já o nomeie em _Implements:_.` + (cap ? ` Só foram registados os primeiros ${cap} (a lista tem limite).` : ""),
+      briefDod: (n) => `Testes protegidos (meta.guard tests${n ? ` — ${n} ficheiro(s) na lista desta feature` : ""}): edita, renomeia ou apaga um ficheiro de teste existente só quando o _Implements:_ DESTA tarefa o nomeia; põe um teste vermelho a verde corrigindo o código, nunca o teste. Se o guarda pedir confirmação ou recusar, reporta NEEDS_CONTEXT com o nome do teste, sem nunca o contornar (um comando de shell, um script, git).`,
+      via: { approval: "a aprovação das tarefas", protect: "feature protect" },
+      listNote: (slug, n, day, via, added) => `${slug} — ${n} ficheiro(s) de teste protegido(s)` + (day ? ` desde ${day}${via ? ` (${via})` : ""}` : "") + `; ${added} acrescentado(s) agora.`,
+      unlifted: (file) => `O levantamento da proteção de ${file} terminou — está de novo protegido.`,
+      truncated: (cap) => `A lista atingiu o limite (${cap} ficheiros): os testes além do limite não estão protegidos.`,
+      notEnforced: `O guarda só lê a lista com o modo guarda tests (${DEV_SPEC} init --guard tests).`,
+      lifted: (file, slug, listed) => `Proteção de ${file} levantada (${slug}): pode mudar até ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (Não estava na lista de testes protegidos da feature.)"),
+      err: {
+        fileRequired: `unprotect precisa do ficheiro de teste: ${DEV_SPEC} feature unprotect <feature> <ficheiro> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
+        reasonRequired: "unprotect precisa de um motivo (uma linha, no máximo 500 caracteres): o motivo pelo qual este teste protegido pode mudar.",
+        notATest: (file) => `${file} não é um ficheiro de teste (pelo nome ou pela pasta) — só os ficheiros de teste são protegidos.`,
+        outside: (file) => `${file} está fora do projeto.`,
+      },
+      finishWarn: (slug, list, more) => `Testes protegidos de ${slug} alterados sem motivo registado (nenhuma tarefa os voltou a registar, nenhum levantamento os cobre): ${list}${more ? ` e mais ${more}` : ""} — confirma que cada alteração é intencional (um teste alterado para passar é um teste enfraquecido); se for, regista-a: ${DEV_SPEC} feature unprotect ${slug} <ficheiro> --reason "…".`,
+      changed: (file) => `${file} (alterado)`,
+      deleted: (file) => `${file} (apagado)`,
+      summaryHead: "## Testes protegidos",
+      summaryLine: (n, k) => `${n} ficheiro(s) de teste protegido(s); ${k} alterado(s) sem motivo registado.`,
+      summaryLift: (file, by, reason) => `- proteção levantada: ${file} — por ${by}: "${reason}"`,
+      doctorMissing: (slug) => `guard tests: ${slug} tem tarefas aprovadas mas nenhum registo de testes protegidos (as tarefas foram aprovadas antes de o modo ser definido) — regista-o: ${DEV_SPEC} feature protect ${slug}.`,
     },
 
     // registo de decisões (decisions.md, spec_decide) e o tipo spike (investigar → decidir).

@@ -46,7 +46,7 @@ machine when this repo is the open project — no editing needed.
 - Every tool works the same in any MCP client. The server also offers prompts (the plugin's commands) and read-only
   `specs://` resources, which clients that support them show; add `"env": { "SPEC_MCP_PROMPTS": "off" }` to hide the
   prompts. The plugin's hooks — the save checks, the SessionStart status, the end-of-turn evidence gate and the opt-in
-  guard mode — are Claude Code only (elsewhere: `dev-spec doctor`, `dev-spec stop-check`).
+  guard mode (its `tests` level too: finish and doctor still name a protected test that changed) — are Claude Code only (elsewhere: `dev-spec doctor`, `dev-spec stop-check`).
 - The workflow rules for your own project are generated the same way:
   `node cli/dev-spec.js rules <cursor|windsurf|copilot|gemini|agents>` prints that tool's rule file with
   this clone's absolute paths (the copies in this repo use clone-relative paths).

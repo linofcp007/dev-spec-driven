@@ -59,10 +59,14 @@ const OPERATIONS = [
       approvalGuard: { mcp: "approvalGuard", cli: "--approval-guard", parsed: true }, // off|ask|deny, checked
       evidence: { mcp: "evidence", cli: "--evidence", parsed: true }, // reported|observed, checked
       guardian: { mcp: "guardian", cli: "--guardian", parsed: true }, // 1.29: a bare --guardian / on → true, off → false (dev-guardian's gate)
+      // 1.36 the fast check: a meta.checks name, or "" / off / none — raw, the engine reads and checks both
+      fastCheck: { mcp: "fastCheck", cli: "--fast-check" },
+      // 1.36 the review panel: an MCP array or the CLI's word (opus,sonnet | diverse | off) — raw, the engine reads and checks both
+      reviewModels: { mcp: "reviewModels", cli: "--review-models" },
     },
     // undefined leaves each meta value as it is
     call: (S, dir, o) => S.initProject(dir, o.tracks, o.lang, { guard: o.guard, checks: o.checks, approvalRoles: o.approvalRoles,
-      stopCheck: o.stopCheck, approvalGuard: o.approvalGuard, evidence: o.evidence, guardian: o.guardian }),
+      stopCheck: o.stopCheck, approvalGuard: o.approvalGuard, evidence: o.evidence, guardian: o.guardian, fastCheck: o.fastCheck, reviewModels: o.reviewModels }),
   },
   {
     id: "classify", tool: "spec_classify", cli: ["classify"], engine: "classify",
@@ -242,9 +246,14 @@ const OPERATIONS = [
   {
     // remove needs confirm (the CLI's --yes); flow: action 'flow' (the CLI's third word is read as it too)
     id: "feature", tool: "spec_feature", cli: ["feature"], engine: "manageFeature",
-    args: { action: { mcp: "action", pos: 0 }, name: { mcp: "name", pos: 1 }, newName: { mcp: "newName", pos: 2 }, confirm: SWITCH("confirm", "--yes"), flow: { mcp: "flow", cli: "--flow" } },
-    internal: { mcp: ["preview"] }, // 1.23 (remove): the folder the user was asked about
-    call: (S, dir, o) => S.manageFeature(dir, o.action, o.name, o.newName, { confirm: o.confirm, flow: o.flow, preview: o.preview }),
+    args: { action: { mcp: "action", pos: 0 }, name: { mcp: "name", pos: 1 }, newName: { mcp: "newName", pos: 2 }, confirm: SWITCH("confirm", "--yes"), flow: { mcp: "flow", cli: "--flow" },
+      // 1.36 guard tests — protect / unprotect: the test file (the CLI's third word too: the engine reads file, else newName's word) ·
+      // unprotect's reason (one line, required)
+      file: { mcp: "file", cli: "--file" }, reason: { mcp: "reason", cli: "--reason" } },
+    // 1.23 (remove): the folder the user was asked about · 1.36 (unprotect): the user's answer over elicitation, the checks before asking
+    internal: { mcp: ["preview", "confirmation", "dryRun"] },
+    call: (S, dir, o) => S.manageFeature(dir, o.action, o.name, o.newName, { confirm: o.confirm, flow: o.flow, preview: o.preview,
+      file: o.file, reason: o.reason, confirmation: o.confirmation, dryRun: o.dryRun }),
   },
   {
     // the engine refuses a path outside the project; text: 1.16 C4 (the CLI: --text or stdin); dryRun: 1.25

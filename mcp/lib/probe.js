@@ -419,8 +419,9 @@ function trimSlashEnd(s) {
 // `x=.spec?/…`) or a writer / remover (PowerShell's `Remove-Item * -Recurse` reaches .specs/). A guard-down another module reads in a
 // command it names adds its test here (the list is the hook point): the hook's pre-filter and the engine's stay one.
 const RE_APPROVAL_NAMES = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
-// The words that make a CLI call an approval or a guard-down (approve, feature remove, init's guard-down flags).
-const RE_APPROVAL_VERB = /(?:^|[^\w-])(?:approve|remove|--approval-guard|--stop-check|--evidence|--guard|--guardian|--roles|--check)(?![\w-])/i;
+// The words that make a CLI call an approval or a guard-down (approve, feature remove, init's guard-down flags; 1.36: add-track's
+// --remove — a gated track turned off —, feature unprotect — a protected test's lift).
+const RE_APPROVAL_VERB = /(?:^|[^\w-])(?:approve|remove|unprotect|--remove|--approval-guard|--stop-check|--evidence|--guard|--guardian|--roles|--check)(?![\w-])/i;
 const RE_APPROVAL_WRITE_WORD = /(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|remove-item|ri|mv|move|move-item|mi|cp|copy|copy-item|cpi|set-content|sc|add-content|ac|clear-content|clc|out-file|new-item|ni|tee|robocopy|xcopy|rsync)(?=[\s;&|)]|$)/i;
 const RE_GLOB_CHAR = /[*?[{]/;
 const approvalPlain = (text) => String(text).replace(/(["'])\s*\+\s*\1/g, "").replace(/[\\`^]\r?\n|['"\\`^]/g, "");

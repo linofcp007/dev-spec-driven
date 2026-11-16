@@ -62,6 +62,69 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, runAsync, tmp, CLI }) => {
   ok(m8.code === 1 && /features\.beta\.dependsOn/.test(m8.out) && r8 && js(r8.features.alpha.dependsOn) === '["beta"]' && !r8.features.beta.dependsOn &&
     Array.isArray(r8.mergeConflicts) && r8.mergeConflicts[0].path === "features.beta.dependsOn",
     "1.24 r6 E5: merge-state on roadmap.json whose two sides' dependency edges close a cycle exits 1 — ours kept at the edge that closes it, the conflict listed (got " + js([m8.code, m8.out, r8]) + ")");
+  // 1.36 the review panel: meta.reviewModels takes the default rule — an ORDERED list (the first model leads), never a set merge:
+  // one side changed → that side; both the same → clean; both changed differently (another list, or off against a change) → a conflict, ours kept
+  const rmMerge = (n, base, ours, theirs) => {
+    const doc = (v) => ({ meta: v === undefined ? { lang: "en" } : { lang: "en", reviewModels: v }, features: {} });
+    const o = put("o-rm" + n, doc(ours));
+    const m = runIn(["merge-state", put("b-rm" + n, doc(base)), o, put("t-rm" + n, doc(theirs)), ".specs/roadmap.json"]);
+    return { code: m.code, r: parse(o) };
+  };
+  const rmOne = rmMerge(1, undefined, undefined, ["opus", "sonnet"]), rmSame = rmMerge(2, undefined, "diverse", "diverse");
+  const rmBoth = rmMerge(3, ["opus", "sonnet"], ["sonnet", "opus"], ["opus", "haiku"]), rmOff = rmMerge(4, "diverse", undefined, ["opus", "haiku"]);
+  all("1.36 review panel: merge-state merges meta.reviewModels by the default rule — one side's change comes through, the same change is clean, two different lists or off against a change conflict (ours kept, listed) — never a union (got " +
+    js([rmOne, rmSame, rmBoth, rmOff]) + ")", {
+    oneSide: () => rmOne.code === 0 && js(rmOne.r.meta.reviewModels) === '["opus","sonnet"]' && !("mergeConflicts" in rmOne.r),
+    same: () => rmSame.code === 0 && rmSame.r.meta.reviewModels === "diverse" && !("mergeConflicts" in rmSame.r),
+    both: () => rmBoth.code === 1 && js(rmBoth.r.meta.reviewModels) === '["sonnet","opus"]' &&
+      js(rmBoth.r.mergeConflicts) === js([{ path: "meta.reviewModels", base: ["opus", "sonnet"], ours: ["sonnet", "opus"], theirs: ["opus", "haiku"] }]),
+    offVsChange: () => rmOff.code === 1 && !("reviewModels" in rmOff.r.meta) && Array.isArray(rmOff.r.mergeConflicts) && rmOff.r.mergeConflicts[0].path === "meta.reviewModels",
+  });
+  // 1.36 the fast check: meta.fastCheck is a plain value (the default rule — two different names conflict); a tick's `fast` snapshot is a
+  // RUN field, carried by the run that wins (evidence[n]: the later one, both sides having recorded the task) with no rule of its own
+  {
+    const doc = (v) => ({ meta: v === undefined ? { lang: "en" } : { lang: "en", fastCheck: v }, features: {} });
+    const fcMerge = (n, base, ours, theirs) => {
+      const o = put("o-fc" + n, doc(ours));
+      const m = runIn(["merge-state", put("b-fc" + n, doc(base)), o, put("t-fc" + n, doc(theirs)), ".specs/roadmap.json"]);
+      return { code: m.code, r: parse(o) };
+    };
+    const one = fcMerge(1, undefined, undefined, "tc"), both = fcMerge(2, "tc", "lint", "types");
+    const fast = { check: "tc", status: "clean", runs: 2, clean: 2 };
+    const rec = (at, extra) => { const r = { command: "npm test", exitCode: 0, at, cmdRule: 1, ...(extra || {}) }; return { ...r, task: "[US1] A", verify: "npm test", history: [r] }; };
+    const st = (ev) => ({ lang: "en", tracks: ["core"], evidence: ev });
+    const so = put("o-fcs", st({ 1: rec(T(4)) }));
+    const ms = runIn(["merge-state", put("b-fcs", st({})), so, put("t-fcs", st({ 1: rec(T(6), { fast }) })), ".specs/invoices/.state.json"]);
+    const s1 = parse(so);
+    all("1.36 fast check: merge-state takes meta.fastCheck by the default rule (one side's change through, two different names a conflict — ours kept) and a tick's `fast` rides with its run, the later one winning (got " +
+      js([one, both, ms.code, s1 && s1.evidence]) + ")", {
+      oneSide: () => one.code === 0 && one.r.meta.fastCheck === "tc" && !("mergeConflicts" in one.r),
+      conflict: () => both.code === 1 && both.r.meta.fastCheck === "lint" && js(both.r.mergeConflicts) === js([{ path: "meta.fastCheck", base: "tc", ours: "lint", theirs: "types" }]),
+      runField: () => ms.code === 0 && s1 && js(s1.evidence["1"].fast) === js(fast) && s1.evidence["1"].history.some((h) => js(h.fast) === js(fast)),
+    });
+  }
+  // 1.36 guard tests: protectedTests merges by its own rule — files file by file (a one-sided re-baseline or addition comes through; both
+  // sides changed one → ours, NO conflict: finish hashes the content again), at / via the earlier snapshot's, truncated either side's,
+  // the lifts united by identity (a lift and its end each a record)
+  {
+    const st = (pt) => ({ lang: "en", tracks: ["core"], protectedTests: pt });
+    const lift = (file, at, extra) => ({ file, at, by: "u", ...(extra || {}) });
+    const base = { at: T(1), via: "approval", files: { "test/a.test.js": "aaaa", "test/b.test.js": "bbbb", "test/c.test.js": "cccc" } };
+    const ours = { at: T(1), via: "approval", files: { "test/a.test.js": "a-ours", "test/b.test.js": "b-ours", "test/c.test.js": "cccc" }, lifts: [lift("test/x.test.js", T(2), { reason: "r" })] };
+    const theirs = { at: T(0), via: "protect", truncated: true, files: { "test/a.test.js": "aaaa", "test/b.test.js": "b-theirs", "test/c.test.js": "c-theirs", "test/new.test.js": "nnnn" },
+      lifts: [lift("test/y.test.js", T(3), { reason: "s" }), lift("test/x.test.js", T(4), { revoked: true })] };
+    const so = put("o-pt", st(ours));
+    const m = runIn(["merge-state", put("b-pt", st(base)), so, put("t-pt", st(theirs)), ".specs/login/.state.json"]);
+    const r = parse(so);
+    const pt = r && r.protectedTests;
+    all("1.36 guard tests: merge-state merges protectedTests — a one-sided re-baseline (c) or addition (new) comes through, ours kept where both re-baselined (b) with NO conflict, the earlier snapshot's at / via, truncated from either side, both sides' lifts and ends united by identity in time order (got " +
+      js([m.code, pt]) + ")", {
+      clean: () => m.code === 0 && !("mergeConflicts" in r),
+      files: () => js(pt.files) === js({ "test/a.test.js": "a-ours", "test/b.test.js": "b-ours", "test/c.test.js": "c-theirs", "test/new.test.js": "nnnn" }),
+      earlier: () => pt.at === T(0) && pt.via === "protect", truncated: () => pt.truncated === true,
+      lifts: () => js(pt.lifts.map((l) => [l.file, l.at, !!l.revoked])) === js([["test/x.test.js", T(2), false], ["test/y.test.js", T(3), false], ["test/x.test.js", T(4), true]]),
+    });
+  }
 
   // --- with git: --install / --uninstall, then a real merge of two branches (skipped without git — the Docker images have it)
   const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });

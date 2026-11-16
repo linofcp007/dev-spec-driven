@@ -215,6 +215,10 @@ function renderBrief(d, lang) {
   const B5 = MSG[normalizeLang(lang)]; // the red run, then the project checks (roadmap.json meta.checks)
   if (d.expectFail) push(`${++extra}. ${B5.redGreen.dodExpect}`);
   if ((d.projectChecks || []).length) push(`${++extra}. ${B5.projectChecks[d.expectFail ? "briefDodRed" : "briefDod"](d.projectChecks.map((c) => "`" + c.command + "` (" + c.name + ")").join(" · "))}`);
+  // 1.36 the fast check (roadmap.json meta.fastCheck) of a code task: the edit → run → fix loop (a red task: its stub keeps it green)
+  if (d.fastCheck) push(`${++extra}. ${B5.fastCheck[d.expectFail ? "briefDodRed" : "briefDod"](d.fastCheck.command)}`);
+  // 1.36 guard tests (meta.guard "tests"): a protected test changes only when this task's _Implements:_ names it
+  if (d.protectedTests != null) push(`${++extra}. ${B5.protectedTests.briefDod(d.protectedTests)}`);
   if (task.checkpoint) push("", t.checkpoint, "**Checkpoint:** " + task.checkpoint);
 
   push("", t.report, t.reportTo(d.reportPath), "");
@@ -456,6 +460,7 @@ function approvalAction(X, a) {
     if (a.setting === "guardian-baseline") return X.guardianBaseline;
     if (a.setting === "guardian-baseline-update") return X.guardianBaselineUpdate;
     if (a.setting === "guardian-cli") return X.guardianCli;
+    if (a.setting === "unprotect") return X.unprotect(a.file || "?", f); // 1.36 guard tests: a lift of a protected test
     return X.lower(a.from, a.to);
   }
   const who = (a.role ? X.asRole(a.role) : "") + (a.by ? X.onBehalf(a.by) : "");

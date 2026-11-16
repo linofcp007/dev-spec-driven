@@ -167,7 +167,11 @@ engine/scan.js — area 13 of the suites.
   (`NESTED_MANIFESTS`, never under a `MANIFEST_FIXTURE_DIRS` folder such as docs or examples) name the stack, the first
   `NESTED_MANIFEST_CAP` give frameworks and test runners; only the root package.json gives entrypoints. Never a test file
   (`isTestFile`); `@SpringBootApplication` only in a `.java` or `.kt` source; a package.json with no dependency is
-  "node". ASP.NET `[controller]` and `[action]` are resolved (`aspActionName`).
+  "node". ASP.NET `[controller]` and `[action]` are resolved (`aspActionName`). 1.36: `fastCheckCandidates()` reads the ROOT
+  manifests the same way (`projectFileInside`, a head — no walk) for the fast check's offer: a package.json typecheck script
+  (the lockfile's runner, never one that rewrites files), tsconfig.json → `npx tsc --noEmit` only with typescript in
+  dependencies / devDependencies, Cargo.toml, go.mod, `[tool.ruff]` / ruff.toml, `[tool.mypy]` / mypy.ini — never a lint script
+  (tasks-and-evidence.md → The fast check).
 - **Edges:** a projectDir that is no folder → `brownfield.notFolder` (CLI exit 1). coverage binary-searches keys sorted
   once per call (`implementsTargets(…, sorted)`, `keysWithPrefix`).
 

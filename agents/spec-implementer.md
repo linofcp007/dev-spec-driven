@@ -38,6 +38,10 @@ commit lacks the earlier tasks and the failing tests you are to make green: repo
    that file in `_Implements:_`, approved like any change to the plan — or tells you to go ahead), or, when the task
    can be done without it, create locally and name the extension in the report's Reuse block. Under the scope guard
    (`meta.guard: "scope"`) an edit to a file no open task plans stops for the user's permission mid-task.
+   **Never edit, delete, rename, skip or weaken a test to make a run pass** — a red test turns green by fixing the code.
+   An existing test file changes only when your task's `_Implements:_` names it. Under `meta.guard: "tests"` the guard asks
+   about (or refuses) an edit of a protected test: report **NEEDS_CONTEXT** naming the test and why it should change — never
+   route around it with a shell command, a script or git.
    Never reuse by copy-paste. What you searched and found goes in the report's **Reuse** block, also when nothing was
    found.
 4. If anything is unclear — an AC you can't satisfy as written, a missing interface, an unresolved
@@ -78,6 +82,11 @@ commit lacks the earlier tasks and the failing tests you are to make green: repo
        `_Verify:_` should drop the pipe.
    - **Project checks** (listed in the brief's definition of done — `roadmap.json → meta.checks`): run each one and
      report its command, exit code and output tail; nothing that passed before your task may fail after it.
+   - **Fast check** (the brief names one — `roadmap.json → meta.fastCheck`, a type check or a linter that answers in
+     seconds): after each small edit run it **on its own** (never chained — `tsc && npm test` is no run of it), fix what it
+     reports before the next edit, and repeat; it must exit 0 after your LAST edit, before you run the `_Verify:_`. On an
+     `_Expect: fail_` task your new test must still pass it: it fails on an assertion or "not implemented", never on a type
+     or lint error — add the stub the test calls.
 3. While iterating, run the focused test for what you are changing; run the full suite once before
    committing.
 4. Commit with a conventional message citing the task (and on tdd, the tests it makes green).
@@ -172,6 +181,9 @@ Write the full report to the report path, in the brief's language:
   `_Expect: fail_` task — your stop is sent back. It reads the codes per run: write each command's exit code next to it (the
   last run of each `_Verify:_` command decides; another command's exit 0 never counts for it).
 - **Project checks:** each command, its exit code and the output tail (when the brief lists them).
+- **Fast check** (when the brief names one): one line, its command in a code span — ``Fast check `npx tsc --noEmit`: 4 runs → exit 0``
+  (the runs you made and the LAST exit code). The span keeps that exit code to the fast check: the SubagentStop gate never
+  reads it as your `_Verify:_` run's. The engine reads the harness's log of your runs, never this line.
 - **Reuse** — a `### Reuse` block, always (the search itself is the evidence; the controller and the reviewer read it
   before the diff):
 

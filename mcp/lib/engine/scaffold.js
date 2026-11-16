@@ -32,6 +32,8 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
 let guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher; // guardian.js — 1.29 (init --guardian)
+let reviewModelsInput, reviewModelsSetting, setReviewModels; // guards.js — 1.36 the review panel (init --review-models)
+let fastCheckInput, fastPlan, setFastCheck, fastCheckOf, fastCheckOffer; // evidence.js — 1.36 the fast check (init --fast-check)
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, enumArg, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -50,7 +52,8 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
-  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher } = E); }
+  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher,
+  reviewModelsInput, reviewModelsSetting, setReviewModels, fastCheckInput, fastPlan, setFastCheck, fastCheckOf, fastCheckOffer } = E); }
 
 // spec_import's source formats — its `tool` enum, each with the name its notes print — and those that write .specs/steering/
 // files, not a feature. The importers (import/) load on first use (engine/index.js LAZY); these lists are read as the surfaces
@@ -115,7 +118,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   if (userLang) lang = userLang;
   // Both writes go to roadmap.json (one read-modify-write under the roadmap lock): refuse on a broken one before
   // creating anything.
-  const guardValue = guardInput(opts.guard); // true | false | "scope" — anything else leaves the guard unchanged
+  const guardValue = guardInput(opts.guard); // true | false | "scope" | "tests" — anything else leaves the guard unchanged
   const setsGuard = guardValue !== undefined;
   const setsStop = typeof opts.stopCheck === "boolean"; // roadmap.json meta.stopCheck (the end-of-turn evidence gate)
   // roadmap.json meta.evidence — "reported" (the default) | "observed"; anything else is refused before any write.
@@ -131,15 +134,26 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const roles = setsRoles ? validateApprovalRoles(opts.approvalRoles, normalizeLang(lang || projectLang(projectDir))) : null;
   if (roles && !roles.ok) return { ok: false, error: roles.error };
   const approvalGuard = approvalGuardInput(opts.approvalGuard); // "off" | "ask" | "deny" — anything else leaves it unchanged
+  // 1.36 the fast check (roadmap.json meta.fastCheck): a check's name, "" / off — its name is checked under the lock (fastPlan)
+  const fcIn = fastCheckInput(opts.fastCheck, lang || projectLang(projectDir));
+  if (fcIn && fcIn.error) return { ok: false, error: fcIn.error, code: "invalid-arguments", invalid: ["fastCheck"] };
+  // 1.36 the review panel (roadmap.json meta.reviewModels): 2–3 model names, "diverse" or off — a bad value refused before any write
+  const rmIn = reviewModelsInput(opts.reviewModels, lang || projectLang(projectDir));
+  if (rmIn && rmIn.error) return { ok: false, error: rmIn.error, code: "invalid-arguments", invalid: ["reviewModels"] };
   // 1.30: dev-guardian's gate on → its launcher, .specs/guardian.cjs, is written FIRST: a path the write gate refuses (a folder, a
   // link) stops init before meta.checks names a check that could never run; a launcher this call created is removed again when
   // meta.checks can't be written (review 8: init was not atomic).
   const launcher = opts.guardian === true ? guardianLauncherOn(projectDir, normalizeLang(lang || projectLang(projectDir))) : {};
   if (launcher.refusal) return launcher.refusal;
-  if (lang || setsGuard || nc || setsRoles || setsStop || approvalGuard || evMode) {
+  let fast = { write: undefined }; // what this call did to meta.fastCheck (fastPlan's answer)
+  if (lang || setsGuard || nc || setsRoles || setsStop || approvalGuard || evMode || fcIn || rmIn) {
     const meta = withRoadmapLock(projectDir, () => {
       const bad = roadmapError(projectDir) || (nc ? checksPlanError(projectDir, nc) : null);
       if (bad) return { ok: false, error: bad };
+      // the fast check against the checks this very call leaves (nc.merged): `--check tc="…" --fast-check tc` is one call
+      const fp = fcIn || nc ? fastPlan(projectDir, nc, fcIn, normalizeLang(lang || projectLang(projectDir))) : fast;
+      if (fp.error) return { ok: false, error: fp.error, code: "invalid-arguments", invalid: ["fastCheck"] };
+      fast = fp;
       // Seed/refresh the project language (single source of truth) if one was requested.
       if (lang) setRoadmapLang(projectDir, lang);
       // Guard mode (opt-in, roadmap.json meta.guard): independent of the tracks; idempotent.
@@ -149,6 +163,8 @@ function initProject(projectDir, tracks, lang, opts = {}) {
       if (nc) writeChecks(projectDir, nc);
       if (setsRoles) setApprovalRoles(projectDir, roles.map);
       if (approvalGuard) setApprovalGuard(projectDir, approvalGuard);
+      if (fast.write !== undefined) setFastCheck(projectDir, fast.write);
+      if (rmIn) setReviewModels(projectDir, rmIn);
       return { ok: true };
     });
     if (!meta.ok) {
@@ -180,7 +196,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     created,
     skipped,
     note: i18n.msg(lng).initNote,
-    guard: guardLevel(projectDir), // the CURRENT guard state (true | false | "scope"), whether or not this call changed it
+    guard: guardLevel(projectDir), // the CURRENT guard state (true | false | "scope" | "tests"), whether or not this call changed it
     stopCheck: stopCheckEnabled(projectDir), // the CURRENT end-of-turn evidence gate state (on unless meta.stopCheck is false)
     // the CURRENT project checks (meta.checks) {name: command}, whether or not this call changed them
     checks: Object.fromEntries(projectChecks(projectDir).checks.map((c) => [c.name, c.command])),
@@ -193,7 +209,9 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   // which of the reported values come from the user's DEV_SPEC_* defaults (the project sets none of them itself).
   const fromUser = userDefaultsApplied(projectDir, { lang: userLang });
   if (Object.keys(fromUser).length) res.userDefaults = fromUser;
-  if (setsGuard) res.guardNote = res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
+  if (setsGuard) res.guardNote = res.guard === "tests" ? i18n.msg(lng).protectedTests.on : res.guard === "scope" ? i18n.msg(lng).scopeGuard.on : i18n.msg(lng).guardMode[res.guard ? "on" : "off"];
+  // 1.36 guard tests: the protected lists live in each feature's .state.json — with the approval guard off an agent may edit them
+  if (res.guard === "tests" && res.approvalGuard === "off") res.protectedTestsWarning = i18n.msg(lng).protectedTests.unguarded;
   if (setsStop) res.stopCheckNote = i18n.msg(lng).stopGate[res.stopCheck ? "on" : "off"];
   if (approvalGuard) res.approvalGuardNote = res.approvalGuard === "off" ? i18n.msg(lng).approvalGuard.off : i18n.msg(lng).approvalGuard.on[res.approvalGuard];
   if (evMode) res.evidenceNote = i18n.msg(lng).observed[res.evidence === "observed" ? "on" : "off"];
@@ -209,6 +227,21 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   // (on: + no baseline yet, record one now — the user's step — and the .gitignore lines the project lacks: guardianOnNote)
   if (setsGuardian) res.guardianNote = res.guardian ? guardianOnNote(projectDir, res.checks.guardian, lng) : i18n.msg(lng).guardian.off;
   else { const offer = guardianOffer(projectDir, lng); if (offer) res.guardianOffer = offer; }
+  // 1.36: the CURRENT fast check (meta.fastCheck as stored; null = none) — + a note when this call changed it (on / off / its check
+  // removed); while none is set and this call names none, the root manifests' candidate is offered — never set
+  const fcNow = fastCheckOf(projectDir), FC = i18n.msg(lng).fastCheck;
+  res.fastCheck = fcNow ? (fcNow.invalid !== undefined ? fcNow.invalid : fcNow.name) : null;
+  if (fast.cleared) res.fastCheckNote = FC.cleared(fast.cleared);
+  else if (fcIn) res.fastCheckNote = fcNow && fcNow.name ? FC.on(fcNow.name, fcNow.command) : FC.off;
+  if (!fcIn && !fcNow) { const offer = fastCheckOffer(projectDir, lng); if (offer) res.fastCheckOffer = offer; }
+  // 1.36: the CURRENT review panel ([] = none) — + a note when this call set it, or when the stored value doesn't read (ignored)
+  const rs = reviewModelsSetting(projectDir), RM = i18n.msg(lng).reviewModels;
+  res.reviewModels = rs.models;
+  if (rmIn) res.reviewModelsNote = rs.models.length ? RM.on(rs.models.join(", "), rs.diverse) : RM.off;
+  else if (rs.invalid !== undefined) {
+    const raw = JSON.stringify(rs.invalid);
+    res.reviewModelsNote = RM.ignored(raw.length > 120 ? raw.slice(0, 119) + "…" : raw);
+  }
   return res;
 }
 

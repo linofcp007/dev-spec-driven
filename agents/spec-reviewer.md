@@ -62,6 +62,10 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
   a check that passed before and fails now is **Important**.
 - An exit code with no output behind it, or a result the diff can't have produced, is **Critical** — treat it as a
   fabricated run.
+- **An existing test file the diff changes, deletes or renames that the task's `_Implements:_` doesn't name** is
+  **Critical** when it loosens the test (an assertion removed or relaxed, a skip, `.only`, an early return) and **Important**
+  otherwise — a test made to pass is a weakened test (under `meta.guard: "tests"` the guard protects them; finish names any
+  that changed).
 
 ### 3. Track checks (only for active tracks)
 - **+tdd:** the report shows RED for the right reason before GREEN for each new behaviour's test (a guard test, a

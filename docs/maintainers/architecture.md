@@ -54,6 +54,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   roadmap-md.js · decisions.js ROADMAP.md / .html, forecasts, overlaps · decisions.md, the ADR export, spikes
   export.js                    spec_export (markdown, HTML, Gherkin, CSV, changelog), milestones
   guards.js                    guard mode, the stop gate and its claim scan, the approval guard + shell lexer (CLI_SWITCHES: probe.js)
+  protect.js                   1.36 guard tests' protected tests: the snapshot, the tick record, the edit decision, protect / unprotect, finish's check
   upgrade.js · scan.js         spec_upgrade · the brownfield scan, coverage, the ONE notion of code / test file (isCodeFile)
   dupes.js                     the duplicate-code detector (duplicationReport, duplicateRuns): spec_scan {duplicates}, finish — LAZY
   design-system.js             the design system against the code (designSystemReport, designSystemSeed, designSystemFinish):
@@ -150,7 +151,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 23 modules loaded with the engine (+ dupes.js,
+  costs ~0.65 ms before any compile (the open is the expensive part): 24 modules loaded with the engine (+ dupes.js,
   design-system.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
   the module of the concept; a new file must earn its load cost. The facade's first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
@@ -261,6 +262,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   doctor.js); the shared i18n layouts (`LAYOUTS`).
 - **1.28** — engine/dupes.js, the duplicate-code detector (quality.md → Duplicate-code detector): a concern of its own (23
   modules), read by spec_scan {duplicates}, `dev-spec dupes`, spec_finish and the tests over the plugin's own sources.
+- **1.36** — engine/protect.js, guard tests' protected tests (tasks-and-evidence.md → Protected tests): eager (the guard hook's
+  guardCheck reads it on every edit at level tests), kept out of guards.js (3,000+ lines) — guards.js only calls it (24 modules).
 
 ### The module rule
 - **1.18** — the split and the rule (load-time DAG, `__link(E)`, `CTX`). Measured (Windows, Node 24, p50 of 40 interleaved

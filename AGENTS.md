@@ -124,8 +124,10 @@ At each phase boundary run `dev-spec doctor <feature>` and advance only on `read
 
 ## What Claude Code enforces — and what you do elsewhere
 
-- **Guard mode** (`init --guard on|scope`) asks before code edits while no feature has approved tasks. Elsewhere: no
-  implementation before the tasks are approved, no code outside the plan without a converge task.
+- **Guard mode** (`init --guard on|scope|tests`) asks before code edits while no feature has approved tasks; `tests` also
+  protects the tests present at the tasks approval. Elsewhere: no implementation before the tasks are approved, no code outside
+  the plan without a converge task, and never edit an existing test your task's `_Implements:_` doesn't name — `spec_finish`
+  warns about a protected test that changed with no recorded reason on every surface.
 - **Turn-end claims and observed evidence** are Claude Code hooks. Elsewhere run `dev-spec stop-check` yourself and
   record runs with `done --run` (MCP: `spec_stop_check {message}`; `spec_log {name, gitLog}` reads git log text you pass).
 - **The approval guard: a Claude Code hook, and the MCP server.** `init --approval-guard ask|deny`: in other MCP

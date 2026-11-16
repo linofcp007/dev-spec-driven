@@ -106,8 +106,9 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     const same = rd(f.dir, "design.md") === i18n.design({ name: "Plain", tracks: ["core", "sec"], label: "core +sec" }, "en") &&
       rd(f.dir, "requirements.md") === i18n.requirements({ name: "Plain", tracks: ["core", "sec"], summary: "" }, "en");
     // (the pin changed on purpose in 1.35: [UI] Design System Usage gained its second line and the Kind | Component | Why table —
-    // the rows doctor's ui-design-system reads; it was 8f06d71f… since 1.34)
-    ok(got === "5c72f8a5f6acc4f0ed59cc5315c4fc3c2159c277" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
+    // the rows doctor's ui-design-system reads; it was 8f06d71f… since 1.34) (and in 1.36: the bugfix tasks.md's task 1 gained
+    // `_Implements: [the test file T-01 goes in]_` — guard tests protects the red test the tick records; it was 5c72f8a5… in 1.35)
+    ok(got === "660580134011914cecc780107e5c2313c1581a3e" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
       has(f.dir, "classification.md") && same,
       "1.21 F5: no size = the 1.20 scaffolds byte for byte (but the bugfix tasks.md, the short form on purpose) — the pinned sha1 of every no-size builder output of every pre-1.21 track combination (EN / PT / ES), and a create without a size writes no size key and the builders' own text (got " +
       JSON.stringify({ got, n: keys.length, state: stateOf(f.dir).size, same }) + ")");

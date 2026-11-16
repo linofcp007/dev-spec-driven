@@ -20,7 +20,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
     "init without --guard leaves the guard as it is; --guard off turns it off");
   const bad = runIn(["init", "--guard", "maybe", "--project", g11]);
   const none = runIn(["init", "--guard", "--project", g11]);
-  ok(bad.code === 1 && /--guard takes on, off or scope \(got 'maybe'\)/.test(bad.out) && none.code === 1 && /missing value for --guard/.test(none.out) && meta().guard === false,
+  ok(bad.code === 1 && bad.out.includes(S11.msg("en").guardMode.badValue("maybe")) && none.code === 1 && /missing value for --guard/.test(none.out) && meta().guard === false,
     "init --guard with a bad or missing value exits 1 and changes nothing");
   const gPt = path.join(tmp, "wp11-guard-pt");
   ok(/Modo guarda LIGADO/.test(runIn(["init", "--guard", "on", "--lang", "pt", "--project", gPt]).out) && S11.guardEnabled(gPt), "init --guard on (PT) is localized");

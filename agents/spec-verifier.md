@@ -28,6 +28,10 @@ with what you checked:
 **An ❌** asks one thing: is the AC satisfied at HEAD? The file:line that satisfies it → REFUTED; nothing does → CONFIRMED.
 An ❌ is never pre-existing and never UNCONFIRMED: when you can't tell, it is CONFIRMED.
 
+**A changed test** (an existing test file the diff edits, deletes or renames that the task's `_Implements:_` doesn't name) is
+never "answered" by the run it makes green: a test made to pass is a weakened test — CONFIRMED unless the AC, the design or
+a `decisions.md` entry asks for that change (cite it).
+
 **Confidence:** **0** gone on a second look, or pre-existing · **25** might be real, unverified · **50** verified but rare or
 small · **75** verified and likely hit, or the spec / a written rule names it · **100** direct evidence (a failing input, a
 test you ran, the line). Only **80 or more** opens a fix round. Never a finding: pre-existing, outside the diff's lines,
