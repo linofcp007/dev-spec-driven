@@ -1846,6 +1846,8 @@ const msg = {
       wUnknownRefLine: (line, ref) => `tasks.md line ${line}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
       wCarried: (list) => `carried over verbatim, not mapped to stories or criteria (review them): ${list}`,
       wNoRefs: "the imported tasks carry no _Requirements:_ references — add them so trace_check can map every AC to a task",
+      // 1.36 review 1: a +port feature whose imported plan has no baseline / differential check (the import replaced the scaffold's)
+      wPortNoFence: (slug) => `+port: the imported tasks.md has no baseline task and no differential check, so the fence holds nothing — let add_track write them: ${DEV_SPEC} add-track ${slug} port --remove, then ${DEV_SPEC} add-track ${slug} port (appended after the imported tasks: move the baseline first — references/port-patterns.md)`,
       wNoTasks: "no tasks.md in the source — the scaffold's tasks.md was kept (its template _Requirements:_ / _Makes green:_ narrowed to the imported criteria)",
       taskAcPlaceholder: "[an imported criterion this task proves]", // a kept template task citing a criterion the import lacks
       taskTestPlaceholder: "[the planned test this task makes green]",
@@ -2503,6 +2505,12 @@ const msg = {
       dependsEscape: (list, b) => `a _Depends:_ that never reaches the baseline (task ${b}): ${list} — a wave can start them before it; add ${b} to it`,
       recheck: (d, list, slug) => `the differential check (task ${d}) has not passed again since a task after it was ticked or re-run (${list}) — run it again on the final code: ${DEV_SPEC} done ${slug} ${d} --run`,
       fence: (list) => `ticked before the [PORT] task they wait for (in brackets) had passed: ${list} — a task moved, +port turned off and on, or a checkbox edited by hand; check them against the baseline and the differential check`,
+      // 1.36 review 1 — a differential check listed before the baseline (port-verify); next_task / next_action: the [PORT] task holding
+      // the rest ticked but not verified; next_action before the finish: the differential check to re-run first
+      verifyOrder: (d, b) => `the differential check (task ${d}) is listed before the baseline (task ${b}), so it holds nothing — move it after the port's tasks`,
+      naHeld: (n, a, slug, runnable) => `Task ${n} waits for task ${a} (+port — port first, improve later): task ${a} is ticked but not verified, and only a passing run of its _Verify:_ opens the fence — ` +
+        (runnable ? `run it and record it: ${DEV_SPEC} done ${slug} ${a} --run.` : `it has no runnable _Verify:_ yet: write its command in tasks.md (a plan change, approved again), then ${DEV_SPEC} done ${slug} ${a} --run.`),
+      naRecheck: (d, list, slug) => `The differential check (task ${d}) has not passed again since a task after it was ticked or re-run (${list}): run it again on the final code first — ${DEV_SPEC} done ${slug} ${d} --run —, then the project checks and /spec-finish ${slug} (the re-run is task activity: project checks run before it would have to run again).`,
     },
 
     // Marker-shaped text on a task line that yields no marker (doctor malformed-markers).

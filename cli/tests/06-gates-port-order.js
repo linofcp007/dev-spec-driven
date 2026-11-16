@@ -1,6 +1,7 @@
 "use strict";
 // +port on the CLI (1.36 — port first, improve later): done --run refuses a task the fence holds before running anything (its --json = the
-// spec_complete_task refusal: gated, heldBy), status prints the [PORT] sections, approve tasks at size m refuses on port-verify, a bugfix with
+// spec_complete_task refusal: gated, heldBy), status prints the [PORT] sections, approve tasks at size m refuses on port-verify, next names the
+// unverified baseline's run instead of a held task (1.36.0 review 1 — --json = spec_next_task), a bugfix with
 // +port is refused, classify reads a port's verb as a 'Possible +port' note (the same reading as the engine).
 
 const fs = require("fs");
@@ -38,6 +39,17 @@ exports.run = async ({ ok, all, runIn, runAsync, tmp, require, __dirname }) => {
   all("1.36 (CLI): status prints 'Port sections: …'; approve tasks at size m is refused on port-verify (got " + js([st.out.split("\n").filter((l) => /Port sections/.test(l)), ap.code, ap.out.slice(0, 300)]) + ")", [
     () => st.code === 0, () => st.out.split("\n").some((l) => l.trim().startsWith(S.msg("en").secPrivacy.statusSections.port("").trim())),
     () => ap.code === 1, () => /port-verify/.test(ap.out),
+  ]);
+  // 1.36 review 1 (INT-2): the baseline ticked with a note only (unverified) — next serves no held task: it prints the way out (the baseline's
+  // run), and --json is spec_next_task's result (next null, gated, heldBy)
+  S.completeTask(p, "csv-port", 1, { summary: "recorded by hand" });
+  const nx = runIn(["next", "csv-port", "--project", p]), nxJson = runIn(["next", "csv-port", "--json", "--project", p]);
+  let nj = null;
+  try { nj = JSON.parse(nxJson.out); } catch { /* reported below */ }
+  const engNext = S.nextTask(p, "csv-port");
+  all("1.36 review 1 (CLI): next on a +port plan whose baseline is ticked but unverified prints the baseline's run, never a held task; --json is spec_next_task's (got " + js([nx.out.slice(0, 200), nj]) + ")", [
+    () => nx.code === 0, () => nx.out.includes(S.msg("en").port.naHeld(2, 1, "csv-port", true)), () => !!nj, () => js(nj) === js(engNext),
+    () => nj.next === null && nj.gated === "port-order" && js(nj.heldBy) === "[1]",
   ]);
   // a bugfix with +port is refused before anything is written; classify reads a port verb as a note only — the engine's reading
   const bug = runIn(["create", "Crash", "--kind", "bugfix", "--tracks", "port", "--project", p]);

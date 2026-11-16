@@ -28,8 +28,8 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
 let guardLevel, protectOnTick, protectedCount; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
-let portTask; // port.js — +port's fence (1.36)
-function __link(E) { ({ guardLevel, protectOnTick, protectedCount, fastCheckStatus, portTask, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+let portTask, portSchedule; // port.js — +port's fence (1.36; next_task passes over the tasks it holds — review 1)
+function __link(E) { ({ guardLevel, protectOnTick, protectedCount, fastCheckStatus, portTask, portSchedule, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -64,7 +64,9 @@ function nextTask(projectDir, name, opts = {}) {
   const tracks = detectTracks(f.dir);
   const text = activeTasks(raw, tracks); // a removed track's task block is inactive, never "next"
   const blocks = taskBlocks(text || "");
-  const sch = taskSchedule(blocks); // the next OPEN task whose _Depends:_ are all done
+  const state = readState(projectDir, f.slug);
+  // the next OPEN task whose _Depends:_ are all done — never one +port's fence holds (1.36 review 1: port.js portSchedule)
+  const { sch, held } = portSchedule(f.dir, state.kind, tracks, blocks, state.evidence, evidenceRule(projectDir));
   const next = sch.next;
   const res = {
     ok: true,
@@ -77,11 +79,15 @@ function nextTask(projectDir, name, opts = {}) {
   // because they wait (skipped), the ones that can't start as things stand (blocked — a cycle, a _Depends:_ naming no task).
   if (sch.skipped.length) res.skipped = sch.skipped;
   if (sch.blocked.length) res.blocked = sch.blocked;
+  // 1.36 review 1 (stable): the first open task is one +port's fence holds — passed over; the [PORT] tasks it waits for (the brief's keys)
+  if (held) Object.assign(res, { gated: "port-order", heldBy: held.heldBy });
   // 1.36 (stable): the fast check to run after each small edit of a CODE next task (roadmap.json meta.fastCheck) — none otherwise
-  const fast = next ? fastCheckStatus(projectDir, f.dir, next, readState(projectDir, f.slug)) : null;
+  const fast = next ? fastCheckStatus(projectDir, f.dir, next, state) : null;
   if (fast) res.fastCheck = { check: fast.check, command: fast.command };
-  if (!next && res.remaining) res.note = taskDepsBlockedNote(sch, f.slug, featureLang(projectDir, f.slug));
-  if (opts.batch && next) res.batch = parallelBatch(text, opts.max, tracks);
+  const lng = featureLang(projectDir, f.slug);
+  // nothing can start: the anchor holding the rest is ticked but not verified — its run opens the fence; else the dependencies
+  if (!next && res.remaining) res.note = held && held.ticked ? i18n.msg(lng).port.naHeld(held.number, held.anchor, f.slug, held.runnable) : taskDepsBlockedNote(sch, f.slug, lng);
+  if (opts.batch && next) res.batch = parallelBatch(text, opts.max, tracks, held && held.hold);
   if (opts.waves) {
     const w = taskWaves(blocks, tracks);
     Object.assign(res, { waves: w.waves, cycles: w.cycles, blocked: w.blocked });
@@ -91,11 +97,12 @@ function nextTask(projectDir, name, opts = {}) {
 
 // A batch for parallel subagents: the next task (taskSchedule) and, when it is [P], the following open [P] tasks of
 // the SAME section whose _Implements:_ files are declared and disjoint (never across a checkpoint) and whose own _Depends:_
-// are all done — a task waiting on an open dependency (one in the batch included) ends it.
-function parallelBatch(tasksText, max, tracks) {
+// are all done — a task waiting on an open dependency (one in the batch included) ends it. hold: the numbers +port's fence holds
+// (never served, and one ends the batch).
+function parallelBatch(tasksText, max, tracks, hold) {
   const cap = Math.max(1, Math.min(parseInt(max, 10) || 3, 8));
   const blocks = taskBlocks(tasksText);
-  const sch = taskSchedule(blocks);
+  const sch = taskSchedule(blocks, hold);
   const i0 = sch.next ? blocks.indexOf(sch.next) : -1;
   if (i0 === -1) return [];
   const first = blocks[i0];
@@ -111,7 +118,7 @@ function parallelBatch(tasksText, max, tracks) {
   for (let i = i0 + 1; i < blocks.length && batch.length < cap; i++) {
     const b = blocks[i];
     if (b.done) continue;
-    if (!b.parallel || b.phase !== first.phase || b.checkpoint !== first.checkpoint) break;
+    if (!b.parallel || b.phase !== first.phase || b.checkpoint !== first.checkpoint || (hold && hold.has(b.number))) break;
     if (isPromptTask(b, taskMarkers(b), tracks || [])) break;
     if (sch.graph.waitsOn(i).length) break; // it waits on an open task (or on one of this batch)
     const imp = keys(taskMarkers(b).implements);
@@ -219,14 +226,15 @@ function stuckTasks(g) {
 }
 // The next task — ONE rule for spec_next_task, next_action's implement step, spec_task_brief's default task, `next --batch`,
 // spec_status, the roadmap and complete_task's `next`. → { next (a block of `blocks`, or null), skipped, blocked, graph }.
-function taskSchedule(blocks) {
+// hold: task numbers never served (+port's fence — port.js portSchedule: the tasks it holds are passed over, never listed as skipped).
+function taskSchedule(blocks, hold) {
   const g = taskDepGraph(blocks);
   const seen = new Set(); // numbers answered for: resolveTask serves the FIRST open task of a duplicated number
   const skipped = [];
   let next = null;
   for (const i of g.order) {
     const b = blocks[i];
-    if (b.done || seen.has(b.number)) continue;
+    if (b.done || seen.has(b.number) || (hold && hold.has(b.number))) continue;
     seen.add(b.number);
     const w = g.waitsOn(i);
     if (!w.length) { next = b; break; }

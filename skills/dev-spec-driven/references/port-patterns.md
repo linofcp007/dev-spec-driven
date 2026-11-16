@@ -63,8 +63,14 @@ it alone. A differential check that only says "37 cases differ" costs a debuggin
 
 The refusal is `gated: "port-order"` with `heldBy` (the `[PORT]` tasks it waits for). Nothing before the baseline is held;
 `undo` never is. The anchors: the first task under the baseline's template heading (else the first task citing a `[PORT]`
-criterion) and the last task under the differential check's heading (else the last citing task) — a hand-written plan works
-by citing the criteria. Moving a task across an anchor is a plan change: tasks.md is approved again.
+criterion) and the last task under the differential check's heading that cites a `[PORT]` criterion (else the first task
+under that heading, else the last citing task) — a hand-written plan works by citing the criteria, and an improvement written
+after the check in its section still waits for it. A differential check listed before the baseline holds nothing (port-verify
+says so: move it after the port's tasks). Moving a task across an anchor is a plan change: tasks.md is approved again.
+
+`spec_next_task`, `spec_next_action` and the status line never name a held task: while the baseline (or the differential
+check) is ticked but not verified, the next step is its run — `done <f> <n> --run` (a `[PORT]` task without a runnable
+`_Verify:_` needs its command written first).
 
 doctor's **`port-verify`** checks the plan: both anchors, each with a runnable `_Verify:_` (a fail at size m / l — the tasks
 approval refuses it — a warn at s / no size), a task listed before the baseline (`add-track port` on a written plan appends
@@ -81,9 +87,11 @@ An improvement task keeps the differential check green but for the differences i
 Differential Check's list of intended differences with the criterion's ID), and **runs the differential check again when
 it is done**. doctor's **`port-recheck`** warns, and `spec_finish` blocks, while the differential check's latest passing
 run is older than the latest tick or run of a task listed after it — `done <f> <n> --run` on the differential check clears
-it (a forced execution approval waives it, like any blocker). doctor's **`port-fence`** warns about a task ticked before the
-`[PORT]` task it waits for had passed — a task moved across an anchor, +port turned off and on again, a checkbox ticked by
-hand.
+it (a forced execution approval waives it, like any blocker). `spec_next_action` names that run before the finish step, so
+the project checks run once, after it. doctor's **`port-fence`** warns about a task ticked before the `[PORT]` task it waits
+for had passed — a task moved across an anchor, +port turned off and on again, a checkbox ticked by hand. The evidence keeps
+an anchor's last 5 runs: past them its first pass is no longer known, and only a task with no record of when it was ticked
+is still named.
 
 ## Cut-over and removing the old code
 

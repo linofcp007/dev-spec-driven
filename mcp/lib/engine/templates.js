@@ -243,14 +243,16 @@ function splitLeadSection(block) {
   const heads = lines.map((l, i) => (/^#{1,6}\s/.test(l) ? i : -1)).filter((i) => i >= 0);
   return heads.length < 2 ? null : { head: lines.slice(heads[0], heads[1]).join("\n").trimEnd(), rest: "\n" + lines.slice(heads[1]).join("\n") };
 }
-// text + `section` inserted before the section heading (level ≥ 2, never in a fence or a comment) of its first task — before that task
-// itself when no such heading holds it; appended when there is no task at all.
+// text + `section` inserted before the OUTERMOST level-2 section (its heading never in a fence or a comment) holding the first task —
+// a `## Phase` over `### Story` headings included; appended when no level-2 heading holds it (the tasks right under the title —
+// Kiro's layout — or a level-1 heading closing it) or there is no task at all: put before them, the section would take the template's
+// own tasks in (1.36 review 1 — removing the track hid them; doctor's port-verify then warns baselineLate).
 function beforeFirstTaskSection(text, section) {
   const first = taskBlocks(text)[0];
-  if (!first) return text.trimEnd() + "\n\n" + section + "\n";
   const lines = text.split("\n");
-  const head = headingEntries(lines).filter((h) => h.level >= 2 && h.i < first.line).pop();
-  lines.splice(head ? head.i : first.line, 0, section, "");
+  const head = first ? headingEntries(lines).filter((h) => h.level <= 2 && h.i < first.line).pop() : null;
+  if (!head || head.level !== 2) return text.trimEnd() + "\n\n" + section + "\n";
+  lines.splice(head.i, 0, section, "");
   return lines.join("\n");
 }
 // An overridden design.md / requirements.md / tasks.md / test-plan.md + the active tracks' blocks it doesn't carry (the
@@ -284,7 +286,8 @@ function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
       const block = isPackTrack(tr) ? packTaskBlock(packOf(tr), out, req, plan, lang, vars) : trackTaskBlock(tr, out, req, lang, trackIdMap(req, tr));
       if (!block) continue;
       // a block of two sections (+port's baseline, then its differential check): the first goes before the template's first task
-      // section — nothing changes the code the baseline covers before it is recorded —, the rest at the end like every block
+      // section — nothing changes the code the baseline covers before it is recorded — (appended when no level-2 section holds that
+      // task), the rest at the end like every block
       const lead = splitLeadSection(block);
       if (lead) out = beforeFirstTaskSection(out, lead.head);
       out = out.trimEnd() + "\n" + (lead ? lead.rest : block);

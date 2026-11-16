@@ -109,7 +109,11 @@ review findings — is in History at the end.
      `tests` once `testsGateDue()`; classification when its file exists): `fill` (a `gateArtifacts()` file missing / a
      template) → `fix` (`approvalChecks()` fail, `refusedGate` — never an approval that would be refused) → `approve`;
   5. `fix` — all approved, but doctor fails for the current or an earlier phase (`checkPhaseIndex`): a forced approval;
-  6. `implement` → `verify` (all ticked, one unverified — `verificationStatus()`) → `finish` (`tasks` when there are none).
+  6. `implement` (never a task +port's fence holds — `portSchedule`; none startable while the `[PORT]` task holding them is ticked
+     but unverified → `verify` naming its run, `port.naHeld`) → `verify` (all ticked, one unverified — `verificationStatus()`) →
+     `verify` (+port: the differential check not passed again since a task after it — FINISH_STEPS `recheck`, `port.naRecheck`:
+     before the review panel's sentence and the project checks' hint, which stay on the finish step, so the checks run once) →
+     `finish` (`tasks` when there are none).
 - **After a finish** (`state.finished`): `finished` — asking for the `execution` sign-off (with roles: `missingRoles`,
   `--role <next>`; project checks without a passing run → `verify`, `suite`, `finish --run`) — or `drift`
   (`baselineDrift()`: {finishedAt, files, changed, missing, nowPresent, drifted}; a re-finish's `recordFinishBaseline()`
@@ -143,18 +147,26 @@ review findings — is in History at the end.
 - **+port's execution gate (1.36, engine/port.js `portTask`).** Port first, improve later — beside the bugfix gate, at the same two
   places (completeTask before anything is recorded, the brief so `done --run` runs nothing): the plan's two anchors, B (the
   first task under the track's lead template heading — the one naming Behaviour Baseline —, else the first task citing a `[PORT]`
-  criterion, `trackAcIds`) and D (the last task under its other heading, else the last citing task). Every task listed after B (D
-  included) waits for B, every task listed after D waits for D, nothing before B is held; B == D: everything after waits for it.
-  An anchor opens the fence only ticked AND verified (`taskVerification`: no reason, not `nothingToVerify` — a note-only or
-  verify-less tick opens nothing: `gates.portHeldUnverified`). The refusal: `{gated: "port-order", heldBy: [n…], error}` — never
+  criterion, `trackAcIds`) and D (the last task under its other heading that cites a `[PORT]` criterion — a task written after the
+  check in its section is never D —, else the first task under that heading, else the last citing task; a D listed before B
+  counts as none, and `port-verify` names the order: `port.verifyOrder`). Every task listed after B (D included) waits for B,
+  every task listed after D waits for D, nothing before B is held; B == D: everything after waits for it. An anchor opens the
+  fence only ticked AND verified with a runnable `_Verify:_` (`evidenceView.open`: `taskMarkers` drops a `[slot]`; with one,
+  `taskVerification`'s no-reason is a passing run of it — a note-only tick, and ANY tick of an anchor without a runnable
+  `_Verify:_`, opens nothing: `gates.portHeldUnverified`). The refusal: `{gated: "port-order", heldBy: [n…], error}` — never
   `waitsOn` (a successful tick's `_Depends:_` key). `undo` is never gated; +port off: no gate. The brief adds `portRole` (`port`
-  between B and D, `after` + `differential` past D) and its definition-of-done rule (`brief.portRules`). Read from the plan and
+  between B and D, `after` + `differential` past D) and its definition-of-done rule (`brief.portRules`). spec_next_task, next_action
+  and the status line never name a held task (`portSchedule`: taskSchedule with the held numbers passed over; next_task adds
+  `gated` / `heldBy` when the first open task is held); nothing else startable while the anchor holding them is ticked but not
+  verified → next_action's step `verify` naming its run (`port.naHeld` — its plan change first when it has no runnable
+  `_Verify:_`), the status line's `verify` of that anchor, next_task's `note`. Read from the plan and
   .state.json alone: no state of its own. doctor's `port-recheck` / `port-fence` (warns) and finish's `port-recheck` blocker read
   the same anchors and the evidence `at` / `history` and `ticks` (`portRunState`): D's latest verifying run older than the latest
-  tick or run of a done task after it (re-run D — a forced execution approval waives it); a done task after an anchor first
-  ticked before that anchor first passed, while it never has, or with no record of when (a task moved, +port off and on, a
-  checkbox by hand). Known limits: the evidence history keeps 5 runs (the earliest one in the window counts as the first); the
-  fence orders ticks, not edits.
+  tick or run of a done task after it (re-run D — a forced execution approval waives it; next_action's step before the finish:
+  FINISH_STEPS `recheck`); a done task after an anchor first ticked before that anchor first passed, while it never has, or with
+  no record of when (a task moved, +port off and on, a checkbox by hand). Known limits: the evidence history keeps 5 runs — once an
+  anchor's is full its first pass is unknown (`anchorPass` → -Infinity: no task is flagged for its time, one with no record of
+  when still is — re-running an anchor never flags honest work); the fence orders ticks, not edits.
 
 ## Approval fingerprints and pending gates
 - **Content fingerprints.** An approval records its artifact's `textFingerprint` (tasks.md with checkboxes normalized):
@@ -593,6 +605,17 @@ here. "r5 review" is 1.23's fifth review.
   meant a successful tick's open `_Depends:_`. Cut from the design: a scope-guard `port-order`, the simplifier's `port-open`, +port
   among `APPROVAL_GATED_TRACKS`, a requirements-gate `port-differential` (the scaffold writes the criteria, the placeholder gate
   refuses their slots, `port-verify` needs an anchor).
+- **1.36.0 review 1** — PORT-1: a note ticked an anchor whose `_Verify:_` was still its slot (every fresh scaffold) or gone, and
+  `taskVerification` passes a verify-less task on a note: the fence opened — `open` now needs a runnable `_Verify:_` (the
+  `exitCode != null` the decision named is implied: with one, no reason means a passing run). PORT-2: the brief asks for D's re-run
+  after each improvement, the 5-run history then dropped D's first pass and `port-fence` blamed honest work — a full history makes
+  the first pass unknown (G / H and a flaky D: four failed re-runs, then a pass). PORT-4: D was the last task under its heading, so
+  an improvement written after the check in its section became D and ticked before it — D is that heading's last task citing a
+  `[PORT]` criterion. PORT-5: a differential check listed before the baseline inverted the fence. INT-2: next_task / next_action /
+  the status line named a held task while an anchor was ticked unverified (implement → refused → implement) — `portSchedule`,
+  the `verify` step. INT-3: next_action said "finish" while `port-recheck` was a certain blocker, and following it ran the project
+  checks twice — FINISH_STEPS `recheck` before the finish step. Not changed: complete_task's `next` (taskSchedule's, the fence's
+  refusal names the way out); a verify-less anchor's note tick still answers `verified: true` (the evidence rule), it only opens nothing.
 - **1.21 F3** — the bugfix prefill (no prefill = byte-identical to 1.20) and `commitTitle()`. **1.21 review A5** — a cut
   split a surrogate pair and a lone surrogate landed in merge-summary.md: `cutAt()`.
 - **1.21 F5 → 1.23.1** — 1.21 F5 introduced the short bugfix tasks.md for xs; 1.23.1 made it every size's (the XS and the
