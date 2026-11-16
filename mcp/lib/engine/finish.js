@@ -477,12 +477,16 @@ function featureMetrics(projectDir, slug, dir) {
   }
   // 1.36 the fast check: each task's latest tick that recorded it (`fast` on its run — completeTask's) — its runs / clean runs since
   // the tick before, and whether it was clean on the final code. Per feature only: the project log's runs are every feature's.
+  // 1.36 review 1 (FC-9 / INT-7): only a task ticked NOW (an undone tick is no tick), never an `unknown` one (no harness log —
+  // an MCP-only client: the engine could not see the check, which is no tick without a clean run).
   const fast = { runs: 0, clean: 0, ticks: 0, ticksClean: 0, check: null, at: -Infinity };
   const nat = (v) => (Number.isSafeInteger(v) && v >= 0 ? v : 0); // a hand-edited count reads 0
-  for (const slot of Object.values(evidence)) {
+  const tickedNow = new Set(active.filter((t) => t.done).map((t) => String(t.number)));
+  for (const [n, slot] of Object.entries(evidence)) {
+    if (!tickedNow.has(n)) continue;
     for (const r of evidenceRecords(slot)) {
       const s = [r, ...(Array.isArray(r.history) ? r.history.filter(isRecord).slice().reverse() : [])].find((h) => isRecord(h.fast));
-      if (!s) continue;
+      if (!s || s.fast.status === "unknown") continue;
       fast.ticks++;
       if (s.fast.status === "clean") fast.ticksClean++;
       fast.runs += nat(s.fast.runs);
@@ -1514,6 +1518,8 @@ const BASELINE_CAP = 500;
 // known: a Set of fold(rel) already recorded in a baseline (staleFinish) — those are counted without the realpath check
 // (they were checked when recorded, and can never be "new"): the check is the whole cost of the walk, and the catalog
 // runs it for every finished feature on each refresh.
+// tasksText: a tasks.md text — or an array of _Implements:_ references already read (one task's own: the fast check, which dates
+// them past this cap — 1.36 review 1).
 function baselineFiles(projectDir, tasksText, globCap, known) {
   const root = path.resolve(projectDir);
   const rootReal = realRootOf(root);
@@ -1526,7 +1532,7 @@ function baselineFiles(projectDir, tasksText, globCap, known) {
     if (out.size >= BASELINE_CAP) { truncated = true; return; }
     if ((known && known.has(k)) || projectFile(root, rootReal, rel)) out.set(k, rel);
   };
-  for (const ref of implementsRefs(tasksText)) {
+  for (const ref of Array.isArray(tasksText) ? tasksText : implementsRefs(tasksText)) {
     const p = implementsPath(ref).replace(/^\.\//, "");
     if (!p) continue;
     if (isImplementsGlob(p)) {

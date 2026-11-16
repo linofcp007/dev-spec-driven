@@ -97,7 +97,7 @@ exports.run = async ({ all, runIn, runAsync, tmp, require, __dirname }) => {
       inVerifyOnce: () => got.inVerify.code === 0 && got.inVerifyRuns === 2 && !got.inVerify.out.includes(label) && got.inVerify.j.fastCheck.status === "clean",
       docsNone: () => got.docs.code === 0 && got.docsRuns === 2 && !("fastCheck" in got.docs.j) && !/fast check/i.test(got.docs.out),
       failingWarns: () => got.failing.code === 0 && got.failingRuns === 3 && got.failing.out.includes(FC.runFailed("node tc.js", 2)) && got.failing.j.verified === true &&
-        got.failing.j.fastCheck.status === "failed" && got.failing.j.note === FC.tickNote(5, "tc", "node tc.js", "failed", f.slug),
+        got.failing.j.fastCheck.status === "failed" && got.failing.j.note === FC.tickNote(5, "tc", "node tc.js", "failed", false),
       startStamp: () => got.rewrites.code === 0 && got.rewrites.j.fastCheck.status === "stale",
       cantRunWarns: () => got.cantRun.code === 0 && /could not run/.test(got.cantRun.out) && got.cantRun.out.includes("`node tc.js`") && got.cantRun.j.completed === 7,
     });

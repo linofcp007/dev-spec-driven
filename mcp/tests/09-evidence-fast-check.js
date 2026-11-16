@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, eq, rpc, payload, S, tmp }) => {
+exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, __dirname }) => {
   const js = JSON.stringify;
   const call = async (name, args) => payload(await rpc("tools/call", { name, arguments: args }));
   const FC = S.msg("en").fastCheck;
@@ -103,6 +103,33 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp }) => {
       nothingWritten: () => after === before && meta(p).guard === undefined,
       checkOnlyFormatter: () => fmtCheck.ok !== false && fmtMeta === "fc",
     });
+    // 1.36 review 1 (FC-4 / T3): the rule as the docs say it, both ways — a --fix / --fix=… / --write word, or a fmt / format program or
+    // subcommand with no check flag, is refused; a check-only command never is (a check flag, a check-named script, an @alias, a flag
+    // that holds "format"). A formatter known by another name (prettier -w, black .) is outside the heuristic, as the docs say.
+    const fixerOf = (cmd) => S.initProject(p, [], null, { checks: { fx: cmd }, fastCheck: "fx" }).ok === false;
+    const rewriters = ["eslint --fix=true .", "gofmt -w .", "ruff format .", "dotnet format", "clang-format -i src/a.c", "npm run format", "mix format"];
+    const checkOnly = ["prettier --check .", "eslint --fix-dry-run .", "cargo fmt --check", "ruff format --check .", "black --check .", "terraform fmt -check",
+      "gofmt -l .", "shfmt -d .", "ruff format --diff .", "clang-format --dry-run --Werror src/a.c", "dotnet format --verify-no-changes",
+      "mix format --check-formatted", "make check-fmt", "npm run check:fmt", "npm run fmt:check", "dune build @fmt", "cargo clippy --message-format short"];
+    const outside = ["prettier -w .", "black ."]; // rewriters by another name: accepted, the documented limit of the heuristic
+    const wrong = [...rewriters.filter((c) => !fixerOf(c)), ...[...checkOnly, ...outside].filter((c) => fixerOf(c))];
+    // 1.36 review 1 (INT-6): a refused init leaves nothing behind — beside dev-guardian's gate the fast check is planned before the
+    // gate's launcher is written (the gate itself, a name no check carries); a roadmap.json that doesn't parse keeps its own refusal
+    const fresh = (name) => { const q = path.join(tmp, name); fs.mkdirSync(q, { recursive: true }); return q; };
+    const g = fresh("proj-fc-guardian-fresh"), n = fresh("proj-fc-guardian-name");
+    const rg = S.initProject(g, ["core"], "en", { guardian: true, fastCheck: "guardian" });
+    const rn = S.initProject(n, ["core"], "en", { guardian: true, fastCheck: "nope" });
+    const b = path.join(tmp, "proj-fc-guardian-broken");
+    S.initProject(b, ["core"], "en", { checks: { tc: TC } });
+    fs.appendFileSync(rmFile(b), "x");
+    const rb0 = S.initProject(b, [], null, { guardian: true }), rb = S.initProject(b, [], null, { guardian: true, fastCheck: "tc" });
+    all("1.36 review 1: init --guardian with a fast check it refuses writes nothing on a fresh folder (no .specs/, no .gitignore) — the gate as the fast check, a name no check carries; a broken roadmap.json still answers with its own refusal (got " +
+      js([rg.error, fs.readdirSync(g), rn.error, fs.readdirSync(n), rb.error && rb.error.slice(0, 80)]) + ")", {
+      gate: () => rg.ok === false && rg.code === "invalid-arguments" && js(rg.invalid) === '["fastCheck"]' && rg.error === FC.guardianNotFast("guardian") && fs.readdirSync(g).length === 0,
+      name: () => rn.ok === false && rn.error === FC.badName("nope", "guardian") && fs.readdirSync(n).length === 0,
+      broken: () => rb0.ok === false && rb.ok === false && rb.error === rb0.error && rb.code === undefined,
+    });
+    ok(wrong.length === 0, "1.36 review 1: the fixer refusal follows its documented rule — --fix / --fix=… / --write, or a fmt / format command without a check flag (-l, -d, --diff, --dry-run, --verify-no-changes, --check-…) refused; check-only commands, check-named scripts, an @fmt alias and a --message-format flag accepted (wrong: " + js(wrong) + ")");
   }
 
   { // removing the fast check's own check removes the fast check too (cleared note); doctor's `fast-check` warns on a stored value no
@@ -117,6 +144,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp }) => {
     const other = S.initProject(p, [], null, { checks: { lint: "" } }); // a call that removes ANOTHER check: nothing to clear
     setMeta(p, { fastCheck: "gone" });
     const missing = fastWarn();
+    const echo = await call("spec_init", { projectDir: p }); // 1.36 review 1 (INT-5): init says the stored value is ignored, as reviewModels'
     setMeta(p, { checks: { guardian: PASS }, fastCheck: "guardian" });
     const guardian = fastWarn();
     setMeta(p, { checks: { fx: "eslint --fix ." }, fastCheck: "fx" });
@@ -127,6 +155,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp }) => {
       otherNoNote: () => other.fastCheckNote === undefined,
       validSilent: () => valid.length === 0,
       missing: () => js(missing) === js([{ id: "fast-check", status: "warn", detail: FC.doctorInvalid("gone", "missing") }]),
+      initIgnored: () => echo.fastCheck === "gone" && echo.fastCheckNote === FC.doctorInvalid("gone", "missing") && /no fast check runs/.test(echo.fastCheckNote),
       guardian: () => guardian.length === 1 && guardian[0].detail === FC.doctorInvalid("guardian", "guardian"),
       fixer: () => fixer.length === 1 && fixer[0].detail === FC.doctorInvalid("fx", "fixer"),
     });
@@ -185,7 +214,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp }) => {
       js([next.fastCheck, b1.fastCheck, b1w.fastCheck, b3.fastCheck, b4.fastCheck, b2done.fastCheck, bSpike.fastCheck, nSpike.fastCheck]) + ")", {
       next: () => js(next.fastCheck) === js({ check: "tc", command: TC }),
       brief: () => js(b1.fastCheck) === js({ check: "tc", command: TC, status: "clean" }),
-      briefDod: () => b1.brief.includes(FC.briefDod(TC)) && !b1.brief.includes(FC.briefDodRed(TC)),
+      briefDod: () => b1.brief.includes(FC.briefDod(TC)) && !b1.brief.includes(FC.briefDodRed(TC)) && /chained or piped/.test(FC.briefDod(TC)), // piped: review 1
       writeKeeps: () => js(b1w.fastCheck) === js(b1.fastCheck) && b1w.brief === undefined,
       docsNone: () => !("fastCheck" in b3) && !b3.brief.includes(FC.briefDod(TC)),
       redLine: () => b4.fastCheck && b4.fastCheck.check === "tc" && b4.brief.includes(FC.briefDodRed(TC)) && !b4.brief.includes(FC.briefDod(TC)),
@@ -212,14 +241,72 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp }) => {
     const nextDocs = S.nextTask(p, f.slug);
     const t4 = await call("spec_complete_task", { name: f.slug, number: 4, evidence: run, projectDir: p });
     const again = S.completeTask(p, f.slug, 1, run);
-    all("1.36 fast check: the tick's fastCheck {check, status, runs, clean} — unknown without a note, missing and stale with their note (the PowerShell hint on missing); next_task / complete_task carry none for a task naming no file, nor a re-check of a done task (got " +
-      js([t1.fastCheck, t1.note, t2.fastCheck, t3.fastCheck, nextDocs.fastCheck, t4.fastCheck, again.fastCheck]) + ")", {
+    const m = S.metrics(p, f.slug).fastCheck;
+    // 1.36 review 1 (FC-2): the note names no command but the fast check itself — its `done <f> <n> --run` named the task just ticked,
+    // whose --run runs no fast check (a done task's brief carries none) — in every language, status and form
+    const onlyFast = (note) => !/--run|dev-spec/.test(note) && (note.match(/`[^`]*`/g) || []).every((s) => s === "`" + TC + "`");
+    const every = ["en", "pt", "es"].every((l) => ["stale", "failed", "missing"].every((s) => [false, true].every((pw) => onlyFast(S.msg(l).fastCheck.tickNote(3, "tc", TC, s, pw)))));
+    all("1.36 fast check: the tick's fastCheck {check, status, runs, clean} — unknown without a note, missing and stale with their note (the PowerShell hint on missing); next_task / complete_task carry none for a task naming no file, nor a re-check of a done task; the note names no command but the fast check (review 1); metrics leave the unknown tick out (review 1) (got " +
+      js([t1.fastCheck, t1.note, t2.fastCheck, t2.note, t3.fastCheck, nextDocs.fastCheck, t4.fastCheck, again.fastCheck, m]) + ")", {
       unknown: () => t1.ok && js(t1.fastCheck) === js({ check: "tc", status: "unknown", runs: 0, clean: 0 }) && t1.note === undefined,
-      missing: () => t2.fastCheck.status === "missing" && t2.note === FC.tickNote(2, "tc", TC, "missing", f.slug) && /PowerShell/.test(t2.note),
-      stale: () => t3.fastCheck.status === "stale" && t3.note === FC.tickNote(3, "tc", TC, "stale", f.slug),
+      missing: () => t2.fastCheck.status === "missing" && t2.note === FC.tickNote(2, "tc", TC, "missing", false) && /PowerShell/.test(t2.note) && /on its own/.test(t2.note) && /piped/.test(t2.note),
+      stale: () => t3.fastCheck.status === "stale" && t3.note === FC.tickNote(3, "tc", TC, "stale", false) && !/PowerShell/.test(t3.note),
+      noOtherCommand: () => every && onlyFast(t2.note) && onlyFast(t3.note),
       docsNext: () => nextDocs.next.number === 4 && !("fastCheck" in nextDocs),
       docsTick: () => t4.ok && !("fastCheck" in t4),
       recheck: () => again.ok && again.alreadyDone === true && !("fastCheck" in again),
+      metricsNoUnknown: () => m && m.ticks === 2 && m.ticksClean === 0, // missing + stale; the unknown tick (no harness log yet) is none
+    });
+  }
+
+  { // 1.36 review 1 (FC-1): past the planned set's cap (500 files — an earlier task's folder of 600), the task's OWN _Implements:_ file
+    // is still dated: its edit reads stale, never clean (done --run then runs the check); partial: true says the set was cut — no other
+    // status, no note of its own
+    const p = path.join(tmp, "proj-fc-cap");
+    S.initProject(p, ["core"], "en", { checks: { tc: TC }, fastCheck: "tc" });
+    const f = S.createFeature(p, { name: "Port", tracks: ["core"] });
+    const T0 = Date.now() - 600000;
+    fs.mkdirSync(path.join(p, "src", "legacy"), { recursive: true });
+    fs.mkdirSync(path.join(p, "src", "new"), { recursive: true });
+    const files = [...Array.from({ length: 600 }, (_, i) => "src/legacy/m" + i + ".ts"), "src/new/port.ts"];
+    files.forEach((rel) => fs.writeFileSync(path.join(p, rel), "//\n"));
+    dated(p, files, T0);
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + task(1, "The legacy module", ["_Implements: src/legacy/_", "_Verify: " + PASS + "_"]) +
+      task(2, "The port", ["_Implements: `src/new/port.ts`_", "_Verify: " + PASS + "_"]));
+    writeLog(p, [[TC, 0, T0 + 10000]]);
+    const before = S.taskBrief(p, f.slug, 2).fastCheck;
+    dated(p, ["src/new/port.ts"], T0 + 20000); // the task's own edit, after the run
+    const after = S.taskBrief(p, f.slug, 2).fastCheck;
+    const t2 = S.completeTask(p, f.slug, 2, { command: PASS, exitCode: 0 });
+    all("1.36 review 1: over 500 planned files the ticked task's own file is dated past the cap — clean before its edit, stale after it (brief and tick, with the stale note), partial: true on both (got " +
+      js([before, after, t2.fastCheck, t2.note]) + ")", {
+      before: () => js(before) === js({ check: "tc", command: TC, status: "clean", partial: true }),
+      after: () => js(after) === js({ check: "tc", command: TC, status: "stale", partial: true }),
+      tick: () => t2.ok && js(t2.fastCheck) === js({ check: "tc", status: "stale", runs: 0, clean: 0, partial: true }) && t2.note === FC.tickNote(2, "tc", TC, "stale", false),
+    });
+  }
+
+  { // 1.36 review 1 (FC-6): the PowerShell tool through the observe hook — its failure is logged (marked tool: PowerShell), a later pass
+    // with no explicit exit code is not: the failed note says why (a Bash run's line carries no tool, its failure no such sentence —
+    // the window block below)
+    const p = path.join(tmp, "proj-fc-pwsh");
+    S.initProject(p, ["core"], "en", { checks: { tc: TC }, fastCheck: "tc" });
+    const f = S.createFeature(p, { name: "Login", tracks: ["core"] });
+    fs.mkdirSync(path.join(p, "src"), { recursive: true });
+    fs.writeFileSync(path.join(p, "src", "a.ts"), "//\n");
+    dated(p, ["src/a.ts"], Date.now() - 600000);
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + task(1, "Code A", ["_Implements: src/a.ts_", "_Verify: " + PASS + "_"]));
+    const hookJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
+    const runHook = (o) => hookIn(hookJs, { input: js({ session_id: "s", cwd: p, tool_name: "PowerShell", tool_input: { command: TC }, ...o }),
+      env: { ...process.env, CLAUDE_PROJECT_DIR: p, SPEC_PROJECT_DIR: "" } });
+    runHook({ hook_event_name: "PostToolUseFailure", error: "Command failed with exit code 2" });
+    runHook({ hook_event_name: "PostToolUse", tool_response: { stdout: "", stderr: "" } }); // a pass with no explicit exit code: not logged
+    const lines = (() => { try { return fs.readFileSync(logFile(p), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } })();
+    const t1 = S.completeTask(p, f.slug, 1, { command: PASS, exitCode: 0 });
+    all("1.36 review 1: a PowerShell-tool failure of the fast check is logged with tool: PowerShell (its pass without an explicit exit code is not) — the tick's failed note names the PowerShell case and the Bash tool (got " +
+      js([lines, t1.fastCheck, t1.note]) + ")", {
+      logged: () => lines.length === 1 && lines[0].exitCode === 2 && lines[0].tool === "PowerShell",
+      note: () => t1.fastCheck && t1.fastCheck.status === "failed" && t1.note === FC.tickNote(1, "tc", TC, "failed", true) && /PowerShell/.test(t1.note) && /Bash tool/.test(t1.note),
     });
   }
 
@@ -246,10 +333,13 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp }) => {
     const m = S.metrics(p, f.slug);
     const proj = S.metrics(p);
     const lines = S.metricsLines(m), projLines = S.metricsLines(proj);
-    all("1.36 fast check: each tick counts the fast runs since the previous tick (2, then 3 with one clean), its snapshot on the tick's run (kept in the history past a re-check; none for a note-only tick); metrics {check, runs, clean, cleanRate, ticks, ticksClean} and the line; the project's fastTicks / fastTicksClean and its line (got " +
-      js([t1.fastCheck, t2.fastCheck, t3.fastCheck, ev["1"].fast, (ev["1"].history || []).map((h) => h.fast), ev["3"].fast, m.fastCheck, proj.totals.fastTicks, proj.totals.fastTicksClean]) + ")", {
+    S.completeTask(p, f.slug, 2, undefined, { undo: true }); // 1.36 review 1 (FC-9): an undone tick is no tick
+    const mUndone = S.metrics(p, f.slug).fastCheck;
+    all("1.36 fast check: each tick counts the fast runs since the previous tick (2, then 3 with one clean), its snapshot on the tick's run (kept in the history past a re-check; none for a note-only tick); metrics {check, runs, clean, cleanRate, ticks, ticksClean} and the line; the project's fastTicks / fastTicksClean and its line; an undone task's tick no longer counts (review 1) (got " +
+      js([t1.fastCheck, t2.fastCheck, t3.fastCheck, ev["1"].fast, (ev["1"].history || []).map((h) => h.fast), ev["3"].fast, m.fastCheck, proj.totals.fastTicks, proj.totals.fastTicksClean, mUndone]) + ")", {
       tick1: () => js(t1.fastCheck) === js({ check: "tc", status: "clean", runs: 2, clean: 2 }),
-      tick2: () => js(t2.fastCheck) === js({ check: "tc", status: "failed", runs: 3, clean: 1 }) && t2.note === FC.tickNote(2, "tc", TC, "failed", f.slug),
+      tick2: () => js(t2.fastCheck) === js({ check: "tc", status: "failed", runs: 3, clean: 1 }) && t2.note === FC.tickNote(2, "tc", TC, "failed", false) && !/PowerShell/.test(t2.note),
+      undone: () => js(mUndone) === js({ check: "tc", runs: 2, clean: 2, cleanRate: 100, ticks: 1, ticksClean: 1 }),
       onTheRun: () => js(ev["2"].fast) === js({ check: "tc", status: "failed", runs: 3, clean: 1 }) && ev["2"].history.some((h) => h.fast),
       recheckKeeps: () => ev["1"].fast === undefined && ev["1"].history.some((h) => js(h.fast) === js({ check: "tc", status: "clean", runs: 2, clean: 2 })),
       noteTick: () => t3.ok && t3.fastCheck && ev["3"].fast === undefined,

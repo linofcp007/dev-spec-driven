@@ -143,6 +143,13 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   // 1.30: dev-guardian's gate on → its launcher, .specs/guardian.cjs, is written FIRST: a path the write gate refuses (a folder, a
   // link) stops init before meta.checks names a check that could never run; a launcher this call created is removed again when
   // meta.checks can't be written (review 8: init was not atomic).
+  // 1.36 review 1 (INT-6): a fast check named beside it is planned FIRST (fastPlan; again under the lock below, which decides) — its
+  // refusal (a name no check carries, the gate itself, a fixer) came after the launcher, which had created .specs/ and the lock's
+  // .gitignore on a fresh folder: a refused init left them behind. A roadmap.json that doesn't parse keeps the lock's refusal.
+  if (opts.guardian === true && fcIn && !roadmapError(projectDir)) {
+    const fp = checksPlanError(projectDir, nc) ? {} : fastPlan(projectDir, nc, fcIn, normalizeLang(lang || projectLang(projectDir)));
+    if (fp.error) return { ok: false, error: fp.error, code: "invalid-arguments", invalid: ["fastCheck"] };
+  }
   const launcher = opts.guardian === true ? guardianLauncherOn(projectDir, normalizeLang(lang || projectLang(projectDir))) : {};
   if (launcher.refusal) return launcher.refusal;
   let fast = { write: undefined }; // what this call did to meta.fastCheck (fastPlan's answer)
@@ -233,6 +240,8 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   res.fastCheck = fcNow ? (fcNow.invalid !== undefined ? fcNow.invalid : fcNow.name) : null;
   if (fast.cleared) res.fastCheckNote = FC.cleared(fast.cleared);
   else if (fcIn) res.fastCheckNote = fcNow && fcNow.name ? FC.on(fcNow.name, fcNow.command) : FC.off;
+  // a stored value no fast check reads (a hand edit, its check renamed) is said to be ignored, as reviewModels' (1.36 review 1 INT-5)
+  else if (fcNow && fcNow.invalid !== undefined) res.fastCheckNote = FC.doctorInvalid(fcNow.invalid, fcNow.why);
   if (!fcIn && !fcNow) { const offer = fastCheckOffer(projectDir, lng); if (offer) res.fastCheckOffer = offer; }
   // 1.36: the CURRENT review panel ([] = none) — + a note when this call set it, or when the stored value doesn't read (ignored)
   const rs = reviewModelsSetting(projectDir), RM = i18n.msg(lng).reviewModels;

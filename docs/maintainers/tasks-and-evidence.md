@@ -391,37 +391,52 @@ Engine: the `B5` block of `engine/evidence.js`.
   <name|off>` (`fastCheckInput`: `""` / off / none delete it — a check named off / none can't be one; a non-string is refused
   before any write, `invalid-arguments` [fastCheck]); `fastPlan` runs under the roadmap lock after `checksPlanError`, against
   `nc.merged` (the checks THIS call leaves — `--check tc="…" --fast-check tc` is one call): a name that is no valid check, the
-  guardian check (`isGuardianCheck`) or a command that rewrites files (`fixerCommand`: `--fix`, `--write`, a `*fmt` word without
-  `--check` / `-check`) is refused, nothing written; the stored one is checked again when this call replaces its check's command
-  and goes when this call removes its check (`cleared` note). `setFastCheck` sits between `setApprovalGuard` and
-  `setReviewModels`; init echoes `fastCheck` (the stored name or null) and `fastCheckNote` when it changed it. **Read:**
+  guardian check (`isGuardianCheck`) or a command that rewrites files (`fixerCommand`, a heuristic the docs state as such: a
+  `--fix` / `--fix=…` / `--write` word, or a `*fmt` / `*format` program or subcommand — never a flag, an `@alias` or a
+  check-named script — with no check flag: `--check` / `-check` / `--check-…`, `-l`, `-d`, `--diff`, `--dry-run`,
+  `--verify-no-changes`) is refused, nothing written; the stored one is checked again when this call replaces its check's
+  command and goes when this call removes its check (`cleared` note). With `guardian: true` the same plan runs once BEFORE the
+  gate's launcher is written (unless roadmap.json doesn't parse — the lock's refusal stays) — a refused init
+  leaves nothing behind. `setFastCheck` sits between `setApprovalGuard` and `setReviewModels`; init echoes `fastCheck` (the
+  stored name or null) and `fastCheckNote` when it changed it — or, when the stored value is one no fast check reads,
+  `doctorInvalid`'s text (ignored, as reviewModels' `ignored`). **Read:**
   `fastCheckOf()` → null · `{name, command}` · `{invalid, why: missing | guardian | fixer}` (a hand edit) — doctor's own
   project-level entry `fast-check` (warn, beside `observed-unguarded`; never one per feature's evidence). Not a guard-down:
   nothing is enforced. **The status at a CODE task** (`fastTask`: `taskMarkers(b).implements` non-empty — the slot dropped —, no
   spike): `fastCheckStatus()` reads the project log (`.specs/.execution/observed.jsonl`) for the latest run by its `at` of the fast
   command (`runProvesVerify(…, [command])` — the check as ONE command; > 5 min ahead ignored, `FAST_SKEW_MS`) and the newest mtime
   of the feature's planned files (`baselineFiles` of the active tasks, the set `suiteCodeStamp` hashes; missing files and dates
-  > 5 min ahead ignored) → `clean` · `stale` (run older than an edit) · `failed` · `missing` · `unknown` (`observedAny` false:
-  no harness log — no note). A file date is never a blocker (gates-and-approvals.md), so this only ever warns. No change to
-  `observeRun`, `readObservedLog` or the observe hook. **Surfaces:** `spec_next_task` → `fastCheck {check, command}` for a code
-  next task; the brief of an OPEN code task → `fastCheck {check, command, status}` (kept under `write: true`) and its
+  > 5 min ahead ignored) plus the task's OWN `_Implements:_` files, always (`baselineFiles` takes an array of references — read as
+  `implementsRefs` reads them: backticks off), past `BASELINE_CAP` → `clean` · `stale` (run older than an edit) · `failed` ·
+  `missing` · `unknown` (`observedAny` false: no harness log — no note); `partial: true` when the planned set stopped at its cap
+  (no other status, no note). A file date is never a blocker (gates-and-approvals.md), so this only ever warns. The log line's
+  `tool` (the observe hook passes it for a PowerShell run only) gives `pwsh`: the latest run came from the PowerShell tool, whose
+  passes are logged only with an explicit exit code — `readObservedLog` is unchanged. **Surfaces:** `spec_next_task` →
+  `fastCheck {check, command}` for a code next task; the brief of an OPEN code task → `fastCheck {check, command, status,
+  partial?}` (kept under `write: true`) and its
   definition-of-done line after the project checks' (`fastCheck.briefDod` / `briefDodRed`: run it ALONE, the report form with
   the command in a code span — `verifyRunCodes` then gives its exit code to that span, never to the `_Verify:_` run above);
   `completeTask` judges it when the call TICKS a code task — before the first write (its window ends at the previous
-  `lastTickAt`) — returns `fastCheck {check, status, runs, clean}` with `fastCheck.tickNote` on stale / failed / missing, and
+  `lastTickAt`) — returns `fastCheck {check, status, runs, clean, partial?}` with `fastCheck.tickNote` on stale / failed /
+  missing (it names no command but the fast check — the task is ticked, and a done task's brief carries no fastCheck, so its
+  `done --run` runs none; the PowerShell sentence on missing or `pwsh`), and
   stores that snapshot on the tick's RUN (`ev.fast`; `runOf` keeps `fast`, so its history and the merge driver carry it; a
   note-only tick stores none; `normalizeEvidence` never takes a caller's). No key on any other task, a re-check of a done task,
   or a spike. **`done --run`** (cli/commands.js) runs it FIRST while `b.fastCheck.status` isn't clean — never when a `_Verify:_`
   command proves it (that run is logged instead, at the run's start) — through `RUN.preRunRefusal` (finish --run's shell rules,
   one helper of cli/run.js), logs it with `spec.observeRun(…, {event: "cli", at: <its START>})` (an edit it makes reads stale), and
   only warns on a failure or a run that couldn't happen. **Metrics:** `featureMetrics` → `fastCheck {check, runs, clean,
-  cleanRate, ticks, ticksClean}` from each task's latest run carrying `fast` (the record, then its history); the project's
+  cleanRate, ticks, ticksClean}` from each task's latest run carrying `fast` (the record, then its history) — only a task ticked
+  now (an undone tick is none), never an `unknown` snapshot; the project's
   `totals.fastTicks` / `fastTicksClean` — never project run sums (each feature's window reads the same log). **The offer:**
   scan.js `fastCheckCandidates()` (root files only — `projectFileInside`, `readFileHead`; no walk) → evidence.js
   `fastCheckOffer()` `{name, command, from, note}` in init (none set and none given) and spec_upgrade (`upgradeLines`, UPGRADE.md).
-  Known limits: a hook-logged run's `at` is when it ENDED (an edit during it reads clean); a clone re-dates every file (stale
-  notes); test files planned only by T-ID are outside the planned set (finish's suite-evidence is the net); a lost log line
-  (a concurrent trim) can only lose evidence.
+  Known limits (verification.md says them to users): a hook-logged run's `at` is when the async hook wrote it (after the run
+  ENDED, ~0.2 s later — an edit during it or right after it reads clean); a planned file deleted after the run is no edit; a
+  log line records no folder (a subfolder's or another worktree's run of the same command counts); past `BASELINE_CAP` only
+  the first files and the task's own are dated (`partial`); a clone re-dates every file (stale notes); test files planned only
+  by T-ID are outside the planned set (finish's suite-evidence is the net); a lost log line (a concurrent trim) can only lose
+  evidence.
 - **Pipes** — `verifyPipeMasked()` (a small shell lexer) flags an unquoted single `|` (also `|&`, inside a subshell or a `bash -c` /
   `sh -c` / `pwsh -Command` / `cmd /c` script); never `||`, a quoted or escaped pipe (`\|`, `^|`), `>|`, one inside `$(…)` or
   backticks; only a `set -o pipefail` BEFORE the pipe (or `-o pipefail`) silences it. Surfaces: the brief's `verifyPipes`, `done
@@ -658,7 +673,8 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
 - **The log.** `hooks/observe-hook.js` (**PostToolUse** + **PostToolUseFailure**, `^(Bash|PowerShell)$`, `"async": true`; PowerShell
   only with an EXPLICIT exit code; never Monitor, which reports no finished run) logs a run of a task's runnable `_Verify:_` as the
   gate's matcher reads it (`runProvesVerify`: one command, all of a task's in any order, or a plain ` && ` step) or of a
-  `meta.checks` command: `spec.observeRun()` appends `{command, exitCode, at, event, session}` (`observedKey`) to
+  `meta.checks` command: `spec.observeRun()` appends `{command, exitCode, at, event, session, tool?}` (`observedKey`; `tool`:
+  "PowerShell" on a PowerShell run — 1.36 review 1, the fast check's note reads it — none on a Bash one) to
   `.specs/<feature>/.execution/observed.jsonl` per non-archived feature with such a task, or `.specs/.execution/observed.jsonl` for a
   check; it never creates a feature folder. Bounds: past `OBSERVED_MAX_BYTES` (64 KB) the newest half is kept (atomic; a concurrent
   append may lose a line — that run reads unobserved); `OBSERVED_MAX_COMMAND` (4000); `OBSERVED_MAX_FEATURES` (200).
@@ -867,6 +883,19 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   shared log's capacity and fell back to time alone past 500 files — the tick-time date comparison costs nothing per run and
   changes no hook. So was block mode (`meta.fastCheckGate`): bypassable by naming a no-op check, refusing every PowerShell-tool
   session, and a file date may never block (gates-and-approvals.md).
+- **1.36.0 review 1** — the fast check. **FC-1:** past `BASELINE_CAP` (an earlier task's folder or glob of 500+ files) the
+  ticked task's own file was never dated — its edit read clean and `done --run` skipped the check; its own `_Implements:_`
+  files are now always dated and `partial: true` says the set was cut. **FC-2:** the tick note named `done <f> <n> --run` for
+  the task it had just ticked — a done task's brief carries no fastCheck, so that command ran none; the note names no command
+  now. **FC-4 / T3:** the fixer rule (a `*fmt` word without `--check`) refused `gofmt -l` / `shfmt -d` / `make check-fmt` /
+  `dune build @fmt` and let `ruff format .` / `dotnet format` / `clang-format -i` through — now `fmt` / `format` programs and
+  subcommands against the check flags, worded as a heuristic in the docs. **FC-6:** a PowerShell-tool failure was logged but
+  its later pass was not: "failed on its last run" with no hint — the hook marks a PowerShell run's line `tool`, the note says
+  why. **FC-7:** the brief and the implementer now forbid a piped run too. **FC-9 / INT-7:** metrics counted an undone tick
+  and an `unknown` one (MCP-only: "0 of N clean"). **INT-5:** init echoed an invalid stored name with no note. **INT-6:**
+  `init --guardian --fast-check guardian` on a fresh folder left `.specs/.gitignore` — the launcher was written before the
+  fast check's refusal. FC-3 (a run's folder), FC-5 (a deleted planned file) and FC-8 (the async hook's stamp, ~0.2 s after
+  the run) are documented Known limits, not mechanisms.
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful

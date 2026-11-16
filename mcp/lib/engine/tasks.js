@@ -744,11 +744,12 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     if (sch.blocked.length) res.blocked = sch.blocked;
     res.note = [res.note, taskDepsBlockedNote(sch, f.slug, lng)].filter(Boolean).join(" ");
   }
-  // 1.36 (stable): the fast check at this tick {check, status, runs, clean} — a note when it wasn't clean since the last edit (never
-  // for `unknown`: no harness log at all, an MCP-only client). Never a refusal.
+  // 1.36 (stable): the fast check at this tick {check, status, runs, clean, partial?} — a note when it wasn't clean since the last
+  // edit (never for `unknown`: no harness log at all, an MCP-only client). Never a refusal. The note names no command but the fast
+  // check (1.36 review 1 FC-2: its `done <f> <n> --run` named this task, ticked now — a done task's --run runs no fast check).
   if (fast) {
-    res.fastCheck = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean };
-    if (["stale", "failed", "missing"].includes(fast.status)) res.note = [res.note, i18n.msg(lng).fastCheck.tickNote(n, fast.check, fast.command, fast.status, f.slug)].filter(Boolean).join(" ");
+    res.fastCheck = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean, ...(fast.partial ? { partial: true } : {}) };
+    if (["stale", "failed", "missing"].includes(fast.status)) res.note = [res.note, i18n.msg(lng).fastCheck.tickNote(n, fast.check, fast.command, fast.status, !!fast.pwsh)].filter(Boolean).join(" ");
   }
   return withObserved(res); // the observed stamp on every result
 }
@@ -1890,7 +1891,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (pipes.length) res.verifyPipes = pipes; // stable: branch on it, never on the brief's text
   if (expectFail) res.expect = "fail"; // B5 (kept with write:true, like verify): the run must exit non-zero
   if (checks.length) res.projectChecks = checks; // [{name, command}] the definition of done names
-  if (fast) res.fastCheck = { check: fast.check, command: fast.command, status: fast.status }; // 1.36 (stable; identifiers only)
+  // 1.36 (stable; identifiers only) — partial: the feature's planned files passed their cap (only the first ones and this task's own
+  // are dated — 1.36 review 1)
+  if (fast) res.fastCheck = { check: fast.check, command: fast.command, status: fast.status, ...(fast.partial ? { partial: true } : {}) };
   if (protectedN != null) res.protectedTests = protectedN; // 1.36 guard tests: the feature's protected test files (a count)
   if (deps.length) res.dependsOn = deps.map((d) => ({ number: d.number, status: d.status })); // 1.14 F3 (kept with write:true: identifiers only)
   if (dec.items.length) res.decisions = dec.items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, affects: x.affects })); // 1.14 C2

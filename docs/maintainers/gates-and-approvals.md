@@ -212,7 +212,8 @@ review findings — is in History at the end.
 - **spec_metrics** reads `.state.json`, `.history/` and the artifacts (`createdAt` from createFeature, else approximated);
   `write` creates `retro.md` (writeIfAbsent). `rework` skips a same-content re-approval (still in `approvalsTotal`); a fingerprint-less
   phase (tests) always counts. 1.36: `fastCheck` {check, runs, clean, cleanRate, ticks, ticksClean} per feature — from the
-  snapshot a code task's tick stored on its run (`fast`), null without one — and the project's `fastTicks` / `fastTicksClean`
+  snapshot a code task's tick stored on its run (`fast`), null without one; only the tasks ticked now, never an `unknown`
+  snapshot (no harness log — 1.36 review 1) — and the project's `fastTicks` / `fastTicksClean`
   (ticks, never run sums: every feature's tick window reads the same project log). The fast check's own doctor warn,
   `fast-check` (a stored name no fast check reads), is a project-level registry entry like `observed-unguarded`
   (tasks-and-evidence.md → The fast check).
