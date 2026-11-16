@@ -53,7 +53,9 @@ Phase 6, opt-in.
   suffix; `REVIEW_RESERVED` inherit / default / diverse / off / none; duplicates case-insensitive, stored as given), the word
   `"diverse"` (= `REVIEW_DIVERSE`, opus + sonnet — stored as the word, so a release can change the pair), off / `[]` deletes the
   key. Set only by `spec_init {reviewModels}` / `init --review-models` (guards.js `reviewModelsInput` validated BEFORE any write —
-  `invalid-arguments` [reviewModels] —, `setReviewModels` inside the roadmap lock after `setApprovalGuard`); init always echoes
+  `invalid-arguments` [reviewModels], a refused array echoed as JSON; the CLI word's names are its runs between commas / spaces,
+  so a stray separator at either end is no empty name, and a word with none is refused —, `setReviewModels` inside the roadmap
+  lock after `setApprovalGuard`); init always echoes
   the current list (`reviewModels`, `[]` = none) and a `reviewModelsNote` when it set it — or when the stored value doesn't read
   (`reviewModelsSetting`: `invalid` → no panel + the `ignored` note, never a roadmap shape error over an advisory setting;
   `[]` / `["off"]` are silent; `["diverse"]` reads as the word). doctor.js `reviewPanel(c)` → `{models}` in every doctor result
@@ -61,8 +63,11 @@ Phase 6, opt-in.
   there; next_action copies the lean doctor's (gates-and-approvals.md → next_action). Not a guard-down (nothing enforces
   it — the engine sees no dispatch); no per-task panel (the brief carries none: the final review on every model sees each
   task's diff). What runs per model is prose: `references/subagent-execution.md` → Review on more than one model (merge
-  first, then ONE verify per merged finding; the panel adds models, never replaces a review's own tier; the task reviewer on
-  the first panel model other than the implementer's), `references/critic-review.md` §1 (the gate critics).
+  first, then ONE verify per merged finding in the code reviews — final / branch, converge; the panel adds models, never
+  replaces a review's own tier; the task reviewer on the first panel model other than the implementer's that is at least
+  standard, else `sonnet`; every path ledgers a `Final review: ×N` line — the finish sentence's exit), `references/critic-review.md`
+  §1 / §3 (the gate critics: the size table's on the session's model plus one per other panel model; their merged findings go
+  to the user — gates have no verifier). mcp/tests/17-docs.js pins each file's wording of these rules.
 
 ## Evidence
 
@@ -739,6 +744,24 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   flows widening gate / converge) was cut before it shipped: it multiplied the most frequent dispatch, and the final review on
   every model already covers each task; so was "two models agree → no verifier" (two reviewers of the same package share its
   blind spots: merge, then verify each merged finding once).
+- **1.36.0 review 1** (the review panel) — **RP-1:** the files disagreed on the gate critics: critic-review.md §1 and
+  spec-doctor.md put them ON the panel's models (a panel without the session's model dropped the session-model critic),
+  while subagent-execution.md, the Model selection row, the CHANGELOG and init's note said the panel adds models and never
+  replaces a review's own — and the latter also verified every merged finding, gate findings included, against §3's "gates
+  have no verifier". The owner's rule, now in every file: the panel ADDS gate critics (the size table's, on the session's
+  model, plus one on each panel model not already the session's); verify-once is the code reviews' rule (final / branch,
+  converge); the gate critics' merged findings go to the user. **RP-2:** "the first panel model other than the
+  implementer's" could put every task review on `haiku` (panel [sonnet, haiku], a sonnet implementer) — below the task
+  reviewer's floor — or every one on `opus` with diverse, unsaid in the cost text; now at least standard, none (or none the
+  host can dispatch) → `sonnet`, and the Cost bullet / init's note say where the task reviews go. **RP-3:** the finish
+  sentence's exit ("unless the ledger already has its `Final review: ×N` line") missed the collapsed-panel form ("review ×2
+  requested …") and the inline host (no line at all), and spec-finish.md had no exit: every path now ledgers a
+  `Final review: ×N` line (`— the host ran one model`, `×1 … — inline, the panel was not run`; spec-review.md says it for
+  the inline branch review). The sentence's "on every model" beside a list without the most capable model was left as it is
+  (not part of the decision). **RP-4:** the CLI word `" opus,sonnet"` / `"opus,sonnet,"` was refused (`split` left an empty
+  name) — names are now the runs between separators (`match`), a word with no name still refused; an array refusal echoed
+  `["opus,sonnet"]` as `opus,sonnet`, the documented example — now JSON; the refusal names the `[1m]` suffix. **T2** (review
+  panel part): `default` / `off` / `none` inside a list were reserved by the code but pinned by no test.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

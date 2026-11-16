@@ -48,8 +48,9 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, list }) => {
     const p = path.join(tmp, "proj-rp-refuse");
     S.initProject(p, ["core"], "en", { reviewModels: ["opus", "sonnet"] });
     const long = (n) => "m" + "x".repeat(n - 1);
-    const bad = [["opus"], ["opus", "Opus"], ["opus", "sonnet", "haiku", "fable"], ["opus", "inherit"], ["opus", "diverse"], ["opus x", "sonnet"],
-      ["-opus", "sonnet"], [long(129), "sonnet"], ["opus", "sonnet["], ["opus", ""]];
+    // 1.36.0 review 1 (T2): every reserved word inside a list — default / off / none too, not only inherit and diverse
+    const bad = [["opus"], ["opus", "Opus"], ["opus", "sonnet", "haiku", "fable"], ["opus", "inherit"], ["opus", "diverse"], ["opus", "default"],
+      ["opus", "off"], ["opus", "none"], ["opus x", "sonnet"], ["-opus", "sonnet"], [long(129), "sonnet"], ["opus", "sonnet["], ["opus", ""], ["opus,sonnet"]];
     const answers = [];
     for (const v of bad) answers.push([v, await call("spec_init", { reviewModels: v, projectDir: p })]);
     const okLong = S.initProject(p, [], null, { reviewModels: [long(128), "sonnet"] });
@@ -61,16 +62,34 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, list }) => {
     const item = await call("spec_init", { reviewModels: ["opus", 1], projectDir: p });
     const after = meta(p);
     const refused = (r) => r.ok === false && r.code === "invalid-arguments" && js(r.invalid) === '["reviewModels"]';
-    all("1.36 review panel: a bad value is refused before anything is written (invalid-arguments, invalid [reviewModels]) — one name, a case-folded duplicate, 4 names, a reserved word (inherit, diverse inside a list), a space, a leading dash, past 128 characters, a broken suffix, an empty name, true; a string or a non-string item over MCP by the schema; up to 128 characters pass (got " +
+    all("1.36 review panel: a bad value is refused before anything is written (invalid-arguments, invalid [reviewModels]) — one name, a case-folded duplicate, 4 names, a reserved word inside a list (inherit, diverse, default, off, none), a space, a leading dash, past 128 characters, a broken suffix, an empty name, one item holding a list, true; a refused array echoed as JSON (1.36.0 review 1); a string or a non-string item over MCP by the schema; up to 128 characters pass (got " +
       js([answers.filter(([, r]) => !refused(r)).map(([v, r]) => [v, r]), half, truthy, str, item, after]) + ")", {
       eachRefused: () => answers.every(([, r]) => refused(r)),
-      message: () => answers[0][1].error === RM.bad("opus"),
+      message: () => answers[0][1].error === RM.bad('["opus"]'),
+      listItemAsJson: () => answers[answers.length - 1][1].error === RM.bad('["opus,sonnet"]'),
       long128: () => okLong.ok !== false && js(okLongMeta) === js([long(128), "sonnet"]),
       halfNothingWritten: () => refused(half) && after.guard === undefined,
       truthyRefused: () => refused(truthy) && truthy.error === RM.bad("true"),
       stringBySchema: () => str.ok === false && str.code === "invalid-arguments",
       itemBySchema: () => item.ok === false && item.code === "invalid-arguments" && js(item.invalid) === '["reviewModels[1]"]',
       keptAsBefore: () => js(after.reviewModels) === js(PAIR),
+    });
+  }
+
+  { // 1.36.0 review 1 (RP-4): the CLI word (a string — init --review-models) — a stray separator at either end is no empty name;
+    // a word with no name at all stays refused, as before; the refusal names the [1m] suffix (EN, PT, ES)
+    const p = path.join(tmp, "proj-rp-word");
+    S.initProject(p, ["core"], "en");
+    const word = (w) => { const r = safe(() => S.initProject(p, [], null, { reviewModels: w })); const m = meta(p).reviewModels; S.initProject(p, [], null, { reviewModels: "off" }); return { r, m }; };
+    const lead = word(" opus,sonnet"), trail = word("opus,sonnet,"), both = word(", opus sonnet ,");
+    const none = ["", "  ", ","].map((w) => [w, word(w)]);
+    const suffix = ["en", "pt", "es"].filter((l) => !S.msg(l).reviewModels.bad("x").includes("[1m]"));
+    all("1.36.0 review 1 (RP-4): init --review-models' word — a stray comma or space at either end is no empty name (\" opus,sonnet\", \"opus,sonnet,\" stored as opus, sonnet); a word with no name (\"\", spaces, a comma) still refused, nothing written; the refusal names the [1m] suffix in EN, PT and ES (got " +
+      js([lead, trail, both, none, suffix]) + ")", {
+      lead: () => lead.r.ok !== false && js(lead.m) === js(PAIR), trail: () => trail.r.ok !== false && js(trail.m) === js(PAIR),
+      both: () => both.r.ok !== false && js(both.m) === js(PAIR),
+      noName: () => none.every(([w, x]) => x.r.ok === false && x.r.code === "invalid-arguments" && x.r.error === RM.bad(w) && x.m === undefined),
+      suffix: () => suffix.length === 0,
     });
   }
 

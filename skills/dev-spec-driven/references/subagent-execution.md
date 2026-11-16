@@ -204,7 +204,9 @@ path, BASE/HEAD, the active tracks and the references folder path. The reviewer 
 verify from the diff), track checks, the project's written rules and the history of rewritten lines, and Critical /
 Important / Minor findings, each Critical / Important one rated 0–100. Never tell a reviewer what not to flag. Resolve
 every ⚠️ yourself (you hold the cross-task context); a confirmed gap is a failed spec review. With a review panel, this ONE
-reviewer runs on the first panel model that differs from the implementer's — a second model's eyes at no extra dispatch.
+reviewer runs on the first panel model that differs from the implementer's and is at least standard (never `haiku`, below
+the task reviewer's floor — Model selection) — a second model's eyes at no extra dispatch. None, or none the host can
+dispatch (Claude Code: an alias), → `sonnet`, as without a panel.
 
 ### 6. Verify the findings
 
@@ -521,29 +523,35 @@ nothing and records nothing: what follows is yours.
 
 - **What it covers.** The final review and `/spec-review <feature> branch` (§ Final review), converge (§ Converge mode) and
   the deep review's gate critics (`references/critic-review.md` §1). The panel ADDS models — it never replaces a review's own
-  tier: the final review is the most capable model plus each panel model not already it. Never multiplied: the task review
-  (its ONE reviewer runs on the first panel model other than the implementer's — §5), the pre-flight, the verifier, the cold
-  read, the visual and the simplify-mode review, a fix dispatch, a scoped re-review.
+  tier: the final review is the most capable model plus each panel model not already it; the gate critics are the size
+  table's, on the session's model, plus one on each panel model not already the session's. Never multiplied: the task review
+  (its ONE reviewer runs on the first panel model other than the implementer's, at least standard — §5), the pre-flight,
+  the verifier, the cold read, the visual and the simplify-mode review, a fix dispatch, a scoped re-review.
 - **Dispatch** one reviewer per model in ONE message, an explicit `model` on each, the same inputs to every one — never one
   reviewer's output to another (each is a fresh goldfish).
 - **Merge first.** The same finding = the same file with overlapping lines, or the same AC ID, AND the same defect (the
   input or state that breaks); in doubt, two findings. A merged finding keeps the higher severity and lists each model with
   its confidence. Every finding of every model enters the merged list; minors are the union, deduped.
-- **Then verify each MERGED finding once** (§6): one verifier per merged finding, not one per model's copy — the merge is the
-  saving. Agreement only ranks a finding first: two models read the same package, so they can share a mistake about
-  pre-existing lines or an AC that asks for the behaviour — it never skips the verifier. A ⚠️ from any model is yours to
-  resolve. No vote: any confirmed finding or ❌ means Needs fixes.
+- **Then verify each MERGED finding once** (§6) in the code reviews — the final / branch review and converge; the gate
+  critics' merged findings go to the user (`references/critic-review.md` §3: gates have no verifier). One verifier per
+  merged finding, not one per model's copy — the merge is the saving. Agreement only ranks a finding first: two models read
+  the same package, so they can share a mistake about pre-existing lines or an AC that asks for the behaviour — it never
+  skips the verifier. A ⚠️ from any model is yours to resolve. No vote: any confirmed finding or ❌ means Needs fixes.
 - **Ledger** `Final review: ×2 (requested opus, sonnet) — 1 agreed, 3 single, 2 minor` (agreed = raised by two or more
-  models). Name the models you REQUESTED: you can't see which one ran. **Resume:** the ledger already has that line since the
-  last task → the panel review ran; don't dispatch it again.
+  models). Name the models you REQUESTED: you can't see which one ran. **Resume:** the ledger already has a
+  `Final review: ×N` line since the last task (any of its forms, below too) → the panel review ran; don't dispatch it again.
 - **When a model can't run.** Claude Code's Agent tool takes an alias only (`opus`, `sonnet`, `haiku`, `fable`) — a full model
   ID or another host's name can't be passed there. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` (no `model` parameter), a mod's
   `agent.spawn` hook that sets the model, an `availableModels` allowlist that substitutes it, or an `opus` alias whose family
-  the provider can't tell (set `ANTHROPIC_DEFAULT_OPUS_MODEL`) runs every reviewer on one model: say so in the ledger and the
-  report ("review ×2 requested opus, sonnet — the host ran one model"): fresh contexts, no model diversity. Without a subagent
-  tool (Cursor, Windsurf, Copilot, Gemini, claude.ai), review inline and say the panel was not run.
+  the provider can't tell (set `ANTHROPIC_DEFAULT_OPUS_MODEL`) runs every reviewer on one model: say so in the ledger line
+  and the report (`Final review: ×2 (requested opus, sonnet) — the host ran one model`): fresh contexts, no model diversity.
+  Without a subagent tool (Cursor, Windsurf, Copilot, Gemini, claude.ai), review inline and say the panel was not run —
+  ledger `Final review: ×1 (requested opus, sonnet) — inline, the panel was not run`, so a resumed session doesn't run it
+  again.
 - **Cost:** one more review dispatch per extra model per review it covers (the final review once a feature; converge and the
-  gate critics when you run them) — say so when the user turns it on (init's note does).
+  gate critics when you run them) — and the task reviews move to a panel model (§5): with `diverse` and a `sonnet`
+  implementer, every task review runs on `opus` (no extra dispatch, the priciest tier). Say so when the user turns it on
+  (init's note does).
 
 ## Model selection
 
@@ -558,13 +566,13 @@ declares `model: inherit`: one semantic review per gate, on the session's own mo
 | Implementer working from prose, multi-file integration | standard (`sonnet`) — the floor for prose tasks |
 | Visual review (`spec-ui-reviewer`) | the session's own model (it declares `model: inherit`); the most capable at size l |
 | Pre-flight (the critic, brief mode) | cheapest (`haiku`) for a brief that carries the code or values; standard otherwise |
-| Task reviewer | standard (`sonnet`); scale up for subtle concurrency/security diffs; with a review panel, the first panel model other than the implementer's |
+| Task reviewer | standard (`sonnet`); scale up for subtle concurrency/security diffs; with a review panel, the first panel model other than the implementer's that is at least standard (never `haiku`; none → `sonnet`) |
 | Scoped re-review of a small fix | cheap-to-standard |
 | Verify pass (one finding) | cheapest (`haiku`); standard for a security, concurrency or data-loss finding |
 | Fix rounds 4–5 | one tier above the implementer that got stuck |
 | Final review, architecture-level judgment | most capable (`opus`) |
 | Simplifier | standard (`sonnet`); its simplify-mode review standard too |
-| Review panel (`reviewPanel`) | adds its models to the final review, converge and the gate critics — one reviewer each, beside the row's own model, never in place of it |
+| Review panel (`reviewPanel`) | adds its models to the final review, converge and the gate critics — one reviewer each, beside the row's own model (the gate critics': the session's), never in place of it |
 
 Turn count beats token price: the cheapest models take 2–3× the turns on multi-step work.
 
