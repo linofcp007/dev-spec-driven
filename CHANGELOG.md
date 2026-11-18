@@ -15,7 +15,8 @@ setting or track over what the plugin already had. No new tool, command, hook or
   `.specs/<feature>/tests/` first, its own first — a project past the cap still lists its failing tests; a `feature
   protect` run before the approval no longer cancels it) are recorded with a content hash in its `.state.json`, up to
   2,000; a task's first tick also records the test files it names in `_Implements:_` (their new content accepted) and
-  those its `_Verify:_` runs — an untick removes nothing, and a task reopened by an untick or a box unchecked by hand
+  those its `_Verify:_` runs — a test another feature already lists joins the snapshot, a `_Verify:_` record or a plain
+  `feature protect` with the content that feature recorded, never its content now; an untick removes nothing, and a task reopened by an untick or a box unchecked by hand
   neither unlocks them again nor re-records them, so finish names an edit made meanwhile. A bugfix's task 1 now names its
   red test's file (`_Implements: [the test file T-01 goes in]_`): planned for task 1, protected from task 2, the fix. In
   Claude Code, editing, removing or moving a protected test asks while the feature that listed it is unfinished (its tasks
@@ -27,10 +28,13 @@ setting or track over what the plugin already had. No new tool, command, hook or
   file; with several targets the strictest answer applies. Only you lift a protection: `feature unprotect <feature>
   <file> --reason "…"` (`spec_feature {action: "unprotect"}` — a guard-down the approval guard asks or refuses;
   elicitation elsewhere); a lift lasts until `feature protect <feature> <file>` ends it, and the guard's line names the
-  feature being worked on. Only you accept a protected test's new content: `feature protect <feature> <file> --accept
-  --reason "…"` (`spec_feature {action: "protect", file, accept: true, reason}` — a guard-down too) records its current
-  content as the authorised one, ends its lift and keeps the reason (the merge summary shows it); `feature protect` alone
-  adds the tests present now (never re-recording one) or ends a lift. On every surface, without git, finish re-hashes the
+  feature being worked on (with no open task anywhere, the one ticked last). Only you accept a protected test's new
+  content: `feature protect <feature> <file> --accept --reason "…"` (`spec_feature {action: "protect", file, accept: true,
+  reason}` — a guard-down too; asked over MCP elicitation, a test rewritten while the question waits is refused) records
+  its current content as the authorised one, ends its lift and keeps the reason (the merge summary of every written finish
+  of that work cycle shows it — /spec-finish writes the finish again after the accept); `feature protect` alone adds the
+  tests present now (never re-recording one) or ends a lift — both read a path through a link or junction as the real
+  file. On every surface, without git, finish re-hashes the
   list (outside the feature lock): a change no recorded hash and no lift explains is a warning — its line accepts the
   change — and a "Protected tests" block in the merge summary — never a blocker. doctor warns `protected-tests` (also
   about a lift still in force after its feature's finish); the brief gains a definition-of-done line; the merge driver
@@ -48,9 +52,10 @@ setting or track over what the plugin already had. No new tool, command, hook or
   written — a heuristic: a `--fix` / `--fix=…` / `--write` word, or a `fmt` / `format` program or subcommand (`gofmt`,
   `cargo fmt`, `ruff format`, `dotnet format`, `clang-format`) with a `-w` word (`gofmt -l -w`) or with no check word
   (`--check`, `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`, `--test`,
-  `--exit-code`, `--output=none`, a `lint` subcommand — `swift format lint`, never a make / just / task target; a check-
-  or lint-named script is none — each read in the formatter's own simple command: `cargo fmt && git diff --exit-code`
-  writes); a formatter known by another name (`black .`, `prettier -w`) is not recognized, and one whose bare form only reports
+  `--exit-code`, `--output=none`, swift-format's own `lint` subcommand — `swift format lint`, `swift-format lint`; any
+  other `fmt lint` (`make fmt lint`, `pants fmt lint ::`, `npm run fmt lint`) is refused; a check- or lint-named script is
+  none — each read in the formatter's own simple command: `cargo fmt && git diff --exit-code` writes; a `$(… | …)` before
+  the check flag splits it there — put the check flag first); a formatter known by another name (`black .`, `prettier -w`) is not recognized, and one whose bare form only reports
   (`biome format .`) is refused — give its check form. `spec_next_task` and the brief carry `fastCheck` for a code task,
   and the brief's definition of done gains the edit → run → fix loop (run it on its own — never chained or piped —, clean
   after the last edit, before the `_Verify:_`; a red task keeps it green with a stub). Ticking a code task judges it —
@@ -73,7 +78,7 @@ setting or track over what the plugin already had. No new tool, command, hook or
   level-2 section holding a project template's first task, and so does `add-track port` while no task of tasks.md is
   ticked — appended when none holds it, tasks right under the title or under `###` headings only: at size m / l the tasks
   approval then refuses the plan until the baseline's section is moved first and those tasks put under a level-2 heading
-  of their own, renumbered)
+  of their own, keeping their numbers)
   and the differential check after US-1's tasks (the new output against the RECORDED baseline, so it still runs after the
   cut-over). The fence: `spec_complete_task` (and `done --run`, which then runs nothing) refuses a task listed after the
   baseline until it is ticked AND verified, and a task listed after the differential check likewise — `gated:
@@ -123,13 +128,13 @@ setting or track over what the plugin already had. No new tool, command, hook or
   `agent.spawn` hook or an allowlist substitution can run every reviewer on one model. The engine dispatches nothing and
   enforces nothing.
 
-The MCP tool list grows by about 500 characters for the four settings, each in its trimmed form (`TOOLS_LIST_CAP` 44,500 →
+The MCP tool list grows by about 600 characters for the four settings, each in its trimmed form (`TOOLS_LIST_CAP` 44,500 →
 45,000).
 
 ### Tests
-- `node mcp/test.js` 2545 assertions, `node cli/test-cli.js` 683 (was 2431 / 663). Each item's mutation list was
+- `node mcp/test.js` 2554 assertions, `node cli/test-cli.js` 683 (was 2431 / 663). Each item's mutation list was
   written before its fixtures and every mutant was caught (48, 78, 109 and 65; the two items' meeting point, 2 of 2); the
-  review rounds' fix mutants too — round 1, 116 of 116; round 2, 73 of 73; round 3, 76 of 76.
+  review rounds' fix mutants too — round 1, 116 of 116; round 2, 73 of 73; round 3, 76 of 76; round 4, 46 of 46.
 
 ## [1.35.4] — 2026-11-16
 
