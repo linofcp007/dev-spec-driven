@@ -888,6 +888,8 @@ const flagged = (c, pick) => c.blocks.map((b) => ({ number: b.number, values: pi
 const quoted = (list) => list.map((v) => "«" + v + "»").join(", ");
 const CORE_STEERING = ["constitution.md", "product.md", "tech.md", "structure.md"];
 
+const protectOpen = (c) => !!c.approvals.tasks && c.blocks.some((b) => !b.done); // protected-tests: approved, open tasks
+
 // DOCTOR_CHECKS — every check spec_doctor runs and every check a phase's approval runs, ONE entry each, in the doctor's order:
 //   id         its stable id (an entry emitting several lists them in `emits`; `family` matches a family — a track pack's
 //              <name>-sections);
@@ -917,9 +919,10 @@ const DOCTOR_CHECKS = [
   // no fast check runs: a project setting, so its own entry (one line, never one per feature's evidence)
   { id: "fast-check", run: (c) => { const f = fastCheckOf(c.projectDir); return f && f.invalid !== undefined ? { status: "warn", detail: c.fm.fastCheck.doctorInvalid(f.invalid, f.why) } : null; } },
   // 1.36 guard tests: a feature with approved, open tasks at level tests and no snapshot (feature protect takes one), a truncated one,
-  // or the approval guard off (the list lives in .state.json, which only that guard keeps agents from editing)
-  { id: "protected-tests", applies: (c) => guardLevel(c.projectDir) === "tests" && !!c.approvals.tasks && c.blocks.some((b) => !b.done),
-    run: (c) => protectedTestsDoctor(c.projectDir, c.slug, c.state, c.lang) },
+  // or the approval guard off (the list lives in .state.json, which only that guard keeps agents from editing); a feature with a finish
+  // recorded: a lift of its own recorded before that finish and still in force (1.36.0 review 3)
+  { id: "protected-tests", applies: (c) => guardLevel(c.projectDir) === "tests" && (protectOpen(c) || (isObj(c.state) && isObj(c.state.finished))),
+    run: (c) => protectedTestsDoctor(c.projectDir, c.slug, c.state, c.lang, protectOpen(c)) },
   // Steering: present is not enough — a steering file that is still its template steers nothing (named, with its count).
   { id: "steering", run: (c) => {
     const missing = CORE_STEERING.filter((f) => !fs.existsSync(path.join(c.root, "steering", f)));

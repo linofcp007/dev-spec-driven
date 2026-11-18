@@ -124,6 +124,15 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, runAsync, tmp, CLI }) => {
       earlier: () => pt.at === T(0) && pt.via === "protect", truncated: () => pt.truncated === true,
       lifts: () => js(pt.lifts.map((l) => [l.file, l.at, !!l.revoked])) === js([["test/x.test.js", T(2), false], ["test/y.test.js", T(3), false], ["test/x.test.js", T(4), true]]),
     });
+    // 1.36.0 review 3: an accept record ({accepted: true}) is its own identity — beside a lift of the same file, time and user, both kept
+    const ours2 = { at: T(1), via: "approval", files: {}, lifts: [lift("test/z.test.js", T(5), { reason: "r", accepted: true })] };
+    const theirs2 = { at: T(1), via: "approval", files: {}, lifts: [lift("test/z.test.js", T(5), { reason: "r" })] };
+    const so2 = put("o-pt2", st(ours2));
+    const m2 = runIn(["merge-state", put("b-pt2", st({ at: T(1), via: "approval", files: {} })), so2, put("t-pt2", st(theirs2)), ".specs/login/.state.json"]);
+    const r2 = parse(so2);
+    const lifts2 = (r2 && r2.protectedTests && r2.protectedTests.lifts) || [];
+    ok(m2.code === 0 && !!r2 && !("mergeConflicts" in r2) && lifts2.length === 2 && lifts2.filter((l) => l.accepted === true).length === 1,
+      "1.36.0 review 3 guard tests: merge-state keeps an accept record and a lift of the same file, time and user as two records (got " + js([m2.code, lifts2]) + ")");
   }
 
   // --- with git: --install / --uninstall, then a real merge of two branches (skipped without git — the Docker images have it)

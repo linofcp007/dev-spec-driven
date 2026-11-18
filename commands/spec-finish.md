@@ -14,8 +14,9 @@ unless the ledger's latest `Final review: ×N` line names the current HEAD (`git
    root cause. Show the warnings too — each one deserves a decision (code the feature repeats from elsewhere: reuse it, or
    say why the copy is deliberate; raw colours or sizes where the design system has tokens: use the token, or say why not;
    a protected test changed with no recorded reason — guard tests: check the change is intended, a test made to pass is a
-   weakened test; if it is, the user records it with the `feature unprotect` line the warning gives — that lift explains this
-   feature's change, its re-check included, and never unprotects the test for a later feature).
+   weakened test; if it is, the user accepts it with the `feature protect <feature> <file> --accept --reason "…"` line the
+   warning gives — its current content becomes the recorded one, so the re-check is explained and the test stays protected
+   for every later feature; never a `feature unprotect` here: a lift lasts until `feature protect <feature> <file>`).
 2. **Verify fresh, now** — the full suite and every check the report lists for the active tracks. With project checks set,
    record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}`, or
    `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" finish <feature> --run` (`--run` given: run that). No shell? Ask the user to
@@ -32,7 +33,7 @@ unless the ledger's latest `Final review: ×N` line names the current HEAD (`git
    the drift baseline — finish again after last-minute code changes — and, on a +ui feature of a project with a design-system
    registry, adds the design's New components to `.specs/steering/design-system.md` (`designSystem.registered`): a change to
    commit with the feature. Forced approvals appear under "Waived gates", a feature's protected tests (what changed, the
-   lifts) under "Protected tests".
+   lifts, the accepts) under "Protected tests".
 4. Offer exactly two options: **1. merge into the base branch locally** (fast-forward when possible, the summary as the
    message; a feature on its own branch: `git switch <base>`, then `git merge <name>`) **· 2. keep the branch as it is.**
    Run only the one the user picks; after a merge, the full suite again. Pushing is a separate step the user approves.

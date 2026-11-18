@@ -95,8 +95,8 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       specsDir: () => gSpecsDir.decision === "ask",
     });
   }
-  { // lifts: one allows; `protect <file>` ends it; another feature's lift counts while that feature has open tasks — never once they are
-    // all ticked (1.36.0 review 2: never finished, it lasted forever); the snapshot note
+  { // lifts: one allows; `protect <file>` ends it; another feature's lift counts whatever that feature's tasks — all ticked, or with an
+    // open task again (1.36.0 review 3: a lift is in force until a protect <file> record, the 1.36 rule); the snapshot note
     const un = S.manageFeature(pD, "unprotect", "login", "test/auth.test.js", { reason: "replaced by the v2 suite" });
     const gLifted = g(pD, "test/auth.test.js");
     const re = S.manageFeature(pD, "protect", "login", "test/auth.test.js", {});
@@ -109,12 +109,15 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     tasks(fDone, "- [x] 1. old\n  - _Implements: src/old.js_\n- [ ] 2. more\n  - _Implements: src/old.js_\n");
     const gOtherLift = g(pD, "test/far.test.js");
     tasks(fDone, "- [x] 1. old\n  - _Implements: src/old.js_\n");
-    all("1.36 guard tests: a lift allows the test; protect <file> ends the lift (the latest record decides) and it asks again; another feature's lift counts while it has open tasks — never once they are all ticked; the first approval's note says what was recorded (got " +
-      js([un.ok, gLifted.why, re.unlifted, gAgain.why, gDoneLift.why, gOtherLift.why, snapD.protectedTests]) + ")", {
+    S.manageFeature(pD, "protect", "done-work", "test/far.test.js", {}); // ended: protected again
+    const gFarEnded = g(pD, "test/far.test.js");
+    all("1.36 guard tests: a lift allows the test; protect <file> ends the lift (the latest record decides) and it asks again; another feature's lift counts whatever its tasks — all ticked, or one open again — until protect <file>; the first approval's note says what was recorded (got " +
+      js([un.ok, gLifted.why, re.unlifted, gAgain.why, gDoneLift.why, gOtherLift.why, gFarEnded.why, snapD.protectedTests]) + ")", {
       lift: () => un.ok && un.lifted.file === "test/auth.test.js" && un.lifted.reason === "replaced by the v2 suite" && un.listed === true,
       allowed: () => gLifted.decision === "allow", ended: () => re.unlifted === "test/auth.test.js" && re.lifts.some((l) => l.revoked === true),
       asks: () => gAgain.decision === "ask" && gAgain.why === "protected-test",
-      doneFeature: () => gDoneLift.decision === "ask" && gDoneLift.why === "protected-test", otherFeature: () => gOtherLift.decision === "allow",
+      doneFeature: () => gDoneLift.decision === "allow", otherFeature: () => gOtherLift.decision === "allow",
+      farEnded: () => gFarEnded.decision === "ask" && gFarEnded.why === "protected-test",
       snap: () => snapD.protectedTests && snapD.protectedTests.count === Object.keys(listD.files).length && snapD.note.includes(M().snapshotNote(snapD.protectedTests.count, 0)),
     });
   }
@@ -363,8 +366,25 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     answer = () => ({ result: { action: "accept", content: { approve: true, note: "ok" } } });
     const accepted = await call("spec_feature", { action: "unprotect", name: "elicit", file: "test/a.test.js", reason: "flaky rewrite", projectDir: pE });
     const lifts = (stateOf(fE).protectedTests || {}).lifts || [];
+    // 1.36.0 review 3: protect {accept: true} — the same path: checked before the question (no reason: nobody is asked), its own sentence
+    const askedBeforeAccept = asked.length;
+    const accNoReason = await call("spec_feature", { action: "protect", name: "elicit", file: "test/a.test.js", accept: true, projectDir: pE });
+    const askedAfterNoReason = asked.length;
+    w(pE, "test/a.test.js", "a, rewritten\n");
+    const accOk = await call("spec_feature", { action: "protect", name: "elicit", file: "test/a.test.js", accept: true, reason: "the rewrite is right", projectDir: pE });
+    const accRec = ((stateOf(fE).protectedTests || {}).lifts || []).find((l) => l.accepted === true);
+    const plain = await call("spec_feature", { action: "protect", name: "elicit", projectDir: pE }); // no accept: never asked
+    const askedAfterPlain = asked.length;
     await new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
     const q = (asked[0] || { params: {} }).params.message || "";
+    const qAcc = (asked[askedBeforeAccept] || { params: {} }).params.message || "";
+    all("1.36 guard tests over MCP elicitation, the accept: without a reason it is refused before any question; the question names the accept and its reason; an approve records the accept with `confirmed`; a plain protect asks nothing (got " +
+      js([accNoReason.code, askedBeforeAccept, askedAfterNoReason, qAcc, accOk.accepted, askedAfterPlain]) + ")", {
+      refusedFirst: () => accNoReason.code === "reason-required" && askedAfterNoReason === askedBeforeAccept,
+      question: () => qAcc.includes(S.msg("en").approvalGuard.action({ kind: "guard-down", setting: "accept", file: "test/a.test.js", feature: "elicit" })) && qAcc.includes(S.msg("en").elicit.accept("the rewrite is right")),
+      recorded: () => accOk.ok && accRec && accRec.reason === "the rewrite is right" && accRec.confirmed && accRec.confirmed.via === "elicitation",
+      plain: () => plain.ok && askedAfterPlain === askedBeforeAccept + 1,
+    });
     all("1.36 guard tests over MCP elicitation: an unprotect without a reason is refused before any question; the question names the test and the reason (control characters out); a decline records nothing; an approve records the lift with `confirmed` (got " +
       js([noReason.code, askedBefore, declined.declined, q, accepted.lifted]) + ")", {
       refusedFirst: () => noReason.code === "reason-required" && askedBefore === 0,
@@ -626,31 +646,46 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     });
   }
 
-  { // 1.36.0 review 1 (PT-5), review 2: a lift ends with its feature — one recorded before its feature's last finish no longer counts
-    // (gamma's protection kept), one recorded after it counts while the feature is reopened (open tasks) — never once its tasks are all
-    // ticked; a protect <file> record (revoked) of a finished feature still ends an earlier lift
+  { // 1.36.0 review 3 (R3-PT-2, R3-PT-3 — rounds 1 and 2 cut lifts at their feature's finish, then to its open tasks): a lift lasts until
+    // a protect <file> record of any feature — recorded before its feature's finish or after it, its feature reopened or all ticked — the
+    // same answer before and after an open task is added to it; doctor warns, on a finished feature, about each lift of its own recorded
+    // BEFORE that finish and still in force (its two lines), never one after the finish or one a later record ended
     const pL = project("lift-ends", { approvalGuard: "ask" });
-    for (const n of ["auth", "b", "c", "d"]) w(pL, "test/" + n + ".test.js", n + "\n");
+    for (const n of ["auth", "b", "c", "d", "e1", "e2"]) w(pL, "test/" + n + ".test.js", n + "\n");
     const fGa = S.createFeature(pL, "Gamma", ["core"], "", undefined, "en");
     tasks(fGa, "- [ ] 1. G\n  - _Implements: src/g.js_\n");
     approveTasks(pL, "gamma");
     const fAl = S.createFeature(pL, "Alpha", ["core"], "", undefined, "en");
     tasks(fAl, "- [x] 1. A\n  - _Implements: src/a.js_\n- [ ] 2. Reopened after the finish\n  - _Implements: src/a.js_\n");
     setState(fAl, { finished: { at: "2026-01-02T00:00:00.000Z", files: {} }, protectedTests: { files: {}, lifts: [
-      { file: "test/auth.test.js", at: "2026-01-01T00:00:00.000Z", by: "u", reason: "intended" }, // before alpha's finish: ended
+      { file: "test/auth.test.js", at: "2026-01-01T00:00:00.000Z", by: "u", reason: "intended" }, // before alpha's finish: still in force
       { file: "test/c.test.js", at: "2026-01-01T12:00:00.000Z", by: "u", revoked: true }, // alpha's protect <file>: ends beta's lift
-      { file: "test/b.test.js", at: "2026-01-03T00:00:00.000Z", by: "u", reason: "reopened" }] } }); // after the finish, reopened: in force
+      { file: "test/b.test.js", at: "2026-01-03T00:00:00.000Z", by: "u", reason: "reopened" }] } }); // after the finish: in force
     const fBe = S.createFeature(pL, "Beta", ["core"], "", undefined, "en");
     tasks(fBe, "- [ ] 1. B\n  - _Implements: src/b.js_\n");
     setState(fBe, { protectedTests: { files: {}, lifts: [{ file: "test/c.test.js", at: "2026-01-01T06:00:00.000Z", by: "u", reason: "r" }] } });
     const fDe = S.createFeature(pL, "Delta", ["core"], "", undefined, "en");
-    tasks(fDe, "- [x] 1. D\n  - _Implements: src/d.js_\n"); // finished, nothing reopened: its lift after the finish never counts
+    tasks(fDe, "- [x] 1. D\n  - _Implements: src/d.js_\n"); // finished, nothing reopened: its lift after the finish counts
     setState(fDe, { finished: { at: "2026-01-02T00:00:00.000Z", files: {} }, protectedTests: { files: {}, lifts: [{ file: "test/d.test.js", at: "2026-01-03T00:00:00.000Z", by: "u", reason: "after" }] } });
+    const fEp = S.createFeature(pL, "Epsilon", ["core"], "", undefined, "en");
+    tasks(fEp, "- [x] 1. E\n  - _Implements: src/e.js_\n"); // finished, all ticked: e1's lift before the finish in force, e2's ended since
+    setState(fEp, { finished: { at: "2026-01-02T00:00:00.000Z", files: {} }, protectedTests: { files: {}, lifts: [
+      { file: "test/e1.test.js", at: "2026-01-01T00:00:00.000Z", by: "u", reason: "e1" }, { file: "test/e2.test.js", at: "2026-01-01T00:00:00.000Z", by: "u", reason: "e2" },
+      { file: "test/e2.test.js", at: "2026-01-03T00:00:00.000Z", by: "u", revoked: true }] } });
     const gAuth = g(pL, "test/auth.test.js"), gB = g(pL, "test/b.test.js"), gC = g(pL, "test/c.test.js"), gD = g(pL, "test/d.test.js");
-    all("1.36 guard tests: a lift ends with its feature — alpha's lift recorded before alpha's finish no longer allows gamma's protected test, one recorded after the finish does while alpha is reopened, delta's after its finish (no open task) never does, and alpha's protect <file> record still ends beta's earlier lift (got " +
-      js([gAuth.why, gB.why, gC.why, gD.why]) + ")", {
-      ended: () => gAuth.decision === "ask" && gAuth.why === "protected-test", afterFinish: () => gB.decision === "allow", revoked: () => gC.decision === "ask" && gC.why === "protected-test",
-      doneAfterFinish: () => gD.decision === "ask" && gD.why === "protected-test",
+    tasks(fDe, "- [x] 1. D\n  - _Implements: src/d.js_\n- [ ] 2. An agent's line\n  - _Implements: src/d.js_\n"); // an open task again
+    const gDOpen = g(pL, "test/d.test.js");
+    tasks(fDe, "- [x] 1. D\n  - _Implements: src/d.js_\n");
+    const doc = (slug) => (S.specDoctor(pL, slug).checks || []).find((c) => c.id === "protected-tests");
+    const dAl = doc("alpha"), dDe = doc("delta"), dEp = doc("epsilon");
+    all("1.36 guard tests: a lift lasts until protect <file> — alpha's lift recorded before alpha's finish still allows the test, one after it too, delta's after its finish (all ticked) too and the same with an open task added; alpha's protect <file> record still ends beta's earlier lift; doctor warns about a finished feature's lift recorded before its finish and in force (alpha's auth, epsilon's e1 — all ticked), never one after it (delta) or one ended since (e2) (got " +
+      js([gAuth.why, gB.why, gC.why, gD.why, gDOpen.why, dAl, dDe, dEp]) + ")", {
+      beforeFinish: () => gAuth.decision === "allow", afterFinish: () => gB.decision === "allow", revoked: () => gC.decision === "ask" && gC.why === "protected-test",
+      doneAfterFinish: () => gD.decision === "allow" && gDOpen.decision === "allow",
+      doctorAlpha: () => dAl && dAl.status === "warn" && dAl.detail === M().doctorLiftAfterFinish("alpha", "test/auth.test.js", "test/auth.test.js"),
+      doctorLines: () => /feature protect alpha test\/auth\.test\.js\)/.test(dAl.detail) && /feature protect alpha test\/auth\.test\.js --accept --reason/.test(dAl.detail),
+      doctorEpsilon: () => dEp && dEp.status === "warn" && dEp.detail === M().doctorLiftAfterFinish("epsilon", "test/e1.test.js", "test/e1.test.js"),
+      doctorDelta: () => dDe === undefined,
     });
   }
 
@@ -714,10 +749,9 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     });
   }
 
-  { // 1.36.0 review 2 (R2-PT-1), in /spec-finish's order at deny: the written finish is ready (it records the finish) and warns about the
-    // changed test; the user records the lift the warning gives — it explains the feature's own re-finish, never a later feature's edit
-    // or finish; reopened (an open task), the lift recorded after its last finish counts and one recorded before it never; protect <file>
-    // ends a lift in force or not
+  { // 1.36.0 review 2 (R2-PT-1) → review 3 (R3-PT-2), in /spec-finish's order at deny: the written finish is ready (it records the finish)
+    // and warns about the changed test; the user ACCEPTS it as the warning says — its own re-finish is explained by the hash, never a lift:
+    // a later feature's edit is refused, also once login-loop has an open task again; a lift recorded before the finish lasts (doctor)
     const pO = project("finish-order", { approvalGuard: "deny" });
     w(pO, "src/auth.js", "module.exports = 1;\n");
     w(pO, "test/auth.test.js", "test('auth', () => { expect(login('a')).toBe(true); });\n");
@@ -748,41 +782,48 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     const fin = S.finishFeature(pO, slug, { write: true }); // /spec-finish step 1
     const finishedAt = (stateOf(bf).finished || {}).at;
     const finWarn = fin.warnings.find((x) => x.startsWith(M().finishWarn(slug, "", 0).slice(0, 20))) || "";
-    const liftAfter = S.manageFeature(pO, "unprotect", slug, "test/auth.test.js", { reason: "intended: login takes a user now" }); // the warning's line
-    const refin = S.finishFeature(pO, slug, {}); // the re-check
-    const listing = S.manageFeature(pO, "protect", slug, undefined, {});
+    // 1.36.0 review 3: the warning's line accepts the content — the user's decision — never a lift
+    const acc = S.manageFeature(pO, "protect", slug, "test/auth.test.js", { accept: true, reason: "intended: login takes a user now" });
+    const refin = S.finishFeature(pO, slug, { write: true, includeBody: true }); // the re-check (written; the merge summary shows the accept)
+    const doc = () => (S.specDoctor(pO, slug).checks || []).find((c) => c.id === "protected-tests");
+    const dLift = doc(); // the lift recorded before the finish (other) is still in force
     const fGm = S.createFeature(pO, "Gamma", ["core"], "", undefined, "en");
     tasks(fGm, "- [ ] 1. Gamma\n  - _Implements: src/auth.js_\n");
     approveTasks(pO, "gamma");
     const gAuth = g(pO, "test/auth.test.js"), gOther = g(pO, "test/other.test.js");
-    w(pO, "test/auth.test.js", "test('auth', () => { expect(true).toBe(true); });\n"); // weakened during gamma
-    const gamFin = S.finishFeature(pO, "gamma", {});
-    const undo = S.completeTask(pO, slug, 2, null, { undo: true, reason: "the fix needs another pass" }); // login-loop reopened
-    const gAuthRe = g(pO, "test/auth.test.js"), gOtherRe = g(pO, "test/other.test.js");
-    const retick = S.completeTask(pO, slug, 2, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
-    const reprot = S.manageFeature(pO, "protect", slug, "test/auth.test.js", {}); // its lift not in force now (no open task): ended all the same
-    S.completeTask(pO, slug, 2, null, { undo: true, reason: "again" });
-    const gAuthEnded = g(pO, "test/auth.test.js");
+    const endOther = S.manageFeature(pO, "protect", slug, "test/other.test.js", {}); // doctor's first line: the lift ends
+    const gOtherEnded = g(pO, "test/other.test.js"), dEnded = doc();
+    // login-loop gets an open task again — an agent's one line in tasks.md (unguarded), then a change request: the accept unlocks nothing
+    const tPath = path.join(bf.dir, "tasks.md"), tText = fs.readFileSync(tPath, "utf8");
+    fs.writeFileSync(tPath, tText + "\n- [ ] 9. Tidy\n");
+    const gAuthHand = g(pO, "test/auth.test.js");
+    fs.writeFileSync(tPath, tText);
+    const app = S.appendTasks(pO, slug, [{ text: "Log the redirect reason", implements: ["src/auth.js"], verify: ["npm test"] }]);
+    const gAuthApp = g(pO, "test/auth.test.js");
+    w(pO, "test/auth.test.js", "test('auth', () => { expect(true).toBe(true); });\n"); // weakened during gamma, by a script
+    const gamFin = S.finishFeature(pO, "gamma", {}), ownFin = S.finishFeature(pO, slug, {});
     const files = (xs) => (xs || []).map((x) => x.file).sort().join();
-    all("1.36 guard tests in /spec-finish's order: the written finish is ready and warns about the changed test; the lift its warning gives, recorded after the finish, explains the feature's own re-check but never a later feature's edit (deny) or finish; reopened, the lift after its last finish counts and the one before it never; protect <file> ends a lift not in force too (got " +
-      js({ approvals, listed, gBefore: gBefore.decision, fin: [fin.readyToFinish, finishedAt, fin.protectedTests], lift: liftAfter.lifted && liftAfter.lifted.at, refin: refin.protectedTests,
-        active: listing.lifts, later: [gAuth.decision, gOther.decision], gamFin: gamFin.protectedTests, reopened: [undo.ok, gAuthRe.decision, gOtherRe.decision], ended: [retick.ok, reprot.unlifted, gAuthEnded.decision] }) + ")", {
+    all("1.36 guard tests in /spec-finish's order: the written finish is ready and its warning gives the ACCEPT line; the accept re-baselines the test — the feature's own re-check is explained by the hash and its merge summary shows the accept; the lift recorded before the finish stays in force (doctor names it) until protect <file>; a later feature's edit of the accepted test is refused, also once login-loop has an open task again (an agent's line in tasks.md, a change request); a later change is named by both finishes (got " +
+      js({ approvals, listed, gBefore: gBefore.decision, fin: [fin.readyToFinish, finishedAt, fin.protectedTests], acc: acc.accepted, refin: refin.protectedTests, dLift,
+        later: [gAuth.decision, gOther.decision, gOtherEnded.decision, dEnded], reopened: [gAuthHand.decision, app.ok, gAuthApp.decision], gamFin: gamFin.protectedTests, ownFin: ownFin.protectedTests }) + ")", {
       setup: () => approvals.every(Boolean) && ["test/auth.test.js", "test/other.test.js"].every((k) => listed.includes(k)) && liftBefore.ok && t1.ok && t2.ok,
       beforeInForce: () => gBefore.decision === "allow",
       step1: () => fin.readyToFinish === true && typeof finishedAt === "string" && finWarn === M().finishWarn(slug, M().changed("test/auth.test.js"), 0) && files(fin.protectedTests.lifted) === "test/other.test.js",
-      liftAfter: () => liftAfter.ok && liftAfter.lifted.at > finishedAt,
-      reFinish: () => refin.protectedTests.unexplained.length === 0 && files(refin.protectedTests.lifted) === "test/auth.test.js,test/other.test.js" && !refin.warnings.some((x) => /Protected tests of/.test(x)),
-      notActive: () => listing.lifts.filter((l) => !l.revoked).length === 2 && listing.lifts.every((l) => l.active === false),
-      laterEdit: () => gAuth.decision === "deny" && gAuth.why === "protected-test" && gOther.decision === "deny",
-      laterFinish: () => files(gamFin.protectedTests.unexplained) === "test/auth.test.js" && !gamFin.protectedTests.lifted.length,
-      reopened: () => undo.ok && gAuthRe.decision === "allow" && gOtherRe.decision === "deny" && gOtherRe.why === "protected-test",
-      protectEnds: () => retick.ok && reprot.unlifted === "test/auth.test.js" && gAuthEnded.decision === "deny",
+      acceptLine: () => finWarn.includes("feature protect " + slug + " <file> --accept --reason") && !/unprotect/.test(finWarn),
+      accepted: () => acc.ok && acc.accepted.file === "test/auth.test.js" && acc.accepted.accepted === true && acc.accepted.reason === "intended: login takes a user now" && !acc.unlifted && acc.note.includes(M().accepted("test/auth.test.js", slug)),
+      reFinish: () => refin.protectedTests.unexplained.length === 0 && files(refin.protectedTests.lifted) === "test/other.test.js" && files(refin.protectedTests.accepted) === "test/auth.test.js" && !refin.warnings.some((x) => /Protected tests of/.test(x)),
+      summary: () => refin.mergeSummary.includes(M().summaryAccept("test/auth.test.js", acc.accepted.by, "intended: login takes a user now")),
+      doctor: () => dLift && dLift.status === "warn" && dLift.detail === M().doctorLiftAfterFinish(slug, "test/other.test.js", "test/other.test.js") && dEnded === undefined,
+      laterEdit: () => gAuth.decision === "deny" && gAuth.why === "protected-test" && gOther.decision === "allow" && endOther.unlifted === "test/other.test.js" && gOtherEnded.decision === "deny",
+      reopened: () => gAuthHand.decision === "deny" && gAuthHand.why === "protected-test" && app.ok && gAuthApp.decision === "deny" && gAuthApp.why === "protected-test",
+      laterFinish: () => files(gamFin.protectedTests.unexplained) === "test/auth.test.js" && !gamFin.protectedTests.lifted.length && files(ownFin.protectedTests.unexplained) === "test/auth.test.js",
     });
   }
 
-  { // 1.36.0 review 2 (R2-PT-2): the lift line names a feature whose lift lasts while the work goes on — accounts (all ticked, never
-    // finished) sorts first, cart is being worked on: the line names cart; a lift in accounts unlocks nothing, cart's lasts until its tasks
-    // are all ticked. The order: an unlocker that lists the file, else the first unlocker, else a holder with open tasks, else the first holder
+  { // 1.36.0 review 2 (R2-PT-2): the lift line names the feature being worked on — accounts (all ticked, never finished) sorts first, cart
+    // is being worked on: the line names cart. 1.36.0 review 3 (R3-PT-1): a lift of either is in force — accounts' too — until protect
+    // <file>, and cart's lasts once its tasks are all ticked (the final review's window). The order: an unlocker that lists the file, else
+    // the first unlocker, else a holder with open tasks, else the first holder
     const liftOf = (r) => ((r.userNote || r.reason || "").match(/feature unprotect (\S+) test\/auth\.test\.js/) || [])[1];
     const pA = project("lift-line", { approvalGuard: "deny" });
     w(pA, "src/a.js", "a\n"); w(pA, "src/cart.js", "c\n"); w(pA, "test/auth.test.js", "auth\n");
@@ -796,6 +837,8 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     const dCart = g(pA, "test/auth.test.js");
     S.manageFeature(pA, "unprotect", "accounts", "test/auth.test.js", { reason: "the old line" });
     const dAccLift = g(pA, "test/auth.test.js");
+    S.manageFeature(pA, "protect", "accounts", "test/auth.test.js", {});
+    const dAccEnded = g(pA, "test/auth.test.js");
     S.manageFeature(pA, "unprotect", "cart", "test/auth.test.js", { reason: "cart changes the login signature" });
     const dCartLift = g(pA, "test/auth.test.js");
     S.completeTask(pA, "cart", 1, { summary: "done" });
@@ -817,10 +860,11 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     tasks(fCcc, "- [ ] 1. C\n  - _Implements: src/a.js_\n");
     approveTasks(pQ, "ccc"); // covering, lists the test
     const step1 = g(pQ, "test/auth.test.js");
-    all("1.36 guard tests: the lift line names the feature being worked on — cart, not accounts (all ticked, never finished, first by name); accounts' lift unlocks nothing, cart's allows until its tasks are all ticked; with no unlocker listing the file, the first unlocker (bbb); with no unlocker, a holder with open tasks (aaa, before old) (got " +
-      js({ cart: [dCart.decision, liftOf(dCart)], accLift: dAccLift.decision, cartLift: dCartLift.decision, cartDone: dCartDone.decision, steps: [liftOf(step1), liftOf(step2), liftOf(step3)] }) + ")", {
+    all("1.36 guard tests: the lift line names the feature being worked on — cart, not accounts (all ticked, never finished, first by name); accounts' lift is in force too until protect <file>, cart's lasts once its tasks are all ticked; with no unlocker listing the file, the first unlocker (bbb); with no unlocker, a holder with open tasks (aaa, before old) (got " +
+      js({ cart: [dCart.decision, liftOf(dCart)], accLift: dAccLift.decision, accEnded: dAccEnded.decision, cartLift: dCartLift.decision, cartDone: [dCartDone.decision, dCartDone.why], steps: [liftOf(step1), liftOf(step2), liftOf(step3)] }) + ")", {
       namesCart: () => dCart.decision === "deny" && dCart.why === "protected-test" && liftOf(dCart) === "cart",
-      accountsLift: () => dAccLift.decision === "deny", cartLift: () => dCartLift.decision === "allow", cartDone: () => dCartDone.decision === "deny",
+      accountsLift: () => dAccLift.decision === "allow" && dAccEnded.decision === "deny" && dAccEnded.why === "protected-test", cartLift: () => dCartLift.decision === "allow",
+      cartDone: () => dCartDone.why !== "protected-test",
       listingUnlocker: () => step1.decision === "deny" && liftOf(step1) === "ccc", firstUnlocker: () => liftOf(step2) === "bbb", openHolder: () => liftOf(step3) === "aaa",
     });
   }
@@ -872,6 +916,127 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       other: () => gOther.decision === "ask" && gOther.reason.includes(M().noCurrent) && !gOther.reason.includes(M().reopened("1 (cart)")),
       brief1: () => n === 2 && b1.brief.includes(M().briefDodReopened(n, "cart")) && !b1.brief.includes(M().briefDod(n)),
       brief2: () => b2.brief.includes(M().briefDod(n)) && !b2.brief.includes(M().briefDodReopened(n, "cart")),
+    });
+  }
+
+  { // 1.36.0 review 3 (R3-PT-1): every task ticked, no finish yet (the final review, its fix round, the simplify pass) — the guard's line
+    // names the only holder (no open task); the user runs it and the test is no longer refused (a lift does not depend on its feature's
+    // open tasks); the same at approvalGuard ask; the real hook agrees
+    const edit = (p) => hookOut(hook(p, "Edit", { file_path: path.join(p, "test", "auth.test.js"), old_string: "auth", new_string: "{ name: 'a' }" }));
+    const hd = (h) => (h && h.hookSpecificOutput ? h.hookSpecificOutput.permissionDecision + " " + (h.hookSpecificOutput.permissionDecisionReason || "") + " " + (h.systemMessage || "") : "silent");
+    const run = (ag) => {
+      const p = project("all-ticked-line-" + ag, { approvalGuard: ag });
+      w(p, "src/auth.js", "a\n"); w(p, "test/auth.test.js", "auth\n");
+      const f = S.createFeature(p, "Alpha", ["core"], "", undefined, "en");
+      tasks(f, "- [ ] 1. Login takes a user object\n  - _Implements: src/auth.js_\n  - _Verify: node --test test/auth.test.js_\n");
+      approveTasks(p, "alpha");
+      const tick = S.completeTask(p, "alpha", 1, { command: "node --test test/auth.test.js", exitCode: 0, summary: "1 passing" });
+      const before = g(p, "test/auth.test.js"), hBefore = hd(edit(p));
+      const line = (before.userNote || before.reason || "").match(/feature unprotect (\S+) (\S+) --reason/) || [];
+      const lifted = line[1] ? S.manageFeature(p, "unprotect", line[1], line[2], { reason: "the review: the test asserted the old call" }) : { ok: false };
+      const after = g(p, "test/auth.test.js"), hAfter = hd(edit(p));
+      const listing = S.manageFeature(p, "protect", "alpha", undefined, {});
+      return { tick: tick.ok, before: [before.decision, before.why], hBefore, line: line.slice(1), lifted, after: [after.decision, after.why], hAfter, active: listing.lifts.map((l) => l.active) };
+    };
+    const D = run("deny"), A = run("ask");
+    all("1.36 guard tests: every task ticked, no finish — the guard's line names the only holder (alpha); run, its lift is in force: the edit is no longer refused as a protected test (deny and ask; the hook too), and the listing says the lift is active (got " + js({ D, A }) + ")", {
+      deny: () => D.tick && D.before[0] === "deny" && D.before[1] === "protected-test" && D.line[0] === "alpha" && D.line[1] === "test/auth.test.js" && /^deny /.test(D.hBefore),
+      ask: () => A.tick && A.before[0] === "ask" && A.before[1] === "protected-test" && A.line[0] === "alpha",
+      lifted: () => D.lifted.ok && D.lifted.note === M().lifted("test/auth.test.js", "alpha", true) && A.lifted.ok,
+      inForce: () => D.after[1] !== "protected-test" && A.after[1] !== "protected-test" && D.active.join() === "true" && A.active.join() === "true",
+      hook: () => !/dev-spec guard \(tests\)/.test(D.hAfter) && !/dev-spec guard \(tests\)/.test(A.hAfter) && /dev-spec guard \(tests\)/.test(A.hBefore),
+    });
+  }
+
+  { // 1.36.0 review 3 (R3-PT-3): a later cycle's finish is explained only by a lift still in force or a recorded / accepted hash — cycle 1's
+    // lift (the guard's line) is not ended by the finish: in cycle 2 the guard allows the edit and finish names it lifted (they agree) and
+    // doctor warns; ended (protect <file>), the guard refuses again and a change made around it is finish's warning; the accept explains it
+    // by its hash, its record in the merge summary of that finish only
+    const p = project("cross-cycle", { approvalGuard: "deny" });
+    w(p, "src/auth.js", "a\n"); w(p, "test/auth.test.js", "v1\n");
+    const f = S.createFeature(p, "Alpha", ["core"], "", undefined, "en");
+    tasks(f, "- [ ] 1. One\n  - _Implements: src/auth.js_\n- [ ] 2. Two\n  - _Implements: src/auth.js_\n");
+    approveTasks(p, "alpha");
+    S.completeTask(p, "alpha", 1, { summary: "done" });
+    const c1Deny = g(p, "test/auth.test.js");
+    const line = (c1Deny.userNote || "").match(/feature unprotect (\S+) (\S+) --reason/) || [];
+    const lift = S.manageFeature(p, "unprotect", line[1], line[2], { reason: "intended: login takes a user now" });
+    w(p, "test/auth.test.js", "v2\n");
+    S.completeTask(p, "alpha", 2, { summary: "done" });
+    const fin1 = S.finishFeature(p, "alpha", {});
+    const finished = () => setState(f, { finished: { at: new Date(Date.now() + 5).toISOString(), files: {} } }); // a ready written finish's record
+    const doc = () => (S.specDoctor(p, "alpha").checks || []).find((c) => c.id === "protected-tests");
+    const d0 = doc(); // before the finish: no warn
+    finished();
+    const d1 = doc();
+    const app = S.appendTasks(p, "alpha", [{ text: "Three", implements: ["src/auth.js"] }]); // a change request
+    approveTasks(p, "alpha");
+    const c2Allow = g(p, "test/auth.test.js");
+    w(p, "test/auth.test.js", "v3\n");
+    const fin2 = S.finishFeature(p, "alpha", {});
+    const ended = S.manageFeature(p, "protect", "alpha", "test/auth.test.js", {}); // doctor's line
+    const c2Deny = g(p, "test/auth.test.js"), d2 = doc();
+    w(p, "test/auth.test.js", "v4: weakened\n"); // around the guard — a script, a git checkout
+    const fin2b = S.finishFeature(p, "alpha", {});
+    const acc = S.manageFeature(p, "protect", "alpha", "test/auth.test.js", { accept: true, reason: "v4 is the intended suite" });
+    S.completeTask(p, "alpha", 3, { summary: "done" });
+    const fin3 = S.finishFeature(p, "alpha", {});
+    finished();
+    const fin4 = S.finishFeature(p, "alpha", {});
+    const pt = (r) => r.protectedTests;
+    const files = (xs) => (xs || []).map((x) => x.file).join();
+    const warns = (r) => r.warnings.some((x) => /Protected tests of/.test(x));
+    all("1.36 guard tests across cycles: cycle 1's lift is never ended by the finish — cycle 2's guard allows the edit and its finish names it lifted, doctor warns; protect <file> ends it, the guard refuses and a change around it is finish's warning; the accept re-baselines (explained, no warning), its record shown by the next written finish only (got " +
+      js({ c1: c1Deny.decision, line: line.slice(1), lift: lift.ok, fin1: pt(fin1), d0, d1, app: app.ok, c2Allow: c2Allow.decision, fin2: pt(fin2), ended: ended.unlifted, c2Deny: c2Deny.decision, d2, fin2b: pt(fin2b), acc: acc.ok, fin3: pt(fin3), fin4: pt(fin4) }) + ")", {
+      cycle1: () => c1Deny.decision === "deny" && line[1] === "alpha" && lift.ok && files(pt(fin1).lifted) === "test/auth.test.js" && !warns(fin1),
+      doctor: () => d0 === undefined && d1 && d1.status === "warn" && d1.detail === M().doctorLiftAfterFinish("alpha", "test/auth.test.js", "test/auth.test.js"),
+      cycle2: () => app.ok && c2Allow.decision === "allow" && files(pt(fin2).lifted) === "test/auth.test.js" && !pt(fin2).unexplained.length && !warns(fin2),
+      ended: () => ended.unlifted === "test/auth.test.js" && c2Deny.decision === "deny" && d2 === undefined,
+      backstop: () => files(pt(fin2b).unexplained) === "test/auth.test.js" && !pt(fin2b).lifted.length && warns(fin2b),
+      accepted: () => acc.ok && !acc.unlifted && !pt(fin3).unexplained.length && !pt(fin3).lifted.length && files(pt(fin3).accepted) === "test/auth.test.js" && !warns(fin3) &&
+        fin3.mergeSummary.includes(M().summaryAccept("test/auth.test.js", acc.accepted.by, "v4 is the intended suite")),
+      once: () => !pt(fin4).unexplained.length && pt(fin4).accepted.length === 0 && !fin4.mergeSummary.includes(M().summaryAccept("test/auth.test.js", acc.accepted.by, "v4 is the intended suite")),
+    });
+  }
+
+  { // 1.36.0 review 3: accepting a protected test's content (spec_feature {action: "protect", file, accept: true, reason}) — a test file
+    // inside the project and a reason (the stable codes, the accept's own words); the dry run writes nothing; with them the hash now is the
+    // recorded one (the listed spelling), a lift in force ends (a revoked record before the accept record), the accept record is no lift;
+    // the listing shows it; a test not on the list joins it
+    const p = project("accept", { approvalGuard: "off" });
+    w(p, "src/x.js", "x\n"); w(p, "test/a.test.js", "a\n");
+    const f = S.createFeature(p, "Acc", ["core"], "", undefined, "en");
+    tasks(f, "- [ ] 1. A\n  - _Implements: src/x.js_\n");
+    approveTasks(p, "acc");
+    const h0 = listOf(f).files["test/a.test.js"];
+    const noFile = await tool("spec_feature", { action: "protect", name: "acc", accept: true, reason: "r", projectDir: p });
+    const noReason = await tool("spec_feature", { action: "protect", name: "acc", file: "test/a.test.js", accept: true, projectDir: p });
+    const notTest = await tool("spec_feature", { action: "protect", name: "acc", file: "src/x.js", accept: true, reason: "r", projectDir: p });
+    const outside = await tool("spec_feature", { action: "protect", name: "acc", file: "../elsewhere.test.js", accept: true, reason: "r", projectDir: p });
+    const beforeDry = js(listOf(f));
+    const dry = S.manageFeature(p, "protect", "acc", "test/a.test.js", { accept: true, reason: "r", dryRun: true });
+    const afterDry = js(listOf(f));
+    S.manageFeature(p, "unprotect", "acc", "test/a.test.js", { reason: "being rewritten" });
+    w(p, "test/a.test.js", "a, rewritten\n");
+    const acc = await tool("spec_feature", { action: "protect", name: "acc", file: "test/a.test.js", accept: true, reason: "the rewrite is right", projectDir: p });
+    const lst = listOf(f);
+    const gAfter = g(p, "test/a.test.js");
+    const fin = S.finishFeature(p, "acc", {});
+    w(p, "test/n.test.js", "n\n"); // written after the snapshot: not on the list
+    const accNew =S.manageFeature(p, "protect", "acc", "test/n.test.js", { accept: true, reason: "a new suite" });
+    const listing = S.manageFeature(p, "protect", "acc", undefined, {});
+    all("1.36 guard tests: accept refuses without a file (its own words), a reason (its own words), a test file or inside the project — stable codes; the dry run writes nothing; the accept re-baselines the test, ends its lift (revoked, then the accept record), the test is protected again and finish is explained by the hash; a test not listed joins the list; the listing marks the accept record (got " +
+      js([noFile.code, noReason.code, notTest.code, outside.code, dry, acc.accepted, acc.unlifted, lst.lifts, gAfter.why, fin.protectedTests, accNew.protectedTests, listing.lifts]) + ")", {
+      codes: () => js([noFile.code, noReason.code, notTest.code, outside.code]) === js(["file-required", "reason-required", "not-a-test", "outside-project"]) && [noFile, noReason, notTest, outside].every((r) => r.isError),
+      messages: () => noFile.error === M().err.acceptFileRequired && noReason.error === M().err.acceptReasonRequired,
+      dryRun: () => dry.ok && dry.dryRun === true && dry.accept === true && dry.file === "test/a.test.js" && dry.reason === "r" && afterDry === beforeDry && !/lifts/.test(afterDry),
+      record: () => acc.ok && acc.accepted.file === "test/a.test.js" && acc.accepted.reason === "the rewrite is right" && acc.accepted.accepted === true && typeof acc.accepted.by === "string" && acc.note.includes(M().accepted("test/a.test.js", "acc")),
+      rebaseline: () => typeof lst.files["test/a.test.js"] === "string" && lst.files["test/a.test.js"] !== h0,
+      liftEnded: () => acc.unlifted === "test/a.test.js" && js(lst.lifts.map((l) => [l.revoked === true, l.accepted === true])) === js([[false, false], [true, false], [false, true]]),
+      protectedAgain: () => gAfter.decision === "ask" && gAfter.why === "protected-test",
+      explained: () => fin.protectedTests.unexplained.length === 0 && fin.protectedTests.lifted.length === 0,
+      added: () => accNew.ok && accNew.protectedTests.added === 1 && typeof listOf(f).files["test/n.test.js"] === "string",
+      listing: () => listing.lifts.filter((l) => l.accepted === true).length === 2 && listing.lifts.filter((l) => l.accepted === true).every((l) => l.active === undefined && typeof l.reason === "string"),
     });
   }
 };

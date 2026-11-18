@@ -656,6 +656,7 @@ Tracks: ${label}. Tick before calling the feature done.`,
     guardianBaselineUpdate: "run dev-guardian's `baseline update` — it accepts every current finding as known, this feature's included, and the gate stops reporting them",
     guardianCli: "run dev-guardian's gate with a DEV_GUARDIAN_CLI or CLAUDE_CONFIG_DIR of its own — another dev-guardian would answer it",
     unprotect: (file, feature) => `lift the protection of the test ${file} ('${feature}') — an agent could then change or delete it`,
+    accept: (file, feature) => `accept the current content of the protected test ${file} ('${feature}') — a change made to it is then no longer reported`,
     lower: (from, to) => `lower the approval guard from ${from} to ${to}`,
     revoke: (phase, feature) => `revoke the approval of the ${phase} phase of '${feature}'`,
     approve: (phase, feature) => `approve the ${phase} phase of '${feature}'`,
@@ -1641,6 +1642,8 @@ const msg = {
       confirmHint: (slug) => `Nothing deleted. Re-run with --yes to confirm — or archive it instead: ${DEV_SPEC} feature archive ${slug}`,
       // feature protect (1.36): one lift record — in force, ended, or a lift a later record ended
       protectLift: (file, by, day, reason, ended, active) => ended ? `  lift ended: ${file} — by ${by}, ${day}` : `  ${active ? "lifted" : "lifted (ended since)"}: ${file} — by ${by}, ${day}: "${reason}"`,
+      // … an accept record (1.36.0 review 3: feature protect <f> <file> --accept)
+      protectAccept: (file, by, day, reason) => `  accepted: ${file} — by ${by}, ${day}: "${reason}"`,
       missingValue: (flag) => `missing value for --${flag}`,
       unknownFlag: (flag, suggestion) => `unknown option ${flag}` + (suggestion ? ` — did you mean ${suggestion}?` : ".") + " Run `" + DEV_SPEC + " help` for the options.",
       unknownRules: (tool, known) => `unknown tool '${tool}'. Known: ${known}`,
@@ -2232,6 +2235,8 @@ const msg = {
       removeSize: (n, rel) => `This deletes ${rel} for good — ${n} file${n === 1 ? "" : "s"}.`,
       // a spec_feature unprotect (1.36 guard tests): the reason the agent gives, as it would be recorded
       unprotect: (reason) => `Reason given: "${reason}". An agent may then change or delete this test until you protect it again.`,
+      // a spec_feature protect {accept: true} (1.36.0 review 3): the reason, as it would be recorded
+      accept: (reason) => `Reason given: "${reason}". The test's content now becomes the authorised one — finish no longer reports how it changed so far.`,
       approveTitle: "Approve",
       approveDesc: "Tick it to record this; leave it unticked (or decline) to refuse.",
       noteTitle: "Note",
@@ -3359,19 +3364,26 @@ const msg = {
       truncated: (cap) => `The list reached its cap (${cap} files): the tests past it are not protected.`,
       notEnforced: `The guard reads the list only at guard tests (${DEV_SPEC} init --guard tests).`,
       lifted: (file, slug, listed) => `Lifted the protection of ${file} (${slug}): it may change until ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (It was not on the feature's protected list.)"),
+      // feature protect <f> <file> --accept (1.36.0 review 3): the test's current content recorded as the authorised one
+      accepted: (file, slug) => `Accepted the current content of ${file} (${slug}): its recorded hash is this content now — finish names a later change.`,
       err: {
         fileRequired: `unprotect needs the test file: ${DEV_SPEC} feature unprotect <feature> <file> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
         reasonRequired: "unprotect needs a reason (one line, at most 500 characters): why this protected test may change.",
+        acceptFileRequired: `Accepting a test's content needs the test file: ${DEV_SPEC} feature protect <feature> <file> --accept --reason "…" (spec_feature {action: "protect", file, accept: true, reason}).`,
+        acceptReasonRequired: "Accepting a test's content needs a reason (one line, at most 500 characters): why its current content is the right one.",
         notATest: (file) => `${file} is not a test file (by its name or its folder) — only test files are protected.`,
         outside: (file) => `${file} is outside the project.`,
       },
-      finishWarn: (slug, list, more) => `Protected tests of ${slug} changed with no recorded reason (no task re-baselined them, no lift covers them): ${list}${more ? ` and ${more} more` : ""} — check each change is intended (a test made to pass is a weakened test); if it is, record it: ${DEV_SPEC} feature unprotect ${slug} <file> --reason "…".`,
+      finishWarn: (slug, list, more) => `Protected tests of ${slug} changed with no recorded reason (no task re-baselined them, no lift covers them): ${list}${more ? ` and ${more} more` : ""} — check each change is intended (a test made to pass is a weakened test); if it is, accept it: ${DEV_SPEC} feature protect ${slug} <file> --accept --reason "…".`,
       changed: (file) => `${file} (changed)`,
       deleted: (file) => `${file} (deleted)`,
       summaryHead: "## Protected tests",
       summaryLine: (n, k) => `${n} protected test file(s); ${k} changed with no recorded reason.`,
       summaryLift: (file, by, reason) => `- lifted: ${file} — by ${by}: "${reason}"`,
+      summaryAccept: (file, by, reason) => `- accepted: ${file} — by ${by}: "${reason}"`,
       doctorMissing: (slug) => `guard tests: ${slug} has approved tasks but no protected-tests snapshot (its tasks were approved before the level was set) — take one: ${DEV_SPEC} feature protect ${slug}.`,
+      // 1.36.0 review 3: a lift of a finished feature, recorded before its finish, never ended (first: the one file, else null)
+      doctorLiftAfterFinish: (slug, files, first) => `guard tests: ${slug}'s lift of ${files} is still in force after its finish — the test stays unprotected for every feature: end it (${DEV_SPEC} feature protect ${slug} ${first || "<file>"}) or accept its current content (${DEV_SPEC} feature protect ${slug} ${first || "<file>"} --accept --reason "…").`,
     },
 
     // the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).

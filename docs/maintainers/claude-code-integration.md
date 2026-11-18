@@ -201,14 +201,15 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   spike / scope answers: a target on the list of any feature with open tasks (a stale or pending one too) or with no finish
   recorded (its tasks all ticked) asks — `why` `protected-test`, `level` `tests` — unless a task that can start now of a covering
   or forced feature names it exactly in `_Implements:_` (never a reopened task with a tick record — the ask then says the test is a
-  reopened task's planned test, which needs a lift) or a lift is in force (its feature has open tasks). The target as the file
+  reopened task's planned test, which needs a lift) or a lift is in force (until a `protect <file>` record — 1.36.0 review 3: its
+  feature's tasks or finish no longer matter). The target as the file
   system reads it: an existing one by its real path (a link, a junction, the on-disk case), a glob in ANY segment (`tes?/`, `*/`,
   `[t]est/`) — a folder target too: a target with a glob skips guardCheck's not-code allow at this level (`rm -rf tes?/unit`,
   `packages/*/test` — `guardFolderCode` reads the last segment only) and is not-code after the decision when no protected test
   matches —, a case variant of a listed file by folded membership (tasks-and-evidence.md → Protected tests → The decision);
   **deny** when `meta.approvalGuard` is deny (the edit guard's only refusal — the project declared the human's decisions the
-  human's): `reason` for the agent (don't route around it), `userNote` for the user (the `!` lift line — naming a feature whose
-  lift is in force while the work goes on). `.specs/<feature>/tests/` is guarded there (never `allow("specs")`); a non-protected
+  human's): `reason` for the agent (don't route around it), `userNote` for the user (the `!` lift line — naming the feature
+  being worked on). `.specs/<feature>/tests/` is guarded there (never `allow("specs")`); a non-protected
   target goes on to the scope rule, whose answers carry the real `level`. **The hook** reads every target of a call and prints the STRICTEST
   answer — deny > a protected test's ask > any other ask (the first ask won: an out-of-scope file first hid the protected one)
   — with `systemMessage: userNote` on a deny; its raw pre-check reads `meta.guard === "tests"` and `DEV_SPEC_GUARD_DEFAULT=tests`.
@@ -293,16 +294,20 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (`APPROVAL_SHELL_TOOLS`) `dev-spec approve …`, `feature remove … --yes`, `init --approval-guard <lower>` (`--help` runs
   nothing); and the guard-down actions.
 - **Guard-down actions** (`kind: "guard-down"`, `setting`: approvalGuard · evidence · roles · check · stopCheck · guard · roadmap
-  · state · observed · track · specs · link · unprotect): lowering the guard or weakening what it protects — evidence observed →
-  reported, approval roles cleared or a required one dropped, a project check removed or changed, the stop gate off, the edit
-  guard lowered (`GUARD_LEVELS` off < on < scope < tests, 1.36 — judged against the EFFECTIVE level: `meta.guard`, else the user's
+  · state · observed · track · specs · link · unprotect · accept): lowering the guard or weakening what it protects —
+  evidence observed → reported, approval roles cleared or a required one dropped, a project check removed or changed, the
+  stop gate off, the edit guard lowered (`GUARD_LEVELS` off < on < scope < tests, 1.36 — judged against the EFFECTIVE level:
+  `meta.guard`, else the user's
   `DEV_SPEC_GUARD_DEFAULT`; meta unknown: every level but tests counts; the human's line is `init --guard <the level asked for>`
   — it printed `off` for scope), **track removal** — `spec_add_track {remove: true}` (`RE_APPROVAL_MCP`) / `add-track … --remove` turning off +tdd
   or +ai (`APPROVAL_GATED_TRACKS`: they carry a phase; +sec / +saas / a pack stay allowed) — and, 1.36, **a protected test's lift**
   — `spec_feature {action: "unprotect"}` / `feature unprotect <f> <file> --reason …` (setting `unprotect`, `file` and `reason`
   shown one line, bounded — `show()`; i18n.js `approvalAction` has its own sentence; the line `feature unprotect <f> <file>
   --reason "<reason>"`, each value only when plainly safe to paste; probe.js `RE_APPROVAL_VERB` holds `unprotect` and `--remove`,
-  so a globbed CLI path running either is a candidate). `feature protect` raises: never one. **The guarded files** (probe.js
+  so a globbed CLI path running either is a candidate) — and, 1.36.0 review 3, **a protected test's accept** — `spec_feature
+  {action: "protect", accept: true}` / `feature protect <f> <file> --accept --reason …` (setting `accept`, its own sentence, the
+  line `feature protect <f> <file> --accept --reason "<reason>"`; `--accept` a CLI switch and in `RE_APPROVAL_VERB`). A plain
+  `feature protect` raises: never one. **The guarded files** (probe.js
   `guardedFileOf`, read on the path's segments) — `.specs/roadmap.json`, `.specs/**/.state.json`, `.specs/**/.execution/observed.jsonl`
   (a forged line would make a run "observed") — written through Write / Edit / MultiEdit / NotebookEdit (`APPROVAL_EDIT_TOOLS`), a
   shell writer or an MCP file tool: `command: null` (the user makes that change), `project` the folder above `.specs/`
@@ -671,6 +676,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   at level tests a target with a glob anywhere skips that early allow (and is not-code after the decision when no protected test
   matches). The lift line named the first holder by folder name — an old feature all ticked, never finished, whose lift never
   ended: it names an unlocker that lists the file, else the first unlocker, else a holder with open tasks.
+- **1.36.0 review 3** — a lift is in force until a `protect <file>` record again (round 2's open-tasks rule made the line's last
+  fallback — a feature with every task ticked — record a lift that was never in force: the user looped); the lift line keeps its
+  order (tasks-and-evidence.md → Protected tests, History).
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer
@@ -737,6 +745,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   test's lift (`spec_feature unprotect`, `feature unprotect`) is a guard-down with its own sentence (it fell through to "lower
   undefined → undefined") and its file and reason shown bounded; `RE_APPROVAL_VERB` gained `unprotect` and `--remove` (a globbed CLI
   path running `add-track … --remove` — an existing gap — was no candidate).
+- **1.36.0 review 3** — a protected test's accept (`spec_feature {action: "protect", accept: true}`, `feature protect <f> <file>
+  --accept`) is a guard-down (setting `accept`) on every path — MCP, elicitation, the CLI through a shell; `accept` joined
+  `CLI_SWITCHES` (the hook's lexer must not read the file after it as its value) and `--accept` `RE_APPROVAL_VERB`.
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import

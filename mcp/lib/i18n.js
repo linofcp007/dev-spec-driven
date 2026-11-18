@@ -478,6 +478,7 @@ function approvalAction(X, a) {
     if (a.setting === "guardian-baseline-update") return X.guardianBaselineUpdate;
     if (a.setting === "guardian-cli") return X.guardianCli;
     if (a.setting === "unprotect") return X.unprotect(a.file || "?", f); // 1.36 guard tests: a lift of a protected test
+    if (a.setting === "accept") return X.accept(a.file || "?", f); // 1.36.0 review 3: a protected test's current content accepted
     return X.lower(a.from, a.to);
   }
   const who = (a.role ? X.asRole(a.role) : "") + (a.by ? X.onBehalf(a.by) : "");

@@ -1051,8 +1051,9 @@ function mergeBranchRecord(b, o, t, p, ctx) {
 }
 // `protectedTests` (1.36, meta.guard tests): `files` file by file, 3-way — a one-sided change (a tick's re-baseline, an added test)
 // comes through; both sides changed one → ours, never a conflict (finish hashes the content again); `at` / `via` the EARLIER snapshot's
-// (a record without a time reads as the later); `truncated` either side's; the lifts united by identity (a lift and its end each a record).
-const LIFT_ID = idOf("l", ["file", "at", "by", "revoked"]);
+// (a record without a time reads as the later); `truncated` either side's; the lifts united by identity (a lift and its end each a record;
+// 1.36.0 review 3: an accept record too — `accepted` in its id, never the same record as a lift or an end of the same file, time and user).
+const LIFT_ID = idOf("l", ["file", "at", "by", "revoked", "accepted"]);
 function mergeProtectedTests(b, o, t, p, ctx) {
   if (!isObj(o) || !isObj(t)) return mergeEither(ctx, p, b, o, t);
   const bb = isObj(b) ? b : {};

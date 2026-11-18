@@ -31,8 +31,9 @@ edit to a code file outside `.specs/` unless some feature has approved, unfinish
 is approved, and any edit during an active spike, pass too; `scope` also asks for a file no open task names in
 `_Implements:_`; `tests` also protects the tests present at a feature's tasks approval (and those a tick records): an edit
 of one asks unless a task that can start now names it in `_Implements:_` — refused with `approvalGuard: "deny"`; only the
-user lifts one (`feature unprotect <f> <file> --reason …`), and init warns while the approval guard is off (the list lives in
-`.state.json`). A reminder to plan before coding, not a lock.
+user lifts one (`feature unprotect <f> <file> --reason …`) or accepts its current content (`feature protect <f> <file> --accept
+--reason …`), and init warns while the approval guard is off (the list lives in `.state.json`). A reminder to plan before
+coding, not a lock.
 
 **statusline `[--user | --project] [--remove]`** — print the entry with
 `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" statusline --print-config`; target `~/.claude/settings.json` (`--user`,

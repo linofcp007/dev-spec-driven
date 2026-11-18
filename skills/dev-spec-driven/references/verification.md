@@ -377,14 +377,17 @@ against stay as they were unless the plan or the user says otherwise:
   refuses, the task reports NEEDS_CONTEXT naming the test — never a shell command, a script or git around it.
 - **The lift** — `dev-spec feature unprotect <feature> <file> --reason "…"` (`spec_feature {action: "unprotect", file,
   reason}`; the guard's line names the feature being worked on): the user's decision — with the approval guard on, an agent's
-  call asks or is refused; `feature protect <feature> <file>` ends it. It counts only while its feature has open tasks and was
-  recorded after that feature's last finish, so a later feature keeps the test protected: the lift recorded after
-  `/spec-finish`'s warning explains that feature's change (its own re-check too) and unlocks nothing else. `feature protect
-  <feature>` adds the tests present now (it never re-hashes a recorded one).
+  call asks or is refused. It lasts until `feature protect <feature> <file>` (of any feature) ends it — whatever its feature's
+  tasks, finished or not: a lift left in place after its feature's finish unprotects the test for every later feature, and
+  doctor warns about it. `feature protect <feature>` adds the tests present now (it never re-hashes a recorded one).
+- **The accept** — `dev-spec feature protect <feature> <file> --accept --reason "…"` (`spec_feature {action: "protect", file,
+  accept: true, reason}`): the user's decision too (a guard-down, like the lift) — the test's current content becomes the
+  recorded one in that feature's list, its lift (if any) ends, and the reason is kept (the merge summary shows it). The test
+  stays protected: a later change asks again, and finish names it.
 - **At finish** (every surface, git-free) — each protected test is hashed again: one whose content matches no hash a live
-  feature recorded for it (its snapshot, a tick of any feature) and that no lift covers is a **warning** naming it (changed /
-  deleted) and a "Protected tests" block in the merge summary — never a blocker: check each change is intended, then record it
-  with a lift.
+  feature recorded for it (its snapshot, a tick of any feature, an accept) and that no lift in force covers is a **warning**
+  naming it (changed / deleted) and a "Protected tests" block in the merge summary — never a blocker: check each change is
+  intended, then accept it (the warning's line) — never a lift for that.
 - **Defence in depth** — the hook prevents (Claude Code), finish detects what got past it (a confirmed prompt, a script, a
   git command, another client), dev-guardian's test-integrity scan reads the diff for weakened assertions (`.only`, skips,
   removed checks — in new tests too), and the independent reviewer sees every test file a task changed outside its

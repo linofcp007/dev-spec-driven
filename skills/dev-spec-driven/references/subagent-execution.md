@@ -178,8 +178,9 @@ command (`spec_complete_task` records the run you pass it, and refuses a failed 
   One about a **protected test** (`meta.guard: "tests"`, 1.36 — the guard asked about, or refused, an edit of a test the plan
   approved) is the same plan question, never a workaround: the test changes only when a task that can start now names it
   exactly in `_Implements:_` (a converge task, approved by the human) or the user lifts it (`feature unprotect <f> <file>
-  --reason …` — theirs to run); a red test turns green by fixing the code. When you plan a task that extends an existing
-  test file, name that file in its `_Implements:_` from the start (a folder or a glob never unlocks one).
+  --reason …` — theirs to run; it lasts until `feature protect <f> <file>`); a red test turns green by fixing the code. When
+  you plan a task that extends an existing test file, name that file in its `_Implements:_` from the start (a folder or a
+  glob never unlocks one).
 - **BLOCKED** → context problem: more context, same model. Needs more reasoning: re-dispatch one tier
   up. Too big: split it (ledger a ruling). **The spec is wrong** (a test that can't be right, an AC that
   contradicts the design): stop — this is a phase problem, not an implementation one.
