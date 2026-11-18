@@ -1742,13 +1742,19 @@ function writeChecks(projectDir, nc) {
 // A command that REWRITES files is never a fast check: run after each edit it would change the code — and the tests — under the
 // task. The rule, word by word (a heuristic — the docs say it as such): a `--fix` (`--fix=…`) or `--write` word, or a formatter —
 // a `*fmt` / `*format` program or subcommand (gofmt, cargo fmt, ruff format, dotnet format, clang-format; never a flag, an `@alias`
-// or a check-named script: check-fmt, check:fmt, fmt:check) — with no check flag (--check / -check / --check-…, -l, -d, --diff,
-// --dry-run, --verify-no-changes). 1.36 review 1 (FC-4 / T3): `gofmt -l`, `shfmt -d`, `make check-fmt`, `dune build @fmt` were
-// refused, `ruff format .`, `dotnet format`, `clang-format -i` accepted.
+// or a check- / lint-named script: check-fmt, check:fmt, fmt:check, lint:format) — with a `-w` word (write: `gofmt -l -w`), or with
+// no check word: a check flag (--check / -check / --check-…, -l, -d, -n, --diff, --dry-run, --verify-no-changes, --lint,
+// --validate, --test, --exit-code, --output=none) or its `lint` subcommand (`swift format lint`). 1.36 review 1 (FC-4 / T3):
+// `gofmt -l`, `shfmt -d`, `make check-fmt`, `dune build @fmt` were refused, `ruff format .`, `dotnet format`, `clang-format -i`
+// accepted. 1.36 review 2 (FC2-1): the widened formatter set refused check-only forms (`swiftformat --lint`, `dart format
+// --output=none`, `clang-format -n`, `elm-format --validate`, `buf format --exit-code`, `npm run lint:format`), and `-l` let
+// `gofmt -l -w` / `shfmt -l -w` through.
 const RE_FIXER_FLAG = /(?<![\w-])--(?:fix|write)(?![\w-])/;
-const RE_FORMATTER = /(?<![\w./@-])(?<!check[:_-])(?!-|check[-_:])[\w-]*(?:fmt|format)(?![\w:.-])/i;
-const RE_CHECK_FLAG = /(?<![\w-])(?:--?check(?:-[\w-]+)?|-[ld]|--diff|--dry-run|--verify-no-changes)(?![\w-])/;
-const fixerCommand = (cmd) => RE_FIXER_FLAG.test(cmd) || (RE_FORMATTER.test(cmd) && !RE_CHECK_FLAG.test(cmd));
+const RE_FORMATTER = /(?<![\w./@-])(?<!(?:check|lint)[:_-])(?!-|(?:check|lint)[-_:])[\w-]*(?:fmt|format)(?![\w:.-])/i;
+const RE_CHECK_FLAG = /(?<![\w-])(?:--?check(?:-[\w-]+)?|-[ldn]|--diff|--dry-run|--verify-no-changes|--lint|--validate|--test|--exit-code|--output=none)(?![\w-])/;
+const RE_LINT_MODE = /(?:fmt|format)\s+lint(?![\w:.-])/i; // a formatter's own lint subcommand: `swift format lint`, `swift-format lint`
+const RE_WRITE_WORD = /(?<![\w-])-w(?![\w-])/; // beside a formatter: it writes, whatever check flag stands beside it
+const fixerCommand = (cmd) => RE_FIXER_FLAG.test(cmd) || (RE_FORMATTER.test(cmd) && (RE_WRITE_WORD.test(cmd) || !(RE_CHECK_FLAG.test(cmd) || RE_LINT_MODE.test(cmd))));
 const FAST_SKEW_MS = 5 * 60 * 1000; // a log entry or a file date further ahead is ignored (another machine's clock)
 // roadmap.json meta.fastCheck → null (none set) · { name, command } · { invalid: the stored value, why: "missing" | "guardian" |
 // "fixer" } — a name no valid check carries, dev-guardian's gate, a command that rewrites files: no fast check runs (doctor warns
@@ -1835,8 +1841,12 @@ function fastCheckStatus(projectDir, dir, block, state) {
   const date = (rel) => { try { const m = fs.statSync(path.resolve(root, rel)).mtimeMs; if (m <= horizon && m > edited) edited = m; } catch { /* missing: no edit */ } };
   const planned = baselineFiles(root, activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "");
   planned.files.forEach(date);
-  const own = baselineFiles(root, taskMarkers(block).implements.map((p) => stripEnds(p.trim(), isBacktickUnit).trim())); // implementsRefs' reading
-  own.files.forEach(date);
+  // the task's own files: the planned walk's are KNOWN (no second realpath check) and dated once — a big glob's own walk is the
+  // call's memoized one (globFiles, the folder listings) — 1.36 review 2 FC2-3: a second walk doubled the brief on a big glob
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const known = new Set(planned.files.map(fold));
+  const own = baselineFiles(root, taskMarkers(block).implements.map((p) => stripEnds(p.trim(), isBacktickUnit).trim()), undefined, known); // implementsRefs' reading
+  own.files.forEach((rel) => { if (!known.has(fold(rel))) date(rel); });
   const partial = planned.truncated; // (a task's own folder past the cap is part of the planned set: cut there too)
   const status = !last ? (observedAny(projectDir) ? "missing" : "unknown") : last.t < edited ? "stale" : last.exitCode === 0 ? "clean" : "failed";
   const st = isRecord(state) ? state : {};

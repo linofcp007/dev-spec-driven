@@ -1122,7 +1122,9 @@ const COMMANDS = [
         const fc = b.fastCheck || null;
         const isFast = (x) => !!fc && spec.runProvesVerify({ command: x }, [fc.command], projectDir);
         const inVerify = cmds.some(isFast);
-        const fastFirst = fc && fc.status !== "clean" && !inVerify ? fc : null;
+        // (a clean status on a partial set — past the planned-file cap only the first files and the task's own are dated — is no
+        // proof: it runs — 1.36 review 2 FC2-2)
+        const fastFirst = fc && (fc.status !== "clean" || fc.partial) && !inVerify ? fc : null;
         const fastRefused = fastFirst ? RUN.preRunRefusal([{ name: fc.check, command: fc.command }], sh, M, c.env) : null;
         if (fastRefused) return fail(fastRefused);
         const git = GIT.gitState(projectDir); // the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it

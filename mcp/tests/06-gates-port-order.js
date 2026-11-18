@@ -235,10 +235,10 @@ ${MAIN}
     fs.writeFileSync(path.join(f.dir, "tasks.md"), t + "\n## Phase: Polish\n- [ ] 5. [shared] Tidy\n  - _Depends: 1_\n  - _Verify: node verify-5.js_\n");
     const h4 = S.completeTask(p, f.slug, 4, run(4));
     const doc = S.specDoctor(p, f.slug);
-    all("1.36: add_track +port on a written plan — the appended differential check waits for the appended baseline (anchors by heading, no [PORT] criterion cited); port-verify warns baselineLate (#1, #2 before task 3) and the _Depends:_ of task 5 that never reaches it (got " +
+    all("1.36: add_track +port on a written plan — the appended differential check waits for the appended baseline (anchors by heading, no [PORT] criterion cited); port-verify warns baselineLate (#1, #2 before task 3), the _Depends:_ of task 5 that never reaches it and (1.36 review 2, P2-4) the differential check citing no [PORT] criterion (got " +
       js([add.ok, h4.heldBy, chk(doc, "port-verify")]) + ")", [
       () => add.ok, () => js(h4.heldBy) === "[3]", () => chk(doc, "port-verify").status === "warn",
-      () => chk(doc, "port-verify").detail === P.baselineLate("#1, #2", 3) + "; " + P.dependsEscape("#5", 3),
+      () => chk(doc, "port-verify").detail === P.baselineLate("#1, #2", 3) + "; " + P.dependsEscape("#5", 3) + "; " + P.dUncited(4),
     ]);
   }
 
@@ -398,6 +398,20 @@ ${MAIN}
       () => ntK.next && ntK.next.number === 5 && ntK.gated === "port-order" && js(ntK.heldBy) === "[1]", () => js((ntK.batch || []).map((b) => b.number)) === "[5]",
       () => naK.step === "implement" && /#5/.test(naK.recommendation),
     ]);
+    // 1.36 review 2 (P2-3): complete_task's `next`, spec_status's next and the brief's default task pass over a held task too — nothing
+    // else can start: none, the tick's note and the brief's naming the anchor's run (next_task's note); a task the fence doesn't hold is
+    // still served
+    const stB = S.statusFeature(B1.p, B1.slug).tasks, brB = S.taskBrief(B1.p, B1.slug), stD = S.statusFeature(D1.p, D1.slug).tasks, brD = S.taskBrief(D1.p, D1.slug);
+    const nD = S.completeTask(D1.p, D1.slug, 5, { summary: "compared by hand again" });
+    const stK = S.statusFeature(K.p, K.slug).tasks, brK = S.taskBrief(K.p, K.slug);
+    const nV = S.completeTask(V1.p, V1.slug, 1, { summary: "baseline recorded again" });
+    all("1.36 review 2 (P2-3): the baseline ticked unverified — complete_task's next is none (its note names the baseline's run), spec_status's next none, the brief's default task none (naHeld); the differential check likewise; a task before the baseline is still served (got " +
+      js([u1.next, stB.next, brB.task, brB.note, stD.next, brD.task, nD.next, stK.next, brK.task && brK.task.number]) + ")", [
+      () => u1.next === null && u1.note.endsWith(P.naHeld(2, 1, B1.slug, true)), () => stB.next === null, () => brB.ok && brB.task === null && brB.note === P.naHeld(2, 1, B1.slug, true),
+      () => stD.next === null && brD.task === null && brD.note === P.naHeld(6, 5, D1.slug, true), () => nD.ok && nD.next === null,
+      () => nV.ok && nV.next === null && nV.note.endsWith(P.naHeld(2, 1, V1.slug, false)),
+      () => stK.next && stK.next.number === 5, () => brK.task && brK.task.number === 5,
+    ]);
   }
 
   { // 1.36 review 1 (INT-3): all ticked with the differential check not passed again since a task after it — next_action's step is that run
@@ -424,5 +438,93 @@ ${MAIN}
       () => naR.step === "verify" && naR.recommendation === P.naRecheck(5, "#6, #7", x.slug), () => js(slR.next) === js({ step: "verify", task: 5 }),
       () => naF.step === "finish" && panelAt === 0 && doneAt > panelAt, () => naF.recommendation.includes("finish " + x.slug + " --run"),
     ]);
+    // 1.36 review 2 (P2-2): port-recheck reads only the tasks listed after the differential check, so a fix after its re-run — the branch
+    // review's included — is never asked for: the finish step says to run it again first (after the finish text, before the checks' hint),
+    // and so does the re-check step's text; a plan with one anchor has no differential check to name
+    const portAt = naF.recommendation.indexOf(P.naFinishCheck(5, x.slug)), hintAt = naF.recommendation.indexOf("finish " + x.slug + " --run");
+    const one = mk("finish-one", { tasks: "# Tasks: One\n\n## Phase A\n- [ ] 1. Record the baseline\n  - _Requirements: US-1.AC-36, US-1.AC-37_\n  - _Verify: node verify-1.js_\n" +
+      "- [ ] 2. Port it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n  - _Verify: node verify-2.js_\n" });
+    approveBefore(one.p, one.slug, "execution");
+    for (const n of [1, 2]) { tick(); one.done(n, run(n)); }
+    const naOne = S.nextAction(one.p, one.slug);
+    all("1.36 review 2 (P2-2): the +port finish step names the differential check's re-run after any fix (after the finish text, before the project checks' hint); the re-check text says it too; a one-anchor plan's finish names none (got " +
+      js([portAt, doneAt, hintAt, naOne.step, naOne.recommendation]) + ")", [
+      () => portAt > doneAt && portAt < hintAt, () => /review panel/.test(P.naRecheck(5, "#6", x.slug)) && /before \/spec-finish/.test(P.naRecheck(5, "#6", x.slug)),
+      () => naOne.step === "finish" && !naOne.recommendation.includes("+port:"),
+    ]);
+  }
+
+  { // 1.36 review 2 (P2-1): a project tasks template with no level-2 heading over its first task (Kiro's tasks right under the title, ###-only
+    // sections) gets the baseline appended after the template's tasks (the insertion is unchanged): at size m / l the tasks approval refuses
+    // the plan until the baseline comes first — doctor's port-verify fails and next_action names the move —, once approved anyway it is a warn
+    // (the next approval requires it); at s a warn, the approval passes. A built-in scaffold (the baseline first) never trips it.
+    const KIRO = "# Implementation Plan\n\n- [ ] 1. [placeholder task]\n  - _Requirements: [criterion]_\n";
+    const H3 = "# Tasks\n\n### Setup\n- [ ] 1. [placeholder task]\n  - _Requirements: [criterion]_\n\n### Core\n- [ ] 2. [placeholder task]\n  - _Requirements: [criterion]_\n";
+    // the scaffold filled in place: each template task covers its share of the story's criteria (cover[k]), every other slot a value
+    const tpl = (name, body, size, cover) => {
+      const p = path.join(tmp, "p36g-tpl-" + name);
+      S.initProject(p, ["core"], "en");
+      handRoadmap(p);
+      fs.mkdirSync(path.join(p, ".specs", "templates"), { recursive: true });
+      fs.writeFileSync(path.join(p, ".specs", "templates", "tasks.md"), body);
+      const f = S.createFeature(p, "Port fixture", ["port"], "", undefined, "en", undefined, { size });
+      let k = 0;
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), rd(f.dir, "tasks.md").replace(/_Requirements: \[criterion\]_/g, () => "_Requirements: " + cover[k++] + "_"));
+      fill(f.dir, ["classification.md", "requirements.md", "design.md", "tasks.md"]);
+      approveBefore(p, f.slug, "tasks");
+      return { p, f, slug: f.slug };
+    };
+    const M_ALL = ["US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1"], S_ALL = ["US-1.AC-1, US-1.AC-2"];
+    const km = tpl("kiro-m", KIRO, "m", M_ALL), hm = tpl("h3-m", H3, "m", ["US-1.AC-1, US-1.AC-2", "US-1.AC-3, US-1.AC-4, US-2.AC-1"]);
+    const ks = tpl("kiro-s", KIRO, "s", S_ALL), hs = tpl("h3-s", H3, "s", ["US-1.AC-1", "US-1.AC-2"]);
+    const lateK = P.baselineLate("#1", 2), lateH = P.baselineLate("#1, #2", 3);
+    const refK = S.approvePhase(km.p, km.slug, "tasks", "t"), refH = S.approvePhase(hm.p, hm.slug, "tasks", "t");
+    const pvK = chk(S.specDoctor(km.p, km.slug), "port-verify"), naK = S.nextAction(km.p, km.slug);
+    const okKs = S.approvePhase(ks.p, ks.slug, "tasks", "t"), okHs = S.approvePhase(hs.p, hs.slug, "tasks", "t");
+    const pvKs = chk(S.specDoctor(ks.p, ks.slug), "port-verify"), pvHs = chk(S.specDoctor(hs.p, hs.slug), "port-verify");
+    // approved anyway (forced): a warn, the next approval requires the move
+    S.approvePhase(km.p, km.slug, "tasks", "t", { force: true, reason: "fixture" });
+    const pvKa = chk(S.specDoctor(km.p, km.slug), "port-verify");
+    // the baseline moved first (its section above the template's, the tasks renumbered in file order): approved
+    const L = rd(hm.f.dir, "tasks.md").split("\n");
+    const at = L.indexOf(LEAD), end = L.indexOf(MAIN);
+    const moved = [...L.slice(0, L.indexOf("### Setup")), ...L.slice(at, end), ...L.slice(L.indexOf("### Setup"), at), ...L.slice(end)];
+    let num = 0;
+    fs.writeFileSync(path.join(hm.f.dir, "tasks.md"), moved.join("\n").replace(/^- \[ \] \d+\./gm, () => "- [ ] " + ++num + "."));
+    const okHm = S.approvePhase(hm.p, hm.slug, "tasks", "t");
+    // a built-in scaffold, filled, at every size, with and without +tdd: the baseline first — no baselineLate
+    const builtIn = [];
+    for (const size of ["s", "m", "l"]) for (const tr of [["port"], ["tdd", "port"]]) {
+      const p = path.join(tmp, "p36g-builtin-" + size + "-" + tr.length);
+      S.initProject(p, ["core"], "en");
+      handRoadmap(p);
+      const f = S.createFeature(p, "Port fixture", tr, "", undefined, "en", undefined, { size });
+      fill(f.dir, ["classification.md", "requirements.md", "design.md", "tasks.md"]);
+      const pv = chk(S.specDoctor(p, f.slug), "port-verify");
+      if (pv.status === "fail" || /listed before the baseline/.test(pv.detail || "")) builtIn.push([size, tr.join("+"), pv]);
+    }
+    all("1.36 review 2 (P2-1): Kiro's and a ###-only template at size m — the tasks approval refuses the plan on port-verify alone, naming the move (baselineLate), doctor fails it and next_action names it; approved anyway, a warn (approved already); the baseline moved first, approved; at s a warn and the approval passes; a built-in scaffold never trips it (got " +
+      js([refK.failing, refK.checks, refH.failing, pvK, okKs.ok, okHs.ok, pvKs, pvHs, pvKa, okHm.ok, okHm.failing, builtIn]) + ")", [
+      () => !refK.ok && js(refK.failing) === '["port-verify"]' && (refK.checks || []).some((c) => c.id === "port-verify" && c.detail === lateK),
+      () => !refH.ok && js(refH.failing) === '["port-verify"]' && (refH.checks || []).some((c) => c.id === "port-verify" && c.detail === lateH),
+      () => pvK.status === "fail" && pvK.detail === lateK, () => naK.step === "fix" && naK.recommendation.includes(lateK),
+      () => pvKa.status === "warn" && pvKa.detail === lateK + " " + P.approvedAlready,
+      () => okHm.ok && !okHm.forced,
+      () => okKs.ok && !okKs.forced && okHs.ok && !okHs.forced, () => pvKs.status === "warn" && pvKs.detail === lateK, () => pvHs.status === "warn" && pvHs.detail === lateH,
+      () => !builtIn.length,
+    ]);
+  }
+
+  { // 1.36 review 2 (P2-4): no task under the differential check's heading cites a [PORT] criterion — its first task (here a prep task) is taken
+    // for the check (the fallback order unchanged): port-verify warns, naming it
+    const PREP = `# Tasks: Prep\n\n${LEAD}\n- [ ] 1. [US1] Record the baseline\n  - _Requirements: US-1.AC-36, US-1.AC-37_\n  - _Verify: node verify-1.js_\n\n` +
+      "## Story US-1 (P1 — MVP)\n- [ ] 2. [US1] Port the reader\n  - _Requirements: US-1.AC-1_\n  - _Verify: node verify-2.js_\n\n" +
+      `${MAIN}\n- [ ] 3. [US1] Write the comparison harness\n  - _Requirements: US-1.AC-2_\n  - _Verify: node verify-3.js_\n` +
+      "- [ ] 4. [US1] Differential check over the corpus\n  - _Requirements: US-1.AC-1_\n  - _Verify: node verify-4.js_\n\n" +
+      "## Story US-2 (P2)\n- [ ] 5. [US2] Clearer errors\n  - _Requirements: US-2.AC-1_\n  - _Verify: node verify-5.js_\n";
+    const x = mk("d-uncited", { tasks: PREP });
+    const pv = chk(S.specDoctor(x.p, x.slug), "port-verify");
+    ok(pv.status === "warn" && pv.detail === P.dUncited(3),
+      "1.36 review 2 (P2-4): no task under the differential check's heading cites a [PORT] criterion — port-verify warns that its first task (3) is taken for the check (got " + js(pv) + ")");
   }
 };

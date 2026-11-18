@@ -138,8 +138,8 @@ own sections hold them. **Filled means your own text:** the template's guidance 
 - brownfield / integration: `_Implements: path/to/file_` ties a task to a real source file (checked by `trace`)
 - +port: the FENCE — the baseline task first (recorded from the old code), the port's work, the differential check, then
   the improvements. `spec_complete_task` refuses a task listed after the baseline until the baseline is ticked AND verified,
-  one listed after the differential check until it is (`gated: "port-order"`, `heldBy`); both need a runnable `_Verify:_`
-  (doctor `port-verify` — a fail at size m / l). A cleanup noticed during the port goes under `[PORT] Deferred Improvements`, never
+  one listed after the differential check until it is (`gated: "port-order"`, `heldBy`); both need a runnable `_Verify:_`, and
+  no task comes before the baseline (doctor `port-verify` — a fail at size m / l). A cleanup noticed during the port goes under `[PORT] Deferred Improvements`, never
   into the port's task. `references/port-patterns.md`.
 
 ## Phase 6 — track-gated "done" checks before a feature is finished
@@ -158,7 +158,8 @@ own sections hold them. **Filled means your own text:** the template's guidance 
 - **+obs:** an alert fired in a staged failure and a rollback drill.
 - **+data:** the data-quality checks, a partition re-run and a backfill rehearsal on real-sized data — the same rows as one run.
 - **+port:** behaviour first — the differential check green on the final build, run AGAIN after the last improvement (doctor
-  `port-recheck`; `spec_finish` blocks until `done <f> <n> --run` of the differential check is newer than every later tick); the
+  `port-recheck`; `spec_finish` blocks until `done <f> <n> --run` of the differential check is newer than every later tick) and
+  after any fix since (a review's, the simplify pass's — `port-recheck` reads only the tasks listed after it); the
   baseline files unchanged since the baseline task; every Deferred Improvement made in a later task or still listed.
 
 `spec_finish` lists the same items as `checks` — only a fresh run or a human can confirm them.

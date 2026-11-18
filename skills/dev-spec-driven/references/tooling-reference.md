@@ -81,8 +81,9 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · `verify-control` (1.25.1: a
   `_Verify:_` or a stored project check holding a control character — an escape sequence, a lone carriage return — named with
   it escaped: a terminal would show another command than the one that runs; `done --run` / `finish --run` run nothing) · `port-verify` (1.36, +port at size m / l: the
-  baseline task and the differential check, each with a runnable `_Verify:_` — the tasks approval refuses without them; a warn at s / no size, and
-  for a task listed before the baseline or a `_Depends:_` that never reaches it — references/port-patterns.md) · bugfix `root-cause` ·
+  baseline task and the differential check, each with a runnable `_Verify:_`, and no task listed before the baseline — the tasks approval refuses
+  without them; a warn at s / no size, and for a `_Depends:_` that never reaches the baseline or a differential check's heading where no task cites a
+  `[PORT]` criterion — references/port-patterns.md) · bugfix `root-cause` ·
   spike `spike` (spike.md missing) / `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
   `.state.json` or in `roadmap.json` — pick each value, delete the list) · `state` (the feature's `.state.json` is not
   valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it) · `roadmap`

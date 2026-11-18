@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, __dirname }) => {
+exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, __dirname }) => {
   const js = JSON.stringify;
   const call = async (name, args) => payload(await rpc("tools/call", { name, arguments: args }));
   const FC = S.msg("en").fastCheck;
@@ -107,12 +107,20 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, __dirname }) =
     // subcommand with no check flag, is refused; a check-only command never is (a check flag, a check-named script, an @alias, a flag
     // that holds "format"). A formatter known by another name (prettier -w, black .) is outside the heuristic, as the docs say.
     const fixerOf = (cmd) => S.initProject(p, [], null, { checks: { fx: cmd }, fastCheck: "fx" }).ok === false;
-    const rewriters = ["eslint --fix=true .", "gofmt -w .", "ruff format .", "dotnet format", "clang-format -i src/a.c", "npm run format", "mix format"];
+    const rewriters = ["eslint --fix=true .", "gofmt -w .", "ruff format .", "dotnet format", "clang-format -i src/a.c", "npm run format", "mix format",
+      // 1.36 review 2 (FC2-1): a -w word beside a formatter writes, whatever check flag stands beside it; a formatter's bare form writes
+      "gofmt -l -w .", "shfmt -l -w .", "buf format -w --exit-code", "dart format --set-exit-if-changed .", "swiftformat .", "elm-format --yes src"];
     const checkOnly = ["prettier --check .", "eslint --fix-dry-run .", "cargo fmt --check", "ruff format --check .", "black --check .", "terraform fmt -check",
       "gofmt -l .", "shfmt -d .", "ruff format --diff .", "clang-format --dry-run --Werror src/a.c", "dotnet format --verify-no-changes",
-      "mix format --check-formatted", "make check-fmt", "npm run check:fmt", "npm run fmt:check", "dune build @fmt", "cargo clippy --message-format short"];
+      "mix format --check-formatted", "make check-fmt", "npm run check:fmt", "npm run fmt:check", "dune build @fmt", "cargo clippy --message-format short",
+      // 1.36 review 2 (FC2-1): the check modes of the formatters the widened set reads — a lint subcommand or flag, a validate / test / exit-code
+      // / no-output flag, -n (a dry run) —, a lint-named script, and a -w that is no formatter's
+      "swift format lint --strict -r Sources", "swift-format lint -r Sources", "swiftformat --lint .", "dart format --output=none --set-exit-if-changed .",
+      "elm-format --validate src", "buf format --exit-code", "clang-format -n --Werror src/a.c", "google-java-format -n --set-exit-if-changed A.java",
+      "scalafmt --test", "npm run lint:format", "npm run lint-fmt", "npx jest -w 2"];
     const outside = ["prettier -w .", "black ."]; // rewriters by another name: accepted, the documented limit of the heuristic
-    const wrong = [...rewriters.filter((c) => !fixerOf(c)), ...[...checkOnly, ...outside].filter((c) => fixerOf(c))];
+    const plainOnly = ["biome format ."]; // a formatter whose bare form only reports: refused, the documented limit (its check form: biome ci / biome check)
+    const wrong = [...[...rewriters, ...plainOnly].filter((c) => !fixerOf(c)), ...[...checkOnly, ...outside].filter((c) => fixerOf(c))];
     // 1.36 review 1 (INT-6): a refused init leaves nothing behind — beside dev-guardian's gate the fast check is planned before the
     // gate's launcher is written (the gate itself, a name no check carries); a roadmap.json that doesn't parse keeps its own refusal
     const fresh = (name) => { const q = path.join(tmp, name); fs.mkdirSync(q, { recursive: true }); return q; };
@@ -129,7 +137,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, __dirname }) =
       name: () => rn.ok === false && rn.error === FC.badName("nope", "guardian") && fs.readdirSync(n).length === 0,
       broken: () => rb0.ok === false && rb.ok === false && rb.error === rb0.error && rb.code === undefined,
     });
-    ok(wrong.length === 0, "1.36 review 1: the fixer refusal follows its documented rule — --fix / --fix=… / --write, or a fmt / format command without a check flag (-l, -d, --diff, --dry-run, --verify-no-changes, --check-…) refused; check-only commands, check-named scripts, an @fmt alias and a --message-format flag accepted (wrong: " + js(wrong) + ")");
+    ok(wrong.length === 0, "1.36 review 1 + 2: the fixer refusal follows its documented rule — --fix / --fix=… / --write, or a fmt / format command with -w or without a check word (-l, -d, -n, --diff, --dry-run, --verify-no-changes, --check-…, --lint, --validate, --test, --exit-code, --output=none, a lint subcommand) refused; check-only commands, check- / lint-named scripts, an @fmt alias, a --message-format flag and a -w of no formatter accepted; biome format . refused (the documented limit) (wrong: " + js(wrong) + ")");
   }
 
   { // removing the fast check's own check removes the fast check too (cleared note); doctor's `fast-check` warns on a stored value no
@@ -284,6 +292,49 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, __dirname }) =
       after: () => js(after) === js({ check: "tc", command: TC, status: "stale", partial: true }),
       tick: () => t2.ok && js(t2.fastCheck) === js({ check: "tc", status: "stale", runs: 0, clean: 0, partial: true }) && t2.note === FC.tickNote(2, "tc", TC, "stale", false),
     });
+  }
+
+  { // 1.36 review 2 (FC2-3): the task's own files are dated from the planned walk's result (its files known: no second realpath check, no second
+    // date) — on a big-glob task the brief and next_task cost stays within ×1.3 of the same call without the fast check plus the planned walk
+    // and its dates alone (a ratio; a second walk of the same glob doubled it)
+    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const p = path.join(tmp, "proj-fc-cost");
+    S.initProject(p, ["core"], "en", { checks: { tc: TC }, fastCheck: "tc" });
+    const f = S.createFeature(p, { name: "Big", tracks: ["core"] });
+    for (let d = 0; d < 8; d++) {
+      fs.mkdirSync(path.join(p, "src", "d" + d), { recursive: true });
+      for (let i = 0; i < 100; i++) fs.writeFileSync(path.join(p, "src", "d" + d, "f" + i + ".ts"), "//\n");
+    }
+    const text = "# Tasks\n\n" + task(1, "Refactor", ["_Implements: src/**/*.ts_", "_Verify: " + PASS + "_"]) + task(2, "More", ["_Implements: src/**/*.ts_", "_Verify: " + PASS + "_"]);
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), text);
+    writeLog(p, [[TC, 0, Date.now() + 1000]]);
+    const planned = () => S.withReadCache(() => E.baselineFiles(p, text).files.forEach((r) => { try { fs.statSync(path.join(p, r)); } catch { /* none */ } }));
+    // interleaved rounds (a load spike hits every side alike), the first a warm-up, each side's median
+    const sample = () => {
+      const T = { brief: [], next: [], briefOff: [], nextOff: [], walk: [] };
+      const time = (k, fn) => { const t0 = process.hrtime.bigint(); fn(); T[k].push(Number(process.hrtime.bigint() - t0) / 1e6); };
+      for (let i = 0; i < 6; i++) {
+        setMeta(p, { fastCheck: "tc" });
+        time("brief", () => S.taskBrief(p, f.slug, 1)); time("next", () => S.nextTask(p, f.slug));
+        setMeta(p, { fastCheck: undefined });
+        time("briefOff", () => S.taskBrief(p, f.slug, 1)); time("nextOff", () => S.nextTask(p, f.slug)); time("walk", planned);
+      }
+      const m = Object.fromEntries(Object.entries(T).map(([k, a]) => [k, a.slice(1).sort((x, y) => x - y)[2]]));
+      return { ...m, rb: m.brief / (m.briefOff + m.walk), rn: m.next / (m.nextOff + m.walk) };
+    };
+    const s = remeasure(sample, (x) => x.rb <= 1.3 && x.rn <= 1.3);
+    // each file is dated once: the brief's stat calls under src/ grow by the planned set (500) with the fast check on — a second date
+    // of the own files the planned walk already dated was +20% of the brief (a cost guard, counted rather than timed)
+    const srcDir = path.join(p, "src") + path.sep, realStat = fs.statSync; // (a file under it — the glob's own folder stat aside)
+    const stats = () => { let n = 0; fs.statSync = function (file, ...rest) { if (String(file).startsWith(srcDir)) n++; return realStat.call(this, file, ...rest); };
+      try { S.taskBrief(p, f.slug, 1); } finally { fs.statSync = realStat; } return n; };
+    const statsOff = stats();
+    setMeta(p, { fastCheck: "tc" });
+    const statsOn = stats();
+    const st = S.taskBrief(p, f.slug, 1).fastCheck;
+    ok(s.rb <= 1.3 && s.rn <= 1.3 && st && st.status === "clean" && st.partial === true && statsOn - statsOff === 500,
+      "1.36 review 2 (FC2-3): a big-glob task's brief and next_task with the fast check cost at most ×1.3 the call without it plus the planned walk and its dates alone, each file dated once (got " +
+      js(Object.fromEntries(Object.entries(s).map(([k, v]) => [k, Math.round(v * 100) / 100]))) + ", tries " + s.tries + ", stats " + statsOff + " → " + statsOn + ", " + js(st) + ")");
   }
 
   { // 1.36 review 1 (FC-6): the PowerShell tool through the observe hook — its failure is logged (marked tool: PowerShell), a later pass

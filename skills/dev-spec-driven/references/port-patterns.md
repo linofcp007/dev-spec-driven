@@ -68,14 +68,20 @@ under that heading, else the last citing task) — a hand-written plan works by 
 after the check in its section still waits for it. A differential check listed before the baseline holds nothing (port-verify
 says so: move it after the port's tasks). Moving a task across an anchor is a plan change: tasks.md is approved again.
 
-`spec_next_task`, `spec_next_action` and the status line never name a held task: while the baseline (or the differential
-check) is ticked but not verified, the next step is its run — `done <f> <n> --run` (a `[PORT]` task without a runnable
-`_Verify:_` needs its command written first).
+`spec_next_task`, `spec_next_action`, the status line, `spec_complete_task`'s `next`, `spec_status`'s next and the brief's
+default task never name a held task (the roadmap's row and `next_task`'s waves still list them): while the baseline (or the
+differential check) is ticked but not verified, the next step is its run — `done <f> <n> --run` (a `[PORT]` task without a
+runnable `_Verify:_` needs its command written first).
 
-doctor's **`port-verify`** checks the plan: both anchors, each with a runnable `_Verify:_` (a fail at size m / l — the tasks
-approval refuses it — a warn at s / no size), a task listed before the baseline (`add-track port` on a written plan appends
-the two tasks: move the baseline first), and a `_Depends:_` after the baseline that never reaches it (a wave would start it
-first).
+doctor's **`port-verify`** checks the plan: both anchors, each with a runnable `_Verify:_`, and no task listed before the
+baseline — a fail at size m / l, where the tasks approval refuses the plan until both hold (once the tasks are approved, a
+warn: their next approval requires it), a warn at s / no size. A task lands before the baseline when `add-track port` appends
+the two tasks to a written plan, or when a project tasks template has no level-2 heading over its first task (Kiro's tasks
+right under the title, `###`-only sections): the scaffold then appends the baseline after the template's tasks — move it
+first. It warns besides about a `_Depends:_` after the baseline that never reaches it (a wave would start it first), and
+about a differential check's heading where no task cites a `[PORT]` criterion: its first task is then taken for the check —
+a preparation task there would open the fence for the improvements before the comparison runs; cite the criteria in the
+check's `_Requirements:_`.
 
 ## Improve later — and compare again
 
@@ -88,7 +94,10 @@ Differential Check's list of intended differences with the criterion's ID), and 
 it is done**. doctor's **`port-recheck`** warns, and `spec_finish` blocks, while the differential check's latest passing
 run is older than the latest tick or run of a task listed after it — `done <f> <n> --run` on the differential check clears
 it (a forced execution approval waives it, like any blocker). `spec_next_action` names that run before the finish step, so
-the project checks run once, after it. doctor's **`port-fence`** warns about a task ticked before the `[PORT]` task it waits
+the project checks run once, after it. **`port-recheck` counts only the tasks listed after the differential check**: a fix
+after that run — the review panel's branch review, the final review, the simplify pass, any edit to the port's own tasks —
+is never asked for, so run the differential check again on the final code yourself before `/spec-finish` (the finish
+step's `+port:` line says so). doctor's **`port-fence`** warns about a task ticked before the `[PORT]` task it waits
 for had passed — a task moved across an anchor, +port turned off and on again, a checkbox ticked by hand. The evidence keeps
 an anchor's last 5 runs: past them its first pass is no longer known, and only a task with no record of when it was ticked
 is still named.

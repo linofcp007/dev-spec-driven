@@ -49,12 +49,15 @@ function portAnchors(blocks, reqText) {
   const mains = under.map((u, i) => (u === "main" ? i : -1)).filter((i) => i >= 0);
   let d = -1;
   for (let k = mains.length - 1; k >= 0 && d < 0; k--) if (cites(blocks[mains[k]])) d = mains[k];
-  if (d < 0 && mains.length) d = mains[0];
+  // uncited: no task under that heading cites one — its first task is taken (port-verify warns: a prep task there would be D — 1.36
+  // review 2, P2-4)
+  const uncited = d < 0 && mains.length > 0;
+  if (uncited) d = mains[0];
   if (d < 0) for (let i = blocks.length - 1; i >= 0; i--) if (cites(blocks[i])) { d = i; break; }
   // a differential check listed before the baseline compares nothing yet: read as absent (B == D — every task after the baseline
   // waits for it, nothing before it is held); port-verify names the order (early: its index)
   if (d >= 0 && d < b) return { b, d: b, early: d };
-  return { b, d };
+  return { b, d, ...(uncited ? { uncited } : {}) };
 }
 // the anchors, distinct, in file order
 const anchorList = (b, d) => [...new Set([b, d])].filter((i) => i >= 0).sort((x, y) => x - y);
@@ -125,12 +128,13 @@ function portSchedule(dir, kind, tracks, blocks, evidence, rule) {
 }
 
 // Is the plan's fence complete: both anchors there — two tasks, the baseline listed first —, each with a runnable _Verify:_
-// (taskMarkers drops a [slot])? → { ok, both, b, d, early, noVerify: [n…] } (early: a differential check listed before the baseline)
+// (taskMarkers drops a [slot])? → { ok, both, b, d, early, uncited, noVerify: [n…] } (early: a differential check listed before the
+// baseline; uncited: D taken as the first task under its heading — none there cites a [PORT] criterion)
 function portPlan(blocks, reqText) {
-  const { b, d, early } = portAnchors(blocks, reqText);
+  const { b, d, early, uncited } = portAnchors(blocks, reqText);
   const noVerify = anchorList(b, d).filter((i) => !taskMarkers(blocks[i]).verify.length).map((i) => blocks[i].number);
   const both = b >= 0 && d > b;
-  return { ok: both && !noVerify.length, both, b, d, early, noVerify };
+  return { ok: both && !noVerify.length, both, b, d, early, uncited: !!uncited, noVerify };
 }
 // port-verify's detail for an incomplete fence: a differential check listed before the baseline, no pair of anchors, an anchor
 // without a runnable _Verify:_
@@ -138,26 +142,34 @@ function planGap(p, blocks, lng) {
   const P = i18n.msg(lng).port;
   return p.early != null ? P.verifyOrder(blocks[p.early].number, blocks[p.b].number) : !p.both ? P.verifyMissing : P.noVerify(numList(p.noVerify, lng));
 }
-// The tasks approval's probe at size m / l (designReuseGated) — [[ok, detail]], [] elsewhere.
+// tasks listed before the baseline (baselineLate) → its detail, or null — a project tasks template with no level-2 heading over its
+// first task gets the baseline appended after them (templates.js beforeFirstTaskSection), add_track on a written plan too
+const lateDetail = (p, blocks, lng) => (p.b > 0 ? i18n.msg(lng).port.baselineLate(numList(blocks.slice(0, p.b).map((x) => x.number), lng), blocks[p.b].number) : null);
+// The tasks approval's probe at size m / l (designReuseGated) — [[ok, detail]…] (the first failing one counts), [] elsewhere: the fence
+// complete, then the baseline first (1.36 review 2, P2-1: a plan with the port's tasks before it was approved at m without a word)
 function portPlanProbe(blocks, reqText, kind, tracks, size, lng) {
   if (!portOn(kind, tracks) || !designReuseGated(kind, size)) return [];
   const p = portPlan(blocks, reqText);
-  return [[p.ok, planGap(p, blocks, lng)]];
+  const late = lateDetail(p, blocks, lng);
+  return [[p.ok, planGap(p, blocks, lng)], ...(late ? [[false, late]] : [])];
 }
-// doctor's port-verify (phase 5) over the ACTIVE tasks → { status, detail }. The fence incomplete (portPlan): a FAIL at size m / l
-// (the approval refuses it) unless the tasks are approved already (then a warn — never a phase failed retroactively), a warn at s /
-// no size. Warns besides: tasks listed before the baseline (add_track on a written plan appends it — baselineLate), a task listed
-// after the baseline whose _Depends:_ never reaches it (a wave would start it first — a task without _Depends:_ waits by tasks
-// order). The pass detail is the fence as the plan reads.
+// doctor's port-verify (phase 5) over the ACTIVE tasks → { status, detail }. The fence incomplete (portPlan), or tasks listed before
+// the baseline (baselineLate): a FAIL at size m / l (the approval refuses it) unless the tasks are approved already (then a warn + the
+// next approval requires it — never a phase failed retroactively: add_track on an approved plan appends the baseline), a warn at s /
+// no size. Warns besides: a task listed after the baseline whose _Depends:_ never reaches it (a wave would start it first — a task
+// without _Depends:_ waits by tasks order), no task under the differential check's heading citing a [PORT] criterion (its first task
+// is taken for the check). The pass detail is the fence as the plan reads.
 function portPlanCheck(blocks, reqText, kind, size, approved, lng) {
   const P = i18n.msg(lng).port;
   const p = portPlan(blocks, reqText);
+  const gated = designReuseGated(kind, size);
   if (!p.ok) {
     const detail = planGap(p, blocks, lng) + (approved ? " " + P.approvedAlready : "");
-    return { status: designReuseGated(kind, size) && !approved ? "fail" : "warn", detail };
+    return { status: gated && !approved ? "fail" : "warn", detail };
   }
   const B = blocks[p.b].number, warns = [];
-  if (p.b > 0) warns.push(P.baselineLate(numList(blocks.slice(0, p.b).map((x) => x.number), lng), B));
+  const late = lateDetail(p, blocks, lng);
+  if (late) warns.push(late);
   // the tasks whose _Depends:_ chain reaches the baseline: B, a task after it without _Depends:_ (it waits by tasks order), a task
   // declaring one that names such a task — propagated backwards over the declared edges (linear, iterative)
   const byNum = new Map();
@@ -171,6 +183,8 @@ function portPlanCheck(blocks, reqText, kind, size, approved, lng) {
   while (queue.length) for (const i of users.get(queue.pop()) || []) if (!reach.has(i)) { reach.add(i); queue.push(i); }
   const escape = blocks.map((x, i) => (i > p.b && specs[i].declared && !reach.has(i) ? x.number : null)).filter((n) => n != null);
   if (escape.length) warns.push(P.dependsEscape(numList(escape, lng), B));
+  if (p.uncited) warns.push(P.dUncited(blocks[p.d].number));
+  if (late && gated) return { status: approved ? "warn" : "fail", detail: warns.join("; ") + (approved ? " " + P.approvedAlready : "") };
   if (warns.length) return { status: "warn", detail: warns.join("; ") };
   const waiting = blocks.slice(p.d + 1).map((x) => x.number);
   return { status: "pass", detail: P.verifyOk(B, blocks[p.d].number, waiting.length ? numList(waiting, lng) : "") };
@@ -253,6 +267,12 @@ function portRecheckNext(blocks, reqText, evidence, ticks, rule, lng, slug) {
 }
 // Does a plan draw the fence at all (a baseline anchor)? — spec_import warns when an imported tasks.md of a +port feature doesn't.
 const portAnchored = (blocks, reqText) => portAnchors(blocks, reqText).b >= 0;
+// The differential check's task number in a plan with both anchors, or null — next_action's finish step says to run it again after
+// any fix from there on (the review panel's included: port-recheck counts only tasks listed after it — 1.36 review 2, P2-2)
+function portCheckNumber(blocks, reqText) {
+  const { b, d } = portAnchors(blocks, reqText);
+  return b >= 0 && d > b ? blocks[d].number : null;
+}
 
 module.exports = { portOn, portTask, portHeldNumbers, portSchedule, portPlanProbe, portPlanCheck, portRunChecks, portFinishRecheck, portRecheckNext,
-  portAnchored, __link };
+  portAnchored, portCheckNumber, __link };
