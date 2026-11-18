@@ -130,7 +130,7 @@ review findings — is in History at the end.
   `next.reviewBranch`: the branch review on every model before the step's own text, i.e. before the optional simplify pass
   and the project checks' line (a fix round from that review would make their runs stale). A hint on the step, never a
   step: verify / drift / finished set their own step and carry none, so nothing can loop; the controller's ledger line says
-  whether the review ran (the engine reads no ledger).
+  whether the review ran on this code — its latest `Final review: ×N` line names the current HEAD (the engine reads no ledger).
 - **finish blockers** (stable ids, in order — the `execution` approval refuses on exactly these): `state`, `roadmap` (never
   inside `doctor`), `doctor`, `root-cause`, `placeholders` (anywhere in the chain), `changed-since-approval` (by content),
   `tasks` (none), `open-tasks`, `verification`, `port-recheck` (1.36 — +port: the differential check not passed again since a task
@@ -501,6 +501,9 @@ here. "r5 review" is 1.23's fifth review.
   hint. The design appended the hint after the step's text, i.e. after the simplify clause and the project checks' line: the
   order the protocol forbids (the simplify pass and the check runs come after the final review's fixes) — it is prepended. It
   also covered only the first finish; a re-finish (new work after a finish) needs the panel review as much.
+- **1.36.0 review 2** (RP2-1) — the hint's exit "since the last task" could not be judged on inline work (no task line in the
+  ledger): it is now "unless the ledger's latest `Final review: ×N` line names the current HEAD" — the line carries
+  `@ <git rev-parse --short HEAD>` (tasks-and-evidence.md → History).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

@@ -706,7 +706,7 @@ exports.run = async ({
       ["subagent-execution: merge, then verify each merged finding once", sub, /\*\*Then verify each MERGED finding once\*\* \(§6\)/],
       ["subagent-execution: agreement never skips the verifier", sub, /it never skips the verifier/],
       ["subagent-execution: the panel adds models", sub, /The panel ADDS models — it never replaces a review's own tier: the final review is the most capable model plus each panel model not already it/],
-      ["subagent-execution: the ledger line, requested", sub, /Final review: ×2 \(requested opus, sonnet\) — 1 agreed, 3 single, 2 minor/],
+      ["subagent-execution: the ledger line, requested", sub, /Final review: ×2 \(requested opus, sonnet\) @ c3d4e5f — 1 agreed, 3 single, 2 minor/],
       // (by fragments: the full names are Claude Code's, allowlisted by 17-docs-identifiers.js as names no code holds)
       ["subagent-execution: the collapse paths", sub, /_MODEL_FORCE` \(no `model` parameter\), a mod's `agent\.spawn` hook.*allowlist that substitutes it.*whose family the provider can't tell/],
       ["subagent-execution: no subagent tool", sub, /review inline and say the panel was not run/],
@@ -757,16 +757,55 @@ exports.run = async ({
       ["RP-2 init's note (en)", on("en"), /The task reviewer runs on a panel model other than the implementer's, never below sonnet's tier — with diverse and a sonnet implementer, every task review runs on opus\./],
       ["RP-2 init's note (pt)", on("pt"), /nunca abaixo do nível do sonnet — com diverse e um implementador sonnet, cada revisão de tarefa corre em opus\./],
       ["RP-2 init's note (es)", on("es"), /nunca por debajo del nivel de sonnet — con diverse y un implementador sonnet, cada revisión de tarea se ejecuta en opus\./],
-      ["RP-3 subagent-execution: resume on any form", sub, /\*\*Resume:\*\* the ledger already has a `Final review: ×N` line since the last task \(any of its forms, below too\)/],
-      ["RP-3 subagent-execution: the collapsed form", sub, /\(`Final review: ×2 \(requested opus, sonnet\) — the host ran one model`\)/],
       ["RP-3 subagent-execution: no 'review ×2 requested' form", sub, /^(?![\s\S]*"review ×2 requested)/],
-      ["RP-3 subagent-execution: the inline form", sub, /review inline and say the panel was not run — ledger `Final review: ×1 \(requested opus, sonnet\) — inline, the panel was not run`, so a resumed session doesn't run it again/],
-      ["RP-3 spec-review: the inline form", review, /Without a subagent tool: review yourself as above, say the panel was not run, and ledger `Final review: ×1 \(requested …\) — inline, the panel was not run`/],
-      ["RP-3 spec-finish: the ledger exit", rd("commands", "spec-finish.md"), /the branch review on every model comes first — unless the ledger already has its `Final review: ×N` line since the last task/],
-      ["RP-3 the sentence's exit names the same line", S.msg("en").next.reviewBranch("x", "opus, sonnet"), /unless the ledger already has its "Final review: ×N" line since the last task/],
     ];
-    all("1.36.0 review 1 (RP-2, RP-3): the task reviewer at least standard (never haiku; none → sonnet) and the cost text saying where the task reviews go (subagent-execution §5, the row, the Cost bullet, init's note EN / PT / ES); every panel path ledgers a `Final review: ×N` line (the collapsed host, the inline host — subagent-execution, spec-review) and spec-finish.md names the sentence's exit (failing: " +
+    all("1.36.0 review 1 (RP-2, RP-3): the task reviewer at least standard (never haiku; none → sonnet) and the cost text saying where the task reviews go (subagent-execution §5, the row, the Cost bullet, init's note EN / PT / ES); no collapsed 'review ×2 requested' form (failing: " +
       JSON.stringify(rp23.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(rp23.map(([k, text, re]) => [k, () => re.test(text)])));
+
+    // 1.36.0 review 2 (RP2-1): the exit "since the last task" read the ledger's order, and only subagent execution ledgers task
+    // lines — a task ticked inline left the first Final review line reading as current. Every form of the line now names the
+    // HEAD the review ended on (`@ <git rev-parse --short HEAD>`), and every exit reads "the latest line names the current HEAD"
+    // (round 1's RP-3 rows — every path ledgers the line, spec-finish.md names the exit — are these rows now).
+    const notes = (f) => rd("docs", "maintainers", f), HEAD = "@ <git rev-parse --short HEAD>";
+    const rp21 = [
+      ["subagent-execution: the ledger block's example", sub, /complete \(commits a1b2c3d\.\.e4f5a6b, review clean\) Final review: ×2 \(requested opus, sonnet\) @ c3d4e5f — 1 agreed/],
+      ["subagent-execution § Final review: the HEAD after the fix", sub, /still ONE fix dispatch and ONE scoped re-review\. Ledger the `Final review: ×N` line with the HEAD the review ended on — `@ <git rev-parse --short HEAD>`, after the fix and its re-review\./],
+      ["subagent-execution: the Ledger bullet names the HEAD", sub, /\*\*Ledger\*\* `Final review: ×2 \(requested opus, sonnet\) @ c3d4e5f — 1 agreed, 3 single, 2 minor` \(agreed = raised by two or more models; `@` the HEAD the review ended on — `git rev-parse --short HEAD` as you write the line\)/],
+      ["subagent-execution: Resume reads the HEAD", sub, /\*\*Resume:\*\* the ledger's latest `Final review: ×N` line \(any of its forms, below too\) names the current HEAD → the panel review ran on this code; don't dispatch it again\. Another HEAD → it reviewed older code \(inline work ledgers no task line\): run it again\./],
+      ["subagent-execution: no 'since the last task' exit", sub, /^(?![\s\S]*`Final review: ×N` line since the last task)/],
+      ["subagent-execution: the collapsed form", sub, /\(`Final review: ×2 \(requested opus, sonnet\) @ c3d4e5f — the host ran one model`\)/],
+      ["subagent-execution: the inline form", sub, /review inline and say the panel was not run — ledger `Final review: ×1 \(requested opus, sonnet\) @ c3d4e5f — inline, the panel was not run`, so a resumed session doesn't run it again on the same HEAD/],
+      ["spec-review: the panel line", review, new RegExp("each merged finding once \\(`subagent-execution\\.md` → Review on more than one model\\)\\. Ledger `Final review: ×N \\(requested …\\) " + HEAD + "`\\.")],
+      ["spec-review: the inline form", review, new RegExp("Without a subagent tool: review yourself as above, say the panel was not run, and ledger `Final review: ×1 \\(requested …\\) " + HEAD + " — inline, the panel was not run`")],
+      ["spec-review: the ledger's path", review, /The ledger: `\.specs\/<feature>\/\.execution\/ledger\.md` \(no `\.execution\/` yet: create it with a `\.gitignore` holding `\*`\)\./],
+      ["spec-finish: the exit", rd("commands", "spec-finish.md"), /the branch review on every model comes first — unless the ledger's latest `Final review: ×N` line names the current HEAD \(`git rev-parse --short HEAD`\)\./],
+      ["the sentence's exit (en)", S.msg("en").next.reviewBranch("x", "opus, sonnet"), /— unless the ledger's latest "Final review: ×N" line names the current HEAD \(git rev-parse --short HEAD\); then the optional simplify pass/],
+      ["the sentence's exit (pt)", S.msg("pt").next.reviewBranch("x", "opus, sonnet"), /— a não ser que a última linha "Final review: ×N" do ledger indique o HEAD atual \(git rev-parse --short HEAD\); depois a passagem de simplificação opcional/],
+      ["the sentence's exit (es)", S.msg("es").next.reviewBranch("x", "opus, sonnet"), /— salvo que la última línea "Final review: ×N" del ledger indique el HEAD actual \(git rev-parse --short HEAD\); después la pasada de simplificación opcional/],
+      ["gates-and-approvals: next_action's rule", notes("gates-and-approvals.md"), /the controller's ledger line says whether the review ran on this code — its latest `Final review: ×N` line names the current HEAD \(the engine reads no ledger\)/],
+      ["tasks-and-evidence: the panel's rule", notes("tasks-and-evidence.md"), /every path ledgers a `Final review: ×N … @ <HEAD>` line — the finish sentence's exit while the latest one names the current HEAD\)/],
+    ];
+    all("1.36.0 review 2 (RP2-1): every form of the `Final review: ×N` ledger line names the HEAD the review ended on, and every exit (next.reviewBranch EN / PT / ES, spec-finish.md, subagent-execution's Resume, the maintainer notes) reads 'the latest line names the current HEAD'; spec-review.md names the ledger's path (failing: " +
+      JSON.stringify(rp21.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(rp21.map(([k, text, re]) => [k, () => re.test(text)])));
+
+    // 1.36.0 review 2 (RP2-2, RP2-3 — round 1's INT-8): tooling-reference's rows as round 1's fixes left the code — a task's
+    // FIRST tick re-baselines its _Implements:_ tests (a re-tick keeps the hash), spec_next_task's +port hold keys, the fast
+    // check in roadmap.json's meta list (every meta key the engine writes, but evidenceSince — the observed switch's internal
+    // stamp) and in /spec-setup init's flags.
+    const tref = ref("tooling-reference.md"), trow = (tool) => (tref.match(new RegExp("\\| `" + tool + "` \\|(?:(?! \\| `spec_)[\\s\\S])*")) || [""])[0];
+    const engineSrc = fs.readdirSync(path.join(root, "mcp", "lib", "engine")).filter((f) => f.endsWith(".js")).map((f) => fs.readFileSync(path.join(root, "mcp", "lib", "engine", f), "utf8")).join("\n");
+    const metaWritten = [...new Set([...engineSrc.matchAll(/\bmeta\.([a-zA-Z]+) ?=(?!=)/g)].map((m) => m[1]))].filter((k) => k !== "evidenceSince");
+    const metaListed = ((tref.match(/roadmap\.json +# order \+ dependencies \+ backlog \+ meta \(([^)]*)\)/) || [])[1] || "").split(/, */);
+    const rp22 = [
+      ["spec_complete_task: the FIRST tick re-baselines", trow("spec_complete_task"), /records the task's exact `_Implements:_` test files \(re-baselined at the task's FIRST tick only — a re-tick keeps the recorded hash, so finish names an edit made while it was open\)/],
+      ["spec_complete_task: no bare '(re-baselined)'", trow("spec_complete_task"), /^(?![\s\S]*test files \(re-baselined\))/],
+      ["spec_next_task: the +port hold keys", trow("spec_next_task"), /\+port \(1\.36\): a task the `\[PORT\]` fence holds is never next — passed over, `gated: "port-order"` \+ `heldBy` \[n\]; none left to start while that anchor is ticked but not verified → `next: null` \+ a note naming its run/],
+      ["roadmap.json meta: every key the engine writes", metaWritten.join(","), { test: () => metaWritten.length >= 12 && metaWritten.includes("fastCheck") && metaWritten.every((k) => metaListed.includes(k)) }],
+      ["/spec-setup init: --fast-check", tref, /\| `\/spec-setup init \\\| guard [^\n]*`spec_init`: `--lang`, `--check`, `--roles`, `--stop-check`, `--fast-check`, `--review-models`\)/],
+    ];
+    all("1.36.0 review 2 (RP2-2, RP2-3): tooling-reference — spec_complete_task re-baselines at a task's FIRST tick only, spec_next_task names +port's gated / heldBy, roadmap.json's meta list names every key the engine writes (fastCheck), /spec-setup init names --fast-check (failing: " +
+      JSON.stringify(rp22.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + "; meta written " + JSON.stringify(metaWritten) + ", listed " + JSON.stringify(metaListed) + ")",
+      Object.fromEntries(rp22.map(([k, text, re]) => [k, () => re.test(text)])));
   }
 
   { // 1.36 the fast check (meta.fastCheck, warn only) — the loop is prose the agent follows: run it ALONE after each small edit, clean

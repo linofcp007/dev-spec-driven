@@ -65,8 +65,8 @@ Phase 6, opt-in.
   task's diff). What runs per model is prose: `references/subagent-execution.md` → Review on more than one model (merge
   first, then ONE verify per merged finding in the code reviews — final / branch, converge; the panel adds models, never
   replaces a review's own tier; the task reviewer on the first panel model other than the implementer's that is at least
-  standard, else `sonnet`; every path ledgers a `Final review: ×N` line — the finish sentence's exit), `references/critic-review.md`
-  §1 / §3 (the gate critics: the size table's on the session's model plus one per other panel model; their merged findings go
+  standard, else `sonnet`; every path ledgers a `Final review: ×N … @ <HEAD>` line — the finish sentence's exit while the
+  latest one names the current HEAD), `references/critic-review.md` §1 / §3 (the gate critics: the size table's on the session's model plus one per other panel model; their merged findings go
   to the user — gates have no verifier). mcp/tests/17-docs.js pins each file's wording of these rules.
 
 ## Evidence
@@ -806,6 +806,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   name) — names are now the runs between separators (`match`), a word with no name still refused; an array refusal echoed
   `["opus,sonnet"]` as `opus,sonnet`, the documented example — now JSON; the refusal names the `[1m]` suffix. **T2** (review
   panel part): `default` / `off` / `none` inside a list were reserved by the code but pinned by no test.
+- **1.36.0 review 2** (RP2-1) — the exit "since the last task" read the ledger's order, and only subagent execution ledgers
+  task lines: a task ticked inline (the default, and every task on a host without subagents) after the panel review left that
+  line reading as current. The line now carries the HEAD the review ended on (`Final review: ×N (requested a, b) @ <git
+  rev-parse --short HEAD>`, its collapsed and inline forms too), and the exit is "unless the ledger's latest `Final review: ×N`
+  line names the current HEAD" — next.reviewBranch (EN / PT / ES), spec-finish.md, spec-review.md (which names the ledger's
+  path for the inline cases) and subagent-execution.md (the ledger lines, Final review, Resume). The narrow reading, no
+  exception: any commit after the line (a fix the branch review asked for, the simplify pass) moves HEAD, so the panel
+  reviews the final code again; work left uncommitted moves nothing — the branch review reads `merge-base..HEAD` only.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
