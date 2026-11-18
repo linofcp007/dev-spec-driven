@@ -256,9 +256,12 @@ edit**, so a type error is fixed the moment it appears, not at the `_Verify:_` o
   `format` program or subcommand (`gofmt`, `cargo fmt`, `ruff format`, `dotnet format`, `clang-format`) with a `-w` word (it
   writes, whatever stands beside it: `gofmt -l -w`, `shfmt -l -w`) or with no check word (`--check`, `-check`, `--check-…`,
   `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`, `--test`, `--exit-code`,
-  `--output=none`, or a `lint` subcommand right after it). Check-only forms pass (`prettier --check`, `eslint --fix-dry-run`,
-  `gofmt -l`, `swift format lint`, `swiftformat --lint`, `dart format --output=none --set-exit-if-changed`, `clang-format -n`,
-  `buf format --exit-code`, `make check-fmt`, `npm run fmt:check`, `npm run lint:format`, `dune build @fmt`, a linter run).
+  `--output=none`, or a `lint` subcommand right after it — never a `make` / `just` / `task` target: `make fmt lint` runs
+  `fmt`). Those words count in the formatter's own simple command only (the command line split on `&&`, `||`, `;` and `|`):
+  `cargo fmt && git diff --exit-code` writes, `gofmt -l . | grep -v -w vendor` only reads. Check-only forms pass
+  (`prettier --check`, `eslint --fix-dry-run`, `gofmt -l`, `swift format lint`, `swiftformat --lint`,
+  `dart format --output=none --set-exit-if-changed`, `clang-format -n`, `buf format --exit-code`, `make check-fmt`,
+  `npm run fmt:check`, `npm run lint:format`, `dune build @fmt`, a linter run).
   Its limits: the words are read, not the tool — a short flag counts by its common meaning (`-n` a dry run, even where a tool
   gives it another one); a formatter known by another name (`black .`, `prettier -w`, `rubocop -a`) is not recognized — give
   the fast check its check-only command; a formatter whose bare form only reports (`biome format .`) is refused like one that

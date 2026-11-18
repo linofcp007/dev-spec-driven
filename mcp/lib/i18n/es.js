@@ -2371,7 +2371,7 @@ const msg = {
       verifyMissing: "+port: ninguna tarea graba la línea base y comprueba el código nuevo contra ella — el port necesita las dos, cada una con un _Verify:_ ejecutable (las tareas [PORT] de la plantilla, o tareas que citan un criterio [PORT] — references/port-patterns.md)",
       noVerify: (list) => `una tarea [PORT] sin un _Verify:_ ejecutable nunca abre la barrera: ${list}`,
       approvedAlready: "(las tareas ya están aprobadas — su próxima aprobación lo exige)",
-      baselineLate: (list, b) => `antes de la línea base (tarea ${b}): ${list} — mueve la línea base al principio, o puede grabarse a partir del código nuevo`,
+      baselineLate: (list, b) => `antes de la línea base (tarea ${b}): ${list} — mueve la sección de la línea base al principio y, después, esas tareas bajo un título de nivel 2 propio (## …; dentro de la sección de la línea base, al quitar +port quedarían ocultas), renumeradas en el orden del fichero — o la línea base puede grabarse a partir del código nuevo`,
       dependsEscape: (list, b) => `un _Depends:_ que nunca llega a la línea base (tarea ${b}): ${list} — una oleada puede empezarlas antes; añádele ${b}`,
       recheck: (d, list, slug) => `la verificación diferencial (tarea ${d}) no ha vuelto a pasar desde que una tarea posterior se marcó o se volvió a ejecutar (${list}) — ejecútala de nuevo sobre el código final: ${DEV_SPEC} done ${slug} ${d} --run`,
       fence: (list) => `marcadas antes de que pasara la tarea [PORT] a la que esperan (entre paréntesis): ${list} — una tarea movida, +port quitado y añadido de nuevo, o una casilla marcada a mano; compruébalas contra la línea base y la verificación diferencial`,

@@ -401,7 +401,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   `--fix` / `--fix=…` / `--write` word, or a `*fmt` / `*format` program or subcommand — never a flag, an `@alias` or a
   check- / lint-named script — with a `-w` word (it writes, whatever check flag stands beside it: `gofmt -l -w`) or with no check
   word: `--check` / `-check` / `--check-…`, `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`,
-  `--test`, `--exit-code`, `--output=none`, or its `lint` subcommand right after it, `RE_LINT_MODE`) is refused, nothing written;
+  `--test`, `--exit-code`, `--output=none`, or its `lint` subcommand right after it, `RE_LINT_MODE` — never after a make / just /
+  task target, `RE_TARGET_RUNNER` —; those words read in the formatter's own simple command, `fixerSegment` over the command split
+  on `&&` / `||` / `;` / `|`) is refused, nothing written;
   the stored one is checked again when this call replaces its check's
   command and goes when this call removes its check (`cleared` note). With `guardian: true` the same plan runs once BEFORE the
   gate's launcher is written (unless roadmap.json doesn't parse — the lock's refusal stays) — a refused init
@@ -473,7 +475,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   walk, `stuckTasks()`: a cycle, a dependency no task carries, or waiting on such a task — only when some task declares
   `_Depends:_`). Consumers: `spec_next_task` / `next`; next_action's implement step (none startable → step `fix` with `blocked` and
   `taskDepsBlockedNote()`, never "finish"); the brief's default task (`task: null` + `blocked` / `skipped`, never "all done"); `next
-  --batch` (`parallelBatch()`: a [P] task waiting on an open dependency ends the batch); `spec_status`'s `next`; the roadmap (none
+  --batch` (`parallelBatch()`: a [P] task waiting on an open dependency ends the batch, and so does a task +port's fence holds —
+  `portHeldNumbers`); `spec_status`'s `next`; the roadmap (none
   startable → `blocked`, never "ready", with `taskDeps.roadmapBlocked`); complete_task's `next`; the spike's investigate step; the
   scope guard's likely task. **Never compute "next" with `find(!done)`.**
 - **`taskWaves(blocks, tracks)`** (`spec_next_task {waves: true}` / `next --waves`) → `{waves, cycles, blocked}` over the open tasks:
@@ -994,6 +997,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   no word tells it from `ruff format .`: the documented limit. **FC2-2:** `done --run` skipped the check on a clean `partial` status
   (a +port corpus of 500+ files fills the planned set): it runs it now. **FC2-3:** the own-file dating walked the planned glob a
   second time (×1.8 on a big glob's brief) — it reuses the planned walk's files.
+- **1.36.0 review 3 (PF3-4)** — FC2-1's check words, `lint` and `-w` were read anywhere on the command line: `make fmt lint`
+  (two targets) and the "format, then fail on a diff" idiom `cargo fmt && git diff --exit-code` were accepted, `gofmt -l . | grep
+  -v -w vendor` refused. They are read in the formatter's own simple command now (`fixerSegment`), and `lint` never after a make
+  / just / task target (`RE_TARGET_RUNNER`). `ruff format -n .` stays accepted: `-n` counts as a dry run, the documented limit.
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
@@ -1006,6 +1013,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   status` and the brief's default task named the held task while next_task said "verify task 1". complete_task's `next`,
   spec_status's next and the brief's default task go through `portSchedule` too (nothing else startable: none, with `port.naHeld`
   as the note). Left: the roadmap's row (its blocked display reads `sch.skipped`, more than one line) and `next --waves`.
+- **1.36.0 review 3 (PF3-5)** — `next --batch` still added a held `[P]` task beside a `[P]` baseline that was itself the next
+  task (`portSchedule`'s hold exists only when it passes a task over): the batch takes `portHeldNumbers` — every task after the
+  first closed anchor — whatever the next task is.
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks
   {depends}`; a tasks.md without `_Depends:_` behaves exactly as before it.
 - **1.24 r6 D6** — tasks order by section: by number alone, a task spec_append_tasks put into an EARLIER phase (`{heading}`, numbered

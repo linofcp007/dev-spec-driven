@@ -155,9 +155,9 @@ exports.run = async ({ ok, all, payload, rpc, S, tmp, require }) => {
     ]);
   }
 
-  { // add_track on a written plan: both parts appended in order (the baseline, then the differential check), numbered after the last task,
-    // a placeholder for the [PORT] criterion (the requirements predate the track); --remove drops BOTH sections from the active tasks; re-add
-    // duplicates nothing
+  { // add_track on an untouched scaffold: both parts in order (1.36 review 3: the baseline's section before the first task section — no task is
+    // ticked —, the differential check appended), numbered after the last task, a placeholder for the [PORT] criterion (the requirements predate
+    // the track); --remove drops BOTH sections from the active tasks; re-add duplicates nothing
     const at = d("add");
     S.initProject(at, ["core"], "en");
     const plain = S.createFeature(at, "Plain", ["core"], "", undefined, "en");
@@ -169,13 +169,37 @@ exports.run = async ({ ok, all, payload, rpc, S, tmp, require }) => {
     const rm = S.removeTrack(at, plain.slug, "port");
     const stRm = S.statusFeature(at, plain.slug);
     const reAdd = S.addTrack(at, plain.slug, "port");
-    all("1.36: add_track +port appends the baseline then the differential check (numbered after the last task, placeholder criteria, no steering); --remove makes both sections inactive (portSections null, neither task counted); re-adding duplicates nothing (got " +
+    all("1.36: add_track +port writes the baseline (review 3: before the scaffold's first task section) then the differential check (numbered after the last task, placeholder criteria, no steering); --remove makes both sections inactive (portSections null, neither task counted); re-adding duplicates nothing (got " +
       js([add.added, rm.inactive, tBefore, tAdded, stRm.tasks.total]) + ")", [
       () => add.ok, () => add.tracks === "core +port", () => !(add.added || []).some((x) => x.startsWith("steering/")), () => t.indexOf(lead) > 0, () => t.indexOf(lead) < t.indexOf(main),
+      () => t.indexOf(lead) < t.indexOf("## Phase: Setup"),
       () => taskLine(t, tBefore + 1) === t.split("\n").indexOf(lead) + 1, () => taskLine(t, tBefore + 2) === t.split("\n").indexOf(main) + 1,
       () => (t.match(/_Requirements: \[the \+port criterion this task proves\]_/g) || []).length === 2, () => tAdded === tBefore + 2,
       () => rm.ok, () => rm.inactive.includes("design.md ([PORT] sections)"), () => stRm.tasks.total === tBefore, () => stRm.portSections === null,
       () => reAdd.ok, () => rd(plain.dir, "tasks.md").split(main).length === 2, () => S.statusFeature(at, plain.slug).tasks.total === tBefore + 2,
+    ]);
+  }
+
+  { // 1.36 review 3 (PF3-1): add_track's baseline insertion keeps tasks.md's own line ends (a CRLF scaffold stays CRLF — no bare LF), and where
+    // no level-2 section holds the first task (Kiro's tasks under the title) the whole block is appended as before — a code block left open at
+    // the end closed first, the baseline a task (never swallowed by the fence)
+    const [lead, main] = heads("en");
+    const cr = d("add-crlf");
+    S.initProject(cr, ["core"], "en");
+    const fc = S.createFeature(cr, "Crlf", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fc.dir, "tasks.md"), rd(fc.dir, "tasks.md").replace(/\r?\n/g, "\r\n"));
+    const cBefore = S.statusFeature(cr, fc.slug).tasks.total, cAdd = S.addTrack(cr, fc.slug, "port");
+    const cT = rd(fc.dir, "tasks.md"), cNext = S.nextTask(cr, fc.slug).next;
+    const kf = d("add-kiro-fence");
+    S.initProject(kf, ["core"], "en");
+    const fk = S.createFeature(kf, "Kiro fence", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fk.dir, "tasks.md"), "# Implementation Plan\n\n- [ ] 1. Build it\n  - _Requirements: US-1.AC-1_\n- [ ] 2. Ship it\n  - _Requirements: US-1.AC-2_\n\n```text\nnotes left open\n");
+    const kAdd = S.addTrack(kf, fk.slug, "port"), kT = rd(fk.dir, "tasks.md"), kSt = S.statusFeature(kf, fk.slug).tasks;
+    all("1.36 review 3 (PF3-1): add_track +port on a CRLF scaffold — the baseline's section before the first task section in CRLF, no bare LF, next_task serves it; on Kiro's layout ending in an open code block — appended after the block is closed, both [PORT] tasks counted (got " +
+      js([cAdd.ok, /[^\r]\n/.test(cT), cT.indexOf(lead) < cT.indexOf("## Phase: Setup"), cNext, kAdd.ok, kSt.total, kSt.list.map((x) => x.number)]) + ")", [
+      () => cAdd.ok && !/(^|[^\r])\n/.test(cT) && cT.indexOf(lead) > 0 && cT.indexOf(lead) < cT.indexOf("## Phase: Setup") && cT.indexOf(main) > cT.indexOf("## Phase: Polish"),
+      () => cNext && cNext.number === cBefore + 1,
+      () => kAdd.ok && kT.indexOf(lead) > kT.indexOf("notes left open") && kSt.total === 4 && js(kSt.list.map((x) => x.number)) === "[1,2,3,4]",
     ]);
   }
 

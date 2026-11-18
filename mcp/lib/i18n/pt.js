@@ -2371,7 +2371,7 @@ const msg = {
       verifyMissing: "+port: nenhuma tarefa grava a linha de base e verifica o código novo contra ela — o porte precisa das duas, cada uma com um _Verify:_ executável (as tarefas [PORT] do modelo, ou tarefas que citam um critério [PORT] — references/port-patterns.md)",
       noVerify: (list) => `uma tarefa [PORT] sem um _Verify:_ executável nunca abre a barreira: ${list}`,
       approvedAlready: "(as tarefas já estão aprovadas — a sua próxima aprovação exige-o)",
-      baselineLate: (list, b) => `antes da linha de base (tarefa ${b}): ${list} — move a linha de base para o início, ou pode ser gravada a partir do código novo`,
+      baselineLate: (list, b) => `antes da linha de base (tarefa ${b}): ${list} — move a secção da linha de base para o início e, a seguir, essas tarefas sob um título de nível 2 próprio (## …; dentro da secção da linha de base, ao remover o +port ficariam escondidas), renumeradas pela ordem do ficheiro — ou a linha de base pode ser gravada a partir do código novo`,
       dependsEscape: (list, b) => `um _Depends:_ que nunca chega à linha de base (tarefa ${b}): ${list} — uma vaga pode começá-las antes dela; acrescenta-lhe ${b}`,
       recheck: (d, list, slug) => `a verificação diferencial (tarefa ${d}) não voltou a passar desde que uma tarefa depois dela foi marcada ou executada de novo (${list}) — corre-a de novo sobre o código final: ${DEV_SPEC} done ${slug} ${d} --run`,
       fence: (list) => `marcadas antes de a tarefa [PORT] por que esperam (entre parênteses) ter passado: ${list} — uma tarefa movida, o +port desligado e ligado de novo, ou uma caixa marcada à mão; verifica-as contra a linha de base e a verificação diferencial`,

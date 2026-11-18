@@ -34,7 +34,8 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
 let guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher; // guardian.js — 1.29 (init --guardian)
 let reviewModelsInput, reviewModelsSetting, setReviewModels; // guards.js — 1.36 the review panel (init --review-models)
 let fastCheckInput, fastPlan, setFastCheck, fastCheckOf, fastCheckOffer; // evidence.js — 1.36 the fast check (init --fast-check)
-function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
+let splitLeadSection, beforeFirstTaskSection; // templates.js — 1.36 review 3: add_track puts +port's baseline before the first task section
+function __link(E) { ({ splitLeadSection, beforeFirstTaskSection, activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, enumArg, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
   guardInput, guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord,
@@ -76,7 +77,9 @@ function linkedSpecsFolder(projectDir, files) {
 // closed first, its line ends kept; `opts` as there) — never through a link (linkedSpecsFolder). → true when written.
 function appendSpecFile(projectDir, file, raw, addition, opts) {
   if (linkedSpecsFolder(projectDir, [file])) return false;
-  const text = appendSpecText(raw, addition, opts);
+  // opts.base: the text to append to when it is no longer `raw` (the file's bytes are still checked against raw) — add_track's +port
+  // baseline inserted first (1.36 review 3)
+  const text = appendSpecText(opts && opts.base != null ? opts.base : raw, addition, opts);
   // tasks.md keeps its own encoding (review 5 P3's last write path: add_track turned a UTF-16 tasks.md into UTF-8):
   // tasksRewrite encodes it as the file is (null — its bytes are no text — was refused up front by applyTracks; never written).
   if (path.basename(file) === "tasks.md") {
@@ -1339,8 +1342,13 @@ function applyTracks(projectDir, f, name, trs, lng) {
       // numbered after the state's leftover evidence / tick numbers too (nextTaskNumber — a removed task's run was inherited)
       const block = sizeTasksText(trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng, undefined, readIfExists(path.join(dir, "test-plan.md")), { name, slug },
         nextTaskNumber(tasksText, state)), after, size);
+      // a block of two sections (+port): while no task of tasks.md is ticked (an untouched scaffold included), its first one goes before the
+      // first task section as withTrackBlocks puts it, the rest appended (1.36 review 3 — appended whole, the baseline came after Setup…
+      // Polish: refused at m / l, no fence at s); once a task is ticked, or no level-2 section holds the first task, the whole block appended
+      const lead = block && !taskBlocks(tasksText).some((b) => b.done) ? splitLeadSection(block) : null;
+      const base = lead ? beforeFirstTaskSection(tasksText, lead.head, true) : null;
       // atomic (never a torn tasks.md for a concurrent reader), after a code block left open at its end is closed
-      if (block && appendSpecFile(projectDir, tasksPath, tasksText, block, { trim: true })) note(T.addedTasks);
+      if (block && appendSpecFile(projectDir, tasksPath, tasksText, base ? lead.rest : block, { trim: true, base })) note(T.addedTasks);
     }
   }
 
