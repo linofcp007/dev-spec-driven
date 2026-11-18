@@ -26,16 +26,18 @@ setting or track over what the plugin already had. No new tool, command, hook or
   case of a listed file's name (where the file system ignores case) and a path through a link or junction are the same
   file; with several targets the strictest answer applies. Only you lift a protection: `feature unprotect <feature>
   <file> --reason "…"` (`spec_feature {action: "unprotect"}` — a guard-down the approval guard asks or refuses;
-  elicitation elsewhere); `feature protect` adds the tests present now (never re-recording one) or ends a lift; a lift
-  counts only while its feature has open tasks and was recorded after that feature's last finish (a later feature keeps
-  the test protected; the lift /spec-finish's warning asks for explains that feature's own change, its re-check
-  included), and the guard's line names the feature being worked on. On every surface, without git, finish re-hashes the
-  list (outside the feature lock): a change no recorded hash and no lift explains is a warning and a "Protected tests"
-  block in the merge summary — never a blocker. doctor warns `protected-tests`; the brief gains a definition-of-done line;
-  the merge driver merges the list file by file. Approval guard fixes on the way: lowering from `tests` counts as a
-  guard-down, also from `DEV_SPEC_GUARD_DEFAULT`; the suggested command names the level asked for (a lowering to scope
-  printed `init --guard off`); a globbed CLI path running `add-track … --remove` or `feature unprotect` is checked too;
-  `spec_feature unprotect` with the file in `newName` names that file in its question. Not protected: tests in ignored,
+  elicitation elsewhere); a lift lasts until `feature protect <feature> <file>` ends it, and the guard's line names the
+  feature being worked on. Only you accept a protected test's new content: `feature protect <feature> <file> --accept
+  --reason "…"` (`spec_feature {action: "protect", file, accept: true, reason}` — a guard-down too) records its current
+  content as the authorised one, ends its lift and keeps the reason (the merge summary shows it); `feature protect` alone
+  adds the tests present now (never re-recording one) or ends a lift. On every surface, without git, finish re-hashes the
+  list (outside the feature lock): a change no recorded hash and no lift explains is a warning — its line accepts the
+  change — and a "Protected tests" block in the merge summary — never a blocker. doctor warns `protected-tests` (also
+  about a lift still in force after its feature's finish); the brief gains a definition-of-done line; the merge driver
+  merges the list file by file. Approval guard fixes on the way: lowering from `tests` counts as a guard-down, also from
+  `DEV_SPEC_GUARD_DEFAULT`; the suggested command names the level asked for (a lowering to scope printed `init --guard
+  off`); a globbed CLI path running `add-track … --remove`, `feature unprotect` or `feature protect --accept` is checked
+  too; `spec_feature unprotect` with the file in `newName` names that file in its question. Not protected: tests in ignored,
   hidden or linked folders, outside the project folder or past the cap; new test-support files (conftest.py, setup files,
   mocks); an archived feature's list; a git command, a script or making a link is not read (an edit through a link is,
   unless spelled with a glob); a re-plan that renumbers the tasks (a tick is recorded by the task's number) — finish
@@ -46,8 +48,9 @@ setting or track over what the plugin already had. No new tool, command, hook or
   written — a heuristic: a `--fix` / `--fix=…` / `--write` word, or a `fmt` / `format` program or subcommand (`gofmt`,
   `cargo fmt`, `ruff format`, `dotnet format`, `clang-format`) with a `-w` word (`gofmt -l -w`) or with no check word
   (`--check`, `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`, `--test`,
-  `--exit-code`, `--output=none`, a `lint` subcommand — `swift format lint`; a check- or lint-named script is none); a
-  formatter known by another name (`black .`, `prettier -w`) is not recognized, and one whose bare form only reports
+  `--exit-code`, `--output=none`, a `lint` subcommand — `swift format lint`, never a make / just / task target; a check-
+  or lint-named script is none — each read in the formatter's own simple command: `cargo fmt && git diff --exit-code`
+  writes); a formatter known by another name (`black .`, `prettier -w`) is not recognized, and one whose bare form only reports
   (`biome format .`) is refused — give its check form. `spec_next_task` and the brief carry `fastCheck` for a code task,
   and the brief's definition of done gains the edit → run → fix loop (run it on its own — never chained or piped —, clean
   after the last edit, before the `_Verify:_`; a red task keeps it green with a stub). Ticking a code task judges it —
@@ -67,8 +70,10 @@ setting or track over what the plugin already had. No new tool, command, hook or
   criteria — the old outputs on a named corpus, case by case (`US-1.AC-36`), the same error where the old code rejects an
   input (`US-1.AC-37`) —; three design sections (Behaviour Baseline, Differential Check, Deferred Improvements); the
   baseline task FIRST (recorded from the old code — before Setup, before the story at size s, before the outermost
-  level-2 section holding a project template's first task — appended when none holds it, tasks right under the title or
-  under `###` headings only: at size m / l the tasks approval then refuses the plan until the baseline is moved first)
+  level-2 section holding a project template's first task, and so does `add-track port` while no task of tasks.md is
+  ticked — appended when none holds it, tasks right under the title or under `###` headings only: at size m / l the tasks
+  approval then refuses the plan until the baseline's section is moved first and those tasks put under a level-2 heading
+  of their own, renumbered)
   and the differential check after US-1's tasks (the new output against the RECORDED baseline, so it still runs after the
   cut-over). The fence: `spec_complete_task` (and `done --run`, which then runs nothing) refuses a task listed after the
   baseline until it is ticked AND verified, and a task listed after the differential check likewise — `gated:
@@ -76,11 +81,12 @@ setting or track over what the plugin already had. No new tool, command, hook or
   `_Verify:_`, and `undo` is never gated. The differential check is the last task under its heading citing a `[PORT]`
   criterion — an improvement written after it in its section waits for it; one listed before the baseline holds nothing
   (port-verify names the order). The brief carries `heldBy`, `portRole`, `differential` and the port rule;
-  `spec_next_task`, `spec_next_action`, the status line, `spec_complete_task`'s `next`, `spec_status` and the brief's
+  `spec_next_task` (its `batch` too), `spec_next_action`, the status line, `spec_complete_task`'s `next`, `spec_status` and the brief's
   default task never name a held task (the roadmap and `next --waves` still list it) — with the baseline or the
   differential check ticked but not verified, the next step is its run (`next_task` carries `gated` / `heldBy`) —, and
   before the finish `spec_next_action` names the differential check's re-run first, so the project checks run once; its
-  finish step asks for that run again after any fix — the review panel's included: `port-recheck` counts only the tasks
+  finish step asks for that run again after any fix (a differential check with a runnable `_Verify:_`) — the review
+  panel's included: `port-recheck` counts only the tasks
   listed after the check. doctor: `port-verify` (both anchors with a runnable `_Verify:_` and no task listed before the
   baseline — a fail at m / l that the tasks approval refuses, a warn at s / no size; a `_Depends:_` that never reaches
   it; no task under the differential check's heading citing a `[PORT]` criterion), `port-recheck` (the differential check
@@ -109,11 +115,11 @@ setting or track over what the plugin already had. No new tool, command, hook or
   haiku; none → sonnet), at no extra dispatch — with `diverse` and a sonnet implementer, every task review runs on opus.
   `spec_doctor` / `spec_next_action` carry `reviewPanel: {models}` (none for an xs change or a spike), and next_action's
   finish step starts with the branch review on every model, before the optional simplify pass and the project checks. The
-  ledger names the models REQUESTED and the commit reviewed: every path writes a `Final review: ×N (requested …) @ <git
-  rev-parse --short HEAD>` line (`— the host ran one model` when the host collapsed the panel, `×1 … — inline, the panel
-  was not run` without a subagent tool), and the finish step's exit, which /spec-finish names too, is "unless the
-  ledger's latest `Final review: ×N` line names the current HEAD" — a task done inline writes no ledger line, but its
-  commit moves HEAD. In Claude Code the Agent tool takes aliases only, and `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, a mod's
+  ledger names the models REQUESTED, and every path writes a `Final review: ×N` line (`— the host ran one model` when the
+  host collapsed the panel, `×1 … — inline, the panel was not run` without a subagent tool): the finish step's "unless
+  the ledger already has it since the last task" exit, which /spec-finish names too — a task done inline writes no ledger
+  line, so after one the review runs again. The branch review reads `merge-base..HEAD`: /spec-review and /spec-finish say
+  to commit the feature's work before it. In Claude Code the Agent tool takes aliases only, and `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, a mod's
   `agent.spawn` hook or an allowlist substitution can run every reviewer on one model. The engine dispatches nothing and
   enforces nothing.
 
@@ -121,9 +127,9 @@ The MCP tool list grows by about 500 characters for the four settings, each in i
 45,000).
 
 ### Tests
-- `node mcp/test.js` 2535 assertions, `node cli/test-cli.js` 681 (was 2431 / 663). Each item's mutation list was
+- `node mcp/test.js` 2545 assertions, `node cli/test-cli.js` 683 (was 2431 / 663). Each item's mutation list was
   written before its fixtures and every mutant was caught (48, 78, 109 and 65; the two items' meeting point, 2 of 2); the
-  review rounds' fix mutants too — round 1, 116 of 116; round 2, 73 of 73.
+  review rounds' fix mutants too — round 1, 116 of 116; round 2, 73 of 73; round 3, 76 of 76.
 
 ## [1.35.4] — 2026-11-16
 
