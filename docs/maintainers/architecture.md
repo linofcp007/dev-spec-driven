@@ -152,7 +152,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 24 modules loaded with the engine (+ dupes.js,
+  costs ~0.65 ms before any compile (the open is the expensive part): 25 modules loaded with the engine (+ dupes.js,
   design-system.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
   the module of the concept; a new file must earn its load cost. The facade's first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
@@ -264,7 +264,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.28** — engine/dupes.js, the duplicate-code detector (quality.md → Duplicate-code detector): a concern of its own (23
   modules), read by spec_scan {duplicates}, `dev-spec dupes`, spec_finish and the tests over the plugin's own sources.
 - **1.36** — engine/protect.js, guard tests' protected tests (tasks-and-evidence.md → Protected tests): eager (the guard hook's
-  guardCheck reads it on every edit at level tests), kept out of guards.js (3,000+ lines) — guards.js only calls it (24 modules).
+  guardCheck reads it on every edit at level tests), kept out of guards.js (3,000+ lines) — guards.js only calls it (25 modules
+  with port.js, the other 1.36 module — The module rule, below).
+- **1.36.0 review 2** — the eager count (Few, cohesive files) and the entry above still said 24, protect.js alone: 25 with
+  port.js; mcp/tests/17-docs-identifiers.js now holds the eager count to engine/index.js `MODULES`, as it holds README's tree.
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):
