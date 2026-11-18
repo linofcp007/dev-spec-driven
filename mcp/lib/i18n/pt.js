@@ -3134,12 +3134,13 @@ const msg = {
       truncated: (cap) => `A lista atingiu o limite (${cap} ficheiros): os testes além do limite não estão protegidos.`,
       notEnforced: `O guarda só lê a lista com o modo guarda tests (${DEV_SPEC} init --guard tests).`,
       lifted: (file, slug, listed) => `Proteção de ${file} levantada (${slug}): pode mudar até ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (Não estava na lista de testes protegidos da feature.)"),
-      accepted: (file, slug) => `O conteúdo atual de ${file} foi aceite (${slug}): o hash registado passa a ser este conteúdo — o finish assinala uma alteração posterior.`,
+      accepted: (file, slug) => `O conteúdo atual de ${file} foi aceite (${slug}): o hash registado passa a ser este conteúdo — o finish assinala uma alteração posterior. Volta a fechá-la (${DEV_SPEC} finish ${slug} --write): o resumo do merge passa a listar a aceitação e deixa de nomear o teste como alterado.`,
       err: {
         fileRequired: `unprotect precisa do ficheiro de teste: ${DEV_SPEC} feature unprotect <feature> <ficheiro> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
         reasonRequired: "unprotect precisa de um motivo (uma linha, no máximo 500 caracteres): o motivo pelo qual este teste protegido pode mudar.",
         acceptFileRequired: `Aceitar o conteúdo de um teste precisa do ficheiro de teste: ${DEV_SPEC} feature protect <feature> <ficheiro> --accept --reason "…" (spec_feature {action: "protect", file, accept: true, reason}).`,
         acceptReasonRequired: "Aceitar o conteúdo de um teste precisa de um motivo (uma linha, no máximo 500 caracteres): o motivo pelo qual o conteúdo atual é o certo.",
+        acceptChangedSincePreview: (file) => `Nada foi aceite: ${file} mudou depois de o utilizador ter sido questionado sobre aceitar o seu conteúdo (editado enquanto a pergunta esperava) — a confirmação cobria o conteúdo que lhe foi mostrado. Pergunta-lhe de novo.`,
         notATest: (file) => `${file} não é um ficheiro de teste (pelo nome ou pela pasta) — só os ficheiros de teste são protegidos.`,
         outside: (file) => `${file} está fora do projeto.`,
       },
@@ -3151,7 +3152,7 @@ const msg = {
       summaryLift: (file, by, reason) => `- proteção levantada: ${file} — por ${by}: "${reason}"`,
       summaryAccept: (file, by, reason) => `- conteúdo aceite: ${file} — por ${by}: "${reason}"`,
       doctorMissing: (slug) => `guard tests: ${slug} tem tarefas aprovadas mas nenhum registo de testes protegidos (as tarefas foram aprovadas antes de o modo ser definido) — regista-o: ${DEV_SPEC} feature protect ${slug}.`,
-      doctorLiftAfterFinish: (slug, files, first) => `guard tests: o levantamento da proteção de ${files} (${slug}) continua em vigor depois do finish da feature — o teste fica desprotegido para todas as features: termina-o (${DEV_SPEC} feature protect ${slug} ${first || "<ficheiro>"}) ou aceita o conteúdo atual (${DEV_SPEC} feature protect ${slug} ${first || "<ficheiro>"} --accept --reason "…").`,
+      doctorLiftAfterFinish: (slug, files, first) => `guard tests: o levantamento da proteção de ${files} (${slug}) continua em vigor depois do finish da feature — ${first ? "o teste fica desprotegido" : "os testes ficam desprotegidos"} para todas as features: termina-o (${DEV_SPEC} feature protect ${slug} ${first || "<ficheiro>"}) ou aceita o conteúdo atual (${DEV_SPEC} feature protect ${slug} ${first || "<ficheiro>"} --accept --reason "…").`,
     },
 
     // registo de decisões (decisions.md, spec_decide) e o tipo spike (investigar → decidir).

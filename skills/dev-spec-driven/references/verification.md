@@ -382,11 +382,14 @@ against stay as they were unless the plan or the user says otherwise:
   reason}`; the guard's line names the feature being worked on): the user's decision — with the approval guard on, an agent's
   call asks or is refused. It lasts until `feature protect <feature> <file>` (of any feature) ends it — whatever its feature's
   tasks, finished or not: a lift left in place after its feature's finish unprotects the test for every later feature, and
-  doctor warns about it. `feature protect <feature>` adds the tests present now (it never re-hashes a recorded one).
+  doctor warns about it. `feature protect <feature>` adds the tests present now (it never re-hashes a recorded one, and a test
+  another feature lists joins with the hash that feature recorded — only the accept records new content).
 - **The accept** — `dev-spec feature protect <feature> <file> --accept --reason "…"` (`spec_feature {action: "protect", file,
   accept: true, reason}`): the user's decision too (a guard-down, like the lift) — the test's current content becomes the
-  recorded one in that feature's list, its lift (if any) ends, and the reason is kept (the merge summary shows it). The test
-  stays protected: a later change asks again, and finish names it.
+  recorded one in that feature's list, its lift (if any) ends, and the reason is kept: the merge summary of every written finish
+  of that work cycle shows it — after the accept (or a lift), finish again with write (`dev-spec finish <feature> --write`): the
+  summary written before it still names the test as changed. The test stays protected: a later change asks again, and finish
+  names it.
 - **At finish** (every surface, git-free) — each protected test is hashed again: one whose content matches no hash a live
   feature recorded for it (its snapshot, a tick of any feature, an accept) and that no lift in force covers is a **warning**
   naming it (changed / deleted) and a "Protected tests" block in the merge summary — never a blocker: check each change is

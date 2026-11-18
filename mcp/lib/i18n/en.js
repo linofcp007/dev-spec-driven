@@ -3365,12 +3365,14 @@ const msg = {
       notEnforced: `The guard reads the list only at guard tests (${DEV_SPEC} init --guard tests).`,
       lifted: (file, slug, listed) => `Lifted the protection of ${file} (${slug}): it may change until ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (It was not on the feature's protected list.)"),
       // feature protect <f> <file> --accept (1.36.0 review 3): the test's current content recorded as the authorised one
-      accepted: (file, slug) => `Accepted the current content of ${file} (${slug}): its recorded hash is this content now — finish names a later change.`,
+      accepted: (file, slug) => `Accepted the current content of ${file} (${slug}): its recorded hash is this content now — finish names a later change. Finish it again (${DEV_SPEC} finish ${slug} --write): the merge summary then lists the accept and no longer names the test as changed.`,
       err: {
         fileRequired: `unprotect needs the test file: ${DEV_SPEC} feature unprotect <feature> <file> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
         reasonRequired: "unprotect needs a reason (one line, at most 500 characters): why this protected test may change.",
         acceptFileRequired: `Accepting a test's content needs the test file: ${DEV_SPEC} feature protect <feature> <file> --accept --reason "…" (spec_feature {action: "protect", file, accept: true, reason}).`,
         acceptReasonRequired: "Accepting a test's content needs a reason (one line, at most 500 characters): why its current content is the right one.",
+        // 1.36.0 review 4: the accept over MCP elicitation, the test rewritten while the question waited
+        acceptChangedSincePreview: (file) => `Nothing accepted: ${file} changed after the user was asked to accept its content (edited while the question waited) — their confirmation covered the content they were shown. Ask them again.`,
         notATest: (file) => `${file} is not a test file (by its name or its folder) — only test files are protected.`,
         outside: (file) => `${file} is outside the project.`,
       },
@@ -3383,7 +3385,7 @@ const msg = {
       summaryAccept: (file, by, reason) => `- accepted: ${file} — by ${by}: "${reason}"`,
       doctorMissing: (slug) => `guard tests: ${slug} has approved tasks but no protected-tests snapshot (its tasks were approved before the level was set) — take one: ${DEV_SPEC} feature protect ${slug}.`,
       // 1.36.0 review 3: a lift of a finished feature, recorded before its finish, never ended (first: the one file, else null)
-      doctorLiftAfterFinish: (slug, files, first) => `guard tests: ${slug}'s lift of ${files} is still in force after its finish — the test stays unprotected for every feature: end it (${DEV_SPEC} feature protect ${slug} ${first || "<file>"}) or accept its current content (${DEV_SPEC} feature protect ${slug} ${first || "<file>"} --accept --reason "…").`,
+      doctorLiftAfterFinish: (slug, files, first) => `guard tests: ${slug}'s lift of ${files} is still in force after its finish — ${first ? "the test stays" : "the tests stay"} unprotected for every feature: end it (${DEV_SPEC} feature protect ${slug} ${first || "<file>"}) or accept its current content (${DEV_SPEC} feature protect ${slug} ${first || "<file>"} --accept --reason "…").`,
     },
 
     // the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).

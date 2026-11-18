@@ -679,8 +679,9 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   now — or, when a reopened task names a blocking test, that it is that task's planned test and needs a lift (`reopened`, never
   "no task names it") —, the plan hint (the first of them) and the lift line (guards.js `approvalCommand`). **The lift line's
   feature** is the one being worked on: a covering / forced feature (an unlocker) whose list holds the file, else the first
-  unlocker, else a holder with open tasks, else the first holder listing it (every task ticked, no finish yet — the final
-  review's window: that feature, and its lift is in force like any other). At guard level
+  unlocker, else a holder with open tasks, else the holder listing it with the latest tick (`state.ticks`; a tie or none: the
+  first by folder name — every task ticked, no finish yet: the final review's window, and its lift is in force like any other;
+  doctor names it after that feature's finish). At guard level
   tests a target with a glob ANYWHERE reaches this decision even when `guardFolderCode` calls it no code (guards.js skips its
   not-code allow for it, then allows not-code when no protected test matches): `rm -rf tes?/unit`, `packages/*/test`.
 - **Lifts** — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect <f> <file> --reason …` (finish.js
@@ -689,7 +690,11 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   before it asks) writes nothing; `confirmation` → `confirmed`. A guard-down of the approval guard (claude-code-integration.md →
   Human approval guard). `protect <f>` adds the tests present now (walked before the lock, add-only; a list without a snapshot
   gets `at` / via protect); `protect <f> <file>` appends a `revoked` record when a lift is in force anywhere and adds the file when
-  absent — never re-hashes one. **In force** (`activeLifts`, over the live features' states — `liveStatesWith`; guardCheck's
+  absent — never re-hashes one. **A file another live feature lists** joins with a hash that feature recorded (`recordedHashes`
+  over the other live states, the first in folder order — the union finish reads gains nothing: a plain protect, no
+  guard-down, never authorises new content, 1.36.0 review 4); only a file no live feature lists gets its hash now. `protect <f>
+  <file>` and the accept read an EXISTING file by its real path (`realRel`, as the decision does — one through a junction is
+  the real file's key; a real path outside the project keeps the typed one). **In force** (`activeLifts`, over the live features' states — `liveStatesWith`; guardCheck's
   `ctx.states`): per file the LATEST record across every feature's lifts — a lift until a `revoked` record of any feature
   follows it. Nothing else ends one: no expiry, no finish, no open-task test (1.36.0 review 3 went back to this, the 1.36 rule —
   History). An accept record is no lift (`activeLifts` skips it; the accept's own `revoked` record ends a lift).
@@ -697,7 +702,9 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   --accept --reason …` (`protectTests` → `protectLocked`, opts.accept): the same checks and codes as a lift (`file-required`,
   `reason-required` — the accept's own words, `err.acceptFileRequired` / `acceptReasonRequired` —, `not-a-test`,
   `outside-project`; `dryRun`; `confirmation` → `confirmed`), a guard-down of the approval guard on every path (setting
-  `accept`: MCP — over elicitation too, its dry run before the question, `elicit.accept` —, the CLI through a shell — probe.js
+  `accept`: MCP — over elicitation too, its dry run before the question, `elicit.accept`; the dry run returns the file's
+  `hash`, the server passes it back as `preview` {hash} and a different hash under the lock is refused `changed-since-preview`,
+  nothing written (`err.acceptChangedSincePreview`, 1.36.0 review 4) —, the CLI through a shell — probe.js
   `CLI_SWITCHES` and `RE_APPROVAL_VERB` hold `accept` / `--accept`). Under the feature lock: a `revoked` record when a lift is in
   force anywhere (as `protect <file>`), the file's hash NOW written into that feature's list (under the listed spelling; the file
   joins the list when absent — the one write that re-hashes a listed file, the user's decision), and an accept record `{file, at,
@@ -709,8 +716,10 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   read under the lock) → `unexplained` {file, status: changed | deleted}; a lift in force explains a change (`lifted`). A warning
   naming the first 5 (+ how many more) whose line is the ACCEPT (`finishWarn` — never a lift: a lift lasts) and the merge
   summary's "Protected tests" block — never a blocker (a change the user confirmed at the prompt is legitimate).
-  `res.protectedTests` {count, unexplained, lifted, accepted — the finishing feature's accept records since its last finish
-  (`state.finished.at` as read: the finish being recorded is written after), shown as `summaryAccept` lines}. **The
+  `res.protectedTests` {count, unexplained, lifted, accepted — the finishing feature's accept records of its WORK CYCLE: since
+  its last finish (`state.finished.at` as read: the finish being recorded is written after) when that finish precedes its
+  latest tasks approval (`approvals.tasks.at` — a new cycle), else since that approval (the cycle was finished once already: a
+  re-finish keeps them, 1.36.0 review 4), else every one; shown as `summaryAccept` lines}. **The
   hashing runs OUTSIDE the feature lock** a write / evidence finish takes (2,000 files held it ~2 s, the MCP server's lock
   wait): the facade wraps it in `protectHashFirst`, which hashes the listed files first and hands them in as
   `opts.protectHashes` — never a tool argument; under the lock a file listed since is hashed there.
@@ -1145,6 +1154,19 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (`feature protect <f> <file> --accept --reason`): the user's guard-down that re-baselines the file, ends its lift and keeps an
   accept record; finish's warning and /spec-finish step 1 give it. Doctor names a lift still in force after its own feature's
   finish. Kept from round 2: the lift line's order and `protect <file>` ending a lift.
+- **1.36.0 review 4** — **R4-PT-1** a plain `feature protect <f> [file]` (no guard-down) on a feature whose list lacked a file
+  another feature listed recorded its CURRENT hash, and finish reads the union of every live feature's hashes: an agent's
+  protect on a new or planning feature — or the user ending a lift in a feature that did not list the file, doctor's "end it"
+  — accepted a weakened test silently. Now such a file joins with a hash that feature recorded (`recordedHashes`, shared with
+  finish); only the accept authorises new content. **R4-PT-2** the lift line's last fallback, the first holder by folder name,
+  could be an old all-ticked feature never finished (R2-PT-2's shape): with round 3's rule its lift stood at once and for good,
+  and no doctor check reached it — the holder with the latest tick now. **R4-PT-3** the merge summary's accepts were those since
+  the last finish, so a re-finish of the same cycle (/spec-finish step 3: after last-minute code changes) dropped them — the
+  work cycle now (since the tasks approval, or the finish before it). **R4-PT-4** the accept over elicitation recorded the
+  content at the answer, not the one asked about — the dry run's hash as `preview` (as approve / remove). **R4-PT-5** the
+  accept and `protect <file>` read the typed path: through a junction a second key, the real file's lift left in force —
+  `realRel`. **D4-1** (prose) /spec-finish step 1, the accept's note and verification.md: finish again after the accept, or the
+  summary written before it names the test as changed.
 
 ### Harness-observed evidence
 - **1.14 F1** — the observe hook, the `observed` stamp, `meta.evidence` and reason `unobserved`. Its feature review: **R1** — an

@@ -743,6 +743,9 @@ async function elicitApproval(toolName, args, pol, flight, progressToken) {
     // refused anyway is answered as it is, nobody is asked; the question quotes the reason the engine will record (one line), bounded
     const pre = runTool(toolName, args, { dryRun: true });
     if (!pre || pre.ok === false || !pre.dryRun) return pre;
+    // the accept records the content the user was asked about — a test rewritten while the question waits is refused (1.36.0
+    // review 4: the engine compares the hash under the feature's lock — changed-since-preview, nothing written)
+    if (pre.accept === true) preview = { hash: pre.hash };
     const why = String(pre.reason || "");
     details.push((pre.accept === true ? E.accept : E.unprotect)(why.length > 200 ? why.slice(0, 199) + "…" : why));
   } else if (toolName === "spec_feature") {

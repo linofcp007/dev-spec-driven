@@ -375,6 +375,12 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     const accRec = ((stateOf(fE).protectedTests || {}).lifts || []).find((l) => l.accepted === true);
     const plain = await call("spec_feature", { action: "protect", name: "elicit", projectDir: pE }); // no accept: never asked
     const askedAfterPlain = asked.length;
+    // 1.36.0 review 4 (R4-PT-4): the test rewritten while the question waits — refused (changed-since-preview), nothing recorded
+    const accState = () => { const pt = stateOf(fE).protectedTests || {}; return js([(pt.lifts || []).filter((l) => l.accepted === true).length, (pt.files || {})["test/a.test.js"]]); };
+    const beforeRace = accState();
+    answer = () => { w(pE, "test/a.test.js", "a, swapped while the question waited\n"); return { result: { action: "accept", content: { approve: true } } }; };
+    const race = await call("spec_feature", { action: "protect", name: "elicit", file: "test/a.test.js", accept: true, reason: "the rewrite is right", projectDir: pE });
+    const afterRace = accState();
     await new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
     const q = (asked[0] || { params: {} }).params.message || "";
     const qAcc = (asked[askedBeforeAccept] || { params: {} }).params.message || "";
@@ -384,6 +390,11 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       question: () => qAcc.includes(S.msg("en").approvalGuard.action({ kind: "guard-down", setting: "accept", file: "test/a.test.js", feature: "elicit" })) && qAcc.includes(S.msg("en").elicit.accept("the rewrite is right")),
       recorded: () => accOk.ok && accRec && accRec.reason === "the rewrite is right" && accRec.confirmed && accRec.confirmed.via === "elicitation",
       plain: () => plain.ok && askedAfterPlain === askedBeforeAccept + 1,
+    });
+    all("1.36.0 review 4 (R4-PT-4) guard tests over MCP elicitation: an accept records only the content the question was asked about — the test rewritten while it waited is refused changed-since-preview, nothing recorded (got " +
+      js([race.code, race.error, beforeRace, afterRace]) + ")", {
+      refused: () => race.ok === false && race.code === "changed-since-preview" && race.error === M().err.acceptChangedSincePreview("test/a.test.js"),
+      nothingRecorded: () => afterRace === beforeRace,
     });
     all("1.36 guard tests over MCP elicitation: an unprotect without a reason is refused before any question; the question names the test and the reason (control characters out); a decline records nothing; an approve records the lift with `confirmed` (got " +
       js([noReason.code, askedBefore, declined.declined, q, accepted.lifted]) + ")", {
@@ -785,6 +796,9 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     // 1.36.0 review 3: the warning's line accepts the content — the user's decision — never a lift
     const acc = S.manageFeature(pO, "protect", slug, "test/auth.test.js", { accept: true, reason: "intended: login takes a user now" });
     const refin = S.finishFeature(pO, slug, { write: true, includeBody: true }); // the re-check (written; the merge summary shows the accept)
+    // 1.36.0 review 4 (R4-PT-3): step 3 — finish again after a last-minute code change: the same cycle, the summary keeps the accept
+    w(pO, "src/auth.js", "module.exports = 2; // a last-minute fix\n");
+    const refin2 = S.finishFeature(pO, slug, { write: true, includeBody: true });
     const doc = () => (S.specDoctor(pO, slug).checks || []).find((c) => c.id === "protected-tests");
     const dLift = doc(); // the lift recorded before the finish (other) is still in force
     const fGm = S.createFeature(pO, "Gamma", ["core"], "", undefined, "en");
@@ -803,8 +817,8 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     w(pO, "test/auth.test.js", "test('auth', () => { expect(true).toBe(true); });\n"); // weakened during gamma, by a script
     const gamFin = S.finishFeature(pO, "gamma", {}), ownFin = S.finishFeature(pO, slug, {});
     const files = (xs) => (xs || []).map((x) => x.file).sort().join();
-    all("1.36 guard tests in /spec-finish's order: the written finish is ready and its warning gives the ACCEPT line; the accept re-baselines the test — the feature's own re-check is explained by the hash and its merge summary shows the accept; the lift recorded before the finish stays in force (doctor names it) until protect <file>; a later feature's edit of the accepted test is refused, also once login-loop has an open task again (an agent's line in tasks.md, a change request); a later change is named by both finishes (got " +
-      js({ approvals, listed, gBefore: gBefore.decision, fin: [fin.readyToFinish, finishedAt, fin.protectedTests], acc: acc.accepted, refin: refin.protectedTests, dLift,
+    all("1.36 guard tests in /spec-finish's order: the written finish is ready and its warning gives the ACCEPT line; the accept re-baselines the test — the feature's own re-check is explained by the hash and its merge summary shows the accept, a third written finish of the same cycle too (1.36.0 review 4); the lift recorded before the finish stays in force (doctor names it) until protect <file>; a later feature's edit of the accepted test is refused, also once login-loop has an open task again (an agent's line in tasks.md, a change request); a later change is named by both finishes (got " +
+      js({ approvals, listed, gBefore: gBefore.decision, fin: [fin.readyToFinish, finishedAt, fin.protectedTests], acc: acc.accepted, refin: refin.protectedTests, refin2: refin2.protectedTests, dLift,
         later: [gAuth.decision, gOther.decision, gOtherEnded.decision, dEnded], reopened: [gAuthHand.decision, app.ok, gAuthApp.decision], gamFin: gamFin.protectedTests, ownFin: ownFin.protectedTests }) + ")", {
       setup: () => approvals.every(Boolean) && ["test/auth.test.js", "test/other.test.js"].every((k) => listed.includes(k)) && liftBefore.ok && t1.ok && t2.ok,
       beforeInForce: () => gBefore.decision === "allow",
@@ -813,6 +827,8 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       accepted: () => acc.ok && acc.accepted.file === "test/auth.test.js" && acc.accepted.accepted === true && acc.accepted.reason === "intended: login takes a user now" && !acc.unlifted && acc.note.includes(M().accepted("test/auth.test.js", slug)),
       reFinish: () => refin.protectedTests.unexplained.length === 0 && files(refin.protectedTests.lifted) === "test/other.test.js" && files(refin.protectedTests.accepted) === "test/auth.test.js" && !refin.warnings.some((x) => /Protected tests of/.test(x)),
       summary: () => refin.mergeSummary.includes(M().summaryAccept("test/auth.test.js", acc.accepted.by, "intended: login takes a user now")),
+      sameCycle: () => files(refin2.protectedTests.accepted) === "test/auth.test.js" && !refin2.protectedTests.unexplained.length &&
+        refin2.mergeSummary.includes(M().summaryAccept("test/auth.test.js", acc.accepted.by, "intended: login takes a user now")),
       doctor: () => dLift && dLift.status === "warn" && dLift.detail === M().doctorLiftAfterFinish(slug, "test/other.test.js", "test/other.test.js") && dEnded === undefined,
       laterEdit: () => gAuth.decision === "deny" && gAuth.why === "protected-test" && gOther.decision === "allow" && endOther.unlifted === "test/other.test.js" && gOtherEnded.decision === "deny",
       reopened: () => gAuthHand.decision === "deny" && gAuthHand.why === "protected-test" && app.ok && gAuthApp.decision === "deny" && gAuthApp.why === "protected-test",
@@ -964,7 +980,7 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     w(p, "test/auth.test.js", "v2\n");
     S.completeTask(p, "alpha", 2, { summary: "done" });
     const fin1 = S.finishFeature(p, "alpha", {});
-    const finished = () => setState(f, { finished: { at: new Date(Date.now() + 5).toISOString(), files: {} } }); // a ready written finish's record
+    const finished = () => { const at = new Date(Date.now() + 5).toISOString(); setState(f, { finished: { at, files: {} } }); return at; }; // a ready written finish's record
     const doc = () => (S.specDoctor(p, "alpha").checks || []).find((c) => c.id === "protected-tests");
     const d0 = doc(); // before the finish: no warn
     finished();
@@ -981,13 +997,19 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     const acc = S.manageFeature(p, "protect", "alpha", "test/auth.test.js", { accept: true, reason: "v4 is the intended suite" });
     S.completeTask(p, "alpha", 3, { summary: "done" });
     const fin3 = S.finishFeature(p, "alpha", {});
-    finished();
-    const fin4 = S.finishFeature(p, "alpha", {});
+    const f2 = finished();
+    const fin4 = S.finishFeature(p, "alpha", {}); // 1.36.0 review 4 (R4-PT-3): a re-finish of the same cycle keeps the accept
+    for (const until = Date.parse(f2) + 2; Date.now() <= until;) { /* the next accept strictly after cycle 2's finish */ }
+    w(p, "test/auth.test.js", "v5\n");
+    const acc2 = S.manageFeature(p, "protect", "alpha", "test/auth.test.js", { accept: true, reason: "v5 between cycles" }); // before the next approval
+    const app3 = S.appendTasks(p, "alpha", [{ text: "Four", implements: ["src/auth.js"] }]); // a change request: cycle 3
+    approveTasks(p, "alpha");
+    const fin5 = S.finishFeature(p, "alpha", {});
     const pt = (r) => r.protectedTests;
     const files = (xs) => (xs || []).map((x) => x.file).join();
     const warns = (r) => r.warnings.some((x) => /Protected tests of/.test(x));
-    all("1.36 guard tests across cycles: cycle 1's lift is never ended by the finish — cycle 2's guard allows the edit and its finish names it lifted, doctor warns; protect <file> ends it, the guard refuses and a change around it is finish's warning; the accept re-baselines (explained, no warning), its record shown by the next written finish only (got " +
-      js({ c1: c1Deny.decision, line: line.slice(1), lift: lift.ok, fin1: pt(fin1), d0, d1, app: app.ok, c2Allow: c2Allow.decision, fin2: pt(fin2), ended: ended.unlifted, c2Deny: c2Deny.decision, d2, fin2b: pt(fin2b), acc: acc.ok, fin3: pt(fin3), fin4: pt(fin4) }) + ")", {
+    all("1.36 guard tests across cycles: cycle 1's lift is never ended by the finish — cycle 2's guard allows the edit and its finish names it lifted, doctor warns; protect <file> ends it, the guard refuses and a change around it is finish's warning; the accept re-baselines (explained, no warning), its record shown by every finish of its cycle (a re-finish too — 1.36.0 review 4) and dropped by the next cycle's, which shows an accept made between the two (got " +
+      js({ c1: c1Deny.decision, line: line.slice(1), lift: lift.ok, fin1: pt(fin1), d0, d1, app: app.ok, c2Allow: c2Allow.decision, fin2: pt(fin2), ended: ended.unlifted, c2Deny: c2Deny.decision, d2, fin2b: pt(fin2b), acc: acc.ok, fin3: pt(fin3), fin4: pt(fin4), acc2: acc2.ok, app3: app3.ok, fin5: pt(fin5) }) + ")", {
       cycle1: () => c1Deny.decision === "deny" && line[1] === "alpha" && lift.ok && files(pt(fin1).lifted) === "test/auth.test.js" && !warns(fin1),
       doctor: () => d0 === undefined && d1 && d1.status === "warn" && d1.detail === M().doctorLiftAfterFinish("alpha", "test/auth.test.js", "test/auth.test.js"),
       cycle2: () => app.ok && c2Allow.decision === "allow" && files(pt(fin2).lifted) === "test/auth.test.js" && !pt(fin2).unexplained.length && !warns(fin2),
@@ -995,7 +1017,9 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       backstop: () => files(pt(fin2b).unexplained) === "test/auth.test.js" && !pt(fin2b).lifted.length && warns(fin2b),
       accepted: () => acc.ok && !acc.unlifted && !pt(fin3).unexplained.length && !pt(fin3).lifted.length && files(pt(fin3).accepted) === "test/auth.test.js" && !warns(fin3) &&
         fin3.mergeSummary.includes(M().summaryAccept("test/auth.test.js", acc.accepted.by, "v4 is the intended suite")),
-      once: () => !pt(fin4).unexplained.length && pt(fin4).accepted.length === 0 && !fin4.mergeSummary.includes(M().summaryAccept("test/auth.test.js", acc.accepted.by, "v4 is the intended suite")),
+      sameCycle: () => !pt(fin4).unexplained.length && files(pt(fin4).accepted) === "test/auth.test.js" && fin4.mergeSummary.includes(M().summaryAccept("test/auth.test.js", acc.accepted.by, "v4 is the intended suite")),
+      once: () => acc2.ok && app3.ok && !pt(fin5).unexplained.length && js(pt(fin5).accepted.map((a) => a.reason)) === js(["v5 between cycles"]) &&
+        !fin5.mergeSummary.includes(M().summaryAccept("test/auth.test.js", acc.accepted.by, "v4 is the intended suite")),
     });
   }
 
@@ -1039,4 +1063,138 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       listing: () => listing.lifts.filter((l) => l.accepted === true).length === 2 && listing.lifts.filter((l) => l.accepted === true).every((l) => l.active === undefined && typeof l.reason === "string"),
     });
   }
+
+  { // 1.36.0 review 4 (R4-PT-1): a plain `feature protect` — no guard-down — never authorises new content. alpha's listed test is
+    // weakened by a route the guard does not read; a protect of it in an existing feature in planning (beta), the walk of a new one
+    // (zeta), a protect of it in another new one (omega) each record the hash alpha recorded, never the content now: alpha's finish
+    // still names the change; a file no live feature lists joins with its hash now; only the accept explains the change
+    const p = project("launder", { approvalGuard: "deny" });
+    w(p, "src/auth.js", "a\n"); w(p, "test/auth.test.js", "auth: two assertions\n");
+    const fBe = S.createFeature(p, "Beta", ["core"], "", undefined, "en"); // in planning: no list
+    const fAl = S.createFeature(p, "Alpha", ["core"], "", undefined, "en");
+    tasks(fAl, "- [ ] 1. Login rule\n  - _Implements: src/auth.js_\n  - _Verify: node --test test/auth.test.js_\n");
+    approveTasks(p, "alpha");
+    S.completeTask(p, "alpha", 1, { command: "node --test test/auth.test.js", exitCode: 0, summary: "1 passing" });
+    const hAl = listOf(fAl).files["test/auth.test.js"];
+    w(p, "test/auth.test.js", "auth: weakened\n"); // a script, a git checkout: finish is the backstop
+    w(p, "test/new.test.js", "new\n"); // on no feature's list
+    const named = () => (S.finishFeature(p, "alpha", {}).protectedTests.unexplained || []).map((x) => x.file + ":" + x.status).join();
+    const w0 = named();
+    const existing = S.manageFeature(p, "protect", "beta", "test/auth.test.js", {});
+    const w1 = named();
+    const fZe = S.createFeature(p, "Zeta", ["core"], "", undefined, "en");
+    const walk = S.manageFeature(p, "protect", "zeta", undefined, {});
+    const w2 = named();
+    const fOm = S.createFeature(p, "Omega", ["core"], "", undefined, "en");
+    const file = S.manageFeature(p, "protect", "omega", "test/auth.test.js", {});
+    const w3 = named();
+    const acc = S.manageFeature(p, "protect", "alpha", "test/auth.test.js", { accept: true, reason: "the weaker test is intended" });
+    const w4 = named();
+    const hNew = E.fileHash(path.join(p, "test", "new.test.js")).slice(0, 16);
+    all("1.36.0 review 4 (R4-PT-1) guard tests: a plain feature protect of a test another feature lists — an existing feature in planning, the walk of a new one, a new one with the file — records the hash that feature recorded, never the content now: alpha's finish still names its weakened test; a test no feature lists joins with its hash now; the accept explains the change (got " +
+      js({ w0, existing: existing.protectedTests, w1, walk: walk.protectedTests, w2, file: file.protectedTests, w3, w4, beta: listOf(fBe).files, zeta: listOf(fZe).files, omega: listOf(fOm).files, hAl, hNew }) + ")", {
+      before: () => w0 === "test/auth.test.js:changed",
+      existing: () => existing.ok && existing.protectedTests.added === 1 && listOf(fBe).files["test/auth.test.js"] === hAl && w1 === w0,
+      walk: () => walk.ok && listOf(fZe).files["test/auth.test.js"] === hAl && w2 === w0,
+      unlisted: () => listOf(fZe).files["test/new.test.js"] === hNew && typeof hNew === "string",
+      file: () => file.ok && file.protectedTests.added === 1 && listOf(fOm).files["test/auth.test.js"] === hAl && w3 === w0,
+      accept: () => acc.ok && w4 === "",
+    });
+  }
+
+  { // 1.36.0 review 4 (R4-PT-1, doctor's "end it"): every task of alpha ticked, beta's agent needs alpha's red test changed — the line
+    // names beta (the first unlocker; its list lacks the file); the user lifts it there, beta finishes, doctor beta offers to end the
+    // lift or accept; ENDING it (protect beta <file>) leaves the change named at alpha's finish — ending accepts nothing
+    const p = project("end-is-not-accept", { approvalGuard: "deny" });
+    w(p, "src/a.js", "1\n"); w(p, "src/b.js", "1\n");
+    const fB = S.createFeature(p, "Beta", ["core"], "", undefined, "en");
+    tasks(fB, "- [ ] 1. Beta one\n  - _Implements: src/b.js_\n- [ ] 2. Beta two\n  - _Implements: src/b.js_\n");
+    approveTasks(p, "beta"); // its snapshot predates alpha's red test
+    const fA = S.createFeature(p, "Alpha", ["core"], "", undefined, "en");
+    tasks(fA, "- [ ] 1. Red test\n  - _Implements: test/login.test.js_\n- [ ] 2. Fix\n  - _Implements: src/a.js_\n");
+    approveTasks(p, "alpha");
+    w(p, "test/login.test.js", "login: two assertions\n");
+    S.completeTask(p, "alpha", 1, { summary: "red" });
+    S.completeTask(p, "alpha", 2, { summary: "green" });
+    const d = g(p, "test/login.test.js");
+    const line = (d.userNote || "").match(/feature unprotect (\S+) (\S+) --reason/) || [];
+    const lift = S.manageFeature(p, "unprotect", line[1] || "beta", "test/login.test.js", { reason: "beta's login change" });
+    w(p, "test/login.test.js", "login: one assertion\n"); // the edit made under the lift
+    S.completeTask(p, "beta", 1, { summary: "done" });
+    S.completeTask(p, "beta", 2, { summary: "done" });
+    setState(fB, { finished: { at: new Date(Date.now() + 1000).toISOString(), files: {} } });
+    const dBeta = (S.specDoctor(p, "beta").checks || []).find((c) => c.id === "protected-tests");
+    const finLifted = S.finishFeature(p, "alpha", {}).protectedTests;
+    const end = S.manageFeature(p, "protect", "beta", "test/login.test.js", {});
+    const finEnded = S.finishFeature(p, "alpha", {}).protectedTests;
+    all("1.36.0 review 4 (R4-PT-1) guard tests: ending a lift in a feature whose list lacked the test (doctor's \"end it\") records the hash the listing feature recorded — alpha's finish names the change made under the lift, no longer explained (got " +
+      js({ d: [d.decision, line.slice(1)], lift: lift.ok, dBeta, finLifted, end: [end.ok, end.unlifted, end.protectedTests && end.protectedTests.added], finEnded }) + ")", {
+      line: () => d.decision === "deny" && line[1] === "beta" && lift.ok,
+      doctor: () => dBeta && dBeta.status === "warn" && dBeta.detail === M().doctorLiftAfterFinish("beta", "test/login.test.js", "test/login.test.js"),
+      lifted: () => finLifted.lifted.map((x) => x.file).join() === "test/login.test.js" && !finLifted.unexplained.length,
+      ended: () => end.ok && end.unlifted === "test/login.test.js" && end.protectedTests.added === 1 && listOf(fB).files["test/login.test.js"] === listOf(fA).files["test/login.test.js"] &&
+        finEnded.unexplained.map((x) => x.file + ":" + x.status).join() === "test/login.test.js:changed" && !finEnded.lifted.length,
+    });
+  }
+
+  { // 1.36.0 review 4 (R4-PT-2): no open task anywhere — accounts (older, all ticked, never finished, first by name) and cart (its last
+    // task ticked: the final review's fix round) both list the test; the line names cart, the holder listing it with the latest tick —
+    // never accounts, nor zed (ticked later, its list lacks the test); cart's lift, after cart's finish, is named by doctor cart
+    const p = project("window-line", { approvalGuard: "deny" });
+    w(p, "src/a.js", "a\n"); w(p, "src/cart.js", "c\n"); w(p, "test/auth.test.js", "auth\n");
+    const mk = (name, src) => {
+      const f = S.createFeature(p, name, ["core"], "", undefined, "en");
+      tasks(f, "- [ ] 1. " + name + "\n  - _Implements: " + src + "_\n");
+      approveTasks(p, name.toLowerCase());
+      S.completeTask(p, name.toLowerCase(), 1, { summary: "done" });
+      return f;
+    };
+    const fAc = mk("Accounts", "src/a.js"), fCa = mk("Cart", "src/cart.js"), fZe = mk("Zed", "src/a.js");
+    setState(fAc, { ticks: { 1: "2026-01-01T00:00:00.000Z" } });
+    setState(fCa, { ticks: { 1: "2026-01-02T00:00:00.000Z" } });
+    setState(fZe, { ticks: { 1: "2026-01-03T00:00:00.000Z" }, protectedTests: { at: "2026-01-01T00:00:00.000Z", via: "approval", files: { "test/other.test.js": null } } });
+    const d = g(p, "test/auth.test.js");
+    const liftIn = ((d.userNote || "").match(/feature unprotect (\S+) test\/auth\.test\.js/) || [])[1];
+    const lift = S.manageFeature(p, "unprotect", liftIn || "accounts", "test/auth.test.js", { reason: "the review: the test asserted the old call" });
+    setState(fCa, { finished: { at: new Date(Date.now() + 1000).toISOString(), files: {} } });
+    const dCart = (S.specDoctor(p, "cart").checks || []).find((c) => c.id === "protected-tests");
+    all("1.36.0 review 4 (R4-PT-2) guard tests: with no open task anywhere the lift line names the holder listing the test with the latest tick — cart, not accounts (first by name) nor zed (a later tick, its list lacks the test); cart's lift after cart's finish is named by doctor cart (got " +
+      js({ d: [d.decision, d.why, liftIn], lift: lift.ok, dCart }) + ")", {
+      namesCart: () => d.decision === "deny" && d.why === "protected-test" && liftIn === "cart",
+      doctor: () => lift.ok && dCart && dCart.status === "warn" && dCart.detail === M().doctorLiftAfterFinish("cart", "test/auth.test.js", "test/auth.test.js"),
+    });
+  }
+
+  { // 1.36.0 review 4 (R4-PT-5): protect <file> and the accept read an existing file by its real path, as the guard does — through a
+    // junction they end the real file's lift and add no second key; a junction out of the project keeps the typed path
+    const p = project("accept-junction", { approvalGuard: "ask" });
+    const out = path.join(tmp, "pt-outside-tests");
+    w(p, "src/x.js", "x\n"); w(p, "test/auth.test.js", "auth\n"); w(out, "x.test.js", "x\n");
+    const f = S.createFeature(p, "Alpha", ["core"], "", undefined, "en");
+    tasks(f, "- [ ] 1. A\n  - _Implements: src/x.js_\n");
+    approveTasks(p, "alpha");
+    fs.symlinkSync(path.join(p, "test"), path.join(p, "t2"), "junction");
+    fs.symlinkSync(out, path.join(p, "t3"), "junction");
+    const keys = () => Object.keys(listOf(f).files).sort().join();
+    S.manageFeature(p, "unprotect", "alpha", "test/auth.test.js", { reason: "lift" });
+    w(p, "test/auth.test.js", "auth, rewritten\n");
+    const acc = S.manageFeature(p, "protect", "alpha", "t2/auth.test.js", { accept: true, reason: "via the junction" });
+    const k1 = keys(), gAcc = g(p, "test/auth.test.js");
+    S.manageFeature(p, "unprotect", "alpha", "test/auth.test.js", { reason: "lift again" });
+    const end = S.manageFeature(p, "protect", "alpha", "t2/auth.test.js", {});
+    const k2 = keys(), gEnd = g(p, "test/auth.test.js");
+    const outside = S.manageFeature(p, "protect", "alpha", "t3/x.test.js", {});
+    const k3 = keys();
+    all("1.36.0 review 4 (R4-PT-5) guard tests: the accept and protect <file> through a junction (t2/ → test/) act on the real file — its lift ended, no second key, the guard asks again; a junction out of the project keeps the typed key (got " +
+      js({ acc: [acc.ok, acc.unlifted, acc.accepted && acc.accepted.file], k1, gAcc: gAcc.why, end: [end.ok, end.unlifted], k2, gEnd: gEnd.why, outside: outside.ok, k3 }) + ")", {
+      accept: () => acc.ok && acc.unlifted === "test/auth.test.js" && acc.accepted.file === "test/auth.test.js" && k1 === "test/auth.test.js" && gAcc.why === "protected-test",
+      protect: () => end.ok && end.unlifted === "test/auth.test.js" && end.protectedTests.added === 0 && k2 === "test/auth.test.js" && gEnd.why === "protected-test",
+      outside: () => outside.ok && k3 === "t3/x.test.js,test/auth.test.js",
+    });
+  }
+
+  // 1.36.0 review 4 (cosmetic): doctor's lift-after-finish line with several files speaks of them in the plural
+  eq(["en", "pt", "es"].map((l) => [M(l).doctorLiftAfterFinish("a", "x, y", null), M(l).doctorLiftAfterFinish("a", "x", "x")]).map(([many, one], i) =>
+    [/the tests stay|os testes ficam|las pruebas quedan/.test(many), [/the test stays/, /o teste fica/, /la prueba queda/][i].test(one)]),
+  [[true, true], [true, true], [true, true]], "1.36.0 review 4 guard tests: doctor's lift-after-finish line — several files in the plural, one in the singular (EN, PT, ES)");
 };

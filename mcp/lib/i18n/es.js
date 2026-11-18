@@ -3134,12 +3134,13 @@ const msg = {
       truncated: (cap) => `La lista alcanzó su límite (${cap} ficheros): las pruebas que pasan de él no están protegidas.`,
       notEnforced: `El guardia solo lee la lista con el modo guardia tests (${DEV_SPEC} init --guard tests).`,
       lifted: (file, slug, listed) => `Protección de ${file} levantada (${slug}): puede cambiar hasta ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (No estaba en la lista de pruebas protegidas de la función.)"),
-      accepted: (file, slug) => `Aceptado el contenido actual de ${file} (${slug}): el hash registrado pasa a ser este contenido — finish señala un cambio posterior.`,
+      accepted: (file, slug) => `Aceptado el contenido actual de ${file} (${slug}): el hash registrado pasa a ser este contenido — finish señala un cambio posterior. Ciérrala de nuevo (${DEV_SPEC} finish ${slug} --write): el resumen del merge lista entonces la aceptación y deja de nombrar la prueba como cambiada.`,
       err: {
         fileRequired: `unprotect necesita el fichero de prueba: ${DEV_SPEC} feature unprotect <función> <fichero> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
         reasonRequired: "unprotect necesita un motivo (una línea, como mucho 500 caracteres): por qué puede cambiar esta prueba protegida.",
         acceptFileRequired: `Aceptar el contenido de una prueba necesita el fichero de prueba: ${DEV_SPEC} feature protect <función> <fichero> --accept --reason "…" (spec_feature {action: "protect", file, accept: true, reason}).`,
         acceptReasonRequired: "Aceptar el contenido de una prueba necesita un motivo (una línea, como mucho 500 caracteres): por qué su contenido actual es el correcto.",
+        acceptChangedSincePreview: (file) => `No se aceptó nada: ${file} cambió después de preguntar al usuario si aceptaba su contenido (editado mientras la pregunta esperaba) — su confirmación cubría el contenido que se le mostró. Pregúntale de nuevo.`,
         notATest: (file) => `${file} no es un fichero de prueba (por su nombre o su carpeta) — solo se protegen los ficheros de prueba.`,
         outside: (file) => `${file} está fuera del proyecto.`,
       },
@@ -3151,7 +3152,7 @@ const msg = {
       summaryLift: (file, by, reason) => `- protección levantada: ${file} — por ${by}: "${reason}"`,
       summaryAccept: (file, by, reason) => `- contenido aceptado: ${file} — por ${by}: "${reason}"`,
       doctorMissing: (slug) => `guard tests: ${slug} tiene tareas aprobadas pero ningún registro de pruebas protegidas (sus tareas se aprobaron antes de fijar el modo) — regístralo: ${DEV_SPEC} feature protect ${slug}.`,
-      doctorLiftAfterFinish: (slug, files, first) => `guard tests: el levantamiento de la protección de ${files} (${slug}) sigue en vigor después del finish de la función — la prueba queda desprotegida para todas las funciones: termínalo (${DEV_SPEC} feature protect ${slug} ${first || "<fichero>"}) o acepta su contenido actual (${DEV_SPEC} feature protect ${slug} ${first || "<fichero>"} --accept --reason "…").`,
+      doctorLiftAfterFinish: (slug, files, first) => `guard tests: el levantamiento de la protección de ${files} (${slug}) sigue en vigor después del finish de la función — ${first ? "la prueba queda desprotegida" : "las pruebas quedan desprotegidas"} para todas las funciones: termínalo (${DEV_SPEC} feature protect ${slug} ${first || "<fichero>"}) o acepta su contenido actual (${DEV_SPEC} feature protect ${slug} ${first || "<fichero>"} --accept --reason "…").`,
     },
 
     // registro de decisiones (decisions.md, spec_decide) y el tipo spike (investigar → decidir).
