@@ -32,8 +32,9 @@ is in History at the end.
   Phase` over `### Story` headings —; appended when no level-2 heading holds it — tasks right under the title, Kiro's layout, or
   a level-1 heading closing an earlier `##` —, where put before them it would take the template's tasks in: doctor's
   `port-verify` then FAILS baselineLate at size m / l — the tasks approval refuses the plan until the baseline's section is
-  moved first and the template's tasks put under a level-2 heading of their own, renumbered (`port.baselineLate` says so;
-  moved INTO the baseline's section they went with it when +port was removed — 1.36.0 review 3) — and warns at s / no size:
+  moved first and the template's tasks put under a level-2 heading of their own, keeping their numbers (`port.baselineLate`
+  says so; moved INTO the baseline's section they went with it when +port was removed — 1.36.0 review 3; renumbered, a ticked
+  task lost its run — review 4) — and warns at s / no size:
   gates-and-approvals.md → Right-sized rigor) and appends the rest: nothing changes the code the baseline covers before it is
   recorded. Its tasks keep the numbers after the template's own; where it goes before them, next_task serves the baseline
   first (tasks order is by section in file order) — appended, the template's tasks come first until it is moved. spec_add_track
@@ -288,6 +289,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   PF3-2: the move baselineLate asked for ("move the baseline first") put a Kiro / `###`-only template's tasks inside the
   baseline's section — removing +port then hid them, review 1's PORT-3 hazard; its text (and port-patterns.md) now names the
   safe move: the baseline's section first, the template's tasks under a level-2 heading of their own, renumbered.
+- **1.36.0 review 4 (PF4-1)** — review 3's "renumbered in file order" was a step the safe move never needs (next_task serves
+  the plan by section, in file order, then by number) and, after a tick (add-track +port on a ticked plan), it moved the
+  ticked task's run and tick record to another task (both keyed by number: unverified, doctor `evidence-moved`). The text
+  says "keeping their numbers" now (EN / PT / ES, port-patterns.md).
 - **1.14** — `.specs/templates/` introduced: a team's own scaffolds over the built-in i18n ones. `templates` and `exports`
   became reserved slugs; a feature created before 1.14 under either name stays a feature (the legacy exception).
 - **1.15** — `tracks` joined `RESERVED_SLUGS` (the project's track packs), with the same exception.

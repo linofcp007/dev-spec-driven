@@ -1750,14 +1750,16 @@ function writeChecks(projectDir, nc) {
 // --output=none`, `clang-format -n`, `elm-format --validate`, `buf format --exit-code`, `npm run lint:format`), and `-l` let
 // `gofmt -l -w` / `shfmt -l -w` through. 1.36 review 3 (PF3-4): the check, lint and -w words are read in the formatter's own simple
 // command (split on && / || / ; / |) — `cargo fmt && git diff --exit-code` was accepted, `gofmt -l . | grep -v -w vendor` refused —, and
-// `lint` is the formatter program's own subcommand, never a make / just / task target list (`make fmt lint`: two targets).
+// `lint` is the formatter program's own subcommand. 1.36 review 4 (PF4-2): a runner list (make / just / task) missed every other target
+// runner (`gmake fmt lint`, `pants fmt lint ::`, `npm run fmt lint`) — `lint` counts only as swift-format's own subcommand (`swift format
+// lint`, `swift-format lint`); any other `fmt lint` is refused, the documented default ("give its check form"). A `$(… | …)` before the
+// check flag splits the formatter's command at its `|`: the documented limit (put the check flag first).
 const RE_FIXER_FLAG = /(?<![\w-])--(?:fix|write)(?![\w-])/;
 const RE_FORMATTER = /(?<![\w./@-])(?<!(?:check|lint)[:_-])(?!-|(?:check|lint)[-_:])[\w-]*(?:fmt|format)(?![\w:.-])/i;
 const RE_CHECK_FLAG = /(?<![\w-])(?:--?check(?:-[\w-]+)?|-[ldn]|--diff|--dry-run|--verify-no-changes|--lint|--validate|--test|--exit-code|--output=none)(?![\w-])/;
-const RE_LINT_MODE = /(?:fmt|format)\s+lint(?![\w:.-])/i; // a formatter's own lint subcommand: `swift format lint`, `swift-format lint`
-const RE_TARGET_RUNNER = /^\s*(?:make|just|task)\s/i; // its words are targets: `make fmt lint` runs fmt (it writes), then lint
+const RE_LINT_MODE = /(?:^|[\s/])swift(?:-format|\s+format)\s+lint(?![\w:.-])/i; // swift-format's own lint subcommand, nothing else
 const RE_WRITE_WORD = /(?<![\w-])-w(?![\w-])/; // beside a formatter: it writes, whatever check flag stands beside it
-const fixerSegment = (seg) => RE_FORMATTER.test(seg) && (RE_WRITE_WORD.test(seg) || !(RE_CHECK_FLAG.test(seg) || (RE_LINT_MODE.test(seg) && !RE_TARGET_RUNNER.test(seg))));
+const fixerSegment = (seg) => RE_FORMATTER.test(seg) && (RE_WRITE_WORD.test(seg) || !(RE_CHECK_FLAG.test(seg) || RE_LINT_MODE.test(seg)));
 const fixerCommand = (cmd) => RE_FIXER_FLAG.test(cmd) || String(cmd).split(/&&|[;|]/).some(fixerSegment);
 const FAST_SKEW_MS = 5 * 60 * 1000; // a log entry or a file date further ahead is ignored (another machine's clock)
 // roadmap.json meta.fastCheck → null (none set) · { name, command } · { invalid: the stored value, why: "missing" | "guardian" |

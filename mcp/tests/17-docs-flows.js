@@ -242,17 +242,34 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
   }
 
   { // 1.36.0 review 3 (PF3-1, PF3-2, PF3-4): port-patterns.md says add-track puts the baseline first while no task is ticked and names the
-    // safe way out of baselineLate (the baseline's section first, the tasks under a level-2 heading of their own, renumbered); verification.md
-    // reads the fixer heuristic's words in the formatter's own simple command, never a make / just / task target as `lint`
+    // safe way out of baselineLate (the baseline's section first, the tasks under a level-2 heading of their own — review 4, PF4-1: keeping
+    // their numbers, never renumbered); verification.md reads the fixer heuristic's words in the formatter's own simple command — review 4
+    // (PF4-2): `lint` only as swift-format's own subcommand, any other `fmt lint` refused, and the `$(… | …)`-then-flag form a known limit
     const refDoc = (f) => ws(rd("skills", "dev-spec-driven", "references", f));
     const port = refDoc("port-patterns.md"), ver = refDoc("verification.md");
     const rows = [
       ["port-patterns: add-track inserts", port, /`add-track port` puts the baseline's section before the plan's first task section while no task of it is ticked/],
-      ["port-patterns: the safe move", port, /The way out: the baseline's section first, then those tasks under a \*\*level-2 heading of their own\*\* .*removing \+port hides them\), and the tasks renumbered in file order/],
+      ["port-patterns: the safe move", port, /The way out: the baseline's section first, then those tasks under a \*\*level-2 heading of their own\*\* .*removing \+port hides them\), the tasks keeping their numbers \(a tick and its run are recorded by number/],
+      ["port-patterns: never renumbered", port, /^(?![\s\S]*renumbered in file order)/],
       ["verification: one simple command", ver, /count in the formatter's own simple command only \(the command line split on `&&`, `\|\|`, `;` and `\|`\)/],
-      ["verification: make targets", ver, /never a `make` \/ `just` \/ `task` target/],
+      ["verification: swift-format's lint only", ver, /swift-format's own `lint` subcommand: `swift format lint`, `swift-format lint` — any other `fmt lint` is refused: `make fmt lint`, `pants fmt lint ::`, `npm run fmt lint` run `fmt`/],
+      ["verification: the $(… | …) limit", ver, /a `\$\(… \| …\)` before the check flag splits the formatter's command at that `\|` .* put the check flag first/],
     ];
     const bad = rows.filter(([, t, re]) => !re.test(t)).map(([k]) => k);
-    ok(!bad.length, "1.36.0 review 3: port-patterns.md names add-track's baseline-first insertion and the safe move out of baselineLate; verification.md reads the fixer's words per simple command, never a make / just / task target as lint (missing: " + js(bad) + ")");
+    ok(!bad.length, "1.36.0 review 3 + 4: port-patterns.md names add-track's baseline-first insertion and the safe move out of baselineLate, the tasks keeping their numbers; verification.md reads the fixer's words per simple command, `lint` only as swift-format's own subcommand, and names the $(… | …)-then-flag limit (missing: " + js(bad) + ")");
+  }
+
+  { // 1.36.0 review 4 (D4-2): tooling-reference.md's rows name review 3's surfaces — doctor's protected-tests warn on a finished feature
+    // (a lift of its own recorded before that finish, still in force), the accept as a guarded call (the approval hook's row, the MCP
+    // approvals paragraph — with unprotect), and spec_next_task's batch that never adds a held task
+    const tool = ws(rd("skills", "dev-spec-driven", "references", "tooling-reference.md"));
+    const rows = [
+      ["doctor protected-tests: a lift after the finish", /any feature with a finish recorded, open tasks or not: a lift of its own recorded before that finish and still in force — end it, `feature protect <f> <file>`, or accept the content/],
+      ["approval hook: the accept", /`feature unprotect` \/ `feature protect … --accept` \(1\.36: `spec_feature` unprotect \/ protect `\{accept: true\}` too\)/],
+      ["approvals over MCP: unprotect and the accept", /`spec_feature` remove, unprotect \(a protected test's lift\) and protect `\{accept: true\}` \(a protected test's content accepted\)/],
+      ["spec_next_task: the batch", /a note naming its run; its `batch` never adds a task the fence holds \|/],
+    ];
+    const bad = rows.filter(([, re]) => !re.test(tool)).map(([k]) => k);
+    ok(!bad.length, "1.36.0 review 4 (D4-2): tooling-reference.md names doctor's protected-tests warn on a finished feature, the accept beside unprotect in the approval hook's row and the MCP approvals paragraph, and spec_next_task's batch never adding a held task (missing: " + js(bad) + ")");
   }
 };

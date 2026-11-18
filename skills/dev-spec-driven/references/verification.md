@@ -256,8 +256,9 @@ edit**, so a type error is fixed the moment it appears, not at the `_Verify:_` o
   `format` program or subcommand (`gofmt`, `cargo fmt`, `ruff format`, `dotnet format`, `clang-format`) with a `-w` word (it
   writes, whatever stands beside it: `gofmt -l -w`, `shfmt -l -w`) or with no check word (`--check`, `-check`, `--check-…`,
   `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`, `--test`, `--exit-code`,
-  `--output=none`, or a `lint` subcommand right after it — never a `make` / `just` / `task` target: `make fmt lint` runs
-  `fmt`). Those words count in the formatter's own simple command only (the command line split on `&&`, `||`, `;` and `|`):
+  `--output=none`, or swift-format's own `lint` subcommand: `swift format lint`, `swift-format lint` — any other `fmt lint`
+  is refused: `make fmt lint`, `pants fmt lint ::`, `npm run fmt lint` run `fmt`). Those words count in the formatter's own
+  simple command only (the command line split on `&&`, `||`, `;` and `|`):
   `cargo fmt && git diff --exit-code` writes, `gofmt -l . | grep -v -w vendor` only reads. Check-only forms pass
   (`prettier --check`, `eslint --fix-dry-run`, `gofmt -l`, `swift format lint`, `swiftformat --lint`,
   `dart format --output=none --set-exit-if-changed`, `clang-format -n`, `buf format --exit-code`, `make check-fmt`,
@@ -265,7 +266,9 @@ edit**, so a type error is fixed the moment it appears, not at the `_Verify:_` o
   Its limits: the words are read, not the tool — a short flag counts by its common meaning (`-n` a dry run, even where a tool
   gives it another one); a formatter known by another name (`black .`, `prettier -w`, `rubocop -a`) is not recognized — give
   the fast check its check-only command; a formatter whose bare form only reports (`biome format .`) is refused like one that
-  writes — use its check form (`biome ci .`, `biome check .`). A check named `off` or `none` can't be the fast check.
+  writes — use its check form (`biome ci .`, `biome check .`); a `$(… | …)` before the check flag splits the formatter's
+  command at that `|` (`ruff format $(git ls-files | grep -v x) --check` is refused) — put the check flag first. A check
+  named `off` or `none` can't be the fast check.
 - **Pick one that passes on the base branch:** it stays a project check, so `spec_finish` needs it passing on the final
   code like the others — a linter that is already red on main gives no signal and blocks every finish.
 - **Offered, never set:** `init` and `spec_upgrade` return `fastCheckOffer` {name, command, from, note} when none is set

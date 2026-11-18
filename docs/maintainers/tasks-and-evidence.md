@@ -401,9 +401,10 @@ Engine: the `B5` block of `engine/evidence.js`.
   `--fix` / `--fix=…` / `--write` word, or a `*fmt` / `*format` program or subcommand — never a flag, an `@alias` or a
   check- / lint-named script — with a `-w` word (it writes, whatever check flag stands beside it: `gofmt -l -w`) or with no check
   word: `--check` / `-check` / `--check-…`, `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`,
-  `--test`, `--exit-code`, `--output=none`, or its `lint` subcommand right after it, `RE_LINT_MODE` — never after a make / just /
-  task target, `RE_TARGET_RUNNER` —; those words read in the formatter's own simple command, `fixerSegment` over the command split
-  on `&&` / `||` / `;` / `|`) is refused, nothing written;
+  `--test`, `--exit-code`, `--output=none`, or swift-format's own `lint` subcommand, `RE_LINT_MODE` (`swift format lint` /
+  `swift-format lint` only — any other `fmt lint` is a target list or a script's argument: refused, the documented default);
+  those words read in the formatter's own simple command, `fixerSegment` over the command split on `&&` / `||` / `;` / `|` — a
+  `$(… | …)` before the check flag splits it there: refused, the documented limit) is refused, nothing written;
   the stored one is checked again when this call replaces its check's
   command and goes when this call removes its check (`cleared` note). With `guardian: true` the same plan runs once BEFORE the
   gate's launcher is written (unless roadmap.json doesn't parse — the lock's refusal stays) — a refused init
@@ -1013,7 +1014,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.36.0 review 3 (PF3-4)** — FC2-1's check words, `lint` and `-w` were read anywhere on the command line: `make fmt lint`
   (two targets) and the "format, then fail on a diff" idiom `cargo fmt && git diff --exit-code` were accepted, `gofmt -l . | grep
   -v -w vendor` refused. They are read in the formatter's own simple command now (`fixerSegment`), and `lint` never after a make
-  / just / task target (`RE_TARGET_RUNNER`). `ruff format -n .` stays accepted: `-n` counts as a dry run, the documented limit.
+  / just / task target (RE_TARGET_RUNNER, gone since review 4). `ruff format -n .` stays accepted: `-n` counts as a dry run, the
+  documented limit.
+- **1.36.0 review 4 (PF4-2)** — review 3's runner list let every other spelling and runner through as a check-only `lint`: `gmake`,
+  `(make …)`, `FOO=1 make`, `pants fmt lint ::`, `./gradlew format lint`, `turbo run format lint`, `npm run fmt lint` (an argument
+  of the fmt script). No name list tells `pants fmt lint` from `swift format lint`: the runner list is gone and `RE_LINT_MODE` is
+  positive — swift-format's own subcommand only (`swift format lint`, `swift-format lint`, by any path). The split's
+  `$(… | …)`-then-flag refusal (`ruff format $(git ls-files | grep -v x) --check`) is a documented limit, not a shell-aware split.
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
