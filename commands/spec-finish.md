@@ -14,8 +14,8 @@ unless the ledger already has its `Final review: ×N` line since the last task.
    root cause. Show the warnings too — each one deserves a decision (code the feature repeats from elsewhere: reuse it, or
    say why the copy is deliberate; raw colours or sizes where the design system has tokens: use the token, or say why not;
    a protected test changed with no recorded reason — guard tests: check the change is intended, a test made to pass is a
-   weakened test; if it is, the user records it with the `feature unprotect` line the warning gives — that lift ends with
-   this feature's finish).
+   weakened test; if it is, the user records it with the `feature unprotect` line the warning gives — that lift explains this
+   feature's change, its re-check included, and never unprotects the test for a later feature).
 2. **Verify fresh, now** — the full suite and every check the report lists for the active tracks. With project checks set,
    record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}`, or
    `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" finish <feature> --run` (`--run` given: run that). No shell? Ask the user to

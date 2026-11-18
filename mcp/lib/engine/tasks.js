@@ -27,9 +27,9 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
   decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize;
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
-let guardLevel, protectOnTick, protectedCount; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
+let guardLevel, protectOnTick, protectedCount, tickRecorded; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
 let portTask, portSchedule; // port.js — +port's fence (1.36; next_task passes over the tasks it holds — review 1)
-function __link(E) { ({ guardLevel, protectOnTick, protectedCount, fastCheckStatus, portTask, portSchedule, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+function __link(E) { ({ guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -1812,6 +1812,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // 1.36 guard tests: an open task's definition of done says a protected test changes only when its _Implements:_ names it (the count:
   // the feature's list)
   const protectedN = !block.done && guardLevel(projectDir) === "tests" ? protectedCount(state) : null;
+  // …a task reopened after its tick unlocks none of them (tickRecorded): its line says so — a lift is needed (1.36.0 review 2)
+  const protectedReopened = protectedN != null && tickRecorded(state, block.number);
   const deps = briefDependencies(activeBlocks, block); // its _Depends:_ and where each stands
 
   const md = i18n.renderBrief({
@@ -1843,6 +1845,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     projectChecks: checks,
     fastCheck: fast ? { check: fast.check, command: fast.command } : null,
     protectedTests: protectedN,
+    protectedReopened,
     portRole: port && port.role, // +port (1.36)
     differential: port && port.differential,
     globalConstraints: globalConstraints(tasksText),

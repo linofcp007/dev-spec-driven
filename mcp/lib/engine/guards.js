@@ -79,7 +79,8 @@ function guardEnabled(projectDir) {
 // "\r\r\n" file normalized to LF are no edit.
 // meta.guard "scope": once tasks are approved, a code file must also be in the plan — scopeGuardDecision.
 // meta.guard "tests" (1.36): scope, plus protected tests (protect.js protectedTestDecision) — read from every unfinished feature that
-// holds a list, BEFORE the stale / tests-phase / spike answers; a test under .specs/<feature>/tests/ is one too (no "specs" allow).
+// holds a list, BEFORE the stale / tests-phase / spike answers; a test under .specs/<feature>/tests/ is one too (no "specs" allow), and a
+// target with a glob in ANY segment reaches it even when it is no code (1.36.0 review 2: `rm -rf tes?/unit` passed as not-code).
 // A FOLDER holding code is a code target too (guardFolderCode): `rm -rf src`, `Remove-Item -Recurse src`, `find src -delete`, `mv src
 // old`, `rm -rf src/*` remove or move the code in it (review 8 C14: they passed while `sed -i src/util.js` asked).
 // Each feature's tasks.md is parsed ONCE per call (its active blocks — the protected tests' and the scope guard's reading).
@@ -108,7 +109,10 @@ function guardCheck(projectDir, filePath, cwd) {
   // guard tests: a feature's own failing tests (.specs/<feature>/tests/) are protected tests too — never waved through as "specs"
   const specsTest = level === "tests" && /^\.specs\/[^/]+\/tests(?:\/|$)/.test(FOLD_CASE ? rel.toLowerCase() : rel);
   if (!specsTest && rel.split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
-  if (!isCodeFile(rel) && !guardFolderCode(pdir, abs)) return allow(specsTest ? "specs" : "not-code");
+  const notCode = !isCodeFile(rel) && !guardFolderCode(pdir, abs);
+  // tests: a target with a glob in ANY segment goes to the protected-test decision first — guardFolderCode reads a glob in the last
+  // segment only, so `rm -rf tes?/unit`, `rm -rf packages/*/test` were no code and passed silently (1.36.0 review 2); none: not-code below
+  if (notCode && !(level === "tests" && /[*?[]/.test(rel))) return allow(specsTest ? "specs" : "not-code");
   const root = specsRoot(pdir);
   const covering = [], forced = [], pending = [], stale = [], spikes = [], testing = [];
   const texts = new Map(); // feature → tasks.md, for a feature with open tasks
@@ -151,6 +155,7 @@ function guardCheck(projectDir, filePath, cwd) {
     const pt = protectedTestDecision(pdir, abs, rel, { holders, unlockers: covering.concat(forced), blocks: blocksOf, states });
     if (pt) return pt;
   }
+  if (notCode) return allow(specsTest ? "specs" : "not-code");
   if (specsTest) return allow("specs");
   // scope / tests: the plan is every approved feature's open tasks (a forced approval's too — noted when it is the only cover, as below).
   if ((level === "scope" || level === "tests") && (covering.length || forced.length)) {
@@ -166,7 +171,8 @@ function guardCheck(projectDir, filePath, cwd) {
 }
 // An edit target that is no code file by its name: is it a folder holding code (scan.js folderHoldsCode — bounded, links not followed,
 // node_modules / dist / build… not code), or a glob in its last segment (`rm -rf src/*`) matching a code file or such a folder? A glob
-// higher up (`rm -rf */lib`) is not read (a known limit); a network path is never read (no SMB connection to a host the agent named).
+// higher up (`rm -rf */lib`) is not read (a known limit — at level tests guardCheck still sends it to the protected-test decision); a
+// network path is never read (no SMB connection to a host the agent named).
 const GUARD_GLOB_ENTRIES = 200; // a glob's matches read, at most (past it: may hold code)
 function guardFolderCode(pdir, abs) {
   if (isNetworkPath(abs)) return false;

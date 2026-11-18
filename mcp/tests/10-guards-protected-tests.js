@@ -95,21 +95,26 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       specsDir: () => gSpecsDir.decision === "ask",
     });
   }
-  { // lifts: one allows; `protect <file>` ends it; any feature's lift counts (one with no open task too); the snapshot note
+  { // lifts: one allows; `protect <file>` ends it; another feature's lift counts while that feature has open tasks — never once they are
+    // all ticked (1.36.0 review 2: never finished, it lasted forever); the snapshot note
     const un = S.manageFeature(pD, "unprotect", "login", "test/auth.test.js", { reason: "replaced by the v2 suite" });
     const gLifted = g(pD, "test/auth.test.js");
     const re = S.manageFeature(pD, "protect", "login", "test/auth.test.js", {});
     const gAgain = g(pD, "test/auth.test.js");
-    // a lift recorded by another feature, one whose tasks are all done
+    // a lift recorded by another feature, one whose tasks are all done (never finished), then with an open task again
     const fDone = S.createFeature(pD, "Done Work", ["core"], "", undefined, "en");
     tasks(fDone, "- [x] 1. old\n  - _Implements: src/old.js_\n");
     setState(fDone, { protectedTests: { files: {}, lifts: [{ file: "test/far.test.js", at: new Date().toISOString(), by: "u", reason: "r" }] } });
+    const gDoneLift = g(pD, "test/far.test.js");
+    tasks(fDone, "- [x] 1. old\n  - _Implements: src/old.js_\n- [ ] 2. more\n  - _Implements: src/old.js_\n");
     const gOtherLift = g(pD, "test/far.test.js");
-    all("1.36 guard tests: a lift allows the test; protect <file> ends the lift (the latest record decides) and it asks again; a lift any feature records counts — one whose tasks are all done too; the first approval's note says what was recorded (got " +
-      js([un.ok, gLifted.why, re.unlifted, gAgain.why, gOtherLift.why, snapD.protectedTests]) + ")", {
+    tasks(fDone, "- [x] 1. old\n  - _Implements: src/old.js_\n");
+    all("1.36 guard tests: a lift allows the test; protect <file> ends the lift (the latest record decides) and it asks again; another feature's lift counts while it has open tasks — never once they are all ticked; the first approval's note says what was recorded (got " +
+      js([un.ok, gLifted.why, re.unlifted, gAgain.why, gDoneLift.why, gOtherLift.why, snapD.protectedTests]) + ")", {
       lift: () => un.ok && un.lifted.file === "test/auth.test.js" && un.lifted.reason === "replaced by the v2 suite" && un.listed === true,
       allowed: () => gLifted.decision === "allow", ended: () => re.unlifted === "test/auth.test.js" && re.lifts.some((l) => l.revoked === true),
-      asks: () => gAgain.decision === "ask" && gAgain.why === "protected-test", otherFeature: () => gOtherLift.decision === "allow",
+      asks: () => gAgain.decision === "ask" && gAgain.why === "protected-test",
+      doneFeature: () => gDoneLift.decision === "ask" && gDoneLift.why === "protected-test", otherFeature: () => gOtherLift.decision === "allow",
       snap: () => snapD.protectedTests && snapD.protectedTests.count === Object.keys(listD.files).length && snapD.note.includes(M().snapshotNote(snapD.protectedTests.count, 0)),
     });
   }
@@ -377,9 +382,9 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     tasks(fF, "- [ ] 1. A\n  - _Implements: src/a.js_\n");
     approveTasks(pF, "fin");
     const clean = S.finishFeature(pF, "fin", {});
-    // another feature plans and ticks a change of a test on fin's list (its re-baseline explains it)
+    // another feature plans and ticks a change of a test on fin's list (its re-baseline explains it); its lift counts (an open task left)
     const fO = S.createFeature(pF, "Other", ["core"], "", undefined, "en");
-    tasks(fO, "- [ ] 1. O\n  - _Implements: test/shared.test.js_\n");
+    tasks(fO, "- [ ] 1. O\n  - _Implements: test/shared.test.js_\n- [ ] 2. More\n  - _Implements: src/o.js_\n");
     approveTasks(pF, "other");
     w(pF, "test/shared.test.js", "s2\n");
     S.completeTask(pF, "other", 1, { summary: "done" });
@@ -621,24 +626,31 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     });
   }
 
-  { // 1.36.0 review 1 (PT-5): a lift ends with its feature — one recorded before its feature's finish no longer counts (gamma's protection
-    // kept), one recorded after it (a reopened feature) does; a protect <file> record (revoked) of a finished feature still ends an earlier lift
+  { // 1.36.0 review 1 (PT-5), review 2: a lift ends with its feature — one recorded before its feature's last finish no longer counts
+    // (gamma's protection kept), one recorded after it counts while the feature is reopened (open tasks) — never once its tasks are all
+    // ticked; a protect <file> record (revoked) of a finished feature still ends an earlier lift
     const pL = project("lift-ends", { approvalGuard: "ask" });
-    for (const n of ["auth", "b", "c"]) w(pL, "test/" + n + ".test.js", n + "\n");
+    for (const n of ["auth", "b", "c", "d"]) w(pL, "test/" + n + ".test.js", n + "\n");
     const fGa = S.createFeature(pL, "Gamma", ["core"], "", undefined, "en");
     tasks(fGa, "- [ ] 1. G\n  - _Implements: src/g.js_\n");
     approveTasks(pL, "gamma");
     const fAl = S.createFeature(pL, "Alpha", ["core"], "", undefined, "en");
+    tasks(fAl, "- [x] 1. A\n  - _Implements: src/a.js_\n- [ ] 2. Reopened after the finish\n  - _Implements: src/a.js_\n");
     setState(fAl, { finished: { at: "2026-01-02T00:00:00.000Z", files: {} }, protectedTests: { files: {}, lifts: [
       { file: "test/auth.test.js", at: "2026-01-01T00:00:00.000Z", by: "u", reason: "intended" }, // before alpha's finish: ended
       { file: "test/c.test.js", at: "2026-01-01T12:00:00.000Z", by: "u", revoked: true }, // alpha's protect <file>: ends beta's lift
-      { file: "test/b.test.js", at: "2026-01-03T00:00:00.000Z", by: "u", reason: "reopened" }] } }); // after the finish: in force
+      { file: "test/b.test.js", at: "2026-01-03T00:00:00.000Z", by: "u", reason: "reopened" }] } }); // after the finish, reopened: in force
     const fBe = S.createFeature(pL, "Beta", ["core"], "", undefined, "en");
+    tasks(fBe, "- [ ] 1. B\n  - _Implements: src/b.js_\n");
     setState(fBe, { protectedTests: { files: {}, lifts: [{ file: "test/c.test.js", at: "2026-01-01T06:00:00.000Z", by: "u", reason: "r" }] } });
-    const gAuth = g(pL, "test/auth.test.js"), gB = g(pL, "test/b.test.js"), gC = g(pL, "test/c.test.js");
-    all("1.36 guard tests: a lift ends with its feature — alpha's lift recorded before alpha's finish no longer allows gamma's protected test, one recorded after the finish does, and alpha's protect <file> record still ends beta's earlier lift (got " +
-      js([gAuth.why, gB.why, gC.why]) + ")", {
+    const fDe = S.createFeature(pL, "Delta", ["core"], "", undefined, "en");
+    tasks(fDe, "- [x] 1. D\n  - _Implements: src/d.js_\n"); // finished, nothing reopened: its lift after the finish never counts
+    setState(fDe, { finished: { at: "2026-01-02T00:00:00.000Z", files: {} }, protectedTests: { files: {}, lifts: [{ file: "test/d.test.js", at: "2026-01-03T00:00:00.000Z", by: "u", reason: "after" }] } });
+    const gAuth = g(pL, "test/auth.test.js"), gB = g(pL, "test/b.test.js"), gC = g(pL, "test/c.test.js"), gD = g(pL, "test/d.test.js");
+    all("1.36 guard tests: a lift ends with its feature — alpha's lift recorded before alpha's finish no longer allows gamma's protected test, one recorded after the finish does while alpha is reopened, delta's after its finish (no open task) never does, and alpha's protect <file> record still ends beta's earlier lift (got " +
+      js([gAuth.why, gB.why, gC.why, gD.why]) + ")", {
       ended: () => gAuth.decision === "ask" && gAuth.why === "protected-test", afterFinish: () => gB.decision === "allow", revoked: () => gC.decision === "ask" && gC.why === "protected-test",
+      doneAfterFinish: () => gD.decision === "ask" && gD.why === "protected-test",
     });
   }
 
@@ -699,6 +711,167 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       quoted: () => tick.ok && typeof files["test/q.test.js"] === "string",
       absImplements: () => typeof files["test/abs.test.js"] === "string",
       absUnprotect: () => un.ok === true && un.lifted.file === "test/q.test.js",
+    });
+  }
+
+  { // 1.36.0 review 2 (R2-PT-1), in /spec-finish's order at deny: the written finish is ready (it records the finish) and warns about the
+    // changed test; the user records the lift the warning gives — it explains the feature's own re-finish, never a later feature's edit
+    // or finish; reopened (an open task), the lift recorded after its last finish counts and one recorded before it never; protect <file>
+    // ends a lift in force or not
+    const pO = project("finish-order", { approvalGuard: "deny" });
+    w(pO, "src/auth.js", "module.exports = 1;\n");
+    w(pO, "test/auth.test.js", "test('auth', () => { expect(login('a')).toBe(true); });\n");
+    w(pO, "test/other.test.js", "test('other', () => {});\n");
+    w(pO, "tests/integration/auth.test.js", "test('T-01', () => {});\n");
+    const bf = S.createFeature(pO, "Login Loop", [], "users bounce back to /login", undefined, "en", "bugfix");
+    const slug = "login-loop";
+    const fill = (rel, pairs) => { const fp = path.join(bf.dir, rel); let t = fs.readFileSync(fp, "utf8"); pairs.forEach(([a, b]) => { t = t.split(a).join(b); }); fs.writeFileSync(fp, t); };
+    const bugPath = path.join(bf.dir, "bug.md");
+    fs.writeFileSync(bugPath, fs.readFileSync(bugPath, "utf8")
+      .replace(/## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\nLog in with an expired refresh token.")
+      .replace(/## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nThe refresh handler returns 302 to /login before clearing the cookie (auth.js:88).")
+      .replace(/## Fix\n\[[^\n]*\]/, "## Fix\nClear the cookie before redirecting."));
+    fill("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
+      ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
+    fill("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
+    fill("tasks.md", [["\n  - _Implements: [the test file T-01 goes in]_", "\n  - _Implements: tests/integration/auth.test.js_"], ["\n  - _Implements: [path of the code the fix changes]_", "\n  - _Implements: src/auth.js_"],
+      ["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
+    fill("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"]]);
+    const approvals = ["requirements", "design", "test-plan", "tasks"].map((ph) => S.approvePhase(pO, slug, ph).ok);
+    const listed = Object.keys(listOf(bf).files || {});
+    const liftBefore = S.manageFeature(pO, "unprotect", slug, "test/other.test.js", { reason: "rewritten with the fix" });
+    const gBefore = g(pO, "test/other.test.js"); // its feature open: in force
+    const t1 = S.completeTask(pO, slug, 1, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails" });
+    w(pO, "test/auth.test.js", "test('auth', () => { expect(login({ name: 'a' })).toBe(true); });\n"); // the user confirmed it
+    w(pO, "test/other.test.js", "test('other', () => { expect(2).toBe(2); });\n"); // lifted
+    const t2 = S.completeTask(pO, slug, 2, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
+    const fin = S.finishFeature(pO, slug, { write: true }); // /spec-finish step 1
+    const finishedAt = (stateOf(bf).finished || {}).at;
+    const finWarn = fin.warnings.find((x) => x.startsWith(M().finishWarn(slug, "", 0).slice(0, 20))) || "";
+    const liftAfter = S.manageFeature(pO, "unprotect", slug, "test/auth.test.js", { reason: "intended: login takes a user now" }); // the warning's line
+    const refin = S.finishFeature(pO, slug, {}); // the re-check
+    const listing = S.manageFeature(pO, "protect", slug, undefined, {});
+    const fGm = S.createFeature(pO, "Gamma", ["core"], "", undefined, "en");
+    tasks(fGm, "- [ ] 1. Gamma\n  - _Implements: src/auth.js_\n");
+    approveTasks(pO, "gamma");
+    const gAuth = g(pO, "test/auth.test.js"), gOther = g(pO, "test/other.test.js");
+    w(pO, "test/auth.test.js", "test('auth', () => { expect(true).toBe(true); });\n"); // weakened during gamma
+    const gamFin = S.finishFeature(pO, "gamma", {});
+    const undo = S.completeTask(pO, slug, 2, null, { undo: true, reason: "the fix needs another pass" }); // login-loop reopened
+    const gAuthRe = g(pO, "test/auth.test.js"), gOtherRe = g(pO, "test/other.test.js");
+    const retick = S.completeTask(pO, slug, 2, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
+    const reprot = S.manageFeature(pO, "protect", slug, "test/auth.test.js", {}); // its lift not in force now (no open task): ended all the same
+    S.completeTask(pO, slug, 2, null, { undo: true, reason: "again" });
+    const gAuthEnded = g(pO, "test/auth.test.js");
+    const files = (xs) => (xs || []).map((x) => x.file).sort().join();
+    all("1.36 guard tests in /spec-finish's order: the written finish is ready and warns about the changed test; the lift its warning gives, recorded after the finish, explains the feature's own re-check but never a later feature's edit (deny) or finish; reopened, the lift after its last finish counts and the one before it never; protect <file> ends a lift not in force too (got " +
+      js({ approvals, listed, gBefore: gBefore.decision, fin: [fin.readyToFinish, finishedAt, fin.protectedTests], lift: liftAfter.lifted && liftAfter.lifted.at, refin: refin.protectedTests,
+        active: listing.lifts, later: [gAuth.decision, gOther.decision], gamFin: gamFin.protectedTests, reopened: [undo.ok, gAuthRe.decision, gOtherRe.decision], ended: [retick.ok, reprot.unlifted, gAuthEnded.decision] }) + ")", {
+      setup: () => approvals.every(Boolean) && ["test/auth.test.js", "test/other.test.js"].every((k) => listed.includes(k)) && liftBefore.ok && t1.ok && t2.ok,
+      beforeInForce: () => gBefore.decision === "allow",
+      step1: () => fin.readyToFinish === true && typeof finishedAt === "string" && finWarn === M().finishWarn(slug, M().changed("test/auth.test.js"), 0) && files(fin.protectedTests.lifted) === "test/other.test.js",
+      liftAfter: () => liftAfter.ok && liftAfter.lifted.at > finishedAt,
+      reFinish: () => refin.protectedTests.unexplained.length === 0 && files(refin.protectedTests.lifted) === "test/auth.test.js,test/other.test.js" && !refin.warnings.some((x) => /Protected tests of/.test(x)),
+      notActive: () => listing.lifts.filter((l) => !l.revoked).length === 2 && listing.lifts.every((l) => l.active === false),
+      laterEdit: () => gAuth.decision === "deny" && gAuth.why === "protected-test" && gOther.decision === "deny",
+      laterFinish: () => files(gamFin.protectedTests.unexplained) === "test/auth.test.js" && !gamFin.protectedTests.lifted.length,
+      reopened: () => undo.ok && gAuthRe.decision === "allow" && gOtherRe.decision === "deny" && gOtherRe.why === "protected-test",
+      protectEnds: () => retick.ok && reprot.unlifted === "test/auth.test.js" && gAuthEnded.decision === "deny",
+    });
+  }
+
+  { // 1.36.0 review 2 (R2-PT-2): the lift line names a feature whose lift lasts while the work goes on — accounts (all ticked, never
+    // finished) sorts first, cart is being worked on: the line names cart; a lift in accounts unlocks nothing, cart's lasts until its tasks
+    // are all ticked. The order: an unlocker that lists the file, else the first unlocker, else a holder with open tasks, else the first holder
+    const liftOf = (r) => ((r.userNote || r.reason || "").match(/feature unprotect (\S+) test\/auth\.test\.js/) || [])[1];
+    const pA = project("lift-line", { approvalGuard: "deny" });
+    w(pA, "src/a.js", "a\n"); w(pA, "src/cart.js", "c\n"); w(pA, "test/auth.test.js", "auth\n");
+    const fAc = S.createFeature(pA, "Accounts", ["core"], "", undefined, "en");
+    tasks(fAc, "- [ ] 1. Accounts\n  - _Implements: src/a.js_\n");
+    approveTasks(pA, "accounts");
+    S.completeTask(pA, "accounts", 1, { summary: "done" });
+    const fCa = S.createFeature(pA, "Cart", ["core"], "", undefined, "en");
+    tasks(fCa, "- [ ] 1. Cart\n  - _Implements: src/cart.js_\n");
+    approveTasks(pA, "cart");
+    const dCart = g(pA, "test/auth.test.js");
+    S.manageFeature(pA, "unprotect", "accounts", "test/auth.test.js", { reason: "the old line" });
+    const dAccLift = g(pA, "test/auth.test.js");
+    S.manageFeature(pA, "unprotect", "cart", "test/auth.test.js", { reason: "cart changes the login signature" });
+    const dCartLift = g(pA, "test/auth.test.js");
+    S.completeTask(pA, "cart", 1, { summary: "done" });
+    const dCartDone = g(pA, "test/auth.test.js");
+    const pQ = project("lift-pref", { approvalGuard: "deny" });
+    w(pQ, "src/a.js", "a\n"); w(pQ, "test/auth.test.js", "auth\n");
+    const fOld = S.createFeature(pQ, "Old", ["core"], "", undefined, "en");
+    tasks(fOld, "- [ ] 1. Old\n  - _Implements: src/a.js_\n");
+    approveTasks(pQ, "old");
+    S.completeTask(pQ, "old", 1, { summary: "done" }); // lists the test; all ticked, never finished
+    const fAaa = S.createFeature(pQ, "Aaa", ["core"], "", undefined, "en");
+    tasks(fAaa, "- [ ] 1. A\n  - _Implements: src/a.js_\n"); // pending: open tasks, no approval, no list
+    const step3 = g(pQ, "test/auth.test.js");
+    const fBbb = S.createFeature(pQ, "Bbb", ["core"], "", undefined, "en");
+    tasks(fBbb, "- [ ] 1. B\n  - _Implements: src/a.js_\n");
+    setState(fBbb, { approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } }); // covering, no list
+    const step2 = g(pQ, "test/auth.test.js");
+    const fCcc = S.createFeature(pQ, "Ccc", ["core"], "", undefined, "en");
+    tasks(fCcc, "- [ ] 1. C\n  - _Implements: src/a.js_\n");
+    approveTasks(pQ, "ccc"); // covering, lists the test
+    const step1 = g(pQ, "test/auth.test.js");
+    all("1.36 guard tests: the lift line names the feature being worked on — cart, not accounts (all ticked, never finished, first by name); accounts' lift unlocks nothing, cart's allows until its tasks are all ticked; with no unlocker listing the file, the first unlocker (bbb); with no unlocker, a holder with open tasks (aaa, before old) (got " +
+      js({ cart: [dCart.decision, liftOf(dCart)], accLift: dAccLift.decision, cartLift: dCartLift.decision, cartDone: dCartDone.decision, steps: [liftOf(step1), liftOf(step2), liftOf(step3)] }) + ")", {
+      namesCart: () => dCart.decision === "deny" && dCart.why === "protected-test" && liftOf(dCart) === "cart",
+      accountsLift: () => dAccLift.decision === "deny", cartLift: () => dCartLift.decision === "allow", cartDone: () => dCartDone.decision === "deny",
+      listingUnlocker: () => step1.decision === "deny" && liftOf(step1) === "ccc", firstUnlocker: () => liftOf(step2) === "bbb", openHolder: () => liftOf(step3) === "aaa",
+    });
+  }
+
+  { // 1.36.0 review 2 (R2-PT-4): at deny a FOLDER target with a glob above its last segment is read for protected tests too — rm -rf tes?/unit,
+    // */unit, packages/*/test, mv packages/*/test, Remove-Item -Recurse tes?/unit; a non-code glob matching no protected test stays not-code
+    const pU = project("glob-folders", { approvalGuard: "deny" });
+    w(pU, "src/cart.js", "c\n"); w(pU, "test/auth.test.js", "auth\n"); w(pU, "test/unit/deep.test.js", "deep\n"); w(pU, "packages/a/test/api.test.js", "api\n");
+    w(pU, "docs/a/old/readme.md", "old\n");
+    const fU = S.createFeature(pU, "Cart", ["core"], "", undefined, "en");
+    tasks(fU, "- [ ] 1. Cart logic\n  - _Implements: src/cart.js_\n");
+    approveTasks(pU, "cart");
+    const hs = (cmd, toolName) => { const h = hookOut(hook(pU, toolName || "Bash", { command: cmd })); return (h && h.hookSpecificOutput && h.hookSpecificOutput.permissionDecision) || "silent"; };
+    const shell = { tesQ: hs("rm -rf tes?/unit"), star: hs("rm -rf */unit"), pkgs: hs("rm -rf packages/*/test"), mv: hs("mv packages/*/test /tmp/x"),
+      ps: hs("Remove-Item -Recurse -Force tes?/unit", "PowerShell"), docs: hs("rm -rf doc?/a/old") };
+    const gDocs = g(pU, "doc?/a/old"), gPkgs = g(pU, "packages/*/test");
+    // below level tests a non-code glob still takes the early not-code allow — no feature read (a cost: 60 features, ×150 per target)
+    const pV = project("glob-scope-cost", { guard: "scope" });
+    w(pV, "docs/a/x.md", "x\n");
+    for (let i = 0; i < 25; i++) tasks(S.createFeature(pV, "Feat " + i, ["core"], "", undefined, "en"), Array.from({ length: 20 }, (_, k) => "- [ ] " + (k + 1) + ". T\n  - _Implements: src/f" + i + "_" + k + ".js_\n").join(""));
+    const per = (t) => { const t0 = process.hrtime.bigint(); for (let i = 0; i < 20; i++) g(pV, t); return Number(process.hrtime.bigint() - t0) / 1e6 / 20; };
+    const cost = remeasure(() => { const glob = per("doc?/a/x.md"), plain = per("docs/a/x.md"); return { glob, plain, ratio: glob / Math.max(0.05, plain) }; }, (s) => s.ratio <= 4);
+    const gScope = g(pV, "doc?/a/x.md");
+    all("1.36 guard tests: a folder target with a glob above its last segment is refused at deny when it holds a protected test — rm -rf tes?/unit, */unit, packages/*/test, mv packages/*/test, Remove-Item -Recurse tes?/unit; a non-code glob holding none stays not-code; below level tests a non-code glob costs what a plain non-code target does (≤ 4×, 25 features) (got " +
+      js([shell, gDocs.why, gPkgs.why, gScope.why, { ratio: cost.ratio, glob: cost.glob, plain: cost.plain, tries: cost.tries }]) + ")", {
+      shell: () => ["tesQ", "star", "pkgs", "mv", "ps"].every((k) => shell[k] === "deny"), engine: () => gPkgs.decision === "deny" && gPkgs.why === "protected-test",
+      notCode: () => shell.docs === "silent" && gDocs.decision === "allow" && gDocs.why === "not-code",
+      scopeCost: () => gScope.why === "not-code" && cost.ratio <= 4,
+    });
+  }
+
+  { // 1.36.0 review 2 (R2-PT-3): a reopened task's planned test still asks, and the ask says why — the planned test of a task reopened after
+    // its tick needs a lift — never "no task that can start now names it"; another protected test keeps the plain text; the reopened task's
+    // brief says so too (never "edit it when THIS task's _Implements:_ names it"), another task's brief keeps the plain line
+    const pR = project("reopen-text", { approvalGuard: "ask" });
+    w(pR, "src/cart.js", "c\n"); w(pR, "test/other.test.js", "other\n");
+    const fR = S.createFeature(pR, "Cart", ["core"], "", undefined, "en");
+    tasks(fR, "- [ ] 1. Red test\n  - _Implements: test/cart.test.js_\n  - _Verify: node --test test/cart.test.js_\n- [ ] 2. Fix\n  - _Implements: src/cart.js_\n");
+    approveTasks(pR, "cart");
+    w(pR, "test/cart.test.js", "red T-01\n");
+    S.completeTask(pR, "cart", 1, { command: "node --test test/cart.test.js", exitCode: 0 });
+    const undo = S.completeTask(pR, "cart", 1, null, { undo: true, reason: "red for the wrong reason" });
+    const gRe = g(pR, "test/cart.test.js"), gOther = g(pR, "test/other.test.js");
+    const b1 = S.taskBrief(pR, "cart", 1, {}), b2 = S.taskBrief(pR, "cart", 2, {});
+    const n = Object.keys(listOf(fR).files || {}).length;
+    all("1.36 guard tests: a reopened task's planned test asks and the ask names the reopened task (a lift is needed), never 'no task names it'; another protected test keeps the plain text; the reopened task's brief says its planned test needs the user's lift, another task's keeps the plain line (got " +
+      js([undo.ok, gRe.why, gRe.reason && gRe.reason.slice(0, 200), gOther.why, n]) + ")", {
+      reopened: () => undo.ok && gRe.decision === "ask" && gRe.why === "protected-test" && gRe.reason.includes(M().reopened("1 (cart)")) && !gRe.reason.includes(M().noCurrent),
+      other: () => gOther.decision === "ask" && gOther.reason.includes(M().noCurrent) && !gOther.reason.includes(M().reopened("1 (cart)")),
+      brief1: () => n === 2 && b1.brief.includes(M().briefDodReopened(n, "cart")) && !b1.brief.includes(M().briefDod(n)),
+      brief2: () => b2.brief.includes(M().briefDod(n)) && !b2.brief.includes(M().briefDodReopened(n, "cart")),
     });
   }
 };
