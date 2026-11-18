@@ -8,7 +8,8 @@
  *   · the snapshot — the test files present at the feature's FIRST complete tasks approval (walked and hashed BEFORE the feature lock:
  *     protectWalkFirst, the facade's approvePhase — the features' .specs/<f>/tests/ first, its own first), at most PROTECT_MAX_FILES
  *     (`truncated` past them), marked via "approval"; `feature protect` adds the files present now — ADD-ONLY: a recorded entry keeps
- *     its hash, and a file another live feature lists joins with that feature's hash (no laundering);
+ *     its hash (no laundering); the snapshot, protect and a tick's _Verify:_ add a file another live feature lists with that feature's
+ *     hash, never its content now (1.36.0 review 4: recordedHashOf);
  *   · the tick record — a task's FIRST tick at level tests re-baselines the test files it names EXACTLY in _Implements:_ (planned: their
  *     hash now is the authorised one) and adds the test files its _Verify:_ runs; an untick never removes one, a re-tick keeps them;
  *   · the decision (guardCheck) — an edit, removal or move of a listed test (its real path, a glob anywhere, any case where the file
@@ -135,11 +136,12 @@ function protectWalkFirst(fn) {
 }
 // approvePhase (gates.js), under the feature lock, on a complete tasks approval: the FIRST one at level tests (a walk was made)
 // records the snapshot — merged ADD-ONLY into a list `feature protect` or a lift began (its hashes kept), then marked via "approval";
-// a later one (a re-approval, a revoke and approve again) keeps it. Changes `state` in place (written with the approval).
-// → {count, at, truncated?} for the result, or null.
-function protectOnApproval(state, walk) {
+// a later one (a re-approval, a revoke and approve again) keeps it. A test another live feature lists joins with a hash that feature
+// recorded (1.36.0 review 4: knownWalk). Changes `state` in place (written with the approval). → {count, at, truncated?} for the
+// result, or null.
+function protectOnApproval(projectDir, slug, state, walk) {
   if (!walk || snapshotted(listOf(state))) return null;
-  const { list } = withWalk(state.protectedTests, walk, "approval");
+  const { list } = withWalk(state.protectedTests, knownWalk(walk, recordedHashOf(otherStates(projectDir, slug))), "approval");
   list.via = "approval";
   state.protectedTests = list;
   return Object.assign({ count: Object.keys(list.files).length, at: list.at }, list.truncated ? { truncated: true } : {});
@@ -154,8 +156,9 @@ const tickRecorded = (st, n) => isObj(st) && ((isObj(st.ticks) && Object.prototy
 // completeTask (tasks.js), under the feature lock, when the call TICKS a task at level tests — BEFORE it stamps ticks[n]: the test files
 // its task names EXACTLY in _Implements:_ are re-baselined at its FIRST tick (planned — their content now is the authorised one; a
 // re-tick after an untick keeps a recorded hash, so finish names an edit made meanwhile) and the test files its _Verify:_ runs join the
-// list when absent. An untick never removes one. Changes `state` in place (written with the tick).
-function protectOnTick(projectDir, state, task) {
+// list when absent — one another live feature lists with a hash that feature recorded (1.36.0 review 4), never its content now. An
+// untick never removes one. Changes `state` in place (written with the tick).
+function protectOnTick(projectDir, slug, state, task) {
   if (guardLevel(projectDir) !== "tests") return;
   const root = path.resolve(projectDir);
   const m = taskMarkers(task);
@@ -168,9 +171,11 @@ function protectOnTick(projectDir, state, task) {
   const files = isObj(pt.files) ? pt.files : (pt.files = {});
   const keyOf = new Map(Object.keys(files).map((k) => [fold(k), k]));
   for (const r of planned) { const k = keyOf.get(fold(r)); if (!(retick && k)) files[k || r] = hash16(path.join(root, r)); }
+  let hashOf = null; // the other features' lists, read only when a _Verify:_ test joins
   for (const r of ran) {
     if (keyOf.has(fold(r)) || planned.has(r)) continue;
-    const h = hash16(path.join(root, r));
+    if (!hashOf) hashOf = recordedHashOf(otherStates(projectDir, slug));
+    const h = hashOf(r, () => hash16(path.join(root, r)));
     if (h) files[r] = h;
   }
 }
@@ -201,11 +206,12 @@ function activeLifts(states) {
   return out;
 }
 // Every live (non-archived) feature's .state.json but `slug`'s (the caller's own, read under its lock), read raw (listOf tolerates any
-// shape), then `state` — the states activeLifts reads.
-const liveStatesWith = (projectDir, slug, state) => featureDirs(projectDir).filter((f) => !f.archived && fold(f.slug) !== fold(slug))
-  .map((f) => readJson(statePath(f.dir)).data).concat([state]);
+// shape) — otherStates; liveStatesWith adds `state` last: the states activeLifts reads.
+const otherStates = (projectDir, slug) => featureDirs(projectDir).filter((f) => !f.archived && fold(f.slug) !== fold(slug))
+  .map((f) => readJson(statePath(f.dir)).data);
+const liveStatesWith = (projectDir, slug, state) => otherStates(projectDir, slug).concat([state]);
 // Every hash these states' lists recorded, by file (folded) — a snapshot, a tick, an accept: what finish counts as explained, and
-// (1.36.0 review 4) the hashes a plain protect copies for a file another feature lists. → Map(fold(file) → Set(hash), list order)
+// (1.36.0 review 4) the hashes a feature copies for a test another feature lists. → Map(fold(file) → Set(hash), list order)
 function recordedHashes(states) {
   const out = new Map();
   for (const st of states) {
@@ -213,6 +219,20 @@ function recordedHashes(states) {
     if (pt) for (const k of Object.keys(pt.files)) { const fk = fold(k); if (!out.has(fk)) out.set(fk, new Set()); out.get(fk).add(pt.files[k]); }
   }
   return out;
+}
+// (1.36.0 review 4) The hash a feature records for a test it ADDS — a plain protect (with a file, or the walk), the first tasks
+// approval's snapshot, a tick's _Verify:_ run: a test the other live features (`states`) list keeps a hash they recorded, so the union
+// finish reads gains nothing (new content is authorised only by the accept or a task's exact _Implements:_); one none lists gets its
+// hash now (`fresh`). → (rel, fresh) → hash
+function recordedHashOf(states) {
+  const known = recordedHashes(states);
+  return (rel, fresh) => (known.has(fold(rel)) ? known.get(fold(rel)).values().next().value : fresh());
+}
+// …a walk's files so ({files, truncated} — withWalk's input)
+function knownWalk(walk, hashOf) {
+  const files = Object.create(null);
+  for (const k of Object.keys(walk.files)) files[k] = hashOf(k, () => walk.files[k]);
+  return { files, truncated: walk.truncated };
 }
 
 // An existing target as the file system reads it (1.36.0 review 1): its project-relative REAL path — links and junctions resolved, the
@@ -372,12 +392,9 @@ function protectLocked(projectDir, slug, o) {
   const others = liveStatesWith(projectDir, f.slug, state); // every live feature's state, this one's as written below
   // (1.36.0 review 4) a plain protect adds a file another live feature lists with a hash that feature recorded — the union finish
   // reads gains nothing, so only the accept authorises new content; a file no live feature lists gets its hash now
-  const known = recordedHashes(others.slice(0, -1));
-  const hashOf = (rel, fresh) => (known.has(fold(rel)) ? known.get(fold(rel)).values().next().value : fresh());
+  const hashOf = recordedHashOf(others.slice(0, -1));
   if (o.walk) {
-    const walk = { files: Object.create(null), truncated: o.walk.truncated };
-    for (const k of Object.keys(o.walk.files)) walk.files[k] = hashOf(k, () => o.walk.files[k]);
-    const w = withWalk(state.protectedTests, walk, "protect");
+    const w = withWalk(state.protectedTests, knownWalk(o.walk, hashOf), "protect");
     state.protectedTests = w.list;
     added = w.added;
   } else {

@@ -369,8 +369,10 @@ against stay as they were unless the plan or the user says otherwise:
   approval (the features' `.specs/<feature>/tests/` first, its own first, then the project's; a content hash each, at most
   2,000 — past them doctor warns; a `feature protect` run before the approval doesn't replace it), and at a task's FIRST tick
   the test files it names exactly in `_Implements:_` (their content then is the authorised one — the bugfix's red test,
-  task 1's `_Implements: [the test file T-01 goes in]_`) and the test files its `_Verify:_` runs. An untick never removes one,
-  and a re-tick never re-records one. A new test file stays editable until a tick records it.
+  task 1's `_Implements: [the test file T-01 goes in]_`) and the test files its `_Verify:_` runs. A test another feature
+  already lists joins the snapshot or a `_Verify:_` record with the hash that feature recorded, never its content now — only a
+  task's exact `_Implements:_` and the accept record new content. An untick never removes one, and a re-tick never re-records
+  one. A new test file stays editable until a tick records it.
 - **The edit** (Claude Code's guard hook) — editing, removing or moving a protected test asks unless a task that can START
   NOW names it exactly in `_Implements:_` (never a folder, a glob or `_Makes green:_`, never a task reopened by an untick or
   a box unchecked by hand — its planned test then changes only with the user's lift, as the guard and the brief say) or the

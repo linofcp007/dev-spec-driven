@@ -832,7 +832,10 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       doctor: () => dLift && dLift.status === "warn" && dLift.detail === M().doctorLiftAfterFinish(slug, "test/other.test.js", "test/other.test.js") && dEnded === undefined,
       laterEdit: () => gAuth.decision === "deny" && gAuth.why === "protected-test" && gOther.decision === "allow" && endOther.unlifted === "test/other.test.js" && gOtherEnded.decision === "deny",
       reopened: () => gAuthHand.decision === "deny" && gAuthHand.why === "protected-test" && app.ok && gAuthApp.decision === "deny" && gAuthApp.why === "protected-test",
-      laterFinish: () => files(gamFin.protectedTests.unexplained) === "test/auth.test.js" && !gamFin.protectedTests.lifted.length && files(ownFin.protectedTests.unexplained) === "test/auth.test.js",
+      // other.test.js, rewritten under the lift, then the lift ended (no accept): named by both (1.36.0 review 4 — gamma's snapshot,
+      // taken while the lift stood, recorded login-loop's hash for it, never the rewritten content)
+      laterFinish: () => files(gamFin.protectedTests.unexplained) === "test/auth.test.js,test/other.test.js" && !gamFin.protectedTests.lifted.length &&
+        files(ownFin.protectedTests.unexplained) === "test/auth.test.js,test/other.test.js",
     });
   }
 
@@ -1099,6 +1102,44 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       unlisted: () => listOf(fZe).files["test/new.test.js"] === hNew && typeof hNew === "string",
       file: () => file.ok && file.protectedTests.added === 1 && listOf(fOm).files["test/auth.test.js"] === hAl && w3 === w0,
       accept: () => acc.ok && w4 === "",
+    });
+  }
+
+  { // 1.36.0 review 4 (R4-PT-1's class — a snapshot, a tick's run): a new feature's first tasks approval (zeta) snapshots alpha's weakened
+    // test with the hash alpha recorded and a test no feature lists with its hash now; a tick whose _Verify:_ runs them (omega, approved
+    // before the tests existed) lists them the same way — alpha's finish still names the change; a task's exact _Implements:_ still
+    // re-baselines the test to its content now (the planned change)
+    const p = project("snapshot-tick", { approvalGuard: "ask" });
+    w(p, "src/a.js", "a\n");
+    const fOm = S.createFeature(p, "Omega", ["core"], "", undefined, "en");
+    tasks(fOm, "- [ ] 1. Runs the suites\n  - _Implements: src/a.js_\n  - _Verify: node --test test/auth.test.js test/fresh.test.js_\n- [ ] 2. Rewrites the auth test\n  - _Implements: test/auth.test.js_\n");
+    approveTasks(p, "omega"); // no test yet: an empty snapshot
+    w(p, "test/auth.test.js", "auth: two assertions\n");
+    const fAl = S.createFeature(p, "Alpha", ["core"], "", undefined, "en");
+    tasks(fAl, "- [ ] 1. A\n  - _Implements: src/a.js_\n");
+    approveTasks(p, "alpha");
+    const hAl = listOf(fAl).files["test/auth.test.js"];
+    w(p, "test/auth.test.js", "auth: weakened\n"); w(p, "test/new.test.js", "new\n");
+    const h = (rel) => E.fileHash(path.join(p, rel)).slice(0, 16);
+    const named = () => (S.finishFeature(p, "alpha", {}).protectedTests.unexplained || []).map((x) => x.file + ":" + x.status).join();
+    const n0 = named();
+    const fZe = S.createFeature(p, "Zeta", ["core"], "", undefined, "en");
+    tasks(fZe, "- [ ] 1. Z\n  - _Implements: src/a.js_\n");
+    approveTasks(p, "zeta");
+    const zeta = listOf(fZe).files, n1 = named();
+    w(p, "test/fresh.test.js", "fresh\n");
+    const t1 = S.completeTask(p, "omega", 1, { command: "node --test test/auth.test.js test/fresh.test.js", exitCode: 0, summary: "2 passing" });
+    const omega1 = Object.assign({}, listOf(fOm).files), n2 = named();
+    const t2 = S.completeTask(p, "omega", 2, { summary: "the auth test rewritten, as planned" });
+    const omega2 = listOf(fOm).files, n3 = named();
+    all("1.36.0 review 4 (R4-PT-1's class) guard tests: a first tasks approval's snapshot and a tick's _Verify:_ run list a test another feature lists with the hash it recorded — alpha's finish still names its weakened test; a test no feature lists joins with its hash now; a task's exact _Implements:_ still re-baselines to the content now (got " +
+      js({ hAl, zeta, omega1, omega2, n: [n0, n1, n2, n3], t: [t1.ok, t2.ok] }) + ")", {
+      before: () => n0 === "test/auth.test.js:changed",
+      snapshot: () => zeta["test/auth.test.js"] === hAl && n1 === n0,
+      snapshotUnlisted: () => zeta["test/new.test.js"] === h("test/new.test.js"),
+      tick: () => t1.ok && omega1["test/auth.test.js"] === hAl && n2 === n0,
+      tickUnlisted: () => omega1["test/fresh.test.js"] === h("test/fresh.test.js"),
+      planned: () => t2.ok && omega2["test/auth.test.js"] === h("test/auth.test.js") && n3 === "",
     });
   }
 

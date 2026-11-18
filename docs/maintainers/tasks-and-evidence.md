@@ -647,7 +647,8 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   **The walk runs OUTSIDE the feature lock:** the facade wraps the locked approvePhase in `protectWalkFirst`, which walks only when
   this call may be that first approval (phase or `through` tasks, no revoke, no dry run, level tests, the list not `snapshotted`)
   and hands it in as `opts.protectWalk` — never a tool argument; under the lock `protectOnApproval` merges it ADD-ONLY
-  (`withWalk`: a recorded hash and the list's first `at` kept) and marks the list `via: "approval"`. **"Snapshotted" is that
+  (`withWalk`: a recorded hash and the list's first `at` kept; a test another live feature lists with that feature's hash —
+  `knownWalk`, below, 1.36.0 review 4) and marks the list `via: "approval"`. **"Snapshotted" is that
   mark** (`snapshotted`: via "approval"), never `at` — a `feature protect` or a lift before the approval sets `at` too, and the
   approval then recorded nothing; a re-approval or a revoke + approve keeps the marked list (another process's too, taken while
   this one walked). The result: `protectedTests {count, at, truncated?}` + a note. Cost: linear (2,000 vs 200 test files ≈ 10×,
@@ -658,7 +659,9 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   keeps it — or an `unticks` entry, the untick drops `ticks[n]`) is a RE-tick, which keeps a recorded hash and only adds a file
   not yet listed, so finish names an edit made while it was open. Each test file its `_Verify:_` names (quotes off, a pytest
   `::node` / a `:line[:col]` suffix off, never a glob) joins the list when absent — never re-hashed (a weakened listed test run
-  by a `_Verify:_` keeps its record). An untick removes nothing. The bugfix tasks.md's task 1 carries `_Implements: [the test
+  by a `_Verify:_` keeps its record), and one another live feature lists joins with that feature's hash (`recordedHashOf`,
+  below — the other features' states read only then; 1.36.0 review 4), never its content now: only the exact `_Implements:_`
+  re-baseline records new content at a tick. An untick removes nothing. The bugfix tasks.md's task 1 carries `_Implements: [the test
   file T-01 goes in]_` (EN / PT / ES; the 1.21 F5 pin moved on purpose) so the red test is planned for task 1, recorded at its
   tick, protected from task 2.
 - **The decision** (`protectedTestDecision`) — an existing target is read by its REAL path (`realRel`: links and junctions
@@ -690,9 +693,10 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   before it asks) writes nothing; `confirmation` → `confirmed`. A guard-down of the approval guard (claude-code-integration.md →
   Human approval guard). `protect <f>` adds the tests present now (walked before the lock, add-only; a list without a snapshot
   gets `at` / via protect); `protect <f> <file>` appends a `revoked` record when a lift is in force anywhere and adds the file when
-  absent — never re-hashes one. **A file another live feature lists** joins with a hash that feature recorded (`recordedHashes`
-  over the other live states, the first in folder order — the union finish reads gains nothing: a plain protect, no
-  guard-down, never authorises new content, 1.36.0 review 4); only a file no live feature lists gets its hash now. `protect <f>
+  absent — never re-hashes one. **A file another live feature lists** joins with a hash that feature recorded — here, in the
+  first tasks approval's snapshot and in a tick's `_Verify:_` record (`recordedHashOf` over `otherStates`, the first in folder
+  order — `recordedHashes`, finish's union, gains nothing; `knownWalk` maps a walk; 1.36.0 review 4): a plain protect (no
+  guard-down), a snapshot or a run never authorises new content; only a file no live feature lists gets its hash now. `protect <f>
   <file>` and the accept read an EXISTING file by its real path (`realRel`, as the decision does — one through a junction is
   the real file's key; a real path outside the project keeps the typed one). **In force** (`activeLifts`, over the live features' states — `liveStatesWith`; guardCheck's
   `ctx.states`): per file the LATEST record across every feature's lifts — a lift until a `revoked` record of any feature
@@ -1158,7 +1162,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   another feature listed recorded its CURRENT hash, and finish reads the union of every live feature's hashes: an agent's
   protect on a new or planning feature — or the user ending a lift in a feature that did not list the file, doctor's "end it"
   — accepted a weakened test silently. Now such a file joins with a hash that feature recorded (`recordedHashes`, shared with
-  finish); only the accept authorises new content. **R4-PT-2** the lift line's last fallback, the first holder by folder name,
+  finish); only the accept authorises new content. The same class, closed the same way (`recordedHashOf`): a new feature's
+  FIRST tasks approval snapshotted the weakened test's current content, and a tick listed a `_Verify:_` test with its content
+  now — both explained the change at the listing feature's finish (a change made under a lift, then ended without an accept,
+  is named again); a task's exact `_Implements:_` still re-baselines (the planned change). **R4-PT-2** the lift line's last fallback, the first holder by folder name,
   could be an old all-ticked feature never finished (R2-PT-2's shape): with round 3's rule its lift stood at once and for good,
   and no doctor check reached it — the holder with the latest tick now. **R4-PT-3** the merge summary's accepts were those since
   the last finish, so a re-finish of the same cycle (/spec-finish step 3: after last-minute code changes) dropped them — the
