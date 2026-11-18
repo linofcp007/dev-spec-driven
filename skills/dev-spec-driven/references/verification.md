@@ -253,11 +253,16 @@ edit**, so a type error is fixed the moment it appears, not at the `_Verify:_` o
   and removing its check switches it off too. Refused before anything is written: a name that is no check after the call,
   dev-guardian's gate (minutes, not seconds), a command that rewrites files — it would change the code and the tests under
   the task. That last rule is a heuristic, read word by word: a `--fix` (or `--fix=…`) or `--write` word, or a `fmt` /
-  `format` program or subcommand (`gofmt`, `cargo fmt`, `ruff format`, `dotnet format`, `clang-format`) with no check flag
-  (`--check`, `-check`, `--check-…`, `-l`, `-d`, `--diff`, `--dry-run`, `--verify-no-changes`). Check-only forms pass
-  (`prettier --check`, `eslint --fix-dry-run`, `gofmt -l`, `make check-fmt`, `npm run fmt:check`, `dune build @fmt`); a
-  formatter known by another name (`black .`, `prettier -w`, `rubocop -a`) is not recognized — give the fast check its
-  check-only command. A check named `off` or `none` can't be the fast check.
+  `format` program or subcommand (`gofmt`, `cargo fmt`, `ruff format`, `dotnet format`, `clang-format`) with a `-w` word (it
+  writes, whatever stands beside it: `gofmt -l -w`, `shfmt -l -w`) or with no check word (`--check`, `-check`, `--check-…`,
+  `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`, `--test`, `--exit-code`,
+  `--output=none`, or a `lint` subcommand right after it). Check-only forms pass (`prettier --check`, `eslint --fix-dry-run`,
+  `gofmt -l`, `swift format lint`, `swiftformat --lint`, `dart format --output=none --set-exit-if-changed`, `clang-format -n`,
+  `buf format --exit-code`, `make check-fmt`, `npm run fmt:check`, `npm run lint:format`, `dune build @fmt`, a linter run).
+  Its limits: the words are read, not the tool — a short flag counts by its common meaning (`-n` a dry run, even where a tool
+  gives it another one); a formatter known by another name (`black .`, `prettier -w`, `rubocop -a`) is not recognized — give
+  the fast check its check-only command; a formatter whose bare form only reports (`biome format .`) is refused like one that
+  writes — use its check form (`biome ci .`, `biome check .`). A check named `off` or `none` can't be the fast check.
 - **Pick one that passes on the base branch:** it stays a project check, so `spec_finish` needs it passing on the final
   code like the others — a linter that is already red on main gives no signal and blocks every finish.
 - **Offered, never set:** `init` and `spec_upgrade` return `fastCheckOffer` {name, command, from, note} when none is set
@@ -284,7 +289,8 @@ edit**, so a type error is fixed the moment it appears, not at the `_Verify:_` o
   `partial: true` (stable): the feature plans more files than the planned-file cap (500 — a big folder or glob), so only
   the first ones and the task's own `_Implements:_` files are dated. `runs` / `clean` count its runs since the feature's
   previous tick; the snapshot is stored on the tick's run (`fast`).
-- **`done --run`** runs it FIRST (`$ <command>   (fast check)`) while it isn't clean since the last edit — not when the
+- **`done --run`** runs it FIRST (`$ <command>   (fast check)`) while it isn't clean since the last edit, or is clean only on a
+  `partial` set (past the cap an edit to another task's file reads clean) — not when the
   task's `_Verify:_` is the fast command itself (that run counts) — and logs it at its START (an edit made while it ran
   reads stale); a failure or a run that couldn't happen is a warning, the `_Verify:_` runs anyway. The shell rules of
   `finish --run` apply to it (POSIX syntax under cmd.exe, a pwsh script under a POSIX shell: refused before anything runs).

@@ -398,8 +398,10 @@ Engine: the `B5` block of `engine/evidence.js`.
   `nc.merged` (the checks THIS call leaves — `--check tc="…" --fast-check tc` is one call): a name that is no valid check, the
   guardian check (`isGuardianCheck`) or a command that rewrites files (`fixerCommand`, a heuristic the docs state as such: a
   `--fix` / `--fix=…` / `--write` word, or a `*fmt` / `*format` program or subcommand — never a flag, an `@alias` or a
-  check-named script — with no check flag: `--check` / `-check` / `--check-…`, `-l`, `-d`, `--diff`, `--dry-run`,
-  `--verify-no-changes`) is refused, nothing written; the stored one is checked again when this call replaces its check's
+  check- / lint-named script — with a `-w` word (it writes, whatever check flag stands beside it: `gofmt -l -w`) or with no check
+  word: `--check` / `-check` / `--check-…`, `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`,
+  `--test`, `--exit-code`, `--output=none`, or its `lint` subcommand right after it, `RE_LINT_MODE`) is refused, nothing written;
+  the stored one is checked again when this call replaces its check's
   command and goes when this call removes its check (`cleared` note). With `guardian: true` the same plan runs once BEFORE the
   gate's launcher is written (unless roadmap.json doesn't parse — the lock's refusal stays) — a refused init
   leaves nothing behind. `setFastCheck` sits between `setApprovalGuard` and `setReviewModels`; init echoes `fastCheck` (the
@@ -412,7 +414,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   command (`runProvesVerify(…, [command])` — the check as ONE command; > 5 min ahead ignored, `FAST_SKEW_MS`) and the newest mtime
   of the feature's planned files (`baselineFiles` of the active tasks, the set `suiteCodeStamp` hashes; missing files and dates
   > 5 min ahead ignored) plus the task's OWN `_Implements:_` files, always (`baselineFiles` takes an array of references — read as
-  `implementsRefs` reads them: backticks off), past `BASELINE_CAP` → `clean` · `stale` (run older than an edit) · `failed` ·
+  `implementsRefs` reads them: backticks off), past `BASELINE_CAP` — the planned walk's files passed as `known` (no second
+  realpath check) and dated once, its glob and folder listings the call's memoized ones (1.36.0 review 2: a second walk doubled a
+  big glob's brief; `09-evidence-fast-check`'s ratio) → `clean` · `stale` (run older than an edit) · `failed` ·
   `missing` · `unknown` (`observedAny` false: no harness log — no note); `partial: true` when the planned set stopped at its cap
   (no other status, no note). A file date is never a blocker (gates-and-approvals.md), so this only ever warns. The log line's
   `tool` (the observe hook passes it for a PowerShell run only) gives `pwsh`: the latest run came from the PowerShell tool, whose
@@ -427,7 +431,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   `done --run` runs none; the PowerShell sentence on missing or `pwsh`), and
   stores that snapshot on the tick's RUN (`ev.fast`; `runOf` keeps `fast`, so its history and the merge driver carry it; a
   note-only tick stores none; `normalizeEvidence` never takes a caller's). No key on any other task, a re-check of a done task,
-  or a spike. **`done --run`** (cli/commands.js) runs it FIRST while `b.fastCheck.status` isn't clean — never when a `_Verify:_`
+  or a spike. **`done --run`** (cli/commands.js) runs it FIRST while `b.fastCheck.status` isn't clean, or is clean on a `partial`
+  set (past the cap an edit to another task's file reads clean — 1.36.0 review 2) — never when a `_Verify:_`
   command proves it (that run is logged instead, at the run's start) — through `RUN.preRunRefusal` (finish --run's shell rules,
   one helper of cli/run.js), logs it with `spec.observeRun(…, {event: "cli", at: <its START>})` (an edit it makes reads stale), and
   only warns on a failure or a run that couldn't happen. **Metrics:** `featureMetrics` → `fastCheck {check, runs, clean,
@@ -456,9 +461,11 @@ Engine: the `B5` block of `engine/evidence.js`.
   task carries never is. **Without `_Depends:_` nothing changes** (the same next task, no new fields).
 - **`taskSchedule(blocks, hold?)` is THE next-task rule** → `{next, skipped, blocked, graph}`: the first open task in tasks order (only
   the task resolveTask answers for its number) whose dependencies are done — never one of `hold`'s numbers (passed over, never
-  `skipped`: +port's fence, port.js `portSchedule` — spec_next_task, next_action's implement step, the status line and `next
-  --batch` pass the tasks it holds; spec_next_task then carries `gated` / `heldBy` and, nothing else startable while the anchor
-  holding them is ticked but unverified, its run as the `note` — gates-and-approvals.md → Bugfix and finish; 1.36.0 review 1).
+  `skipped`: +port's fence, port.js `portSchedule` — spec_next_task, next_action's implement step, the status line, `next
+  --batch`, complete_task's `next`, spec_status's `tasks.next` and the brief's default task pass the tasks it holds (1.36.0
+  review 2: not the roadmap's row nor `next --waves`); spec_next_task then carries `gated` / `heldBy` and, nothing else startable
+  while the anchor holding them is ticked but unverified, its run as the `note` (complete_task's note and the default brief's too)
+  — gates-and-approvals.md → Bugfix and finish; 1.36.0 review 1).
   **Tasks order:** by SECTION in file order (`taskSections()`:
   a phase heading and its closing checkpoint), then by number — `taskDepGraph`'s `order`, which the waves use too; parseTasks' public
   list stays by number. `skipped` / `blocked` `[{number, waitsOn}]`: open tasks that wait / can never start as things stand (Kahn's
@@ -947,6 +954,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `init --guardian --fast-check guardian` on a fresh folder left `.specs/.gitignore` — the launcher was written before the
   fast check's refusal. FC-3 (a run's folder), FC-5 (a deleted planned file) and FC-8 (the async hook's stamp, ~0.2 s after
   the run) are documented Known limits, not mechanisms.
+- **1.36.0 review 2** — the fast check. **FC2-1:** review 1's widened formatter set (`*format`) refused check-only forms —
+  `swift format lint`, `swiftformat --lint`, `dart format --output=none`, `elm-format --validate`, `buf format --exit-code`,
+  `clang-format -n`, `npm run lint:format` — and its `-l` exemption let `gofmt -l -w` / `shfmt -l -w` through: a `-w` word beside
+  a formatter now refuses, and the check words those tools use (`-n`, `--lint`, `--validate`, `--test`, `--exit-code`,
+  `--output=none`, a `lint` subcommand, a lint-named script) count. `biome format .` (a bare form that only reports) stays refused —
+  no word tells it from `ruff format .`: the documented limit. **FC2-2:** `done --run` skipped the check on a clean `partial` status
+  (a +port corpus of 500+ files fills the planned set): it runs it now. **FC2-3:** the own-file dating walked the planned glob a
+  second time (×1.8 on a big glob's brief) — it reuses the planned walk's files.
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
@@ -955,6 +970,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   the status line served the task the fence refuses (an inline /executeTask wrote the port's code before the baseline was
   verified). The brief's default task and complete_task's `next` stay taskSchedule's (the brief carries `gated`, the refusal
   names the anchor's run).
+- **1.36.0 review 2 (P2-3)** — the surfaces disagreed: with an anchor ticked unverified, `done` printed "next → #2", `dev-spec
+  status` and the brief's default task named the held task while next_task said "verify task 1". complete_task's `next`,
+  spec_status's next and the brief's default task go through `portSchedule` too (nothing else startable: none, with `port.naHeld`
+  as the note). Left: the roadmap's row (its blocked display reads `sch.skipped`, more than one line) and `next --waves`.
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks
   {depends}`; a tasks.md without `_Depends:_` behaves exactly as before it.
 - **1.24 r6 D6** — tasks order by section: by number alone, a task spec_append_tasks put into an EARLIER phase (`{heading}`, numbered

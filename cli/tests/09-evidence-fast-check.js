@@ -103,6 +103,32 @@ exports.run = async ({ all, runIn, runAsync, tmp, require, __dirname }) => {
     });
   }
 
+  { // 1.36 review 2 (FC2-2): past the planned-file cap (an earlier task's folder of 600 files) a clean status is partial — only the first
+    // files and the task's own are dated, so an edit to another task's file reads clean: done --run runs the fast check all the same
+    const p = path.join(tmp, "fc-partial");
+    fs.mkdirSync(path.join(p, "legacy"), { recursive: true });
+    fs.mkdirSync(path.join(p, "src"), { recursive: true });
+    fs.writeFileSync(path.join(p, "tc.js"), "require('fs').appendFileSync('tc-runs.log', 'run\\n'); console.log('0 type errors');\n");
+    SD.initProject(p, ["core"], "en", { checks: { tc: "node tc.js" }, fastCheck: "tc" });
+    const f = SD.createFeature(p, { name: "Port", tracks: ["core"] });
+    const past = new Date(Date.now() - 600000);
+    const files = [...Array.from({ length: 600 }, (_, i) => "legacy/m" + i + ".js"), "src/a.js"];
+    files.forEach((rel) => { fs.writeFileSync(path.join(p, rel), "//\n"); fs.utimesSync(path.join(p, rel), past, past); });
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [x] 1. [US1] The legacy module\n  - _Implements: legacy/_\n  - _Verify: " + PASS + "_\n" +
+      "- [ ] 2. [US1] The port\n  - _Implements: src/a.js_\n  - _Verify: " + PASS + "_\n");
+    SD.observeRun(p, { command: "node tc.js", exitCode: 0, event: "cli", at: new Date().toISOString(), cwd: p });
+    const brief = SD.taskBrief(p, f.slug, 2).fastCheck;
+    const r = await runAsync(["done", f.slug, "2", "--run", "--json", "--project", p]);
+    let runs = 0;
+    try { runs = fs.readFileSync(path.join(p, "tc-runs.log"), "utf8").split("\n").filter(Boolean).length; } catch { /* never ran */ }
+    all("1.36 review 2 (FC2-2): done --run runs the fast check on a clean but partial status (past the planned-file cap) — never 'clean since the last edit' (got " +
+      js([brief, r.code, runs, (r.out || "").split("\n").filter((l) => /fast check/i.test(l))]) + ")", {
+      partialClean: () => js(brief) === js({ check: "tc", command: "node tc.js", status: "clean", partial: true }),
+      ran: () => r.code === 0 && runs === 1 && r.out.includes("$ node tc.js   (" + FC.label + ")") && !r.out.includes(FC.skipClean("tc")),
+    });
+  }
+
+
   { // the shell rules of finish --run's checks refuse the fast command before anything runs (RUN.preRunRefusal): POSIX quoting under
     // cmd.exe (Windows), a pwsh script's $… under /bin/sh (elsewhere)
     const p = path.join(tmp, "fc-done-shell");

@@ -31,9 +31,11 @@ is in History at the end.
   section (`splitLeadSection` / `beforeFirstTaskSection`: before the OUTERMOST level-2 heading holding the first task — a `##
   Phase` over `### Story` headings —; appended when no level-2 heading holds it — tasks right under the title, Kiro's layout, or
   a level-1 heading closing an earlier `##` —, where put before them it would take the template's tasks in: doctor's
-  `port-verify` then warns baselineLate) and appends the rest: nothing changes the code the baseline covers before it is
-  recorded. Its tasks keep the numbers after the template's own; next_task still serves the baseline first (tasks order is by
-  section in file order).
+  `port-verify` then FAILS baselineLate at size m / l — the tasks approval refuses the plan until the baseline is moved first —
+  and warns at s / no size: gates-and-approvals.md → Right-sized rigor) and appends the rest: nothing changes the code the
+  baseline covers before it is recorded. Its tasks keep the numbers after the template's own; where it goes before them,
+  next_task serves the baseline first (tasks order is by section in file order) — appended, the template's tasks come first
+  until it is moved.
 - **Placeholder corpus:** `projectTemplateSets()` adds the templates' bracket texts, code-span slots and task lines (bug.md's
   join `bugTemplateSlots()`), so an untouched custom scaffold reads placeholder to doctor, approve and next_action. Scoped
   to the engine call's
@@ -272,6 +274,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   before the task itself: a Kiro-like template (tasks under the title) had all its tasks under the baseline's heading, a `##
   Phase` / `### Story` one its first phase's — removing +port hid them, and spec_import fitted their `_Requirements:_` to the
   `[PORT]` criteria. Now the outermost level-2 section, else appended.
+- **1.36.0 review 2 (P2-1)** — appended, the baseline came after a Kiro / `###`-only template's tasks: the fence held none of the
+  port's work and the plan was approved at size m with a doctor warn. The insertion is unchanged; `port-verify`'s approval probe
+  refuses that order at m / l (gates-and-approvals.md).
 - **1.14** — `.specs/templates/` introduced: a team's own scaffolds over the built-in i18n ones. `templates` and `exports`
   became reserved slugs; a feature created before 1.14 under either name stays a feature (the legacy exception).
 - **1.15** — `tracks` joined `RESERVED_SLUGS` (the project's track packs), with the same exception.

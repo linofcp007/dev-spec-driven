@@ -40,7 +40,7 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
 let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the tasks gate, the execution gate, its live views)
 let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
 let designSystemRegistry, designSystemCheck, designSystemGated; // quality.js — the design-system registry's check (1.35)
-let portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext; // port.js — +port's fence (1.36; the last two: review 1)
+let portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext, portCheckNumber; // port.js — +port's fence (1.36; portSchedule, portRecheckNext: review 1; portCheckNumber: review 2)
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.reviewModels)
 let fastCheckOf; // evidence.js — the fast check (1.36, meta.fastCheck): doctor's fast-check warn
@@ -72,7 +72,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
   designSystemRegistry, designSystemCheck, designSystemGated, reviewModelsSetting, fastCheckOf, guardLevel, protectedTestsDoctor,
-  portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext } = E); }
+  portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext, portCheckNumber } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -243,10 +243,11 @@ function statusFeature(projectDir, name) {
   // Judged per task BLOCK (its own _Verify:_, its own record), never per number: a duplicated number must
   // not lend one task's run or _Verify:_ to the other. Same order as parseTasks (stable sort by number).
   const blocks = taskBlocks(tasksText || "");
-  const next = taskSchedule(blocks).next; // next_task's rule (_Depends:_ all done)
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = stateEvidence(projectDir, slug);
   const mode = evidenceRule(projectDir); // meta.evidence "observed" — an unobserved run verifies nothing
+  // next_task's rule (_Depends:_ all done) — never a task +port's fence holds (portSchedule; 1.36 review 2, P2-3)
+  const next = portSchedule(dir, readState(projectDir, slug).kind, tracks, blocks, evidence, mode).sch.next;
   const list = blocks.map((b) => {
     const v = taskVerification(evidence, b, dups.has(b.number), mode); // doctor's rule — never a second opinion
     return { number: b.number, done: b.done, parallel: b.parallel, story: b.story, text: b.text, verified: !v.reason, ...(v.nothingToVerify ? { nothingToVerify: true } : {}) };
@@ -597,6 +598,10 @@ function tasksStep(x) {
   // the project checks' runs (a fix round after them makes those runs stale) — at the first finish and a re-finish (the step stays
   // "finish" only then: verify / drift / finished set their own). A hint added to the step, never a step of its own.
   if (x.step === "finish" && x.doc.reviewPanel) x.recommendation = nx.reviewBranch(slug, x.doc.reviewPanel.models.join(", ")) + " " + x.recommendation;
+  // 1.36 review 2 (P2-2): +port — the differential check again on the final code after any fix from here on (the branch review's
+  // included): port-recheck reads only the tasks listed after it, so a fix to the port's own tasks is never asked for. A hint.
+  const dNum = x.step === "finish" && portOn(x.kind, x.tracks) ? portCheckNumber(blocks, ctx.reqs) : null;
+  if (dNum != null) x.recommendation += " " + i18n.msg(lng).port.naFinishCheck(dNum, slug);
   // with project checks configured (meta.checks), a plain /spec-finish is refused until each has a passing
   // run since the last task activity (or on the code as it is now: Ga3's code-changed) — say how to run and record them
   // (dev-spec finish <f> --run / spec_finish {evidence}); also on `drift`, whose "harmless → re-finish" needs that run.

@@ -226,7 +226,8 @@ function stuckTasks(g) {
 }
 // The next task — ONE rule for spec_next_task, next_action's implement step, spec_task_brief's default task, `next --batch`,
 // spec_status, the roadmap and complete_task's `next`. → { next (a block of `blocks`, or null), skipped, blocked, graph }.
-// hold: task numbers never served (+port's fence — port.js portSchedule: the tasks it holds are passed over, never listed as skipped).
+// hold: task numbers never served (+port's fence — port.js portSchedule: the tasks it holds are passed over, never listed as skipped;
+// every surface above but the roadmap's row and the waves goes through it — 1.36 review 1, review 2 P2-3).
 function taskSchedule(blocks, hold) {
   const g = taskDepGraph(blocks);
   const seen = new Set(); // numbers answered for: resolveTask serves the FIRST open task of a duplicated number
@@ -693,7 +694,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   }
   const tracksNow = detectTracks(f.dir);
   const tasks = parseTasks(activeTasks(updated, tracksNow)); // done/total/next as status counts them
-  const sch = taskSchedule(taskBlocks(activeTasks(updated, tracksNow) || "")); // next_task's rule
+  // next_task's rule — never a task +port's fence holds, this tick's evidence included (portSchedule; 1.36 review 2, P2-3)
+  const { sch, held } = portSchedule(f.dir, state.kind, tracksNow, taskBlocks(activeTasks(updated, tracksNow) || ""), state.evidence, evidenceRule(projectDir));
   const next = sch.next;
   const runnable = taskMarkers(task).verify.length > 0;
   const entry = ownEvidence(state.evidence || {}, task, dup);
@@ -750,7 +752,9 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.waitsOn = early;
     res.note = [res.note, i18n.msg(lng).taskDeps.tickedEarly(n, early.map((d) => "#" + d).join(", "))].filter(Boolean).join(" ");
   }
-  if (!next && res.done < res.total) {
+  // (nothing can start while the [PORT] task holding the rest is ticked but not verified: its run opens the fence — next_task's note)
+  if (!next && res.done < res.total && held && held.ticked) res.note = [res.note, i18n.msg(lng).port.naHeld(held.number, held.anchor, f.slug, held.runnable)].filter(Boolean).join(" ");
+  else if (!next && res.done < res.total) {
     if (sch.blocked.length) res.blocked = sch.blocked;
     res.note = [res.note, taskDepsBlockedNote(sch, f.slug, lng)].filter(Boolean).join(" ");
   }
@@ -1670,11 +1674,14 @@ function taskBrief(projectDir, name, number, opts = {}) {
   let block;
   const activeBlocks = taskBlocks(activeTasks(tasksText, tracks) || "");
   if (number == null || number === "") {
-    // "The next task" is next_task's (taskSchedule — its _Depends:_ all done): a removed track's block is inactive, never
-    // served as next. An explicit number still reaches the whole file (like complete_task).
-    const sch = taskSchedule(activeBlocks);
+    // "The next task" is next_task's (taskSchedule — its _Depends:_ all done; never a task +port's fence holds: portSchedule, 1.36
+    // review 2 P2-3): a removed track's block is inactive, never served as next. An explicit number still reaches the whole file (like
+    // complete_task).
+    const st0 = readState(projectDir, slug);
+    const { sch, held } = portSchedule(dir, st0.kind, tracks, activeBlocks, st0.evidence, evidenceRule(projectDir));
     block = sch.next;
     if (!block && activeBlocks.some((b) => !b.done)) { // open tasks, none can start — say why, never "all done"
+      if (held && held.ticked) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: i18n.msg(lng).port.naHeld(held.number, held.anchor, slug, held.runnable) };
       return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, ...(sch.blocked.length ? { blocked: sch.blocked } : { skipped: sch.skipped }),
         note: taskDepsBlockedNote(sch, slug, lng) };
     }

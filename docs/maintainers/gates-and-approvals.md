@@ -155,18 +155,24 @@ review findings — is in History at the end.
   `taskVerification`'s no-reason is a passing run of it — a note-only tick, and ANY tick of an anchor without a runnable
   `_Verify:_`, opens nothing: `gates.portHeldUnverified`). The refusal: `{gated: "port-order", heldBy: [n…], error}` — never
   `waitsOn` (a successful tick's `_Depends:_` key). `undo` is never gated; +port off: no gate. The brief adds `portRole` (`port`
-  between B and D, `after` + `differential` past D) and its definition-of-done rule (`brief.portRules`). spec_next_task, next_action
-  and the status line never name a held task (`portSchedule`: taskSchedule with the held numbers passed over; next_task adds
-  `gated` / `heldBy` when the first open task is held); nothing else startable while the anchor holding them is ticked but not
+  between B and D, `after` + `differential` past D) and its definition-of-done rule (`brief.portRules`). spec_next_task, next_action,
+  the status line, complete_task's `next`, spec_status's next and the brief's default task never name a held task (`portSchedule`:
+  taskSchedule with the held numbers passed over; next_task adds `gated` / `heldBy` when the first open task is held — the
+  roadmap's row and `next --waves` still list them); nothing else startable while the anchor holding them is ticked but not
   verified → next_action's step `verify` naming its run (`port.naHeld` — its plan change first when it has no runnable
-  `_Verify:_`), the status line's `verify` of that anchor, next_task's `note`. Read from the plan and
+  `_Verify:_`), the status line's `verify` of that anchor, the `note` of next_task, of complete_task and of the default brief.
+  Read from the plan and
   .state.json alone: no state of its own. doctor's `port-recheck` / `port-fence` (warns) and finish's `port-recheck` blocker read
   the same anchors and the evidence `at` / `history` and `ticks` (`portRunState`): D's latest verifying run older than the latest
   tick or run of a done task after it (re-run D — a forced execution approval waives it; next_action's step before the finish:
   FINISH_STEPS `recheck`); a done task after an anchor first ticked before that anchor first passed, while it never has, or with
-  no record of when (a task moved, +port off and on, a checkbox by hand). Known limits: the evidence history keeps 5 runs — once an
-  anchor's is full its first pass is unknown (`anchorPass` → -Infinity: no task is flagged for its time, one with no record of
-  when still is — re-running an anchor never flags honest work); the fence orders ticks, not edits.
+  no record of when (a task moved, +port off and on, a checkbox by hand). The finish step adds `port.naFinishCheck` (D's re-run
+  after any fix from there on — `portCheckNumber`, a plan with both anchors). Known limits: the evidence history keeps 5 runs —
+  once an anchor's is full its first pass is unknown (`anchorPass` → -Infinity: no task is flagged for its time, one with no
+  record of when still is — re-running an anchor never flags honest work); the fence orders ticks, not edits; `port-recheck`
+  counts only the tasks listed AFTER D — a fix to the port's own tasks after D's re-run (the review panel's branch review, the
+  final review, the simplify pass) is never asked for: naRecheck and the finish step say to re-run D on the final code
+  before /spec-finish, port-patterns.md says why.
 
 ## Approval fingerprints and pending gates
 - **Content fingerprints.** An approval records its artifact's `textFingerprint` (tasks.md with checkboxes normalized):
@@ -387,8 +393,12 @@ finish / execution gate, every track criterion scaffolded.
   `TRACK_SECTIONS` `tier`), per track only the template tasks that implement a criterion (`sizeTasksText()`). An XS bugfix:
   the plan in one call, the common short-form tasks.md.
 - **+port's `port-verify`** (1.36) follows the same rule (`designReuseGated`): a FAIL at size m / l, where the tasks approval refuses
-  it, unless the tasks are approved already (a warn + `port.approvedAlready`); a warn at s / no size. The execution gate (Bugfix and
-  finish → +port's execution gate) holds at every size.
+  it (`portPlanProbe`: the fence complete, then — 1.36.0 review 2 — no task listed before the baseline, `port.baselineLate`), unless
+  the tasks are approved already (a warn + `port.approvedAlready`); a warn at s / no size. Its other warns (a `_Depends:_` that never
+  reaches B, `port.dUncited`: no task under D's heading cites a `[PORT]` criterion) never refuse. A fresh built-in scaffold puts B
+  first at every size; a project tasks template with no level-2 heading over its first task gets B appended after them
+  (templates-imports-exports.md), so its plan is refused at m / l until B is moved first. The execution gate (Bugfix and finish →
+  +port's execution gate) holds at every size.
 - **m / l**: the full chain — and the design's **Reuse & Integration is an approval check** (1.28, `designReuseGated`):
   doctor fails `design-reuse` and the design gate refuses it until the section names what is reused, extended or new; a
   design approved before 1.28 (no `reuseGate` stamp) keeps the warning (quality.md → Reuse & Integration). At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
@@ -619,6 +629,15 @@ here. "r5 review" is 1.23's fifth review.
   the `verify` step. INT-3: next_action said "finish" while `port-recheck` was a certain blocker, and following it ran the project
   checks twice — FINISH_STEPS `recheck` before the finish step. Not changed: complete_task's `next` (taskSchedule's, the fence's
   refusal names the way out); a verify-less anchor's note tick still answers `verified: true` (the evidence rule), it only opens nothing.
+- **1.36.0 review 2** — P2-1: review 1's PORT-3 appended the baseline after a project template's tasks when no level-2 heading held
+  the first one (Kiro's tasks under the title, `###`-only sections) — the fence then held none of the port's work, and the plan
+  was approved at size m with only a doctor warn. The insertion stays; `baselineLate` joined `portPlanProbe` at m / l (refused
+  until the baseline comes first; a warn at s / no size and once approved). P2-3: complete_task's `next`, spec_status's next and
+  the brief's default task now pass held tasks too (the roadmap's row: its blocked display reads `skipped`, not a one-line change).
+  P2-4: with no task under D's heading citing a `[PORT]` criterion, its first task is D (a prep task there opened the fence) —
+  `port.dUncited` warns; the fallback order is unchanged. P2-2: a known limit, not a rule change — `port-recheck` reads only the
+  tasks after D, and INT-3's recheck step put D's re-run before the panel's branch review: a review fix in the port's own tasks
+  was never compared again. naRecheck and the finish step (`port.naFinishCheck`) say to re-run D after any fix.
 - **1.21 F3** — the bugfix prefill (no prefill = byte-identical to 1.20) and `commitTitle()`. **1.21 review A5** — a cut
   split a surrogate pair and a lone surrogate landed in merge-summary.md: `cutAt()`.
 - **1.21 F5 → 1.23.1** — 1.21 F5 introduced the short bugfix tasks.md for xs; 1.23.1 made it every size's (the XS and the
