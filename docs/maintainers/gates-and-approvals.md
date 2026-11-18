@@ -301,7 +301,8 @@ review findings — is in History at the end.
   earliest expiry, else the first — the completing sign-off's own included; each role's record keeps its own). Metrics count `revokedApprovals` and `untickedTasks`.
 - **Lifts of protected tests (1.36, guard tests)** sit beside waivers: a waiver records why a GATE was forced, a lift why ONE
   protected test may change — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect` (`reason` required:
-  `reasonInput()`; no expiry — it lasts until `feature protect <f> <file>` or its own feature's finish), `{file, at, by, reason, confirmed?}` in
+  `reasonInput()`; no expiry — it lasts until `feature protect <f> <file>`, and counts only while its own feature has open tasks and
+  was recorded after that feature's last finish; its own feature's finish counts it always), `{file, at, by, reason, confirmed?}` in
   `.state.json → protectedTests.lifts`, a guard-down of the approval guard, listed by `spec_finish` (`protectedTests.lifted`, the
   merge summary's "Protected tests" block). **The snapshot hook:** `approvePhase` records the feature's protected tests at its
   FIRST complete tasks approval at level tests — inside `if (!so || so.complete)`, before the one `writeFileAtomic` (a dry run
@@ -567,6 +568,9 @@ here. "r5 review" is 1.23's fifth review.
 - **1.36.0 review 1** — a `feature protect` before the tasks approval cancelled its snapshot (`at` read as "taken"): the via
   "approval" mark; a lift recorded before its feature's finish unprotected the test for every later feature: it ends with that
   finish.
+- **1.36.0 review 2** — the lift /spec-finish's warning asks for is recorded AFTER the written finish, and one in a feature all
+  ticked but never finished never ended: a lift counts only while its feature has open tasks and was recorded after that
+  feature's last finish (its own finish counts all of its lifts) — tasks-and-evidence.md → Protected tests.
 
 ### Approvals the user confirmed over MCP, and the dry run
 - **1.21 F1b** — `confirmed` and the dry run.

@@ -664,37 +664,51 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   `[P]` task beside the open baseline included; never a reopened task with a tick record — `tickRecorded`, which is not named
   as one either) of a COVERING or FORCED feature names it exactly in `_Implements:_` (a folder or a glob never equals a file;
   `_Makes green:_` never unlocks). Else ask — deny under `meta.approvalGuard: deny`; the reason names the tasks that can start
-  now, the plan hint (the first of them) and the lift line (guards.js `approvalCommand`).
+  now — or, when a reopened task names a blocking test, that it is that task's planned test and needs a lift (`reopened`, never
+  "no task names it") —, the plan hint (the first of them) and the lift line (guards.js `approvalCommand`). **The lift line's
+  feature** is one whose lift is in force while the work goes on: a covering / forced feature (an unlocker) whose list holds the
+  file, else the first unlocker (the feature being worked on), else a holder with open tasks, else the first holder listing it —
+  never just the first holder by folder name (an old feature all ticked, never finished, whose lift never ended). At guard level
+  tests a target with a glob ANYWHERE reaches this decision even when `guardFolderCode` calls it no code (guards.js skips its
+  not-code allow for it, then allows not-code when no protected test matches): `rm -rf tes?/unit`, `packages/*/test`.
 - **Lifts** — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect <f> <file> --reason …` (finish.js
   `manageFeature` → `protectTests`): a test file (by name or folder; never a glob) inside the project, a reason (`reasonInput`: one
   line, ≤ 500); codes `file-required` · `reason-required` · `not-a-test` · `outside-project`; `dryRun` (the MCP server's check
   before it asks) writes nothing; `confirmation` → `confirmed`. A guard-down of the approval guard (claude-code-integration.md →
   Human approval guard). `protect <f>` adds the tests present now (walked before the lock, add-only; a list without a snapshot
   gets `at` / via protect); `protect <f> <file>` appends a `revoked` record when a lift is in force anywhere and adds the file when
-  absent — never re-hashes one. **In force** (`activeLifts`, over the live features' states — `liveStates`): per file the
-  LATEST record across every feature's lifts — a lift until a `revoked` record follows it — and a lift ENDS WITH ITS FEATURE: a
-  non-revoked lift recorded at or before its own feature's `state.finished.at` is no record any more (finish's "record it"
-  advice explains this feature's change without unprotecting the test for every later feature); a lift recorded after a finish
-  (a reopened feature) counts until the next one; a `revoked` record of a finished feature still ends the lifts before it. No
-  expiry otherwise. So a RE-finish of the feature names that test again (its lift ended at the first finish).
+  absent — never re-hashes one (a lift recorded and not ended, in force now or not: one of a feature with no open task would count
+  again once a task reopens). **In force** (`activeLifts`, over the live features — `liveFeats`: each state and whether its tasks.md
+  has open tasks, as guardCheck reads them): per file the LATEST record across every feature's lifts — a lift until a `revoked`
+  record follows it — and a non-revoked lift counts only while ITS OWN FEATURE HAS OPEN TASKS and when it was recorded after that
+  feature's last finish (`state.finished.at`, if any). So a lift ends with its feature's work: once its tasks are all ticked (never
+  finished, too), at its finish, and — /spec-finish records the finish first — the lift its warning asks for, recorded after the
+  finish, explains that feature's change without unprotecting the test for every later feature; a feature reopened after its
+  finish (an open task) counts the lifts recorded since. A `revoked` record of any feature always ends the lifts before it. No
+  expiry otherwise. **The finishing feature's OWN lifts all count at its finish** (`all`: a re-check after the lift is explained).
 - **Finish** (`protectedTestsFinish`, after the gate-only return): each listed file hashed again — a hash matching NO record of
-  any live feature (snapshot or tick) and no lift in force → `unexplained` {file, status: changed | deleted}; a lift explains a
-  change (`lifted`). A warning naming the first 5 (+ how many more) and the merge summary's "Protected tests" block — never a
+  any live feature (snapshot or tick) and no lift → `unexplained` {file, status: changed | deleted}; a lift explains a change
+  (`lifted`) — every lift of the finishing feature, another feature's only while in force (above). A warning naming the first 5 (+ how many more) and the merge summary's "Protected tests" block — never a
   blocker (a change the user confirmed at the prompt is legitimate). `res.protectedTests` {count, unexplained, lifted}. **The
   hashing runs OUTSIDE the feature lock** a write / evidence finish takes (2,000 files held it ~2 s, the MCP server's lock
   wait): the facade wraps it in `protectHashFirst`, which hashes the listed files first and hands them in as
   `opts.protectHashes` — never a tool argument; under the lock a file listed since is hashed there.
 - **Doctor** `protected-tests` (warn; level tests, a tasks approval, an open active task): no snapshot (`feature protect <f>`), a
   truncated one, the approval guard off. **The brief** of an open task at level tests: `protectedTests` (the list's count) and its
-  definition-of-done line after the fast check's. **init** `--guard tests`: `protectedTests.on` and `protectedTestsWarning` while
+  definition-of-done line after the fast check's — a task with a tick record (reopened) gets `briefDodReopened`: it unlocks no
+  test, its planned one needs the user's lift. **init** `--guard tests`: `protectedTests.on` and `protectedTestsWarning` while
   the approval guard is off.
 - **Known limits** (not findings): tests in ignored / hidden / linked folders, outside the project folder or past the cap are
   not listed; new test-support files (conftest.py, setup files, mocks) stay editable; a git command or a script (`node -e`) is
   not read by the hook — finish names the result; a merge from main lists teammates' test changes; an ARCHIVED feature's list and
-  lifts are not read (`liveStates`, guardCheck's feature folders — a restore reads them again, and its finish names what changed
+  lifts are not read (`liveFeats`, guardCheck's feature folders — a restore reads them again, and its finish names what changed
   meanwhile); creating a link or junction to a protected folder (`ln -s`, `mklink /J`, `New-Item -ItemType Junction`) is not read
   — it edits no test, and an edit through it is read by the real path — nor is removing the junction itself (no code folder by
-  lstat).
+  lstat); a GLOB through a link or junction (`sed -i t2/*.test.js`) is matched as typed — `realRel` resolves an existing target
+  only — finish names the change; the tick record is keyed by the task's NUMBER (`ticks[n]`, `unticks`): a re-plan that
+  renumbers the tasks gives an open task a ticked number — it then unlocks nothing and its first tick re-baselines nothing (a
+  lift, and finish names the change); with no feature holding open tasks no lift is in force at all (the line names the first
+  holder; its lift counts once that feature has an open task).
 
 ## Harness-observed evidence
 - **Only as strong as the approval guard; not a security boundary.** The log is a file the agent can write: with
@@ -1053,6 +1067,18 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   inside the lock (~1.9 s at 2,000 files): `protectHashFirst`. **INT-4** PT / ES scope ask glued "—" to the CLI line. **T1 / T2**
   fixtures: a task after +port's open differential check unlocks nothing; a case variant of a listed test that is gone asks; a
   quoted `_Verify:_` path and an absolute `_Implements:_` / unprotect path are read.
+- **1.36.0 review 2** — **R2-PT-1** PT-5's "ended at or before its feature's finish" missed /spec-finish's own order: step 1's
+  written finish records the finish and carries the warning, so the lift the warning asks for came AFTER the finish and never
+  ended — every later feature edited the test silently at deny, and its finish called the weakening "lifted": a lift counts only
+  while its feature has open tasks and was recorded after that feature's last finish; the finishing feature's own lifts all count
+  at its finish (`liveFeats`, `activeLifts` `{state, open, all}`). **R2-PT-2** INT-1 made every unfinished feature a holder, and
+  the lift line named the first holder by folder name — an old feature all ticked, never finished, whose lift never ended: the
+  line names an unlocker that lists the file, else the first unlocker, else a holder with open tasks (and such a feature's lift no
+  longer counts, by R2-PT-1's rule). **R2-PT-4** a folder target with a glob above its last segment (`rm -rf tes?/unit`, `*/unit`,
+  `packages/*/test`) was allowed as no code before the decision: at level tests a glob target skips that allow. **R2-PT-3** (no
+  rule change) a reopened task's planned test asked "no task that can start now names it": the ask says it is a reopened task's
+  planned test, which needs a lift; the brief's line alike (`briefDodReopened`). **R2-PT-5 / R2-PT-6** known limits: the tick
+  record keyed by the task's number; a glob through a link or junction.
 
 ### Harness-observed evidence
 - **1.14 F1** — the observe hook, the `observed` stamp, `meta.evidence` and reason `unobserved`. Its feature review: **R1** — an

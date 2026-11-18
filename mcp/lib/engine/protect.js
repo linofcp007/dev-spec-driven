@@ -13,13 +13,14 @@
  *     hash now is the authorised one) and adds the test files its _Verify:_ runs; an untick never removes one, a re-tick keeps them;
  *   · the decision (guardCheck) — an edit, removal or move of a listed test (its real path, a glob anywhere, any case where the file
  *     system folds it) of an unfinished feature asks (deny under meta.approvalGuard deny) unless a task that can start now — never a
- *     reopened one — names it EXACTLY in _Implements:_, or a lift is in force (`feature unprotect` — the user's, a guard-down; it ends
- *     with its feature's finish);
+ *     reopened one — names it EXACTLY in _Implements:_, or a lift is in force (`feature unprotect` — the user's, a guard-down; in force
+ *     while its feature has open tasks, recorded after that feature's last finish);
  *   · spec_finish re-hashes the list (before the feature lock: protectHashFirst): a change no recorded hash and no lift explains is a
- *     warning (never a blocker); doctor warns protected-tests.
+ *     warning (never a blocker; the feature's own lifts all explain its own changes); doctor warns protected-tests.
  * Known limits (docs/maintainers/tasks-and-evidence.md → Protected tests): tests under SCAN_IGNORE / hidden / linked folders or outside
  * the project folder and past the cap are not listed; new test-support files stay editable; a git command or a script is not read; an
- * archived feature's list and lifts are not read.
+ * archived feature's list and lifts are not read; a tick record is keyed by the task's number (a re-plan that renumbers the tasks
+ * gives an open task a ticked number); a glob through a link or junction is matched as typed (its real path is not read).
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -27,13 +28,13 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked, fileHash,
+let activeTasks, approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked, fileHash,
   FOLD_CASE, globMatcher, guardLevel, implementsRel, insideDirAlias, isCodeFile, isImplementsGlob, isObj, isTestFile, projectLang,
-  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic;
+  readIfExists, readJson, readState, readyTasks, reasonInput, statePath, taskBlocks, taskMarkers, walkProject, writeFileAtomic;
 let portHeldNumbers, detectTracks, specsRoot, evidenceRule; // port.js · tracks.js · core.js · evidence.js — a task +port's fence holds
-function __link(E) { ({ approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked,
+function __link(E) { ({ activeTasks, approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked,
   fileHash, FOLD_CASE, globMatcher, guardLevel, implementsRel, insideDirAlias, isCodeFile, isImplementsGlob, isObj, isTestFile, projectLang,
-  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic,
+  readIfExists, readJson, readState, readyTasks, reasonInput, statePath, taskBlocks, taskMarkers, walkProject, writeFileAtomic,
   portHeldNumbers, detectTracks, specsRoot, evidenceRule } = E); }
 
 const PROTECT_MAX_FILES = 2000; // test files a snapshot records, at most (past them: `truncated` — doctor warns)
@@ -173,22 +174,25 @@ function protectOnTick(projectDir, state, task) {
 // The number of test files a feature's list holds (the brief's definition-of-done line).
 const protectedCount = (state) => { const pt = listOf(state); return pt ? Object.keys(pt.files).length : 0; };
 
-// The lifts in force across these states, by file (folded): each file's LATEST record (by `at`, then list order) — a lift until a
-// `protect <file>` record (revoked) follows it, in any feature. A lift ENDS WITH ITS FEATURE (1.36.0 review 1): one recorded at or
-// before its feature's finish (state.finished.at) is no record any more — finish's "record it" advice clears that feature's warning
-// without unprotecting the test for every later feature; an archived feature's lifts are not read at all (callers pass live states).
-// A `revoked` record still ends the lifts before it. → Map(fold(file) → its lift record)
-function activeLifts(states) {
+// The lifts in force across these features, by file (folded): each file's LATEST record (by `at`, then list order) — a lift until a
+// `protect <file>` record (revoked) follows it, in any feature. A lift is IN FORCE only while its own feature has OPEN TASKS and when
+// it was recorded after that feature's last finish (state.finished.at, if any) — 1.36.0 review 2: /spec-finish records the finish
+// first and the lift its warning asks for after it, and a lift in a feature whose tasks are all ticked but never finished lasted
+// forever; so the guard and ANOTHER feature's finish never read a done feature's lifts. `all`: every lift of that feature counts —
+// the finishing feature's own (a lift recorded right after its finish explains its own warning on a re-check), and protect <file>'s
+// "is one recorded" check. A `revoked` record of any feature always ends the lifts before it; an archived feature's lifts are not
+// read at all (callers pass live features). feats: [{state, open, all?}] → Map(fold(file) → its lift record)
+function activeLifts(feats) {
   const last = new Map();
-  for (const st of states) {
-    const pt = listOf(st);
+  for (const ft of feats) {
+    const st = ft.state, pt = listOf(st);
     if (!pt) continue;
     const fin = isObj(st.finished) ? (Number.isFinite(Date.parse(st.finished.at)) ? Date.parse(st.finished.at) : Infinity) : null;
     for (const l of pt.lifts) {
       if (typeof l.file !== "string") continue;
       const k = fold(l.file);
       const t = Number.isFinite(Date.parse(l.at)) ? Date.parse(l.at) : -Infinity;
-      if (fin !== null && l.revoked !== true && t <= fin) continue;
+      if (l.revoked !== true && !ft.all && (!ft.open || (fin !== null && t <= fin))) continue;
       const prev = last.get(k);
       if (!prev || t >= prev.t) last.set(k, { t, rec: l });
     }
@@ -197,8 +201,12 @@ function activeLifts(states) {
   for (const [k, v] of last) if (v.rec.revoked !== true) out.set(k, v.rec);
   return out;
 }
-// Every live (non-archived) feature's .state.json, read raw (listOf tolerates any shape).
-const liveStates = (projectDir) => featureDirs(projectDir).filter((f) => !f.archived).map((f) => readJson(statePath(f.dir)).data);
+// Every live (non-archived) feature: its .state.json read raw (listOf tolerates any shape) and whether it has open tasks — its
+// tasks.md's active blocks, as guardCheck reads them. → [{slug, state, open}]
+const liveFeats = (projectDir) => featureDirs(projectDir).filter((f) => !f.archived).map((f) => {
+  const text = readIfExists(path.join(f.dir, "tasks.md"));
+  return { slug: f.slug, state: readJson(statePath(f.dir)).data, open: text != null && taskBlocks(activeTasks(text, detectTracks(f.dir)) || "").some((b) => !b.done) };
+});
 
 // An existing target as the file system reads it (1.36.0 review 1): its project-relative REAL path — links and junctions resolved, the
 // on-disk case (`t2/auth.test.js` through a junction to test/ IS test/auth.test.js) — or null (nothing there: the text path stands).
@@ -212,11 +220,14 @@ const RE_GLOB_CLASS = /\[[^\]/]+\]/g;
 // unfinished feature (ctx.holders — every feature with open tasks: covering, forced, stale or pending — or with no finish recorded), a
 // folder holding one, or a glob (in any segment) matching one or a folder holding one? An existing target is read by its real path;
 // "listed" is folded membership in the lists, whatever its name (a case variant of a listed file is that file). → null when none, or
-// when every one is lifted (a lift in force of any feature: ctx.states) or named EXACTLY in the _Implements:_ of a task that can start
-// now (readyTasks — never one +port's fence holds: portHeldNumbers — and never a reopened task with a tick record: tickRecorded) of a
-// covering or forced feature (ctx.unlockers — a folder, a glob or _Makes green:_ never unlocks); else ask — deny under
-// meta.approvalGuard deny, with the user's line (userNote: the lift command). ctx.blocks: each feature's active task blocks, parsed
-// once by guardCheck.
+// when every one is lifted (a lift in force of any feature: ctx.states, activeLifts — its feature with open tasks: ctx.blocks) or named
+// EXACTLY in the _Implements:_ of a task that can start now (readyTasks — never one +port's fence holds: portHeldNumbers — and never a
+// reopened task with a tick record: tickRecorded, which the ask then names as reopened, 1.36.0 review 2) of a covering or forced
+// feature (ctx.unlockers — a folder, a glob or _Makes green:_ never unlocks); else ask — deny under meta.approvalGuard deny, with the
+// user's line (userNote: the lift command). The lift line names a feature whose lift is in force while the work goes on (1.36.0
+// review 2 — the first holder could be one all ticked, never finished, whose lift never ended): an unlocker that lists the file, else
+// the first unlocker, else a holder with open tasks, else the first holder listing it. ctx.blocks: each feature's active task blocks,
+// parsed once by guardCheck.
 function protectedTestDecision(pdir, abs, rel, ctx) {
   const real = realRel(pdir, abs);
   const key = fold(real != null ? real : rel);
@@ -239,9 +250,10 @@ function protectedTestDecision(pdir, abs, rel, ctx) {
     }
   }
   if (!found.length) return null;
-  const lifted = activeLifts([...ctx.states.values()]);
+  const open = (name) => (ctx.blocks.get(name) || []).some((b) => !b.done);
+  const lifted = activeLifts([...ctx.states].map(([name, state]) => ({ state, open: open(name) })));
   const root = path.resolve(pdir);
-  const unlocked = new Set(), current = [];
+  const unlocked = new Set(), current = [], reopened = [];
   let rule; // (the evidence rule, read once — only when a +port feature asks it)
   for (const name of ctx.unlockers) {
     const blocks = ctx.blocks.get(name) || [];
@@ -250,9 +262,11 @@ function protectedTestDecision(pdir, abs, rel, ctx) {
     const held = portHeldNumbers(dir, isObj(st) ? st.kind : undefined, tracks, blocks, isObj(st) ? st.evidence : undefined, rule);
     const ready = new Set(readyTasks(blocks).filter((n) => !held.has(n)));
     for (const b of blocks) {
-      if (b.done || !ready.has(b.number) || tickRecorded(st, b.number)) continue; // (a reopened task: no unlock, not named as one)
+      if (b.done || !ready.has(b.number)) continue;
+      const refs = taskMarkers(b).implements.map((ref) => projectRel(root, implementsRel(ref))).filter(Boolean).map(fold); // a folder / glob never equals a file
+      if (tickRecorded(st, b.number)) { reopened.push({ feature: name, number: b.number, refs }); continue; } // (a reopened task: no unlock, not named as one)
       current.push({ feature: name, number: b.number });
-      for (const ref of taskMarkers(b).implements) { const r = projectRel(root, implementsRel(ref)); if (r) unlocked.add(fold(r)); } // a folder / glob never equals a file
+      for (const r of refs) unlocked.add(r);
     }
   }
   const blocking = found.filter((x) => !lifted.has(x.key) && !unlocked.has(x.key));
@@ -261,8 +275,13 @@ function protectedTestDecision(pdir, abs, rel, ctx) {
   const first = blocking[0];
   const shown = rel || ".";
   const why = file ? P.whyFile(first.feature, first.at ? dayOf(first.at) : "") : P.whyFolder(blocking.length, first.file);
-  const cur = current.length ? P.current(current.slice(0, 4).map((t) => `${t.number} (${t.feature})`).join(", ") + (current.length > 4 ? ", …" : "")) : P.noCurrent;
-  const lift = approvalCommand({ kind: "guard-down", setting: "unprotect", feature: first.feature, file: first.file }, i18n.DEV_SPEC_SCRIPT);
+  const taskList = (ts) => ts.slice(0, 4).map((t) => `${t.number} (${t.feature})`).join(", ") + (ts.length > 4 ? ", …" : "");
+  // a reopened task that names a blocking test: the ask says so — its planned test needs a lift (it said no task named it)
+  const reop = reopened.filter((t) => t.refs.some((r) => blocking.some((x) => x.key === r)));
+  const cur = reop.length ? P.reopened(taskList(reop)) : current.length ? P.current(taskList(current)) : P.noCurrent;
+  const lists = (name) => { const pt = listOf(ctx.states.get(name)); return !!pt && Object.keys(pt.files).some((k) => fold(k) === first.key); };
+  const liftIn = ctx.unlockers.find(lists) || ctx.unlockers[0] || ctx.holders.find(open) || first.feature;
+  const lift = approvalCommand({ kind: "guard-down", setting: "unprotect", feature: liftIn, file: first.file }, i18n.DEV_SPEC_SCRIPT);
   const deny = approvalGuardLevel(pdir) === "deny";
   const res = { guard: true, level: "tests", decision: deny ? "deny" : "ask", why: "protected-test", file: shown, feature: first.feature,
     protected: blocking.slice(0, PROTECT_WARN_FILES).map((x) => x.file), current,
@@ -319,13 +338,15 @@ function protectLocked(projectDir, slug, o) {
     return { ok: true, feature: f.slug, action: "unprotect", lifted: rec, listed: listed(), note: P.lifted(o.rel, f.slug, listed()) };
   }
   let added = 0, unlifted = null;
+  const live = liveFeats(projectDir), others = live.filter((x) => fold(x.slug) !== fold(f.slug)); // (this feature: `state`, as written below)
   if (o.walk) {
     const w = withWalk(state.protectedTests, o.walk, "protect");
     state.protectedTests = w.list;
     added = w.added;
   } else {
     const pt = isObj(state.protectedTests) ? state.protectedTests : (state.protectedTests = { files: {} });
-    if (activeLifts(liveStates(projectDir).concat([state])).has(fold(o.rel))) {
+    // any lift recorded and not yet ended, in force now or not (one in a feature with no open tasks counts again once they reopen)
+    if (activeLifts(others.map((x) => ({ state: x.state, all: true })).concat([{ state, all: true }])).has(fold(o.rel))) {
       pt.lifts = (Array.isArray(pt.lifts) ? pt.lifts : []).concat([{ file: o.rel, at, by: userName(), revoked: true }]);
       unlifted = o.rel;
     }
@@ -337,7 +358,8 @@ function protectLocked(projectDir, slug, o) {
   }
   writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
   const pt = listOf(state);
-  const inForce = activeLifts(liveStates(projectDir).concat([state])); // as the guard reads them: any feature's later record ends a lift
+  // as the guard reads them: any feature's later record ends a lift; in force while its feature has open tasks, after its last finish
+  const inForce = activeLifts(others.concat([{ state, open: live.some((x) => fold(x.slug) === fold(f.slug) && x.open) }]));
   const inForceIs = (l) => { const a = inForce.get(fold(l.file)); return !!a && a.at === l.at && a.by === l.by; };
   const lifts = pt.lifts.map((l) => Object.assign({ file: l.file, at: l.at, by: l.by }, l.revoked === true ? { revoked: true } : { reason: l.reason, active: inForceIs(l) }));
   const count = Object.keys(pt.files).length;
@@ -363,20 +385,21 @@ function protectHashFirst(fn) {
   return run;
 }
 // spec_finish: the feature's list hashed again (`hashes`: protectHashFirst's, taken before the lock). A file whose content now matches
-// NO hash a live feature recorded for it (a snapshot, a tick) and that no lift in force (of any feature) covers is unexplained — changed
-// or deleted; a lift in force explains a change (`lifted`). → { count, unexplained: [{file, status}], lifted: [{file, by, at, reason}] }
-// | null (no list) — a warning and the merge summary's block, never a blocker.
-function protectedTestsFinish(projectDir, state, hashes) {
+// NO hash a live feature recorded for it (a snapshot, a tick) and that no lift covers is unexplained — changed or deleted; a lift explains
+// a change (`lifted`): every lift of THIS feature (slug — `state`, its own, read under the lock), another feature's only while in force
+// (activeLifts: its feature with open tasks, recorded after its last finish). → { count, unexplained: [{file, status}], lifted: [{file,
+// by, at, reason}] } | null (no list) — a warning and the merge summary's block, never a blocker.
+function protectedTestsFinish(projectDir, state, hashes, slug) {
   const own = listOf(state);
   if (!own || !Object.keys(own.files).length) return null;
   const root = path.resolve(projectDir);
-  const states = liveStates(projectDir).concat([state]);
+  const feats = liveFeats(projectDir).filter((x) => fold(x.slug) !== fold(slug)).concat([{ state, all: true }]);
   const recorded = new Map();
-  for (const st of states) {
-    const pt = listOf(st);
+  for (const ft of feats) {
+    const pt = listOf(ft.state);
     if (pt) for (const k of Object.keys(pt.files)) { const fk = fold(k); if (!recorded.has(fk)) recorded.set(fk, new Set()); recorded.get(fk).add(pt.files[k]); }
   }
-  const lifts = activeLifts(states);
+  const lifts = activeLifts(feats);
   const unexplained = [], lifted = [];
   for (const k of Object.keys(own.files)) {
     const now = isObj(hashes) && Object.prototype.hasOwnProperty.call(hashes, k) ? hashes[k] : hash16(path.join(root, k));
@@ -412,5 +435,5 @@ function protectedTestsDoctor(projectDir, slug, state, lng) {
   return issues.length ? { status: "warn", detail: issues.join(" ") } : null;
 }
 
-module.exports = { protectWalkFirst, protectOnApproval, protectApprovalNote, protectOnTick, protectedCount, protectedTestDecision,
+module.exports = { protectWalkFirst, protectOnApproval, protectApprovalNote, protectOnTick, protectedCount, tickRecorded, protectedTestDecision,
   protectTests, protectHashFirst, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, protectedTestsDoctor, __link };

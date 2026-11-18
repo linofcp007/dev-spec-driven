@@ -217,8 +217,9 @@ function renderBrief(d, lang) {
   if ((d.projectChecks || []).length) push(`${++extra}. ${B5.projectChecks[d.expectFail ? "briefDodRed" : "briefDod"](d.projectChecks.map((c) => "`" + c.command + "` (" + c.name + ")").join(" · "))}`);
   // 1.36 the fast check (roadmap.json meta.fastCheck) of a code task: the edit → run → fix loop (a red task: its stub keeps it green)
   if (d.fastCheck) push(`${++extra}. ${B5.fastCheck[d.expectFail ? "briefDodRed" : "briefDod"](d.fastCheck.command)}`);
-  // 1.36 guard tests (meta.guard "tests"): a protected test changes only when this task's _Implements:_ names it
-  if (d.protectedTests != null) push(`${++extra}. ${B5.protectedTests.briefDod(d.protectedTests)}`);
+  // 1.36 guard tests (meta.guard "tests"): a protected test changes only when this task's _Implements:_ names it — a task reopened after
+  // its tick: only with the user's lift (1.36.0 review 2)
+  if (d.protectedTests != null) push(`${++extra}. ${d.protectedReopened ? B5.protectedTests.briefDodReopened(d.protectedTests, d.feature) : B5.protectedTests.briefDod(d.protectedTests)}`);
   // +port (1.36): a task of the port keeps the behaviour exactly; one after the differential check keeps it green (portRole)
   if (d.portRole) push(`${++extra}. ${t.portRules[d.portRole](d.differential)}`);
   if (task.checkpoint) push("", t.checkpoint, "**Checkpoint:** " + task.checkpoint);

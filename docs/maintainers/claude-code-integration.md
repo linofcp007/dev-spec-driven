@@ -177,7 +177,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   code file in it — breadth first, ≤ `FOLDER_CODE_ENTRIES` (2,000) entries (past them: it may — ask), links never followed, the scan's
   ignored folders (`SCAN_IGNORE`: node_modules, dist, build, .git, .specs…) neither entered nor code themselves (`rm -rf
   node_modules` asks nothing). A glob in the target's last segment (`rm -rf src/*`) reads the folder's entries it matches (≤
-  `GUARD_GLOB_ENTRIES`); a glob higher up is not read. So every removal / move spelling the guard reads — rm -r, rmdir /s and rd /s
+  `GUARD_GLOB_ENTRIES`); a glob higher up is not read (at level tests such a target still reaches the protected-test decision —
+  Level tests below). So every removal / move spelling the guard reads — rm -r, rmdir /s and rd /s
   (cmd), Remove-Item -Recurse and PowerShell's rm, find … -delete, mv / Move-Item — asks for a code folder as for a code file. A
   network path is never read. git stays the user's — the edit guard reads no git command: `git rm -r src` asks nothing, as
   `git rm src/a.ts` and `git checkout -- src/a.ts` don't.
@@ -199,13 +200,16 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
 - **Level tests (1.36)** — `guardCheck` asks engine/protect.js `protectedTestDecision` FIRST, before the stale / tests-phase /
   spike / scope answers: a target on the list of any feature with open tasks (a stale or pending one too) or with no finish
   recorded (its tasks all ticked) asks — `why` `protected-test`, `level` `tests` — unless a task that can start now of a covering
-  or forced feature names it exactly in `_Implements:_` (never a reopened task with a tick record) or a lift is in force. The
-  target as the file system reads it: an existing one by its real path (a link, a junction, the on-disk case), a glob in ANY
-  segment (`tes?/`, `*/`, `[t]est/`), a case variant of a listed file by folded membership (tasks-and-evidence.md → Protected
-  tests → The decision); **deny** when `meta.approvalGuard` is deny (the edit guard's only refusal — the
-  project declared the human's decisions the human's): `reason` for the agent (don't route around it), `userNote` for the user
-  (the `!` lift line). `.specs/<feature>/tests/` is guarded there (never `allow("specs")`); a non-protected target goes on to
-  the scope rule, whose answers carry the real `level`. **The hook** reads every target of a call and prints the STRICTEST
+  or forced feature names it exactly in `_Implements:_` (never a reopened task with a tick record — the ask then says the test is a
+  reopened task's planned test, which needs a lift) or a lift is in force (its feature has open tasks). The target as the file
+  system reads it: an existing one by its real path (a link, a junction, the on-disk case), a glob in ANY segment (`tes?/`, `*/`,
+  `[t]est/`) — a folder target too: a target with a glob skips guardCheck's not-code allow at this level (`rm -rf tes?/unit`,
+  `packages/*/test` — `guardFolderCode` reads the last segment only) and is not-code after the decision when no protected test
+  matches —, a case variant of a listed file by folded membership (tasks-and-evidence.md → Protected tests → The decision);
+  **deny** when `meta.approvalGuard` is deny (the edit guard's only refusal — the project declared the human's decisions the
+  human's): `reason` for the agent (don't route around it), `userNote` for the user (the `!` lift line — naming a feature whose
+  lift is in force while the work goes on). `.specs/<feature>/tests/` is guarded there (never `allow("specs")`); a non-protected
+  target goes on to the scope rule, whose answers carry the real `level`. **The hook** reads every target of a call and prints the STRICTEST
   answer — deny > a protected test's ask > any other ask (the first ask won: an out-of-scope file first hid the protected one)
   — with `systemMessage: userNote` on a deny; its raw pre-check reads `meta.guard === "tests"` and `DEV_SPEC_GUARD_DEFAULT=tests`.
   Each feature's tasks.md is parsed once per call (`blocksOf`, shared by the scope and protected-test readings). **git stays the
@@ -662,6 +666,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `sed -i … tes?/auth.test.js`, `rm [t]est/…`, `cart.TEST.js` and an edit through a junction passed at deny. The target is read
   by its real path, a glob anywhere, folded membership; the lists of a feature whose tasks are all ticked count until its finish
   (the generic ask had answered, under deny too).
+- **1.36.0 review 2** — a FOLDER target with a glob above its last segment (`rm -rf tes?/unit`, `*/unit`, `packages/*/test`) was no
+  code for `guardFolderCode` (it reads the last segment only) and left by the not-code allow before the protected-test decision ran:
+  at level tests a target with a glob anywhere skips that early allow (and is not-code after the decision when no protected test
+  matches). The lift line named the first holder by folder name — an old feature all ticked, never finished, whose lift never
+  ended: it names an unlocker that lists the file, else the first unlocker, else a holder with open tasks.
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer
