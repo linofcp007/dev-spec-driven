@@ -8,7 +8,8 @@
  *   · the snapshot — the test files present at the feature's FIRST complete tasks approval (walked and hashed BEFORE the feature lock:
  *     protectWalkFirst, the facade's approvePhase — the features' .specs/<f>/tests/ first, its own first), at most PROTECT_MAX_FILES
  *     (`truncated` past them), marked via "approval"; `feature protect` adds the files present now — ADD-ONLY: a recorded entry keeps
- *     its hash (no laundering);
+ *     its hash (no laundering); the snapshot, protect and a tick's _Verify:_ add a file another live feature lists with that feature's
+ *     hash, never its content now (1.36.0 review 4: recordedHashOf);
  *   · the tick record — a task's FIRST tick at level tests re-baselines the test files it names EXACTLY in _Implements:_ (planned: their
  *     hash now is the authorised one) and adds the test files its _Verify:_ runs; an untick never removes one, a re-tick keeps them;
  *   · the decision (guardCheck) — an edit, removal or move of a listed test (its real path, a glob anywhere, any case where the file
@@ -135,11 +136,12 @@ function protectWalkFirst(fn) {
 }
 // approvePhase (gates.js), under the feature lock, on a complete tasks approval: the FIRST one at level tests (a walk was made)
 // records the snapshot — merged ADD-ONLY into a list `feature protect` or a lift began (its hashes kept), then marked via "approval";
-// a later one (a re-approval, a revoke and approve again) keeps it. Changes `state` in place (written with the approval).
-// → {count, at, truncated?} for the result, or null.
-function protectOnApproval(state, walk) {
+// a later one (a re-approval, a revoke and approve again) keeps it. A test another live feature lists joins with a hash that feature
+// recorded (1.36.0 review 4: knownWalk). Changes `state` in place (written with the approval). → {count, at, truncated?} for the
+// result, or null.
+function protectOnApproval(projectDir, slug, state, walk) {
   if (!walk || snapshotted(listOf(state))) return null;
-  const { list } = withWalk(state.protectedTests, walk, "approval");
+  const { list } = withWalk(state.protectedTests, knownWalk(walk, recordedHashOf(otherStates(projectDir, slug))), "approval");
   list.via = "approval";
   state.protectedTests = list;
   return Object.assign({ count: Object.keys(list.files).length, at: list.at }, list.truncated ? { truncated: true } : {});
@@ -154,8 +156,9 @@ const tickRecorded = (st, n) => isObj(st) && ((isObj(st.ticks) && Object.prototy
 // completeTask (tasks.js), under the feature lock, when the call TICKS a task at level tests — BEFORE it stamps ticks[n]: the test files
 // its task names EXACTLY in _Implements:_ are re-baselined at its FIRST tick (planned — their content now is the authorised one; a
 // re-tick after an untick keeps a recorded hash, so finish names an edit made meanwhile) and the test files its _Verify:_ runs join the
-// list when absent. An untick never removes one. Changes `state` in place (written with the tick).
-function protectOnTick(projectDir, state, task) {
+// list when absent — one another live feature lists with a hash that feature recorded (1.36.0 review 4), never its content now. An
+// untick never removes one. Changes `state` in place (written with the tick).
+function protectOnTick(projectDir, slug, state, task) {
   if (guardLevel(projectDir) !== "tests") return;
   const root = path.resolve(projectDir);
   const m = taskMarkers(task);
@@ -168,9 +171,11 @@ function protectOnTick(projectDir, state, task) {
   const files = isObj(pt.files) ? pt.files : (pt.files = {});
   const keyOf = new Map(Object.keys(files).map((k) => [fold(k), k]));
   for (const r of planned) { const k = keyOf.get(fold(r)); if (!(retick && k)) files[k || r] = hash16(path.join(root, r)); }
+  let hashOf = null; // the other features' lists, read only when a _Verify:_ test joins
   for (const r of ran) {
     if (keyOf.has(fold(r)) || planned.has(r)) continue;
-    const h = hash16(path.join(root, r));
+    if (!hashOf) hashOf = recordedHashOf(otherStates(projectDir, slug));
+    const h = hashOf(r, () => hash16(path.join(root, r)));
     if (h) files[r] = h;
   }
 }
@@ -201,9 +206,34 @@ function activeLifts(states) {
   return out;
 }
 // Every live (non-archived) feature's .state.json but `slug`'s (the caller's own, read under its lock), read raw (listOf tolerates any
-// shape), then `state` — the states activeLifts reads.
-const liveStatesWith = (projectDir, slug, state) => featureDirs(projectDir).filter((f) => !f.archived && fold(f.slug) !== fold(slug))
-  .map((f) => readJson(statePath(f.dir)).data).concat([state]);
+// shape) — otherStates; liveStatesWith adds `state` last: the states activeLifts reads.
+const otherStates = (projectDir, slug) => featureDirs(projectDir).filter((f) => !f.archived && fold(f.slug) !== fold(slug))
+  .map((f) => readJson(statePath(f.dir)).data);
+const liveStatesWith = (projectDir, slug, state) => otherStates(projectDir, slug).concat([state]);
+// Every hash these states' lists recorded, by file (folded) — a snapshot, a tick, an accept: what finish counts as explained, and
+// (1.36.0 review 4) the hashes a feature copies for a test another feature lists. → Map(fold(file) → Set(hash), list order)
+function recordedHashes(states) {
+  const out = new Map();
+  for (const st of states) {
+    const pt = listOf(st);
+    if (pt) for (const k of Object.keys(pt.files)) { const fk = fold(k); if (!out.has(fk)) out.set(fk, new Set()); out.get(fk).add(pt.files[k]); }
+  }
+  return out;
+}
+// (1.36.0 review 4) The hash a feature records for a test it ADDS — a plain protect (with a file, or the walk), the first tasks
+// approval's snapshot, a tick's _Verify:_ run: a test the other live features (`states`) list keeps a hash they recorded, so the union
+// finish reads gains nothing (new content is authorised only by the accept or a task's exact _Implements:_); one none lists gets its
+// hash now (`fresh`). → (rel, fresh) → hash
+function recordedHashOf(states) {
+  const known = recordedHashes(states);
+  return (rel, fresh) => (known.has(fold(rel)) ? known.get(fold(rel)).values().next().value : fresh());
+}
+// …a walk's files so ({files, truncated} — withWalk's input)
+function knownWalk(walk, hashOf) {
+  const files = Object.create(null);
+  for (const k of Object.keys(walk.files)) files[k] = hashOf(k, () => walk.files[k]);
+  return { files, truncated: walk.truncated };
+}
 
 // An existing target as the file system reads it (1.36.0 review 1): its project-relative REAL path — links and junctions resolved, the
 // on-disk case (`t2/auth.test.js` through a junction to test/ IS test/auth.test.js) — or null (nothing there: the text path stands).
@@ -222,8 +252,9 @@ const RE_GLOB_CLASS = /\[[^\]/]+\]/g;
 // reopened task with a tick record: tickRecorded, which the ask then names as reopened, 1.36.0 review 2) of a covering or forced
 // feature (ctx.unlockers — a folder, a glob or _Makes green:_ never unlocks); else ask — deny under meta.approvalGuard deny, with the
 // user's line (userNote: the lift command). The lift line names the feature being worked on (1.36.0 review 2): an unlocker that lists
-// the file, else the first unlocker, else a holder with open tasks, else the first holder listing it. ctx.blocks: each feature's
-// active task blocks, parsed once by guardCheck.
+// the file, else the first unlocker, else a holder with open tasks, else the holder listing it with the latest tick (1.36.0 review 4:
+// the first by folder name was an old all-ticked feature, whose lift then stood unseen). ctx.blocks: each feature's active task
+// blocks, parsed once by guardCheck.
 function protectedTestDecision(pdir, abs, rel, ctx) {
   const real = realRel(pdir, abs);
   const key = fold(real != null ? real : rel);
@@ -276,7 +307,10 @@ function protectedTestDecision(pdir, abs, rel, ctx) {
   const cur = reop.length ? P.reopened(taskList(reop)) : current.length ? P.current(taskList(current)) : P.noCurrent;
   const lists = (name) => { const pt = listOf(ctx.states.get(name)); return !!pt && Object.keys(pt.files).some((k) => fold(k) === first.key); };
   const open = (name) => (ctx.blocks.get(name) || []).some((b) => !b.done);
-  const liftIn = ctx.unlockers.find(lists) || ctx.unlockers[0] || ctx.holders.find(open) || first.feature;
+  // (1.36.0 review 4) no open task anywhere: the holder listing it with the latest tick (state.ticks) — the one being worked on
+  const lastTick = (name) => { const st = ctx.states.get(name); let t = -Infinity; if (isObj(st) && isObj(st.ticks)) for (const v of Object.values(st.ticks)) { const n = Date.parse(v); if (n > t) t = n; } return t; };
+  const latest = () => ctx.holders.filter(lists).reduce((a, b) => (lastTick(b) > lastTick(a) ? b : a), first.feature);
+  const liftIn = ctx.unlockers.find(lists) || ctx.unlockers[0] || ctx.holders.find(open) || latest();
   const lift = approvalCommand({ kind: "guard-down", setting: "unprotect", feature: liftIn, file: first.file }, i18n.DEV_SPEC_SCRIPT);
   const deny = approvalGuardLevel(pdir) === "deny";
   const res = { guard: true, level: "tests", decision: deny ? "deny" : "ask", why: "protected-test", file: shown, feature: first.feature,
@@ -290,22 +324,32 @@ function protectedTestDecision(pdir, abs, rel, ctx) {
 //   protect <f>            the test files present now join the feature's list — walked before the lock, ADD-ONLY (a recorded entry
 //                          keeps its hash); a list without a snapshot gets one (`at`, via "protect");
 //   protect <f> <file>     that file's lift ends (a `revoked` record, when one is in force in any feature) and it joins the list when absent;
+//                          (1.36.0 review 4) both add a file another live feature lists with a hash that feature recorded, never its
+//                          content now; an existing <file> is read by its real path (realRel, as the guard reads it);
 //   protect <f> <file> + opts.accept   (1.36.0 review 3) the user ACCEPTS the test's current content — a guard-down of the approval
 //                          guard, `reason` required: its hash now is recorded in the feature's list (a re-baseline), its lift ends as
-//                          above, and a record {file, at, by, reason, accepted: true, confirmed?} keeps the decision;
+//                          above, and a record {file, at, by, reason, accepted: true, confirmed?} keeps the decision; its dry run
+//                          returns that `hash`, and opts.preview {hash} (the MCP server's question) refuses another content
+//                          (changed-since-preview, nothing written);
 //   unprotect <f> <file>   lifts its protection — the user's decision (an agent's call is a guard-down of the approval guard): a record
 //                          {file, at, by, reason, confirmed?}; `reason` required (one line, ≤ 500). opts.dryRun: the checks only (the
 //                          MCP server asks the user after them); opts.confirmation: the user's answer over elicitation.
-// → { ok, feature, action, … } — refusals carry a stable `code`: file-required · reason-required · not-a-test · outside-project.
+// → { ok, feature, action, … } — refusals carry a stable `code`: file-required · reason-required · not-a-test · outside-project ·
+// changed-since-preview.
 function protectTests(projectDir, action, name, file, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const lng = featureLang(projectDir, f.slug);
   const P = i18n.msg(lng).protectedTests;
   let rel = null;
+  const root = path.resolve(projectDir);
   if (typeof file === "string" && file.trim()) {
-    rel = projectRel(path.resolve(projectDir), file);
+    rel = projectRel(root, file);
     if (!rel) return { ok: false, code: "outside-project", error: P.err.outside(file.trim()) };
+    // protect / accept: an existing target by its real path, as the guard reads it (1.36.0 review 4 — a path through a junction
+    // added a second key and left the real file's lift in force); one outside the project keeps the typed path
+    const real = action === "protect" ? realRel(root, path.join(root, rel)) : null;
+    if (real && projectRel(root, real) === real) rel = real;
     if (/[*?[]/.test(rel) || !isTest(rel)) return { ok: false, code: "not-a-test", error: P.err.notATest(rel) };
   }
   const accept = action === "protect" && opts.accept === true;
@@ -314,8 +358,9 @@ function protectTests(projectDir, action, name, file, opts = {}) {
     const r = reasonInput(opts.reason, lng);
     if (r.error) return { ok: false, code: "invalid-arguments", invalid: ["reason"], error: r.error };
     if (!r.value) return { ok: false, code: "reason-required", error: accept ? P.err.acceptReasonRequired : P.err.reasonRequired };
-    if (opts.dryRun === true) return Object.assign({ ok: true, dryRun: true, feature: f.slug, action }, accept ? { accept: true } : {}, { file: rel, reason: r.value });
-    return featureLocked(protectLocked)(projectDir, f.slug, { action, accept, rel, reason: r.value, confirmation: opts.confirmation, lng });
+    // the accept's dry run: the content the user is asked about (its hash — the MCP server's preview, 1.36.0 review 4)
+    if (opts.dryRun === true) return Object.assign({ ok: true, dryRun: true, feature: f.slug, action }, accept ? { accept: true, hash: hash16(path.join(root, rel)) } : {}, { file: rel, reason: r.value });
+    return featureLocked(protectLocked)(projectDir, f.slug, { action, accept, rel, reason: r.value, confirmation: opts.confirmation, preview: opts.preview, lng });
   }
   if (opts.dryRun === true) return { ok: true, dryRun: true, feature: f.slug, action, ...(rel ? { file: rel } : {}) };
   return featureLocked(protectLocked)(projectDir, f.slug, { action, rel, walk: rel ? null : protectWalk(projectDir, f.slug), lng });
@@ -338,9 +383,18 @@ function protectLocked(projectDir, slug, o) {
     return { ok: true, feature: f.slug, action: "unprotect", lifted: rec, listed: listed(), note: P.lifted(o.rel, f.slug, listed()) };
   }
   let added = 0, unlifted = null, accepted = null;
+  const abs = o.rel ? path.join(path.resolve(projectDir), o.rel) : null;
+  const now = o.accept ? hash16(abs) : null;
+  // the accept asked over MCP elicitation records the content the question was about — never one written while it waited
+  if (o.accept && isObj(o.preview) && "hash" in o.preview && o.preview.hash !== now) {
+    return { ok: false, changedSincePreview: true, code: "changed-since-preview", feature: f.slug, file: o.rel, error: P.err.acceptChangedSincePreview(o.rel) };
+  }
   const others = liveStatesWith(projectDir, f.slug, state); // every live feature's state, this one's as written below
+  // (1.36.0 review 4) a plain protect adds a file another live feature lists with a hash that feature recorded — the union finish
+  // reads gains nothing, so only the accept authorises new content; a file no live feature lists gets its hash now
+  const hashOf = recordedHashOf(others.slice(0, -1));
   if (o.walk) {
-    const w = withWalk(state.protectedTests, o.walk, "protect");
+    const w = withWalk(state.protectedTests, knownWalk(o.walk, hashOf), "protect");
     state.protectedTests = w.list;
     added = w.added;
   } else {
@@ -352,12 +406,12 @@ function protectLocked(projectDir, slug, o) {
     if (!isObj(pt.files)) pt.files = {};
     const key = Object.keys(pt.files).find((k) => fold(k) === fold(o.rel));
     if (o.accept) { // the user's accept: the content now is the authorised one (its hash, under the listed spelling) + the record
-      pt.files[key || o.rel] = hash16(path.join(path.resolve(projectDir), o.rel));
+      pt.files[key || o.rel] = now;
       accepted = { file: o.rel, at, by: userName(), reason: o.reason, accepted: true };
       const conf = confirmationOf(o.confirmation);
       if (conf) accepted.confirmed = conf;
       pt.lifts = (Array.isArray(pt.lifts) ? pt.lifts : []).concat([accepted]);
-    } else if (key === undefined) pt.files[o.rel] = hash16(path.join(path.resolve(projectDir), o.rel)); // never re-hashes a listed one
+    } else if (key === undefined) pt.files[o.rel] = hashOf(o.rel, () => hash16(abs)); // never re-hashes a listed one
     if (key === undefined) added = 1;
   }
   writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
@@ -390,7 +444,7 @@ function protectHashFirst(fn) {
 // spec_finish: the feature's list hashed again (`hashes`: protectHashFirst's, taken before the lock). A file whose content now matches
 // NO hash a live feature recorded for it (a snapshot, a tick, an accept) and that no lift in force covers is unexplained — changed or
 // deleted; a lift in force (activeLifts, of any live feature — this one's `state` read under the lock) explains a change (`lifted`).
-// `accepted`: this feature's accept records since its last finish (the merge summary shows them). → { count, unexplained: [{file,
+// `accepted`: this feature's accept records of its work cycle (the merge summary shows them). → { count, unexplained: [{file,
 // status}], lifted: [{file, by, at, reason}], accepted: [{file, by, at, reason}] } | null (no list) — a warning and the merge summary's
 // block, never a blocker.
 function protectedTestsFinish(projectDir, state, hashes, slug) {
@@ -398,11 +452,7 @@ function protectedTestsFinish(projectDir, state, hashes, slug) {
   if (!own || !Object.keys(own.files).length) return null;
   const root = path.resolve(projectDir);
   const states = liveStatesWith(projectDir, slug, state);
-  const recorded = new Map();
-  for (const st of states) {
-    const pt = listOf(st);
-    if (pt) for (const k of Object.keys(pt.files)) { const fk = fold(k); if (!recorded.has(fk)) recorded.set(fk, new Set()); recorded.get(fk).add(pt.files[k]); }
-  }
+  const recorded = recordedHashes(states);
   const lifts = activeLifts(states);
   const unexplained = [], lifted = [];
   for (const k of Object.keys(own.files)) {
@@ -412,8 +462,13 @@ function protectedTestsFinish(projectDir, state, hashes, slug) {
     if (l) lifted.push({ file: k, by: l.by, at: l.at, reason: l.reason });
     else unexplained.push({ file: k, status: now == null ? "deleted" : "changed" });
   }
-  const fin = isObj(state.finished) ? Date.parse(state.finished.at) : NaN; // the last finish recorded (this one is written after)
-  const accepted = own.lifts.filter((l) => l.accepted === true && typeof l.file === "string" && !(Date.parse(l.at) <= fin))
+  // the accepts of the feature's work cycle (1.36.0 review 4 — a re-finish of the same cycle dropped them): since its last finish when
+  // that finish came before its latest tasks approval (a new cycle; this one is written after), else since that approval (the cycle
+  // was finished once already), else every one (never finished)
+  const fin = isObj(state.finished) ? Date.parse(state.finished.at) : NaN;
+  const appr = isObj(state.approvals) && isObj(state.approvals.tasks) ? Date.parse(state.approvals.tasks.at) : NaN;
+  const since = fin >= appr ? appr : fin;
+  const accepted = own.lifts.filter((l) => l.accepted === true && typeof l.file === "string" && !(Date.parse(l.at) <= since))
     .map((l) => ({ file: l.file, by: l.by, at: l.at, reason: l.reason }));
   return { count: Object.keys(own.files).length, unexplained, lifted, accepted };
 }

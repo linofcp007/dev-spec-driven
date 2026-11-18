@@ -372,8 +372,10 @@ against stay as they were unless the plan or the user says otherwise:
   approval (the features' `.specs/<feature>/tests/` first, its own first, then the project's; a content hash each, at most
   2,000 — past them doctor warns; a `feature protect` run before the approval doesn't replace it), and at a task's FIRST tick
   the test files it names exactly in `_Implements:_` (their content then is the authorised one — the bugfix's red test,
-  task 1's `_Implements: [the test file T-01 goes in]_`) and the test files its `_Verify:_` runs. An untick never removes one,
-  and a re-tick never re-records one. A new test file stays editable until a tick records it.
+  task 1's `_Implements: [the test file T-01 goes in]_`) and the test files its `_Verify:_` runs. A test another feature
+  already lists joins the snapshot or a `_Verify:_` record with the hash that feature recorded, never its content now — only a
+  task's exact `_Implements:_` and the accept record new content. An untick never removes one, and a re-tick never re-records
+  one. A new test file stays editable until a tick records it.
 - **The edit** (Claude Code's guard hook) — editing, removing or moving a protected test asks unless a task that can START
   NOW names it exactly in `_Implements:_` (never a folder, a glob or `_Makes green:_`, never a task reopened by an untick or
   a box unchecked by hand — its planned test then changes only with the user's lift, as the guard and the brief say) or the
@@ -385,11 +387,14 @@ against stay as they were unless the plan or the user says otherwise:
   reason}`; the guard's line names the feature being worked on): the user's decision — with the approval guard on, an agent's
   call asks or is refused. It lasts until `feature protect <feature> <file>` (of any feature) ends it — whatever its feature's
   tasks, finished or not: a lift left in place after its feature's finish unprotects the test for every later feature, and
-  doctor warns about it. `feature protect <feature>` adds the tests present now (it never re-hashes a recorded one).
+  doctor warns about it. `feature protect <feature>` adds the tests present now (it never re-hashes a recorded one, and a test
+  another feature lists joins with the hash that feature recorded — only the accept records new content).
 - **The accept** — `dev-spec feature protect <feature> <file> --accept --reason "…"` (`spec_feature {action: "protect", file,
   accept: true, reason}`): the user's decision too (a guard-down, like the lift) — the test's current content becomes the
-  recorded one in that feature's list, its lift (if any) ends, and the reason is kept (the merge summary shows it). The test
-  stays protected: a later change asks again, and finish names it.
+  recorded one in that feature's list, its lift (if any) ends, and the reason is kept: the merge summary of every written finish
+  of that work cycle shows it — after the accept (or a lift), finish again with write (`dev-spec finish <feature> --write`): the
+  summary written before it still names the test as changed. The test stays protected: a later change asks again, and finish
+  names it.
 - **At finish** (every surface, git-free) — each protected test is hashed again: one whose content matches no hash a live
   feature recorded for it (its snapshot, a tick of any feature, an accept) and that no lift in force covers is a **warning**
   naming it (changed / deleted) and a "Protected tests" block in the merge summary — never a blocker: check each change is

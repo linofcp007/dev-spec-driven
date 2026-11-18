@@ -661,8 +661,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   if (ticks) {
     state.lastTickAt = now; // spec_finish's suite-evidence needs every project check run AFTER the last tick
     // 1.36 guard tests: its exact _Implements:_ tests re-baselined (its FIRST tick only — read before ticks[n] is stamped), its _Verify:_
-    // tests listed
-    protectOnTick(projectDir, state, task);
+    // tests listed (one another feature lists with that feature's hash — 1.36.0 review 4)
+    protectOnTick(projectDir, f.slug, state, task);
     // when this task was ticked (state.ticks[n]) — the roadmap forecasts' completion times; a hand-broken ticks value is left alone
     if (state.ticks === undefined || isRecord(state.ticks)) state.ticks = { ...(state.ticks || {}), [key]: now };
   }

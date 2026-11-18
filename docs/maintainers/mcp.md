@@ -123,8 +123,9 @@ A guardrail on the approve paths, like the approval hook — not a sandbox.
   its own dry run first (`spec_feature {…, dryRun}`: a test file inside the project, a reason — `reason-required` / `not-a-test` /
   … answer as they are) and its question quotes the reason the engine would record (one line, ≤ 200 characters shown —
   `elicit.unprotect`); an approve records the lift with `confirmed`. An accept (protect `{accept: true}`, 1.36.0 review 3) takes
-  the same path — its dry run carries `accept: true`, its question `elicit.accept`. `requestedSchema`: `approve`
-  (boolean, default false, required) + `note` (≤ 500).
+  the same path — its dry run carries `accept: true` and the file's `hash`, passed back as `preview` {hash}: a test rewritten
+  while the question waits is refused `changed-since-preview` (1.36.0 review 4) —, its question `elicit.accept`.
+  `requestedSchema`: `approve` (boolean, default false, required) + `note` (≤ 500).
 - **Only `action: "accept"` with `content.approve === true` runs the call**, recording `confirmation` {via: "elicitation", at,
   note?} as `confirmed` (`confirmationOf()`, gates.js — never a tool argument) and passing `preview`, what the dry run judged:
   content edited, another approval recorded or an unnamed check failing by then records nothing (`changed-since-preview`). A
@@ -299,6 +300,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   refusal anyway asks nobody); its question quotes the reason; the internals `confirmation` and `dryRun` joined spec_feature's.
 - **1.36.0 review 3** — spec_feature protect `{accept: true}` (the accept: a protected test's current content re-baselined) is
   asked the same way — the dry run first, `elicit.accept`.
+- **1.36.0 review 4** — the accept recorded the test's content at the answer, not the one the question was about: its dry run's
+  hash is the `preview` now (changed-since-preview, as approve and remove).
 
 ### Argument validation
 - **1.12** — the MCP accepted `Design` / `PT`; `foldEnumArgs` keeps it so.

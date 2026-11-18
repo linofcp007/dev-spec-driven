@@ -800,6 +800,18 @@ exports.run = async ({
     all("1.36.0 review 3 (D3-1, D3-2): round 1's panel exit and ledger lines, no `@ <HEAD>` — next.reviewBranch (EN / PT / ES), spec-finish.md, spec-review.md, subagent-execution.md (the ledger block, Final review, the Ledger bullet, Resume, the collapsed / inline forms), the maintainer notes — each place saying a task done inline writes no ledger line, so one done after the review means running it again; spec-review.md (branch) and spec-finish.md say to commit the feature's work first (failing: " +
       JSON.stringify(d31.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(d31.map(([k, text, re]) => [k, () => re.test(text)])));
 
+    // 1.36.0 review 4 (D4-1): the merge summary written before an accept (or a lift) still names the test as changed and shows no
+    // accept — /spec-finish step 1 says to run it again after one, as do the accept's note (EN / PT / ES) and verification.md
+    const d41 = [
+      ["spec-finish step 1: run it again after the accept", finishCmd, /After the accept \(or a lift\), run step 1 again \(`spec_finish \{name, write: true\}`\): the merge summary then lists the accept and no longer names the test as changed — the one written before it still does\. 2\. \*\*Verify fresh/],
+      ["verification.md: the accept bullet", ref("verification.md"), /the merge summary of every written finish of that work cycle shows it — after the accept \(or a lift\), finish again with write \(`dev-spec finish <feature> --write`\): the summary written before it still names the test as changed\./],
+      ["the accept's note (en)", S.msg("en").protectedTests.accepted("t.test.js", "alpha"), /Finish it again \([\s\S]*?finish alpha --write\): the merge summary then lists the accept and no longer names the test as changed\.$/],
+      ["the accept's note (pt)", S.msg("pt").protectedTests.accepted("t.test.js", "alpha"), /Volta a fechá-la \([\s\S]*?finish alpha --write\): o resumo do merge passa a listar a aceitação e deixa de nomear o teste como alterado\.$/],
+      ["the accept's note (es)", S.msg("es").protectedTests.accepted("t.test.js", "alpha"), /Ciérrala de nuevo \([\s\S]*?finish alpha --write\): el resumen del merge lista entonces la aceptación y deja de nombrar la prueba como cambiada\.$/],
+    ];
+    all("1.36.0 review 4 (D4-1): after an accept (or a lift) the finish is written again — /spec-finish step 1, the accept's note (EN / PT / ES), verification.md's accept bullet (failing: " +
+      JSON.stringify(d41.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(d41.map(([k, text, re]) => [k, () => re.test(text)])));
+
     // 1.36.0 review 2 (RP2-2, RP2-3 — round 1's INT-8): tooling-reference's rows as round 1's fixes left the code — a task's
     // FIRST tick re-baselines its _Implements:_ tests (a re-tick keeps the hash), spec_next_task's +port hold keys, the fast
     // check in roadmap.json's meta list (every meta key the engine writes, but evidenceSince — the observed switch's internal

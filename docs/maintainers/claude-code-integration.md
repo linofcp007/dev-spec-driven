@@ -679,6 +679,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.36.0 review 3** — a lift is in force until a `protect <file>` record again (round 2's open-tasks rule made the line's last
   fallback — a feature with every task ticked — record a lift that was never in force: the user looped); the lift line keeps its
   order (tasks-and-evidence.md → Protected tests, History).
+- **1.36.0 review 4** — the lift line's last fallback (no open task anywhere) is the holder listing the file with the latest tick,
+  no longer the first by folder name (an old all-ticked feature, whose lift then stood unseen).
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer

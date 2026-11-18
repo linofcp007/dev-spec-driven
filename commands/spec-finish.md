@@ -19,6 +19,8 @@ before it.
    weakened test; if it is, the user accepts it with the `feature protect <feature> <file> --accept --reason "…"` line the
    warning gives — its current content becomes the recorded one, so the re-check is explained and the test stays protected
    for every later feature; never a `feature unprotect` here: a lift lasts until `feature protect <feature> <file>`).
+   After the accept (or a lift), run step 1 again (`spec_finish {name, write: true}`): the merge summary then lists the
+   accept and no longer names the test as changed — the one written before it still does.
 2. **Verify fresh, now** — the full suite and every check the report lists for the active tracks. With project checks set,
    record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}`, or
    `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" finish <feature> --run` (`--run` given: run that). No shell? Ask the user to

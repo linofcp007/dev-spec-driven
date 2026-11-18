@@ -1023,8 +1023,9 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
     case "flow": // opts.flow (MCP `flow`), else the positional value (CLI `feature flow <name> <flow>`)
       return setFeatureFlowLocked(projectDir, name, opts.flow != null ? opts.flow : arg);
     case "protect": case "unprotect": // 1.36 guard tests (protect.js): opts.file (MCP `file`, CLI --file), else the CLI's third word;
-      // protect's accept (1.36.0 review 3): the test's current content accepted — the user's decision
-      return protectTests(projectDir, act.value, name, opts.file != null ? opts.file : arg, { accept: opts.accept, reason: opts.reason, confirmation: opts.confirmation, dryRun: opts.dryRun });
+      // protect's accept (1.36.0 review 3): the test's current content accepted — the user's decision (opts.preview {hash}: the
+      // content the MCP server's question named, 1.36.0 review 4)
+      return protectTests(projectDir, act.value, name, opts.file != null ? opts.file : arg, { accept: opts.accept, reason: opts.reason, confirmation: opts.confirmation, dryRun: opts.dryRun, preview: opts.preview });
   }
   return null; // (unreachable: enumArg answered every other value)
 }

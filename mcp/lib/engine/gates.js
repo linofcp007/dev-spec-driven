@@ -303,8 +303,9 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     state.lastApprovedPhase = p;
   }
   // 1.36 guard tests: the FIRST complete tasks approval records the feature's protected tests — the walk the facade made before this
-  // lock (opts.protectWalk, protect.js protectWalkFirst); a later approval keeps that snapshot
-  const protectSnap = p === "tasks" && (!so || so.complete) ? protectOnApproval(state, opts.protectWalk) : null;
+  // lock (opts.protectWalk, protect.js protectWalkFirst); a later approval keeps that snapshot; a test another feature lists keeps that
+  // feature's hash (1.36.0 review 4)
+  const protectSnap = p === "tasks" && (!so || so.complete) ? protectOnApproval(projectDir, f.slug, state, opts.protectWalk) : null;
   writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
   // a fast-forward refreshes ROADMAP.md once, after its last phase (opts.noRefresh — internal, never a tool argument)
   if (opts.noRefresh !== true) maybeRefreshRoadmap(projectDir);
