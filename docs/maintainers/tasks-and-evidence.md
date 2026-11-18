@@ -65,8 +65,9 @@ Phase 6, opt-in.
   task's diff). What runs per model is prose: `references/subagent-execution.md` → Review on more than one model (merge
   first, then ONE verify per merged finding in the code reviews — final / branch, converge; the panel adds models, never
   replaces a review's own tier; the task reviewer on the first panel model other than the implementer's that is at least
-  standard, else `sonnet`; every path ledgers a `Final review: ×N … @ <HEAD>` line — the finish sentence's exit while the
-  latest one names the current HEAD), `references/critic-review.md` §1 / §3 (the gate critics: the size table's on the session's model plus one per other panel model; their merged findings go
+  standard, else `sonnet`; every path ledgers a `Final review: ×N` line — the finish sentence's exit; a task done inline
+  writes no ledger line: after one, run the review again — and the branch review reads `merge-base..HEAD`: the feature's
+  work committed first), `references/critic-review.md` §1 / §3 (the gate critics: the size table's on the session's model plus one per other panel model; their merged findings go
   to the user — gates have no verifier). mcp/tests/17-docs.js pins each file's wording of these rules.
 
 ## Evidence
@@ -835,6 +836,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   path for the inline cases) and subagent-execution.md (the ledger lines, Final review, Resume). The narrow reading, no
   exception: any commit after the line (a fix the branch review asked for, the simplify pass) moves HEAD, so the panel
   reviews the final code again; work left uncommitted moves nothing — the branch review reads `merge-base..HEAD` only.
+- **1.36.0 review 3** (D3-1, D3-2) — round 2's `@ <HEAD>` went back out: a new mechanism for a LOW that made the whole panel
+  run again after every commit — the branch review's own fixes (spec-review.md ledgers the line before them), each simplify
+  commit (the pass comes after the review), a `.specs/`-only commit — with no bound, against "Never multiplied", "No second
+  wave" and the Cost bullet's "the final review once a feature". The exit and the ledger lines are round 1's again ("unless
+  the ledger already has its `Final review: ×N` line since the last task", no `@`) in next.reviewBranch (EN / PT / ES),
+  spec-finish.md, spec-review.md and subagent-execution.md; RP2-1's gap (a task done inline writes no ledger line) is closed
+  in prose in the same places — "if you did one after the review, run it again". D3-2: the branch review reads
+  `merge-base..HEAD`, so spec-review.md (branch) and spec-finish.md say to commit the feature's work before it (inline work
+  is committed only when the user asks — executeTask.md). spec-review.md keeps round 2's ledger path.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
