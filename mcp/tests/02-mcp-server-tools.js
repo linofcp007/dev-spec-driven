@@ -342,12 +342,12 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list, cliI
       for (const f of [js(dir).slice(1, -1), dir.split(path.sep).join("/")]) s = s.split(f).join("<P>");
       return JSON.parse(s.replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g, "<T>"));
     };
-    const TASKS = "# Tasks\n\n- [ ] 1. Parse the input\n  - _Verify: npm test_\n- [ ] 2. Store it\n";
+    const TASKS = "# Tasks\n\n- [ ] 1. Parse the input\n  - _Implements: src/parse.js_\n  - _Verify: npm test_\n- [ ] 2. Store it\n";
     const PLAN = "# Plan: Audit log\n\nRecord who changed what.\n\n## Steps\n1. Add the audit table (src/audit.js)\n2. Write each change to it\n";
     const ears = "1. **US-1.AC-1** — WHEN a user saves THE SYSTEM SHALL store the draft";
     // [operation, tool, arguments, CLI words (+ stdin)] — or a function: the same setup on both twins
     const steps = [
-      ["init", "spec_init", { tracks: ["sec"], guard: "scope", stopCheck: true, checks: { test: "npm test" }, evidence: "reported" }, ["init", "sec", "--guard", "scope", "--stop-check", "on", "--check", "test=npm test", "--evidence", "reported"]],
+      ["init", "spec_init", { tracks: ["sec"], guard: "scope", stopCheck: true, checks: { test: "npm test" }, evidence: "reported", fastCheck: "test", reviewModels: ["opus", "sonnet"] }, ["init", "sec", "--guard", "scope", "--stop-check", "on", "--check", "test=npm test", "--evidence", "reported", "--fast-check", "test", "--review-models", "opus,sonnet"]], // 1.36: + the review panel (doctor / next_action carry it below), the fast check (next / brief / complete carry it on task 1, a code task)
       ["create", "spec_create", { name: "Login", tracks: ["tdd"], summary: "Users sign in", size: "m", includeBody: true }, ["create", "Login", "tdd", "--summary", "Users sign in", "--size", "m", "--include-body"]],
       ["create", "spec_create", { name: "Crash", kind: "bugfix", reproduction: "click save twice", rootCause: "a null session" }, ["bugfix", "Crash", "--reproduction", "click save twice", "--root-cause", "a null session"]],
       ["create", "spec_create", { name: "Probe", kind: "spike", question: "Does X scale?", timebox: "3d" }, ["spike", "Probe", "--question", "Does X scale?", "--timebox", "3d"]],

@@ -30,6 +30,8 @@ exports.run = async ({ ok, root, require }) => {
     // An identifier from outside this code base is allowed by name, with why.
     const OUTSIDE = new Set([
       "subagentStatusLine", // a Claude Code plugin `settings` key (claude-code-integration.md: why a plugin can't ship a status line)
+      // Claude Code's subagent model settings (claude-code-integration.md, 1.36: what collapses a review panel to one model)
+      "CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "ANTHROPIC_DEFAULT_OPUS_MODEL", "availableModels",
     ]);
     const words = new Set();
     for (const f of codeFiles(["mcp", "cli", "hooks", "scripts", "evals"], /\.(?:js|mjs|cjs|json|sh|ps1|bash|zsh|fish)$/)) {
@@ -86,6 +88,15 @@ exports.run = async ({ ok, root, require }) => {
     });
     ok(own >= 20 && importers >= 5 && readmes.every((r) => r.stated === own && r.importer && !r.stale && r.counts.length >= 1 && r.counts.every((n) => n === own)),
       "1.25.1 review: the tree of README.md / .pt.md / .es.md says the engine's own module count (" + own + ", + " + importers + " in import/) and no README states another (got " + js(readmes) + ")");
+    // 1.36.0 review 2 (RP2-3, round 1's INT-8): architecture.md's load-cost count (Few, cohesive files) said 24 eager modules
+    // after 1.36 added two (port.js, protect.js) — it states MODULES' length, the lazy tier's own modules and its import/ count.
+    const eager = listed("MODULES").length, lazy = listed("LAZY"), lazyOwn = lazy.filter((m) => !m.startsWith('"./import/')).map((m) => m.slice(3, -1));
+    const arch = ws(rd("docs", "maintainers", "architecture.md")), archAt = arch.match(/: (\d+) modules loaded with the engine \(\+ ([^)]*?) and (\d+) in import\/, the lazy tier\)/) || [];
+    const archLazy = (archAt[2] || "").split(/, */);
+    const archHist = (arch.match(/- \*\*1\.36\*\* — engine\/protect\.js[^\n]*?\(\d+ modules[^)]*\)/) || [""])[0];
+    ok(eager >= 20 && +archAt[1] === eager && +archAt[3] === lazy.length - lazyOwn.length && js(archLazy.slice().sort()) === js(lazyOwn.slice().sort()) &&
+      /\(25 modules with port\.js, the other 1\.36 module/.test(archHist),
+      "1.36.0 review 2 (RP2-3): architecture.md's load-cost line states engine/index.js's eager count (" + eager + " MODULES), the lazy tier's own modules (" + js(lazyOwn) + ") and its import/ count; its 1.36 History entry counts port.js too (got " + js({ stated: archAt.slice(1), archHist: archHist.slice(0, 200) }) + ")");
   }
 
   { // 4. Model-facing prose. /approve and /spec-ff are user-only commands since 1.24 (disable-model-invocation): the model records an

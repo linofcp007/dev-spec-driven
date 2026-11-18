@@ -28,7 +28,8 @@ let acIndex, activeDesign, activeTasks, artifactReport, artifactState,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
   checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError, sameApprovedContent,
   approvalChecks, CHECK_PHASE; // doctor.js (the check registry)
-function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport,
+let protectOnApproval, protectApprovalNote; // protect.js — 1.36 guard tests: the first complete tasks approval's snapshot
+function __link(E) { ({ protectOnApproval, protectApprovalNote, acIndex, activeDesign, activeTasks, artifactReport,
   artifactState, bugPlaceholders, criterionBlocks, designSections, detectTracks,
   duplicateTaskNumbers, enumArg, errs, evidenceRule, existingFeature, existsCached, extractSection,
   extractTestIds, featureLang, fingerprintMatches, hasProseOutsideBrackets, headingsOnly,
@@ -301,6 +302,10 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
     state.approvals[p] = entry;
     state.lastApprovedPhase = p;
   }
+  // 1.36 guard tests: the FIRST complete tasks approval records the feature's protected tests — the walk the facade made before this
+  // lock (opts.protectWalk, protect.js protectWalkFirst); a later approval keeps that snapshot; a test another feature lists keeps that
+  // feature's hash (1.36.0 review 4)
+  const protectSnap = p === "tasks" && (!so || so.complete) ? protectOnApproval(projectDir, f.slug, state, opts.protectWalk) : null;
   writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
   // a fast-forward refreshes ROADMAP.md once, after its last phase (opts.noRefresh — internal, never a tool argument)
   if (opts.noRefresh !== true) maybeRefreshRoadmap(projectDir);
@@ -315,6 +320,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (failing.length && wv.waiver) Object.assign(res, { waiver: wv.waiver, note: [res.note, W.recorded(wv.waiver.reason, wv.waiver.expires)].filter(Boolean).join(" ") });
   else if (wv.waiver) Object.assign(res, { waiverIgnored: true, note: [res.note, W.notForced].filter(Boolean).join(" ") });
   if (so && so.complete && entry.waiver) res.waiver = entry.waiver; // the completing sign-off: the waiver the approval carries
+  if (protectSnap) Object.assign(res, { protectedTests: protectSnap, note: [res.note, protectApprovalNote(protectSnap, lng)].filter(Boolean).join(" ") }); // 1.36
   return res;
 }
 
@@ -949,7 +955,8 @@ function approveThrough(projectDir, name, phase, by, opts) {
   const done = (res) => { if (wrote) maybeRefreshRoadmap(projectDir); return res; };
   for (const ph of chain) {
     const r = approvePhase(projectDir, f.slug, ph, by, { force: opts.force === true, role: opts.role, batch: true, reason: opts.reason, expires: opts.expires,
-      confirmation: opts.confirmation, noRefresh: true, ...(pv ? { preview: isObj(pv.fingerprints) && isObj(pv.fingerprints[ph]) ? pv.fingerprints[ph] : {} } : {}) });
+      confirmation: opts.confirmation, noRefresh: true, protectWalk: opts.protectWalk, // 1.36: the protected tests walked before the lock
+      ...(pv ? { preview: isObj(pv.fingerprints) && isObj(pv.fingerprints[ph]) ? pv.fingerprints[ph] : {} } : {}) });
     if (r.ok) wrote = true;
     if (r.approvals) approvals = r.approvals;
     const step = { phase: ph, approved: !!r.ok && r.complete !== false };
@@ -1746,4 +1753,6 @@ module.exports = { phaseActive, approvalsInForce, testsStaleText, roadmapGoverna
   positionPhase, flowOrderText, setFeatureFlowLocked, createFlow, storeCreateFlow, changeScope, chainArtifacts,
   changedSinceApproval, approvedContentSame, realLines, hasSuccessCriteria, hasPriority, acDuplicates, sectionFilled,
   bugSectionFilled, CONSTITUTION_SYN, RE_CONSTITUTION_CHECK, RE_SUCCESS_CRITERIA, RE_INDEPENDENT_TEST,
-  RE_OUT_OF_SCOPE, RE_NFR, RE_EDGE_CASES, RE_TESTABILITY, __link };
+  RE_OUT_OF_SCOPE, RE_NFR, RE_EDGE_CASES, RE_TESTABILITY,
+  confirmationOf, // 1.36: a lift of a protected test the user confirmed over MCP (protect.js) records it as an approval does
+  __link };

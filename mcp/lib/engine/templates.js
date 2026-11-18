@@ -22,7 +22,8 @@ let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValid
   tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel, trackMarker,
   trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection, writeIfAbsent;
 let today; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, enumArg, existsCached,
+let taskBlocks, headingEntries; // a track block's lead section before the template's first task section (1.36, +port)
+function __link(E) { ({ taskBlocks, headingEntries, today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, enumArg, existsCached,
   extractAcIds, extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements,
   isInsideDir, writeInsideProject, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
@@ -235,6 +236,27 @@ function trackTestRowsBlock(tr, lang, used, map, tracks) {
   if (!rows.length) return null;
   return "\n## " + TRACK_MARKER[tr] + " " + heading + "\n\n" + lines[first - 2] + "\n" + lines[first - 1] + "\n" + rows.join("\n") + "\n";
 }
+// A track's task block of TWO sections (+port: the baseline's, then the differential check's — 1.36) → { head: the first
+// section, rest: the others }, or null for a block of one section.
+function splitLeadSection(block) {
+  const lines = block.split("\n");
+  const heads = lines.map((l, i) => (/^#{1,6}\s/.test(l) ? i : -1)).filter((i) => i >= 0);
+  return heads.length < 2 ? null : { head: lines.slice(heads[0], heads[1]).join("\n").trimEnd(), rest: "\n" + lines.slice(heads[1]).join("\n") };
+}
+// text + `section` inserted before the OUTERMOST level-2 section (its heading never in a fence or a comment) holding the first task —
+// a `## Phase` over `### Story` headings included; appended when no level-2 heading holds it (the tasks right under the title —
+// Kiro's layout — or a level-1 heading closing it) or there is no task at all: put before them, the section would take the template's
+// own tasks in (1.36 review 1 — removing the track hid them; doctor's port-verify then warns baselineLate). orNull: null instead of
+// the append (spec_add_track appends the whole block its own way). Inserted in the text's own line ends (a CRLF tasks.md — 1.36 review 3).
+function beforeFirstTaskSection(text, section, orNull) {
+  const first = taskBlocks(text)[0];
+  const lines = text.split("\n");
+  const head = first ? headingEntries(lines).filter((h) => h.level <= 2 && h.i < first.line).pop() : null;
+  if (!head || head.level !== 2) return orNull ? null : text.trimEnd() + "\n\n" + section + "\n";
+  const eol = /\r\n/.test(text) ? "\r\n" : "\n";
+  const at = lines.slice(0, head.i).reduce((n, l) => n + l.length + 1, 0);
+  return text.slice(0, at) + section.replace(/\r?\n/g, eol) + eol + eol + text.slice(at);
+}
 // An overridden design.md / requirements.md / tasks.md / test-plan.md + the active tracks' blocks it doesn't carry (the
 // rule above). reqText: () => the feature's requirements.md (tasks and test rows follow the IDs it defines for a track).
 // opts: only — the tracks to add blocks for (a built-in scaffold: its track packs; the i18n builders wrote the rest);
@@ -264,7 +286,13 @@ function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
     for (const tr of markerTracks()) {
       if (!want(tr)) continue;
       const block = isPackTrack(tr) ? packTaskBlock(packOf(tr), out, req, plan, lang, vars) : trackTaskBlock(tr, out, req, lang, trackIdMap(req, tr));
-      if (block) out = out.trimEnd() + "\n" + block;
+      if (!block) continue;
+      // a block of two sections (+port's baseline, then its differential check): the first goes before the template's first task
+      // section — nothing changes the code the baseline covers before it is recorded — (appended when no level-2 section holds that
+      // task), the rest at the end like every block
+      const lead = splitLeadSection(block);
+      if (lead) out = beforeFirstTaskSection(out, lead.head);
+      out = out.trimEnd() + "\n" + (lead ? lead.rest : block);
     }
   } else if (key === "test-plan") {
     const req = (reqText && reqText()) || "";
@@ -646,4 +674,4 @@ function templatesLines(r) {
 
 module.exports = { templatesLines, TEMPLATE_ARTIFACTS, RE_TEMPLATE_VAR, templateKey, readTemplateFile, templateFileList,
   templateLangChain, templateOverride, withTrackBlocks, scaffoldText, steeringScaffold, wildcardMatch, projectTemplateHas,
-  useTemplateScopeOf, templates, __link };
+  useTemplateScopeOf, templates, splitLeadSection, beforeFirstTaskSection, __link };

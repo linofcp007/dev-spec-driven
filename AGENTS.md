@@ -35,6 +35,7 @@ When unsure, turn a track on.
 | **+ui** | a user-facing screen: design system, WCAG accessibility, UI states |
 | **+obs** | a service people depend on: SLOs, alerts and runbooks, safe rollout |
 | **+data** | pipelines between stores: ETL / ELT, a warehouse, quality checks, backfills |
+| **+port** | behaviour that exists, carried to new code: a baseline first, a differential check before any improvement |
 
 The tracks are stored with the feature; `dev-spec add-track` changes them (`--remove` turns one off, no file deleted).
 What each adds at every phase: `skills/dev-spec-driven/references/track-checklists.md`.
@@ -124,8 +125,10 @@ At each phase boundary run `dev-spec doctor <feature>` and advance only on `read
 
 ## What Claude Code enforces — and what you do elsewhere
 
-- **Guard mode** (`init --guard on|scope`) asks before code edits while no feature has approved tasks. Elsewhere: no
-  implementation before the tasks are approved, no code outside the plan without a converge task.
+- **Guard mode** (`init --guard on|scope|tests`) asks before code edits while no feature has approved tasks; `tests` also
+  protects the tests present at the tasks approval. Elsewhere: no implementation before the tasks are approved, no code outside
+  the plan without a converge task, and never edit an existing test your task's `_Implements:_` doesn't name — `spec_finish`
+  warns about a protected test that changed with no recorded reason on every surface.
 - **Turn-end claims and observed evidence** are Claude Code hooks. Elsewhere run `dev-spec stop-check` yourself and
   record runs with `done --run` (MCP: `spec_stop_check {message}`; `spec_log {name, gitLog}` reads git log text you pass).
 - **The approval guard: a Claude Code hook, and the MCP server.** `init --approval-guard ask|deny`: in other MCP

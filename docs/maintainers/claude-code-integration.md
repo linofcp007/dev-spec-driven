@@ -25,6 +25,14 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   the files the brief names) with its Read tool. The
   implementer, the simplifier and the reviewer keep CLAUDE.md: they write or judge code against the project's
   conventions. mcp/tests/17-docs.js holds both sides.
+- **A model per dispatch — the review panel (1.36).** An agent's frontmatter `model:` is its default; the Agent tool's
+  per-invocation `model` wins over it (then `CLAUDE_CODE_SUBAGENT_MODEL`, then the parent's) and takes an ALIAS only (`opus`,
+  `sonnet`, `haiku`, `fable`). The review panel (`meta.reviewModels`, tasks-and-evidence.md → Subagent-driven execution) is
+  that parameter, once per model, and nothing else: the agents' files stay unaware of it (their independence). It collapses
+  to one model, invisibly to the engine, under `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` (no `model` parameter), a mod whose
+  `agent.spawn` hook sets the model, an `availableModels` allowlist substitution, or an `opus` alias whose family the
+  provider can't tell (`ANTHROPIC_DEFAULT_OPUS_MODEL`); a full model ID can't be passed. So the controller ledgers the models
+  it REQUESTED, never "ran on" (`references/subagent-execution.md` → Review on more than one model).
 - **One dev-spec project rule — `mcp/lib/probe.js`.** Node core only, never the engine; every surface asks it — the hooks
   (lazily, past each one's pre-filter), hooks/hook-utils.js (it re-exports the readers), the CLI's engine-free paths
   (cli/completion.js `statusProbe` / `resolveProject`) and the engine: doctor.js `isDevSpecDir` IS `probe.isDevSpecProject`
@@ -151,8 +159,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   the rules that matter (/dsx: `_Depends:_`, the micro-cycle, the scope rule, evidence).
 
 ## Guard mode
-- **`roadmap.json → meta.guard`** (`spec_init {guard}` / `init --guard on|off|scope`; `"scope"` — tasks-and-evidence.md →
-  End-of-turn evidence gate and scope guard). `hooks/guard-hook.js` (PreToolUse `Write|Edit|NotebookEdit|Bash|PowerShell|Monitor`;
+- **`roadmap.json → meta.guard`** (`spec_init {guard}` / `init --guard on|off|scope|tests`; `"scope"` — tasks-and-evidence.md →
+  End-of-turn evidence gate and scope guard; `"tests"` — scope plus protected tests, tasks-and-evidence.md → Protected tests;
+  the ladder off < on < scope < tests is guards.js `GUARD_LEVELS`). `hooks/guard-hook.js` (PreToolUse `Write|Edit|NotebookEdit|Bash|PowerShell|Monitor`;
   a MultiEdit payload is read too) is silent unless the guard is on (off costs one raw JSON read); `guardCheck()` reads
   roadmap.json + each feature's `.state.json` / tasks.md, never a repo walk. Its own errors never block: a malformed payload, a
   broken roadmap.json, any exception → exit 0.
@@ -168,7 +177,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   code file in it — breadth first, ≤ `FOLDER_CODE_ENTRIES` (2,000) entries (past them: it may — ask), links never followed, the scan's
   ignored folders (`SCAN_IGNORE`: node_modules, dist, build, .git, .specs…) neither entered nor code themselves (`rm -rf
   node_modules` asks nothing). A glob in the target's last segment (`rm -rf src/*`) reads the folder's entries it matches (≤
-  `GUARD_GLOB_ENTRIES`); a glob higher up is not read. So every removal / move spelling the guard reads — rm -r, rmdir /s and rd /s
+  `GUARD_GLOB_ENTRIES`); a glob higher up is not read (at level tests such a target still reaches the protected-test decision —
+  Level tests below). So every removal / move spelling the guard reads — rm -r, rmdir /s and rd /s
   (cmd), Remove-Item -Recurse and PowerShell's rm, find … -delete, mv / Move-Item — asks for a code folder as for a code file. A
   network path is never read. git stays the user's — the edit guard reads no git command: `git rm -r src` asks nothing, as
   `git rm src/a.ts` and `git checkout -- src/a.ts` don't.
@@ -187,6 +197,24 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (undecided or with open tasks, within its timebox — why `spike`, field `spikes`; at `scope` it never overrides the approved
   features' plan). A tasks approval whose content no longer matches tasks.md is `stale` and covers nothing; one without a
   fingerprint counts; "changed" is next_action's `approvedContentSame` (gates-and-approvals.md → Approval fingerprints).
+- **Level tests (1.36)** — `guardCheck` asks engine/protect.js `protectedTestDecision` FIRST, before the stale / tests-phase /
+  spike / scope answers: a target on the list of any feature with open tasks (a stale or pending one too) or with no finish
+  recorded (its tasks all ticked) asks — `why` `protected-test`, `level` `tests` — unless a task that can start now of a covering
+  or forced feature names it exactly in `_Implements:_` (never a reopened task with a tick record — the ask then says the test is a
+  reopened task's planned test, which needs a lift) or a lift is in force (until a `protect <file>` record — 1.36.0 review 3: its
+  feature's tasks or finish no longer matter). The target as the file
+  system reads it: an existing one by its real path (a link, a junction, the on-disk case), a glob in ANY segment (`tes?/`, `*/`,
+  `[t]est/`) — a folder target too: a target with a glob skips guardCheck's not-code allow at this level (`rm -rf tes?/unit`,
+  `packages/*/test` — `guardFolderCode` reads the last segment only) and is not-code after the decision when no protected test
+  matches —, a case variant of a listed file by folded membership (tasks-and-evidence.md → Protected tests → The decision);
+  **deny** when `meta.approvalGuard` is deny (the edit guard's only refusal — the project declared the human's decisions the
+  human's): `reason` for the agent (don't route around it), `userNote` for the user (the `!` lift line — naming the feature
+  being worked on). `.specs/<feature>/tests/` is guarded there (never `allow("specs")`); a non-protected
+  target goes on to the scope rule, whose answers carry the real `level`. **The hook** reads every target of a call and prints the STRICTEST
+  answer — deny > a protected test's ask > any other ask (the first ask won: an out-of-scope file first hid the protected one)
+  — with `systemMessage: userNote` on a deny; its raw pre-check reads `meta.guard === "tests"` and `DEV_SPEC_GUARD_DEFAULT=tests`.
+  Each feature's tasks.md is parsed once per call (`blocksOf`, shared by the scope and protected-test readings). **git stays the
+  user's**: no git reading at this level either — finish's hash check names what a git command changed.
 - **Inside / outside the project** is decided on real paths too (`insideDirAlias()`: an 8.3 name, a junction or symlink to the
   project is inside), never for a NETWORK path (`isNetworkPath`): its realpath would open an SMB connection to a host the agent
   named — `networkPathInside()` decides on the text (inside only under root's own `\\host\share\…`), so a project on a share
@@ -266,10 +294,20 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (`APPROVAL_SHELL_TOOLS`) `dev-spec approve …`, `feature remove … --yes`, `init --approval-guard <lower>` (`--help` runs
   nothing); and the guard-down actions.
 - **Guard-down actions** (`kind: "guard-down"`, `setting`: approvalGuard · evidence · roles · check · stopCheck · guard · roadmap
-  · state · observed · track · specs · link): lowering the guard or weakening what it protects — evidence observed → reported,
-  approval roles cleared or a required one dropped, a project check removed or changed, the stop gate off, the edit guard
-  lowered, and **track removal** — `spec_add_track {remove: true}` (`RE_APPROVAL_MCP`) / `add-track … --remove` turning off +tdd
-  or +ai (`APPROVAL_GATED_TRACKS`: they carry a phase; +sec / +saas / a pack stay allowed). **The guarded files** (probe.js
+  · state · observed · track · specs · link · unprotect · accept): lowering the guard or weakening what it protects —
+  evidence observed → reported, approval roles cleared or a required one dropped, a project check removed or changed, the
+  stop gate off, the edit guard lowered (`GUARD_LEVELS` off < on < scope < tests, 1.36 — judged against the EFFECTIVE level:
+  `meta.guard`, else the user's
+  `DEV_SPEC_GUARD_DEFAULT`; meta unknown: every level but tests counts; the human's line is `init --guard <the level asked for>`
+  — it printed `off` for scope), **track removal** — `spec_add_track {remove: true}` (`RE_APPROVAL_MCP`) / `add-track … --remove` turning off +tdd
+  or +ai (`APPROVAL_GATED_TRACKS`: they carry a phase; +sec / +saas / a pack stay allowed) — and, 1.36, **a protected test's lift**
+  — `spec_feature {action: "unprotect"}` / `feature unprotect <f> <file> --reason …` (setting `unprotect`, `file` and `reason`
+  shown one line, bounded — `show()`; i18n.js `approvalAction` has its own sentence; the line `feature unprotect <f> <file>
+  --reason "<reason>"`, each value only when plainly safe to paste; probe.js `RE_APPROVAL_VERB` holds `unprotect` and `--remove`,
+  so a globbed CLI path running either is a candidate) — and, 1.36.0 review 3, **a protected test's accept** — `spec_feature
+  {action: "protect", accept: true}` / `feature protect <f> <file> --accept --reason …` (setting `accept`, its own sentence, the
+  line `feature protect <f> <file> --accept --reason "<reason>"`; `--accept` a CLI switch and in `RE_APPROVAL_VERB`). A plain
+  `feature protect` raises: never one. **The guarded files** (probe.js
   `guardedFileOf`, read on the path's segments) — `.specs/roadmap.json`, `.specs/**/.state.json`, `.specs/**/.execution/observed.jsonl`
   (a forged line would make a run "observed") — written through Write / Edit / MultiEdit / NotebookEdit (`APPROVAL_EDIT_TOOLS`), a
   shell writer or an MCP file tool: `command: null` (the user makes that change), `project` the folder above `.specs/`
@@ -592,6 +630,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   fresh subagent had no conversation, but every CLAUDE.md file still loaded — the author's context in the reviewer's.
 - **1.32** — a sixth agent, spec-ui-reviewer (Shopify's Helix UI gate): the visual review needs a reviewer that sees only the
   images, so it is no mode of the code reviewer (which keeps CLAUDE.md and reads the diff).
+- **1.36** — the review panel dispatches the same agents with a `model` each; no agent file, hook or matcher changed (the
+  SubagentStop matcher still gates the implementer and the simplifier only — a reviewer reports no run).
+- **1.36.0 review 1 (FC-6)** — the observe hook passes `tool` for a PowerShell run (the line gains `"tool": "PowerShell"`; a
+  Bash run's line is unchanged): the PowerShell tool's passes are logged only with an explicit exit code while its failures
+  always are, so the fast check read "failed on its last run" after an unlogged pass — its note now says why
+  (tasks-and-evidence.md → The fast check).
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.
@@ -618,6 +662,25 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30.1** — on win32 `echo x > src/MAIN~1.JAV` (or a Write there) edited src/Main.java as no code (`.JAV`) and PowerShell's
   `Set-Content src\a.ts. x` wrote src\a.ts as no code: a target holding `~<digit>` is read through its real path, a shell target also
   as Win32 trims it (Human approval guard → Windows' own readings).
+- **1.36** — level tests (scope + protected tests, engine/protect.js): the decision before the stale / tests-phase / spike answers,
+  deny under `meta.approvalGuard: deny` (the edit guard's first refusal, + `userNote`), `.specs/<feature>/tests/` out of the "specs"
+  allow; the hook now reads EVERY target and prints the strictest answer (the first ask won — `sed -i src/out.ts test/a.test.js`
+  showed the scope ask and the protected test went through on a yes); tasks.md parsed once per call. The design's git readings
+  (`git rm` / `checkout --` / `restore` of a protected test) were cut before shipping: git stays the user's, finish names the result.
+- **1.36.0 review 1** — level tests read only the last segment for a glob and named a file by `isTestFile` on its text path:
+  `sed -i … tes?/auth.test.js`, `rm [t]est/…`, `cart.TEST.js` and an edit through a junction passed at deny. The target is read
+  by its real path, a glob anywhere, folded membership; the lists of a feature whose tasks are all ticked count until its finish
+  (the generic ask had answered, under deny too).
+- **1.36.0 review 2** — a FOLDER target with a glob above its last segment (`rm -rf tes?/unit`, `*/unit`, `packages/*/test`) was no
+  code for `guardFolderCode` (it reads the last segment only) and left by the not-code allow before the protected-test decision ran:
+  at level tests a target with a glob anywhere skips that early allow (and is not-code after the decision when no protected test
+  matches). The lift line named the first holder by folder name — an old feature all ticked, never finished, whose lift never
+  ended: it names an unlocker that lists the file, else the first unlocker, else a holder with open tasks.
+- **1.36.0 review 3** — a lift is in force until a `protect <file>` record again (round 2's open-tasks rule made the line's last
+  fallback — a feature with every task ticked — record a lift that was never in force: the user looped); the lift line keeps its
+  order (tasks-and-evidence.md → Protected tests, History).
+- **1.36.0 review 4** — the lift line's last fallback (no open task anywhere) is the holder listing the file with the latest tick,
+  no longer the first by folder name (an old all-ticked feature, whose lift then stood unseen).
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer
@@ -678,6 +741,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `launcherGlob`. **A folder's stream designation** (`cmd /c 'echo x> .specs::$INDEX_ALLOCATION\roadmap.json'`, .NET's
   `[IO.File]::WriteAllText` there) wrote roadmap.json past the guard at deny (the edit tools were caught through the real path):
   `winPathTrim` drops it.
+- **1.36** — the guard ladder (`GUARD_LEVELS`, + tests): lowering from tests is a guard-down, judged against the EFFECTIVE level
+  (`DEV_SPEC_GUARD_DEFAULT` while `meta.guard` is unset — an `init --guard scope` under a default of scope / tests read as a raise
+  from off), and the human's line names the level asked for (`init --guard off` was printed for a lowering to scope). A protected
+  test's lift (`spec_feature unprotect`, `feature unprotect`) is a guard-down with its own sentence (it fell through to "lower
+  undefined → undefined") and its file and reason shown bounded; `RE_APPROVAL_VERB` gained `unprotect` and `--remove` (a globbed CLI
+  path running `add-track … --remove` — an existing gap — was no candidate).
+- **1.36.0 review 3** — a protected test's accept (`spec_feature {action: "protect", accept: true}`, `feature protect <f> <file>
+  --accept`) is a guard-down (setting `accept`) on every path — MCP, elicitation, the CLI through a shell; `accept` joined
+  `CLI_SWITCHES` (the hook's lexer must not read the file after it as its value) and `--accept` `RE_APPROVAL_VERB`.
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import

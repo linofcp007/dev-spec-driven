@@ -49,7 +49,7 @@ exports.run = ({ ok, run, runIn, tmp, __dirname }) => {
   const usage = runIn(["add-track", "--project", pd]).out;
   ok(typo.code === 1 && /did you mean 'data'/.test(typo.out) && add.code === 0 && /core \+data/.test(add.out) && rm.code === 0 && rm.out.includes("design.md ([DATA] sections)") &&
     trk.code === 0 && trk.out.split("\n").some((l) => l.startsWith("  · data ") && l.includes("[DATA]  5 secci")) && pk.code === 1 && /reservado/.test(pk.out) && pkEtl.code === 1 &&
-    /\+obs\/\+data\b/.test(help) && /\|obs\|data>/.test(usage),
+    /\+obs\/\+data\b/.test(help) && /\|obs\|data\|port>/.test(usage), // (1.36: + port)
     "1.21 F4 (CLI): add-track 'dataa' gets a did-you-mean, +data is added and --remove lists its inactive [DATA] sections; tracks lists data [DATA] (5 sections, ES project); tracks init data / etl are refused (reserved); help and the add-track usage name +data (got " +
     js([typo.out, rm.out, trk.out.split("\n").slice(0, 14), pk.out, pkEtl.out]) + ")");
 

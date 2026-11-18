@@ -257,6 +257,77 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, hookIn, __dirname, require
     ]);
   }
 
+  // 1.36 guard tests — the ladder off < on < scope < tests: lowering from tests is a guard-down (from the user's default too; meta
+  // unknown: anything but tests), the human's line names the level asked for; lifting a protected test (spec_feature unprotect,
+  // `feature unprotect` through a shell) is one, with its own sentence and line; a globbed CLI with unprotect / --remove is a candidate.
+  {
+    const init = (ti, meta, level) => S.approvalGuardDecision(pre(tmp, "mcp__plugin_dev-spec-driven_spec-driven__spec_init", ti), level || "deny", { meta, lang: "en" });
+    const toScope = init({ guard: "scope" }, { guard: "tests" });
+    const toOn = init({ guard: "on" }, { guard: "tests" });
+    const raise = init({ guard: "tests" }, { guard: "scope" });
+    const unknown = init({ guard: "scope" }, undefined);
+    const unknownTests = init({ guard: "tests" }, undefined);
+    const saved = process.env.DEV_SPEC_GUARD_DEFAULT;
+    process.env.DEV_SPEC_GUARD_DEFAULT = "tests";
+    let viaDefault, cliDefault;
+    try { viaDefault = init({ guard: "scope" }, {}); cliDefault = dec("Bash", "node " + C + " init --guard scope"); }
+    finally { if (saved === undefined) delete process.env.DEV_SPEC_GUARD_DEFAULT; else process.env.DEV_SPEC_GUARD_DEFAULT = saved; }
+    const noDefault = init({ guard: "scope" }, {});
+    all("1.36 guard tests: lowering meta.guard from tests (to scope, on) is a guard-down naming both levels and the line `init --guard <the level asked for>`; raising to tests is none; the user's DEV_SPEC_GUARD_DEFAULT=tests is the level an `init --guard scope` lowers (MCP and CLI); meta unknown: every level but tests counts (got " +
+      js([toScope.actions, toScope.command, toOn.command, raise.decision, unknown.decision, unknownTests.decision, viaDefault.decision, cliDefault.decision, noDefault.decision]) + ")", {
+      toScope: () => toScope.decision === "deny" && toScope.actions[0].setting === "guard" && toScope.actions[0].from === "tests" && toScope.actions[0].to === "scope",
+      scopeLine: () => /init --guard scope$/.test(toScope.command), onLine: () => /init --guard on$/.test(toOn.command) && toOn.actions[0].from === "tests",
+      raise: () => raise.decision === "allow", unknown: () => unknown.decision === "deny" && unknownTests.decision === "allow",
+      viaDefault: () => viaDefault.decision === "deny" && viaDefault.actions[0].from === "tests" && cliDefault.decision === "deny",
+      noDefault: () => noDefault.decision === "allow",
+    });
+    const feat = (ti, level) => S.approvalGuardDecision(pre(tmp, "mcp__plugin_dev-spec-driven_spec-driven__spec_feature", ti), level || "deny", { meta: {}, lang: "en" });
+    const mcpLift = feat({ action: "unprotect", name: "login", file: "test/auth.test.js", reason: "replaced by v2" });
+    const mcpAsk = feat({ action: "unprotect", name: "login", file: "test/auth.test.js", reason: "r" }, "ask");
+    const mcpProtect = feat({ action: "protect", name: "login" });
+    const long = "test/" + "x".repeat(120) + ".test.js";
+    const mcpOdd = feat({ action: "unprotect", name: "login", file: "test/a\u0007b.test.js\n" + long, reason: "why $(rm -rf /)" });
+    const spaced = feat({ action: "unprotect", name: "login", file: "test/my auth.test.js", reason: "ok" });
+    const bash = dec("Bash", "node " + C + " feature unprotect login test/auth.test.js --reason \"v2\"");
+    const bashFlag = dec("Bash", "node " + C + " feature unprotect login --file test/auth.test.js --reason v2");
+    const ps = dec("PowerShell", "node " + C + " feature unprotect login test/auth.test.js --reason 'v2'");
+    const cliProtect = dec("Bash", "node " + C + " feature protect login");
+    const PR = require("./lib/probe.js");
+    const globbed = ["node cli/d*-spec.js feature unprotect f test/a.test.js --reason x", "node cli/dev-sp?c.js add-track f tdd --remove"];
+    const plain = ["node cli/d*-x.js feature list f", "node cli/d*-x.js add-track f tdd"];
+    all("1.36 guard tests: spec_feature unprotect (MCP) and `feature unprotect` through Bash / PowerShell (a file positional or --file) are guard-downs — 'lift the protection of the test …', the line `feature unprotect <f> <file> --reason \"<reason or placeholder>\"` (a spaced file quoted; the agent's file shown one line, bounded); protect is none; a globbed CLI with unprotect or --remove is an approval candidate (got " +
+      js([mcpLift.actions, mcpLift.command, mcpAsk.decision, mcpProtect.decision, mcpOdd.summary, mcpOdd.command, spaced.command, bash.decision, bashFlag.actions, ps.decision, cliProtect.decision]) + ")", {
+      mcp: () => mcpLift.decision === "deny" && mcpLift.actions[0].setting === "unprotect" && mcpLift.actions[0].file === "test/auth.test.js" && mcpLift.actions[0].reason === "replaced by v2",
+      sentence: () => mcpLift.summary === S.msg("en").approvalGuard.action({ kind: "guard-down", setting: "unprotect", file: "test/auth.test.js", feature: "login" }) && !/undefined/.test(mcpLift.reason),
+      line: () => /feature unprotect login test\/auth\.test\.js --reason "replaced by v2"$/.test(mcpLift.command), ask: () => mcpAsk.decision === "ask",
+      protect: () => mcpProtect.decision === "allow" && cliProtect.decision === "allow",
+      bounded: () => !/[\u0000-\u001f]/.test(mcpOdd.summary) && mcpOdd.summary.includes("…") && /--reason "<reason>"$/.test(mcpOdd.command) && /unprotect login <file> /.test(mcpOdd.command),
+      quoted: () => /unprotect login "test\/my auth\.test\.js" --reason "ok"$/.test(spaced.command),
+      shells: () => bash.decision === "deny" && ps.decision === "deny" && bash.actions[0].setting === "unprotect" && bashFlag.actions[0].file === "test/auth.test.js",
+      candidates: () => globbed.every((c) => PR.approvalMayBe(c)) && !plain.some((c) => PR.approvalMayBe(c)),
+      pt: () => /levantar a proteção do teste test\/auth\.test\.js \('login'\)/.test(S.approvalGuardDecision(pre(tmp, "mcp__x__spec_feature", { action: "unprotect", name: "login", file: "test/auth.test.js", reason: "r" }), "ask", { meta: {}, lang: "pt" }).reason),
+    });
+    // 1.36.0 review 3: accepting a protected test's content (spec_feature protect {accept: true}, `feature protect <f> <file> --accept`) is
+    // a guard-down too — its own sentence and line; --accept is a switch (the file after it stays the file); accept false / absent is none
+    const mcpAcc = feat({ action: "protect", name: "login", file: "test/auth.test.js", accept: true, reason: "v2 is right" });
+    const mcpAccAsk = feat({ action: "protect", name: "login", file: "test/auth.test.js", accept: true, reason: "r" }, "ask");
+    const mcpAccOff = feat({ action: "protect", name: "login", file: "test/auth.test.js", accept: false, reason: "r" });
+    const bashAcc = dec("Bash", "node " + C + " feature protect login --accept test/auth.test.js --reason \"v2\"");
+    const psAcc = dec("PowerShell", "node " + C + " feature protect login test/auth.test.js --accept --reason 'v2'");
+    const bashAccOff = dec("Bash", "node " + C + " feature protect login test/auth.test.js");
+    const globAcc = "node cli/d*-spec.js feature protect f test/a.test.js --accept --reason x";
+    all("1.36.0 review 3 guard tests: spec_feature protect {accept: true} and `feature protect <f> <file> --accept` (Bash, PowerShell; --accept before the file too) are guard-downs — 'accept the current content of the protected test …', the line `feature protect <f> <file> --accept --reason \"…\"`; accept false or absent is none; a globbed CLI with --accept is an approval candidate (got " +
+      js([mcpAcc.actions, mcpAcc.command, mcpAccAsk.decision, mcpAccOff.decision, bashAcc.actions, psAcc.decision, bashAccOff.decision]) + ")", {
+      mcp: () => mcpAcc.decision === "deny" && mcpAcc.actions[0].setting === "accept" && mcpAcc.actions[0].file === "test/auth.test.js" && mcpAcc.actions[0].reason === "v2 is right",
+      sentence: () => mcpAcc.summary === S.msg("en").approvalGuard.action({ kind: "guard-down", setting: "accept", file: "test/auth.test.js", feature: "login" }) && /accept the current content/.test(mcpAcc.summary),
+      line: () => /feature protect login test\/auth\.test\.js --accept --reason "v2 is right"$/.test(mcpAcc.command), ask: () => mcpAccAsk.decision === "ask",
+      notAccept: () => mcpAccOff.decision === "allow" && bashAccOff.decision === "allow",
+      shells: () => bashAcc.decision === "deny" && bashAcc.actions[0].setting === "accept" && bashAcc.actions[0].file === "test/auth.test.js" && psAcc.decision === "deny",
+      candidate: () => PR.approvalMayBe(globAcc),
+      pt: () => /aceitar o conteúdo atual do teste protegido test\/auth\.test\.js \('login'\)/.test(S.approvalGuardDecision(pre(tmp, "mcp__x__spec_feature", { action: "protect", name: "login", file: "test/auth.test.js", accept: true, reason: "r" }), "ask", { meta: {}, lang: "pt" }).reason),
+    });
+  }
+
   // C-I10 — the hook's 2 s stdin safety net fired on a partial payload: it used to exit 0 (allowed). Partial input naming dev-spec /
   // .specs / spec_approve in a guarded project → ask; anything else → silent.
   {

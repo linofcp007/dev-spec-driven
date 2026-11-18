@@ -11,7 +11,7 @@
 **Spec-driven development that sizes its rigor to the change.** You describe a change; the plugin classifies it, writes
 the spec with you — EARS requirements with stable IDs, a design, traceable tasks —, waits for your approval at each gate
 and counts a task as done only with a recorded run of its check. One workflow plus composable **tracks** for what a
-feature needs (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data, or your own), served by a bundled
+feature needs (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data, +port, or your own), served by a bundled
 **local, zero-dependency MCP server**: no `npm install`, no network, no cloud, no GitHub Actions, no per-run cost. A
 Claude Code plugin that also works in any MCP client and from a plain CLI — in English, Portuguese (PT-PT and PT-BR) and
 Spanish.
@@ -120,6 +120,7 @@ webhook in a multi-tenant SaaS that summarizes invoices with an LLM is `core +td
 | **+ui** | The design system (components checked against the project's registry), the UI states, accessibility (WCAG 2.2 AA), responsiveness and i18n, a performance budget |
 | **+obs** | SLOs and error budgets, telemetry, alerting and runbooks, rollout and rollback |
 | **+data** | Data contracts, data quality, idempotent re-runs and backfills, lineage, retention |
+| **+port** | Port first, improve later: the old behaviour recorded as a baseline, a differential check over a corpus, the improvements only after it — and the check run again once they are in |
 
 **One design system for every screen.** `dev-spec steering design-system.md` writes `.specs/steering/design-system.md` from
 your code — the components and tokens the project already has. From then on a +ui design lists each component as
@@ -161,7 +162,7 @@ are yours to type, so their descriptions stay out of its context. As a plugin th
 | report | `/spec-status` | Tracks, phase, tasks, verification — of one feature or all |
 | | `/roadmap [depend \| backlog \| milestone]` | Progress, dependencies, ETAs, milestones → `.specs/ROADMAP.md` (`--html`) |
 | | `/spec-report [catalog \| drift \| metrics \| changelog \| export]` | The living catalog, drift since finish, metrics and a retro, release notes, stakeholder exports |
-| setup | `/spec-setup [init \| guard \| statusline \| superpowers \| templates \| tracks]` | `.specs/` and steering, guard mode, the status line, superpowers precedence, your templates and tracks |
+| setup | `/spec-setup [init \| guard \| statusline \| superpowers \| templates \| tracks]` | `.specs/` and steering, guard mode (`tests`: the tests the plan approved change only when a task names them), the status line, superpowers precedence, your templates and tracks |
 | | `/spec-upgrade` | After a plugin update: audit `.specs/` against the current rules, then the safe migrations |
 | aliases | `/ds` · `/dss` · `/dsx` | `/spec` · `/spec-status` · `/executeTask` |
 
@@ -179,7 +180,7 @@ calls the same engine:
 | Tool | Does |
 |---|---|
 | `spec_classify` | Phase 0: the tracks and a suggested size from a description (local keyword signals, EN / PT / ES — no model) |
-| `spec_init` | `.specs/` and the tracks' steering; project settings: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard` |
+| `spec_init` | `.specs/` and the tracks' steering; project settings: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard`, `fastCheck` (the check run after each edit), `reviewModels` (the review panel) |
 | `spec_create` | A feature for its tracks and `size` (`xs` = one `change.md`); `kind` bugfix · spike, `brownfield`, `flow: "design-first"`, `branch` |
 | `spec_import` | A Kiro, spec-kit or OpenSpec spec, a plan (Claude Code, Cursor, Codex ExecPlan, fluidplan) or BMAD docs as a feature — or Kiro steering / Cursor rules as steering; `dryRun` |
 | `spec_status` | A feature's kind, flow, tracks, phase, tasks and design sections; without `name`, every feature |
@@ -309,7 +310,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (32 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine: 25 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
+│   ├── lib/engine/                   ← the engine: 27 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← localized content (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)

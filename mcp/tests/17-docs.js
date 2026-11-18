@@ -500,9 +500,9 @@ exports.run = async ({
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-setup.md"), dRef("tooling-reference.md")]; // 1.26: /spec-guard + /spec-init → /spec-setup guard | init
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;
-    ok(d5Schema.type === "string" && d5Schema.enum.join() === "on,off,scope" &&
-      d5Docs.every((t) => !/guard: (?:true|false)\b|`true` \/ `"scope"`|`true` \/ `false`/.test(t) && /"on"/.test(t) && /"off"/.test(t) && /"scope"/.test(t)),
-      "full review D5: /spec-setup (guard, init) and the tooling reference pass guard as \"on\" / \"off\" / \"scope\" (the schema's string enum)");
+    ok(d5Schema.type === "string" && d5Schema.enum.join() === "on,off,scope,tests" &&
+      d5Docs.every((t) => !/guard: (?:true|false)\b|`true` \/ `"scope"`|`true` \/ `false`/.test(t) && /"on"/.test(t) && /"off"/.test(t) && /"scope"/.test(t) && /"tests"/.test(t)),
+      "full review D5: /spec-setup (guard, init) and the tooling reference pass guard as \"on\" / \"off\" / \"scope\" / \"tests\" (the schema's string enum)");
     // D6: spec_approve's description lists every execution check (suite-evidence; a spike's spike / decision), one line.
     const d6Desc = list.result.tools.find((t) => t.name === "spec_approve").description;
     // (1.26: the per-phase check lists left the description and /approve — a refusal names its failing check ids; /approve still
@@ -692,6 +692,170 @@ exports.run = async ({
     ok(/gate de evidencia/.test(esJs) && !/puerta de evidencia/.test(esJs) &&
       !/la puerta de evidencia|La puerta de evidencia/.test(esOutsideNews) && /el gate de evidencia/.test(esOutsideNews) && !esDescFeature.length,
       "1.22 review P12: README.es.md says 'el gate de evidencia' (as es.js), never 'la puerta'; no command's ES description says 'feature' (got " + JSON.stringify(esDescFeature) + ")");
+  }
+
+  { // 1.36 the review panel (meta.reviewModels) — the protocol is prose: merge first, then ONE verify per merged finding; the panel
+    // ADDS models; the ledger names the models REQUESTED; what collapses it; the agents stay unaware of it
+    const rd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n").replace(/\s+/g, " ");
+    const ref = (f) => rd("skills", "dev-spec-driven", "references", f);
+    const sub = ref("subagent-execution.md"), critic = ref("critic-review.md"), review = rd("commands", "spec-review.md");
+    const agents = fs.readdirSync(path.join(root, "agents")).filter((f) => f.endsWith(".md")).filter((f) => /reviewPanel|reviewModels/.test(rd("agents", f)));
+    const rows = [
+      ["subagent-execution: the section", sub, /## Review on more than one model \(`meta\.reviewModels`, opt-in\)/],
+      ["subagent-execution: the key", sub, /`reviewPanel: \{models\}`/],
+      ["subagent-execution: merge, then verify each merged finding once", sub, /\*\*Then verify each MERGED finding once\*\* \(§6\)/],
+      ["subagent-execution: agreement never skips the verifier", sub, /it never skips the verifier/],
+      ["subagent-execution: the panel adds models", sub, /The panel ADDS models — it never replaces a review's own tier: the final review is the most capable model plus each panel model not already it/],
+      ["subagent-execution: the ledger line, requested", sub, /Final review: ×2 \(requested opus, sonnet\) — 1 agreed, 3 single, 2 minor/],
+      // (by fragments: the full names are Claude Code's, allowlisted by 17-docs-identifiers.js as names no code holds)
+      ["subagent-execution: the collapse paths", sub, /_MODEL_FORCE` \(no `model` parameter\), a mod's `agent\.spawn` hook.*allowlist that substitutes it.*whose family the provider can't tell/],
+      ["subagent-execution: no subagent tool", sub, /review inline and say the panel was not run/],
+      ["subagent-execution: the task reviewer on another model", sub, /this ONE reviewer runs on the first panel model that differs from the implementer's/],
+      ["subagent-execution: the 'reviewer is sure' row kept", sub, /"The reviewer is sure — skip the verifier"/],
+      ["subagent-execution: no vote", sub, /"The models disagree — take the majority" \| There is no vote/],
+      ["critic-review §1: the cold read stays one", critic, /The cold read stays one, on the session's model; xs stays as above/],
+      ["spec-review branch: fresh reviewers per model", review, /one final-mode `dev-spec-driven:spec-reviewer` on the most capable model and one on each panel model not already it/],
+      ["spec-review converge: every model's ✅", review, /an AC is ✅ only when every model says ✅, every ❌ still verified/],
+      ["spec-doctor --deep", rd("commands", "spec-doctor.md"), /`reviewPanel` in this result.*critic-review\.md` §1/],
+      ["spec-setup init", rd("commands", "spec-setup.md"), /`reviewModels` \(`--review-models opus,sonnet \| diverse \| off`\)/],
+      ["spec-finish: the panel first", rd("commands", "spec-finish.md"), /`reviewPanel`\), the branch review on every model comes first/],
+      ...["README.md", "README.pt.md", "README.es.md"].map((f) => [f + ": spec_init's settings", rd(f), /\| `spec_init` \|[^|]*`reviewModels`/]),
+    ];
+    all("1.36 review panel: the prose protocol — subagent-execution.md's section (merge, verify each merged finding once, the panel adds models, the requested-models ledger line, the collapse paths), critic-review §1, spec-review branch / converge, spec-doctor, spec-setup, spec-finish, the READMEs' spec_init row; no agent file knows the panel (got agents " + JSON.stringify(agents) + ")",
+      Object.assign(Object.fromEntries(rows.map(([k, text, re]) => [k, () => re.test(text)])), { agentsUnaware: () => agents.length === 0 }));
+
+    // 1.36.0 review 1 (RP-1): ONE rule for the gate critics in every file that states it — the panel ADDS critics (the size
+    // table's on the session's model, plus one on each panel model not already it), and verify-once is the code reviews' rule:
+    // the gate critics' merged findings go to the user (critic-review.md §3, no verifier). Before: §1 / spec-doctor put the
+    // critics ON the panel's models and init's note verified every merged finding, gate findings included.
+    const integ = rd("INTEGRATIONS.md"), on = (l) => S.msg(l).reviewModels.on("opus, sonnet", false);
+    const rp1 = [
+      ["critic-review §1: the panel ADDS critics", critic, /\*\*A review panel\*\* \([^)]*\) ADDS gate critics: the table's critics as they are, on the session's model, plus one gate critic on each panel model not already the session's — an explicit `model` on each, in the same message\. The cold read stays one/],
+      ["critic-review §1: no 'on its models' re-assignment", critic, /^(?![\s\S]*puts the gate critics on its models)/],
+      ["critic-review §3: merged findings to the user, no verifier", critic, /the merged findings go to the user, never to a verifier — gates have no verifier \(verifying each merged finding once is the code reviews' rule\)/],
+      ["spec-doctor --deep: the panel ADDS critics, no verifier", rd("commands", "spec-doctor.md"), /`reviewPanel` in this result \(`meta\.reviewModels`\) ADDS gate critics: the critics above as they are, on the session's model, plus one on each panel model not already the session's \(`model` on each\); their merged findings go to the user, no verifier — `critic-review\.md` §1, §3/],
+      ["subagent-execution: what it covers — the gate critics added", sub, /the gate critics are the size table's, on the session's model, plus one on each panel model not already the session's/],
+      ["subagent-execution: verify-once scoped to the code reviews", sub, /\*\*Then verify each MERGED finding once\*\* \(§6\) in the code reviews — the final \/ branch review and converge; the gate critics' merged findings go to the user \(`references\/critic-review\.md` §3: gates have no verifier\)/],
+      ["subagent-execution: the Model selection row", sub, /\| Review panel \(`reviewPanel`\) \| adds its models to the final review, converge and the gate critics — one reviewer each, beside the row's own model \(the gate critics': the session's\), never in place of it \|/],
+      ["INTEGRATIONS: the row", integ, /the gate critics once per model — the panel adds models, never replaces the review's own; the gate critics' findings go to the user, no verifier\)/],
+      ["init's note (en)", on("en"), /the branch review before merge, converge and the deep review's gate critics also run on each panel model — the panel adds models, never replaces the review's own \(the gate critics': the session's model\) —; the branch review's and converge's findings are merged and each verified once, the gate critics' merged findings go to the user \(gates have no verifier\)/],
+      ["init's note (pt)", on("pt"), /a revisão do ramo antes do merge, o converge e os críticos do gate da revisão profunda correm também em cada modelo do painel — o painel acrescenta modelos, nunca substitui o da própria revisão \(o dos críticos do gate: o modelo da sessão\) —; os achados da revisão do ramo e do converge são reunidos e cada um é verificado uma vez, os achados reunidos dos críticos do gate vão para o utilizador \(os gates não têm verificador\)/],
+      ["init's note (es)", on("es"), /la revisión de la rama antes del merge, el converge y los críticos del gate de la revisión profunda se ejecutan también en cada modelo del panel — el panel añade modelos, nunca sustituye el de la propia revisión \(el de los críticos del gate: el modelo de la sesión\) —; los hallazgos de la revisión de la rama y del converge se combinan y cada uno se verifica una vez, los hallazgos combinados de los críticos del gate van al usuario \(los gates no tienen verificador\)/],
+    ];
+    all("1.36.0 review 1 (RP-1): one rule for the gate critics with a review panel — critic-review.md §1 / §3, spec-doctor.md, subagent-execution.md (what it covers, the verify-once scope, the Model selection row), INTEGRATIONS.md and init's note (EN, PT, ES): the panel ADDS critics beside the session's model; the gate critics' merged findings go to the user, no verifier (failing: " +
+      JSON.stringify(rp1.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(rp1.map(([k, text, re]) => [k, () => re.test(text)])));
+
+    // 1.36.0 review 1 (RP-2): the task reviewer never drops below its row's tier (never haiku; none → sonnet), and the cost
+    // text says where the task reviews go (diverse + a sonnet implementer → opus). (RP-3): every path that runs the panel
+    // review — the collapsed host, the inline host — ledgers a `Final review: ×N` line, the finish sentence's exit, and
+    // spec-finish.md names that exit too.
+    const rp23 = [
+      ["RP-2 subagent-execution §5: at least standard, none → sonnet", sub, /this ONE reviewer runs on the first panel model that differs from the implementer's and is at least standard \(never `haiku`, below the task reviewer's floor — Model selection\) — a second model's eyes at no extra dispatch\. None, or none the host can dispatch \(Claude Code: an alias\), → `sonnet`, as without a panel/],
+      ["RP-2 subagent-execution: what it covers — at least standard", sub, /its ONE reviewer runs on the first panel model other than the implementer's, at least standard — §5\)/],
+      ["RP-2 subagent-execution: the Task reviewer row", sub, /\| Task reviewer \|[^|\n]*with a review panel, the first panel model other than the implementer's that is at least standard \(never `haiku`; none → `sonnet`\) \|/],
+      ["RP-2 subagent-execution: the Cost bullet", sub, /and the task reviews move to a panel model \(§5\): with `diverse` and a `sonnet` implementer, every task review runs on `opus` \(no extra dispatch, the priciest tier\)/],
+      ["RP-2 init's note (en)", on("en"), /The task reviewer runs on a panel model other than the implementer's, never below sonnet's tier — with diverse and a sonnet implementer, every task review runs on opus\./],
+      ["RP-2 init's note (pt)", on("pt"), /nunca abaixo do nível do sonnet — com diverse e um implementador sonnet, cada revisão de tarefa corre em opus\./],
+      ["RP-2 init's note (es)", on("es"), /nunca por debajo del nivel de sonnet — con diverse y un implementador sonnet, cada revisión de tarea se ejecuta en opus\./],
+      ["RP-3 subagent-execution: no 'review ×2 requested' form", sub, /^(?![\s\S]*"review ×2 requested)/],
+    ];
+    all("1.36.0 review 1 (RP-2, RP-3): the task reviewer at least standard (never haiku; none → sonnet) and the cost text saying where the task reviews go (subagent-execution §5, the row, the Cost bullet, init's note EN / PT / ES); no collapsed 'review ×2 requested' form (failing: " +
+      JSON.stringify(rp23.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(rp23.map(([k, text, re]) => [k, () => re.test(text)])));
+
+    // 1.36.0 review 3 (D3-1): round 2's `@ <HEAD>` on the Final review line (RP2-1) made the whole panel run again after every
+    // commit — the branch review's own fixes, each simplify commit, a `.specs/`-only commit — with no bound. It went back out:
+    // round 1's exit ("unless the ledger already has its Final review line since the last task") and its ledger lines, no `@`,
+    // in every place; RP2-1's gap — a task done inline writes no ledger line — closed in prose: "if you did one after the
+    // review, run it again". (D3-2): the branch review reads merge-base..HEAD — spec-review.md (branch) and spec-finish.md say
+    // to commit the feature's work before it. spec-review.md keeps round 2's ledger path.
+    const notes = (f) => rd("docs", "maintainers", f), finishCmd = rd("commands", "spec-finish.md");
+    const INLINE = "a task done inline writes no ledger line — if you did one after the review, run it again";
+    const noHead = /^(?![\s\S]*(?:Final review: ×[\dN][^`]*@ |names the current HEAD|rev-parse --short HEAD))/;
+    const d31 = [
+      ["subagent-execution: the ledger block's example", sub, /complete \(commits a1b2c3d\.\.e4f5a6b, review clean\) Final review: ×2 \(requested opus, sonnet\) — 1 agreed/],
+      ["subagent-execution § Final review: the line, ONE fix and ONE re-review", sub, /still ONE fix dispatch and ONE scoped re-review\. Ledger the `Final review: ×N` line\. ## The simplification pass/],
+      ["subagent-execution: the Ledger bullet", sub, /\*\*Ledger\*\* `Final review: ×2 \(requested opus, sonnet\) — 1 agreed, 3 single, 2 minor` \(agreed = raised by two or more models\)\. Name the models you REQUESTED/],
+      ["subagent-execution: Resume — since the last task, an inline task → again", sub, new RegExp("\\*\\*Resume:\\*\\* the ledger already has a `Final review: ×N` line since the last task \\(any of its forms, below too\\) → the panel review ran; don't dispatch it again\\. A " + INLINE.slice(2) + "\\.")],
+      ["subagent-execution: the collapsed form", sub, /\(`Final review: ×2 \(requested opus, sonnet\) — the host ran one model`\): fresh contexts, no model diversity/],
+      ["subagent-execution: the inline form", sub, /review inline and say the panel was not run — ledger `Final review: ×1 \(requested opus, sonnet\) — inline, the panel was not run`, so a resumed session doesn't run it again\./],
+      ["subagent-execution: no `@ <HEAD>` form", sub, noHead],
+      ["spec-review: the panel line", review, /each merged finding once \(`subagent-execution\.md` → Review on more than one model\)\. Ledger `Final review: ×N \(requested …\)`\. Without/],
+      ["spec-review: the inline form", review, /Without a subagent tool: review yourself as above, say the panel was not run, and ledger `Final review: ×1 \(requested …\) — inline, the panel was not run`\./],
+      ["spec-review: the ledger's path", review, /The ledger: `\.specs\/<feature>\/\.execution\/ledger\.md` \(no `\.execution\/` yet: create it with a `\.gitignore` holding `\*`\)\./],
+      ["spec-review: an inline task after the review → again", review, new RegExp("holding `\\*`\\)\\. A " + INLINE.slice(2) + "\\.")],
+      ["spec-review: no `@ <HEAD>` form", review, noHead],
+      ["spec-finish: the exit and the inline task", finishCmd, new RegExp("the branch review on every model comes first — unless the ledger already has its `Final review: ×N` line since the last task \\(" + INLINE + "\\)\\.")],
+      ["spec-finish: no HEAD exit", finishCmd, noHead],
+      ["the sentence's exit (en)", S.msg("en").next.reviewBranch("x", "opus, sonnet"), new RegExp("— unless the ledger already has its \"Final review: ×N\" line since the last task \\(" + INLINE + "\\); then the optional simplify pass")],
+      ["the sentence's exit (pt)", S.msg("pt").next.reviewBranch("x", "opus, sonnet"), /— a não ser que o ledger já tenha a sua linha "Final review: ×N" desde a última tarefa \(uma tarefa feita sem subagentes não escreve linha no ledger — se fizeste uma depois da revisão, corre a revisão de novo\); depois a passagem de simplificação opcional/],
+      ["the sentence's exit (es)", S.msg("es").next.reviewBranch("x", "opus, sonnet"), /— salvo que el ledger ya tenga su línea "Final review: ×N" desde la última tarea \(una tarea hecha sin subagentes no escribe línea en el ledger — si hiciste una después de la revisión, vuelve a ejecutar la revisión\); después la pasada de simplificación opcional/],
+      ...["en", "pt", "es"].map((l) => ["the sentence: no HEAD exit (" + l + ")", S.msg(l).next.reviewBranch("x", "opus, sonnet"), /^(?![\s\S]*HEAD)/]),
+      ["gates-and-approvals: next_action's rule", notes("gates-and-approvals.md"), /the controller's ledger line says whether the review ran — a `Final review: ×N` line since the last task \(the engine reads no ledger\); a task done inline writes no ledger line, so the hint says to run the review again after one\./],
+      ["tasks-and-evidence: the panel's rule", notes("tasks-and-evidence.md"), /every path ledgers a `Final review: ×N` line — the finish sentence's exit; a task done inline writes no ledger line: after one, run the review again — and the branch review reads `merge-base\.\.HEAD`: the feature's work committed first\)/],
+      ["tasks-and-evidence: the History entry", notes("tasks-and-evidence.md"), /\*\*1\.36\.0 review 3\*\* \(D3-1, D3-2\) — round 2's `@ <HEAD>` went back out/],
+      // D3-2: the branch review reads merge-base..HEAD — commit the feature's work before it
+      ["spec-review branch: commit first", review, /\*\*branch\*\* — a local pre-merge review of `git diff <merge-base>\.\.HEAD` \(`git merge-base <base-branch> HEAD`; it reads commits only — commit the feature's work before it\)/],
+      ["spec-finish: commit first", finishCmd, /\. The branch review reads `merge-base\.\.HEAD`: commit the feature's work before it\. 1\. `spec_finish/],
+    ];
+    all("1.36.0 review 3 (D3-1, D3-2): round 1's panel exit and ledger lines, no `@ <HEAD>` — next.reviewBranch (EN / PT / ES), spec-finish.md, spec-review.md, subagent-execution.md (the ledger block, Final review, the Ledger bullet, Resume, the collapsed / inline forms), the maintainer notes — each place saying a task done inline writes no ledger line, so one done after the review means running it again; spec-review.md (branch) and spec-finish.md say to commit the feature's work first (failing: " +
+      JSON.stringify(d31.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(d31.map(([k, text, re]) => [k, () => re.test(text)])));
+
+    // 1.36.0 review 4 (D4-1): the merge summary written before an accept (or a lift) still names the test as changed and shows no
+    // accept — /spec-finish step 1 says to run it again after one, as do the accept's note (EN / PT / ES) and verification.md
+    const d41 = [
+      ["spec-finish step 1: run it again after the accept", finishCmd, /After the accept \(or a lift\), run step 1 again \(`spec_finish \{name, write: true\}`\): the merge summary then lists the accept and no longer names the test as changed — the one written before it still does\. 2\. \*\*Verify fresh/],
+      ["verification.md: the accept bullet", ref("verification.md"), /the merge summary of every written finish of that work cycle shows it — after the accept \(or a lift\), finish again with write \(`dev-spec finish <feature> --write`\): the summary written before it still names the test as changed\./],
+      ["the accept's note (en)", S.msg("en").protectedTests.accepted("t.test.js", "alpha"), /Finish it again \([\s\S]*?finish alpha --write\): the merge summary then lists the accept and no longer names the test as changed\.$/],
+      ["the accept's note (pt)", S.msg("pt").protectedTests.accepted("t.test.js", "alpha"), /Volta a fechá-la \([\s\S]*?finish alpha --write\): o resumo do merge passa a listar a aceitação e deixa de nomear o teste como alterado\.$/],
+      ["the accept's note (es)", S.msg("es").protectedTests.accepted("t.test.js", "alpha"), /Ciérrala de nuevo \([\s\S]*?finish alpha --write\): el resumen del merge lista entonces la aceptación y deja de nombrar la prueba como cambiada\.$/],
+    ];
+    all("1.36.0 review 4 (D4-1): after an accept (or a lift) the finish is written again — /spec-finish step 1, the accept's note (EN / PT / ES), verification.md's accept bullet (failing: " +
+      JSON.stringify(d41.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + ")", Object.fromEntries(d41.map(([k, text, re]) => [k, () => re.test(text)])));
+
+    // 1.36.0 review 2 (RP2-2, RP2-3 — round 1's INT-8): tooling-reference's rows as round 1's fixes left the code — a task's
+    // FIRST tick re-baselines its _Implements:_ tests (a re-tick keeps the hash), spec_next_task's +port hold keys, the fast
+    // check in roadmap.json's meta list (every meta key the engine writes, but evidenceSince — the observed switch's internal
+    // stamp) and in /spec-setup init's flags.
+    const tref = ref("tooling-reference.md"), trow = (tool) => (tref.match(new RegExp("\\| `" + tool + "` \\|(?:(?! \\| `spec_)[\\s\\S])*")) || [""])[0];
+    const engineSrc = fs.readdirSync(path.join(root, "mcp", "lib", "engine")).filter((f) => f.endsWith(".js")).map((f) => fs.readFileSync(path.join(root, "mcp", "lib", "engine", f), "utf8")).join("\n");
+    const metaWritten = [...new Set([...engineSrc.matchAll(/\bmeta\.([a-zA-Z]+) ?=(?!=)/g)].map((m) => m[1]))].filter((k) => k !== "evidenceSince");
+    const metaListed = ((tref.match(/roadmap\.json +# order \+ dependencies \+ backlog \+ meta \(([^)]*)\)/) || [])[1] || "").split(/, */);
+    const rp22 = [
+      ["spec_complete_task: the FIRST tick re-baselines", trow("spec_complete_task"), /records the task's exact `_Implements:_` test files \(re-baselined at the task's FIRST tick only — a re-tick keeps the recorded hash, so finish names an edit made while it was open\)/],
+      ["spec_complete_task: no bare '(re-baselined)'", trow("spec_complete_task"), /^(?![\s\S]*test files \(re-baselined\))/],
+      ["spec_next_task: the +port hold keys", trow("spec_next_task"), /\+port \(1\.36\): a task the `\[PORT\]` fence holds is never next — passed over, `gated: "port-order"` \+ `heldBy` \[n\]; none left to start while that anchor is ticked but not verified → `next: null` \+ a note naming its run/],
+      ["roadmap.json meta: every key the engine writes", metaWritten.join(","), { test: () => metaWritten.length >= 12 && metaWritten.includes("fastCheck") && metaWritten.every((k) => metaListed.includes(k)) }],
+      ["/spec-setup init: --fast-check", tref, /\| `\/spec-setup init \\\| guard [^\n]*`spec_init`: `--lang`, `--check`, `--roles`, `--stop-check`, `--fast-check`, `--review-models`\)/],
+    ];
+    all("1.36.0 review 2 (RP2-2, RP2-3): tooling-reference — spec_complete_task re-baselines at a task's FIRST tick only, spec_next_task names +port's gated / heldBy, roadmap.json's meta list names every key the engine writes (fastCheck), /spec-setup init names --fast-check (failing: " +
+      JSON.stringify(rp22.filter(([, text, re]) => !re.test(text)).map(([k]) => k)) + "; meta written " + JSON.stringify(metaWritten) + ", listed " + JSON.stringify(metaListed) + ")",
+      Object.fromEntries(rp22.map(([k, text, re]) => [k, () => re.test(text)])));
+  }
+
+  { // 1.36 the fast check (meta.fastCheck, warn only) — the loop is prose the agent follows: run it ALONE after each small edit, clean
+    // before the _Verify:_, the report line with the command in a code span; never described as a refusal
+    const rd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n").replace(/\s+/g, " ");
+    const ref = (f) => rd("skills", "dev-spec-driven", "references", f);
+    const ver = ref("verification.md"), sub = ref("subagent-execution.md"), impl = rd("agents", "spec-implementer.md");
+    const rows = [
+      ["SKILL.md: the one line", rd("skills", "dev-spec-driven", "SKILL.md"), /`meta\.fastCheck`: run it alone after each small edit; clean before `_Verify:_`\./],
+      ["verification: the section", ver, /### The fast check \(`meta\.fastCheck`, warn only\)/],
+      ["verification: one call", ver, /spec_init \{checks: \{"typecheck": "npx tsc --noEmit"\}, fastCheck: "typecheck"\}/],
+      ["verification: the statuses", ver, /`clean` · `stale` .*· `failed` .*· `missing` .*· `unknown`/],
+      ["verification: never refused", ver, /the tick is never refused/],
+      ["verification: base branch", ver, /\*\*Pick one that passes on the base branch:\*\*/],
+      ["subagent-execution: the report form", sub, /``Fast check `<command>`: N runs → exit 0``/],
+      ["subagent-execution: after a parallel merge", sub, /With a fast check \(`meta\.fastCheck`\), run it once on its own after the merges, before the ticks/],
+      ["spec-implementer: the loop", impl, /after each small edit run it \*\*on its own\*\* \(never chained/],
+      ["spec-implementer: the report line", impl, /``Fast check `npx tsc --noEmit`: 4 runs → exit 0``/],
+      ["spec-setup init", rd("commands", "spec-setup.md"), /`fastCheck` \(`--fast-check <check>\|off`\)/],
+      ["tooling-reference: spec_init", ref("tooling-reference.md"), /`fastCheck` \(1\.36 — the name of the project check run on its own after each small edit/],
+      ["tooling-reference: doctor", ref("tooling-reference.md"), /`fast-check` \(1\.36 — `meta\.fastCheck` names no project check/],
+      ...["README.md", "README.pt.md", "README.es.md"].map((f) => [f + ": spec_init's settings", rd(f), /\| `spec_init` \|[^|]*`fastCheck`/]),
+    ];
+    const refusal = [["verification", ver], ["subagent-execution", sub], ["spec-implementer", impl]].filter(([, t]) => /fast check[^.]{0,80}\b(?:refuses|blocks the tick)/i.test(t));
+    all("1.36 fast check: the prose — SKILL.md's line, verification.md's section (one call, the statuses, never a refusal, the base branch), subagent-execution's report form and parallel merge, spec-implementer's loop and report line, spec-setup, tooling-reference, the READMEs' spec_init row; nothing calls it a refusal (got " + JSON.stringify(refusal.map(([k]) => k)) + ")",
+      Object.assign(Object.fromEntries(rows.map(([k, text, re]) => [k, () => re.test(text)])), { noRefusal: () => refusal.length === 0 }));
   }
 
   // Release hygiene: the three version fields agree.

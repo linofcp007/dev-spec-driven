@@ -24,7 +24,7 @@ file states the CURRENT rules first; its `## History` at the end keeps how they 
 - **`docs/maintainers/architecture.md`** — before adding or splitting an engine module, changing what a surface requires,
   the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) ·
   The module rule · The build · Config paths.
-- **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs, +data) or
+- **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs, +data, +port) or
   track packs: The track model · Project-defined tracks · Classifier gotchas · The classifier's signal rules, track by track.
 - **`docs/maintainers/languages.md`** — before adding or rewording ANY user-facing string, a translated heading or a
   language: Languages (EN / PT-PT / PT-BR / ES) · Localization gotchas.
@@ -38,9 +38,9 @@ file states the CURRENT rules first; its `## History` at the end keeps how they 
   history · Team governance · Undo, revoke, waivers, MCP-only gates · Approvals the user confirmed over MCP, and the dry run ·
   Flows · Right-sized rigor · Bugfix and finish.
 - **`docs/maintainers/tasks-and-evidence.md`** — before changing tasks.md parsing, the task brief, `_Verify:_` / evidence /
-  `done --run`, `_Depends:_`, the stop gate, the scope guard or observed evidence: Subagent-driven execution · Evidence ·
-  Task dependencies and execution waves · Tasks: ONE scanner · End-of-turn evidence gate and scope guard ·
-  Harness-observed evidence.
+  `done --run`, `_Depends:_`, the stop gate, the scope guard, protected tests (guard tests) or observed evidence: Subagent-driven
+  execution · Evidence · Task dependencies and execution waves · Tasks: ONE scanner · End-of-turn evidence gate and scope guard ·
+  Protected tests · Harness-observed evidence.
 - **`docs/maintainers/lifecycle.md`** — before changing the catalog, `_Supersedes:_`, finish baselines / drift, archive /
   restore, a feature's git branch (`create --branch`), spec_upgrade, decisions, spikes, forecasts / overlaps or the generated
   roadmap files: Catalog, drift, restore · A feature's own git branch · Upgrade · Decisions and spikes · Forecasts and
@@ -165,9 +165,9 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(2431 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(2554 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 663 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 683 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its
 AREA: `mcp/tests/NN-<area>.js` / `cli/tests/NN-<area>-<topic>.js` (NN is the area, the same in both; `--list` says what
 each holds; `--only <file|area|NN>` runs a part, plus the files it needs — testing.md → The suites). Keep

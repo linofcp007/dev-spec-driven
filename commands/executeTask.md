@@ -17,7 +17,8 @@ Use the **dev-spec-driven** skill, Phase 6 (Execute). Target: $ARGUMENTS
    never make them fail artificially.
 3. **Search before you write** — reuse, else extend, else create: the design's Reuse & Integration, then the codebase by
    concept and synonyms. Stay inside the task's `_Implements:_` files: a unit elsewhere is a plan change
-   (`spec_append_tasks`; the scope guard asks), and a refactor you notice is filed, not done —
+   (`spec_append_tasks`; the scope guard asks) — never edit an existing test your task's `_Implements:_` doesn't name
+   (`guard tests` protects them) —, and a refactor you notice is filed, not done —
    `spec_roadmap_edit {kind: "backlog", action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>"}`.
 4. **A +ui task that changes what renders** (size m / l or none): once its `_Verify:_` is green, the visual review — the
    build captured beside the design's reference, state by state, judged by `dev-spec-driven:spec-ui-reviewer` from the
@@ -27,7 +28,8 @@ Use the **dev-spec-driven** skill, Phase 6 (Execute). Target: $ARGUMENTS
 5. **Evidence before claims** — run the task's `_Verify:_` fresh and tick with `spec_complete_task {name, number,
    evidence: {command, exitCode, summary}}`: the `_Verify:_` command itself (several: all of them joined with ` && `). A
    non-zero exit refuses the tick (an `_Expect: fail_` task is proven by its red run); a note alone leaves a runnable
-   `_Verify:_` unverified. Or `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`.
+   `_Verify:_` unverified. Or `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run` — with a fast check
+   (`meta.fastCheck`: next_task's and the brief's `fastCheck`, run alone after each small edit) it runs that first while it isn't clean.
 
 **Can't run the `_Verify:_` yourself?** Don't tick — name the command and ask the user to run it and paste the output (or
 the line above); never send a subagent to look for a shell. A wrong tick: `spec_complete_task {name, number, undo: true,

@@ -35,7 +35,7 @@ review findings — is in History at the end.
   | design | placeholders, constitution-check, `design-weigh:reuse` (design-reuse — a size m / l plain feature's Reuse & Integration, 1.28; a bugfix signs off bug.md: root-cause, reproduction, placeholders), then `<track>-sections`, `ui-design-system` (1.35 — a size m / l +ui feature's Design System Usage rows against the registry), clarifications |
   | test-plan · eval-plan | placeholders, traceability · placeholders |
   | tests | `tests-in-code` (+tdd with test-plan.md: every planned T-ID named by a test file), `eval-sets` (+ai with eval-plan.md: evals/golden.json the feature's own, neither empty nor the sample) |
-  | tasks | placeholders, `placeholders:realTasks` (a real task beyond the scaffold's), traceability, task-deps; a change's plan (change.md): ears, placeholders, clarifications, ac-uniqueness, realTasks, change-scope, traceability, task-deps |
+  | tasks | placeholders, `placeholders:realTasks` (a real task beyond the scaffold's), traceability, `port-verify` (1.36 — a size m / l +port feature's baseline and differential check, each with a runnable `_Verify:_`), task-deps; a change's plan (change.md): ears, placeholders, clarifications, ac-uniqueness, realTasks, change-scope, traceability, task-deps |
   | execution | spec_finish's blockers (`finishFeature(…, {gateOnly: true})`) |
 - **Doctor agrees with the gates.** An approval check is also a doctor check that fails on what the approval refuses —
   `clarifications` counts requirements.md, a bugfix's bug.md AND design.md's own markers (`doctor.clarificationsOpenDesign`;
@@ -109,7 +109,11 @@ review findings — is in History at the end.
      `tests` once `testsGateDue()`; classification when its file exists): `fill` (a `gateArtifacts()` file missing / a
      template) → `fix` (`approvalChecks()` fail, `refusedGate` — never an approval that would be refused) → `approve`;
   5. `fix` — all approved, but doctor fails for the current or an earlier phase (`checkPhaseIndex`): a forced approval;
-  6. `implement` → `verify` (all ticked, one unverified — `verificationStatus()`) → `finish` (`tasks` when there are none).
+  6. `implement` (never a task +port's fence holds — `portSchedule`; none startable while the `[PORT]` task holding them is ticked
+     but unverified → `verify` naming its run, `port.naHeld`) → `verify` (all ticked, one unverified — `verificationStatus()`) →
+     `verify` (+port: the differential check not passed again since a task after it — FINISH_STEPS `recheck`, `port.naRecheck`:
+     before the review panel's sentence and the project checks' hint, which stay on the finish step, so the checks run once) →
+     `finish` (`tasks` when there are none).
 - **After a finish** (`state.finished`): `finished` — asking for the `execution` sign-off (with roles: `missingRoles`,
   `--role <next>`; project checks without a passing run → `verify`, `suite`, `finish --run`) — or `drift`
   (`baselineDrift()`: {finishedAt, files, changed, missing, nowPresent, drifted}; a re-finish's `recordFinishBaseline()`
@@ -119,9 +123,19 @@ review findings — is in History at the end.
   (`approvalInForceAt()`; `tests`, fingerprint-less, always counts) and a revocation of a phase back as it was. Stale → the
   step stays `finish` with `staleBaseline` {finishedAt, since, newFiles}, an older execution sign-off is asked again
   (`executionSignOffStale()`); with drift too → `drift` + `staleBaseline` (`nx.driftedStale`).
+- **The review panel (1.36).** Every doctor result (the lean one too) carries `reviewPanel` {models} while `meta.reviewModels`
+  names 2–3 models (doctor.js `reviewPanel`; none for an xs feature or a spike — tasks-and-evidence.md → Subagent-driven
+  execution); next_action copies the lean doctor's, never computes it again, and its early returns (an invalid state or
+  roadmap) carry none. At a `finish` step — the first one or a re-finish (`staleBaseline`) — the recommendation STARTS with
+  `next.reviewBranch`: the branch review on every model before the step's own text, i.e. before the optional simplify pass
+  and the project checks' line (a fix round from that review would make their runs stale). A hint on the step, never a
+  step: verify / drift / finished set their own step and carry none, so nothing can loop; the controller's ledger line says
+  whether the review ran — a `Final review: ×N` line since the last task (the engine reads no ledger); a task done inline
+  writes no ledger line, so the hint says to run the review again after one.
 - **finish blockers** (stable ids, in order — the `execution` approval refuses on exactly these): `state`, `roadmap` (never
   inside `doctor`), `doctor`, `root-cause`, `placeholders` (anywhere in the chain), `changed-since-approval` (by content),
-  `tasks` (none), `open-tasks`, `verification`, `suite-evidence` (`meta.checks`), `approval-gates` (a phase missing a role's
+  `tasks` (none), `open-tasks`, `verification`, `port-recheck` (1.36 — +port: the differential check not passed again since a task
+  listed after it was ticked or re-run), `suite-evidence` (`meta.checks`), `approval-gates` (a phase missing a role's
   sign-off is pending); a spike: `spike`, `decision`, `open-tasks`. `warnings` never block (EC/NFR/SC,
   planned-not-in-code, legacy approvals missing a role, `outside-code-artifacts`, a file-date-only change, an expired
   waiver). spec_metrics' `finished` = the earlier of the first execution approval and `state.finished.at`.
@@ -131,6 +145,37 @@ review findings — is in History at the end.
   `_Makes green:_` task (the fix) is refused wherever it sits (`bugGate` / `bugGateTicked` name the root-cause task;
   `bugGateFix` when the fix is task 1). The root-cause task itself ticks with `rootCausePending: true` + a note; later
   refusals are then `bugGateTicked` ("the section is still empty").
+- **+port's execution gate (1.36, engine/port.js `portTask`).** Port first, improve later — beside the bugfix gate, at the same two
+  places (completeTask before anything is recorded, the brief so `done --run` runs nothing): the plan's two anchors, B (the
+  first task under the track's lead template heading — the one naming Behaviour Baseline —, else the first task citing a `[PORT]`
+  criterion, `trackAcIds`) and D (the last task under its other heading that cites a `[PORT]` criterion — a task written after the
+  check in its section is never D —, else the first task under that heading, else the last citing task; a D listed before B
+  counts as none, and `port-verify` names the order: `port.verifyOrder`). Every task listed after B (D included) waits for B,
+  every task listed after D waits for D, nothing before B is held; B == D: everything after waits for it. An anchor opens the
+  fence only ticked AND verified with a runnable `_Verify:_` (`evidenceView.open`: `taskMarkers` drops a `[slot]`; with one,
+  `taskVerification`'s no-reason is a passing run of it — a note-only tick, and ANY tick of an anchor without a runnable
+  `_Verify:_`, opens nothing: `gates.portHeldUnverified`). The refusal: `{gated: "port-order", heldBy: [n…], error}` — never
+  `waitsOn` (a successful tick's `_Depends:_` key). `undo` is never gated; +port off: no gate. The brief adds `portRole` (`port`
+  between B and D, `after` + `differential` past D) and its definition-of-done rule (`brief.portRules`). spec_next_task, next_action,
+  the status line, complete_task's `next`, spec_status's next and the brief's default task never name a held task (`portSchedule`:
+  taskSchedule with the held numbers passed over; next_task adds `gated` / `heldBy` when the first open task is held; its
+  `batch` takes `portHeldNumbers` — the next task the open anchor itself included, 1.36.0 review 3 — the
+  roadmap's row and `next --waves` still list them); nothing else startable while the anchor holding them is ticked but not
+  verified → next_action's step `verify` naming its run (`port.naHeld` — its plan change first when it has no runnable
+  `_Verify:_`), the status line's `verify` of that anchor, the `note` of next_task, of complete_task and of the default brief.
+  Read from the plan and
+  .state.json alone: no state of its own. doctor's `port-recheck` / `port-fence` (warns) and finish's `port-recheck` blocker read
+  the same anchors and the evidence `at` / `history` and `ticks` (`portRunState`): D's latest verifying run older than the latest
+  tick or run of a done task after it (re-run D — a forced execution approval waives it; next_action's step before the finish:
+  FINISH_STEPS `recheck`); a done task after an anchor first ticked before that anchor first passed, while it never has, or with
+  no record of when (a task moved, +port off and on, a checkbox by hand). The finish step adds `port.naFinishCheck` (D's re-run
+  after any fix from there on — `portCheckNumber`, a plan with both anchors, D with a runnable `_Verify:_`: a verify-less D gets
+  no line — 1.36.0 review 3). Known limits: the evidence history keeps 5 runs —
+  once an anchor's is full its first pass is unknown (`anchorPass` → -Infinity: no task is flagged for its time, one with no
+  record of when still is — re-running an anchor never flags honest work); the fence orders ticks, not edits; `port-recheck`
+  counts only the tasks listed AFTER D — a fix to the port's own tasks after D's re-run (the review panel's branch review, the
+  final review, the simplify pass) is never asked for: naRecheck and the finish step say to re-run D on the final code
+  before /spec-finish, port-patterns.md says why.
 
 ## Approval fingerprints and pending gates
 - **Content fingerprints.** An approval records its artifact's `textFingerprint` (tasks.md with checkboxes normalized):
@@ -187,7 +232,12 @@ review findings — is in History at the end.
   design.md that exists now was created after it — a change.
 - **spec_metrics** reads `.state.json`, `.history/` and the artifacts (`createdAt` from createFeature, else approximated);
   `write` creates `retro.md` (writeIfAbsent). `rework` skips a same-content re-approval (still in `approvalsTotal`); a fingerprint-less
-  phase (tests) always counts.
+  phase (tests) always counts. 1.36: `fastCheck` {check, runs, clean, cleanRate, ticks, ticksClean} per feature — from the
+  snapshot a code task's tick stored on its run (`fast`), null without one; only the tasks ticked now, never an `unknown`
+  snapshot (no harness log — 1.36 review 1) — and the project's `fastTicks` / `fastTicksClean`
+  (ticks, never run sums: every feature's tick window reads the same project log). The fast check's own doctor warn,
+  `fast-check` (a stored name no fast check reads), is a project-level registry entry like `observed-unguarded`
+  (tasks-and-evidence.md → The fast check).
 - **Test-plan scaffold:** `scaffoldTestPlan()` writes the template rows only while requirements.md holds exactly the
   template's AC IDs (`i18n.templateAcIds()`); else one generic row per real AC — none at all: one row whose Covers cell is
   a slot (`acSlot`). spec_import warns (`wNoCriteriaAtAll`), re-plans after writing the requirements, and fits a kept
@@ -258,6 +308,19 @@ review findings — is in History at the end.
   `forcedApprovalList`: doctor's `waiver-expired` (both doctors), ROADMAP.md (EXPIRED), `spec_finish` `waivers` + a warning +
   the merge summary's "Waived gates". With roles the approval carries the STRICTEST counted waiver (`strictestWaiver()`: the
   earliest expiry, else the first — the completing sign-off's own included; each role's record keeps its own). Metrics count `revokedApprovals` and `untickedTasks`.
+- **Lifts of protected tests (1.36, guard tests)** sit beside waivers: a waiver records why a GATE was forced, a lift why ONE
+  protected test may change — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect` (`reason` required:
+  `reasonInput()`; no expiry — it lasts until `feature protect <f> <file>` of any feature, whatever its own feature's tasks or
+  finish), `{file, at, by, reason, confirmed?}` in `.state.json → protectedTests.lifts`, a guard-down of the approval guard,
+  listed by `spec_finish` (`protectedTests.lifted`, the merge summary's "Protected tests" block). Beside it (1.36.0 review 3)
+  the **accept** — `spec_feature {action: "protect", file, accept: true, reason}` / `feature protect <f> <file> --accept
+  --reason …`: the user's decision that a test's CURRENT content is the right one (a guard-down too) — the hash re-baselined,
+  the lift ended, an accept record `{file, at, by, reason, accepted: true, confirmed?}` kept beside the lifts
+  (`protectedTests.accepted`, the merge summary). **The snapshot hook:** `approvePhase` records the feature's protected tests at its
+  FIRST complete tasks approval at level tests — inside `if (!so || so.complete)`, before the one `writeFileAtomic` (a dry run
+  returns earlier, a role's waiting sign-off takes none), from the walk the facade made before the lock (`opts.protectWalk` —
+  `approveThrough` passes it to each phase), merged add-only into a list a `feature protect` began and marked via "approval"; a
+  re-approval or a revoke + approve keeps the first (tasks-and-evidence.md → Protected tests).
 - **MCP-only surfaces** — `spec_stop_check {message, agent?}` = `stopCheck()` (= `dev-spec stop-check --json`);
   `spec_log {name, gitLog, max?}` = `taskCommits()` over git log TEXT the client supplies — the server never runs a
   command (`dev-spec log` runs git itself; `log <f> - --max N` passes the window too). An empty `gitLog` / `message` is a value (`EMPTY_OK` — mcp.md → Argument validation).
@@ -336,6 +399,15 @@ finish / execution gate, every track criterion scaffolded.
   into **Decisions, reuse & risks** (`WEIGH_MERGED_SYN`), each track's **core-tier** sections only (`sizeDesignText()`,
   `TRACK_SECTIONS` `tier`), per track only the template tasks that implement a criterion (`sizeTasksText()`). An XS bugfix:
   the plan in one call, the common short-form tasks.md.
+- **+port's `port-verify`** (1.36) follows the same rule (`designReuseGated`): a FAIL at size m / l, where the tasks approval refuses
+  it (`portPlanProbe`: the fence complete, then — 1.36.0 review 2 — no task listed before the baseline, `port.baselineLate`), unless
+  the tasks are approved already (a warn + `port.approvedAlready`); a warn at s / no size. Its other warns (a `_Depends:_` that never
+  reaches B, `port.dUncited`: no task under D's heading cites a `[PORT]` criterion) never refuse. A fresh built-in scaffold puts B
+  first at every size, and so does spec_add_track +port while no task of tasks.md is ticked (1.36.0 review 3); a project tasks
+  template with no level-2 heading over its first task gets B appended after them (templates-imports-exports.md), so its plan is
+  refused at m / l until B's section is moved first and those tasks put under a level-2 heading of their own, keeping their
+  numbers (the move `port.baselineLate` names — 1.36.0 review 4: renumbered, a ticked task's run went to another task). The
+  execution gate (Bugfix and finish → +port's execution gate) holds at every size.
 - **m / l**: the full chain — and the design's **Reuse & Integration is an approval check** (1.28, `designReuseGated`):
   doctor fails `design-reuse` and the design gate refuses it until the section names what is reused, extended or new; a
   design approved before 1.28 (no `reuseGate` stamp) keeps the warning (quality.md → Reuse & Integration). At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
@@ -383,6 +455,8 @@ finish / execution gate, every track criterion scaffolded.
   bug.md → Reproduction / Root Cause / Expected and US-1.AC-1 `IF <condition> THEN THE SYSTEM SHALL <behaviour>`; only in a
   file this call created from the built-in builder (`prefilled`, else `prefillSkipped`); no prefill = byte-identical. The
   gates are untouched. `includeBody: true` (`--include-body`) returns `bodies` (`createdBodies()`).
+- **+port on a bugfix is refused** (1.36, `tracks.portBugfix` — createFeature and addTrack, before anything is written): a bugfix
+  changes behaviour on purpose, a port keeps it.
 - **`spec_finish`** writes a merge title + summary (`mergeTitle` / `mergeSummary`, `.execution/merge-summary.md`); it never
   merges, pushes or approves. `commitTitle(prefix, text)`: the line ≤ 72 (`COMMIT_TITLE_MAX`) while the prefix leaves the
   text ≥ 24, else the prefix + 24; `shortTitle()` cuts at the first sentence's last `,` `;` `—` `–` that fits (from a third
@@ -397,6 +471,8 @@ How the rules above came to be, section by section — grep a release (`1.24`) o
 here. "r5 review" is 1.23's fifth review.
 
 ### Gates
+- **1.36** — `port-verify` (phase 5, the tasks gate at m / l) and `port-runs` (emits `port-recheck` / `port-fence`, phase 6) in the
+  registry; `port-sections` among `<track>-sections`.
 - **1.12.1 / 1.13** — 1.13 made an approval a gate, not a stamp. Its placeholder test guessed from a bracket's shape and
   refused user content (`[free: 60, pro: 600]`, `[admin, billing-manager, read only]`…), blocking upgraded, finished 1.12
   specs — it became a lookup of the scaffolds' own texts; `LEGACY_TEMPLATE_PLACEHOLDERS` holds the 1.12.1 templates'
@@ -440,6 +516,17 @@ here. "r5 review" is 1.23's fifth review.
 - **1.33** — two registry entries with no probe (warns, never in `GATES`): `critical-flows` (phase 2) and
   `critical-flow-tests` (phase 3), over one context view (`critical`); `approvePhase` stamps `critical: true` on the design
   and test-plan approvals (and their records) so an approval made before 1.33 is never flagged (quality.md → Critical flows).
+- **1.36** — doctor's `reviewPanel` {models} beside `size` (none for an xs feature or a spike) and next_action's finish-step
+  hint. The design appended the hint after the step's text, i.e. after the simplify clause and the project checks' line: the
+  order the protocol forbids (the simplify pass and the check runs come after the final review's fixes) — it is prepended. It
+  also covered only the first finish; a re-finish (new work after a finish) needs the panel review as much.
+- **1.36.0 review 2** (RP2-1) — the hint's exit "since the last task" could not be judged on inline work (no task line in the
+  ledger): it is now "unless the ledger's latest `Final review: ×N` line names the current HEAD" — the line carries
+  `@ <git rev-parse --short HEAD>` (tasks-and-evidence.md → History).
+- **1.36.0 review 3** (D3-1) — the HEAD exit went back out: every commit after the line (the review's own fixes, each simplify
+  commit, a `.specs/`-only commit) asked for the whole panel again, with no bound — against "nothing can loop". The exit is
+  round 1's again ("since the last task"), and the inline gap is closed in prose: "a task done inline writes no ledger line —
+  if you did one after the review, run it again" (tasks-and-evidence.md → History).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12
@@ -498,6 +585,17 @@ here. "r5 review" is 1.23's fifth review.
   was refused; `waiver.badExpires` now says UTC.
 - **1.24 review 6 (E7)** — with roles, the completing sign-off kept its own waiver (one with no expiry) and another role's
   expiring waiver was lost — doctor never warned `waiver-expired`, finish never said expired: `strictestWaiver()`.
+- **1.36** — a protected test's lift (guard tests) joins the waivers as the user's recorded decision; the tasks approval takes
+  the protected-tests snapshot (the walk outside the lock — the design walked under it, and a concurrent call answered busy).
+- **1.36.0 review 1** — a `feature protect` before the tasks approval cancelled its snapshot (`at` read as "taken"): the via
+  "approval" mark; a lift recorded before its feature's finish unprotected the test for every later feature: it ends with that
+  finish.
+- **1.36.0 review 2** — the lift /spec-finish's warning asks for is recorded AFTER the written finish, and one in a feature all
+  ticked but never finished never ended: a lift counts only while its feature has open tasks and was recorded after that
+  feature's last finish (its own finish counts all of its lifts) — tasks-and-evidence.md → Protected tests.
+- **1.36.0 review 3** — both narrowings lost real cases (a lift recorded in the final review's window never in force, a dormant
+  lift revived by one task line, a cycle-1 lift explaining a cycle-2 change): back to "a lift lasts until protect <file>", and
+  the intended change finish warns about is recorded with the ACCEPT (a re-baseline), never a lift — tasks-and-evidence.md.
 
 ### Approvals the user confirmed over MCP, and the dry run
 - **1.21 F1b** — `confirmed` and the dry run.
@@ -535,6 +633,43 @@ here. "r5 review" is 1.23's fifth review.
 
 ### Bugfix and finish
 - **v1.12** — the bugfix kind.
+- **1.36** — +port's execution gate beside the bugfix gate, and `port-recheck` among the finish blockers (the owner's "improve
+  later WITH an old-vs-new comparison"). The design's per-task flag (every task citing a `[PORT]` criterion its own anchor) let a
+  port task that cites the preservation criterion tick before the baseline, and a verified-only-by-name anchor (`!b.done`) let an
+  UNVERIFIED tick open the fence: two anchors, opened only by a verified tick. The refusal key is `heldBy` — `waitsOn` already
+  meant a successful tick's open `_Depends:_`. Cut from the design: a scope-guard `port-order`, the simplifier's `port-open`, +port
+  among `APPROVAL_GATED_TRACKS`, a requirements-gate `port-differential` (the scaffold writes the criteria, the placeholder gate
+  refuses their slots, `port-verify` needs an anchor).
+- **1.36.0 review 1** — PORT-1: a note ticked an anchor whose `_Verify:_` was still its slot (every fresh scaffold) or gone, and
+  `taskVerification` passes a verify-less task on a note: the fence opened — `open` now needs a runnable `_Verify:_` (the
+  `exitCode != null` the decision named is implied: with one, no reason means a passing run). PORT-2: the brief asks for D's re-run
+  after each improvement, the 5-run history then dropped D's first pass and `port-fence` blamed honest work — a full history makes
+  the first pass unknown (G / H and a flaky D: four failed re-runs, then a pass). PORT-4: D was the last task under its heading, so
+  an improvement written after the check in its section became D and ticked before it — D is that heading's last task citing a
+  `[PORT]` criterion. PORT-5: a differential check listed before the baseline inverted the fence. INT-2: next_task / next_action /
+  the status line named a held task while an anchor was ticked unverified (implement → refused → implement) — `portSchedule`,
+  the `verify` step. INT-3: next_action said "finish" while `port-recheck` was a certain blocker, and following it ran the project
+  checks twice — FINISH_STEPS `recheck` before the finish step. Not changed: complete_task's `next` (taskSchedule's, the fence's
+  refusal names the way out); a verify-less anchor's note tick still answers `verified: true` (the evidence rule), it only opens nothing.
+- **1.36.0 review 2** — P2-1: review 1's PORT-3 appended the baseline after a project template's tasks when no level-2 heading held
+  the first one (Kiro's tasks under the title, `###`-only sections) — the fence then held none of the port's work, and the plan
+  was approved at size m with only a doctor warn. The insertion stays; `baselineLate` joined `portPlanProbe` at m / l (refused
+  until the baseline comes first; a warn at s / no size and once approved). P2-3: complete_task's `next`, spec_status's next and
+  the brief's default task now pass held tasks too (the roadmap's row: its blocked display reads `skipped`, not a one-line change).
+  P2-4: with no task under D's heading citing a `[PORT]` criterion, its first task is D (a prep task there opened the fence) —
+  `port.dUncited` warns; the fallback order is unchanged. P2-2: a known limit, not a rule change — `port-recheck` reads only the
+  tasks after D, and INT-3's recheck step put D's re-run before the panel's branch review: a review fix in the port's own tasks
+  was never compared again. naRecheck and the finish step (`port.naFinishCheck`) say to re-run D after any fix.
+- **1.36.0 review 3** — PF3-1: review 2's probe refused the engine's own output — spec_add_track +port on a feature whose tasks.md
+  was still the built-in scaffold appended B after Setup … Polish (at s the fence held nothing): `applyTracks` puts B's section
+  first while no task is ticked (templates-imports-exports.md). PF3-2: the move baselineLate named put a Kiro / `###`-only
+  template's tasks inside B's section (removing +port hid them; unrenumbered, next_task served B "held by" itself): the text names
+  the safe move. PF3-3: the finish step's +port line named `done <f> <D> --run` for a D with no runnable `_Verify:_` (exit 1):
+  `portCheckNumber` is null for it — port-recheck never reads such a D either. PF3-5: `next --batch` added a held task beside a
+  `[P]` baseline that was itself the next task (no hold then): the batch takes `portHeldNumbers`.
+- **1.36.0 review 4 (PF4-1)** — PF3-2's text also asked to renumber the moved tasks in file order: never needed once they sit under
+  a level-2 heading of their own (B's section first is served first), and after a tick it detached the ticked task's run (keyed
+  by number). The safe move keeps their numbers (templates-imports-exports.md).
 - **1.21 F3** — the bugfix prefill (no prefill = byte-identical to 1.20) and `commitTitle()`. **1.21 review A5** — a cut
   split a surrogate pair and a lone surrogate landed in merge-summary.md: `cutAt()`.
 - **1.21 F5 → 1.23.1** — 1.21 F5 introduced the short bugfix tasks.md for xs; 1.23.1 made it every size's (the XS and the

@@ -1429,7 +1429,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     dsecs = designSections(read("bug.md") || "").map(byFile("bug.md")).concat(dsecs.map(byFile(PHASE_FILE.design)));
   }
   const dinfo = dsecs.map((s) => { const hay = s.title + "\n" + s.body; return { title: s.title, acs: extractAcIds(hay), sec: secondaryIds(hay) }; });
-  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs
+  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", "port", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs
   // (the rows' index: the sections citing a key, and each track marker's sections)
   const dinfoBy = rtmIndex(dinfo, (d) => rtmKeys(d.acs, d.sec));
   for (const m of trackMarks) m.secs = dinfo.map((d, n) => (d.title.includes(m.marker) ? n : -1)).filter((n) => n >= 0);

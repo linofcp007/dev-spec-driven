@@ -26,7 +26,10 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
   briefReuse, briefDesignSystem, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
   decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize;
 let dayOf; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
+let guardLevel, protectOnTick, protectedCount, tickRecorded; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
+let portTask, portSchedule, portHeldNumbers; // port.js — +port's fence (1.36; next_task passes over the tasks it holds — review 1; the batch: review 3)
+function __link(E) { ({ guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, portHeldNumbers, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -61,7 +64,9 @@ function nextTask(projectDir, name, opts = {}) {
   const tracks = detectTracks(f.dir);
   const text = activeTasks(raw, tracks); // a removed track's task block is inactive, never "next"
   const blocks = taskBlocks(text || "");
-  const sch = taskSchedule(blocks); // the next OPEN task whose _Depends:_ are all done
+  const state = readState(projectDir, f.slug);
+  // the next OPEN task whose _Depends:_ are all done — never one +port's fence holds (1.36 review 1: port.js portSchedule)
+  const { sch, held } = portSchedule(f.dir, state.kind, tracks, blocks, state.evidence, evidenceRule(projectDir));
   const next = sch.next;
   const res = {
     ok: true,
@@ -74,8 +79,16 @@ function nextTask(projectDir, name, opts = {}) {
   // because they wait (skipped), the ones that can't start as things stand (blocked — a cycle, a _Depends:_ naming no task).
   if (sch.skipped.length) res.skipped = sch.skipped;
   if (sch.blocked.length) res.blocked = sch.blocked;
-  if (!next && res.remaining) res.note = taskDepsBlockedNote(sch, f.slug, featureLang(projectDir, f.slug));
-  if (opts.batch && next) res.batch = parallelBatch(text, opts.max, tracks);
+  // 1.36 review 1 (stable): the first open task is one +port's fence holds — passed over; the [PORT] tasks it waits for (the brief's keys)
+  if (held) Object.assign(res, { gated: "port-order", heldBy: held.heldBy });
+  // 1.36 (stable): the fast check to run after each small edit of a CODE next task (roadmap.json meta.fastCheck) — none otherwise
+  const fast = next ? fastCheckStatus(projectDir, f.dir, next, state) : null;
+  if (fast) res.fastCheck = { check: fast.check, command: fast.command };
+  const lng = featureLang(projectDir, f.slug);
+  // nothing can start: the anchor holding the rest is ticked but not verified — its run opens the fence; else the dependencies
+  if (!next && res.remaining) res.note = held && held.ticked ? i18n.msg(lng).port.naHeld(held.number, held.anchor, f.slug, held.runnable) : taskDepsBlockedNote(sch, f.slug, lng);
+  // the fence's held tasks never join the batch — when the next task is the open anchor itself too (1.36 review 3: no hold then)
+  if (opts.batch && next) res.batch = parallelBatch(text, opts.max, tracks, portHeldNumbers(f.dir, state.kind, tracks, blocks, state.evidence, evidenceRule(projectDir)));
   if (opts.waves) {
     const w = taskWaves(blocks, tracks);
     Object.assign(res, { waves: w.waves, cycles: w.cycles, blocked: w.blocked });
@@ -85,11 +98,12 @@ function nextTask(projectDir, name, opts = {}) {
 
 // A batch for parallel subagents: the next task (taskSchedule) and, when it is [P], the following open [P] tasks of
 // the SAME section whose _Implements:_ files are declared and disjoint (never across a checkpoint) and whose own _Depends:_
-// are all done — a task waiting on an open dependency (one in the batch included) ends it.
-function parallelBatch(tasksText, max, tracks) {
+// are all done — a task waiting on an open dependency (one in the batch included) ends it. hold: the numbers +port's fence holds
+// (never served, and one ends the batch).
+function parallelBatch(tasksText, max, tracks, hold) {
   const cap = Math.max(1, Math.min(parseInt(max, 10) || 3, 8));
   const blocks = taskBlocks(tasksText);
-  const sch = taskSchedule(blocks);
+  const sch = taskSchedule(blocks, hold);
   const i0 = sch.next ? blocks.indexOf(sch.next) : -1;
   if (i0 === -1) return [];
   const first = blocks[i0];
@@ -105,7 +119,7 @@ function parallelBatch(tasksText, max, tracks) {
   for (let i = i0 + 1; i < blocks.length && batch.length < cap; i++) {
     const b = blocks[i];
     if (b.done) continue;
-    if (!b.parallel || b.phase !== first.phase || b.checkpoint !== first.checkpoint) break;
+    if (!b.parallel || b.phase !== first.phase || b.checkpoint !== first.checkpoint || (hold && hold.has(b.number))) break;
     if (isPromptTask(b, taskMarkers(b), tracks || [])) break;
     if (sch.graph.waitsOn(i).length) break; // it waits on an open task (or on one of this batch)
     const imp = keys(taskMarkers(b).implements);
@@ -213,14 +227,16 @@ function stuckTasks(g) {
 }
 // The next task — ONE rule for spec_next_task, next_action's implement step, spec_task_brief's default task, `next --batch`,
 // spec_status, the roadmap and complete_task's `next`. → { next (a block of `blocks`, or null), skipped, blocked, graph }.
-function taskSchedule(blocks) {
+// hold: task numbers never served (+port's fence — port.js portSchedule: the tasks it holds are passed over, never listed as skipped;
+// every surface above but the roadmap's row and the waves goes through it — 1.36 review 1, review 2 P2-3).
+function taskSchedule(blocks, hold) {
   const g = taskDepGraph(blocks);
   const seen = new Set(); // numbers answered for: resolveTask serves the FIRST open task of a duplicated number
   const skipped = [];
   let next = null;
   for (const i of g.order) {
     const b = blocks[i];
-    if (b.done || seen.has(b.number)) continue;
+    if (b.done || seen.has(b.number) || (hold && hold.has(b.number))) continue;
     seen.add(b.number);
     const w = g.waitsOn(i);
     if (!w.length) { next = b; break; }
@@ -349,6 +365,25 @@ function taskWaves(blocks, tracks) {
     ready = merged;
   }
   return { waves, cycles: dependencyCycles(g, true), blocked: stuckTasks(g) };
+}
+// The open tasks that can START now — what next_task, next --batch or the waves could hand out first (1.36: their exact _Implements:_
+// files unlock a protected test, protect.js): a task WITH _Depends:_ once every dependency is done; of the tasks without one, the first
+// open task in tasks order and, when it is [P], the rest of its run of [P] tasks in its section — taskWaves' first ready set, without
+// packing the waves. → [numbers] in tasks order.
+function readyTasks(blocks) {
+  const g = taskDepGraph(blocks);
+  const out = [];
+  let run = null; // the first run of open tasks declaring no _Depends:_ — its section while it is a [P] run, false once it is closed
+  for (const i of g.order) {
+    const b = blocks[i];
+    if (b.done) continue;
+    if (g.specs[i].declared) { if (!g.waitsOn(i).length) out.push(b.number); continue; }
+    if (run === false) continue;
+    if (run !== null && !(b.parallel && run.phase === b.phase && run.checkpoint === b.checkpoint)) { run = false; continue; }
+    out.push(b.number);
+    run = b.parallel ? { phase: b.phase, checkpoint: b.checkpoint } : false;
+  }
+  return out;
 }
 // complete_task: the task's _Depends:_ that are not done in the active view (its own number aside), ascending.
 function openDependenciesOf(tasksText, tracks, task) {
@@ -566,9 +601,11 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const state = readState(projectDir, f.slug);
   const bad = state.invalid; // readState refuses wrong-shape JSON (evidence/approvals/tracks/top level) — checked before any write
   if (bad) return { ok: false, error: bad };
-  // Bugfix iron law (bugfixGate): no fix before the root cause is written in bug.md. Checked before anything is
-  // recorded or ticked.
-  const gate = bugfixGate(f.dir, state.kind, blocks, task, lng);
+  // The execution gates, checked before anything is recorded or ticked: the bugfix iron law (bugfixGate — no fix before the root
+  // cause is written in bug.md) and +port's fence (1.36, port.js portTask — a task listed after a [PORT] anchor that is not ticked
+  // and verified waits for it: port first, improve later).
+  const gate = bugfixGate(f.dir, state.kind, blocks, task, lng) ||
+    (portTask(f.dir, state.kind, detectTracks(f.dir), blocks, task, state.evidence, evidenceRule(projectDir), lng, f.slug) || {}).gate;
   if (gate) return { ok: false, ...gate };
   const key = String(n);
   // every run {command, exitCode} is stamped observed: true | false (the harness's log) | "cli" (`done --run`), and
@@ -606,6 +643,10 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const cli = !!opts && opts.ranBy === "cli";
   const cliStart = cli ? runStartOf({ at: opts.startedAt }) : null;
   const ranVerify = cli && Array.isArray(opts.ranVerify) ? opts.ranVerify.filter((c) => typeof c === "string").join("\n").slice(0, 1000) : undefined;
+  // 1.36 the fast check (meta.fastCheck, warn only): judged when this call TICKS a code task — read BEFORE anything is written
+  // (its window ends at the previous tick: lastTickAt is stamped below). A tick with a run carries it on that run (`fast`: metrics).
+  const fast = !alreadyDone && !failed ? fastCheckStatus(projectDir, f.dir, task, state) : null;
+  if (fast && ev && ev.exitCode != null) ev.fast = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean };
   if (ev) { // every run is recorded — a failure too (never ticked), so a later note can't paper over it
     state.evidence = state.evidence || {};
     // Only THIS task's record is extended; another task's record under the same number is kept aside.
@@ -619,6 +660,9 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   if (tickBytes === false) return { ok: false, error: E.tasksNotText(tasksFileName(f.dir)) };
   if (ticks) {
     state.lastTickAt = now; // spec_finish's suite-evidence needs every project check run AFTER the last tick
+    // 1.36 guard tests: its exact _Implements:_ tests re-baselined (its FIRST tick only — read before ticks[n] is stamped), its _Verify:_
+    // tests listed (one another feature lists with that feature's hash — 1.36.0 review 4)
+    protectOnTick(projectDir, f.slug, state, task);
     // when this task was ticked (state.ticks[n]) — the roadmap forecasts' completion times; a hand-broken ticks value is left alone
     if (state.ticks === undefined || isRecord(state.ticks)) state.ticks = { ...(state.ticks || {}), [key]: now };
   }
@@ -651,7 +695,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   }
   const tracksNow = detectTracks(f.dir);
   const tasks = parseTasks(activeTasks(updated, tracksNow)); // done/total/next as status counts them
-  const sch = taskSchedule(taskBlocks(activeTasks(updated, tracksNow) || "")); // next_task's rule
+  // next_task's rule — never a task +port's fence holds, this tick's evidence included (portSchedule; 1.36 review 2, P2-3)
+  const { sch, held } = portSchedule(f.dir, state.kind, tracksNow, taskBlocks(activeTasks(updated, tracksNow) || ""), state.evidence, evidenceRule(projectDir));
   const next = sch.next;
   const runnable = taskMarkers(task).verify.length > 0;
   const entry = ownEvidence(state.evidence || {}, task, dup);
@@ -708,9 +753,18 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.waitsOn = early;
     res.note = [res.note, i18n.msg(lng).taskDeps.tickedEarly(n, early.map((d) => "#" + d).join(", "))].filter(Boolean).join(" ");
   }
-  if (!next && res.done < res.total) {
+  // (nothing can start while the [PORT] task holding the rest is ticked but not verified: its run opens the fence — next_task's note)
+  if (!next && res.done < res.total && held && held.ticked) res.note = [res.note, i18n.msg(lng).port.naHeld(held.number, held.anchor, f.slug, held.runnable)].filter(Boolean).join(" ");
+  else if (!next && res.done < res.total) {
     if (sch.blocked.length) res.blocked = sch.blocked;
     res.note = [res.note, taskDepsBlockedNote(sch, f.slug, lng)].filter(Boolean).join(" ");
+  }
+  // 1.36 (stable): the fast check at this tick {check, status, runs, clean, partial?} — a note when it wasn't clean since the last
+  // edit (never for `unknown`: no harness log at all, an MCP-only client). Never a refusal. The note names no command but the fast
+  // check (1.36 review 1 FC-2: its `done <f> <n> --run` named this task, ticked now — a done task's --run runs no fast check).
+  if (fast) {
+    res.fastCheck = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean, ...(fast.partial ? { partial: true } : {}) };
+    if (["stale", "failed", "missing"].includes(fast.status)) res.note = [res.note, i18n.msg(lng).fastCheck.tickNote(n, fast.check, fast.command, fast.status, !!fast.pwsh)].filter(Boolean).join(" ");
   }
   return withObserved(res); // the observed stamp on every result
 }
@@ -1621,11 +1675,14 @@ function taskBrief(projectDir, name, number, opts = {}) {
   let block;
   const activeBlocks = taskBlocks(activeTasks(tasksText, tracks) || "");
   if (number == null || number === "") {
-    // "The next task" is next_task's (taskSchedule — its _Depends:_ all done): a removed track's block is inactive, never
-    // served as next. An explicit number still reaches the whole file (like complete_task).
-    const sch = taskSchedule(activeBlocks);
+    // "The next task" is next_task's (taskSchedule — its _Depends:_ all done; never a task +port's fence holds: portSchedule, 1.36
+    // review 2 P2-3): a removed track's block is inactive, never served as next. An explicit number still reaches the whole file (like
+    // complete_task).
+    const st0 = readState(projectDir, slug);
+    const { sch, held } = portSchedule(dir, st0.kind, tracks, activeBlocks, st0.evidence, evidenceRule(projectDir));
     block = sch.next;
     if (!block && activeBlocks.some((b) => !b.done)) { // open tasks, none can start — say why, never "all done"
+      if (held && held.ticked) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: i18n.msg(lng).port.naHeld(held.number, held.anchor, slug, held.runnable) };
       return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, ...(sch.blocked.length ? { blocked: sch.blocked } : { skipped: sch.skipped }),
         note: taskDepsBlockedNote(sch, slug, lng) };
     }
@@ -1646,9 +1703,12 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const blockText = taskProse(block).join("\n");
   // A bugfix task carries the bug itself: bug.md's Reproduction and Root Cause (null while still unwritten).
   let bug = null;
-  const kind = readState(projectDir, slug).kind;
-  // The same gate complete_task applies — reported up front, so `done --run` refuses BEFORE running any command.
-  const gate = bugfixGate(dir, kind, blocks, block, lng);
+  const state = readState(projectDir, slug);
+  const kind = state.kind;
+  // The same gates complete_task applies — reported up front, so `done --run` refuses BEFORE running any command. +port (1.36): the
+  // fence, and the task's role in it (portRole — the definition of done's port rule).
+  const port = portTask(dir, kind, tracks, blocks, block, state.evidence, evidenceRule(projectDir), lng, slug);
+  const gate = bugfixGate(dir, kind, blocks, block, lng) || (port && port.gate);
   if (kind === "bugfix") {
     const bugText = readIfExists(path.join(dir, "bug.md")) || "";
     const sec = (syn) => (bugSectionFilled(bugText, syn) ? stripHtmlComments(extractSection(bugText, syn)).trim() : null);
@@ -1697,7 +1757,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const idHit = (s) => idNeedles.some((r) => r.test(s.title + "\n" + s.body));
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
   // … and a track pack's — its sections are the rigor its criteria were written for.
-  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
+  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", "port", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
   // search before you write: the design's Reuse & Integration entries naming this task's files / folders / ACs, and the
   // existing source files next to its _Implements:_ targets (names only; bounded).
   const reuse = briefReuse(projectDir, designText, mk.implements, acIds);
@@ -1754,6 +1814,14 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const pipes = verifyPipes(block);
   const expectFail = expectsFail(block); // _Expect: fail_ — the brief's Verification section says the run must fail
   const checks = projectChecks(projectDir).checks; // roadmap.json meta.checks — part of the definition of done
+  // 1.36 the fast check (meta.fastCheck) of an OPEN code task: the definition of done's loop line, and its status — done --run runs
+  // it first unless it is clean
+  const fast = block.done ? null : fastCheckStatus(projectDir, dir, block, state);
+  // 1.36 guard tests: an open task's definition of done says a protected test changes only when its _Implements:_ names it (the count:
+  // the feature's list)
+  const protectedN = !block.done && guardLevel(projectDir) === "tests" ? protectedCount(state) : null;
+  // …a task reopened after its tick unlocks none of them (tickRecorded): its line says so — a lift is needed (1.36.0 review 2)
+  const protectedReopened = protectedN != null && tickRecorded(state, block.number);
   const deps = briefDependencies(activeBlocks, block); // its _Depends:_ and where each stands
 
   const md = i18n.renderBrief({
@@ -1783,6 +1851,11 @@ function taskBrief(projectDir, name, number, opts = {}) {
     verifyPipes: pipes, // a pipe masks the check's exit code — the brief says so
     expectFail,
     projectChecks: checks,
+    fastCheck: fast ? { check: fast.check, command: fast.command } : null,
+    protectedTests: protectedN,
+    protectedReopened,
+    portRole: port && port.role, // +port (1.36)
+    differential: port && port.differential,
     globalConstraints: globalConstraints(tasksText),
     decisions: dec.items,
     decisionsOmitted: dec.omitted,
@@ -1834,10 +1907,15 @@ function taskBrief(projectDir, name, number, opts = {}) {
     uiReview: freshReviews && !expectFail && uiWork, // a red task renders nothing yet
   };
   if (bug) res.bug = bug;
-  if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });
+  if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error, ...(gate.heldBy ? { heldBy: gate.heldBy } : {}) }); // heldBy: +port's
+  if (port && port.role) Object.assign(res, { portRole: port.role, ...(port.differential != null ? { differential: port.differential } : {}) });
   if (pipes.length) res.verifyPipes = pipes; // stable: branch on it, never on the brief's text
   if (expectFail) res.expect = "fail"; // B5 (kept with write:true, like verify): the run must exit non-zero
   if (checks.length) res.projectChecks = checks; // [{name, command}] the definition of done names
+  // 1.36 (stable; identifiers only) — partial: the feature's planned files passed their cap (only the first ones and this task's own
+  // are dated — 1.36 review 1)
+  if (fast) res.fastCheck = { check: fast.check, command: fast.command, status: fast.status, ...(fast.partial ? { partial: true } : {}) };
+  if (protectedN != null) res.protectedTests = protectedN; // 1.36 guard tests: the feature's protected test files (a count)
   if (deps.length) res.dependsOn = deps.map((d) => ({ number: d.number, status: d.status })); // 1.14 F3 (kept with write:true: identifiers only)
   if (dec.items.length) res.decisions = dec.items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, affects: x.affects })); // 1.14 C2
   if (dec.omitted.length) res.decisionsOmitted = dec.omitted;
@@ -1859,6 +1937,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // the nearby files (identifiers) and how many design entries the brief quotes — never the entries' text
     if (res.reuse) res.refs.reuse = { entries: res.reuse.entries.length, files: res.reuse.files };
     if (res.designSystem) res.refs.designSystem = res.designSystem.components.map((c) => c.name); // the names only
+    // KEPT (identifiers the controller and done --run act on): verify, expect, projectChecks, dependsOn, gated / gateError /
+    // heldBy, preflight, uiReview, fastCheck (1.36), protectedTests (1.36), portRole / differential (1.36) — only the quoted spec
+    // text below goes.
     for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse", "designSystem"]) delete res[k];
   }
   return res;
@@ -2203,7 +2284,9 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
 module.exports = { parseTasks, taskDescription, nextTask, taskDependsSpec, taskSchedule, dependencyCycles, taskWaves,
   taskDepsBlockedNote, taskDepsWaitList, taskDepsCheck, tasksRewrite, checkboxBytes, completeTask, reasonInput, taskLine,
   dropTrailingCr, RE_CHECKPOINT, scanTaskLines, indentOf, hasOutsideCode, backtickRuns, nextTaskNumber, taskPeerStamps,
-  taskBlocks, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
+  taskBlocks, unreadTaskLines, unreadTasksDetail, resolveTask, blockPosition, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
   changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers,
   taskMarkers, malformedMarkers, suspiciousVerify, RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections,
-  taskBrief, RE_THEMATIC_BREAK, appendTasks, __link };
+  taskBrief, RE_THEMATIC_BREAK, appendTasks,
+  readyTasks, // 1.36 guard tests (protect.js): the tasks that can start now — their exact _Implements:_ files unlock a protected test
+  __link };

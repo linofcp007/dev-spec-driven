@@ -243,6 +243,74 @@ Task runs prove tasks; a feature is done when the **whole project's checks** pas
 
 Without `meta.checks` nothing changes: `/spec-finish` lists "run the full suite" among the fresh checks to confirm.
 
+### The fast check (`meta.fastCheck`, warn only)
+
+One project check — a type check or a linter that answers in seconds — named as the check to run **after each small
+edit**, so a type error is fixed the moment it appears, not at the `_Verify:_` or in review.
+
+- **Set it in one call:** `spec_init {checks: {"typecheck": "npx tsc --noEmit"}, fastCheck: "typecheck"}` (CLI `dev-spec
+  init --check typecheck="npx tsc --noEmit" --fast-check typecheck`); `fastCheck: ""` / `--fast-check off` switches it off,
+  and removing its check switches it off too. Refused before anything is written: a name that is no check after the call,
+  dev-guardian's gate (minutes, not seconds), a command that rewrites files — it would change the code and the tests under
+  the task. That last rule is a heuristic, read word by word: a `--fix` (or `--fix=…`) or `--write` word, or a `fmt` /
+  `format` program or subcommand (`gofmt`, `cargo fmt`, `ruff format`, `dotnet format`, `clang-format`) with a `-w` word (it
+  writes, whatever stands beside it: `gofmt -l -w`, `shfmt -l -w`) or with no check word (`--check`, `-check`, `--check-…`,
+  `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`, `--test`, `--exit-code`,
+  `--output=none`, or swift-format's own `lint` subcommand: `swift format lint`, `swift-format lint` — any other `fmt lint`
+  is refused: `make fmt lint`, `pants fmt lint ::`, `npm run fmt lint` run `fmt`). Those words count in the formatter's own
+  simple command only (the command line split on `&&`, `||`, `;` and `|`):
+  `cargo fmt && git diff --exit-code` writes, `gofmt -l . | grep -v -w vendor` only reads. Check-only forms pass
+  (`prettier --check`, `eslint --fix-dry-run`, `gofmt -l`, `swift format lint`, `swiftformat --lint`,
+  `dart format --output=none --set-exit-if-changed`, `clang-format -n`, `buf format --exit-code`, `make check-fmt`,
+  `npm run fmt:check`, `npm run lint:format`, `dune build @fmt`, a linter run).
+  Its limits: the words are read, not the tool — a short flag counts by its common meaning (`-n` a dry run, even where a tool
+  gives it another one); a formatter known by another name (`black .`, `prettier -w`, `rubocop -a`) is not recognized — give
+  the fast check its check-only command; a formatter whose bare form only reports (`biome format .`) is refused like one that
+  writes — use its check form (`biome ci .`, `biome check .`); a `$(… | …)` before the check flag splits the formatter's
+  command at that `|` (`ruff format $(git ls-files | grep -v x) --check` is refused) — put the check flag first. A check
+  named `off` or `none` can't be the fast check.
+- **Pick one that passes on the base branch:** it stays a project check, so `spec_finish` needs it passing on the final
+  code like the others — a linter that is already red on main gives no signal and blocks every finish.
+- **Offered, never set:** `init` and `spec_upgrade` return `fastCheckOffer` {name, command, from, note} when none is set
+  and the root manifests suggest one — a `typecheck` / `type-check` / `check-types` / `tsc` script of package.json (run with
+  the lockfile's runner), `npx tsc --noEmit` when tsconfig.json exists AND package.json lists typescript (else npx would
+  fetch a compiler), `cargo check`, `go vet ./...`, `ruff check .` (`[tool.ruff]`, ruff.toml), `mypy .` (`[tool.mypy]`,
+  mypy.ini). Never a lint script.
+- **The loop:** `spec_next_task` returns `fastCheck {check, command}` for a code task (one whose `_Implements:_` names a
+  file; never a spike's), the brief `fastCheck {check, command, status}` and a definition-of-done line: edit → run it **on
+  its own** (a chained `npx tsc --noEmit && npm test` or a piped `npx tsc --noEmit | head -40` is no run of it — the log
+  matches the check as one command) → fix → repeat, clean (exit 0) after the LAST edit, before the `_Verify:_`. A red
+  (`_Expect: fail_`) task's test must still pass
+  it: it fails on an assertion or "not implemented", never on a type error — add the stub it calls.
+- **What is seen:** in Claude Code the observe hook logs each run in `.specs/.execution/observed.jsonl` (the Bash tool; the
+  PowerShell tool's failures, and its passes only with an explicit exit code — its lines carry `tool: "PowerShell"`); over
+  an MCP-only client nothing is logged — `dev-spec done <feature> <n> --run` on an open code task runs it for you.
+- **At the tick:** `spec_complete_task` on a code task it ticks returns `fastCheck {check, status, runs, clean}` — status
+  (stable): `clean` · `stale` (a planned file of the feature — its tasks' `_Implements:_` files — is newer than the latest
+  run) · `failed` (the latest run failed) · `missing` (no run of it logged) · `unknown` (no harness log at all: no note).
+  `stale` / `failed` / `missing` add a note that says to run it on its own now (not piped, not chained) — it names no
+  other command: the task is ticked by then, and `done --run` on a done task runs no fast check (the next code task's
+  `done --run` does). On `missing`, or when the latest logged run came from the PowerShell tool, the note adds that a
+  PowerShell-tool pass is logged only with an explicit exit code — run it with the Bash tool; the tick is never refused.
+  `partial: true` (stable): the feature plans more files than the planned-file cap (500 — a big folder or glob), so only
+  the first ones and the task's own `_Implements:_` files are dated. `runs` / `clean` count its runs since the feature's
+  previous tick; the snapshot is stored on the tick's run (`fast`).
+- **`done --run`** runs it FIRST (`$ <command>   (fast check)`) while it isn't clean since the last edit, or is clean only on a
+  `partial` set (past the cap an edit to another task's file reads clean) — not when the
+  task's `_Verify:_` is the fast command itself (that run counts) — and logs it at its START (an edit made while it ran
+  reads stale); a failure or a run that couldn't happen is a warning, the `_Verify:_` runs anyway. The shell rules of
+  `finish --run` apply to it (POSIX syntax under cmd.exe, a pwsh script under a POSIX shell: refused before anything runs).
+- **Metrics:** `spec_metrics {name}` → `fastCheck {check, runs, clean, cleanRate, ticks, ticksClean}` from the tasks ticked
+  now (an undone tick is none) — an `unknown` tick (no harness log) is left out: null with no tick that recorded it; the
+  project view counts the ticks (`fastTicks`, `fastTicksClean`) — never run totals (every feature reads the same log).
+- **Known limits:** freshness is a file date (a clone or a checkout re-dates every file: a stale note, never a refusal); a
+  hook-logged run carries the time the hook wrote it — after the run ENDED, a fraction of a second later — so an edit made
+  while it ran, or right after it in the same turn, reads clean (done --run stamps its start); a planned file deleted after
+  the run is no edit (its importers may now fail — the next run says so); a logged run records no folder, so the same
+  command run in a subfolder or in another worktree of the project counts as the project's run; past the planned-file
+  cap only the first files and the task's own are dated (`partial: true`); test files a task names only by T-ID are outside
+  the planned files; after merging a parallel wave the merged files are new — run the fast check once before the ticks.
+
 ### dev-guardian's gate — the check `guardian`
 
 With the sibling plugin **dev-guardian** (3.2.1 or later) installed, `spec_init {guardian: true}` (CLI `dev-spec init
@@ -294,6 +362,52 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   `spec_scan {duplicates: true}` shows the project's duplicated share beside it (`budget`), and finish's duplicate warning
   says when the project is over it. dev-spec counts windows of code lines, dev-guardian measures with jscpd — close, not
   identical.
+
+## Protected tests (`meta.guard: "tests"`, 1.36)
+
+A test made to pass is a weakened test. At guard level `tests` (`init --guard tests`) the tests the plan was approved
+against stay as they were unless the plan or the user says otherwise:
+
+- **What is protected** — the feature's `.state.json → protectedTests`: the test files present at its FIRST complete tasks
+  approval (the features' `.specs/<feature>/tests/` first, its own first, then the project's; a content hash each, at most
+  2,000 — past them doctor warns; a `feature protect` run before the approval doesn't replace it), and at a task's FIRST tick
+  the test files it names exactly in `_Implements:_` (their content then is the authorised one — the bugfix's red test,
+  task 1's `_Implements: [the test file T-01 goes in]_`) and the test files its `_Verify:_` runs. A test another feature
+  already lists joins the snapshot or a `_Verify:_` record with the hash that feature recorded, never its content now — only a
+  task's exact `_Implements:_` and the accept record new content. An untick never removes one, and a re-tick never re-records
+  one. A new test file stays editable until a tick records it.
+- **The edit** (Claude Code's guard hook) — editing, removing or moving a protected test asks unless a task that can START
+  NOW names it exactly in `_Implements:_` (never a folder, a glob or `_Makes green:_`, never a task reopened by an untick or
+  a box unchecked by hand — its planned test then changes only with the user's lift, as the guard and the brief say) or the
+  user lifted it; refused under `meta.approvalGuard: deny`. It holds while the feature that listed the test is unfinished —
+  its tasks all ticked too, until its finish — and for every spelling of the path: a glob in any folder (a folder target too:
+  `rm -rf tes?/unit`), another case where the file system ignores case, a path through a link or junction. If it asks or
+  refuses, the task reports NEEDS_CONTEXT naming the test — never a shell command, a script or git around it.
+- **The lift** — `dev-spec feature unprotect <feature> <file> --reason "…"` (`spec_feature {action: "unprotect", file,
+  reason}`; the guard's line names the feature being worked on): the user's decision — with the approval guard on, an agent's
+  call asks or is refused. It lasts until `feature protect <feature> <file>` (of any feature) ends it — whatever its feature's
+  tasks, finished or not: a lift left in place after its feature's finish unprotects the test for every later feature, and
+  doctor warns about it. `feature protect <feature>` adds the tests present now (it never re-hashes a recorded one, and a test
+  another feature lists joins with the hash that feature recorded — only the accept records new content).
+- **The accept** — `dev-spec feature protect <feature> <file> --accept --reason "…"` (`spec_feature {action: "protect", file,
+  accept: true, reason}`): the user's decision too (a guard-down, like the lift) — the test's current content becomes the
+  recorded one in that feature's list, its lift (if any) ends, and the reason is kept: the merge summary of every written finish
+  of that work cycle shows it — after the accept (or a lift), finish again with write (`dev-spec finish <feature> --write`): the
+  summary written before it still names the test as changed. The test stays protected: a later change asks again, and finish
+  names it.
+- **At finish** (every surface, git-free) — each protected test is hashed again: one whose content matches no hash a live
+  feature recorded for it (its snapshot, a tick of any feature, an accept) and that no lift in force covers is a **warning**
+  naming it (changed / deleted) and a "Protected tests" block in the merge summary — never a blocker: check each change is
+  intended, then accept it (the warning's line) — never a lift for that.
+- **Defence in depth** — the hook prevents (Claude Code), finish detects what got past it (a confirmed prompt, a script, a
+  git command, another client), dev-guardian's test-integrity scan reads the diff for weakened assertions (`.only`, skips,
+  removed checks — in new tests too), and the independent reviewer sees every test file a task changed outside its
+  `_Implements:_`. Known limits: tests in ignored, hidden or linked folders, outside the project folder or past the cap are
+  not listed; new test-support files (conftest.py, setup files, mocks) stay editable; a git command or a script is not read
+  by the hook (finish names the result); a merge from the main branch lists teammates' test changes; an archived feature's
+  list and lifts are not read (restored, they are again); creating a link to a protected folder is not read — an edit through
+  it is, but not one spelled with a glob through it (finish names the change); a task's tick is recorded by its number, so a
+  re-plan that renumbers the tasks gives an open task a ticked number (its planned test then needs a lift).
 
 ## Evidence the harness observed (Claude Code)
 

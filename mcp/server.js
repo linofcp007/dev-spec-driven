@@ -50,26 +50,28 @@ const SUPPORTED_PROTOCOLS = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-
 const PROJECT_DIR_INIT = Object.freeze({ type: "string", description: "Project folder — only spec_init creates a missing one: a path or a local file:// URI. Default: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR, else the client's first root, else the nearest folder with .specs/ up from the server's cwd, else the cwd. Relative: from the client's first root, else the cwd." });
 const PROJECT_DIR = Object.freeze({ type: "string", description: "Project folder" });
 // A track name (spec_init / spec_create / spec_import): no enum — an unknown name gets the engine's did-you-mean.
-const TRACK_ITEM = Object.freeze({ type: "string", description: "core | tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a project track pack; 'tdd,saas' / '+saas +ai' are split" });
+const TRACK_ITEM = Object.freeze({ type: "string", description: "core | tdd | saas | ai | sec | privacy | dist | api | ui | obs | data | port, or a project track pack; 'tdd,saas' / '+saas +ai' are split" });
 const ROADMAP_ACTIONS = [...new Set([...spec.BACKLOG_ACTIONS, ...spec.MILESTONE_ACTIONS])]; // add · rm (alias remove) · list
 
 const TOOLS = [
   {
     name: "spec_init",
     description:
-      "Initialize .specs/ and the steering files of the tracks the project uses (core always; each track adds its own). Idempotent — never overwrites a file. `lang` writes the steering in that language and becomes the project default. Optional project settings, each unchanged when omitted and always reported back: `guard`, `stopCheck`, `approvalGuard`, `checks`, `guardian`, `evidence`, `approvalRoles`. Lowering a protection (guard, approvalGuard, roles, a check) is the user's decision — never without their consent.",
+      "Initialize .specs/ and the steering files of the tracks the project uses (core always; each track adds its own). Idempotent — never overwrites a file. `lang` writes the steering in that language and becomes the project default. Optional project settings, each unchanged when omitted and always reported back: `guard`, `stopCheck`, `approvalGuard`, `checks`, `guardian`, `evidence`, `approvalRoles`, `fastCheck` (a check run after each edit), `reviewModels` (2–3 review models, diverse or []). Lowering a protection (guard, approvalGuard, roles, a check) is the user's decision — never without their consent.",
     inputSchema: {
       type: "object",
       properties: {
         tracks: { type: "array", items: TRACK_ITEM, description: "Tracks the project uses ('core' always included)." },
         lang: { type: "string", enum: LANG_ENUM, description: "Project language (default en): pt = European, pt-BR = Brazilian Portuguese." },
-        guard: { type: "string", enum: ["on", "off", "scope"], description: "on = a code edit asks while no feature has approved, unfinished tasks; scope = also a file no open task names in _Implements:_; off." },
+        guard: { type: "string", enum: ["on", "off", "scope", "tests"], description: "on = a code edit asks while no feature has approved, unfinished tasks; scope = also a file no open task names in _Implements:_; tests = scope + protected tests; off." },
         evidence: { type: "string", enum: ["reported", "observed"], description: "observed = a runnable _Verify:_ counts only from a run the harness saw or the CLI made; reported (default)." },
         stopCheck: { type: "boolean", description: "The end-of-turn evidence gate (on by default)." },
         approvalGuard: { type: "string", enum: [...spec.APPROVAL_GUARD_LEVELS], description: "ask = an agent's approval asks the user first; deny = only the human approves; off (default)." },
         checks: { type: "object", additionalProperties: { type: "string" }, description: "Project check commands {name: command}, e.g. {\"test\": \"npm test\"} — spec_finish needs a passing run of each; an empty command removes one." },
         guardian: { type: "boolean", description: "true: dev-guardian's gate as check `guardian` (a scan of minutes — only when the user asks); false removes it." },
         approvalRoles: { type: "object", description: "{<phase>: [<role>, …]}: every role signs the phase off; {} clears them." },
+        fastCheck: { type: "string" }, // 1.36 the fast check: a meta.checks name, "" off — the settings sentence says it (budget)
+        reviewModels: { type: "array", items: { type: "string" } }, // 1.36 the review panel — the settings sentence says it (budget)
         projectDir: PROJECT_DIR_INIT,
       },
     },
@@ -77,7 +79,7 @@ const TOOLS = [
   {
     name: "spec_classify",
     description:
-      "Phase 0: classify a feature description into tracks (core +tdd +saas +ai +sec +privacy +dist +api +ui +obs +data, plus the project's track packs) from local keyword signals in EN / PT / ES — no model. Returns the recommended tracks with the matched signals and reasoning, a suggested size (xs | s | m | l) and, for Brazilian wording, langHint 'pt-BR'. A suggestion: confirm tracks and size with the user, then pass their choice to spec_create. `explain: true` lists every keyword match.",
+      "Phase 0: classify a feature description into tracks (core +tdd +saas +ai +sec +privacy +dist +api +ui +obs +data +port, plus the project's track packs) from local keyword signals in EN / PT / ES — no model. Returns the recommended tracks with the matched signals and reasoning, a suggested size (xs | s | m | l) and, for Brazilian wording, langHint 'pt-BR'. A suggestion: confirm tracks and size with the user, then pass their choice to spec_create. `explain: true` lists every keyword match.",
     inputSchema: {
       type: "object",
       properties: {
@@ -155,7 +157,7 @@ const TOOLS = [
   {
     name: "spec_complete_task",
     description:
-      "Tick task N of a feature — EVIDENCE BEFORE CLAIMS. Pass `evidence` {command, exitCode, summary}: the run of its _Verify:_ command you actually made. If you cannot run it (no shell), do NOT call this tool: name the _Verify:_ command and ask the user for its output, or to run `" + spec.DEV_SPEC + " done <feature> <n> --run` (that exact line) — never send a subagent to look for a shell, never pass an exit code you did not see. \"I finished it, mark it done\" is a claim, not a run; tick with a note only when the user explicitly asks for an UNVERIFIED tick. A non-zero exitCode REFUSES the tick (it stays recorded). A runnable _Verify:_ is verified only by {command: that very command (several: one run joined with ` && `), exitCode: 0}; anything else ticks it unverified. The result carries `verified`; when false, a stable `unverifiedReason` plus a localized note — doctor, spec_finish and ROADMAP.md list the task with that reason. A task with no runnable _Verify:_ and nothing recorded is verified (`nothingToVerify: true`, never listed). RED → GREEN: an `_Expect: fail_` task needs a FAILING run first; a run that never reached the test (exit 126 / 127 / 9009) is refused. Bugfix: a task after the root-cause task is refused until bug.md's Root Cause is filled. `undo: true` (+ `reason`) unticks it instead — its evidence turns stale.",
+      "Tick task N of a feature — EVIDENCE BEFORE CLAIMS. Pass `evidence` {command, exitCode, summary}: the run of its _Verify:_ command you actually made. If you cannot run it (no shell), do NOT call this tool: name the _Verify:_ command and ask the user for its output, or to run `" + spec.DEV_SPEC + " done <feature> <n> --run` (that exact line) — never send a subagent to look for a shell, never pass an exit code you did not see. \"I finished it, mark it done\" is a claim, not a run; tick with a note only when the user explicitly asks for an UNVERIFIED tick. A non-zero exitCode REFUSES the tick (it stays recorded). A runnable _Verify:_ is verified only by {command: that very command (several: one run joined with ` && `), exitCode: 0}; anything else ticks it unverified. The result carries `verified`; when false, a stable `unverifiedReason` plus a localized note — doctor, spec_finish and ROADMAP.md list the task with that reason. A task with no runnable _Verify:_ and nothing recorded is verified (`nothingToVerify: true`, never listed). RED → GREEN: an `_Expect: fail_` task needs a FAILING run first; a run that never reached the test (exit 126 / 127 / 9009) is refused. Bugfix: a task after the root-cause task is refused until bug.md's Root Cause is filled; +port: one after an unverified [PORT] task. `undo: true` (+ `reason`) unticks it instead — its evidence turns stale.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, number: { type: "integer", minimum: 0 }, evidence: { type: "object", properties: { command: { type: "string" }, exitCode: { type: "integer" }, summary: { type: "string", description: "e.g. '14/14 passing' or the last lines of output." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional: uncommitted changes outside .specs/." } }, description: "The run you made." }, undo: { type: "boolean", description: "Untick task N instead (its evidence turns stale)." }, reason: { type: "string", description: "With undo: why, one line." }, projectDir: PROJECT_DIR }, required: ["name", "number"] },
   },
   {
@@ -240,14 +242,14 @@ const TOOLS = [
   {
     name: "spec_add_track",
     description:
-      "Escalate an EXISTING feature to more tracks (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data or a track pack) — additive, never overwrites: scaffolds the missing artifacts, appends the track's design sections and template tasks, adds its steering and records the track set. `remove: true` turns tracks off instead — no file is deleted, the now-inactive artifacts are listed ('core' can't be removed; a bugfix keeps +tdd). Turning +tdd / +ai off drops their gates: only with the user's consent.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", description: "tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a track pack — several: 'saas,ai' / '+sec +privacy'." }, remove: { type: "boolean", description: "Turn the track(s) off instead (files kept)." }, projectDir: PROJECT_DIR }, required: ["name", "track"] },
+      "Escalate an EXISTING feature to more tracks (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data, +port or a track pack) — additive, never overwrites: scaffolds the missing artifacts, appends the track's design sections and template tasks, adds its steering and records the track set. `remove: true` turns tracks off instead — no file is deleted, the now-inactive artifacts are listed ('core' can't be removed; a bugfix keeps +tdd). Turning +tdd / +ai off drops their gates: only with the user's consent.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", description: "tdd | saas | ai | sec | privacy | dist | api | ui | obs | data | port, or a track pack — several: 'saas,ai' / '+sec +privacy'." }, remove: { type: "boolean", description: "Turn the track(s) off instead (files kept)." }, projectDir: PROJECT_DIR }, required: ["name", "track"] },
   },
   {
     name: "spec_feature",
     description:
-      "A feature's lifecycle: archive (to .specs/_archive/, out of the roadmap — reversible), restore, rename (folder, slug and every reference), flow (the phase order) or remove (deletes .specs/<slug>/ — needs `confirm: true` and the user's consent; without confirm nothing is deleted and the result lists what would be; prefer archive). The roadmap (and SPECS.md) are regenerated; a folder another process is updating is never moved (`busy`).",
-    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename", "restore", "flow"] }, name: { type: "string" }, newName: { type: "string", description: "rename: the new name." }, flow: { type: "string", enum: [...spec.FLOWS], description: "flow: the phase order." }, confirm: { type: "boolean", description: "remove: must be true (deletion is permanent)." }, projectDir: PROJECT_DIR }, required: ["action", "name"] },
+      "A feature's lifecycle: archive (to .specs/_archive/, out of the roadmap — reversible), restore, rename (folder, slug and every reference), flow (the phase order) or remove (deletes .specs/<slug>/ — needs `confirm: true` and the user's consent; without confirm nothing is deleted and the result lists what would be; prefer archive). protect / unprotect: guard tests' protected tests (unprotect a `file`, or protect it with `accept` — its current content authorised —, needs a `reason` and the user's consent). The roadmap (and SPECS.md) are regenerated; a folder another process is updating is never moved (`busy`).",
+    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename", "restore", "flow", "protect", "unprotect"] }, name: { type: "string" }, newName: { type: "string", description: "rename: the new name." }, flow: { type: "string", enum: [...spec.FLOWS], description: "flow: the phase order." }, confirm: { type: "boolean", description: "remove: must be true (deletion is permanent)." }, file: { type: "string" }, reason: { type: "string" }, accept: { type: "boolean" }, projectDir: PROJECT_DIR }, required: ["action", "name"] },
   },
   {
     name: "spec_import",
@@ -735,6 +737,17 @@ async function elicitApproval(toolName, args, pol, flight, progressToken) {
     if (Array.isArray(pre.failing) && pre.failing.length) details.push(E.forced(pre.failing.join(", ")));
     else if (!pre.revoke && !pre.chain) details.push(E.gatePasses);
     if (pre.waiver) details.push(E.waiver(pre.waiver.reason, pre.waiver.expires));
+  } else if (toolName === "spec_feature" && (String(args.action || "").trim().toLowerCase() === "unprotect" ||
+    (String(args.action || "").trim().toLowerCase() === "protect" && args.accept === true))) {
+    // 1.36 guard tests — a lift's (1.36.0 review 3: or an accept's) own checks first (a test file inside the project, a reason): a call
+    // refused anyway is answered as it is, nobody is asked; the question quotes the reason the engine will record (one line), bounded
+    const pre = runTool(toolName, args, { dryRun: true });
+    if (!pre || pre.ok === false || !pre.dryRun) return pre;
+    // the accept records the content the user was asked about — a test rewritten while the question waits is refused (1.36.0
+    // review 4: the engine compares the hash under the feature's lock — changed-since-preview, nothing written)
+    if (pre.accept === true) preview = { hash: pre.hash };
+    const why = String(pre.reason || "");
+    details.push((pre.accept === true ? E.accept : E.unprotect)(why.length > 200 ? why.slice(0, 199) + "…" : why));
   } else if (toolName === "spec_feature") {
     // remove's own preview (no confirm): a feature that doesn't exist is answered as it is — nobody is asked
     const pre = runTool(toolName, { action: "remove", name: args.name, projectDir: args.projectDir });

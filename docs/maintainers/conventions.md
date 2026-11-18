@@ -105,6 +105,17 @@ History at the end.
   approvals. Lists (`tracks`, `dependsOn`, roles, milestone `features`) → a 3-way SET merge; keyed roadmap entries
   (`features`, `backlog` — case-insensitive —, `meta.milestones`, `meta.checks`, `meta.approvalRoles`) per key, a change
   beating a delete; `meta.specVersion` → the higher, `meta.changelogAt` → the later, `meta.evidenceSince` → the earlier.
+- **`meta.reviewModels` (1.36) takes the default rule on purpose** — an ORDERED list (the first model leads), at most 3: never
+  a set merge (a union of two panels could hold 4). One side changed it → that side; both changed it differently (another list,
+  or off against a change) → a real conflict (cli/tests/16-conventions-merge-state.js).
+- **`meta.fastCheck` (1.36) is a plain value** (a check's name): the default rule — two different names conflict. A tick's
+  fast-check snapshot (`fast` {check, status, runs, clean}) is a RUN field (`runOf` keeps it): it travels with the run that wins
+  `evidence[n]`, no rule of its own.
+- **`protectedTests` (1.36, guard tests) has its rule** (`mergeProtectedTests`): `files` file by file, 3-way (`mergeMapWith`) — a
+  one-sided change (a tick's re-baseline, an added test) comes through; both sides changed one → OURS, never a conflict (finish
+  hashes the content again and names a change no record explains); `at` / `via` the EARLIER snapshot's (a record without a time
+  reads as the later); `truncated` either side's; `lifts` the union by identity (`LIFT_ID`: file, at, by, revoked, accepted — a
+  lift, its end and an accept each a record, in time order).
 - **A real conflict** (anything else both sides changed differently — a meta scalar, an unknown key): ours kept, the conflict
   written INTO the file as a top-level `mergeConflicts` list (valid JSON; each once — `mergeCanon`), exit 1, and doctor fails
   `merge-conflicts` until someone picks the values and deletes the list. An unparseable side merges nothing (exit 1).
@@ -384,6 +395,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.25** — `branch` (create --branch) merges as the earlier record.
 - **1.25.1 review 7** — `--install` / `--uninstall` lstat `.gitattributes` first: a cloned repository's link made --install
   write into the file it pointed at.
+- **1.36** — `meta.reviewModels` needs no rule of its own: the default 3-way per key gives the conflict an ordered, capped
+  list needs; a test holds it there. `protectedTests` (guard tests) got one: the design's "the earlier snapshot's hash wins"
+  would have reverted a tick's re-baseline made on one branch — files merge 3-way, both-changed keeps ours with no conflict.
+- **1.36.0 review 3** — the accept record (`{…, accepted: true}`, `feature protect --accept`) lives in `protectedTests.lifts`:
+  `LIFT_ID` gained `accepted`, so it never merges into a lift or an end of the same file, time and user (no new key).
 
 ### The locks
 - **1.13** — the cross-process feature lock: two MCP servers (or MCP + `dev-spec done`) on one feature lost ticks and evidence

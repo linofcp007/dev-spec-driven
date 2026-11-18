@@ -40,7 +40,11 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
 let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the tasks gate, the execution gate, its live views)
 let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
 let designSystemRegistry, designSystemCheck, designSystemGated; // quality.js — the design-system registry's check (1.35)
+let portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext, portCheckNumber; // port.js — +port's fence (1.36; portSchedule, portRecheckNext: review 1; portCheckNumber: review 2)
 let dayOf; // core.js — the local calendar date (today / dayOf)
+let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.reviewModels)
+let fastCheckOf; // evidence.js — the fast check (1.36, meta.fastCheck): doctor's fast-check warn
+let guardLevel, protectedTestsDoctor; // guards.js · protect.js — 1.36 guard tests: doctor's protected-tests warn
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
 function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
@@ -67,7 +71,8 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
-  designSystemRegistry, designSystemCheck, designSystemGated } = E); }
+  designSystemRegistry, designSystemCheck, designSystemGated, reviewModelsSetting, fastCheckOf, guardLevel, protectedTestsDoctor,
+  portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext, portCheckNumber } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -132,7 +137,7 @@ function designSaveCheck(projectDir, name) {
 // other tool's MCP config `env`, or a shell). Deliberately NOT plugin.json `userConfig`: it opens a configuration dialog on every
 // install / enable, and an older Claude Code that validates option fields strictly would refuse to load the plugin.
 // Keys: DEFAULT_LANG (the language a NEW project gets — newProjectLang), STOP_CHECK (the end-of-turn evidence gate while
-// meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope while meta.guard is unset). hooks/guard-hook.js and
+// meta.stopCheck is unset), GUARD_DEFAULT (off | on | scope | tests while meta.guard is unset). hooks/guard-hook.js and
 // hooks/stop-hook.js read the same variables raw (their cheap pre-checks).
 function userOptionRaw(key) {
   for (const name of ["DEV_SPEC_" + key]) {
@@ -238,10 +243,11 @@ function statusFeature(projectDir, name) {
   // Judged per task BLOCK (its own _Verify:_, its own record), never per number: a duplicated number must
   // not lend one task's run or _Verify:_ to the other. Same order as parseTasks (stable sort by number).
   const blocks = taskBlocks(tasksText || "");
-  const next = taskSchedule(blocks).next; // next_task's rule (_Depends:_ all done)
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = stateEvidence(projectDir, slug);
   const mode = evidenceRule(projectDir); // meta.evidence "observed" — an unobserved run verifies nothing
+  // next_task's rule (_Depends:_ all done) — never a task +port's fence holds (portSchedule; 1.36 review 2, P2-3)
+  const next = portSchedule(dir, readState(projectDir, slug).kind, tracks, blocks, evidence, mode).sch.next;
   const list = blocks.map((b) => {
     const v = taskVerification(evidence, b, dups.has(b.number), mode); // doctor's rule — never a second opinion
     return { number: b.number, done: b.done, parallel: b.parallel, story: b.story, text: b.text, verified: !v.reason, ...(v.nothingToVerify ? { nothingToVerify: true } : {}) };
@@ -298,6 +304,7 @@ function statusFeature(projectDir, name) {
     uiSections: trackView("ui"),
     obsSections: trackView("obs"),
     dataSections: trackView("data"), // 1.21 F4
+    portSections: trackView("port"), // 1.36
     ...(Object.keys(packSections).length ? { packSections } : {}),
     ...(missingPacks.length ? { missingPacks } : {}), // saved track packs the project lacks now (inactive — doctor: track-pack-missing)
   };
@@ -421,6 +428,7 @@ function nextAction(projectDir, name, opts = {}) {
   if (x.depsBlocked) res.blocked = x.depsBlocked; // stable — the open tasks and the dependencies each waits on
   if (x.impactPhases.length) res.impact = { tool: "spec_impact", phases: x.impactPhases }; // what to run before re-approval
   if (x.missingApproved.length) res.missingApproved = x.missingApproved; // stable — approved artifacts that no longer exist
+  if (doc.reviewPanel) res.reviewPanel = doc.reviewPanel; // 1.36 (stable): the lean doctor's, never computed again
   const extras = x.approveExtras;
   if (extras && extras.missingRoles) res.missingRoles = extras.missingRoles; // stable — the roles to sign
   if ((extras && extras.signoffsComplete) || x.finishedComplete) res.signoffsComplete = true; // stable — every role signed, one re-signs to approve
@@ -460,11 +468,14 @@ const NEXT_STEPS = [
   { id: "fix", when: (x) => x.fails.length > 0, run: (x) => { x.step = "fix"; x.recommendation = x.nx.fixChecks(x.fails.map((c) => c.id).join(", "), x.slug); } },
   { id: "tasks", when: () => true, run: tasksStep },
 ];
-// (5) all tasks done (step "finish"): a ticked task without passing evidence → verify it (spec_finish would refuse), else drift since a
-// finish → decide, else spec_finish again (its baseline is stale), else — finished — project checks without a passing run since the
-// last task activity → verify (res.suite), else finished. The first whose `when(x, fin)` holds; none: finish it.
+// (5) all tasks done (step "finish"): a ticked task without passing evidence → verify it (spec_finish would refuse), else +port's
+// differential check not passed again since a task after it → verify (re-run it — before the project checks: the re-run is task
+// activity, so checks run first would run twice), else drift since a finish → decide, else spec_finish again (its baseline is stale),
+// else — finished — project checks without a passing run since the last task activity → verify (res.suite), else finished. The first
+// whose `when(x, fin)` holds; none: finish it.
 const FINISH_STEPS = [
   { id: "verify", when: (x, f) => f.vs.unverified.length > 0, run: verifyStep },
+  { id: "recheck", when: (x, f) => !!f.recheck, run: (x, f) => { x.step = "verify"; x.recommendation = f.recheck.text; } },
   { id: "drift", when: (x, f) => !!(f.dr && f.dr.drifted), run: driftStep },
   { id: "refinish", when: (x, f) => !!f.stale, run: refinishStep },
   { id: "verify-suite", when: (x, f) => !!(f.fin && f.suiteGap.length), run: verifySuiteStep },
@@ -542,8 +553,17 @@ function tasksStep(x) {
   const { ctx, nx, slug, lng, st } = x;
   const activeText = ctx.tasksActive;
   const tasks = parseTasks(activeText);
-  const sch = taskSchedule(taskBlocks(activeText || "")); // the next task whose _Depends:_ are all done
+  const blocks = taskBlocks(activeText || "");
+  // the next task whose _Depends:_ are all done — never one +port's fence holds (portSchedule, spec_next_task's rule)
+  const { sch, held } = portSchedule(x.dir, x.kind, x.tracks, blocks, st.evidence, evidenceRule(x.projectDir));
   const next = sch.next;
+  // 1.36 review 1: nothing else can start while the [PORT] task holding the rest is ticked but not verified — its run opens the fence
+  // (the step named the held task: implement → refused → implement)
+  if (!next && held && held.ticked) {
+    x.step = "verify";
+    x.recommendation = i18n.msg(lng).port.naHeld(held.number, held.anchor, slug, held.runnable);
+    return;
+  }
   // Open tasks, none of which can start (a cycle, a _Depends:_ naming no task): fix the dependencies — never "finish".
   const stuck = !next && tasks.some((t) => !t.done);
   x.step = next ? "implement" : stuck ? "fix" : tasks.length ? "finish" : "tasks";
@@ -569,9 +589,19 @@ function tasksStep(x) {
   // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
   // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
   const vs = ctx.vs;
-  const f = { activeText, stale, fin, dr, vs, day: (fin && dayOf(fin.at)) || "?", suiteGap: fin && !vs.unverified.length ? ctx.suite.missing : [] };
+  const f = { activeText, stale, fin, dr, vs, day: (fin && dayOf(fin.at)) || "?", suiteGap: fin && !vs.unverified.length ? ctx.suite.missing : [],
+    // +port: spec_finish's port-recheck blocker pending → { d, text } (1.36 review 1)
+    recheck: portOn(x.kind, x.tracks) ? portRecheckNext(blocks, ctx.reqs, vs.evidence, st.ticks, evidenceRule(x.projectDir), lng, slug) : null };
   const s = FINISH_STEPS.find((e) => e.when(x, f));
   if (s) s.run(x, f);
+  // 1.36 a review panel (meta.reviewModels): the branch review on every model comes FIRST — before the optional simplify pass and
+  // the project checks' runs (a fix round after them makes those runs stale) — at the first finish and a re-finish (the step stays
+  // "finish" only then: verify / drift / finished set their own). A hint added to the step, never a step of its own.
+  if (x.step === "finish" && x.doc.reviewPanel) x.recommendation = nx.reviewBranch(slug, x.doc.reviewPanel.models.join(", ")) + " " + x.recommendation;
+  // 1.36 review 2 (P2-2): +port — the differential check again on the final code after any fix from here on (the branch review's
+  // included): port-recheck reads only the tasks listed after it, so a fix to the port's own tasks is never asked for. A hint.
+  const dNum = x.step === "finish" && portOn(x.kind, x.tracks) ? portCheckNumber(blocks, ctx.reqs) : null;
+  if (dNum != null) x.recommendation += " " + i18n.msg(lng).port.naFinishCheck(dNum, slug);
   // with project checks configured (meta.checks), a plain /spec-finish is refused until each has a passing
   // run since the last task activity (or on the code as it is now: Ga3's code-changed) — say how to run and record them
   // (dev-spec finish <f> --run / spec_finish {evidence}); also on `drift`, whose "harmless → re-finish" needs that run.
@@ -858,6 +888,8 @@ const flagged = (c, pick) => c.blocks.map((b) => ({ number: b.number, values: pi
 const quoted = (list) => list.map((v) => "«" + v + "»").join(", ");
 const CORE_STEERING = ["constitution.md", "product.md", "tech.md", "structure.md"];
 
+const protectOpen = (c) => !!c.approvals.tasks && c.blocks.some((b) => !b.done); // protected-tests: approved, open tasks
+
 // DOCTOR_CHECKS — every check spec_doctor runs and every check a phase's approval runs, ONE entry each, in the doctor's order:
 //   id         its stable id (an entry emitting several lists them in `emits`; `family` matches a family — a track pack's
 //              <name>-sections);
@@ -883,6 +915,14 @@ const DOCTOR_CHECKS = [
   // an .execution/observed.jsonl forges an observed run: a warn naming the fix
   { id: "observed-unguarded", applies: (c) => evidenceMode(c.projectDir) === "observed" && approvalGuardLevel(c.projectDir) === "off",
     run: (c) => ({ status: "warn", detail: c.fm.observed.unguarded }) },
+  // 1.36: meta.fastCheck names no valid check (a hand edit, its check renamed), dev-guardian's gate or a command that rewrites files —
+  // no fast check runs: a project setting, so its own entry (one line, never one per feature's evidence)
+  { id: "fast-check", run: (c) => { const f = fastCheckOf(c.projectDir); return f && f.invalid !== undefined ? { status: "warn", detail: c.fm.fastCheck.doctorInvalid(f.invalid, f.why) } : null; } },
+  // 1.36 guard tests: a feature with approved, open tasks at level tests and no snapshot (feature protect takes one), a truncated one,
+  // or the approval guard off (the list lives in .state.json, which only that guard keeps agents from editing); a feature with a finish
+  // recorded: a lift of its own recorded before that finish and still in force (1.36.0 review 3)
+  { id: "protected-tests", applies: (c) => guardLevel(c.projectDir) === "tests" && (protectOpen(c) || (isObj(c.state) && isObj(c.state.finished))),
+    run: (c) => protectedTestsDoctor(c.projectDir, c.slug, c.state, c.lang, protectOpen(c)) },
   // Steering: present is not enough — a steering file that is still its template steers nothing (named, with its count).
   { id: "steering", run: (c) => {
     const missing = CORE_STEERING.filter((f) => !fs.existsSync(path.join(c.root, "steering", f)));
@@ -1026,7 +1066,7 @@ const DOCTOR_CHECKS = [
   // overlaps) and the stricter filled rule: a section holding nothing but the template's guidance lines fails — a WARN on a design
   // approved already (never a phase failed retroactively; its next approval asks — the approval holds every NEW one to it).
   { id: "<track>-sections", family: /-sections$/, phase: 2, emits: ["saas-sections", "ai-sections", "sec-sections", "privacy-sections", "dist-sections",
-    "api-sections", "ui-sections", "obs-sections", "data-sections"], applies: (c) => c.read("design.md") != null, run: (c) => {
+    "api-sections", "ui-sections", "obs-sections", "data-sections", "port-sections"], applies: (c) => c.read("design.md") != null, run: (c) => {
     const allFilled = { saas: c.m.saasAllFilled, ai: c.m.aiAllFilled, ...c.fm.secPrivacy.allFilled };
     const size = c.size, approved = isRecord(c.approvals.design), S = c.fm.sizes;
     return c.sections.map(([tr, mark, rows]) => {
@@ -1061,6 +1101,17 @@ const DOCTOR_CHECKS = [
       const r = designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, gate: c.size, slug: c.slug }); // the approval being made: never legacy
       return [[r.status !== "fail", r.detail]];
     } } },
+  // 1.36 +port (engine/port.js): the fence the plan draws — the baseline and the differential check, each with a runnable _Verify:_ (a
+  // FAIL at size m / l, where the tasks approval refuses it — designReuseGated —, unless the tasks are approved already; a warn at s / no
+  // size); a task listed before the baseline, a _Depends:_ that never reaches it (warns). Not while tasks.md is a later phase's template.
+  // The anchors read the whole requirements.md (trackAcIds picks the [PORT] lines), as complete_task and spec_finish do.
+  { id: "port-verify", phase: 5, applies: (c) => portOn(c.kind, c.tracks) && c.exists("tasks.md") && !c.laterFiles.includes("tasks.md"),
+    run: (c) => portPlanCheck(c.blocks, c.reqs, c.kind, c.size, isRecord(c.approvals.tasks), c.lang),
+    gate: { tasks: (c) => portPlanProbe(c.blocks, c.reqs, c.kind, c.tracks, c.size, c.lang) } },
+  // … once tasks are ticked: the differential check not run again since the improvements were ticked (port-recheck — spec_finish
+  // blocks on it), a task ticked before the [PORT] task it waits for had passed (port-fence). Warns.
+  { id: "port-runs", emits: ["port-recheck", "port-fence"], phase: 6, applies: (c) => portOn(c.kind, c.tracks) && c.blocks.some((b) => b.done),
+    run: (c) => portRunChecks(c.blocks, c.reqs, c.vs.evidence, c.state.ticks, evidenceRule(c.projectDir), c.lang, c.slug) },
   // a saved track pack the project no longer has (its folder deleted, or the pack now invalid) — the track is inactive.
   { id: "track-pack-missing", applies: (c) => c.missingPacks.length > 0, run: (c) => {
     const reg = packRegistry(), st = readJson(statePath(c.dir)).data, K = c.fm.trackPacks;
@@ -1281,7 +1332,7 @@ const GATES = {
   // the plan of a change: ONE file holds its criteria and its tasks, one gate checks both
   tasks: { artifact: (c) => (c.kind === "change" ? { file: CHANGE_FILE, missing: !c.exists(CHANGE_FILE) } : { file: "tasks.md", missing: !c.exists("tasks.md") }),
     probes: (c) => (c.kind === "change" ? ["ears", "placeholders", "clarifications", "ac-uniqueness", "placeholders:realTasks", "change-scope", "traceability", "task-deps"]
-      : ["placeholders", "placeholders:realTasks", "traceability", "task-deps"]) },
+      : ["placeholders", "placeholders:realTasks", "traceability", "port-verify", "task-deps"]) },
   // Phase 4 has no artifact of its own: it signs off the failing tests (+tdd) / the eval harness (+ai) that implement an active plan —
   // nothing to approve without one (a core-only feature has no Phase 4).
   tests: { artifact: (c) => ({ file: c.tracks.includes("ai") && !c.tracks.includes("tdd") ? "eval-plan.md" : "test-plan.md", missing: !phaseActive("tests", c.tracks) || (!c.testsTdd && !c.testsAi) }),
@@ -1353,12 +1404,22 @@ function doctorRun(projectDir, name, opts = {}) {
     verdict: fails.length ? "fail" : warns.length ? "warn" : "pass",
   };
   if (c.size) res.size = c.size; // 1.31: the deep review picks its reviewers by size (references/critic-review.md); absent = no size
+  const panel = reviewPanel(c);
+  if (panel) res.reviewPanel = panel; // 1.36 (stable): {models} — the reviews that run once per model; absent = one model each
   // only when the project has approval roles: {phase: {required, signed, missing, stale}} per pending phase that needs
   // roles, and {phase: [roles]} per approved phase lacking a role now required.
   if (g.rv.any) Object.assign(res, { pendingRoles: g.rv.pending, unsignedRoles: g.rv.unsigned });
   if (c.flow === "design-first") res.flow = "design-first"; // C3 (only then: the default flow's result is unchanged)
   if (c.steeringChanged.length) res.steeringChanged = c.steeringChanged; // 1.16 Q1 (stable): [{phase, approvedAt, files: [{file, change}]}]
   return { res, ctx: c };
+}
+// 1.36 the review panel (roadmap.json meta.reviewModels — guards.js reviewModelsSetting): {models} when the project names 2–3 models,
+// for every feature but an xs one (a change: right-sized rigor — critic-review.md's xs row reviews nothing by default). The engine
+// dispatches nothing: the controller runs the branch / final review, the gate critics and converge once per model
+// (references/subagent-execution.md → Review on more than one model). A spike never gets here (spikeDoctor).
+function reviewPanel(c) {
+  const { models } = reviewModelsSetting(c.projectDir);
+  return models.length && c.size !== "xs" ? { models } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1472,8 +1533,10 @@ function statusTestsGate(pdir, dir, tracks, reads) {
 //   every phase approved: a FORCED approval whose gate still fails (approvalChecks re-run for the forced phases — next_action's
 //     doctor step for a forced approval), or a bugfix whose bug.md → Root Cause is still empty (the doctor's root-cause failure; the
 //     bugfix gate refuses every task after the one that writes it) → fix;
-//   tasks: none → tasks · the next startable one → implement · none startable → blocked;
-//   every task done: a tick not verified → verify · no finish baseline → finish · a baseline older than a change (staleFinish,
+//   tasks: none → tasks · the next startable one (+port: never one its fence holds) → implement · none startable → blocked (+port: the
+//     [PORT] task holding the rest ticked but not verified → verify it);
+//   every task done: a tick not verified → verify · +port's differential check not passed again since a task after it → verify it ·
+//     no finish baseline → finish · a baseline older than a change (staleFinish,
 //     state only — the _Implements:_ walk skipped) → finish (again) · a project check without a passing run since the last task
 //     activity (suiteStatus without the code hash) → verify · the execution sign-off missing or older than a change → sign-off ·
 //     else finished — the drift of the recorded files is NOT checked (next_action's `drift`), so the line never says "clean".
@@ -1533,10 +1596,14 @@ function statusNext(pdir, f, kind, lng, unverified, reads) { // reads: statusLin
   }
   if (!f.blocks.length) return { step: "tasks" };
   if (open.length) {
-    const nx = taskSchedule(f.blocks).next;
-    return nx ? { step: "implement", task: nx.number } : { step: "blocked" };
+    // never a task +port's fence holds — the [PORT] task holding the rest ticked but not verified: verify it (next_action's step)
+    const { sch, held } = portSchedule(f.dir, kind, f.tracks, f.blocks, st.evidence, evidenceRule(pdir));
+    return sch.next ? { step: "implement", task: sch.next.number } : held && held.ticked ? { step: "verify", task: held.anchor } : { step: "blocked" };
   }
   if (unverified.length) return { step: "verify", task: unverified[0] };
+  // +port: the differential check not passed again since a task after it (spec_finish's port-recheck) → re-run it first (next_action's)
+  const rc = portOn(kind, f.tracks) ? portRecheckNext(f.blocks, readIfExists(path.join(f.dir, "requirements.md")), st.evidence, st.ticks, evidenceRule(pdir), lng, f.slug) : null;
+  if (rc) return { step: "verify", task: rc.d };
   const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
   if (!fin) return { step: "finish" };
   if (staleFinish(pdir, st, "", { newFiles: false })) return { step: "finish", again: true };

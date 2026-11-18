@@ -98,6 +98,11 @@ const text = {
       ["Linaje y Responsables", "- Orígenes → transformaciones → consumidores (un diagrama de linaje o el DAG de dbt) · el responsable de cada conjunto de datos y a quién se avisa cuando falla · el SLA de frescura del que dependen los consumidores · el historial que guarda cada tabla (dimensiones lentamente cambiantes: el tipo 1 sobrescribe, el tipo 2 guarda versiones)."],
       ["Retención y Coste", "- La retención por conjunto de datos y por nivel de almacenamiento (la zona bruta frente a la curada; caliente / templado / frío) — los datos personales siguen references/privacy-track.md · particionado y clustering para que una consulta lea solo lo que necesita · el coste esperado de almacenamiento y de consultas al mes y la alerta cuando se desvía."],
     ],
+    port: [
+      ["Línea Base del Comportamiento", "- Lo que se mantiene: las salidas, los errores y los efectos secundarios (y su orden) que produce el código antiguo · el corpus — entradas reales grabadas, la suite de pruebas antigua, fixtures — y por qué llega a los caminos que importan · dónde vive la línea base (su ruta) · grabada a partir del código ANTIGUO antes de que cambie cualquier código que cubre, nunca regenerada a partir del código nuevo (references/port-patterns.md)."],
+      ["Verificación Diferencial", "- El comando que ejecuta el código NUEVO sobre el corpus y lo compara con la línea base GRABADA (nunca con el código antiguo en ejecución — sigue funcionando después del cambio) · lo que se normaliza (fechas y horas, IDs generados, un orden que el contrato no fija, una tolerancia de coma flotante) y por qué nada de eso es comportamiento · cómo se informa una diferencia · después de portar, cada diferencia intencionada listada con el criterio que la pide — nunca silenciada."],
+      ["Mejoras Aplazadas", "- Cada limpieza o cambio de comportamiento detectado al portar, escrito aquí en lugar de hecho — se hace después de la verificación diferencial: en una tarea posterior (listada después de ella), en la pasada de simplificación (solo limpiezas que conservan el comportamiento) o en una funcionalidad siguiente."],
+    ],
   },
   // trackTasks — each built-in track's template tasks (none for +tdd — it only adds markers): the story heading and each task's
   // text, in the order of the layout's TRACK_TASK_PLAN (the criteria each task implements and makes green, its fixed markers).
@@ -183,6 +188,19 @@ const text = {
         "Backfill — el procedimiento para un rango de fechas (paralelismo, coste, una ejecución de prueba), ensayado en una partición y comparado con una sola ejecución",
         "Linaje, responsables y retención — orígenes → transformaciones → consumidores documentados, un responsable por conjunto de datos, la retención y el particionado de design.md aplicados",
       ],
+    },
+    port: {
+      leadHeading: "Historia US-1 — Línea Base del Comportamiento (antes de portar)",
+      heading: "Historia US-1 — Verificación Diferencial (la prueba de que nada cambió)",
+      tasks: [
+        "Grabar la línea base del comportamiento — ejecutar la implementación ANTIGUA sobre el corpus y guardar sus salidas y errores como línea base, antes de que cambie cualquier código que cubre",
+        "Verificación diferencial — ejecutar la implementación NUEVA sobre el corpus y compararla con la línea base grabada; cada diferencia es un error o una diferencia intencionada listada con su criterio",
+      ],
+      slots: {
+        baseline: "[ruta de la línea base grabada — las salidas antiguas por caso del corpus]",
+        verifyOld: "[comando que ejecuta la implementación ANTIGUA sobre el corpus y la compara con la línea base]",
+        verifyNew: "[comando que ejecuta la implementación NUEVA sobre el corpus y la compara con la línea base grabada]",
+      },
     },
   },
   // requirements — the title, the Summary, then the user stories (size S: the one story) up to the core criteria; the active
@@ -302,6 +320,10 @@ Resultados que la función debe lograr — negocio/UX, no implementación. Cuant
         "SI el job se vuelve a ejecutar para una partición ya cargada, ENTONCES EL SISTEMA DEBE producir el mismo resultado que una sola ejecución, sin filas duplicadas ni ausentes (una reejecución y un backfill idempotentes).",
         "SI los datos más recientes de [la tabla] son más antiguos que [su SLA de frescura], ENTONCES EL SISTEMA DEBE avisar a [la persona responsable] y marcar la tabla como desactualizada para sus consumidores.",
         "CUANDO cambie el esquema de [el origen], EL SISTEMA DEBE aceptar un cambio aditivo y retrocompatible y DEBE rechazar un cambio incompatible (una columna eliminada o renombrada, un tipo más restringido) antes de que ninguna fila llegue a [los consumidores].",
+      ],
+      port: [
+        "CUANDO la nueva implementación procese [el corpus — las entradas grabadas, fixtures o casos de prueba antiguos que guardan el comportamiento actual], EL SISTEMA DEBE producir las mismas salidas que la implementación antigua, caso por caso.",
+        "SI la implementación antigua rechaza una entrada de [el corpus] con un error, ENTONCES EL SISTEMA DEBE rechazarla con el mismo código o tipo de error.",
       ],
     },
   },
@@ -528,6 +550,8 @@ Cada AC debe aparecer en al menos una celda "Cubre". Lagunas (con justificación
       idempotentRerun: "una partición reejecutada o con backfill dos veces queda con las mismas filas que una ejecución — sin duplicados, sin huecos",
       freshness: "una partición más antigua que el SLA de frescura: la comprobación de frescura falla y avisa al responsable",
       schemaChange: "compatibilidad de cambios de esquema: una columna opcional nueva pasa, una columna eliminada / renombrada o un tipo más restringido se rechaza antes de la carga",
+      differential: "verificación diferencial: la salida nueva es igual a la línea base grabada en cada caso del corpus",
+      differentialErrors: "verificación diferencial: cada caso del corpus que falla recibe el código o tipo de error de la implementación antigua",
     },
   },
   // checklist — the items: the core four, +tdd's, then per marker track its sections item (n: the design sections to fill —
@@ -592,6 +616,11 @@ Tracks: ${label}. Marca antes de dar la función por terminada.`,
       "DATA: las comprobaciones de calidad de datos se ejecutan en la ingesta y antes de publicar — una fila errónea queda en cuarentena, nunca se carga; el aviso de frescura llega al responsable.",
       "DATA: una reejecución de partición y un backfill ensayados con datos de tamaño real dan las mismas filas que una ejecución; retención y particionado aplicados según el diseño.",
     ],
+    port: [
+      (n) => `PORT: ${n} secciones obligatorias de diseño rellenadas (sin TODO) — el corpus indicado, lo que se normaliza y por qué.`,
+      "PORT: la línea base grabada a partir del código ANTIGUO antes de empezar el trabajo de portar — nunca regenerada a partir del código nuevo.",
+      "PORT: la verificación diferencial en verde en la versión final sobre todo el corpus; cada diferencia intencionada listada con el criterio que la pide.",
+    ],
     saasLoadOnly: "SaaS: prueba de carga cumple el presupuesto (ruta crítica).",
     done: ["Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos los gates de fase aprobados (`approve`)."],
   },
@@ -629,6 +658,8 @@ Tracks: ${label}. Marca antes de dar la función por terminada.`,
     guardianBaseline: "escribir o borrar .guardian/baseline.json — los findings que el gate de dev-guardian acepta como conocidos",
     guardianBaselineUpdate: "ejecutar el `baseline update` de dev-guardian — acepta como conocidos todos los findings actuales, incluidos los de la funcionalidad, y el gate deja de informarlos",
     guardianCli: "ejecutar el gate de dev-guardian con un DEV_GUARDIAN_CLI o CLAUDE_CONFIG_DIR propio — respondería otro dev-guardian",
+    unprotect: (file, feature) => `levantar la protección de la prueba ${file} ('${feature}') — un agente podría entonces cambiarla o borrarla`,
+    accept: (file, feature) => `aceptar el contenido actual de la prueba protegida ${file} ('${feature}') — un cambio hecho en ella deja de señalarse`,
     lower: (from, to) => `bajar la guardia de aprobaciones de ${from} a ${to}`,
     revoke: (phase, feature) => `revocar la aprobación de la fase ${phase} de '${feature}'`,
     approve: (phase, feature) => `aprobar la fase ${phase} de '${feature}'`,
@@ -732,6 +763,7 @@ ${a.summary || "[una línea: el bug a corregir]"}
 ## Fase: Corrección
 - [ ] 1. [US1] Escribir la prueba de regresión T-01 y verla fallar por la razón correcta (pegar la salida); añadir la prueba de protección T-02 (ya pasa)
   - _Requirements: US-1.AC-1_
+  - _Implements: [el fichero de prueba donde va T-01]_
   - _Verify: [comando que ejecuta T-01]_
   - _Expect: fail_
 - [ ] 2. [US1] Corregir la causa raíz — un cambio, no un paquete; la prueba de protección T-02 sigue en verde
@@ -1075,7 +1107,7 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' ya existe.`,
       renameArchived: (slug) => `'${slug}' es el nombre de una función archivada (.specs/_archive/${slug}) — elige otro nombre (con el mismo nombre, ninguna de las dos podría archivarse ni restaurarse).`,
       slugTaken: (slug, held, name) => `'${name}' llega a la carpeta .specs/${slug}/, que contiene otra función ('${held}') — el nombre de la carpeta conserva solo los primeros 64 caracteres del nombre. No se cambió nada: usa un nombre más corto que se diferencie dentro de ellos (para trabajar en '${held}', usa el nombre '${slug}').`,
-      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
+      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data | port",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
       noSpecs: (root) => `No hay .specs/ en ${root}`,
@@ -1215,6 +1247,7 @@ const msg = {
       approveTests: (slug, what) => `Fase 4, el gate estricto: ${({ tdd: "escribe todas las pruebas planificadas y confirma que cada una falla por la razón correcta", ai: "escribe las pruebas deterministas y el harness de evals, y registra la línea base", both: "escribe todas las pruebas planificadas (cada una fallando por la razón correcta) y el harness de evals, y registra la línea base" })[what]} — /spec ${slug} tests; ningún código de implementación antes. Después apruébalo — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa la tarea #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge. Opcional, antes: /spec-review ${slug} simplify — una limpieza del código de la propia funcionalidad sin cambiar el comportamiento, probada por sus pruebas.`,
+      reviewBranch: (slug, list) => `Panel de revisión (meta.reviewModels: ${list}): primero la revisión de la rama en cada modelo — /spec-review ${slug} branch, un revisor nuevo por modelo (en la ejecución con subagentes: la revisión final) — salvo que el ledger ya tenga su línea "Final review: ×N" desde la última tarea (una tarea hecha sin subagentes no escribe línea en el ledger — si hiciste una después de la revisión, vuelve a ejecutar la revisión); después la pasada de simplificación opcional, las comprobaciones del proyecto y /spec-finish ${slug}.`,
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /spec ${slug} tasks.`,
       drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (${DEV_SPEC} drift ${slug}). La línea base solo dice que cambiaron: /spec-review ${slug} converge lee el código criterio a criterio, a partir de esos ficheros. Después decide: la spec ahora es incorrecta → /spec-change ${slug} impact (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
       finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` +
@@ -1309,6 +1342,7 @@ const msg = {
       unknown: (items, valid) => `Track${items.length > 1 ? "s" : ""} desconocido${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (¿querías decir '${u.suggestion}'?)` : "")).join(", ")}. Tracks válidos: ${valid}.`,
       cannotRemoveCore: "'core' está siempre activo — no se puede quitar.",
       bugfixNeedsTdd: "Un bugfix es siempre test-first — no se puede quitar +tdd.",
+      portBugfix: "+port no puede ir en un bugfix: un bugfix cambia el comportamiento a propósito, un port lo mantiene igual — porta en una funcionalidad propia (/spec) y corrige el bug antes o después.",
       notActive: (list) => `No activo: ${list} — nada que quitar.`,
       removed: (list, slug) => `Tracks desactivados: ${list}. No se borró ningún fichero — los artefactos inactivos se quedan donde están y vuelven a contar si vuelves a añadir el track. Vuelve a ejecutar /spec-doctor ${slug}.`,
       restoredSections: (list) => `El track eliminado cubría estas secciones de los tracks que quedan — vuelven a design.md, por rellenar: ${list}.`,
@@ -1364,6 +1398,7 @@ const msg = {
       finishChecks: "'finishChecks' debe ser un objeto",
       signoffs: "'signoffs' debe ser un objeto",
       unticks: "'unticks' debe ser un array",
+      protectedTests: "'protectedTests' debe ser un objeto (su 'files' un objeto, su 'lifts' un array)",
     },
     depend: {
       // "Necesita atención" de ROADMAP.md / .html: un dependsOn que no nombra ninguna función
@@ -1547,6 +1582,8 @@ const msg = {
       removed: (f) => `'${f}' eliminada ✓`,
       wouldRemove: (slug, dir, n, entries) => `Esto eliminaría '${slug}' definitivamente: ${dir} (${n} fichero(s): ${entries})`,
       confirmHint: (slug) => `No se ha eliminado nada. Vuelve a ejecutar con --yes para confirmar — o archívala: ${DEV_SPEC} feature archive ${slug}`,
+      protectLift: (file, by, day, reason, ended, active) => ended ? `  levantamiento terminado: ${file} — por ${by}, ${day}` : `  ${active ? "levantada" : "levantada (terminada después)"}: ${file} — por ${by}, ${day}: "${reason}"`,
+      protectAccept: (file, by, day, reason) => `  contenido aceptado: ${file} — por ${by}, ${day}: "${reason}"`,
       missingValue: (flag) => `falta el valor de --${flag}`,
       unknownFlag: (flag, suggestion) => `opción desconocida ${flag}` + (suggestion ? ` — ¿quizás ${suggestion}?` : ".") + " Las opciones están en `" + DEV_SPEC + " help`.",
       unknownRules: (tool, known) => `herramienta desconocida '${tool}'. Conocidas: ${known}`,
@@ -1630,6 +1667,8 @@ const msg = {
       bugGateFirst: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar y ninguna tarea la escribe — solo la tarea ${first} puede completarse hasta que la causa raíz esté escrita en bug.md (ninguna corrección antes de la causa raíz).`,
       bugGateFix: (n) => `La tarea ${n} aún no puede completarse: pone en verde la prueba de regresión — es una corrección — y bug.md → Causa Raíz está sin rellenar. Escribe allí primero la causa raíz, con su evidencia (ninguna corrección antes de que la causa raíz esté escrita en bug.md).`,
       bugGateTicked: (n, rc) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz sigue vacía — la tarea ${rc} está marcada, pero lo que entrega es esa sección. Escribe allí la causa raíz, con su evidencia (ninguna corrección antes de que la causa raíz esté escrita en bug.md).`,
+      portHeld: (n, a, slug) => `La tarea ${n} espera a la tarea ${a} (+port — primero portar, después mejorar: el trabajo de portar espera a la línea base, una mejora a la verificación diferencial). No se registró nada. Marca primero la tarea ${a} con la ejecución de su _Verify:_ (${DEV_SPEC} done ${slug} ${a} --run); si la tarea ${n} va antes, muévela allí en tasks.md — un cambio del plan, aprobado de nuevo.`,
+      portHeldUnverified: (n, a, slug) => `La tarea ${n} espera a la tarea ${a} (+port): la tarea ${a} está marcada pero no verificada — solo una ejecución correcta de su _Verify:_ abre la barrera (${DEV_SPEC} done ${slug} ${a} --run; una tarea [PORT] sin un _Verify:_ ejecutable nunca la abre). No se registró nada.`,
       rootCauseTaskEmpty: (n) => `La tarea ${n} está marcada, pero bug.md → Causa Raíz sigue vacía — escribe allí la causa raíz, con su evidencia: las tareas siguientes (la prueba de regresión, la corrección) siguen rechazadas hasta que esté escrita.`,
       fill: (file, what, hint) => `Rellena ${file} — ${what}; luego ${hint}.`,
       fillMissing: "aún no existe",
@@ -1722,6 +1761,7 @@ const msg = {
       wUnknownRefLine: (line, ref) => `tasks.md, línea ${line}: la referencia _Requirements:_ '${ref}' no corresponde a ningún criterio importado — se conserva tal cual`,
       wCarried: (list) => `copiado tal cual, sin correspondencia con historias o criterios (revísalo): ${list}`,
       wNoRefs: "las tareas importadas no tienen referencias _Requirements:_ — añádelas para que trace_check asocie cada AC a una tarea",
+      wPortNoFence: (slug) => `+port: el tasks.md importado no tiene tarea de línea base ni verificación diferencial, así que la barrera no retiene nada — deja que add_track las escriba: ${DEV_SPEC} add-track ${slug} port --remove y después ${DEV_SPEC} add-track ${slug} port (añadidas tras las tareas importadas: mueve la línea base al principio — references/port-patterns.md)`,
       wNoTasks: "el origen no tiene tasks.md — se conservó el tasks.md del scaffold (los _Requirements:_ / _Makes green:_ de la plantilla limitados a los criterios importados)",
       taskAcPlaceholder: "[un criterio importado que prueba esta tarea]",
       taskTestPlaceholder: "[la prueba planificada que esta tarea pone en verde]",
@@ -2016,7 +2056,7 @@ const msg = {
       forced: (list) => `dev-spec guard: los cambios de código solo están cubiertos por una aprobación FORZADA de las tareas (${list}) — sus comprobaciones fallaban cuando se aprobó.`,
       on: "Modo guardia ACTIVADO — Write/Edit en ficheros de código fuera de .specs/ pide confirmación mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard). Los ficheros de prueba se permiten mientras el plan de pruebas de una función sin terminar esté aprobado (la Fase 4 escribe las pruebas que fallan antes del gate de las tareas), y todo fichero de código mientras un spike esté en curso (su prototipo).",
       off: "Modo guardia DESACTIVADO — los cambios de código no se controlan.",
-      badValue: (v) => `--guard admite on, off o scope (recibido '${v}').`,
+      badValue: (v) => `--guard admite on, off, scope o tests (recibido '${v}').`,
     },
     approvalGuard: {
       on: {
@@ -2037,6 +2077,32 @@ const msg = {
         (command ? `Detente y pide al usuario que lo ejecute él mismo, en su propio terminal: ${command}` : "Detente y pide al usuario que haga él mismo ese cambio, en su propio editor o terminal") +
         " — y espéralo. No lo reintentes por otra vía (la herramienta MCP, la CLI, un script o una edición de los ficheros de .specs/). (meta.approvalGuard: deny.)",
     },
+    fastCheck: {
+      on: (name, cmd) => `Verificación rápida ACTIVADA (roadmap.json meta.fastCheck: ${name} — \`${cmd}\`): ejecútala sola después de cada pequeña edición y antes del _Verify:_ de una tarea — next_task y el brief de la tarea la nombran; ${DEV_SPEC} done <feature> <n> --run la ejecuta primero mientras el código haya cambiado desde su última ejecución, y una tarea de código marcada sin una ejecución limpia desde su última edición recibe una nota (nunca un rechazo). Como verificación del proyecto, spec_finish también la necesita pasando en el código final.`,
+      off: "Verificación rápida DESACTIVADA (roadmap.json meta.fastCheck).",
+      cleared: (name) => `Se quitó la verificación '${name}', así que la verificación rápida también queda desactivada (roadmap.json meta.fastCheck).`,
+      badInput: (v) => `fastCheck acepta el nombre de una verificación del proyecto (meta.checks), o "" / off para desactivarla (recibido ${v}).`,
+      badName: (name, list) => `'${name}' no es una verificación del proyecto (meta.checks: ${list || "ninguna"}) — añádela en la misma llamada: ${DEV_SPEC} init --check ${name}="<comando>" --fast-check ${name} (spec_init {checks: {"${name}": "<comando>"}, fastCheck: "${name}"}).`,
+      guardianNotFast: (name) => `'${name}' ejecuta el gate de dev-guardian — un análisis de minutos, nunca una verificación rápida. Indica una verificación que responda en segundos (una comprobación de tipos, un linter).`,
+      fixer: (name, cmd) => `'${name}' (\`${cmd}\`) reescribe ficheros (--fix, --write, un comando fmt / format con -w o sin una opción de comprobación): ejecutada después de cada edición, cambiaría el código — y los tests — bajo la tarea. Dale a la verificación rápida su forma que solo comprueba (--check, sin --fix ni -w).`,
+      briefDod: (cmd) => `Después de cada pequeña edición, ejecuta la verificación rápida \`${cmd}\` SOLA (nunca encadenada ni con pipe — una línea \`${cmd} && …\` o \`${cmd} | …\` no es una ejecución de ella) y corrige lo que señale antes de la edición siguiente; tiene que terminar con exit 0 después de tu ÚLTIMA edición, antes del _Verify:_. En el informe: Verificación rápida \`${cmd}\`: N ejecuciones → exit <el último código>.`,
+      briefDodRed: (cmd) => `La verificación rápida \`${cmd}\` tiene que seguir pasando con tu nuevo test — falla en una aserción o en "not implemented", nunca en un error de tipos o de lint: añade el stub que el test llama. Ejecútala sola después de cada edición; en el informe: Verificación rápida \`${cmd}\`: N ejecuciones → exit <el último código>.`,
+      tickNote: (n, name, cmd, status, pwsh) => `Tarea ${n}: la verificación rápida ${name} (\`${cmd}\`) ${({ stale: "es anterior a la última edición de los ficheros planificados", failed: "falló en su última ejecución", missing: "nunca quedó registrada ejecutándose sola" })[status]} — ejecútala sola ahora (sin pipe, sin encadenar) y corrige lo que señale.${status === "missing" || pwsh ? " Una ejecución correcta de la herramienta PowerShell solo queda registrada con un exit code explícito: ejecútala con la herramienta Bash." : ""}`,
+      label: "verificación rápida",
+      skipClean: (name) => `verificación rápida ${name}: limpia desde la última edición — no se vuelve a ejecutar`,
+      runFailed: (cmd, code) => `la verificación rápida \`${cmd}\` falló (exit ${code}) — corrígela antes de la próxima edición; el _Verify:_ de la tarea se ejecuta igualmente, y la tarea marcada recibe una nota.`,
+      cantRun: (cmd, why) => `la verificación rápida \`${cmd}\` no se pudo ejecutar (${why}) — el _Verify:_ de la tarea se ejecuta igualmente.`,
+      metrics: (name, runs, clean, rate, ticks, ticksClean) => `  verificación rápida (${name}): ${runs} ejecución(es), ${clean} limpia(s)${rate == null ? "" : ` (${rate}%)`} · ${ticksClean} de ${ticks} tarea(s) de código marcada(s) después de una ejecución limpia en el código final`,
+      metricsTotals: (ticks, ticksClean) => `  verificación rápida: ${ticksClean} de ${ticks} tarea(s) de código marcada(s) después de una ejecución limpia en el código final`,
+      doctorInvalid: (name, why) => `meta.fastCheck nombra '${name}', ${({ missing: "que no es una verificación del proyecto (meta.checks)", guardian: "que ejecuta el gate de dev-guardian (un análisis de minutos)", fixer: "cuyo comando reescribe ficheros (--fix, --write, un comando fmt / format con -w o sin una opción de comprobación)" })[why]} — no se ejecuta ninguna verificación rápida. Define otra: ${DEV_SPEC} init --fast-check <verificación> (u off).`,
+      offer: (cmd, from, name, existing) => `Una verificación rápida después de cada pequeño cambio detecta errores de tipos y de lint en segundos: \`${cmd}\` (${from}). Tiene que pasar en la rama base — pasa a ser una verificación del proyecto que spec_finish también necesita. Propuesta, nunca activada: ${existing ? `${DEV_SPEC} init --fast-check ${name}` : `${DEV_SPEC} init --check ${name}="${cmd}" --fast-check ${name}`}.`,
+    },
+    reviewModels: {
+      on: (list, diverse) => `Panel de revisión ACTIVADO (meta.reviewModels: ${list}${diverse ? " — diverse" : ""}): la revisión de la rama antes del merge, el converge y los críticos del gate de la revisión profunda se ejecutan también en cada modelo del panel — el panel añade modelos, nunca sustituye el de la propia revisión (el de los críticos del gate: el modelo de la sesión) —; los hallazgos de la revisión de la rama y del converge se combinan y cada uno se verifica una vez, los hallazgos combinados de los críticos del gate van al usuario (los gates no tienen verificador). El revisor de cada tarea se ejecuta en un modelo del panel distinto del del implementador, nunca por debajo del nivel de sonnet — con diverse y un implementador sonnet, cada revisión de tarea se ejecuta en opus. Cada modelo de más cuesta un despacho de revisión más por cada revisión que cubre. Claude Code solo despacha alias (opus, sonnet, haiku, fable): allí, otro nombre hace la revisión en un solo modelo.`,
+      off: "Panel de revisión DESACTIVADO (meta.reviewModels): cada revisión se ejecuta en un solo modelo.",
+      bad: (v) => `reviewModels admite 2–3 nombres de modelo distintos (p. ej. opus,sonnet — cada uno empieza por una letra o un dígito, luego letras, dígitos o . _ : / @ -, hasta 128 caracteres, y luego un sufijo opcional como [1m]; nunca inherit, default, diverse, off ni none), diverse, u off (recibido '${v}').`,
+      ignored: (v) => `meta.reviewModels contiene ${v}, que no son 2–3 nombres de modelo distintos ni "diverse" — se ignora: cada revisión se ejecuta en un solo modelo. Configúralo con spec_init {reviewModels: ["opus", "sonnet"]} (${DEV_SPEC} init --review-models opus,sonnet), o diverse / off.`,
+    },
     elicit: {
       message: (list, details) => `dev-spec: un agente pide ${list}.` + (details ? " " + details : "") + " Las aprobaciones te corresponden — marca Aprobar solo si lo apruebas tú.",
       gatePasses: "Las comprobaciones de la fase pasan.",
@@ -2044,6 +2110,8 @@ const msg = {
       waiver: (reason, expires) => "Excepción: " + [reason ? `"${reason}"` : null, expires ? `hasta el ${expires}` : null].filter(Boolean).join(" ") + ".",
       phases: (list) => `Fases a aprobar, en orden: ${list}.`,
       removeSize: (n, rel) => `Esto borra ${rel} para siempre — ${n} fichero${n === 1 ? "" : "s"}.`,
+      unprotect: (reason) => `Motivo indicado: "${reason}". Un agente podrá entonces cambiar o borrar esta prueba hasta que vuelvas a protegerla.`,
+      accept: (reason) => `Motivo indicado: "${reason}". El contenido de la prueba pasa a ser el autorizado — finish deja de señalar cómo cambió hasta ahora.`,
       approveTitle: "Aprobar",
       approveDesc: "Márcalo para registrarlo; déjalo sin marcar (o rechaza) para no aprobar.",
       noteTitle: "Nota",
@@ -2268,10 +2336,11 @@ const msg = {
         "SLIs & SLOs": "SLIs y SLOs", "Telemetry": "Telemetría", "Alerting & Runbooks": "Alertas y Runbooks", "Rollout & Rollback": "Despliegue y Reversión", "Health & Capacity": "Salud y Capacidad",
         "Data Contracts & Schema Evolution": "Contratos de Datos y Evolución del Esquema", "Data Quality": "Calidad de los Datos",
         "Pipeline Idempotency & Backfills": "Idempotencia del Pipeline y Backfills", "Lineage & Ownership": "Linaje y Responsables", "Retention & Cost": "Retención y Coste",
+        "Behaviour Baseline": "Línea Base del Comportamiento", "Differential Check": "Verificación Diferencial", "Deferred Improvements": "Mejoras Aplazadas",
       },
-      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas", dist: "las 5 rellenadas", api: "las 5 rellenadas", ui: "las 5 rellenadas", obs: "las 5 rellenadas", data: "las 5 rellenadas" },
+      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas", dist: "las 5 rellenadas", api: "las 5 rellenadas", ui: "las 5 rellenadas", obs: "las 5 rellenadas", data: "las 5 rellenadas", port: "las 3 rellenadas" },
       statusSections: { sec: (list) => `Secciones de seguridad: ${list}`, privacy: (list) => `Secciones de privacidad: ${list}`, dist: (list) => `Secciones de consistencia de datos: ${list}`, api: (list) => `Secciones del contrato de la API: ${list}`, ui: (list) => `Secciones de la interfaz: ${list}`, obs: (list) => `Secciones de operabilidad: ${list}`,
-        data: (list) => `Secciones del pipeline de datos: ${list}` },
+        data: (list) => `Secciones del pipeline de datos: ${list}`, port: (list) => `Secciones del port: ${list}` },
       finishChecks: {
         sec: ["+sec: SAST, auditoría de dependencias y análisis de secretos limpios en una ejecución local nueva; todas las pruebas de casos de abuso en verde.",
           "+sec: modelo de amenazas revisado contra el código final — ningún punto de entrada ni frontera de confianza nuevo sin mitigar."],
@@ -2287,6 +2356,8 @@ const msg = {
           "+obs: las métricas, los logs y las trazas que indica el diseño vistos emitiéndose desde la versión final — ningún dato personal en logs ni trazas."],
         data: ["+data: las comprobaciones de calidad de datos, una reejecución de partición y un ensayo de backfill en verde en una ejecución nueva con datos de tamaño real — las mismas filas que una ejecución, las filas erróneas en cuarentena.",
           "+data: cada conjunto de datos que escribe el código final cumple su contrato (esquema, responsable, SLA de frescura) y el linaje, la retención y el particionado de design.md."],
+        port: ["+port: la verificación diferencial en verde en la versión final sobre todo el corpus — cada diferencia que queda está listada en design.md con el criterio que la pide.",
+          "+port: los ficheros de la línea base sin cambios desde que se marcó la tarea de la línea base (su historial git más antiguo que los cambios de portar); cada Mejora Aplazada hecha en una tarea posterior o aún listada para después."],
       },
       clarify: {
         secAccess: "Especifica qué recibe quien llama sin autenticación o sin autorización (SI … ENTONCES EL SISTEMA DEBE denegar …) y el nivel ASVS al que apunta la función.",
@@ -2296,6 +2367,23 @@ const msg = {
         distDelivery: "Especifica la garantía de entrega (al menos una vez) y cómo un mensaje entregado dos veces se detecta y se aplica una sola vez (clave de idempotencia, inbox) — escríbelo como AC.",
         distFailure: "Especifica qué hace la función cuando cada dependencia (base de datos, broker, API externa) no está disponible o agota el tiempo de espera — como criterios SI … ENTONCES EL SISTEMA DEBE.",
       },
+    },
+
+    port: {
+      verifyOk: (b, d, waiting) => `orden del port: la tarea ${b} graba la línea base, la tarea ${d} comprueba el código nuevo contra ella${waiting ? ` — ${waiting} la esperan` : ""}.`,
+      verifyMissing: "+port: ninguna tarea graba la línea base y comprueba el código nuevo contra ella — el port necesita las dos, cada una con un _Verify:_ ejecutable (las tareas [PORT] de la plantilla, o tareas que citan un criterio [PORT] — references/port-patterns.md)",
+      noVerify: (list) => `una tarea [PORT] sin un _Verify:_ ejecutable nunca abre la barrera: ${list}`,
+      approvedAlready: "(las tareas ya están aprobadas — su próxima aprobación lo exige)",
+      baselineLate: (list, b) => `antes de la línea base (tarea ${b}): ${list} — mueve la sección de la línea base al principio y, después, esas tareas bajo un título de nivel 2 propio (## …; dentro de la sección de la línea base, al quitar +port quedarían ocultas), conservando sus números — o la línea base puede grabarse a partir del código nuevo`,
+      dependsEscape: (list, b) => `un _Depends:_ que nunca llega a la línea base (tarea ${b}): ${list} — una oleada puede empezarlas antes; añádele ${b}`,
+      recheck: (d, list, slug) => `la verificación diferencial (tarea ${d}) no ha vuelto a pasar desde que una tarea posterior se marcó o se volvió a ejecutar (${list}) — ejecútala de nuevo sobre el código final: ${DEV_SPEC} done ${slug} ${d} --run`,
+      fence: (list) => `marcadas antes de que pasara la tarea [PORT] a la que esperan (entre paréntesis): ${list} — una tarea movida, +port quitado y añadido de nuevo, o una casilla marcada a mano; compruébalas contra la línea base y la verificación diferencial`,
+      verifyOrder: (d, b) => `la verificación diferencial (tarea ${d}) está antes de la línea base (tarea ${b}), así que no retiene nada — muévela después de las tareas del port`,
+      naHeld: (n, a, slug, runnable) => `La tarea ${n} espera a la tarea ${a} (+port — primero portar, después mejorar): la tarea ${a} está marcada pero no verificada, y solo una ejecución correcta de su _Verify:_ abre la barrera — ` +
+        (runnable ? `ejecútalo y regístralo: ${DEV_SPEC} done ${slug} ${a} --run.` : `aún no tiene un _Verify:_ ejecutable: escribe su comando en tasks.md (un cambio del plan, aprobado de nuevo) y después ${DEV_SPEC} done ${slug} ${a} --run.`),
+      naRecheck: (d, list, slug) => `La verificación diferencial (tarea ${d}) no ha vuelto a pasar desde que una tarea posterior se marcó o se volvió a ejecutar (${list}): ejecútala primero de nuevo sobre el código final — ${DEV_SPEC} done ${slug} ${d} --run —, después las verificaciones del proyecto y /spec-finish ${slug} (la nueva ejecución es actividad de tarea: las verificaciones del proyecto ejecutadas antes tendrían que volver a ejecutarse). Tras cualquier corrección a partir de aquí (la del panel de revisión incluida), ejecútala una vez más antes de /spec-finish — una corrección en una tarea listada antes de ella no la pide.`,
+      dUncited: (d) => `ninguna tarea bajo el título de la verificación diferencial cita un criterio [PORT], así que su primera tarea (tarea ${d}) se toma por la verificación — cita los criterios [PORT] en los _Requirements:_ de la tarea que hace la comparación, o una tarea anterior en esa sección abre la barrera a las mejoras`,
+      naFinishCheck: (d, slug) => `+port: tras cualquier corrección a partir de aquí (la de la revisión de la rama incluida), ejecuta de nuevo la verificación diferencial (tarea ${d}) sobre el código final — ${DEV_SPEC} done ${slug} ${d} --run — antes de /spec-finish ${slug}: port-recheck solo la pide después de una tarea listada tras ella.`,
     },
 
     markerSyntax: {
@@ -3018,12 +3106,53 @@ const msg = {
     },
     scopeGuard: {
       on: "Modo guardia SCOPE (alcance) — Write/Edit en un fichero de código fuera de .specs/ pide confirmación salvo que una tarea sin terminar de una función aprobada lo nombre en _Implements:_ (el fichero, su carpeta o un glob; ficheros de prueba exceptuados), y la pide en todo cambio de código mientras ninguna función tenga tareas aprobadas sin terminar (roadmap.json meta.guard: \"scope\"). Los ficheros de prueba se permiten mientras el plan de pruebas de una función sin terminar esté aprobado (la Fase 4 escribe las pruebas que fallan antes del gate de las tareas), y todo fichero de código mientras un spike esté en curso (su prototipo).",
-      ask: (file, features, hint) => `dev-spec guard (scope): ${file} no está en el plan — ninguna tarea sin terminar de ${features} lo nombra en _Implements:_. ${hint} (El modo guardia está en scope — ${DEV_SPEC} init --guard on permite todo fichero de código mientras haya tareas aprobadas; --guard off lo desactiva.)`,
+      ask: (file, features, hint, level = "scope") => `dev-spec guard (scope): ${file} no está en el plan — ninguna tarea sin terminar de ${features} lo nombra en _Implements:_. ${hint} (El modo guardia está en ${level} — ${DEV_SPEC} init --guard on permite todo fichero de código mientras haya tareas aprobadas; --guard off lo desactiva.)`,
       hint: {
         "same-folder": (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — misma carpeta que ${ref}) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-review ${slug} converge (spec_append_tasks).`,
         nearby: (n, slug, ref) => `Añádelo al _Implements:_ de la tarea ${n} (${slug} — planifica ${ref}, cerca) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-review ${slug} converge (spec_append_tasks).`,
         next: (n, slug) => `Añádelo al _Implements:_ de la tarea ${n} (${slug}, la siguiente tarea sin terminar) y vuelve a aprobar la fase tasks, o planifica el cambio con /spec-review ${slug} converge (spec_append_tasks).`,
       },
+    },
+    protectedTests: {
+      on: `Modo guardia TESTS — el guardia de alcance, más pruebas protegidas: una vez aprobadas las tareas de una función, los ficheros de prueba que existían entonces (y los que una tarea marcada nombra en _Implements:_ o ejecuta en su _Verify:_) quedan protegidos — editar, borrar o mover uno pide confirmación salvo que una tarea que puede empezar ya lo nombre en _Implements:_, y se rechaza con meta.approvalGuard deny. Solo el usuario levanta la protección de uno: ${DEV_SPEC} feature unprotect <función> <fichero> --reason "…".`,
+      unguarded: "Las pruebas protegidas se listan en el .state.json de cada función — solo el guardia de aprobaciones (init --approval-guard ask|deny) impide que un agente edite esa lista.",
+      whyFile: (slug, day) => `es una de las pruebas protegidas de ${slug}${day ? ` (registrada el ${day})` : ""}`,
+      whyFolder: (n, first) => `contiene ${n} prueba(s) protegida(s), p. ej. ${first}`,
+      current: (list) => `Las tareas que pueden empezar ya — ${list} — no la nombran en _Implements:_.`,
+      noCurrent: "Ninguna tarea que pueda empezar ya la nombra en _Implements:_.",
+      reopened: (list) => `Es la prueba planificada de la(s) tarea(s) reabierta(s) ${list} — una tarea reabierta después de marcarla nunca vuelve a desbloquear su prueba planificada: solo cambia con un levantamiento de la protección (abajo).`,
+      planHint: (n, slug) => ` Para planificar el cambio, añádela al _Implements:_ de la tarea ${n} (${slug}) y vuelve a aprobar la fase tasks.`,
+      ask: (file, why, current, planHint, lift) => `dev-spec guard (tests): ${file} es una prueba protegida — ${why}. ${current} Una tarea que hace pasar una prueba cambia el código, no la prueba: confirma solo si de verdad quieres cambiar esta prueba.${planHint} Para permitirlo en esta función, levanta tú la protección: ${lift}. (El modo guardia está en tests — ${DEV_SPEC} init --guard scope deja de proteger las pruebas.)`,
+      deny: (file, why) => `dev-spec guard (tests): rechazado — ${file} es una prueba protegida (${why}), y una prueba protegida solo cambia por decisión del usuario (meta.approvalGuard: deny). No la cambies por otra vía (un comando de shell, un script, git): detente, indica la prueba y por qué la cambiarías, y deja que el usuario decida.`,
+      denyUser: (file, cmd) => `dev-spec guard rechazó la edición, por un agente, de la prueba protegida ${file}. Para permitirla tú: ${cmd}`,
+      snapshotNote: (n, cap) => `Pruebas protegidas: ${n} fichero(s) de prueba registrado(s) — editar, borrar o mover uno ahora pide confirmación salvo que una tarea que puede empezar ya lo nombre en _Implements:_.` + (cap ? ` Solo se registraron los primeros ${cap} (la lista tiene un límite).` : ""),
+      briefDod: (n) => `Pruebas protegidas (meta.guard tests${n ? ` — ${n} fichero(s) en la lista de esta función` : ""}): edita, renombra o borra un fichero de prueba existente solo cuando el _Implements:_ de ESTA tarea lo nombra; pon en verde una prueba roja arreglando el código, nunca la prueba. Si el guardia pide confirmación o lo rechaza, detente e informa NEEDS_CONTEXT nombrando la prueba — nunca lo esquives (un comando de shell, un script, git).`,
+      briefDodReopened: (n, slug) => `Pruebas protegidas (meta.guard tests${n ? ` — ${n} fichero(s) en la lista de esta función` : ""}): esta tarea se reabrió después de marcarla, así que no desbloquea ningún fichero de prueba — ni siquiera los que nombra su _Implements:_: una prueba así solo cambia si el usuario levanta la protección (${DEV_SPEC} feature unprotect ${slug} <fichero> --reason "…" — lo ejecuta él); pon en verde una prueba roja arreglando el código, nunca la prueba. Si el guardia pide confirmación o lo rechaza, detente e informa NEEDS_CONTEXT nombrando la prueba — nunca lo esquives (un comando de shell, un script, git).`,
+      via: { approval: "la aprobación de las tareas", protect: "feature protect" },
+      listNote: (slug, n, day, via, added) => `${slug} — ${n} fichero(s) de prueba protegido(s)` + (day ? ` desde el ${day}${via ? ` (${via})` : ""}` : "") + `; ${added} añadido(s) ahora.`,
+      unlifted: (file) => `El levantamiento de la protección de ${file} terminó — vuelve a estar protegida.`,
+      truncated: (cap) => `La lista alcanzó su límite (${cap} ficheros): las pruebas que pasan de él no están protegidas.`,
+      notEnforced: `El guardia solo lee la lista con el modo guardia tests (${DEV_SPEC} init --guard tests).`,
+      lifted: (file, slug, listed) => `Protección de ${file} levantada (${slug}): puede cambiar hasta ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (No estaba en la lista de pruebas protegidas de la función.)"),
+      accepted: (file, slug) => `Aceptado el contenido actual de ${file} (${slug}): el hash registrado pasa a ser este contenido — finish señala un cambio posterior. Ciérrala de nuevo (${DEV_SPEC} finish ${slug} --write): el resumen del merge lista entonces la aceptación y deja de nombrar la prueba como cambiada.`,
+      err: {
+        fileRequired: `unprotect necesita el fichero de prueba: ${DEV_SPEC} feature unprotect <función> <fichero> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
+        reasonRequired: "unprotect necesita un motivo (una línea, como mucho 500 caracteres): por qué puede cambiar esta prueba protegida.",
+        acceptFileRequired: `Aceptar el contenido de una prueba necesita el fichero de prueba: ${DEV_SPEC} feature protect <función> <fichero> --accept --reason "…" (spec_feature {action: "protect", file, accept: true, reason}).`,
+        acceptReasonRequired: "Aceptar el contenido de una prueba necesita un motivo (una línea, como mucho 500 caracteres): por qué su contenido actual es el correcto.",
+        acceptChangedSincePreview: (file) => `No se aceptó nada: ${file} cambió después de preguntar al usuario si aceptaba su contenido (editado mientras la pregunta esperaba) — su confirmación cubría el contenido que se le mostró. Pregúntale de nuevo.`,
+        notATest: (file) => `${file} no es un fichero de prueba (por su nombre o su carpeta) — solo se protegen los ficheros de prueba.`,
+        outside: (file) => `${file} está fuera del proyecto.`,
+      },
+      finishWarn: (slug, list, more) => `Pruebas protegidas de ${slug} cambiadas sin motivo registrado (ninguna tarea las volvió a registrar, ningún levantamiento las cubre): ${list}${more ? ` y ${more} más` : ""} — comprueba que cada cambio es intencionado (una prueba cambiada para pasar es una prueba debilitada); si lo es, acéptalo: ${DEV_SPEC} feature protect ${slug} <fichero> --accept --reason "…".`,
+      changed: (file) => `${file} (cambiada)`,
+      deleted: (file) => `${file} (borrada)`,
+      summaryHead: "## Pruebas protegidas",
+      summaryLine: (n, k) => `${n} fichero(s) de prueba protegido(s); ${k} cambiado(s) sin motivo registrado.`,
+      summaryLift: (file, by, reason) => `- protección levantada: ${file} — por ${by}: "${reason}"`,
+      summaryAccept: (file, by, reason) => `- contenido aceptado: ${file} — por ${by}: "${reason}"`,
+      doctorMissing: (slug) => `guard tests: ${slug} tiene tareas aprobadas pero ningún registro de pruebas protegidas (sus tareas se aprobaron antes de fijar el modo) — regístralo: ${DEV_SPEC} feature protect ${slug}.`,
+      doctorLiftAfterFinish: (slug, files, first) => `guard tests: el levantamiento de la protección de ${files} (${slug}) sigue en vigor después del finish de la función — ${first ? "la prueba queda desprotegida" : "las pruebas quedan desprotegidas"} para todas las funciones: termínalo (${DEV_SPEC} feature protect ${slug} ${first || "<fichero>"}) o acepta su contenido actual (${DEV_SPEC} feature protect ${slug} ${first || "<fichero>"} --accept --reason "…").`,
     },
 
     // registro de decisiones (decisions.md, spec_decide) y el tipo spike (investigar → decidir).
@@ -3430,6 +3559,10 @@ const brief = {
       ],
     },
     metricsRule: "Cada métrica listada arriba se emite de verdad — muestra la evidencia en el informe.",
+    portRules: {
+      port: () => "Tarea del port: conserva el comportamiento exactamente — las mismas salidas, errores y efectos secundarios que el código antiguo. Una limpieza o un cambio que detectes va a design.md → [PORT] Mejoras Aplazadas, nunca a esta tarea.",
+      after: (d) => `Después del port: la verificación diferencial (tarea ${d}) sigue en verde salvo las diferencias que piden los criterios de esta tarea — cada una listada en design.md → [PORT] Verificación Diferencial con el ID del criterio. Ejecuta de nuevo el _Verify:_ de la tarea ${d} cuando termines esta tarea.`,
+    },
     redRules: [
       "Esta es una tarea ROJA: escribe (o conserva) las pruebas planificadas exactamente como las describe el plan de pruebas — nada de código de producción ni de arreglo en esta tarea.",
       "Ejecútalas: deben FALLAR por la razón correcta — una aserción o \"no implementado\". Un fichero de prueba, módulo o script que falta, una errata o un comando que no se ejecuta no es una prueba en rojo (se rechaza como tal).",

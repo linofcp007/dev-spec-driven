@@ -12,7 +12,7 @@
 escreve a spec contigo — requisitos EARS com IDs estáveis, um design, tarefas rastreáveis —, espera pela tua aprovação em
 cada gate e só dá uma tarefa por concluída com uma execução registada da sua verificação. Um só fluxo, mais **tracks**
 que se combinam para o que cada funcionalidade precisa (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data,
-ou os teus), servido por um **servidor MCP local e sem dependências**: sem `npm install`, sem rede, sem cloud, sem GitHub
++port, ou os teus), servido por um **servidor MCP local e sem dependências**: sem `npm install`, sem rede, sem cloud, sem GitHub
 Actions, sem custo por execução. Um plugin do Claude Code que também funciona em qualquer cliente MCP e numa CLI simples —
 em inglês, português (PT-PT e PT-BR) e espanhol.
 
@@ -122,6 +122,7 @@ combinam-se — um webhook do Stripe num SaaS multi-inquilino que resume faturas
 | **+ui** | O design system (componentes verificados contra o registo do projeto), os estados da interface, acessibilidade (WCAG 2.2 AA), design responsivo e i18n, um orçamento de desempenho |
 | **+obs** | SLOs e orçamentos de erro, telemetria, alertas e runbooks, lançamento e reversão |
 | **+data** | Contratos de dados, qualidade de dados, reexecuções e backfills idempotentes, linhagem, retenção |
+| **+port** | Primeiro o porte, depois as melhorias: o comportamento antigo gravado como linha de base, uma verificação diferencial sobre um corpus, as melhorias só depois dela — e a verificação corrida de novo quando estão feitas |
 
 **Um só design system para todos os ecrãs.** O `dev-spec steering design-system.md` escreve o
 `.specs/steering/design-system.md` a partir do teu código — os componentes e os tokens que o projeto já tem. A partir daí, o
@@ -165,7 +166,7 @@ namespace (`/dev-spec-driven:spec`); noutros clientes MCP são os prompts do ser
 | relatórios | `/spec-status` | Tracks, fase, tarefas, verificação — de uma funcionalidade ou de todas |
 | | `/roadmap [depend \| backlog \| milestone]` | Progresso, dependências, ETAs, marcos → `.specs/ROADMAP.md` (`--html`) |
 | | `/spec-report [catalog \| drift \| metrics \| changelog \| export]` | O catálogo vivo, o drift desde o fecho, métricas e uma retrospetiva, notas de versão, exportações para stakeholders |
-| configurar | `/spec-setup [init \| guard \| statusline \| superpowers \| templates \| tracks]` | `.specs/` e steering, modo guarda, a linha de estado, a precedência sobre o superpowers, os teus templates e tracks |
+| configurar | `/spec-setup [init \| guard \| statusline \| superpowers \| templates \| tracks]` | `.specs/` e steering, modo guarda (`tests`: os testes que o plano aprovou só mudam quando uma tarefa os nomeia), a linha de estado, a precedência sobre o superpowers, os teus templates e tracks |
 | | `/spec-upgrade` | Depois de atualizar o plugin: audita o `.specs/` face às regras atuais e depois aplica as migrações seguras |
 | atalhos | `/ds` · `/dss` · `/dsx` | `/spec` · `/spec-status` · `/executeTask` |
 
@@ -184,7 +185,7 @@ cliente MCP — chamam o mesmo motor:
 | Ferramenta | O que faz |
 |---|---|
 | `spec_classify` | Fase 0: os tracks e um tamanho sugerido a partir de uma descrição (sinais locais por palavras-chave, EN / PT / ES — sem modelo) |
-| `spec_init` | O `.specs/` e o steering dos tracks; definições do projeto: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard` |
+| `spec_init` | O `.specs/` e o steering dos tracks; definições do projeto: `lang`, `guard`, `stopCheck`, `checks`, `approvalRoles`, `evidence`, `approvalGuard`, `fastCheck` (a verificação corrida depois de cada edição), `reviewModels` (o painel de revisão) |
 | `spec_create` | Uma funcionalidade para os seus tracks e `size` (`xs` = um `change.md`); `kind` bugfix · spike, `brownfield`, `flow: "design-first"`, `branch` |
 | `spec_import` | Uma spec do Kiro, spec-kit ou OpenSpec, um plano (Claude Code, Cursor, ExecPlan do Codex, fluidplan) ou documentos BMAD como funcionalidade — ou o steering do Kiro / as regras do Cursor como steering; `dryRun` |
 | `spec_status` | O tipo, o fluxo, os tracks, a fase, as tarefas e as secções do design de uma funcionalidade; sem `name`, todas |
@@ -315,7 +316,7 @@ dev-spec-driven/                      ← raiz do plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 ferramentas + prompts + recursos, sem dependências)
 │   ├── servers.json                  ← registo MCP do plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← a fachada do motor (o único objeto que o servidor, a CLI e os hooks carregam)
-│   ├── lib/engine/                   ← o motor: 25 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
+│   ├── lib/engine/                   ← o motor: 27 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← conteúdo localizado (en · pt · es) + a derivação pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (um por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (a tua chave de API; --dry-run offline)

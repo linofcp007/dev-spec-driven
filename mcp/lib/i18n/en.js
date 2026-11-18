@@ -100,6 +100,11 @@ const text = {
       ["Lineage & Ownership", "- Sources → transformations → consumers (a lineage diagram or the dbt DAG) · the owner of each dataset and who is told when it breaks · the freshness SLA consumers rely on · the history each table keeps (slowly changing dimensions: type 1 overwrites, type 2 keeps versions)."],
       ["Retention & Cost", "- Retention per dataset and storage tier (the raw zone vs the curated one; hot / warm / cold) — personal data follows references/privacy-track.md · partitioning and clustering so a query scans only what it needs · the expected storage and query cost per month and the alert when it drifts."],
     ],
+    port: [
+      ["Behaviour Baseline", "- What is kept: the outputs, errors and side effects (and their order) the old code produces · the corpus — recorded production inputs, the old test suite, fixtures — and why it reaches the paths that matter · where the baseline lives (its path) · recorded from the OLD code before any code it covers changes, never regenerated from the new code (references/port-patterns.md)."],
+      ["Differential Check", "- The command that runs the NEW code over the corpus and compares it with the RECORDED baseline (never with live old code — it still runs after the cut-over) · what is normalized (timestamps, generated IDs, an order the contract doesn't fix, a float tolerance) and why each is no behaviour · how a difference is reported · after the port, every intended difference listed with the criterion that asks for it — never silenced."],
+      ["Deferred Improvements", "- Each cleanup or behaviour change noticed during the port, written here instead of made — done after the differential check: as a later task (listed after it), in the simplification pass (behaviour-preserving cleanups only) or in a follow-up feature."],
+    ],
   },
   // trackTasks — each built-in track's template tasks (none for +tdd — it only adds markers): the story heading and each task's
   // text, in the order of the layout's TRACK_TASK_PLAN (the criteria each task implements and makes green, its fixed markers).
@@ -182,6 +187,21 @@ const text = {
         "Backfill — the procedure for a date range (parallelism, cost, a dry run), rehearsed on one partition and compared with a single run",
         "Lineage, ownership and retention — sources → transformations → consumers documented, an owner per dataset, the retention and partitioning from design.md applied",
       ],
+    },
+    // +port (1.36): two headings — the baseline's (the plan's first task) and the differential check's (after US-1) — and the slots
+    // of their _Implements:_ / _Verify:_ lines
+    port: {
+      leadHeading: "Story US-1 — Behaviour Baseline (before the port)",
+      heading: "Story US-1 — Differential Check (the port's proof)",
+      tasks: [
+        "Record the behaviour baseline — run the OLD implementation over the corpus and keep its outputs and errors as the baseline, before any code it covers changes",
+        "Differential check — run the NEW implementation over the corpus and compare it with the recorded baseline; every difference is a bug or an intended difference listed with its criterion",
+      ],
+      slots: {
+        baseline: "[path of the recorded baseline — the old outputs per corpus case]",
+        verifyOld: "[command that runs the OLD implementation on the corpus and compares it with the baseline]",
+        verifyNew: "[command that runs the NEW implementation on the corpus and compares it with the recorded baseline]",
+      },
     },
   },
   // requirements — the title, the Summary, then the user stories (size S: the one story) up to the core criteria; the active
@@ -301,6 +321,10 @@ Outcomes the feature must achieve — business/UX, not implementation. Quantify 
         "IF the job is re-run for a partition that was already loaded, THEN THE SYSTEM SHALL produce the same result as a single run, with no duplicate and no missing rows (an idempotent re-run and backfill).",
         "IF the newest data in [the table] is older than [its freshness SLA], THEN THE SYSTEM SHALL alert [the owner] and mark the table stale for its consumers.",
         "WHEN the schema of [the source] changes, THE SYSTEM SHALL accept an additive, backward-compatible change and SHALL reject a breaking change (a removed or renamed column, a narrowed type) before any row reaches [the consumers].",
+      ],
+      port: [
+        "WHEN the new implementation processes [the corpus — the recorded inputs, fixtures or old test cases that hold the current behaviour], THE SYSTEM SHALL produce the same outputs as the old implementation, case by case.",
+        "IF the old implementation rejects an input of [the corpus] with an error, THEN THE SYSTEM SHALL reject it with the same error code or type.",
       ],
     },
   },
@@ -526,6 +550,8 @@ Every AC must appear in at least one "Covers" cell. Gaps (with justification):
       idempotentRerun: "a partition re-run or backfilled twice leaves the same rows as one run — no duplicate, no gap",
       freshness: "a partition older than the freshness SLA: the freshness check fails and alerts the owner",
       schemaChange: "schema-change compatibility: an added optional column passes, a removed / renamed column or a narrowed type is rejected before the load",
+      differential: "differential check: the new output equals the recorded baseline on every corpus case",
+      differentialErrors: "differential check: every failing corpus case gets the old implementation's error code or type",
     },
   },
   // checklist — the items: the core four, +tdd's, then per marker track its sections item (n: the design sections to fill —
@@ -587,6 +613,11 @@ Tracks: ${label}. Tick before calling the feature done.`,
       "DATA: the data-quality checks run at ingestion and before publishing — a bad row quarantined, never loaded; the freshness alert reaches the owner.",
       "DATA: a partition re-run and a backfill rehearsed on real-sized data give the same rows as one run; retention and partitioning applied as designed.",
     ],
+    port: [
+      (n) => `PORT: ${n} mandatory design sections filled (no TODO) — the corpus named, what is normalized and why.`,
+      "PORT: the baseline recorded from the OLD code before the port's work started — never regenerated from the new code.",
+      "PORT: the differential check green on the final build over the whole corpus; every intended difference listed with the criterion that asks for it.",
+    ],
     saasLoadOnly: "SaaS: load test meets budget (hot path).",
     done: ["Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`)."],
   },
@@ -624,6 +655,8 @@ Tracks: ${label}. Tick before calling the feature done.`,
     guardianBaseline: "write or remove .guardian/baseline.json — the findings dev-guardian's gate accepts as known",
     guardianBaselineUpdate: "run dev-guardian's `baseline update` — it accepts every current finding as known, this feature's included, and the gate stops reporting them",
     guardianCli: "run dev-guardian's gate with a DEV_GUARDIAN_CLI or CLAUDE_CONFIG_DIR of its own — another dev-guardian would answer it",
+    unprotect: (file, feature) => `lift the protection of the test ${file} ('${feature}') — an agent could then change or delete it`,
+    accept: (file, feature) => `accept the current content of the protected test ${file} ('${feature}') — a change made to it is then no longer reported`,
     lower: (from, to) => `lower the approval guard from ${from} to ${to}`,
     revoke: (phase, feature) => `revoke the approval of the ${phase} phase of '${feature}'`,
     approve: (phase, feature) => `approve the ${phase} phase of '${feature}'`,
@@ -730,6 +763,7 @@ ${a.summary || "[one line: the bug being fixed]"}
 ## Phase: Fix
 - [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output); add guard test T-02 (it passes already)
   - _Requirements: US-1.AC-1_
+  - _Implements: [the test file T-01 goes in]_
   - _Verify: [command that runs T-01]_
   - _Expect: fail_
 - [ ] 2. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
@@ -1089,7 +1123,7 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' already exists.`,
       renameArchived: (slug) => `'${slug}' is the name of an archived feature (.specs/_archive/${slug}) — pick another name (with one name, neither of them could be archived or restored).`,
       slugTaken: (slug, held, name) => `'${name}' reaches the folder .specs/${slug}/, which holds another feature ('${held}') — a folder name keeps the first 64 characters of the name. Nothing was changed: pass a shorter name that differs within them (to work on '${held}', name it '${slug}').`,
-      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
+      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data | port",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
       noSpecs: (root) => `No .specs/ at ${root}`,
@@ -1231,6 +1265,8 @@ const msg = {
       approveTests: (slug, what) => `Phase 4, the hard gate: ${({ tdd: "write every planned test and confirm each fails for the right reason", ai: "write the deterministic tests and the eval harness, and record the baseline", both: "write every planned test (each failing for the right reason) and the eval harness, and record the baseline" })[what]} — /spec ${slug} tests; no implementation code until then. Then approve — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary. Optional, before it: /spec-review ${slug} simplify — a behaviour-preserving cleanup of the feature's own code, proven by its tests.`,
+      // 1.36 the review panel (meta.reviewModels), put BEFORE the finish step's text: the branch review on every model comes first
+      reviewBranch: (slug, list) => `Review panel (meta.reviewModels: ${list}): first the branch review on every model — /spec-review ${slug} branch, one fresh reviewer per model (in subagent execution: the final review) — unless the ledger already has its "Final review: ×N" line since the last task (a task done inline writes no ledger line — if you did one after the review, run it again); then the optional simplify pass, the project checks and /spec-finish ${slug}.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /spec ${slug} tasks.`,
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). The baseline only says that they changed — /spec-review ${slug} converge reads the code AC by AC, from those files. Then decide: the spec is now wrong → /spec-change ${slug} impact (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
@@ -1341,6 +1377,8 @@ const msg = {
       unknown: (items, valid) => `Unknown track${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (did you mean '${u.suggestion}'?)` : "")).join(", ")}. Valid tracks: ${valid}.`,
       cannotRemoveCore: "'core' is always on — it can't be removed.",
       bugfixNeedsTdd: "A bugfix is always test-first — +tdd can't be removed from it.",
+      // +port (1.36) on a bugfix — refused on create and add_track, before anything is written
+      portBugfix: "+port can't go on a bugfix: a bugfix changes behaviour on purpose, a port keeps it the same — port in a feature of its own (/spec), and fix the bug before or after it.",
       notActive: (list) => `Not active: ${list} — nothing to remove.`,
       removed: (list, slug) => `Removed ${list} from the active tracks. No file was deleted — the inactive artifacts stay in place and count again if you re-add the track. Re-run /spec-doctor ${slug}.`,
       // a sized design's section the removed track covered, written back (heading + TODO + guidance)
@@ -1407,6 +1445,7 @@ const msg = {
       finishChecks: "'finishChecks' must be an object",
       signoffs: "'signoffs' must be an object", // 1.14 B3 (role sign-offs)
       unticks: "'unticks' must be an array", // 1.16 U1 (undone ticks)
+      protectedTests: "'protectedTests' must be an object (its 'files' an object, its 'lifts' an array)", // 1.36 guard tests
     },
     depend: {
       // ROADMAP.md / .html "Needs attention": a dependsOn naming no feature (a stale or hand-edited roadmap.json entry)
@@ -1601,6 +1640,10 @@ const msg = {
       removed: (f) => `Removed '${f}' ✓`,
       wouldRemove: (slug, dir, n, entries) => `Would permanently delete '${slug}': ${dir} (${n} file(s): ${entries})`,
       confirmHint: (slug) => `Nothing deleted. Re-run with --yes to confirm — or archive it instead: ${DEV_SPEC} feature archive ${slug}`,
+      // feature protect (1.36): one lift record — in force, ended, or a lift a later record ended
+      protectLift: (file, by, day, reason, ended, active) => ended ? `  lift ended: ${file} — by ${by}, ${day}` : `  ${active ? "lifted" : "lifted (ended since)"}: ${file} — by ${by}, ${day}: "${reason}"`,
+      // … an accept record (1.36.0 review 3: feature protect <f> <file> --accept)
+      protectAccept: (file, by, day, reason) => `  accepted: ${file} — by ${by}, ${day}: "${reason}"`,
       missingValue: (flag) => `missing value for --${flag}`,
       unknownFlag: (flag, suggestion) => `unknown option ${flag}` + (suggestion ? ` — did you mean ${suggestion}?` : ".") + " Run `" + DEV_SPEC + " help` for the options.",
       unknownRules: (tool, known) => `unknown tool '${tool}'. Known: ${known}`,
@@ -1703,6 +1746,9 @@ const msg = {
       bugGateFirst: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled and no task writes it — only task ${first} can be completed until the root cause is written in bug.md (no fix before the root cause).`,
       bugGateFix: (n) => `Task ${n} can't be completed yet: it makes the regression test green — a fix — and bug.md → Root Cause is not filled. Write the root cause there, with its evidence, first (no fix before the root cause is written in bug.md).`,
       bugGateTicked: (n, rc) => `Task ${n} can't be completed yet: bug.md → Root Cause is still empty — task ${rc} is ticked, but its deliverable is that section. Write the root cause there, with its evidence (no fix before the root cause is written in bug.md).`,
+      // +port (1.36) — the fence: a task listed after a [PORT] anchor (the baseline, the differential check) waits for it
+      portHeld: (n, a, slug) => `Task ${n} waits for task ${a} (+port — port first, improve later: the port's work waits for the baseline, an improvement for the differential check). Nothing was recorded. Tick task ${a} with its _Verify:_ run first (${DEV_SPEC} done ${slug} ${a} --run); if task ${n} belongs before it, move it there in tasks.md — a plan change, approved again.`,
+      portHeldUnverified: (n, a, slug) => `Task ${n} waits for task ${a} (+port): task ${a} is ticked but not verified — only a passing run of its _Verify:_ opens the fence (${DEV_SPEC} done ${slug} ${a} --run; a [PORT] task without a runnable _Verify:_ never does). Nothing was recorded.`,
       rootCauseTaskEmpty: (n) => `Task ${n} is ticked, but bug.md → Root Cause is still empty — write the root cause there, with its evidence: the tasks after it (the regression test, the fix) stay refused until it is written.`,
       fill: (file, what, hint) => `Fill ${file} — ${what}; then ${hint}.`,
       fillMissing: "it doesn't exist yet",
@@ -1803,6 +1849,8 @@ const msg = {
       wUnknownRefLine: (line, ref) => `tasks.md line ${line}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
       wCarried: (list) => `carried over verbatim, not mapped to stories or criteria (review them): ${list}`,
       wNoRefs: "the imported tasks carry no _Requirements:_ references — add them so trace_check can map every AC to a task",
+      // 1.36 review 1: a +port feature whose imported plan has no baseline / differential check (the import replaced the scaffold's)
+      wPortNoFence: (slug) => `+port: the imported tasks.md has no baseline task and no differential check, so the fence holds nothing — let add_track write them: ${DEV_SPEC} add-track ${slug} port --remove, then ${DEV_SPEC} add-track ${slug} port (appended after the imported tasks: move the baseline first — references/port-patterns.md)`,
       wNoTasks: "no tasks.md in the source — the scaffold's tasks.md was kept (its template _Requirements:_ / _Makes green:_ narrowed to the imported criteria)",
       taskAcPlaceholder: "[an imported criterion this task proves]", // a kept template task citing a criterion the import lacks
       taskTestPlaceholder: "[the planned test this task makes green]",
@@ -2115,7 +2163,7 @@ const msg = {
       forced: (list) => `dev-spec guard: code changes are covered only by a FORCED tasks approval (${list}) — its checks were failing when it was approved.`,
       on: "Guard mode ON — Write/Edit on code files outside .specs/ asks for confirmation while no feature has approved, unfinished tasks (roadmap.json meta.guard). Test files are allowed while a feature's test plan is approved and the feature is unfinished (Phase 4 writes the failing tests before the tasks gate), and every code file while a spike is under way (its prototype).",
       off: "Guard mode OFF — code edits are not gated.",
-      badValue: (v) => `--guard takes on, off or scope (got '${v}').`,
+      badValue: (v) => `--guard takes on, off, scope or tests (got '${v}').`,
     },
     // the human approval guard (hooks/approval-hook.js, PreToolUse · roadmap.json meta.approvalGuard off|ask|deny ·
     // spec_init {approvalGuard} · `dev-spec init --approval-guard`). `ask` is read by the USER (the permission prompt), `deny` by
@@ -2142,6 +2190,38 @@ const msg = {
         (command ? `Stop and ask the user to run it themselves, in their own terminal: ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
     },
+    // 1.36 the fast check (roadmap.json meta.fastCheck · spec_init {fastCheck} · `dev-spec init --fast-check`): ONE project check run on
+    // its own after each small edit — warn only. `meta.fastCheck`, `_Verify:_`, the flags and the check names stay English.
+    fastCheck: {
+      on: (name, cmd) => `Fast check ON (roadmap.json meta.fastCheck: ${name} — \`${cmd}\`): run it on its own after each small edit and before a task's _Verify:_ — next_task and the task brief name it; ${DEV_SPEC} done <feature> <n> --run runs it first while the code changed since its last run, and a code task ticked without a clean run since its last edit gets a note (never a refusal). Being a project check, spec_finish needs it passing on the final code too.`,
+      off: "Fast check OFF (roadmap.json meta.fastCheck).",
+      cleared: (name) => `The check '${name}' was removed, so the fast check is off too (roadmap.json meta.fastCheck).`,
+      badInput: (v) => `fastCheck takes the name of a project check (meta.checks), or "" / off to switch it off (got ${v}).`,
+      badName: (name, list) => `'${name}' is not a project check (meta.checks: ${list || "none"}) — add it in the same call: ${DEV_SPEC} init --check ${name}="<command>" --fast-check ${name} (spec_init {checks: {"${name}": "<command>"}, fastCheck: "${name}"}).`,
+      guardianNotFast: (name) => `'${name}' runs dev-guardian's gate — a scan of minutes, never a fast check. Name a check that answers in seconds (a type check, a linter).`,
+      fixer: (name, cmd) => `'${name}' (\`${cmd}\`) rewrites files (--fix, --write, a fmt / format command with -w or without a check flag): run after each edit, it would change the code — and the tests — under the task. Give the fast check its check-only form (--check, no --fix, no -w).`,
+      briefDod: (cmd) => `After each small edit, run the fast check \`${cmd}\` ON ITS OWN (never chained or piped — a \`${cmd} && …\` or \`${cmd} | …\` line is no run of it) and fix what it reports before the next edit; it must exit 0 after your LAST edit, before the _Verify:_. Report it as: Fast check \`${cmd}\`: N runs → exit <the last code>.`,
+      briefDodRed: (cmd) => `The fast check \`${cmd}\` must still pass with your new test — it fails on an assertion or "not implemented", never on a type or lint error: add the stub the test calls. Run it on its own after each edit; report it as: Fast check \`${cmd}\`: N runs → exit <the last code>.`,
+      // the note names no command but the fast check: task n is ticked now, and a done task's `done --run` runs no fast check (1.36
+      // review 1). pwsh: its latest logged run came from the PowerShell tool (a later pass there may be unlogged).
+      tickNote: (n, name, cmd, status, pwsh) => `Task ${n}: the fast check ${name} (\`${cmd}\`) ${({ stale: "is older than the last edit of the planned files", failed: "failed on its last run", missing: "was never logged running on its own" })[status]} — run it on its own now (not piped, not chained) and fix what it reports.${status === "missing" || pwsh ? " A pass of the PowerShell tool is logged only with an explicit exit code: run it with the Bash tool." : ""}`,
+      label: "fast check",
+      skipClean: (name) => `fast check ${name}: clean since the last edit — not run again`,
+      runFailed: (cmd, code) => `the fast check \`${cmd}\` failed (exit ${code}) — fix it before the next edit; the task's _Verify:_ runs anyway, and the tick gets a note.`,
+      cantRun: (cmd, why) => `the fast check \`${cmd}\` could not run (${why}) — the task's _Verify:_ runs anyway.`,
+      metrics: (name, runs, clean, rate, ticks, ticksClean) => `  fast check (${name}): ${runs} run(s), ${clean} clean${rate == null ? "" : ` (${rate}%)`} · ${ticksClean} of ${ticks} code-task tick(s) after a clean run on the final code`,
+      metricsTotals: (ticks, ticksClean) => `  fast check: ${ticksClean} of ${ticks} code-task tick(s) after a clean run on the final code`,
+      doctorInvalid: (name, why) => `meta.fastCheck names '${name}', ${({ missing: "which is no project check (meta.checks)", guardian: "which runs dev-guardian's gate (a scan of minutes)", fixer: "whose command rewrites files (--fix, --write, a fmt / format command with -w or without a check flag)" })[why]} — no fast check runs. Set another: ${DEV_SPEC} init --fast-check <check> (or off).`,
+      offer: (cmd, from, name, existing) => `A fast check after each small change catches type and lint errors in seconds: \`${cmd}\` (${from}). It must pass on the base branch — it becomes a project check spec_finish needs too. Offered, never set: ${existing ? `${DEV_SPEC} init --fast-check ${name}` : `${DEV_SPEC} init --check ${name}="${cmd}" --fast-check ${name}`}.`,
+    },
+    // 1.36 the review panel (roadmap.json meta.reviewModels · spec_init {reviewModels} · `dev-spec init --review-models`). Model names,
+    // `meta.reviewModels`, `diverse` and the slash commands stay English.
+    reviewModels: {
+      on: (list, diverse) => `Review panel ON (meta.reviewModels: ${list}${diverse ? " — diverse" : ""}): the branch review before merge, converge and the deep review's gate critics also run on each panel model — the panel adds models, never replaces the review's own (the gate critics': the session's model) —; the branch review's and converge's findings are merged and each verified once, the gate critics' merged findings go to the user (gates have no verifier). The task reviewer runs on a panel model other than the implementer's, never below sonnet's tier — with diverse and a sonnet implementer, every task review runs on opus. Each extra model costs one more review dispatch per review it covers. Claude Code dispatches aliases only (opus, sonnet, haiku, fable): there, another name runs the review on one model.`,
+      off: "Review panel OFF (meta.reviewModels): each review runs on one model.",
+      bad: (v) => `reviewModels takes 2–3 different model names (e.g. opus,sonnet — each a letter or digit first, then letters, digits or . _ : / @ -, up to 128 characters, then an optional suffix such as [1m]; never inherit, default, diverse, off or none), diverse, or off (got '${v}').`,
+      ignored: (v) => `meta.reviewModels holds ${v}, which is not 2–3 different model names or "diverse" — ignored: each review runs on one model. Set it with spec_init {reviewModels: ["opus", "sonnet"]} (${DEV_SPEC} init --review-models opus,sonnet), or diverse / off.`,
+    },
     // human approvals over MCP elicitation (mcp/server.js: spec_approve, spec_feature remove, spec_init lowering a guard,
     // while meta.approvalGuard is ask | deny and the MCP client can ask its user — elicitation/create). `message` and the field
     // titles are read by the USER (the client's dialog); the refusals by the AGENT. list = approvalGuard.action's text.
@@ -2153,6 +2233,10 @@ const msg = {
       phases: (list) => `Phases to approve, in order: ${list}.`,
       // what a spec_feature remove deletes (remove's preview: wouldDelete.files)
       removeSize: (n, rel) => `This deletes ${rel} for good — ${n} file${n === 1 ? "" : "s"}.`,
+      // a spec_feature unprotect (1.36 guard tests): the reason the agent gives, as it would be recorded
+      unprotect: (reason) => `Reason given: "${reason}". An agent may then change or delete this test until you protect it again.`,
+      // a spec_feature protect {accept: true} (1.36.0 review 3): the reason, as it would be recorded
+      accept: (reason) => `Reason given: "${reason}". The test's content now becomes the authorised one — finish no longer reports how it changed so far.`,
       approveTitle: "Approve",
       approveDesc: "Tick it to record this; leave it unticked (or decline) to refuse.",
       noteTitle: "Note",
@@ -2384,9 +2468,9 @@ const msg = {
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
       sectionNames: {},
-      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled", obs: "all 5 filled", data: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
+      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled", obs: "all 5 filled", data: "all 5 filled", port: "all 3 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
       statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}`, api: (list) => `API contract sections: ${list}`, ui: (list) => `UI sections: ${list}`, obs: (list) => `Operability sections: ${list}`,
-        data: (list) => `Data pipeline sections: ${list}` }, // `dev-spec status`
+        data: (list) => `Data pipeline sections: ${list}`, port: (list) => `Port sections: ${list}` }, // `dev-spec status`
       finishChecks: { // spec_finish `checks`: what only a fresh run or a human can confirm
         sec: ["+sec: SAST, dependency audit and secret scan clean on a fresh local run; every abuse-case test green.",
           "+sec: threat model re-checked against the final code — no new entry point or trust boundary left unmitigated."],
@@ -2402,6 +2486,8 @@ const msg = {
           "+obs: the metrics, logs and traces the design names seen emitting from the final build — no personal data in logs or traces."],
         data: ["+data: the data-quality checks, a partition re-run and a backfill rehearsal green on a fresh run against real-sized data — the same rows as one run, bad rows quarantined.",
           "+data: every dataset the final code writes matches its contract (schema, owner, freshness SLA) and the lineage, retention and partitioning in design.md."],
+        port: ["+port: the differential check green on the final build over the whole corpus — every difference left is listed in design.md with the criterion that asks for it.",
+          "+port: the baseline files unchanged since the baseline task was ticked (their git history older than the port's changes); every Deferred Improvement made in a later task or still listed for later."],
       },
       clarify: { // spec_clarify questions for the track (asked while requirements.md says nothing about them)
         secAccess: "Specify what an unauthenticated or unauthorized caller gets (IF … THEN THE SYSTEM SHALL deny …) and the ASVS level the feature targets.",
@@ -2411,6 +2497,29 @@ const msg = {
         distDelivery: "Specify the delivery guarantee (at-least-once) and how a message delivered twice is detected and applied once (idempotency key, inbox) — write it as an AC.",
         distFailure: "Specify what the feature does when each dependency (database, broker, external API) is unavailable or times out — as IF … THEN THE SYSTEM SHALL criteria.",
       },
+    },
+
+    // +port (1.36): doctor's port-verify / port-recheck / port-fence details (and spec_finish's port-recheck blocker). b: the baseline
+    // task, d: the differential check — the two [PORT] anchors (engine/port.js)
+    port: {
+      verifyOk: (b, d, waiting) => `port order: task ${b} records the baseline, task ${d} checks the new code against it${waiting ? ` — ${waiting} wait for it` : ""}.`,
+      verifyMissing: "+port: no task records the baseline and checks the new code against it — the port needs both, each with a runnable _Verify:_ (the [PORT] template tasks, or tasks citing a [PORT] criterion — references/port-patterns.md)",
+      noVerify: (list) => `a [PORT] task without a runnable _Verify:_ never opens the fence: ${list}`,
+      approvedAlready: "(the tasks are approved already — their next approval requires it)",
+      baselineLate: (list, b) => `listed before the baseline (task ${b}): ${list} — move the baseline's section first, then those tasks under a level-2 heading of their own (## …; inside the baseline's section, removing +port would hide them), keeping their numbers — or the baseline may be recorded from the new code`,
+      dependsEscape: (list, b) => `a _Depends:_ that never reaches the baseline (task ${b}): ${list} — a wave can start them before it; add ${b} to it`,
+      recheck: (d, list, slug) => `the differential check (task ${d}) has not passed again since a task after it was ticked or re-run (${list}) — run it again on the final code: ${DEV_SPEC} done ${slug} ${d} --run`,
+      fence: (list) => `ticked before the [PORT] task they wait for (in brackets) had passed: ${list} — a task moved, +port turned off and on, or a checkbox edited by hand; check them against the baseline and the differential check`,
+      // 1.36 review 1 — a differential check listed before the baseline (port-verify); next_task / next_action: the [PORT] task holding
+      // the rest ticked but not verified; next_action before the finish: the differential check to re-run first
+      verifyOrder: (d, b) => `the differential check (task ${d}) is listed before the baseline (task ${b}), so it holds nothing — move it after the port's tasks`,
+      naHeld: (n, a, slug, runnable) => `Task ${n} waits for task ${a} (+port — port first, improve later): task ${a} is ticked but not verified, and only a passing run of its _Verify:_ opens the fence — ` +
+        (runnable ? `run it and record it: ${DEV_SPEC} done ${slug} ${a} --run.` : `it has no runnable _Verify:_ yet: write its command in tasks.md (a plan change, approved again), then ${DEV_SPEC} done ${slug} ${a} --run.`),
+      naRecheck: (d, list, slug) => `The differential check (task ${d}) has not passed again since a task after it was ticked or re-run (${list}): run it again on the final code first — ${DEV_SPEC} done ${slug} ${d} --run —, then the project checks and /spec-finish ${slug} (the re-run is task activity: project checks run before it would have to run again). After any fix from here on (the review panel's included), run it once more before /spec-finish — a fix to a task listed before it is not asked for.`,
+      // 1.36 review 2 — port-verify: no task under the differential check's heading cites a [PORT] criterion (its first task is taken);
+      // next_action's finish step: the differential check again after any fix (port-recheck reads only the tasks listed after it)
+      dUncited: (d) => `no task under the differential check's heading cites a [PORT] criterion, so its first task (task ${d}) is taken for the check — cite the [PORT] criteria in the _Requirements:_ of the task that runs the comparison, or a task before it in that section opens the fence for the improvements`,
+      naFinishCheck: (d, slug) => `+port: after any fix from here on (the branch review's included), run the differential check (task ${d}) again on the final code — ${DEV_SPEC} done ${slug} ${d} --run — before /spec-finish ${slug}: port-recheck asks for it only after a task listed after it.`,
     },
 
     // Marker-shaped text on a task line that yields no marker (doctor malformed-markers).
@@ -3224,12 +3333,59 @@ const msg = {
     },
     scopeGuard: {
       on: "Guard mode SCOPE — Write/Edit on a code file outside .specs/ asks unless an open task of an approved feature names it in _Implements:_ (the file, its folder or a glob; test files excepted), and asks for every code edit while no feature has approved, unfinished tasks (roadmap.json meta.guard: \"scope\"). Test files are allowed while a feature's test plan is approved and the feature is unfinished (Phase 4 writes the failing tests before the tasks gate), and every code file while a spike is under way (its prototype).",
-      ask: (file, features, hint) => `dev-spec guard (scope): ${file} is not in the plan — no open task of ${features} names it in _Implements:_. ${hint} (Guard mode is scope — ${DEV_SPEC} init --guard on allows every code file while tasks are approved; --guard off disables it.)`,
+      ask: (file, features, hint, level = "scope") => `dev-spec guard (scope): ${file} is not in the plan — no open task of ${features} names it in _Implements:_. ${hint} (Guard mode is ${level} — ${DEV_SPEC} init --guard on allows every code file while tasks are approved; --guard off disables it.)`,
       hint: {
         "same-folder": (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — same folder as ${ref}) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
         nearby: (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — it plans ${ref} nearby) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
         next: (n, slug) => `Add it to the _Implements:_ of task ${n} (${slug}, the next open task) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
       },
+    },
+    // 1.36 protected tests (roadmap.json meta.guard "tests" · spec_feature {action: "protect" | "unprotect"} · `dev-spec feature
+    // protect|unprotect`). `ask` is read by the USER (the permission prompt), `deny` by the AGENT (+ `denyUser`, the line the user sees).
+    // The "dev-spec guard (tests)" prefix, _Implements:_, _Verify:_, meta keys and the commands stay English.
+    protectedTests: {
+      on: `Guard mode TESTS — the scope guard, plus protected tests: once a feature's tasks are approved, the test files present then (and those a ticked task names in _Implements:_ or runs in its _Verify:_) are protected — editing, removing or moving one asks unless a task that can start now names it in _Implements:_, and is refused under meta.approvalGuard deny. Only the user lifts one: ${DEV_SPEC} feature unprotect <feature> <file> --reason "…".`,
+      unguarded: "The protected tests are listed in each feature's .state.json — only the approval guard (init --approval-guard ask|deny) keeps an agent from editing that list.",
+      whyFile: (slug, day) => `it is one of ${slug}'s protected tests${day ? ` (recorded ${day})` : ""}`,
+      whyFolder: (n, first) => `it holds ${n} protected test(s), e.g. ${first}`,
+      current: (list) => `The tasks that can start now — ${list} — don't name it in _Implements:_.`,
+      noCurrent: "No task that can start now names it in _Implements:_.",
+      reopened: (list) => `It is the planned test of the reopened task(s) ${list} — a task reopened after its tick never unlocks its planned test again: it changes only with a lift (below).`,
+      planHint: (n, slug) => ` To plan the change, add it to the _Implements:_ of task ${n} (${slug}) and re-approve the tasks phase.`,
+      ask: (file, why, current, planHint, lift) => `dev-spec guard (tests): ${file} is a protected test — ${why}. ${current} A task that makes a test pass changes the code, not the test: confirm only if you want this test changed.${planHint} To allow it for the feature, lift it yourself: ${lift}. (Guard mode is tests — ${DEV_SPEC} init --guard scope stops protecting tests.)`,
+      deny: (file, why) => `dev-spec guard (tests): refused — ${file} is a protected test (${why}), and a protected test changes only by the user's decision (meta.approvalGuard: deny). Do not change it another way (a shell command, a script, git): stop, report the test and why you would change it, and let the user decide.`,
+      denyUser: (file, cmd) => `dev-spec guard refused an agent's edit of the protected test ${file}. To allow it yourself: ${cmd}`,
+      snapshotNote: (n, cap) => `Protected tests: ${n} test file(s) recorded — editing, removing or moving one now asks unless a task that can start now names it in _Implements:_.` + (cap ? ` Only the first ${cap} were recorded (the list is capped).` : ""),
+      briefDod: (n) => `Protected tests (meta.guard tests${n ? ` — ${n} file(s) on this feature's list` : ""}): edit, rename or delete an existing test file only when THIS task's _Implements:_ names it; make a red test green by fixing the code, never the test. If the guard asks or refuses, stop and report NEEDS_CONTEXT naming the test — never route around it (a shell command, a script, git).`,
+      briefDodReopened: (n, slug) => `Protected tests (meta.guard tests${n ? ` — ${n} file(s) on this feature's list` : ""}): this task was reopened after its tick, so it unlocks no test file — not even one its _Implements:_ names: such a test changes only with the user's lift (${DEV_SPEC} feature unprotect ${slug} <file> --reason "…" — theirs to run); make a red test green by fixing the code, never the test. If the guard asks or refuses, stop and report NEEDS_CONTEXT naming the test — never route around it (a shell command, a script, git).`,
+      via: { approval: "the tasks approval", protect: "feature protect" },
+      listNote: (slug, n, day, via, added) => `${slug} — ${n} protected test file(s)` + (day ? ` since ${day}${via ? ` (${via})` : ""}` : "") + `; ${added} added now.`,
+      unlifted: (file) => `The lift of ${file} ended — it is protected again.`,
+      truncated: (cap) => `The list reached its cap (${cap} files): the tests past it are not protected.`,
+      notEnforced: `The guard reads the list only at guard tests (${DEV_SPEC} init --guard tests).`,
+      lifted: (file, slug, listed) => `Lifted the protection of ${file} (${slug}): it may change until ${DEV_SPEC} feature protect ${slug} ${file}.` + (listed ? "" : " (It was not on the feature's protected list.)"),
+      // feature protect <f> <file> --accept (1.36.0 review 3): the test's current content recorded as the authorised one
+      accepted: (file, slug) => `Accepted the current content of ${file} (${slug}): its recorded hash is this content now — finish names a later change. Finish it again (${DEV_SPEC} finish ${slug} --write): the merge summary then lists the accept and no longer names the test as changed.`,
+      err: {
+        fileRequired: `unprotect needs the test file: ${DEV_SPEC} feature unprotect <feature> <file> --reason "…" (spec_feature {action: "unprotect", file, reason}).`,
+        reasonRequired: "unprotect needs a reason (one line, at most 500 characters): why this protected test may change.",
+        acceptFileRequired: `Accepting a test's content needs the test file: ${DEV_SPEC} feature protect <feature> <file> --accept --reason "…" (spec_feature {action: "protect", file, accept: true, reason}).`,
+        acceptReasonRequired: "Accepting a test's content needs a reason (one line, at most 500 characters): why its current content is the right one.",
+        // 1.36.0 review 4: the accept over MCP elicitation, the test rewritten while the question waited
+        acceptChangedSincePreview: (file) => `Nothing accepted: ${file} changed after the user was asked to accept its content (edited while the question waited) — their confirmation covered the content they were shown. Ask them again.`,
+        notATest: (file) => `${file} is not a test file (by its name or its folder) — only test files are protected.`,
+        outside: (file) => `${file} is outside the project.`,
+      },
+      finishWarn: (slug, list, more) => `Protected tests of ${slug} changed with no recorded reason (no task re-baselined them, no lift covers them): ${list}${more ? ` and ${more} more` : ""} — check each change is intended (a test made to pass is a weakened test); if it is, accept it: ${DEV_SPEC} feature protect ${slug} <file> --accept --reason "…".`,
+      changed: (file) => `${file} (changed)`,
+      deleted: (file) => `${file} (deleted)`,
+      summaryHead: "## Protected tests",
+      summaryLine: (n, k) => `${n} protected test file(s); ${k} changed with no recorded reason.`,
+      summaryLift: (file, by, reason) => `- lifted: ${file} — by ${by}: "${reason}"`,
+      summaryAccept: (file, by, reason) => `- accepted: ${file} — by ${by}: "${reason}"`,
+      doctorMissing: (slug) => `guard tests: ${slug} has approved tasks but no protected-tests snapshot (its tasks were approved before the level was set) — take one: ${DEV_SPEC} feature protect ${slug}.`,
+      // 1.36.0 review 3: a lift of a finished feature, recorded before its finish, never ended (first: the one file, else null)
+      doctorLiftAfterFinish: (slug, files, first) => `guard tests: ${slug}'s lift of ${files} is still in force after its finish — ${first ? "the test stays" : "the tests stay"} unprotected for every feature: end it (${DEV_SPEC} feature protect ${slug} ${first || "<file>"}) or accept its current content (${DEV_SPEC} feature protect ${slug} ${first || "<file>"} --accept --reason "…").`,
     },
 
     // the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).
@@ -3644,6 +3800,11 @@ const brief = {
       ],
     },
     metricsRule: "Every metric listed above is actually emitted — show the evidence in the report.",
+    // +port (1.36): the definition of done of a task of the port (between the baseline and the differential check) and of one after it
+    portRules: {
+      port: () => "Port task: keep the behaviour exactly — the same outputs, errors and side effects as the old code. A cleanup or a change you notice goes under design.md → [PORT] Deferred Improvements, never into this task.",
+      after: (d) => `After the port: the differential check (task ${d}) stays green but for the differences this task's criteria ask for — each listed in design.md → [PORT] Differential Check with the criterion's ID. Run task ${d}'s _Verify:_ again once this task is done.`,
+    },
     // the definition of done of an _Expect: fail_ (red) task — replaces the loop's green-making rules.
     redRules: [
       "This is a RED task: write (or keep) the planned test(s) exactly as the test plan describes them — no production code and no fix in this task.",

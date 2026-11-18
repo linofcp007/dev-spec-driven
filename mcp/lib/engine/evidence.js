@@ -20,7 +20,8 @@ let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, c
   traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps, gitDirsOf;
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact; // guardian.js — dev-guardian's gate: which check runs it, its run read, its verdict, what is refused / stored, --compact
-function __link(E) { ({ dayOf, isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
+let fastCheckCandidates; // scan.js — 1.36: what the root manifests suggest as the fast check (fastCheckOffer)
+function __link(E) { ({ fastCheckCandidates, dayOf, isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
@@ -515,7 +516,8 @@ function runOf(e) {
   // expected: "fail" (_Expect: fail_), commit / dirty (the git state `done --run` saw); observed (true | false | "cli": the
   // harness — or the CLI itself — saw the run); absent on older records. cmdRule (recorded under the command
   // rule — never grandfathered by redProof) and root (the project folder its absolute `cd`s are read against — runRootStamp).
-  for (const k of ["command", "exitCode", "summary", "at", "expected", "commit", "dirty", "observed", "cmdRule", "root"]) if (e[k] != null) r[k] = e[k];
+  // fast (1.36): the fast check at a code task's tick {check, status, runs, clean} — completeTask's, never a caller's (metrics).
+  for (const k of ["command", "exitCode", "summary", "at", "expected", "commit", "dirty", "observed", "cmdRule", "root", "fast"]) if (e[k] != null) r[k] = e[k];
   return r;
 }
 function stateEvidence(projectDir, slug) {
@@ -1331,7 +1333,7 @@ function gitEvidence(ev) {
 // ---------------------------------------------------------------------------
 // harness-observed evidence. In Claude Code the plugin's hooks/observe-hook.js (PostToolUse and PostToolUseFailure,
 // matcher Bash) sees every Bash run: a run of a task's runnable _Verify:_ command (or the " && " join of a task's commands) or
-// of a project check (roadmap.json meta.checks) is appended — one JSON line {command, exitCode, at, event, session} — to a
+// of a project check (roadmap.json meta.checks) is appended — one JSON line {command, exitCode, at, event, session, tool?} — to a
 // git-ignored, size-bounded log: .specs/<feature>/.execution/observed.jsonl for a task's command, .specs/.execution/
 // observed.jsonl for a project check's (a dot folder is never a feature; both .execution/ folders ignore themselves).
 // spec_complete_task / `done` and spec_finish {evidence} stamp every reported run `observed: true | false` from that log
@@ -1604,6 +1606,9 @@ function observeRun(projectDir, run) {
   const entry = { command: key, exitCode: code, at: typeof run.at === "string" && Number.isFinite(Date.parse(run.at)) ? run.at : new Date().toISOString() };
   if (typeof run.event === "string" && run.event) entry.event = run.event.slice(0, 40);
   if (typeof run.session === "string" && run.session) entry.session = run.session.slice(0, 200);
+  // the tool that ran it, when the hook names one — the PowerShell tool's (its passes are logged only with an explicit exit code: the
+  // fast check's note says so, 1.36 review 1 FC-6)
+  if (typeof run.tool === "string" && run.tool) entry.tool = run.tool.slice(0, 40);
   const targets = [];
   for (const f of featureDirs(pdir).filter((x) => !x.archived).slice(0, OBSERVED_MAX_FEATURES)) {
     const text = readIfExists(path.join(f.dir, "tasks.md"));
@@ -1724,6 +1729,153 @@ function writeChecks(projectDir, nc) {
     writeRoadmap(projectDir, rm);
     return { ok: true };
   });
+}
+
+// ---------------------------------------------------------------------------
+// 1.36 — the fast check (roadmap.json meta.fastCheck, warn only): the name of ONE project check (meta.checks) an agent runs on
+// its own after each small edit — a type check, a linter that answers in seconds. Set by spec_init {fastCheck} / `init
+// --fast-check <name|off>` (validated under the roadmap lock against the checks merged in the SAME call: fastPlan); next_task
+// and the brief name it; `done --run` runs it first while it isn't clean; a code task's tick is judged by the project log's
+// latest run of it against the dates of the feature's planned files (fastCheckStatus) — a note, never a refusal (a file date
+// only ever warns). Being a meta.checks entry it is a finish check too (suite-evidence): the gate on the final code.
+// ---------------------------------------------------------------------------
+// A command that REWRITES files is never a fast check: run after each edit it would change the code — and the tests — under the
+// task. The rule, word by word (a heuristic — the docs say it as such): a `--fix` (`--fix=…`) or `--write` word, or a formatter —
+// a `*fmt` / `*format` program or subcommand (gofmt, cargo fmt, ruff format, dotnet format, clang-format; never a flag, an `@alias`
+// or a check- / lint-named script: check-fmt, check:fmt, fmt:check, lint:format) — with a `-w` word (write: `gofmt -l -w`), or with
+// no check word: a check flag (--check / -check / --check-…, -l, -d, -n, --diff, --dry-run, --verify-no-changes, --lint,
+// --validate, --test, --exit-code, --output=none) or its `lint` subcommand (`swift format lint`). 1.36 review 1 (FC-4 / T3):
+// `gofmt -l`, `shfmt -d`, `make check-fmt`, `dune build @fmt` were refused, `ruff format .`, `dotnet format`, `clang-format -i`
+// accepted. 1.36 review 2 (FC2-1): the widened formatter set refused check-only forms (`swiftformat --lint`, `dart format
+// --output=none`, `clang-format -n`, `elm-format --validate`, `buf format --exit-code`, `npm run lint:format`), and `-l` let
+// `gofmt -l -w` / `shfmt -l -w` through. 1.36 review 3 (PF3-4): the check, lint and -w words are read in the formatter's own simple
+// command (split on && / || / ; / |) — `cargo fmt && git diff --exit-code` was accepted, `gofmt -l . | grep -v -w vendor` refused —, and
+// `lint` is the formatter program's own subcommand. 1.36 review 4 (PF4-2): a runner list (make / just / task) missed every other target
+// runner (`gmake fmt lint`, `pants fmt lint ::`, `npm run fmt lint`) — `lint` counts only as swift-format's own subcommand (`swift format
+// lint`, `swift-format lint`); any other `fmt lint` is refused, the documented default ("give its check form"). A `$(… | …)` before the
+// check flag splits the formatter's command at its `|`: the documented limit (put the check flag first).
+const RE_FIXER_FLAG = /(?<![\w-])--(?:fix|write)(?![\w-])/;
+const RE_FORMATTER = /(?<![\w./@-])(?<!(?:check|lint)[:_-])(?!-|(?:check|lint)[-_:])[\w-]*(?:fmt|format)(?![\w:.-])/i;
+const RE_CHECK_FLAG = /(?<![\w-])(?:--?check(?:-[\w-]+)?|-[ldn]|--diff|--dry-run|--verify-no-changes|--lint|--validate|--test|--exit-code|--output=none)(?![\w-])/;
+const RE_LINT_MODE = /(?:^|[\s/])swift(?:-format|\s+format)\s+lint(?![\w:.-])/i; // swift-format's own lint subcommand, nothing else
+const RE_WRITE_WORD = /(?<![\w-])-w(?![\w-])/; // beside a formatter: it writes, whatever check flag stands beside it
+const fixerSegment = (seg) => RE_FORMATTER.test(seg) && (RE_WRITE_WORD.test(seg) || !(RE_CHECK_FLAG.test(seg) || RE_LINT_MODE.test(seg)));
+const fixerCommand = (cmd) => RE_FIXER_FLAG.test(cmd) || String(cmd).split(/&&|[;|]/).some(fixerSegment);
+const FAST_SKEW_MS = 5 * 60 * 1000; // a log entry or a file date further ahead is ignored (another machine's clock)
+// roadmap.json meta.fastCheck → null (none set) · { name, command } · { invalid: the stored value, why: "missing" | "guardian" |
+// "fixer" } — a name no valid check carries, dev-guardian's gate, a command that rewrites files: no fast check runs (doctor warns
+// `fast-check`). A roadmap.json that doesn't parse reads as no meta: none.
+function fastCheckOf(projectDir) {
+  const l = loadRoadmap(projectDir);
+  const raw = !l.parseError && isObj(l.rm.meta) ? l.rm.meta.fastCheck : undefined;
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (typeof raw !== "string") return { invalid: String(JSON.stringify(raw)).slice(0, 80), why: "missing" };
+  const c = projectChecks(projectDir).checks.find((x) => x.name === raw);
+  const why = !c ? "missing" : isGuardianCheck(c.name, c.command) ? "guardian" : fixerCommand(c.command) ? "fixer" : null;
+  return why ? { invalid: raw.slice(0, 80), why } : { name: c.name, command: c.command };
+}
+// spec_init {fastCheck} / `init --fast-check <name|off>` → undefined (not given) · { off } ("", off, none — a check named off or
+// none can't be the fast check) · { name } · { error } (not a string: the MCP schema refuses one first).
+function fastCheckInput(v, lng) {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "string") return { error: i18n.msg(normalizeLang(lng)).fastCheck.badInput(String(v)) };
+  const s = v.trim();
+  return s === "" || /^(?:off|none)$/i.test(s) ? { off: true } : { name: s };
+}
+// Under initProject's roadmap lock, after checksPlanError (nc.merged: the checks as this call leaves them) — what this call does to
+// meta.fastCheck → { error } · { write: undefined (nothing) | null (delete it) | <name>, cleared? (the stored name whose check this
+// call removed) }. A name given must be a valid check after the merge, never dev-guardian's gate nor a command that rewrites
+// files; the stored one is checked again when this call replaces its check's command, and goes when this call removes its check.
+function fastPlan(projectDir, nc, fc, lng) {
+  const F = i18n.msg(lng).fastCheck;
+  const l = loadRoadmap(projectDir);
+  const meta = isObj(l.rm.meta) ? l.rm.meta : {};
+  const stored = typeof meta.fastCheck === "string" && meta.fastCheck ? meta.fastCheck : null;
+  const checks = nc ? nc.merged : isObj(meta.checks) ? meta.checks : {};
+  const has = (k) => Object.prototype.hasOwnProperty.call(checks, k) && validCheckName(k) && validCheckCmd(checks[k]);
+  if (fc && fc.off) return { write: null };
+  if (fc) {
+    if (!has(fc.name)) return { error: F.badName(fc.name, Object.keys(checks).filter(has).join(", ")) };
+  } else if (!stored || !nc) return { write: undefined };
+  else if (!has(stored)) return nc.remove.includes(stored) ? { write: null, cleared: stored } : { write: undefined };
+  else if (!Object.prototype.hasOwnProperty.call(nc.set, stored)) return { write: undefined };
+  const name = fc ? fc.name : stored;
+  const cmd = checks[name].trim();
+  if (isGuardianCheck(name, cmd)) return { error: F.guardianNotFast(name) };
+  if (fixerCommand(cmd)) return { error: F.fixer(name, cmd) };
+  return { write: fc ? name : undefined };
+}
+// Inside initProject's roadmap lock: null deletes meta.fastCheck, a name sets it — no write when nothing changes.
+function setFastCheck(projectDir, name) {
+  const rm = readRoadmap(projectDir);
+  rm.meta = isObj(rm.meta) ? rm.meta : {};
+  if (name === null ? rm.meta.fastCheck === undefined : rm.meta.fastCheck === name) return;
+  if (name === null) delete rm.meta.fastCheck;
+  else rm.meta.fastCheck = name;
+  writeRoadmap(projectDir, rm);
+}
+// A task the fast check judges: a CODE task — its _Implements:_ names a file (taskMarkers drops the template's [slot]) — of a
+// feature that is no spike. Any other task carries no `fastCheck` (next_task, the brief, complete_task).
+const fastTask = (block, state) => !!block && !(isRecord(state) && state.kind === "spike") && taskMarkers(block).implements.length > 0;
+// The fast check at a code task → null (no valid fast check, or not a code task) · { check, command, status, runs, clean, at?,
+// partial?, pwsh? }.
+// status (stable): clean · stale (a planned file is newer than its latest run) · failed (its latest run failed) · missing (no run
+// of it in the project log) · unknown (no harness log at all — an MCP-only client: no note). Its latest run: the project log's
+// newest entry that runs the fast command (runProvesVerify — the check as ONE command: `tsc && npm test` is no run of it; > 5 min
+// ahead ignored); its edits: the newest date of the feature's planned files (baselineFiles of the active tasks — the set
+// suiteCodeStamp hashes, bounded; a missing file or one dated > 5 min ahead ignored) and of the task's OWN _Implements:_ files,
+// always — past that set's cap (1.36 review 1 FC-1: BASELINE_CAP keeps the first files in task order, so a later task's own file
+// fell outside it and its edit read clean). partial (stable): the planned set stopped at its cap — no other status, no note.
+// pwsh: its latest run came from Claude Code's PowerShell tool, whose passes are logged only with an explicit exit code (the
+// observe hook marks those runs `tool`) — the note says so (FC-6). runs / clean: its runs since the feature's previous tick (else
+// its tasks approval, else its creation) — what a tick records on its run (`fast`) for metrics.
+function fastCheckStatus(projectDir, dir, block, state) {
+  const fc = fastCheckOf(projectDir);
+  if (!fc || fc.invalid !== undefined || !fastTask(block, state)) return null;
+  const horizon = Date.now() + FAST_SKEW_MS;
+  const seen = new Map(); // a log repeats its commands: each one matched once
+  const isFast = (cmd) => { if (!seen.has(cmd)) seen.set(cmd, runProvesVerify({ command: cmd }, [fc.command], projectDir)); return seen.get(cmd); };
+  const runs = [];
+  for (const e of readObservedLog(observedLogFile(projectDir, null))) {
+    const t = Date.parse(e.at);
+    if (Number.isFinite(t) && t <= horizon && isFast(e.command)) runs.push({ t, exitCode: e.exitCode, at: e.at, pwsh: e.tool === "PowerShell" });
+  }
+  let last = null;
+  for (const r of runs) if (!last || r.t >= last.t) last = r;
+  const root = path.resolve(projectDir);
+  let edited = -Infinity;
+  const date = (rel) => { try { const m = fs.statSync(path.resolve(root, rel)).mtimeMs; if (m <= horizon && m > edited) edited = m; } catch { /* missing: no edit */ } };
+  const planned = baselineFiles(root, activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "");
+  planned.files.forEach(date);
+  // the task's own files: the planned walk's are KNOWN (no second realpath check) and dated once — a big glob's own walk is the
+  // call's memoized one (globFiles, the folder listings) — 1.36 review 2 FC2-3: a second walk doubled the brief on a big glob
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const known = new Set(planned.files.map(fold));
+  const own = baselineFiles(root, taskMarkers(block).implements.map((p) => stripEnds(p.trim(), isBacktickUnit).trim()), undefined, known); // implementsRefs' reading
+  own.files.forEach((rel) => { if (!known.has(fold(rel))) date(rel); });
+  const partial = planned.truncated; // (a task's own folder past the cap is part of the planned set: cut there too)
+  const status = !last ? (observedAny(projectDir) ? "missing" : "unknown") : last.t < edited ? "stale" : last.exitCode === 0 ? "clean" : "failed";
+  const st = isRecord(state) ? state : {};
+  const ap = isObj(st.approvals) && isObj(st.approvals.tasks) ? timeOf(st.approvals.tasks.at) : null;
+  const since = Math.max(timeOf(st.lastTickAt) || -Infinity, ap || -Infinity);
+  const from = since > -Infinity ? since : timeOf(st.createdAt) || -Infinity;
+  const win = runs.filter((r) => r.t > from);
+  return { check: fc.name, command: fc.command, status, runs: win.length, clean: win.filter((r) => r.exitCode === 0).length, ...(last ? { at: last.at } : {}),
+    ...(partial ? { partial: true } : {}), ...(last && last.pwsh ? { pwsh: true } : {}) };
+}
+// init / spec_upgrade, while no fast check is set: the first candidate the project's root manifests suggest (scan.js
+// fastCheckCandidates) → { name, command, from, note } | null — offered, never set (it must pass on the base branch: it becomes a
+// finish check). Its name: a check that already runs that command, else the candidate's when free, else "fast" / "fastcheck".
+function fastCheckOffer(projectDir, lng) {
+  const l = loadRoadmap(projectDir);
+  if (l.parseError || (isObj(l.rm.meta) && l.rm.meta.fastCheck != null && l.rm.meta.fastCheck !== "")) return null;
+  const cand = fastCheckCandidates(projectDir)[0];
+  if (!cand) return null;
+  const checks = projectChecks(projectDir).checks;
+  const same = checks.find((c) => c.command === cand.command);
+  const name = same ? same.name : [cand.name, "fast", "fastcheck"].find((n) => !checks.some((c) => c.name === n));
+  if (!name) return null;
+  return { name, command: cand.command, from: cand.from, note: i18n.msg(lng).fastCheck.offer(cand.command, cand.from, name, !!same) };
 }
 
 const GUARDIAN_STDERR_MAX = 64 * 1024; // the raw stderr finish --run hands a guardian check's reading (its last characters)
@@ -2086,5 +2238,6 @@ module.exports = { normalizeEvidence, taskStamp, isRecord, evidenceRecords, ownR
   expectFailRefusal, expectFailResult, gitEvidence, OBSERVED_MAX_BYTES, evidenceMode, evidenceRule, evidenceModeInput,
   setEvidenceMode, observedRun, observedAny, observedStamp, stripCdPrefix, runRootStamp, proofIncomplete, runProvesVerify,
   observeRun, observedNorm, observedBodies, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks,
+  fastCheckOf, fastCheckInput, fastPlan, setFastCheck, fastCheckStatus, fastCheckOffer, fixerCommand, // 1.36 the fast check (meta.fastCheck)
   suiteStatus, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, parseGitLog, taskCommits,
   unverifiedLabel, specChangedSince, untickedSince, __link };

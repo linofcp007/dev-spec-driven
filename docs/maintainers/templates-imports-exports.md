@@ -26,7 +26,21 @@ is in History at the end.
   block is appended as spec_add_track appends it (`trackDesignBlock`, `trackTaskBlock`, `trackRequirementsBlock` and
   `trackTestRowsBlock` numbered after the template's own IDs, from `trackIdMap`) — UNLESS the template already carries the
   track (its marker on a real heading, the localized Testability Notes, its task-block heading; a test plan citing its
-  criteria). Every other artifact, the bugfix and spike variants included, is written as the template says.
+  criteria). Every other artifact, the bugfix and spike variants included, is written as the template says. A task block of
+  TWO sections (+port, 1.36 — its baseline, then its differential check) puts its first one BEFORE the template's first task
+  section (`splitLeadSection` / `beforeFirstTaskSection`: before the OUTERMOST level-2 heading holding the first task — a `##
+  Phase` over `### Story` headings —; appended when no level-2 heading holds it — tasks right under the title, Kiro's layout, or
+  a level-1 heading closing an earlier `##` —, where put before them it would take the template's tasks in: doctor's
+  `port-verify` then FAILS baselineLate at size m / l — the tasks approval refuses the plan until the baseline's section is
+  moved first and the template's tasks put under a level-2 heading of their own, keeping their numbers (`port.baselineLate`
+  says so; moved INTO the baseline's section they went with it when +port was removed — 1.36.0 review 3; renumbered, a ticked
+  task lost its run — review 4) — and warns at s / no size:
+  gates-and-approvals.md → Right-sized rigor) and appends the rest: nothing changes the code the baseline covers before it is
+  recorded. Its tasks keep the numbers after the template's own; where it goes before them, next_task serves the baseline
+  first (tasks order is by section in file order) — appended, the template's tasks come first until it is moved. spec_add_track
+  (`applyTracks`) inserts the lead section the same way while NO task of tasks.md is ticked (`beforeFirstTaskSection(…, orNull)`:
+  null where no level-2 section holds the first task — the whole block then appended, after a code block left open at the end
+  is closed; inserted in the file's own line ends), and appends the whole block once one is (1.36.0 review 3).
 - **Placeholder corpus:** `projectTemplateSets()` adds the templates' bracket texts, code-span slots and task lines (bug.md's
   join `bugTemplateSlots()`), so an untouched custom scaffold reads placeholder to doctor, approve and next_action. Scoped
   to the engine call's
@@ -78,7 +92,10 @@ is in History at the end.
   escaped before its slug is taken); every requirements.md line is comment-inert (`commentInert`, `inertBlock`); the
   track design and task blocks follow the body through `appendSpecText` (an open fence closed first); an archived twin
   slug is a warning (`createArchivedTwin`); the roadmap is refreshed ONCE, at the end (createFeature's
-  `{ refresh: false }`).
+  `{ refresh: false }`). A source's tasks.md replaces the scaffold's plan, and with it a built-in marker track's template tasks
+  (only a track pack's are re-added): for +port, an imported plan with no anchor (port.js `portAnchored`) warns
+  `importSpec.wPortNoFence` — the fence holds nothing, and add_track adds nothing to a track already on (its way: `add-track
+  <f> port --remove`, then `add-track <f> port`).
 - **No usable title** (a parser's `nameHint` slugifying to nothing, `# Добавить тёмную тему`) → its `nameFallback` (the
   file's stem, the folder, fp.id); inline text has none → `importSpec.noUsableTitle`.
 - **Dry run** (`dryRun: true`, CLI `--dry-run`): `importRun` inside `withDryRun` (conventions.md → The dry-run sink) — the
@@ -167,7 +184,11 @@ engine/scan.js — area 13 of the suites.
   (`NESTED_MANIFESTS`, never under a `MANIFEST_FIXTURE_DIRS` folder such as docs or examples) name the stack, the first
   `NESTED_MANIFEST_CAP` give frameworks and test runners; only the root package.json gives entrypoints. Never a test file
   (`isTestFile`); `@SpringBootApplication` only in a `.java` or `.kt` source; a package.json with no dependency is
-  "node". ASP.NET `[controller]` and `[action]` are resolved (`aspActionName`).
+  "node". ASP.NET `[controller]` and `[action]` are resolved (`aspActionName`). 1.36: `fastCheckCandidates()` reads the ROOT
+  manifests the same way (`projectFileInside`, a head — no walk) for the fast check's offer: a package.json typecheck script
+  (the lockfile's runner, never one that rewrites files), tsconfig.json → `npx tsc --noEmit` only with typescript in
+  dependencies / devDependencies, Cargo.toml, go.mod, `[tool.ruff]` / ruff.toml, `[tool.mypy]` / mypy.ini — never a lint script
+  (tasks-and-evidence.md → The fast check).
 - **Edges:** a projectDir that is no folder → `brownfield.notFolder` (CLI exit 1). coverage binary-searches keys sorted
   once per call (`implementsTargets(…, sorted)`, `keysWithPrefix`).
 
@@ -252,6 +273,26 @@ engine/scan.js — area 13 of the suites.
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
 
 ### Project templates
+- **1.36** — a two-section track block (+port) splits: its lead section before the template's first task section, the
+  rest appended (a template's tasks.md had the baseline after Polish, so baseline-first was lost for every project with one).
+- **1.36.0 review 1 (PORT-3)** — the lead section went before the NEAREST heading of level ≥ 2 above the first task, else
+  before the task itself: a Kiro-like template (tasks under the title) had all its tasks under the baseline's heading, a `##
+  Phase` / `### Story` one its first phase's — removing +port hid them, and spec_import fitted their `_Requirements:_` to the
+  `[PORT]` criteria. Now the outermost level-2 section, else appended.
+- **1.36.0 review 2 (P2-1)** — appended, the baseline came after a Kiro / `###`-only template's tasks: the fence held none of the
+  port's work and the plan was approved at size m with a doctor warn. The insertion is unchanged; `port-verify`'s approval probe
+  refuses that order at m / l (gates-and-approvals.md).
+- **1.36.0 review 3** — PF3-1: spec_add_track appended +port's block whole, so on a core feature whose tasks.md was still the
+  built-in scaffold (the documented flow: create once, add +port later) the baseline came after Setup … Polish — review 2's
+  probe refused the engine's own scaffold at m / l, and at s the fence held nothing. `applyTracks` now splits the block like
+  `withTrackBlocks` while no task of tasks.md is ticked (the whole block appended once one is: baselineLate warns / the gate).
+  PF3-2: the move baselineLate asked for ("move the baseline first") put a Kiro / `###`-only template's tasks inside the
+  baseline's section — removing +port then hid them, review 1's PORT-3 hazard; its text (and port-patterns.md) now names the
+  safe move: the baseline's section first, the template's tasks under a level-2 heading of their own, renumbered.
+- **1.36.0 review 4 (PF4-1)** — review 3's "renumbered in file order" was a step the safe move never needs (next_task serves
+  the plan by section, in file order, then by number) and, after a tick (add-track +port on a ticked plan), it moved the
+  ticked task's run and tick record to another task (both keyed by number: unverified, doctor `evidence-moved`). The text
+  says "keeping their numbers" now (EN / PT / ES, port-patterns.md).
 - **1.14** — `.specs/templates/` introduced: a team's own scaffolds over the built-in i18n ones. `templates` and `exports`
   became reserved slugs; a feature created before 1.14 under either name stays a feature (the legacy exception).
 - **1.15** — `tracks` joined `RESERVED_SLUGS` (the project's track packs), with the same exception.
@@ -268,6 +309,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.25** — steering imported from Kiro / Cursor; the steering logic itself was left untouched.
 
 ### Import sources and the brownfield scan
+- **1.36.0 review 1 (PORT-7)** — a +port import of a source with tasks.md had no baseline, no differential check and no
+  `[PORT]` criterion (as +data has no `[DATA]` one — the existing pattern for built-in marker tracks), so no fence, and only
+  doctor's `port-verify` warned: `wPortNoFence` (a warning only; the plan stays the source's).
 - **1.14** — `spec_import`, with the same guarantees for every source. The section ("Import sources and flows") also held
   the design-first Flows, since moved to gates-and-approvals.md → Flows.
 - **1.17 (F)** — the `fluidplan` source, read at fluidplan 755d1b2 (EN / FR labels). **1.17 F review** — the plan's text is

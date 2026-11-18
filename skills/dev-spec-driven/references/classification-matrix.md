@@ -48,6 +48,7 @@ little time; under-investing on one that turns out critical costs an incident, l
 | **+ui** | 5 `[UI]` sections (design system, UI states, accessibility, responsiveness & i18n, performance budget) | a user-facing screen, component or flow |
 | **+obs** | 5 `[OBS]` sections (SLIs & SLOs, telemetry, alerting & runbooks, rollout & rollback, health & capacity) | a service people depend on staying up |
 | **+data** | 5 `[DATA]` sections (contracts, data quality, idempotency & backfills, lineage, retention & cost) | data moves between stores on a schedule or a stream, and the feature owns its quality |
+| **+port** | 3 `[PORT]` sections (behaviour baseline, differential check, deferred improvements), the baseline task first, the differential check before any improvement | behaviour that exists is carried to new code — another language, framework or design — and must come out the same |
 
 Each marker track also brings its criteria and its steering file; what every track adds at each phase:
 `track-checklists.md`. A team's own track is a pack in `.specs/tracks/<name>/` (`project-tracks.md`).
@@ -183,14 +184,29 @@ Business monitoring (stock levels, price alerts to users) and a sales dashboard 
 
 A table migration, a CSV export or the warehouse building are no pipeline. Patterns: `data-pipeline-patterns.md`.
 
+## +port
+
+| Signal | Example |
+|---|---|
+| Behaviour that exists moves to new code | A port to another language or framework, a rewrite of a module, a reimplementation behind the same interface |
+| The old output is the specification | "The same results as today", a golden master, characterization tests, recorded production inputs |
+| Old and new run side by side for a while | A strangler fig, a cut-over, a differential test of the new code against the old |
+
+`spec_classify` turns +port on only from a technique name (characterization tests, a golden master, the strangler fig,
+differential testing, a behaviour-preserving port or rewrite); its verbs — port, rewrite, reimplement, migrate (*portar,
+reescrever, reescribir, migrar*) — give a "Possible +port" note at most: confirm it with the user. A network port ("open port
+8443"), a schema migration ("add a migration that renames a column") and a rewrite of copy are no port. A refactor that keeps
+behaviour and is small stays a change; one that moves behaviour across files or languages is a port. Patterns:
+`port-patterns.md`.
+
 ## What each track set scaffolds
 
 `core`: `classification.md` (m / l), `requirements.md`, `design.md`, `quickstart.md`, `checklist.md`, `tasks.md`. +tdd
 adds `test-plan.md` and the failing tests; +ai `eval-plan.md`, `prompts/`, `evals/`; +saas a `load-test.md` on a hot
-path. Design sections are additive — +saas 5, +ai 10, +sec 5, +privacy 6, +dist / +api / +ui / +obs / +data 5 each — on
-top of the base design, with their criteria (`US-1.AC-10` … `US-1.AC-35`) and steering files. A blank mandatory
+path. Design sections are additive — +saas 5, +ai 10, +sec 5, +privacy 6, +dist / +api / +ui / +obs / +data 5 each, +port 3 — on
+top of the base design, with their criteria (`US-1.AC-10` … `US-1.AC-37`) and steering files. A blank mandatory
 section is never acceptable; an honest "not needed because X" is. The section markers (`[SaaS]`, `[AI]`, `[SEC]`,
-`[PRIVACY]`, `[DIST]`, `[API]`, `[UI]`, `[OBS]`, `[DATA]`) are English in every language and case-sensitive.
+`[PRIVACY]`, `[DIST]`, `[API]`, `[UI]`, `[OBS]`, `[DATA]`, `[PORT]`) are English in every language and case-sensitive.
 
 ## `classification.md` format
 
@@ -201,7 +217,7 @@ section is never acceptable; an honest "not needed because X" is. The section ma
 Spec | Vibe
 
 ## Active Tracks
-core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui] [+obs] [+data]
+core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui] [+obs] [+data] [+port]
 
 ## Signals
 - **+tdd:** [signal from table] — [why it applies] (omit section if track off)
@@ -214,6 +230,7 @@ core [+tdd] [+saas] [+ai] [+sec] [+privacy] [+dist] [+api] [+ui] [+obs] [+data]
 - **+ui:** [signal] — [why]
 - **+obs:** [signal] — [why]
 - **+data:** [signal] — [why]
+- **+port:** [signal] — [why]
 
 ## Blast Radius
 [What breaks if this is wrong? Who is affected? Is it recoverable? How fast?]

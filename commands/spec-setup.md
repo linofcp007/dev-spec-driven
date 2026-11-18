@@ -1,13 +1,13 @@
 ---
 description: Set up a project — .specs/ and steering, guard mode, the status line, superpowers precedence, templates, track packs.
 disable-model-invocation: true
-argument-hint: "init [tracks] [--lang en|pt|pt-BR|es] | guard on|off|scope | statusline | superpowers | templates … | tracks …"
+argument-hint: "init [tracks] [--lang en|pt|pt-BR|es] | guard on|off|scope|tests | statusline | superpowers | templates … | tracks …"
 ---
 
 Args: $ARGUMENTS — the opt-in settings live in `.specs/roadmap.json → meta`; each call reports them back.
 
-**init `[tracks]`** — `spec_init {tracks, lang, guard?, checks?, approvalRoles?, stopCheck?, approvalGuard?, evidence?}`
-(CLI `dev-spec init [tracks…] [--lang en|pt|pt-BR|es] [--check name="cmd"] [--roles …] [--approval-guard off|ask|deny]`):
+**init `[tracks]`** — `spec_init {tracks, lang, guard?, checks?, approvalRoles?, stopCheck?, approvalGuard?, evidence?, fastCheck?, reviewModels?}`
+(CLI `dev-spec init [tracks…] [--lang en|pt|pt-BR|es] [--check name="cmd"] [--roles …] [--approval-guard off|ask|deny] [--fast-check <check>|off] [--review-models …]`):
 `.specs/steering/` with the files the tracks need — never over an existing file. Pass the user's `lang` (`pt` European,
 `pt-BR` Brazilian): every new feature inherits it. Settings, each only when the user wants it: `checks` — the project's
 check commands (`{"test": "npm test"}` — ask for the real ones, never guess), which `/spec-finish` then needs a passing
@@ -15,16 +15,25 @@ run of; `approvalRoles` — phases signed off per role; `stopCheck: false` — t
 `approvalGuard` `"ask"` / `"deny"` — an agent's approval asks the user or is refused; `evidence: "observed"` — only runs
 the harness saw count (suggest the approval guard with it); `guardian: true` (`--guardian`) — dev-guardian's gate as the
 check `guardian`, project-wide (every machine that finishes needs dev-guardian and its scanners): relay init's note — the
-user records the baseline now, on the base commit, and adds the `.gitignore` lines it names. Then help fill each
+user records the baseline now, on the base commit, and adds the `.gitignore` lines it names; `fastCheck` (`--fast-check
+<check>|off`) — the check run on its own after each small edit (a type check that passes on the base branch: it stays a
+project check), named with its check in one call (`--check tc="npx tsc --noEmit" --fast-check tc`); relay init's
+`fastCheckOffer` when it gives one — never set it unasked; `reviewModels`
+(`--review-models opus,sonnet | diverse | off`) — a review panel: the branch review, converge and the gate critics once per
+model; relay init's note (each extra model costs a review dispatch). Then help fill each
 steering file with real content (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/steering-templates.md`). A team on branches: suggest the merge
 driver once — `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" merge-state --install` (the user runs it; it writes
 `.gitattributes` and the clone's git config), again after each plugin update.
 
-**guard `on|off|scope`** — `spec_init {guard: "on"}` / `"scope"` / `"off"` (a string); no argument: read
+**guard `on|off|scope|tests`** — `spec_init {guard: "on"}` / `"scope"` / `"tests"` / `"off"` (a string); no argument: read
 `meta.guard` (absent = off) and explain it — don't call `spec_init` just to look. While on, Claude Code asks before an
 edit to a code file outside `.specs/` unless some feature has approved, unfinished tasks — a test file while a test plan
 is approved, and any edit during an active spike, pass too; `scope` also asks for a file no open task names in
-`_Implements:_`. A reminder to plan before coding, not a lock.
+`_Implements:_`; `tests` also protects the tests present at a feature's tasks approval (and those a tick records): an edit
+of one asks unless a task that can start now names it in `_Implements:_` — refused with `approvalGuard: "deny"`; only the
+user lifts one (`feature unprotect <f> <file> --reason …`) or accepts its current content (`feature protect <f> <file> --accept
+--reason …`), and init warns while the approval guard is off (the list lives in `.state.json`). A reminder to plan before
+coding, not a lock.
 
 **statusline `[--user | --project] [--remove]`** — print the entry with
 `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" statusline --print-config`; target `~/.claude/settings.json` (`--user`,
@@ -68,7 +77,7 @@ change, and `steering/<file>.md`. Keep the English-stable tokens exactly (`US-n.
 **tracks `[list|init <name>|check] [name] [--lang …]`** — `spec_tracks {action, name?, lang?}`: a team's own track pack
 in `.specs/tracks/<name>/` (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/project-tracks.md`). `track.json`:
 `name` = the folder, a `marker` (`^[A-Z][A-Z0-9]{1,11}$`, never a built-in marker — SAAS, AI, SEC, PRIVACY, DIST, API, UI,
-OBS, DATA —, a reserved word — TDD, CORE, SHARED, TODO, TBD, TBC, FIXME, NEEDS, NOTE, WIP — or an ID's shape: US / US1,
+OBS, DATA, PORT —, a reserved word — TDD, CORE, SHARED, TODO, TBD, TBC, FIXME, NEEDS, NOTE, WIP — or an ID's shape: US / US1,
 P1, AC / AC1, SC / SC1, EC / EC1, NFR / NFR1, T1), `title`, `signals`, `sections`. Use it like any track:
 `spec_create {tracks: ["tdd", "a11y"]}`. `check` reports each problem with its code; a bad pack is ignored as a whole.
 

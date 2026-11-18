@@ -25,6 +25,11 @@ Readiness category judges `tasks.md`; each task's brief gets its own pre-flight 
 (`references/subagent-execution.md` → Pre-flight the brief). Two critics at size l buy recall: two fresh reviews miss
 different things.
 
+**A review panel** (`spec_doctor`'s `reviewPanel` — `meta.reviewModels`, opt-in) ADDS gate critics: the table's critics as
+they are, on the session's model, plus one gate critic on each panel model not already the session's — an explicit `model`
+on each, in the same message. The cold read stays one, on the session's model; xs stays as above.
+(`references/subagent-execution.md` → Review on more than one model.)
+
 ## 2. Dispatch — keep them goldfish
 
 - `dev-spec-driven:spec-critic`, its mode on the dispatch prompt's first line (`Mode: gate` / `Mode: naive` — a line
@@ -41,8 +46,10 @@ different things.
 ## 3. Triage — before the user sees it
 
 Merge first: the same artifact, ID and problem from two reviewers is one finding (note both). A finding only one
-reviewer raised still counts. Then classify every Blocking and Important finding — you hold the context the reviewers
-lack:
+reviewer raised still counts. On a review panel, a finding two models raised is ranked first in the table (the reviewer
+column names both) — never decided by a vote: the merged findings go to the user, never to a verifier — gates have no
+verifier (verifying each merged finding once is the code reviews' rule), the user decides. Then classify every Blocking
+and Important finding — you hold the context the reviewers lack:
 
 | Call | When | What you add |
 |---|---|---|

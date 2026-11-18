@@ -126,7 +126,9 @@ extend lies **outside** them, it is never edited silently:
   report's **Reuse** block, so it is filed as a refactor candidate.
 
 The scope guard enforces it: with `meta.guard: "scope"`, an edit to a code file no open approved task names asks the
-user for permission — a subagent that hits the prompt mid-task stalls the loop until someone answers.
+user for permission — a subagent that hits the prompt mid-task stalls the loop until someone answers. `meta.guard: "tests"`
+adds the tests: an existing test the plan was approved against changes only when a task that can start now names it exactly
+in `_Implements:_` (or the user lifts it) — plan an extended test file there from the start.
 
 ---
 

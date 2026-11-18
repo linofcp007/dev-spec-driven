@@ -12,7 +12,9 @@ Phase 6, opt-in.
   T-IDs as their test-plan row (keyed by the FIRST cell); the design sections naming it; `_Verify:_`, `verifyPipes` and `expect:
   "fail"`; Global Constraints; `projectChecks`; its steering (see Scoped steering); `decisions` (the decisions.md entries citing its
   IDs, ≤ 5 / 2000 characters); a `[SEC]` / `[PRIVACY]` task's track design sections; a bugfix's Reproduction + Root Cause (+
-  `gated` / `gateError` when the bugfix gate would refuse it); `dependsOn` (see Task dependencies); the loop's definition of done.
+  `gated` / `gateError` when the bugfix gate would refuse it — 1.36: or +port's, with `heldBy`, the `[PORT]` tasks it waits for);
+  `portRole` (`port` · `after`) + `differential` on a +port task (its definition-of-done rule, `brief.portRules`); `dependsOn` (see
+  Task dependencies); the loop's definition of done.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
   feature's `x/`; a T-ID is read by its number (T-01 = T-1); a file needs a boundary on both sides (US-1.AC-1 is not US-1.AC-10).
@@ -20,8 +22,8 @@ Phase 6, opt-in.
 - **A RED task's brief** (`_Expect: fail_`): its tests heading `BRIEF.testsRed` and definition of done `redRules`; its project-checks
   item is `projectChecks.briefDodRed` (only its new red tests may fail).
 - **`write: true`** writes `.specs/<f>/.execution/` (self-ignoring: `.gitignore` = `*`): the brief regenerated, `ledger.md` created
-  once and only ever appended by the controller. The result keeps identifiers (`refs`, `loop`, `inlineOnly`, `verify`, gate,
-  `dependsOn`, `preflight`), the quoted spec text only with `includeBrief`. The PostToolUse hook exits early on
+  once and only ever appended by the controller. The result keeps identifiers (`refs`, `loop`, `inlineOnly`, `verify`, gate —
+  `gated` / `gateError` / `heldBy` —, `portRole` / `differential`, `dependsOn`, `preflight`), the quoted spec text only with `includeBrief`. The PostToolUse hook exits early on
   `/.execution/` paths.
 - **`preflight` (1.31)** — a boolean on every brief of a task: true at size m / l or no size (`featureSize()`), false
   for an xs change (`isChangeDir()`), size s, a spike (its tasks exist to make the decision), an `inlineOnly` task and a
@@ -46,6 +48,27 @@ Phase 6, opt-in.
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
   runs the simplifier's, each verified before it costs a fix.
+- **`reviewPanel` (1.36)** — `roadmap.json → meta.reviewModels`, opt-in: 2–3 model names checked by SHAPE, never a list of
+  known names (`RE_MODEL_NAME`: up to 128 characters — a Bedrock profile ARN —, a leading letter or digit, an optional `[1m]`
+  suffix; `REVIEW_RESERVED` inherit / default / diverse / off / none; duplicates case-insensitive, stored as given), the word
+  `"diverse"` (= `REVIEW_DIVERSE`, opus + sonnet — stored as the word, so a release can change the pair), off / `[]` deletes the
+  key. Set only by `spec_init {reviewModels}` / `init --review-models` (guards.js `reviewModelsInput` validated BEFORE any write —
+  `invalid-arguments` [reviewModels], a refused array echoed as JSON; the CLI word's names are its runs between commas / spaces,
+  so a stray separator at either end is no empty name, and a word with none is refused —, `setReviewModels` inside the roadmap
+  lock after `setApprovalGuard`); init always echoes
+  the current list (`reviewModels`, `[]` = none) and a `reviewModelsNote` when it set it — or when the stored value doesn't read
+  (`reviewModelsSetting`: `invalid` → no panel + the `ignored` note, never a roadmap shape error over an advisory setting;
+  `[]` / `["off"]` are silent; `["diverse"]` reads as the word). doctor.js `reviewPanel(c)` → `{models}` in every doctor result
+  (the lean one too) but an xs feature (a change — critic-review.md's xs row reviews nothing by default); a spike never gets
+  there; next_action copies the lean doctor's (gates-and-approvals.md → next_action). Not a guard-down (nothing enforces
+  it — the engine sees no dispatch); no per-task panel (the brief carries none: the final review on every model sees each
+  task's diff). What runs per model is prose: `references/subagent-execution.md` → Review on more than one model (merge
+  first, then ONE verify per merged finding in the code reviews — final / branch, converge; the panel adds models, never
+  replaces a review's own tier; the task reviewer on the first panel model other than the implementer's that is at least
+  standard, else `sonnet`; every path ledgers a `Final review: ×N` line — the finish sentence's exit; a task done inline
+  writes no ledger line: after one, run the review again — and the branch review reads `merge-base..HEAD`: the feature's
+  work committed first), `references/critic-review.md` §1 / §3 (the gate critics: the size table's on the session's model plus one per other panel model; their merged findings go
+  to the user — gates have no verifier). mcp/tests/17-docs.js pins each file's wording of these rules.
 
 ## Evidence
 
@@ -369,6 +392,65 @@ Engine: the `B5` block of `engine/evidence.js`.
   (PT "tarefa N", ES "tarea N"), and every task naming one of its T-IDs (`T-01` = `T-1`) or AC IDs — unless it names only another
   feature. +tdd red-first: a `_Makes green: T-xx_` task cited before the first commit touching a test file naming T-xx warns; a full
   `--max` window makes an unknowable order `outside-window`.
+- **The fast check (1.36, warn only)** — `roadmap.json → meta.fastCheck`: the NAME of one `meta.checks` entry the agent runs on its
+  own after each small edit (evidence.js, beside the project checks). **Set:** `spec_init {fastCheck}` / `init --fast-check
+  <name|off>` (`fastCheckInput`: `""` / off / none delete it — a check named off / none can't be one; a non-string is refused
+  before any write, `invalid-arguments` [fastCheck]); `fastPlan` runs under the roadmap lock after `checksPlanError`, against
+  `nc.merged` (the checks THIS call leaves — `--check tc="…" --fast-check tc` is one call): a name that is no valid check, the
+  guardian check (`isGuardianCheck`) or a command that rewrites files (`fixerCommand`, a heuristic the docs state as such: a
+  `--fix` / `--fix=…` / `--write` word, or a `*fmt` / `*format` program or subcommand — never a flag, an `@alias` or a
+  check- / lint-named script — with a `-w` word (it writes, whatever check flag stands beside it: `gofmt -l -w`) or with no check
+  word: `--check` / `-check` / `--check-…`, `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`,
+  `--test`, `--exit-code`, `--output=none`, or swift-format's own `lint` subcommand, `RE_LINT_MODE` (`swift format lint` /
+  `swift-format lint` only — any other `fmt lint` is a target list or a script's argument: refused, the documented default);
+  those words read in the formatter's own simple command, `fixerSegment` over the command split on `&&` / `||` / `;` / `|` — a
+  `$(… | …)` before the check flag splits it there: refused, the documented limit) is refused, nothing written;
+  the stored one is checked again when this call replaces its check's
+  command and goes when this call removes its check (`cleared` note). With `guardian: true` the same plan runs once BEFORE the
+  gate's launcher is written (unless roadmap.json doesn't parse — the lock's refusal stays) — a refused init
+  leaves nothing behind. `setFastCheck` sits between `setApprovalGuard` and `setReviewModels`; init echoes `fastCheck` (the
+  stored name or null) and `fastCheckNote` when it changed it — or, when the stored value is one no fast check reads,
+  `doctorInvalid`'s text (ignored, as reviewModels' `ignored`). **Read:**
+  `fastCheckOf()` → null · `{name, command}` · `{invalid, why: missing | guardian | fixer}` (a hand edit) — doctor's own
+  project-level entry `fast-check` (warn, beside `observed-unguarded`; never one per feature's evidence). Not a guard-down:
+  nothing is enforced. **The status at a CODE task** (`fastTask`: `taskMarkers(b).implements` non-empty — the slot dropped —, no
+  spike): `fastCheckStatus()` reads the project log (`.specs/.execution/observed.jsonl`) for the latest run by its `at` of the fast
+  command (`runProvesVerify(…, [command])` — the check as ONE command; > 5 min ahead ignored, `FAST_SKEW_MS`) and the newest mtime
+  of the feature's planned files (`baselineFiles` of the active tasks, the set `suiteCodeStamp` hashes; missing files and dates
+  > 5 min ahead ignored) plus the task's OWN `_Implements:_` files, always (`baselineFiles` takes an array of references — read as
+  `implementsRefs` reads them: backticks off), past `BASELINE_CAP` — the planned walk's files passed as `known` (no second
+  realpath check) and dated once, its glob and folder listings the call's memoized ones (1.36.0 review 2: a second walk doubled a
+  big glob's brief; `09-evidence-fast-check`'s ratio) → `clean` · `stale` (run older than an edit) · `failed` ·
+  `missing` · `unknown` (`observedAny` false: no harness log — no note); `partial: true` when the planned set stopped at its cap
+  (no other status, no note). A file date is never a blocker (gates-and-approvals.md), so this only ever warns. The log line's
+  `tool` (the observe hook passes it for a PowerShell run only) gives `pwsh`: the latest run came from the PowerShell tool, whose
+  passes are logged only with an explicit exit code — `readObservedLog` is unchanged. **Surfaces:** `spec_next_task` →
+  `fastCheck {check, command}` for a code next task; the brief of an OPEN code task → `fastCheck {check, command, status,
+  partial?}` (kept under `write: true`) and its
+  definition-of-done line after the project checks' (`fastCheck.briefDod` / `briefDodRed`: run it ALONE, the report form with
+  the command in a code span — `verifyRunCodes` then gives its exit code to that span, never to the `_Verify:_` run above);
+  `completeTask` judges it when the call TICKS a code task — before the first write (its window ends at the previous
+  `lastTickAt`) — returns `fastCheck {check, status, runs, clean, partial?}` with `fastCheck.tickNote` on stale / failed /
+  missing (it names no command but the fast check — the task is ticked, and a done task's brief carries no fastCheck, so its
+  `done --run` runs none; the PowerShell sentence on missing or `pwsh`), and
+  stores that snapshot on the tick's RUN (`ev.fast`; `runOf` keeps `fast`, so its history and the merge driver carry it; a
+  note-only tick stores none; `normalizeEvidence` never takes a caller's). No key on any other task, a re-check of a done task,
+  or a spike. **`done --run`** (cli/commands.js) runs it FIRST while `b.fastCheck.status` isn't clean, or is clean on a `partial`
+  set (past the cap an edit to another task's file reads clean — 1.36.0 review 2) — never when a `_Verify:_`
+  command proves it (that run is logged instead, at the run's start) — through `RUN.preRunRefusal` (finish --run's shell rules,
+  one helper of cli/run.js), logs it with `spec.observeRun(…, {event: "cli", at: <its START>})` (an edit it makes reads stale), and
+  only warns on a failure or a run that couldn't happen. **Metrics:** `featureMetrics` → `fastCheck {check, runs, clean,
+  cleanRate, ticks, ticksClean}` from each task's latest run carrying `fast` (the record, then its history) — only a task ticked
+  now (an undone tick is none), never an `unknown` snapshot; the project's
+  `totals.fastTicks` / `fastTicksClean` — never project run sums (each feature's window reads the same log). **The offer:**
+  scan.js `fastCheckCandidates()` (root files only — `projectFileInside`, `readFileHead`; no walk) → evidence.js
+  `fastCheckOffer()` `{name, command, from, note}` in init (none set and none given) and spec_upgrade (`upgradeLines`, UPGRADE.md).
+  Known limits (verification.md says them to users): a hook-logged run's `at` is when the async hook wrote it (after the run
+  ENDED, ~0.2 s later — an edit during it or right after it reads clean); a planned file deleted after the run is no edit; a
+  log line records no folder (a subfolder's or another worktree's run of the same command counts); past `BASELINE_CAP` only
+  the first files and the task's own are dated (`partial`); a clone re-dates every file (stale notes); test files planned only
+  by T-ID are outside the planned set (finish's suite-evidence is the net); a lost log line (a concurrent trim) can only lose
+  evidence.
 - **Pipes** — `verifyPipeMasked()` (a small shell lexer) flags an unquoted single `|` (also `|&`, inside a subshell or a `bash -c` /
   `sh -c` / `pwsh -Command` / `cmd /c` script); never `||`, a quoted or escaped pipe (`\|`, `^|`), `>|`, one inside `$(…)` or
   backticks; only a `set -o pipefail` BEFORE the pipe (or `-o pipefail`) silences it. Surfaces: the brief's `verifyPipes`, `done
@@ -381,14 +463,21 @@ Engine: the `B5` block of `engine/evidence.js`.
   `taskDependsSpec(block)` → `{declared, numbers, invalid}`. The numbers name tasks of the SAME tasks.md, read on ONE view — the
   ACTIVE tasks (`activeTasks()`) — with resolveTask's duplicate rule: n is done once EVERY task numbered n is; a number no active
   task carries never is. **Without `_Depends:_` nothing changes** (the same next task, no new fields).
-- **`taskSchedule(blocks)` is THE next-task rule** → `{next, skipped, blocked, graph}`: the first open task in tasks order (only the
-  task resolveTask answers for its number) whose dependencies are done. **Tasks order:** by SECTION in file order (`taskSections()`:
+- **`taskSchedule(blocks, hold?)` is THE next-task rule** → `{next, skipped, blocked, graph}`: the first open task in tasks order (only
+  the task resolveTask answers for its number) whose dependencies are done — never one of `hold`'s numbers (passed over, never
+  `skipped`: +port's fence, port.js `portSchedule` — spec_next_task, next_action's implement step, the status line, `next
+  --batch`, complete_task's `next`, spec_status's `tasks.next` and the brief's default task pass the tasks it holds (1.36.0
+  review 2: not the roadmap's row nor `next --waves`); spec_next_task then carries `gated` / `heldBy` and, nothing else startable
+  while the anchor holding them is ticked but unverified, its run as the `note` (complete_task's note and the default brief's too)
+  — gates-and-approvals.md → Bugfix and finish; 1.36.0 review 1).
+  **Tasks order:** by SECTION in file order (`taskSections()`:
   a phase heading and its closing checkpoint), then by number — `taskDepGraph`'s `order`, which the waves use too; parseTasks' public
   list stays by number. `skipped` / `blocked` `[{number, waitsOn}]`: open tasks that wait / can never start as things stand (Kahn's
   walk, `stuckTasks()`: a cycle, a dependency no task carries, or waiting on such a task — only when some task declares
   `_Depends:_`). Consumers: `spec_next_task` / `next`; next_action's implement step (none startable → step `fix` with `blocked` and
   `taskDepsBlockedNote()`, never "finish"); the brief's default task (`task: null` + `blocked` / `skipped`, never "all done"); `next
-  --batch` (`parallelBatch()`: a [P] task waiting on an open dependency ends the batch); `spec_status`'s `next`; the roadmap (none
+  --batch` (`parallelBatch()`: a [P] task waiting on an open dependency ends the batch, and so does a task +port's fence holds —
+  `portHeldNumbers`); `spec_status`'s `next`; the roadmap (none
   startable → `blocked`, never "ready", with `taskDeps.roadmapBlocked`); complete_task's `next`; the spike's investigate step; the
   scope guard's likely task. **Never compute "next" with `find(!done)`.**
 - **`taskWaves(blocks, tracks)`** (`spec_next_task {waves: true}` / `next --waves`) → `{waves, cycles, blocked}` over the open tasks:
@@ -399,7 +488,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   `dependencyCycles(g, true)` (iterative Tarjan over the open tasks). Only a task's own `_Depends:_` takes it past an earlier
   section's checkpoint — the controller still stops at each. Every walk is linear and iterative (no recursion on a long chain).
 - **complete_task never refuses on dependencies** (a tick records what happened): open `_Depends:_` (`openDependenciesOf()`) →
-  `waitsOn` + `taskDeps.tickedEarly`. The bugfix gate stays the only refusal.
+  `waitsOn` + `taskDeps.tickedEarly`. The execution gates are the only refusals: the bugfix and +port gates, checked before
+  anything is recorded (the brief carries `gated`, so `done --run` runs nothing) — gates-and-approvals.md → Bugfix and finish.
 - **Doctor `task-deps`** (fail, `CHECK_PHASE` 5; the feature doctor and `spikeDoctor`; `taskDepsCheck()` → null when no task
   declares): an invalid token, a number no active task carries, a self-dependency, a cycle (`dependencyCycles(g, false)`, done tasks
   included). The tasks approval refuses on it (`approvalChecks` tasks → `task-deps`). `malformed-markers` reads "depends:" as a
@@ -535,11 +625,128 @@ Engine: the `B5` block of `engine/evidence.js`.
   triggered patterns; no match ends the hook. A superset: negations, questions and admissions stay the engine's; any trouble → the
   engine. SubagentStop is never pre-filtered. mcp/tests/10-guards-guard-downs.js ("I-I4") checks it filters out no engine claim. **`npm
   run build` after editing an i18n file or guards.js** — the "1.20 build" test fails until the file is committed.
-- **Scope guard:** `meta.guard` `false | true | "scope"` (`guardLevel()`; the hook reads it raw; `guardInput()`: true / "on", false
-  / "off", "scope"). `scope`, once a feature holds approved (or forced) tasks with open ones, adds `scopeGuardDecision()`: a code
-  file passes when an OPEN task of such a feature names it in `_Implements:_` (`implementsKey`, a folder above it, a glob) or it is a
-  test file; otherwise ask, naming the likely task (a planned file in its folder, the longest shared prefix, the first covering
-  feature's `taskSchedule()` next, the first open task) or `/spec-review <feature> converge`.
+- **Scope guard:** `meta.guard` `false | true | "scope" | "tests"` (`guardLevel()`; the hook reads it raw; `guardInput()`: true /
+  "on", false / "off", "scope", "tests"). `scope` (and `tests`), once a feature holds approved (or forced) tasks with open ones, adds
+  `scopeGuardDecision()`: a code file passes when an OPEN task of such a feature names it in `_Implements:_` (`implementsKey`, a
+  folder above it, a glob) or it is a test file — at level tests only a test no list protects (below); otherwise ask, naming the
+  likely task (a planned file in its folder, the longest shared prefix, the first covering feature's `taskSchedule()` next, the
+  first open task) or `/spec-review <feature> converge`.
+
+## Protected tests (`meta.guard: "tests"`, 1.36)
+**One module:** engine/protect.js (the snapshot, the tick record, the decision, protect / unprotect, finish's check, doctor's
+warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md → Guard mode, Level tests).
+- **The list** — `.state.json → protectedTests` `{at, via: approval | protect, files: {"<rel>": "<16 hex>" | null}, truncated?,
+  lifts: [{file, at, by, reason, confirmed?} | {file, at, by, revoked: true} | {file, at, by, reason, accepted: true,
+  confirmed?}]}` (the hash: finish.js `fileHash`, CRLF-normalized,
+  shortened; null: unreadable or gone). `stateFromFile` refuses a wrong shape (`jsonShape.protectedTests`); protect.js `listOf`
+  tolerates any shape on its own (guardCheck reads the file raw).
+- **The snapshot** — at a feature's FIRST complete tasks approval at level tests (`approvePhase`: `p === "tasks"`, the approval
+  complete — a role's waiting sign-off takes none; a fast-forward through tasks passes it on): `protectWalk(projectDir, first)` —
+  each live feature's `.specs/<f>/tests/` FIRST (the approving feature's, `first`, before the others), then the project's test
+  files (`walkProject` — hidden / `SCAN_IGNORE` folders skipped, links never followed; `isCodeFile && isTestFile`), at most
+  `PROTECT_MAX_FILES` (2,000 — `truncated` past them; so a project past the cap still lists the feature's own failing tests).
+  **The walk runs OUTSIDE the feature lock:** the facade wraps the locked approvePhase in `protectWalkFirst`, which walks only when
+  this call may be that first approval (phase or `through` tasks, no revoke, no dry run, level tests, the list not `snapshotted`)
+  and hands it in as `opts.protectWalk` — never a tool argument; under the lock `protectOnApproval` merges it ADD-ONLY
+  (`withWalk`: a recorded hash and the list's first `at` kept; a test another live feature lists with that feature's hash —
+  `knownWalk`, below, 1.36.0 review 4) and marks the list `via: "approval"`. **"Snapshotted" is that
+  mark** (`snapshotted`: via "approval"), never `at` — a `feature protect` or a lift before the approval sets `at` too, and the
+  approval then recorded nothing; a re-approval or a revoke + approve keeps the marked list (another process's too, taken while
+  this one walked). The result: `protectedTests {count, at, truncated?}` + a note. Cost: linear (2,000 vs 200 test files ≈ 10×,
+  held ≤ 25× by a ratio test). `feature protect <f>` walks the same way (its own feature first).
+- **The tick record** — `completeTask` (under the feature lock, a TICK at level tests — `protectOnTick`, called BEFORE the tick
+  stamps `ticks[n]`): at the task's FIRST tick each test file it names EXACTLY in `_Implements:_` is re-baselined (its content
+  now is the authorised one: a planned change); a task with a tick record (`tickRecorded`: `ticks[n]` — a box unchecked by hand
+  keeps it — or an `unticks` entry, the untick drops `ticks[n]`) is a RE-tick, which keeps a recorded hash and only adds a file
+  not yet listed, so finish names an edit made while it was open. Each test file its `_Verify:_` names (quotes off, a pytest
+  `::node` / a `:line[:col]` suffix off, never a glob) joins the list when absent — never re-hashed (a weakened listed test run
+  by a `_Verify:_` keeps its record), and one another live feature lists joins with that feature's hash (`recordedHashOf`,
+  below — the other features' states read only then; 1.36.0 review 4), never its content now: only the exact `_Implements:_`
+  re-baseline records new content at a tick. An untick removes nothing. The bugfix tasks.md's task 1 carries `_Implements: [the test
+  file T-01 goes in]_` (EN / PT / ES; the 1.21 F5 pin moved on purpose) so the red test is planned for task 1, recorded at its
+  tick, protected from task 2.
+- **The decision** (`protectedTestDecision`) — an existing target is read by its REAL path (`realRel`: links and junctions
+  resolved, the on-disk case — `t2/auth.test.js` through a junction to test/ IS test/auth.test.js); nothing there, the text
+  path stands. The target is a glob when `*`, `?` or `[` appears ANYWHERE in it (`tes?/a.test.js`, `*/a.test.js`,
+  `test/*/a.test.js` — `globMatcher` on the whole path, matching a listed file or a folder above one; a `[class]` is also read
+  as one character, `RE_GLOB_CLASS`, since globMatcher reads `[` as itself and `app/[id]/x.test.js` must still match itself),
+  else a folder (lstat, never a link), else a file — decided by FOLDED membership in the lists, never by `isTestFile` (a case
+  variant of a listed file is that file: `cart.TEST.js`, `TEST_UTIL.PY` where the file system folds case). The lists read are
+  every feature with open tasks OR no finish recorded (`holders`: covering, forced, stale, pending, and a feature whose tasks
+  are all ticked until its `state.finished` — before the stale / tests-phase / spike answers); a listed test passes only when a
+  lift is in force (`activeLifts`, below) or a task that can start now (`readyTasks`, tasks.js: a task with `_Depends:_` all
+  done, the first open undeclared task and its `[P]` run in one section — taskWaves' first ready set without packing the waves;
+  never a task +port's fence holds — `portHeldNumbers`, port.js: every task after the first anchor not ticked AND verified, a
+  `[P]` task beside the open baseline included; never a reopened task with a tick record — `tickRecorded`, which is not named
+  as one either) of a COVERING or FORCED feature names it exactly in `_Implements:_` (a folder or a glob never equals a file;
+  `_Makes green:_` never unlocks). Else ask — deny under `meta.approvalGuard: deny`; the reason names the tasks that can start
+  now — or, when a reopened task names a blocking test, that it is that task's planned test and needs a lift (`reopened`, never
+  "no task names it") —, the plan hint (the first of them) and the lift line (guards.js `approvalCommand`). **The lift line's
+  feature** is the one being worked on: a covering / forced feature (an unlocker) whose list holds the file, else the first
+  unlocker, else a holder with open tasks, else the holder listing it with the latest tick (`state.ticks`; a tie or none: the
+  first by folder name — every task ticked, no finish yet: the final review's window, and its lift is in force like any other;
+  doctor names it after that feature's finish). At guard level
+  tests a target with a glob ANYWHERE reaches this decision even when `guardFolderCode` calls it no code (guards.js skips its
+  not-code allow for it, then allows not-code when no protected test matches): `rm -rf tes?/unit`, `packages/*/test`.
+- **Lifts** — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect <f> <file> --reason …` (finish.js
+  `manageFeature` → `protectTests`): a test file (by name or folder; never a glob) inside the project, a reason (`reasonInput`: one
+  line, ≤ 500); codes `file-required` · `reason-required` · `not-a-test` · `outside-project`; `dryRun` (the MCP server's check
+  before it asks) writes nothing; `confirmation` → `confirmed`. A guard-down of the approval guard (claude-code-integration.md →
+  Human approval guard). `protect <f>` adds the tests present now (walked before the lock, add-only; a list without a snapshot
+  gets `at` / via protect); `protect <f> <file>` appends a `revoked` record when a lift is in force anywhere and adds the file when
+  absent — never re-hashes one. **A file another live feature lists** joins with a hash that feature recorded — here, in the
+  first tasks approval's snapshot and in a tick's `_Verify:_` record (`recordedHashOf` over `otherStates`, the first in folder
+  order — `recordedHashes`, finish's union, gains nothing; `knownWalk` maps a walk; 1.36.0 review 4): a plain protect (no
+  guard-down), a snapshot or a run never authorises new content; only a file no live feature lists gets its hash now. `protect <f>
+  <file>` and the accept read an EXISTING file by its real path (`realRel`, as the decision does — one through a junction is
+  the real file's key; a real path outside the project keeps the typed one). **In force** (`activeLifts`, over the live features' states — `liveStatesWith`; guardCheck's
+  `ctx.states`): per file the LATEST record across every feature's lifts — a lift until a `revoked` record of any feature
+  follows it. Nothing else ends one: no expiry, no finish, no open-task test (1.36.0 review 3 went back to this, the 1.36 rule —
+  History). An accept record is no lift (`activeLifts` skips it; the accept's own `revoked` record ends a lift).
+- **The accept** (1.36.0 review 3) — `spec_feature {action: "protect", file, accept: true, reason}` / `feature protect <f> <file>
+  --accept --reason …` (`protectTests` → `protectLocked`, opts.accept): the same checks and codes as a lift (`file-required`,
+  `reason-required` — the accept's own words, `err.acceptFileRequired` / `acceptReasonRequired` —, `not-a-test`,
+  `outside-project`; `dryRun`; `confirmation` → `confirmed`), a guard-down of the approval guard on every path (setting
+  `accept`: MCP — over elicitation too, its dry run before the question, `elicit.accept`; the dry run returns the file's
+  `hash`, the server passes it back as `preview` {hash} and a different hash under the lock is refused `changed-since-preview`,
+  nothing written (`err.acceptChangedSincePreview`, 1.36.0 review 4) —, the CLI through a shell — probe.js
+  `CLI_SWITCHES` and `RE_APPROVAL_VERB` hold `accept` / `--accept`). Under the feature lock: a `revoked` record when a lift is in
+  force anywhere (as `protect <file>`), the file's hash NOW written into that feature's list (under the listed spelling; the file
+  joins the list when absent — the one write that re-hashes a listed file, the user's decision), and an accept record `{file, at,
+  by, reason, accepted: true, confirmed?}`. Result: protect's (`protectedTests`, `lifts` — an accept record marked `accepted`,
+  `unlifted`) + `accepted` and the `accepted` note. Plain `protect` stays no guard-down. The CLI takes `--reason` on protect only
+  with `--accept`. The merge driver unites the accept record with the lifts by identity (`LIFT_ID` holds `accepted`).
+- **Finish** (`protectedTestsFinish`, after the gate-only return): each listed file hashed again — a hash matching NO record of
+  any live feature (snapshot, tick, accept) and no lift in force (`activeLifts` over every live feature, the finishing one's state
+  read under the lock) → `unexplained` {file, status: changed | deleted}; a lift in force explains a change (`lifted`). A warning
+  naming the first 5 (+ how many more) whose line is the ACCEPT (`finishWarn` — never a lift: a lift lasts) and the merge
+  summary's "Protected tests" block — never a blocker (a change the user confirmed at the prompt is legitimate).
+  `res.protectedTests` {count, unexplained, lifted, accepted — the finishing feature's accept records of its WORK CYCLE: since
+  its last finish (`state.finished.at` as read: the finish being recorded is written after) when that finish precedes its
+  latest tasks approval (`approvals.tasks.at` — a new cycle), else since that approval (the cycle was finished once already: a
+  re-finish keeps them, 1.36.0 review 4), else every one; shown as `summaryAccept` lines}. **The
+  hashing runs OUTSIDE the feature lock** a write / evidence finish takes (2,000 files held it ~2 s, the MCP server's lock
+  wait): the facade wraps it in `protectHashFirst`, which hashes the listed files first and hands them in as
+  `opts.protectHashes` — never a tool argument; under the lock a file listed since is hashed there.
+- **Doctor** `protected-tests` (warn; level tests, a tasks approval, an open active task): no snapshot (`feature protect <f>`), a
+  truncated one, the approval guard off; and (1.36.0 review 3) on a feature with a finish recorded — open tasks or not — each
+  lift of its own recorded BEFORE that finish and still in force (`doctorLiftAfterFinish`: both lines, end it — `feature protect
+  <f> <file>` — or accept the content). A lift recorded after the finish is not named (/spec-finish's warning gives the accept,
+  never a lift). **The brief** of an open task at level tests: `protectedTests` (the list's count) and its
+  definition-of-done line after the fast check's — a task with a tick record (reopened) gets `briefDodReopened`: it unlocks no
+  test, its planned one needs the user's lift. **init** `--guard tests`: `protectedTests.on` and `protectedTestsWarning` while
+  the approval guard is off.
+- **Known limits** (not findings): tests in ignored / hidden / linked folders, outside the project folder or past the cap are
+  not listed; new test-support files (conftest.py, setup files, mocks) stay editable; a git command or a script (`node -e`) is
+  not read by the hook — finish names the result; a merge from main lists teammates' test changes; an ARCHIVED feature's list and
+  lifts are not read (`liveStatesWith`, guardCheck's feature folders — a restore reads them again, and its finish names what changed
+  meanwhile); creating a link or junction to a protected folder (`ln -s`, `mklink /J`, `New-Item -ItemType Junction`) is not read
+  — it edits no test, and an edit through it is read by the real path — nor is removing the junction itself (no code folder by
+  lstat); a GLOB through a link or junction (`sed -i t2/*.test.js`) is matched as typed — `realRel` resolves an existing target
+  only — finish names the change; the tick record is keyed by the task's NUMBER (`ticks[n]`, `unticks`): a re-plan that
+  renumbers the tasks gives an open task a ticked number — it then unlocks nothing and its first tick re-baselines nothing (a
+  lift, and finish names the change); a lift lasts until `protect <file>` — its feature's finish never ends it (doctor warns once
+  that feature is finished; the accept is the way to record an intended change).
 
 ## Harness-observed evidence
 - **Only as strong as the approval guard; not a security boundary.** The log is a file the agent can write: with
@@ -551,7 +758,8 @@ Engine: the `B5` block of `engine/evidence.js`.
 - **The log.** `hooks/observe-hook.js` (**PostToolUse** + **PostToolUseFailure**, `^(Bash|PowerShell)$`, `"async": true`; PowerShell
   only with an EXPLICIT exit code; never Monitor, which reports no finished run) logs a run of a task's runnable `_Verify:_` as the
   gate's matcher reads it (`runProvesVerify`: one command, all of a task's in any order, or a plain ` && ` step) or of a
-  `meta.checks` command: `spec.observeRun()` appends `{command, exitCode, at, event, session}` (`observedKey`) to
+  `meta.checks` command: `spec.observeRun()` appends `{command, exitCode, at, event, session, tool?}` (`observedKey`; `tool`:
+  "PowerShell" on a PowerShell run — 1.36 review 1, the fast check's note reads it — none on a Bash one) to
   `.specs/<feature>/.execution/observed.jsonl` per non-archived feature with such a task, or `.specs/.execution/observed.jsonl` for a
   check; it never creates a feature folder. Bounds: past `OBSERVED_MAX_BYTES` (64 KB) the newest half is kept (atomic; a concurrent
   append may lose a line — that run reads unobserved); `OBSERVED_MAX_COMMAND` (4000); `OBSERVED_MAX_FEATURES` (200).
@@ -626,6 +834,47 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.31** — the brief's `preflight` key and the pre-flight (from google/elephant-goldfish-model's zero-decision rule): a
   brief that left a design choice open was found only when the implementer came back NEEDS_CONTEXT — a dispatch spent — or
   not at all when it chose alone.
+- **1.36** — the review panel (`meta.reviewModels`, doctor's / next_action's `reviewPanel`): every review step ran ONE model —
+  the task review, the final / branch review and converge one spec-reviewer each, the size-l gate critics both on the session's
+  model, `/spec-review branch` read by the session that wrote the code. The design's per-task panel (a brief key, the critical
+  flows widening gate / converge) was cut before it shipped: it multiplied the most frequent dispatch, and the final review on
+  every model already covers each task; so was "two models agree → no verifier" (two reviewers of the same package share its
+  blind spots: merge, then verify each merged finding once).
+- **1.36.0 review 1** (the review panel) — **RP-1:** the files disagreed on the gate critics: critic-review.md §1 and
+  spec-doctor.md put them ON the panel's models (a panel without the session's model dropped the session-model critic),
+  while subagent-execution.md, the Model selection row, the CHANGELOG and init's note said the panel adds models and never
+  replaces a review's own — and the latter also verified every merged finding, gate findings included, against §3's "gates
+  have no verifier". The owner's rule, now in every file: the panel ADDS gate critics (the size table's, on the session's
+  model, plus one on each panel model not already the session's); verify-once is the code reviews' rule (final / branch,
+  converge); the gate critics' merged findings go to the user. **RP-2:** "the first panel model other than the
+  implementer's" could put every task review on `haiku` (panel [sonnet, haiku], a sonnet implementer) — below the task
+  reviewer's floor — or every one on `opus` with diverse, unsaid in the cost text; now at least standard, none (or none the
+  host can dispatch) → `sonnet`, and the Cost bullet / init's note say where the task reviews go. **RP-3:** the finish
+  sentence's exit ("unless the ledger already has its `Final review: ×N` line") missed the collapsed-panel form ("review ×2
+  requested …") and the inline host (no line at all), and spec-finish.md had no exit: every path now ledgers a
+  `Final review: ×N` line (`— the host ran one model`, `×1 … — inline, the panel was not run`; spec-review.md says it for
+  the inline branch review). The sentence's "on every model" beside a list without the most capable model was left as it is
+  (not part of the decision). **RP-4:** the CLI word `" opus,sonnet"` / `"opus,sonnet,"` was refused (`split` left an empty
+  name) — names are now the runs between separators (`match`), a word with no name still refused; an array refusal echoed
+  `["opus,sonnet"]` as `opus,sonnet`, the documented example — now JSON; the refusal names the `[1m]` suffix. **T2** (review
+  panel part): `default` / `off` / `none` inside a list were reserved by the code but pinned by no test.
+- **1.36.0 review 2** (RP2-1) — the exit "since the last task" read the ledger's order, and only subagent execution ledgers
+  task lines: a task ticked inline (the default, and every task on a host without subagents) after the panel review left that
+  line reading as current. The line now carries the HEAD the review ended on (`Final review: ×N (requested a, b) @ <git
+  rev-parse --short HEAD>`, its collapsed and inline forms too), and the exit is "unless the ledger's latest `Final review: ×N`
+  line names the current HEAD" — next.reviewBranch (EN / PT / ES), spec-finish.md, spec-review.md (which names the ledger's
+  path for the inline cases) and subagent-execution.md (the ledger lines, Final review, Resume). The narrow reading, no
+  exception: any commit after the line (a fix the branch review asked for, the simplify pass) moves HEAD, so the panel
+  reviews the final code again; work left uncommitted moves nothing — the branch review reads `merge-base..HEAD` only.
+- **1.36.0 review 3** (D3-1, D3-2) — round 2's `@ <HEAD>` went back out: a new mechanism for a LOW that made the whole panel
+  run again after every commit — the branch review's own fixes (spec-review.md ledgers the line before them), each simplify
+  commit (the pass comes after the review), a `.specs/`-only commit — with no bound, against "Never multiplied", "No second
+  wave" and the Cost bullet's "the final review once a feature". The exit and the ledger lines are round 1's again ("unless
+  the ledger already has its `Final review: ×N` line since the last task", no `@`) in next.reviewBranch (EN / PT / ES),
+  spec-finish.md, spec-review.md and subagent-execution.md; RP2-1's gap (a task done inline writes no ledger line) is closed
+  in prose in the same places — "if you did one after the review, run it again". D3-2: the branch review reads
+  `merge-base..HEAD`, so spec-review.md (branch) and spec-finish.md say to commit the feature's work before it (inline work
+  is committed only when the user asks — executeTask.md). spec-review.md keeps round 2's ledger path.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
@@ -746,8 +995,60 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.33 review 7** — a base passed that still contains HEAD reads only the uncommitted work, yet the verdict said "the change since
   main checked": `uncommitted` → `diffBaseUncommitted`, its own line in EN / PT / ES. The rebased-then-merged start commit's wider
   read documented as a known cost.
+- **1.36** — the fast check (`meta.fastCheck`, The fast check above): the only per-edit signal was the agent's own habit — a type
+  error surfaced at the `_Verify:_`, in review or at finish, after several edits had piled on it (the owner's case study: a fast
+  check after each small change). The design's per-line content stamp (`codes` on every fast-check log line: the observe hook
+  hashing up to 8 features' planned files after each run) was cut before it shipped: measured ~3 s per run against the hook's
+  ~0.2 s, it could leave out the feature being worked on, stamped the main checkout's files for a worktree run, quartered the
+  shared log's capacity and fell back to time alone past 500 files — the tick-time date comparison costs nothing per run and
+  changes no hook. So was block mode (`meta.fastCheckGate`): bypassable by naming a no-op check, refusing every PowerShell-tool
+  session, and a file date may never block (gates-and-approvals.md).
+- **1.36.0 review 1** — the fast check. **FC-1:** past `BASELINE_CAP` (an earlier task's folder or glob of 500+ files) the
+  ticked task's own file was never dated — its edit read clean and `done --run` skipped the check; its own `_Implements:_`
+  files are now always dated and `partial: true` says the set was cut. **FC-2:** the tick note named `done <f> <n> --run` for
+  the task it had just ticked — a done task's brief carries no fastCheck, so that command ran none; the note names no command
+  now. **FC-4 / T3:** the fixer rule (a `*fmt` word without `--check`) refused `gofmt -l` / `shfmt -d` / `make check-fmt` /
+  `dune build @fmt` and let `ruff format .` / `dotnet format` / `clang-format -i` through — now `fmt` / `format` programs and
+  subcommands against the check flags, worded as a heuristic in the docs. **FC-6:** a PowerShell-tool failure was logged but
+  its later pass was not: "failed on its last run" with no hint — the hook marks a PowerShell run's line `tool`, the note says
+  why. **FC-7:** the brief and the implementer now forbid a piped run too. **FC-9 / INT-7:** metrics counted an undone tick
+  and an `unknown` one (MCP-only: "0 of N clean"). **INT-5:** init echoed an invalid stored name with no note. **INT-6:**
+  `init --guardian --fast-check guardian` on a fresh folder left `.specs/.gitignore` — the launcher was written before the
+  fast check's refusal. FC-3 (a run's folder), FC-5 (a deleted planned file) and FC-8 (the async hook's stamp, ~0.2 s after
+  the run) are documented Known limits, not mechanisms.
+- **1.36.0 review 2** — the fast check. **FC2-1:** review 1's widened formatter set (`*format`) refused check-only forms —
+  `swift format lint`, `swiftformat --lint`, `dart format --output=none`, `elm-format --validate`, `buf format --exit-code`,
+  `clang-format -n`, `npm run lint:format` — and its `-l` exemption let `gofmt -l -w` / `shfmt -l -w` through: a `-w` word beside
+  a formatter now refuses, and the check words those tools use (`-n`, `--lint`, `--validate`, `--test`, `--exit-code`,
+  `--output=none`, a `lint` subcommand, a lint-named script) count. `biome format .` (a bare form that only reports) stays refused —
+  no word tells it from `ruff format .`: the documented limit. **FC2-2:** `done --run` skipped the check on a clean `partial` status
+  (a +port corpus of 500+ files fills the planned set): it runs it now. **FC2-3:** the own-file dating walked the planned glob a
+  second time (×1.8 on a big glob's brief) — it reuses the planned walk's files.
+- **1.36.0 review 3 (PF3-4)** — FC2-1's check words, `lint` and `-w` were read anywhere on the command line: `make fmt lint`
+  (two targets) and the "format, then fail on a diff" idiom `cargo fmt && git diff --exit-code` were accepted, `gofmt -l . | grep
+  -v -w vendor` refused. They are read in the formatter's own simple command now (`fixerSegment`), and `lint` never after a make
+  / just / task target (RE_TARGET_RUNNER, gone since review 4). `ruff format -n .` stays accepted: `-n` counts as a dry run, the
+  documented limit.
+- **1.36.0 review 4 (PF4-2)** — review 3's runner list let every other spelling and runner through as a check-only `lint`: `gmake`,
+  `(make …)`, `FOO=1 make`, `pants fmt lint ::`, `./gradlew format lint`, `turbo run format lint`, `npm run fmt lint` (an argument
+  of the fmt script). No name list tells `pants fmt lint` from `swift format lint`: the runner list is gone and `RE_LINT_MODE` is
+  positive — swift-format's own subcommand only (`swift format lint`, `swift-format lint`, by any path). The split's
+  `$(… | …)`-then-flag refusal (`ruff format $(git ls-files | grep -v x) --check`) is a documented limit, not a shell-aware split.
 
 ### Task dependencies and execution waves
+- **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
+  tick's open `_Depends:_`); doctor's `port-verify` warns about a task after the baseline whose `_Depends:_` never reaches it.
+- **1.36.0 review 1 (INT-2)** — `taskSchedule`'s `hold`: with the baseline ticked but unverified, spec_next_task, next_action and
+  the status line served the task the fence refuses (an inline /executeTask wrote the port's code before the baseline was
+  verified). The brief's default task and complete_task's `next` stay taskSchedule's (the brief carries `gated`, the refusal
+  names the anchor's run).
+- **1.36.0 review 2 (P2-3)** — the surfaces disagreed: with an anchor ticked unverified, `done` printed "next → #2", `dev-spec
+  status` and the brief's default task named the held task while next_task said "verify task 1". complete_task's `next`,
+  spec_status's next and the brief's default task go through `portSchedule` too (nothing else startable: none, with `port.naHeld`
+  as the note). Left: the roadmap's row (its blocked display reads `sch.skipped`, more than one line) and `next --waves`.
+- **1.36.0 review 3 (PF3-5)** — `next --batch` still added a held `[P]` task beside a `[P]` baseline that was itself the next
+  task (`portSchedule`'s hold exists only when it passes a task over): the batch takes `portHeldNumbers` — every task after the
+  first closed anchor — whatever the next task is.
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks
   {depends}`; a tasks.md without `_Depends:_` behaves exactly as before it.
 - **1.24 r6 D6** — tasks order by section: by number alone, a task spec_append_tasks put into an EARLIER phase (`{heading}`, numbered
@@ -816,6 +1117,70 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   stopClaims ~110 ms slower and the pre-filter ~30 ms; claim patterns, triggers and admissions are built on first use (a message
   runs ~18 of ~47). Every hook's pre-check became mcp/lib/probe.js (`sessionProjects` / `sessionAnchors`, the one rule
   `isDevSpecProject`).
+
+### Protected tests
+- **1.36** — tests the implementer cannot alter: a fourth guard level, `tests` (engine/protect.js). Cut from the design before
+  shipping (the critiques): the git readings (git stays the user's — finish names what git changed), the T-ID file-head rule (T-IDs
+  restart per feature: most bugfix tests carry T-01), the per-edit done-task scan (it read checkboxes an agent changes with no
+  prompt — replaced by the tick record, in the approval-guarded .state.json), lift expiry, init-time snapshotting (doctor names
+  `feature protect`), finish's "planned" exemption (it hid a later weakening). The ready set is `readyTasks` ("the tasks that can
+  start now" — never next_task's single next), the walk runs outside the feature lock, and the hook reads every target.
+- **1.36.0 review 1** — **PT-1** an untick (or a box unchecked by hand) reopened its task, which then unlocked its own red test,
+  and the re-tick recorded the weakened content — finish said nothing: `tickRecorded` (no unlock; the re-baseline at the FIRST
+  tick only, `protectOnTick` before `ticks[n]` is stamped). **PT-2** other spellings passed silently at deny — a glob in a folder
+  segment (`tes?/`, `*/`), `[t]est/`, a case variant (`cart.TEST.js` was "no test" by name), a path through a junction: a glob
+  anywhere, the real path, folded membership. **PT-3** past the 2,000-file cap the project walked first filled it and the
+  feature's own `.specs/<f>/tests/` was never listed: the features' tests first, the approving one first. **PT-4** a `feature
+  protect` before the approval set `at`, which read as "already snapshotted": the via "approval" mark. **PT-5** finish's "record
+  it" advice left a lift that unprotected the test for every later feature: a lift ends with its feature's finish. **INT-1 / PT-6**
+  once every task was ticked (before finish) the list stopped counting — under deny the edit got the generic ask: `holders` adds
+  the features with no finish recorded; archiving is a known limit. **PT-7** `spec_feature unprotect` with the file in `newName`
+  asked about no file (guards.js `mcpApprovalAction` reads `newName` as `manageFeature` does). **PT-8** finish hashed the list
+  inside the lock (~1.9 s at 2,000 files): `protectHashFirst`. **INT-4** PT / ES scope ask glued "—" to the CLI line. **T1 / T2**
+  fixtures: a task after +port's open differential check unlocks nothing; a case variant of a listed test that is gone asks; a
+  quoted `_Verify:_` path and an absolute `_Implements:_` / unprotect path are read.
+- **1.36.0 review 2** — **R2-PT-1** PT-5's "ended at or before its feature's finish" missed /spec-finish's own order: step 1's
+  written finish records the finish and carries the warning, so the lift the warning asks for came AFTER the finish and never
+  ended — every later feature edited the test silently at deny, and its finish called the weakening "lifted": a lift counts only
+  while its feature has open tasks and was recorded after that feature's last finish; the finishing feature's own lifts all count
+  at its finish (`activeLifts` `{state, open, all}`, over each live feature's state and open tasks). **R2-PT-2** INT-1 made every unfinished feature a holder, and
+  the lift line named the first holder by folder name — an old feature all ticked, never finished, whose lift never ended: the
+  line names an unlocker that lists the file, else the first unlocker, else a holder with open tasks (and such a feature's lift no
+  longer counts, by R2-PT-1's rule). **R2-PT-4** a folder target with a glob above its last segment (`rm -rf tes?/unit`, `*/unit`,
+  `packages/*/test`) was allowed as no code before the decision: at level tests a glob target skips that allow. **R2-PT-3** (no
+  rule change) a reopened task's planned test asked "no task that can start now names it": the ask says it is a reopened task's
+  planned test, which needs a lift; the brief's line alike (`briefDodReopened`). **R2-PT-5 / R2-PT-6** known limits: the tick
+  record keyed by the task's number; a glob through a link or junction.
+- **1.36.0 review 3** — WENT BACK to the 1.36 lift rule: rounds 1 and 2 narrowed a lift's lifetime twice (round 1: it ended at its
+  feature's finish; round 2: it counted only while its feature had open tasks and after its last finish, its own finish counting
+  all of them), and each narrowing lost real cases: **R3-PT-1** once every task was ticked (the final review's fix round, the
+  simplify pass) the guard's line named a feature with no open task and the lift it recorded was never in force — the user
+  looped; **R3-PT-2** the lift /spec-finish's warning asked for was dormant, not ended: one open task in that feature (a change
+  request, or an agent's one-line edit of the unguarded tasks.md) revived it for every feature; **R3-PT-3** a feature's own
+  finish counted all of its lifts, so cycle 1's lift explained a cycle-2 change the guard had refused — the backstop went silent.
+  Now: a lift is in force until a later `protect <file>` record of any feature (`activeLifts` over the live states — round 2's
+  tasks.md parse, `open` / `all`, are gone: finish and protect read the states only — ~175 ms against round 2's ~315 ms at 200
+  features). The one shape that was wrong (round 1's
+  PT-5: finish's warning advised a lift to "record" an intended change, which then stood forever) is replaced by the ACCEPT
+  (`feature protect <f> <file> --accept --reason`): the user's guard-down that re-baselines the file, ends its lift and keeps an
+  accept record; finish's warning and /spec-finish step 1 give it. Doctor names a lift still in force after its own feature's
+  finish. Kept from round 2: the lift line's order and `protect <file>` ending a lift.
+- **1.36.0 review 4** — **R4-PT-1** a plain `feature protect <f> [file]` (no guard-down) on a feature whose list lacked a file
+  another feature listed recorded its CURRENT hash, and finish reads the union of every live feature's hashes: an agent's
+  protect on a new or planning feature — or the user ending a lift in a feature that did not list the file, doctor's "end it"
+  — accepted a weakened test silently. Now such a file joins with a hash that feature recorded (`recordedHashes`, shared with
+  finish); only the accept authorises new content. The same class, closed the same way (`recordedHashOf`): a new feature's
+  FIRST tasks approval snapshotted the weakened test's current content, and a tick listed a `_Verify:_` test with its content
+  now — both explained the change at the listing feature's finish (a change made under a lift, then ended without an accept,
+  is named again); a task's exact `_Implements:_` still re-baselines (the planned change). **R4-PT-2** the lift line's last fallback, the first holder by folder name,
+  could be an old all-ticked feature never finished (R2-PT-2's shape): with round 3's rule its lift stood at once and for good,
+  and no doctor check reached it — the holder with the latest tick now. **R4-PT-3** the merge summary's accepts were those since
+  the last finish, so a re-finish of the same cycle (/spec-finish step 3: after last-minute code changes) dropped them — the
+  work cycle now (since the tasks approval, or the finish before it). **R4-PT-4** the accept over elicitation recorded the
+  content at the answer, not the one asked about — the dry run's hash as `preview` (as approve / remove). **R4-PT-5** the
+  accept and `protect <file>` read the typed path: through a junction a second key, the real file's lift left in force —
+  `realRel`. **D4-1** (prose) /spec-finish step 1, the accept's note and verification.md: finish again after the accept, or the
+  summary written before it names the test as changed.
 
 ### Harness-observed evidence
 - **1.14 F1** — the observe hook, the `observed` stamp, `meta.evidence` and reason `unobserved`. Its feature review: **R1** — an

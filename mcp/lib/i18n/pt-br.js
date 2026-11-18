@@ -43,6 +43,7 @@ const PTBR_OVERRIDES = [
   // +dist: a race condition is a "condição de corrida" in Brazil too — never the "corrida" (a run) → "executada" rule
   ["Condições de corrida", "Condições de corrida"], ["condições de corrida", "condições de corrida"], ["condição de corrida", "condição de corrida"],
   ["caminho/ficheiro.test.js", "caminho/arquivo.test.js"], // an example path inside a _Verify:_ placeholder
+  ["[o ficheiro de teste onde fica o T-01]", "[o arquivo de teste onde fica o T-01]"], // the bugfix task 1 _Implements:_ slot (1.36)
   ["<ficheiro>", "<arquivo>"], ["<artefacto>", "<artefato>"], // placeholders inside a path / URI
   ["Põe-no a falhar", "Faça-o falhar"],
   [") e regista essa execução", ") e registre essa execução"],
@@ -109,6 +110,7 @@ const PTBR_PHRASES = {
   "é aceite": "é aceito", "for aceite": "for aceito", "foi aceite": "foi aceito", "seja aceite": "seja aceito", "ser aceite": "ser aceito",
   "aceite(s)": "aceito(s)", "aceite (não bloqueia)": "aceito (não bloqueia)", // dev-guardian's accepted gaps (1.30.2): files, a gap's line
   "timeout aceite": "timeout aceito", "parcial aceite": "parcial aceito", // … and the feature's own among them
+  "conteúdo aceite": "conteúdo aceito", // a protected test's accept record (1.36.0 review 3: feature protect --accept)
   "correu bem": "deu certo", "correu mal": "deu errado", "corre bem": "dá certo", "corre mal": "dá errado",
   "pôr a passar": "fazer passar", "di-lo": "diga isso", "fá-lo": "faça isso",
   "efeitos secundários": "efeitos colaterais", "batem sempre certo": "sempre fecham", "porque se aplica": "por que se aplica",

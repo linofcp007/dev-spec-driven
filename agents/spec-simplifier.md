@@ -75,8 +75,8 @@ Unsure whether a change keeps the behaviour? Don't make it.
   DONE, never an exit code you didn't see.
 - **Never dispatch subagents** — no helpers, no reviewer: the review of the pass is the controller's.
 - Don't tick tasks and don't call `spec_complete_task` or `spec_finish` — the controller records the runs.
-- **Under guard mode** (`meta.guard` on or `scope`) each edit asks the user — every task is done, so no open task covers
-  it. That is expected: wait for the answer, never work around it.
+- **Under guard mode** (`meta.guard` on, `scope` or `tests`) each edit asks the user — every task is done, so no open task
+  covers it. That is expected: wait for the answer, never work around it. You never touch a test (`tests` protects them).
 - No destructive git operations (reset --hard, force push, rebase of shared history), no pushes.
 
 ## Report
@@ -94,7 +94,9 @@ Write it to the report path, in the feature's language, under these headings —
   backticks when it holds one), its exit code written out right after it on the same line; the last lines of output go
   on INDENTED lines below it. In Claude Code a SubagentStop hook reads this file when you report DONE: everything after
   the last `## Final runs` heading counts, to the end of the file — unless every run there exits 0 and every project
-  check is one of those runs, your stop is sent back.
+  check is one of those runs, your stop is sent back. On a **+port** feature the differential check's `_Verify:_` (the
+  last `[PORT]` task's) is one of the final runs, and from design.md → `[PORT] Deferred Improvements` you take only the
+  cleanups that keep the behaviour.
 
 On a revert round, **append** a revert section (`## Revert round`: the commits reverted, why) and a new `## Final runs`
 after it — the last one is the one that counts.

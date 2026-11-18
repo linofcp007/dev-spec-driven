@@ -5,13 +5,22 @@ argument-hint: "[feature] [--run]"
 ---
 
 Feature: $ARGUMENTS — an optional simplification pass (`/spec-review <feature> simplify`) changes code: run it before
-this, not after.
+this, not after. With a review panel (`spec_next_action`'s `reviewPanel`), the branch review on every model comes first —
+unless the ledger already has its `Final review: ×N` line since the last task (a task done inline writes no ledger line —
+if you did one after the review, run it again). The branch review reads `merge-base..HEAD`: commit the feature's work
+before it.
 
 1. `spec_finish {name, write: true}` (CLI `dev-spec finish <feature> --write`). Not `readyToFinish` → show the
    **blockers** and stop: failing doctor checks, open or unverified tasks, project checks without a passing run on the
    current code (`suite-evidence`), pending approvals, an artifact changed since its approval, placeholders, a bugfix's
    root cause. Show the warnings too — each one deserves a decision (code the feature repeats from elsewhere: reuse it, or
-   say why the copy is deliberate; raw colours or sizes where the design system has tokens: use the token, or say why not).
+   say why the copy is deliberate; raw colours or sizes where the design system has tokens: use the token, or say why not;
+   a protected test changed with no recorded reason — guard tests: check the change is intended, a test made to pass is a
+   weakened test; if it is, the user accepts it with the `feature protect <feature> <file> --accept --reason "…"` line the
+   warning gives — its current content becomes the recorded one, so the re-check is explained and the test stays protected
+   for every later feature; never a `feature unprotect` here: a lift lasts until `feature protect <feature> <file>`).
+   After the accept (or a lift), run step 1 again (`spec_finish {name, write: true}`): the merge summary then lists the
+   accept and no longer names the test as changed — the one written before it still does.
 2. **Verify fresh, now** — the full suite and every check the report lists for the active tracks. With project checks set,
    record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}`, or
    `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" finish <feature> --run` (`--run` given: run that). No shell? Ask the user to
@@ -27,7 +36,8 @@ this, not after.
    **A green run is evidence, not the sign-off:** after the run, show it and ask. A ready written finish also records
    the drift baseline — finish again after last-minute code changes — and, on a +ui feature of a project with a design-system
    registry, adds the design's New components to `.specs/steering/design-system.md` (`designSystem.registered`): a change to
-   commit with the feature. Forced approvals appear under "Waived gates".
+   commit with the feature. Forced approvals appear under "Waived gates", a feature's protected tests (what changed, the
+   lifts, the accepts) under "Protected tests".
 4. Offer exactly two options: **1. merge into the base branch locally** (fast-forward when possible, the summary as the
    message; a feature on its own branch: `git switch <base>`, then `git merge <name>`) **· 2. keep the branch as it is.**
    Run only the one the user picks; after a merge, the full suite again. Pushing is a separate step the user approves.

@@ -33,7 +33,7 @@ how they came to be — the releases and review findings — is in History at th
   `projectLang()`); a feature may override it in its `.state.json` `lang` (`featureLang()`). `spec_create {lang}` takes the
   explicit one, else the project's, else `en`; feature operations, the CLI and the hooks read `featureLang()`.
 - **English-STABLE tokens** — matched literally, never translated: AC / SC / test IDs (`US-1.AC-1`, `SC-001`, `T-01`, `EC-1`,
-  `NFR-1`), `D-n`, the markers `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]`/`[DIST]`/`[API]`/`[UI]`/`[OBS]`/`[DATA]` (case-sensitive)
+  `NFR-1`), `D-n`, the markers `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]`/`[DIST]`/`[API]`/`[UI]`/`[OBS]`/`[DATA]`/`[PORT]` (case-sensitive)
   and a pack's own, `[US1]`/`[US2]`/`[shared]`/`[P]`, `> **TODO**`, `[NEEDS CLARIFICATION]`, every `_Marker:_`
   (`_Requirements:_` … `_Supersedes:_`, the decision log's `_Kind:_` / `_Date:_` / `_Affects:_`, `_Outcome:_` with `go` /
   `no-go` / `pivot`), `**Checkpoint:**`, the Kind values `example` / `property`, the steering front matter

@@ -79,7 +79,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
   recordSpecEdit, runStartStamp, isGuardianCheck, guardianRecord, guardianLines, guardianPreRun, guardianDiffBase, GUARDIAN_DIFF_BASE_ENV,
   parseGitLog, parseTasks, parseTracks, PHASES, placeholderReport, planBridge, planPaths,
-  posixPwshScript, posixShellSyntax, projectChecks, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
+  posixPwshScript, posixShellSyntax, projectChecks, protectHashFirst, protectWalkFirst, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
   renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, unexpandedVar, expandHome, resolveRunShell, resolveTask, restoreFeature,
   roadmap, roadmapData, roadmapReport, roadmapTailLines, RTM_STATUSES, scaffoldSteeringFile, scanCodebase, scanTestCode,
   setDependency, SIGNAL_CONCEPTS, SIGNALS, SIZE_POINTS, slugify, specDoctor, specsRoot, specUpgrade, specVersionStatus,
@@ -128,9 +128,11 @@ module.exports = {
   taskDependsSpec, // a task block's _Depends:_ → { declared, numbers, invalid }
   taskSchedule, // task blocks → { next, skipped, blocked } — THE next-task rule (dependencies all done)
   taskWaves, // task blocks (+ tracks) → { waves: [[numbers…]…], cycles, blocked } — spec_next_task {waves}
-  finishFeature: featureLocked(finishFeature, (a) => !!(a[2] && (a[2].write || a[2].evidence != null))), // write: the drift baseline · evidence: finishChecks — both in .state.json
+  // write: the drift baseline · evidence: finishChecks — both in .state.json; 1.36.0 review 1: the protected tests hashed BEFORE the lock
+  finishFeature: protectHashFirst(featureLocked(finishFeature, (a) => !!(a[2] && (a[2].write || a[2].evidence != null)))),
   parseTasks,
-  approvePhase: featureLocked(approvePhase),
+  // 1.36 guard tests: a first tasks approval at level tests walks the test files BEFORE the lock (protect.js), merged under it
+  approvePhase: protectWalkFirst(featureLocked(approvePhase)),
   readState,
   manageFeature, // remove / archive / rename / restore move or delete the folder under its lock (withMoveLock), then the roadmap lock
   removeFeature,

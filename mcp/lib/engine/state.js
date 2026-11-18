@@ -173,6 +173,9 @@ function stateFromFile(projectDir, file) {
   }
   // The change history (approvePhase / spec_impact append to these lists): a non-list would be replaced by the next append.
   for (const key of ["approvalHistory", "changes", "unticks"]) if (s[key] !== undefined && !Array.isArray(s[key])) { problems.push([key]); delete s[key]; } // unticks: 1.16 U1 (undone ticks)
+  // 1.36 guard tests: the protected tests {files: {…}, lifts: […]} — a wrong shape would be replaced by the next tick or lift
+  const pt = s.protectedTests;
+  if (pt !== undefined && (!isObj(pt) || (pt.files !== undefined && !isObj(pt.files)) || (pt.lifts !== undefined && !Array.isArray(pt.lifts)))) { problems.push(["protectedTests"]); delete s.protectedTests; }
   s.approvals = s.approvals || {};
   if (problems.length) s.invalid = shapeError(typeof s.lang === "string" ? s.lang : projectLang(projectDir), jsonRel(file), problems);
   return s;
@@ -1046,6 +1049,24 @@ function mergeBranchRecord(b, o, t, p, ctx) {
   for (const k of Object.keys(o)) setOwn(m, k, o[k]);
   return m;
 }
+// `protectedTests` (1.36, meta.guard tests): `files` file by file, 3-way — a one-sided change (a tick's re-baseline, an added test)
+// comes through; both sides changed one → ours, never a conflict (finish hashes the content again); `at` / `via` the EARLIER snapshot's
+// (a record without a time reads as the later); `truncated` either side's; the lifts united by identity (a lift and its end each a record;
+// 1.36.0 review 3: an accept record too — `accepted` in its id, never the same record as a lift or an end of the same file, time and user).
+const LIFT_ID = idOf("l", ["file", "at", "by", "revoked", "accepted"]);
+function mergeProtectedTests(b, o, t, p, ctx) {
+  if (!isObj(o) || !isObj(t)) return mergeEither(ctx, p, b, o, t);
+  const bb = isObj(b) ? b : {};
+  const when = (x) => { const v = mergeTime(x.at); return v === -Infinity ? Infinity : v; };
+  const first = when(t) < when(o) ? t : o;
+  const out = copyOwn(o);
+  for (const k of ["at", "via"]) { if (first[k] !== undefined) setOwn(out, k, first[k]); else delete out[k]; }
+  setOwn(out, "files", mergeMapWith((bv, ov) => ov)(bb.files, isObj(o.files) ? o.files : {}, isObj(t.files) ? t.files : {}, p.concat("files"), ctx));
+  if (o.truncated === true || t.truncated === true) setOwn(out, "truncated", true);
+  const lifts = mergeHistoryBy(LIFT_ID)(bb.lifts, Array.isArray(o.lifts) ? o.lifts : [], Array.isArray(t.lifts) ? t.lifts : [], p.concat("lifts"), ctx);
+  if (lifts.length) setOwn(out, "lifts", lifts); else delete out.lifts;
+  return out;
+}
 // `finished` (the drift baseline): the later one; firstAt = the earliest finish either side recorded.
 function mergeFinished(b, o, t, p, ctx) {
   if (!isObj(o) || !isObj(t)) return mergeEither(ctx, p, b, o, t);
@@ -1155,6 +1176,7 @@ function mergeFeatureState(b, o, t, ctx) {
     evidence: mergeMapWith(mergeRunRecord), finishChecks: mergeMapWith(mergeRunRecord), ticks: mergeMapWith(mergeLaterTime),
     finished: mergeFinished, tracks: mergeSet, createdAt: mergeEarlierTime, lastTickAt: mergeLaterTime, lastEditAt: mergeLaterTime, // lastEditAt: 1.22 review (the spec-hook's stamp)
     branch: mergeBranchRecord, // 1.25 (create --branch)
+    protectedTests: mergeProtectedTests, // 1.36 (meta.guard tests)
   };
   const out = mergeObject(b, o, t, [], ctx, (k) => (own(FIELDS, k) ? FIELDS[k] : null));
   // lastApprovedPhase follows the merged approvals, never its own 3-way (ours unchanged + theirs revoked would drop it while a

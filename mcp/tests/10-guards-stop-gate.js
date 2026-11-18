@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, remeasure, S, tmp, hookIn, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, S, tmp, hookIn, __dirname }) => {
   const js = JSON.stringify;
 
   // 1.22 review (finding 2) — a zero count is no admission ("All tasks done. 0 tests failing." was `admitted`, silent), and a
@@ -271,6 +271,20 @@ exports.run = async ({ ok, remeasure, S, tmp, hookIn, __dirname }) => {
       ok([pt, es, br].every((m) => typeof m.lastNotPassing === "function" && typeof m.lastNotFailing === "function") && /^o relatório \(r\) termina/.test(pt.lastNotPassing("r", "`x`")) &&
         /^su informe \(r\) termina/.test(es.lastNotFailing("r", "`x`")),
         "1.25.1 review 7: the implementer gate's last-run messages exist in EN / PT / pt-BR / ES");
+    }
+    { // 1.36 the fast check: the report line the brief prescribes — 'Fast check `<cmd>`: N runs → exit 0', the command in a code span — keeps
+      // its exit code to the fast command, so a failing _Verify:_ run above it stays red (the bare "Fast check: 4 runs, last exit 0" gave
+      // its 0 to the run above). The brief's own wording (EN / PT / ES) carries the code span.
+      const line = (l) => S.msg(l).fastCheck.briefDod("npx tsc --noEmit").match(/: ([^:]*`npx tsc --noEmit`: N [^→]*→ exit)/);
+      const got = {
+        redThenFast: stop(1, "# Task 1\n\nRan `npm test` → exit code: 1 (2 failing)\n\nFast check `npx tsc --noEmit`: 4 runs → exit 0\n"),
+        fastThenGreen: stop(1, "# Task 1\n\nFast check `npx tsc --noEmit`: 4 runs → exit 0\n\nRan `npm test` → exit 0\n"),
+      };
+      all("1.36 fast check: the implementer's report line 'Fast check `<cmd>`: N runs → exit 0' never vouches for the _Verify:_ run — a red _Verify:_ above it stays blocked, a green one passes; the brief prescribes that form in EN / PT / ES (got " + js(got) + ")", {
+        redStaysRed: () => /^implementer-evidence: its report .* shows no passing run \(exit 0\) of `npm test`/.test(got.redThenFast),
+        greenPasses: () => got.fastThenGreen === "report-ok",
+        briefForm: () => ["en", "pt", "es"].every((l) => !!line(l)),
+      });
     }
   }
 };

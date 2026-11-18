@@ -3,6 +3,139 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.36.0] — 2026-11-18
+
+Four habits that made AI-assisted rewrites hold up — tests the agent cannot alter, a fast check after each small change, a
+port that keeps the behaviour before it improves anything, and a second reviewer on another model — each as an opt-in
+setting or track over what the plugin already had. No new tool, command, hook or dependency.
+
+- **Protected tests: tests the implementer cannot alter (`meta.guard: "tests"`).** A fourth guard level, `tests`
+  (`init --guard tests`, `spec_init {guard: "tests"}`, `/spec-setup guard tests`, `DEV_SPEC_GUARD_DEFAULT=tests`): the
+  scope guard plus protected tests. The test files present at a feature's first tasks approval (the features'
+  `.specs/<feature>/tests/` first, its own first — a project past the cap still lists its failing tests; a `feature
+  protect` run before the approval no longer cancels it) are recorded with a content hash in its `.state.json`, up to
+  2,000; a task's first tick also records the test files it names in `_Implements:_` (their new content accepted) and
+  those its `_Verify:_` runs — a test another feature already lists joins the snapshot, a `_Verify:_` record or a plain
+  `feature protect` with the content that feature recorded, never its content now; an untick removes nothing, and a task reopened by an untick or a box unchecked by hand
+  neither unlocks them again nor re-records them, so finish names an edit made meanwhile. A bugfix's task 1 now names its
+  red test's file (`_Implements: [the test file T-01 goes in]_`): planned for task 1, protected from task 2, the fix. In
+  Claude Code, editing, removing or moving a protected test asks while the feature that listed it is unfinished (its tasks
+  all ticked too, until its finish), unless a task that can start now names that exact file in `_Implements:_` (a folder,
+  a glob or `_Makes green:_` never does, nor a task +port's fence holds, nor a reopened one — the guard and the brief say
+  its planned test needs your lift); refused under `meta.approvalGuard: deny`, with the command to allow it yourself.
+  Shell writes count (rm, mv, sed -i, Remove-Item, Set-Content — files, folders, globs in any folder of the path); another
+  case of a listed file's name (where the file system ignores case) and a path through a link or junction are the same
+  file; with several targets the strictest answer applies. Only you lift a protection: `feature unprotect <feature>
+  <file> --reason "…"` (`spec_feature {action: "unprotect"}` — a guard-down the approval guard asks or refuses;
+  elicitation elsewhere); a lift lasts until `feature protect <feature> <file>` ends it, and the guard's line names the
+  feature being worked on (with no open task anywhere, the one ticked last). Only you accept a protected test's new
+  content: `feature protect <feature> <file> --accept --reason "…"` (`spec_feature {action: "protect", file, accept: true,
+  reason}` — a guard-down too; asked over MCP elicitation, a test rewritten while the question waits is refused) records
+  its current content as the authorised one, ends its lift and keeps the reason (the merge summary of every written finish
+  of that work cycle shows it — /spec-finish writes the finish again after the accept); `feature protect` alone adds the
+  tests present now (never re-recording one) or ends a lift — both read a path through a link or junction as the real
+  file. On every surface, without git, finish re-hashes the
+  list (outside the feature lock): a change no recorded hash and no lift explains is a warning — its line accepts the
+  change — and a "Protected tests" block in the merge summary — never a blocker. doctor warns `protected-tests` (also
+  about a lift still in force after its feature's finish); the brief gains a definition-of-done line; the merge driver
+  merges the list file by file. Approval guard fixes on the way: lowering from `tests` counts as a guard-down, also from
+  `DEV_SPEC_GUARD_DEFAULT`; the suggested command names the level asked for (a lowering to scope printed `init --guard
+  off`); a globbed CLI path running `add-track … --remove`, `feature unprotect` or `feature protect --accept` is checked
+  too; `spec_feature unprotect` with the file in `newName` names that file in its question. Not protected: tests in ignored,
+  hidden or linked folders, outside the project folder or past the cap; new test-support files (conftest.py, setup files,
+  mocks); an archived feature's list; a git command, a script or making a link is not read (an edit through a link is,
+  unless spelled with a glob); a re-plan that renumbers the tasks (a tick is recorded by the task's number) — finish
+  reports what it changed.
+- **A fast check after each small change (`meta.fastCheck`, warn only).** `init --check typecheck="npx tsc --noEmit"
+  --fast-check typecheck` (`spec_init {fastCheck}`) names one project check — a type check or a linter that answers in
+  seconds; a name that is no check, dev-guardian's gate, or a command that rewrites files is refused before anything is
+  written — a heuristic: a `--fix` / `--fix=…` / `--write` word, or a `fmt` / `format` program or subcommand (`gofmt`,
+  `cargo fmt`, `ruff format`, `dotnet format`, `clang-format`) with a `-w` word (`gofmt -l -w`) or with no check word
+  (`--check`, `-l`, `-d`, `-n`, `--diff`, `--dry-run`, `--verify-no-changes`, `--lint`, `--validate`, `--test`,
+  `--exit-code`, `--output=none`, swift-format's own `lint` subcommand — `swift format lint`, `swift-format lint`; any
+  other `fmt lint` (`make fmt lint`, `pants fmt lint ::`, `npm run fmt lint`) is refused; a check- or lint-named script is
+  none — each read in the formatter's own simple command: `cargo fmt && git diff --exit-code` writes; a `$(… | …)` before
+  the check flag splits it there — put the check flag first); a formatter known by another name (`black .`, `prettier -w`) is not recognized, and one whose bare form only reports
+  (`biome format .`) is refused — give its check form. `spec_next_task` and the brief carry `fastCheck` for a code task,
+  and the brief's definition of done gains the edit → run → fix loop (run it on its own — never chained or piped —, clean
+  after the last edit, before the `_Verify:_`; a red task keeps it green with a stub). Ticking a code task judges it —
+  the latest logged run of the fast command against the newest date of the feature's planned files — `fastCheck {check,
+  status, runs, clean}` (clean · stale · failed · missing · unknown; `partial: true` past the 500-file planned-set cap,
+  where the task's own `_Implements:_` files are still dated) and a note while it isn't clean — to run it on its own now;
+  on a missing run, or a latest run from the PowerShell tool, that a PowerShell pass is logged only with an explicit exit
+  code; never a refusal. `done <f> <n> --run` on an open code task runs it first while it isn't clean — or is clean only
+  on a `partial` set —, logged at its start. `spec_metrics` adds its runs, clean rate and ticks after a clean run (tasks
+  ticked now; a tick with no harness log is left out); doctor warns `fast-check`, and init says a stored
+  `meta.fastCheck` that reads as no fast check is ignored; `init` and `spec_upgrade` offer one from the root manifests (a
+  typecheck script, `npx tsc --noEmit` when typescript is a dependency, `cargo check`, `go vet ./...`, `ruff check .`,
+  `mypy .`) and never set it. It stays a project check, so `/spec-finish` needs it green on the final code: choose one
+  green on the base branch.
+- **+port — port first, improve later.** A built-in marker track for a feature that carries existing behaviour into new
+  code (another language or framework, a rewrite, a reimplementation behind the same interface). The scaffold: two `[PORT]`
+  criteria — the old outputs on a named corpus, case by case (`US-1.AC-36`), the same error where the old code rejects an
+  input (`US-1.AC-37`) —; three design sections (Behaviour Baseline, Differential Check, Deferred Improvements); the
+  baseline task FIRST (recorded from the old code — before Setup, before the story at size s, before the outermost
+  level-2 section holding a project template's first task, and so does `add-track port` while no task of tasks.md is
+  ticked — appended when none holds it, tasks right under the title or under `###` headings only: at size m / l the tasks
+  approval then refuses the plan until the baseline's section is moved first and those tasks put under a level-2 heading
+  of their own, keeping their numbers)
+  and the differential check after US-1's tasks (the new output against the RECORDED baseline, so it still runs after the
+  cut-over). The fence: `spec_complete_task` (and `done --run`, which then runs nothing) refuses a task listed after the
+  baseline until it is ticked AND verified, and a task listed after the differential check likewise — `gated:
+  "port-order"`, `heldBy` [n]; a note-only tick opens nothing, nor any tick of a `[PORT]` task without a runnable
+  `_Verify:_`, and `undo` is never gated. The differential check is the last task under its heading citing a `[PORT]`
+  criterion — an improvement written after it in its section waits for it; one listed before the baseline holds nothing
+  (port-verify names the order). The brief carries `heldBy`, `portRole`, `differential` and the port rule;
+  `spec_next_task` (its `batch` too), `spec_next_action`, the status line, `spec_complete_task`'s `next`, `spec_status` and the brief's
+  default task never name a held task (the roadmap and `next --waves` still list it) — with the baseline or the
+  differential check ticked but not verified, the next step is its run (`next_task` carries `gated` / `heldBy`) —, and
+  before the finish `spec_next_action` names the differential check's re-run first, so the project checks run once; its
+  finish step asks for that run again after any fix (a differential check with a runnable `_Verify:_`) — the review
+  panel's included: `port-recheck` counts only the tasks
+  listed after the check. doctor: `port-verify` (both anchors with a runnable `_Verify:_` and no task listed before the
+  baseline — a fail at m / l that the tasks approval refuses, a warn at s / no size; a `_Depends:_` that never reaches
+  it; no task under the differential check's heading citing a `[PORT]` criterion), `port-recheck` (the differential check
+  has not passed again since a task after it — the improvements — was ticked: spec_finish blocks until `done <f> <n>
+  --run`, waivable by a forced execution approval) and `port-fence` (a task ticked before the `[PORT]` task it waits for
+  had passed — past an anchor's 5 recorded runs, only a task with no record of when it was ticked). The classifier turns
+  +port on only from a technique name (characterization tests, a golden master, the strangler fig, differential testing,
+  a behaviour-preserving port or rewrite — EN / PT / ES); its verbs (port, rewrite, reimplement, migrate…) give at most a
+  "Possible +port" note, never the track, never a lost xs size; a port number or an open / forwarded / TCP port (the words
+  right around "port") and a schema migration are no signal — another mention of a port (a port field, the port of
+  Lisbon) still gets the note. Refused on a bugfix; `port` / `PORT` are reserved pack names since 1.36; `spec_import` of a
+  source with its own tasks.md warns when a +port feature's imported plan has no baseline and no differential check
+  (`add-track <f> port --remove`, then `add-track <f> port`); new guide `references/port-patterns.md`. A differential of
+  v1.35.4 against 1.36 over 71,368 inputs (the suites' logged classify inputs, the test-file literals, the evals, a
+  50,880-frame sweep) changed no other track's reading.
+- **Review on more than one model — the review panel (`meta.reviewModels`, opt-in).** `init --review-models
+  opus,sonnet | diverse | off` (`spec_init {reviewModels}`; `diverse` = opus + sonnet; 2–3 names checked by shape — aliases,
+  a `[1m]` suffix, a profile ARN up to 128 characters; the CLI word splits on commas and spaces, a stray separator at
+  either end ignored —, `inherit` / `default` / `diverse` / `off` / `none` reserved). With it the branch review (the final
+  review in subagent execution), converge and the deep review's gate critics also run on each panel model, each a fresh
+  reviewer with an explicit `model`; the panel adds models and never replaces a review's own tier (the gate critics: the
+  size table's, on the session's model, plus one on each panel model not already it). The code reviews' findings (branch
+  / final, converge) are merged first, then each merged finding is verified once — agreement only ranks a finding first,
+  there is no vote —; the gate critics' merged findings go to the user, with no verifier, as at every gate. With a panel,
+  the one task reviewer runs on the first panel model other than the implementer's that is at least standard (never
+  haiku; none → sonnet), at no extra dispatch — with `diverse` and a sonnet implementer, every task review runs on opus.
+  `spec_doctor` / `spec_next_action` carry `reviewPanel: {models}` (none for an xs change or a spike), and next_action's
+  finish step starts with the branch review on every model, before the optional simplify pass and the project checks. The
+  ledger names the models REQUESTED, and every path writes a `Final review: ×N` line (`— the host ran one model` when the
+  host collapsed the panel, `×1 … — inline, the panel was not run` without a subagent tool): the finish step's "unless
+  the ledger already has it since the last task" exit, which /spec-finish names too — a task done inline writes no ledger
+  line, so after one the review runs again. The branch review reads `merge-base..HEAD`: /spec-review and /spec-finish say
+  to commit the feature's work before it. In Claude Code the Agent tool takes aliases only, and `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, a mod's
+  `agent.spawn` hook or an allowlist substitution can run every reviewer on one model. The engine dispatches nothing and
+  enforces nothing.
+
+The MCP tool list grows by about 600 characters for the four settings, each in its trimmed form (`TOOLS_LIST_CAP` 44,500 →
+45,000).
+
+### Tests
+- `node mcp/test.js` 2554 assertions, `node cli/test-cli.js` 683 (was 2431 / 663). Each item's mutation list was
+  written before its fixtures and every mutant was caught (48, 78, 109 and 65; the two items' meeting point, 2 of 2); the
+  review rounds' fix mutants too — round 1, 116 of 116; round 2, 73 of 73; round 3, 76 of 76; round 4, 46 of 46.
+
 ## [1.35.4] — 2026-11-16
 
 What 1.35.3 left to add by hand, and what it cost. The code scan follows an import where the project's own tools send
