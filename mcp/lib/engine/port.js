@@ -101,7 +101,8 @@ function portTask(dir, kind, tracks, blocks, task, evidence, rule, lng, slug) {
 }
 
 // The task numbers the fence holds now — every task listed after the first anchor that is not ticked AND verified — or an empty
-// set (off +port, no anchor). The protected tests (protect.js, guard tests): a held task cannot start now, so it unlocks no test.
+// set (off +port, no anchor). The protected tests (protect.js, guard tests): a held task cannot start now, so it unlocks no test; next
+// --batch never adds one (1.36 review 3).
 function portHeldNumbers(dir, kind, tracks, blocks, evidence, rule) {
   if (!portOn(kind, tracks)) return new Set();
   const { b, d } = portAnchors(blocks, readIfExists(path.join(dir, "requirements.md")));
@@ -112,8 +113,8 @@ function portHeldNumbers(dir, kind, tracks, blocks, evidence, rule) {
 }
 // The next task with the fence applied (1.36 review 1 — spec_next_task, next_action, the status line): taskSchedule's, the tasks the
 // fence holds passed over → { sch: taskSchedule's result, held: null | { number: the first open task it passed over, heldBy, anchor:
-// the first of them, ticked: that anchor is ticked (unverified: only its run opens the fence), runnable: it has a runnable _Verify:_,
-// hold: the numbers the fence holds (next --batch never adds one) } }.
+// the first of them, ticked: that anchor is ticked (unverified: only its run opens the fence), runnable: it has a runnable _Verify:_ } }.
+// (next --batch reads portHeldNumbers: it holds the same tasks when the next one is the open anchor itself — 1.36 review 3.)
 function portSchedule(dir, kind, tracks, blocks, evidence, rule) {
   const sch = taskSchedule(blocks);
   if (!sch.next || !portOn(kind, tracks)) return { sch, held: null };
@@ -124,7 +125,7 @@ function portSchedule(dir, kind, tracks, blocks, evidence, rule) {
   if (!by.length) return { sch, held: null };
   const a = blocks[by[0]], hold = new Set(blocks.slice(by[0] + 1).map((x) => x.number));
   return { sch: taskSchedule(blocks, hold),
-    held: { number: sch.next.number, heldBy: by.map((i) => blocks[i].number), anchor: a.number, ticked: a.done, runnable: taskMarkers(a).verify.length > 0, hold } };
+    held: { number: sch.next.number, heldBy: by.map((i) => blocks[i].number), anchor: a.number, ticked: a.done, runnable: taskMarkers(a).verify.length > 0 } };
 }
 
 // Is the plan's fence complete: both anchors there — two tasks, the baseline listed first —, each with a runnable _Verify:_
@@ -268,10 +269,11 @@ function portRecheckNext(blocks, reqText, evidence, ticks, rule, lng, slug) {
 // Does a plan draw the fence at all (a baseline anchor)? — spec_import warns when an imported tasks.md of a +port feature doesn't.
 const portAnchored = (blocks, reqText) => portAnchors(blocks, reqText).b >= 0;
 // The differential check's task number in a plan with both anchors, or null — next_action's finish step says to run it again after
-// any fix from there on (the review panel's included: port-recheck counts only tasks listed after it — 1.36 review 2, P2-2)
+// any fix from there on (the review panel's included: port-recheck counts only tasks listed after it — 1.36 review 2, P2-2). Null too
+// when it has no runnable _Verify:_ (1.36 review 3: the line named a `done --run` that exits 1 — port-recheck never reads such a D either).
 function portCheckNumber(blocks, reqText) {
   const { b, d } = portAnchors(blocks, reqText);
-  return b >= 0 && d > b ? blocks[d].number : null;
+  return b >= 0 && d > b && taskMarkers(blocks[d]).verify.length ? blocks[d].number : null;
 }
 
 module.exports = { portOn, portTask, portHeldNumbers, portSchedule, portPlanProbe, portPlanCheck, portRunChecks, portFinishRecheck, portRecheckNext,

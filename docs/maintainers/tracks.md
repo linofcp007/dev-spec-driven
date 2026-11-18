@@ -302,7 +302,10 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
   and `implements` / `verify` slot names (`text.trackTasks.port.slots`): `LAYOUTS.tasks` renders the lead part FIRST (before
   Setup; at size s before the story) and the main part with the other blocks; `trackTasks` with no `part` renders both, the
   lead first (spec_add_track); `withTrackBlocks` puts the lead section before the outermost level-2 section holding a project
-  template's first task, else appends it (`splitLeadSection`, `beforeFirstTaskSection` — templates-imports-exports.md). `renderTrackTaskHeadings` collects EVERY
+  template's first task, else appends it (`splitLeadSection`, `beforeFirstTaskSection` — templates-imports-exports.md);
+  spec_add_track (`applyTracks`) does the same while NO task of tasks.md is ticked (an untouched scaffold included — 1.36.0
+  review 3: appended whole, the baseline came after Setup … Polish, refused at m / l and holding nothing at s), else — or with
+  no level-2 section over the first task — appends the whole block. `renderTrackTaskHeadings` collects EVERY
   heading of a track's block, so both are +port's (activeTasks drops both once it is off); every other track has one.
 - **The fence** — engine/port.js (gates-and-approvals.md → Bugfix and finish): the anchors are read from the plan — the lead
   heading is the one naming Behaviour Baseline's strict names, the other is the differential check's (its last task citing a
@@ -945,6 +948,9 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   the classifier unchanged — the network cue reads a window around the word ("open port 8443", "port 80", "the TCP port"), so
   "Update the port in docker-compose.yml", "a port field", "the port of Lisbon" still get the "Possible +port" note; widening the
   cue was left out (a cue change needs the differential), the release notes say what the window covers.
+- **1.36.0 review 3** — PF3-1: spec_add_track +port on a feature whose tasks.md was still the built-in scaffold appended the
+  baseline after Setup … Polish (the classifier never turns +port on, so "create, then add +port" is the documented flow):
+  `applyTracks` now puts the lead section before the first task section while no task is ticked (templates-imports-exports.md).
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.

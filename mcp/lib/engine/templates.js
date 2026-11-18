@@ -246,14 +246,16 @@ function splitLeadSection(block) {
 // text + `section` inserted before the OUTERMOST level-2 section (its heading never in a fence or a comment) holding the first task —
 // a `## Phase` over `### Story` headings included; appended when no level-2 heading holds it (the tasks right under the title —
 // Kiro's layout — or a level-1 heading closing it) or there is no task at all: put before them, the section would take the template's
-// own tasks in (1.36 review 1 — removing the track hid them; doctor's port-verify then warns baselineLate).
-function beforeFirstTaskSection(text, section) {
+// own tasks in (1.36 review 1 — removing the track hid them; doctor's port-verify then warns baselineLate). orNull: null instead of
+// the append (spec_add_track appends the whole block its own way). Inserted in the text's own line ends (a CRLF tasks.md — 1.36 review 3).
+function beforeFirstTaskSection(text, section, orNull) {
   const first = taskBlocks(text)[0];
   const lines = text.split("\n");
   const head = first ? headingEntries(lines).filter((h) => h.level <= 2 && h.i < first.line).pop() : null;
-  if (!head || head.level !== 2) return text.trimEnd() + "\n\n" + section + "\n";
-  lines.splice(head.i, 0, section, "");
-  return lines.join("\n");
+  if (!head || head.level !== 2) return orNull ? null : text.trimEnd() + "\n\n" + section + "\n";
+  const eol = /\r\n/.test(text) ? "\r\n" : "\n";
+  const at = lines.slice(0, head.i).reduce((n, l) => n + l.length + 1, 0);
+  return text.slice(0, at) + section.replace(/\r?\n/g, eol) + eol + eol + text.slice(at);
 }
 // An overridden design.md / requirements.md / tasks.md / test-plan.md + the active tracks' blocks it doesn't carry (the
 // rule above). reqText: () => the feature's requirements.md (tasks and test rows follow the IDs it defines for a track).
@@ -672,4 +674,4 @@ function templatesLines(r) {
 
 module.exports = { templatesLines, TEMPLATE_ARTIFACTS, RE_TEMPLATE_VAR, templateKey, readTemplateFile, templateFileList,
   templateLangChain, templateOverride, withTrackBlocks, scaffoldText, steeringScaffold, wildcardMatch, projectTemplateHas,
-  useTemplateScopeOf, templates, __link };
+  useTemplateScopeOf, templates, splitLeadSection, beforeFirstTaskSection, __link };

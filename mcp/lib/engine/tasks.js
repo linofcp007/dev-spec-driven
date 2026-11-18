@@ -28,8 +28,8 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
 let guardLevel, protectOnTick, protectedCount, tickRecorded; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
-let portTask, portSchedule; // port.js — +port's fence (1.36; next_task passes over the tasks it holds — review 1)
-function __link(E) { ({ guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+let portTask, portSchedule, portHeldNumbers; // port.js — +port's fence (1.36; next_task passes over the tasks it holds — review 1; the batch: review 3)
+function __link(E) { ({ guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, portHeldNumbers, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -87,7 +87,8 @@ function nextTask(projectDir, name, opts = {}) {
   const lng = featureLang(projectDir, f.slug);
   // nothing can start: the anchor holding the rest is ticked but not verified — its run opens the fence; else the dependencies
   if (!next && res.remaining) res.note = held && held.ticked ? i18n.msg(lng).port.naHeld(held.number, held.anchor, f.slug, held.runnable) : taskDepsBlockedNote(sch, f.slug, lng);
-  if (opts.batch && next) res.batch = parallelBatch(text, opts.max, tracks, held && held.hold);
+  // the fence's held tasks never join the batch — when the next task is the open anchor itself too (1.36 review 3: no hold then)
+  if (opts.batch && next) res.batch = parallelBatch(text, opts.max, tracks, portHeldNumbers(f.dir, state.kind, tracks, blocks, state.evidence, evidenceRule(projectDir)));
   if (opts.waves) {
     const w = taskWaves(blocks, tracks);
     Object.assign(res, { waves: w.waves, cycles: w.cycles, blocked: w.blocked });

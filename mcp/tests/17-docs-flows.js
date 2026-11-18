@@ -240,4 +240,19 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
     ok(c.ok && ff.through === "eval-plan" && !(ff.phases || []).includes("test-plan"),
       "1.23 review 5 (M14): next_action's fast-forward of a size-s +ai feature names eval-plan, never test-plan (got " + js(ff) + ")");
   }
+
+  { // 1.36.0 review 3 (PF3-1, PF3-2, PF3-4): port-patterns.md says add-track puts the baseline first while no task is ticked and names the
+    // safe way out of baselineLate (the baseline's section first, the tasks under a level-2 heading of their own, renumbered); verification.md
+    // reads the fixer heuristic's words in the formatter's own simple command, never a make / just / task target as `lint`
+    const refDoc = (f) => ws(rd("skills", "dev-spec-driven", "references", f));
+    const port = refDoc("port-patterns.md"), ver = refDoc("verification.md");
+    const rows = [
+      ["port-patterns: add-track inserts", port, /`add-track port` puts the baseline's section before the plan's first task section while no task of it is ticked/],
+      ["port-patterns: the safe move", port, /The way out: the baseline's section first, then those tasks under a \*\*level-2 heading of their own\*\* .*removing \+port hides them\), and the tasks renumbered in file order/],
+      ["verification: one simple command", ver, /count in the formatter's own simple command only \(the command line split on `&&`, `\|\|`, `;` and `\|`\)/],
+      ["verification: make targets", ver, /never a `make` \/ `just` \/ `task` target/],
+    ];
+    const bad = rows.filter(([, t, re]) => !re.test(t)).map(([k]) => k);
+    ok(!bad.length, "1.36.0 review 3: port-patterns.md names add-track's baseline-first insertion and the safe move out of baselineLate; verification.md reads the fixer's words per simple command, never a make / just / task target as lint (missing: " + js(bad) + ")");
+  }
 };

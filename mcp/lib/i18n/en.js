@@ -2501,7 +2501,7 @@ const msg = {
       verifyMissing: "+port: no task records the baseline and checks the new code against it — the port needs both, each with a runnable _Verify:_ (the [PORT] template tasks, or tasks citing a [PORT] criterion — references/port-patterns.md)",
       noVerify: (list) => `a [PORT] task without a runnable _Verify:_ never opens the fence: ${list}`,
       approvedAlready: "(the tasks are approved already — their next approval requires it)",
-      baselineLate: (list, b) => `listed before the baseline (task ${b}): ${list} — move the baseline first, or it may be recorded from the new code`,
+      baselineLate: (list, b) => `listed before the baseline (task ${b}): ${list} — move the baseline's section first, then those tasks under a level-2 heading of their own (## …; inside the baseline's section, removing +port would hide them), renumbered in file order — or the baseline may be recorded from the new code`,
       dependsEscape: (list, b) => `a _Depends:_ that never reaches the baseline (task ${b}): ${list} — a wave can start them before it; add ${b} to it`,
       recheck: (d, list, slug) => `the differential check (task ${d}) has not passed again since a task after it was ticked or re-run (${list}) — run it again on the final code: ${DEV_SPEC} done ${slug} ${d} --run`,
       fence: (list) => `ticked before the [PORT] task they wait for (in brackets) had passed: ${list} — a task moved, +port turned off and on, or a checkbox edited by hand; check them against the baseline and the differential check`,

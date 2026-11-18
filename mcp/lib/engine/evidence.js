@@ -1748,13 +1748,17 @@ function writeChecks(projectDir, nc) {
 // `gofmt -l`, `shfmt -d`, `make check-fmt`, `dune build @fmt` were refused, `ruff format .`, `dotnet format`, `clang-format -i`
 // accepted. 1.36 review 2 (FC2-1): the widened formatter set refused check-only forms (`swiftformat --lint`, `dart format
 // --output=none`, `clang-format -n`, `elm-format --validate`, `buf format --exit-code`, `npm run lint:format`), and `-l` let
-// `gofmt -l -w` / `shfmt -l -w` through.
+// `gofmt -l -w` / `shfmt -l -w` through. 1.36 review 3 (PF3-4): the check, lint and -w words are read in the formatter's own simple
+// command (split on && / || / ; / |) — `cargo fmt && git diff --exit-code` was accepted, `gofmt -l . | grep -v -w vendor` refused —, and
+// `lint` is the formatter program's own subcommand, never a make / just / task target list (`make fmt lint`: two targets).
 const RE_FIXER_FLAG = /(?<![\w-])--(?:fix|write)(?![\w-])/;
 const RE_FORMATTER = /(?<![\w./@-])(?<!(?:check|lint)[:_-])(?!-|(?:check|lint)[-_:])[\w-]*(?:fmt|format)(?![\w:.-])/i;
 const RE_CHECK_FLAG = /(?<![\w-])(?:--?check(?:-[\w-]+)?|-[ldn]|--diff|--dry-run|--verify-no-changes|--lint|--validate|--test|--exit-code|--output=none)(?![\w-])/;
 const RE_LINT_MODE = /(?:fmt|format)\s+lint(?![\w:.-])/i; // a formatter's own lint subcommand: `swift format lint`, `swift-format lint`
+const RE_TARGET_RUNNER = /^\s*(?:make|just|task)\s/i; // its words are targets: `make fmt lint` runs fmt (it writes), then lint
 const RE_WRITE_WORD = /(?<![\w-])-w(?![\w-])/; // beside a formatter: it writes, whatever check flag stands beside it
-const fixerCommand = (cmd) => RE_FIXER_FLAG.test(cmd) || (RE_FORMATTER.test(cmd) && (RE_WRITE_WORD.test(cmd) || !(RE_CHECK_FLAG.test(cmd) || RE_LINT_MODE.test(cmd))));
+const fixerSegment = (seg) => RE_FORMATTER.test(seg) && (RE_WRITE_WORD.test(seg) || !(RE_CHECK_FLAG.test(seg) || (RE_LINT_MODE.test(seg) && !RE_TARGET_RUNNER.test(seg))));
+const fixerCommand = (cmd) => RE_FIXER_FLAG.test(cmd) || String(cmd).split(/&&|[;|]/).some(fixerSegment);
 const FAST_SKEW_MS = 5 * 60 * 1000; // a log entry or a file date further ahead is ignored (another machine's clock)
 // roadmap.json meta.fastCheck → null (none set) · { name, command } · { invalid: the stored value, why: "missing" | "guardian" |
 // "fixer" } — a name no valid check carries, dev-guardian's gate, a command that rewrites files: no fast check runs (doctor warns

@@ -109,7 +109,11 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, __d
     const fixerOf = (cmd) => S.initProject(p, [], null, { checks: { fx: cmd }, fastCheck: "fx" }).ok === false;
     const rewriters = ["eslint --fix=true .", "gofmt -w .", "ruff format .", "dotnet format", "clang-format -i src/a.c", "npm run format", "mix format",
       // 1.36 review 2 (FC2-1): a -w word beside a formatter writes, whatever check flag stands beside it; a formatter's bare form writes
-      "gofmt -l -w .", "shfmt -l -w .", "buf format -w --exit-code", "dart format --set-exit-if-changed .", "swiftformat .", "elm-format --yes src"];
+      "gofmt -l -w .", "shfmt -l -w .", "buf format -w --exit-code", "dart format --set-exit-if-changed .", "swiftformat .", "elm-format --yes src",
+      // 1.36 review 3 (PF3-4): the words of the formatter's own simple command decide (another command's check word in a chain never does), and
+      // `lint` after a make / just / task target is another target
+      "make fmt lint", "just fmt lint", "task fmt lint", "cargo fmt && git diff --exit-code", "cargo fmt; git diff --exit-code", "cargo fmt || git diff --exit-code",
+      "cargo fmt && cargo test --test api"];
     const checkOnly = ["prettier --check .", "eslint --fix-dry-run .", "cargo fmt --check", "ruff format --check .", "black --check .", "terraform fmt -check",
       "gofmt -l .", "shfmt -d .", "ruff format --diff .", "clang-format --dry-run --Werror src/a.c", "dotnet format --verify-no-changes",
       "mix format --check-formatted", "make check-fmt", "npm run check:fmt", "npm run fmt:check", "dune build @fmt", "cargo clippy --message-format short",
@@ -117,7 +121,9 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, __d
       // / no-output flag, -n (a dry run) —, a lint-named script, and a -w that is no formatter's
       "swift format lint --strict -r Sources", "swift-format lint -r Sources", "swiftformat --lint .", "dart format --output=none --set-exit-if-changed .",
       "elm-format --validate src", "buf format --exit-code", "clang-format -n --Werror src/a.c", "google-java-format -n --set-exit-if-changed A.java",
-      "scalafmt --test", "npm run lint:format", "npm run lint-fmt", "npx jest -w 2"];
+      "scalafmt --test", "npm run lint:format", "npm run lint-fmt", "npx jest -w 2",
+      // 1.36 review 3 (PF3-4): another command's -w in a pipe is not the formatter's
+      "gofmt -l . | grep -v -w vendor", "test -z \"$(gofmt -l . | grep -w go)\""];
     const outside = ["prettier -w .", "black ."]; // rewriters by another name: accepted, the documented limit of the heuristic
     const plainOnly = ["biome format ."]; // a formatter whose bare form only reports: refused, the documented limit (its check form: biome ci / biome check)
     const wrong = [...[...rewriters, ...plainOnly].filter((c) => !fixerOf(c)), ...[...checkOnly, ...outside].filter((c) => fixerOf(c))];
@@ -137,7 +143,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, __d
       name: () => rn.ok === false && rn.error === FC.badName("nope", "guardian") && fs.readdirSync(n).length === 0,
       broken: () => rb0.ok === false && rb.ok === false && rb.error === rb0.error && rb.code === undefined,
     });
-    ok(wrong.length === 0, "1.36 review 1 + 2: the fixer refusal follows its documented rule — --fix / --fix=… / --write, or a fmt / format command with -w or without a check word (-l, -d, -n, --diff, --dry-run, --verify-no-changes, --check-…, --lint, --validate, --test, --exit-code, --output=none, a lint subcommand) refused; check-only commands, check- / lint-named scripts, an @fmt alias, a --message-format flag and a -w of no formatter accepted; biome format . refused (the documented limit) (wrong: " + js(wrong) + ")");
+    ok(wrong.length === 0, "1.36 review 1 + 2 + 3: the fixer refusal follows its documented rule — --fix / --fix=… / --write, or a fmt / format command with -w or without a check word in its own simple command (review 3: never another command's of a chain or pipe; a lint after a make / just / task target is a target) (-l, -d, -n, --diff, --dry-run, --verify-no-changes, --check-…, --lint, --validate, --test, --exit-code, --output=none, a lint subcommand) refused; check-only commands, check- / lint-named scripts, an @fmt alias, a --message-format flag and a -w of no formatter accepted; biome format . refused (the documented limit) (wrong: " + js(wrong) + ")");
   }
 
   { // removing the fast check's own check removes the fast check too (cleared note); doctor's `fast-check` warns on a stored value no

@@ -31,11 +31,15 @@ is in History at the end.
   section (`splitLeadSection` / `beforeFirstTaskSection`: before the OUTERMOST level-2 heading holding the first task — a `##
   Phase` over `### Story` headings —; appended when no level-2 heading holds it — tasks right under the title, Kiro's layout, or
   a level-1 heading closing an earlier `##` —, where put before them it would take the template's tasks in: doctor's
-  `port-verify` then FAILS baselineLate at size m / l — the tasks approval refuses the plan until the baseline is moved first —
-  and warns at s / no size: gates-and-approvals.md → Right-sized rigor) and appends the rest: nothing changes the code the
-  baseline covers before it is recorded. Its tasks keep the numbers after the template's own; where it goes before them,
-  next_task serves the baseline first (tasks order is by section in file order) — appended, the template's tasks come first
-  until it is moved.
+  `port-verify` then FAILS baselineLate at size m / l — the tasks approval refuses the plan until the baseline's section is
+  moved first and the template's tasks put under a level-2 heading of their own, renumbered (`port.baselineLate` says so;
+  moved INTO the baseline's section they went with it when +port was removed — 1.36.0 review 3) — and warns at s / no size:
+  gates-and-approvals.md → Right-sized rigor) and appends the rest: nothing changes the code the baseline covers before it is
+  recorded. Its tasks keep the numbers after the template's own; where it goes before them, next_task serves the baseline
+  first (tasks order is by section in file order) — appended, the template's tasks come first until it is moved. spec_add_track
+  (`applyTracks`) inserts the lead section the same way while NO task of tasks.md is ticked (`beforeFirstTaskSection(…, orNull)`:
+  null where no level-2 section holds the first task — the whole block then appended, after a code block left open at the end
+  is closed; inserted in the file's own line ends), and appends the whole block once one is (1.36.0 review 3).
 - **Placeholder corpus:** `projectTemplateSets()` adds the templates' bracket texts, code-span slots and task lines (bug.md's
   join `bugTemplateSlots()`), so an untouched custom scaffold reads placeholder to doctor, approve and next_action. Scoped
   to the engine call's
@@ -277,6 +281,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.36.0 review 2 (P2-1)** — appended, the baseline came after a Kiro / `###`-only template's tasks: the fence held none of the
   port's work and the plan was approved at size m with a doctor warn. The insertion is unchanged; `port-verify`'s approval probe
   refuses that order at m / l (gates-and-approvals.md).
+- **1.36.0 review 3** — PF3-1: spec_add_track appended +port's block whole, so on a core feature whose tasks.md was still the
+  built-in scaffold (the documented flow: create once, add +port later) the baseline came after Setup … Polish — review 2's
+  probe refused the engine's own scaffold at m / l, and at s the fence held nothing. `applyTracks` now splits the block like
+  `withTrackBlocks` while no task of tasks.md is ticked (the whole block appended once one is: baselineLate warns / the gate).
+  PF3-2: the move baselineLate asked for ("move the baseline first") put a Kiro / `###`-only template's tasks inside the
+  baseline's section — removing +port then hid them, review 1's PORT-3 hazard; its text (and port-patterns.md) now names the
+  safe move: the baseline's section first, the template's tasks under a level-2 heading of their own, renumbered.
 - **1.14** — `.specs/templates/` introduced: a team's own scaffolds over the built-in i18n ones. `templates` and `exports`
   became reserved slugs; a feature created before 1.14 under either name stays a feature (the legacy exception).
 - **1.15** — `tracks` joined `RESERVED_SLUGS` (the project's track packs), with the same exception.
