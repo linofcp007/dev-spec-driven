@@ -109,8 +109,9 @@ A guardrail on the approve paths, like the approval hook — not a sandbox.
 - **What is asked.** While `meta.approvalGuard` is `ask` or `deny`, a client that declares `capabilities.elicitation` in form
   mode (`clientElicits`: `{}` or `{form: {…}}`, not `{url: {…}}` alone) is asked (`elicitation/create`) before an AGENT's
   approval runs — the calls the approval hook guards, by the same `spec.approvalGuardDecision()`: `spec_approve` (approve,
-  revoke, `through`, force / waiver), `spec_feature` remove, `spec_feature` unprotect (1.36 — a protected test's lift),
-  `spec_init` lowering a protection, `spec_add_track {remove: true}` dropping +tdd / +ai.
+  revoke, `through`, force / waiver), `spec_feature` remove, `spec_feature` unprotect (1.36 — a protected test's lift) and
+  protect `{accept: true}` (1.36.0 review 3 — a protected test's content accepted), `spec_init` lowering a protection,
+  `spec_add_track {remove: true}` dropping +tdd / +ai.
 - **`approvalPolicy()`** (server.js): nothing is asked with the guard off, for a projectDir runTool refuses, or at `ask` under
   `SPEC_MCP_APPROVAL_HOOK=on` (the plugin's hook asks — never twice); `deny` holds even there (a call that reaches the server
   got past no hook). Without elicitation `ask` runs and `deny` refuses (`humanRequired: true`; `command`, with `{plain:
@@ -121,7 +122,8 @@ A guardrail on the approve paths, like the approval hook — not a sandbox.
   anyway, an error or a fast-forward with nothing to do is answered as it is — NOBODY is asked. An unprotect (1.36) is checked by
   its own dry run first (`spec_feature {…, dryRun}`: a test file inside the project, a reason — `reason-required` / `not-a-test` /
   … answer as they are) and its question quotes the reason the engine would record (one line, ≤ 200 characters shown —
-  `elicit.unprotect`); an approve records the lift with `confirmed`. `requestedSchema`: `approve`
+  `elicit.unprotect`); an approve records the lift with `confirmed`. An accept (protect `{accept: true}`, 1.36.0 review 3) takes
+  the same path — its dry run carries `accept: true`, its question `elicit.accept`. `requestedSchema`: `approve`
   (boolean, default false, required) + `note` (≤ 500).
 - **Only `action: "accept"` with `content.approve === true` runs the call**, recording `confirmation` {via: "elicitation", at,
   note?} as `confirmed` (`confirmationOf()`, gates.js — never a tool argument) and passing `preview`, what the dry run judged:
@@ -264,6 +266,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   +port: 85 characters — `port` in `TRACK_ITEM` (spec_init, spec_create, spec_import) and in spec_classify's /
   spec_add_track's lists, and "+port: one after an unverified [PORT] task" folded into spec_complete_task's bugfix
   sentence (no sentence of its own).
+- **1.36.0 review 3** — the accept: `spec_feature` gains a bare `accept: {type: "boolean"}` and "or protect it with `accept`
+  — its current content authorised —," in its protect / unprotect clause: +93 (44,617 → 44,710), under the 45,000 cap.
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.
@@ -293,6 +297,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   changed: eliciting there would ask twice without a hook→server handshake.
 - **1.36** — `spec_feature` unprotect (a protected test's lift, guard tests) is asked like a removal, after its own dry run (a
   refusal anyway asks nobody); its question quotes the reason; the internals `confirmation` and `dryRun` joined spec_feature's.
+- **1.36.0 review 3** — spec_feature protect `{accept: true}` (the accept: a protected test's current content re-baselined) is
+  asked the same way — the dry run first, `elicit.accept`.
 
 ### Argument validation
 - **1.12** — the MCP accepted `Design` / `PT`; `foldEnumArgs` keeps it so.

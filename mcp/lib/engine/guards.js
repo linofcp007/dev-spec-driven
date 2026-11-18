@@ -1699,10 +1699,12 @@ function cliApprovalAction(args, level, meta) {
     }
     // `feature remove <name>` without --yes only previews what it would delete.
     if (cmd === "feature" && String(pos[1] || "").toLowerCase() === "remove" && approvalTruthy(fl.yes)) return [Object.assign({ kind: "remove", feature: approvalStr(pos[2]) }, base)];
-    // `feature unprotect <name> <file> --reason "…"` (1.36 guard tests): lifting a protected test's protection is the user's decision
-    if (cmd === "feature" && String(pos[1] || "").toLowerCase() === "unprotect") {
-      return [Object.assign({ kind: "guard-down", setting: "unprotect", feature: approvalStr(pos[2]), file: approvalStr(pos[3] !== undefined ? pos[3] : fl.file),
-        reason: approvalStr(fl.reason) }, base)];
+    // `feature unprotect <name> <file> --reason "…"` (1.36 guard tests): lifting a protected test's protection is the user's decision;
+    // so is `feature protect <name> <file> --accept --reason "…"` (1.36.0 review 3): accepting its current content
+    const sub = cmd === "feature" ? String(pos[1] || "").toLowerCase() : "";
+    if (sub === "unprotect" || (sub === "protect" && fl.accept !== undefined && approvalTruthy(fl.accept))) {
+      return [Object.assign({ kind: "guard-down", setting: sub === "unprotect" ? "unprotect" : "accept", feature: approvalStr(pos[2]),
+        file: approvalStr(pos[3] !== undefined ? pos[3] : fl.file), reason: approvalStr(fl.reason) }, base)];
     }
     // `merge-state <base> <ours> <theirs> [<path>]` — git's merge driver — writes its merge into <ours>: run by an
     // agent on a .state.json (its approvals) or on .specs/roadmap.json (this guard), it is a hand edit of them. Git runs the driver
@@ -2053,12 +2055,15 @@ function mcpApprovalAction(tool, ti, level, meta) {
       role: approvalStr(ti.role), by: approvalStr(ti.by), force: ti.force === true }, approvalExtras(ti.revoke === true, ti.reason, ti.expires), base)];
   }
   // spec_feature remove without confirm: true only previews what it would delete; archive / rename / restore / flow / protect aren't
-  // approvals. unprotect (1.36 guard tests) lifts a protected test's protection: the user's decision.
+  // approvals. unprotect (1.36 guard tests) lifts a protected test's protection, protect with accept: true (1.36.0 review 3) accepts its
+  // current content: the user's decisions.
   if (tool === "spec_feature") {
     const act = String(approvalStr(ti.action) || "").toLowerCase();
     if (act === "remove" && ti.confirm === true) return [Object.assign({ kind: "remove", feature: approvalStr(ti.name) }, base)];
     // (the file the engine lifts: `file`, else `newName` — manageFeature's `opts.file ?? arg`; 1.36.0 review 1: the question named none)
-    if (act === "unprotect") return [Object.assign({ kind: "guard-down", setting: "unprotect", feature: approvalStr(ti.name), file: approvalStr(ti.file != null ? ti.file : ti.newName), reason: approvalStr(ti.reason) }, base)];
+    if (act === "unprotect" || (act === "protect" && ti.accept === true)) {
+      return [Object.assign({ kind: "guard-down", setting: act === "unprotect" ? "unprotect" : "accept", feature: approvalStr(ti.name), file: approvalStr(ti.file != null ? ti.file : ti.newName), reason: approvalStr(ti.reason) }, base)];
+    }
     return [];
   }
   // spec_add_track {remove: true} turning off +tdd / +ai (the gates they carry); adding a track is never one.
@@ -2090,10 +2095,11 @@ function approvalCommand(a, cli) {
     else if (a.setting === "evidence") words.push("init", "--evidence", "reported");
     else if (a.setting === "stopCheck") words.push("init", "--stop-check", "off");
     else if (a.setting === "guard") words.push("init", "--guard", ["on", "scope", "tests"].includes(a.to) ? a.to : "off"); // the level asked for (1.36: scope printed off)
-    else if (a.setting === "unprotect") { // 1.36 guard tests: the lift, its file and reason only when plainly safe to paste
+    else if (a.setting === "unprotect" || a.setting === "accept") { // 1.36 guard tests: the lift (1.36.0 review 3: or the accept), its
+      // file and reason only when plainly safe to paste
       const file = safe(typeof a.file === "string" ? a.file.replace(/\\/g, "/") : a.file, /^[\p{L}\p{N} _.@+,:/()~-]{1,400}$/u);
-      words.push("feature", "unprotect", name(a.feature), file ? (/[^\p{L}\p{N}_.@+,:/~-]/u.test(file) ? '"' + file + '"' : file) : "<file>",
-        "--reason", "\"" + (safe(a.reason, /^[\p{L}\p{N} _.,:;@+()/-]{1,200}$/u) || "<reason>") + "\"");
+      words.push("feature", a.setting === "accept" ? "protect" : "unprotect", name(a.feature), file ? (/[^\p{L}\p{N}_.@+,:/~-]/u.test(file) ? '"' + file + '"' : file) : "<file>",
+        ...(a.setting === "accept" ? ["--accept"] : []), "--reason", "\"" + (safe(a.reason, /^[\p{L}\p{N} _.,:;@+()/-]{1,200}$/u) || "<reason>") + "\"");
     }
     else if (a.setting === "roles") {
       const map = isObj(a.to) ? a.to : {};

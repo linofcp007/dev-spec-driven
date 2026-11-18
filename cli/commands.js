@@ -1409,6 +1409,8 @@ const COMMANDS = [
   feature flow <name> <requirements-first|design-first>   Set a feature's phase order (a bugfix keeps its own)
   feature protect <name> [<file>]  Guard tests: add the test files present now to the feature's protected tests (never re-hashing one);
                                   with a file (or --file <file>), end its lift
+  feature protect <name> <file> --accept --reason "…"   Accept the test's current content (re-baselined, its lift ended) — the user's
+                                  decision (an agent asks first)
   feature unprotect <name> <file> --reason "…"   Lift the protection of one test file (or --file <file>) — the user's decision (an agent asks first)`,
     run(c) {
       // dev-spec feature <remove|archive|rename|restore|flow> <name> [new-name|flow] — remove needs --yes (= spec_feature confirm:true);
@@ -1422,8 +1424,9 @@ const COMMANDS = [
       const most = { remove: 2, archive: 2, restore: 2, rename: 3, flow: flags.flow !== undefined ? 2 : 3,
         protect: flags.file !== undefined ? 2 : 3, unprotect: flags.file !== undefined ? 2 : 3 }[act];
       if (most !== undefined && pos.length > most) die(c.projectText().extraArgs("feature " + act, pos.slice(most).join(" ")), c.unknownArg(String(pos[most])));
-      const own = { remove: "--yes", flow: "--flow", protect: "--file", unprotect: "--file, --reason" }; // the flags each action reads
-      for (const [flag, k] of [["--flow", "flow"], ["--file", "file"], ["--reason", "reason"]]) {
+      // the flags each action reads (protect's --reason only with --accept — 1.36.0 review 3)
+      const own = { remove: "--yes", flow: "--flow", protect: flags.accept === true ? "--file, --accept, --reason" : "--file, --accept", unprotect: "--file, --reason" };
+      for (const [flag, k] of [["--flow", "flow"], ["--file", "file"], ["--reason", "reason"], ["--accept", "accept"]]) {
         if (most !== undefined && flags[k] !== undefined && !String(own[act] || "").split(", ").includes(flag)) die(c.projectText().flagNotFor(flag, "feature " + act, own[act] || ""), c.unknownArg(flag));
       }
       const T = c.featureText(pos[1]); // resolved BEFORE the folder moves or disappears
@@ -1451,9 +1454,9 @@ const COMMANDS = [
         }
         else if (r.action === "flow") log(r.note); // the flow, the phase order (and the phases that stay approved)
         else if (r.action === "unprotect") log(r.note); // 1.36: the lift recorded (and whether the file was on the list)
-        else if (r.action === "protect") { // 1.36: the list (count, since, added now), then each lift record
+        else if (r.action === "protect") { // 1.36: the list (count, since, added now), then each lift record (and accept record)
           log(r.note);
-          for (const l of r.lifts) log(T.protectLift(l.file, l.by, spec.dayOf(l.at), l.reason, l.revoked === true, l.active === true));
+          for (const l of r.lifts) log(l.accepted === true ? T.protectAccept(l.file, l.by, spec.dayOf(l.at), l.reason) : T.protectLift(l.file, l.by, spec.dayOf(l.at), l.reason, l.revoked === true, l.active === true));
         }
         else if (r.action === "restore") {
           const RT = spec.msg(spec.featureLang(projectDir, r.feature)).restore; // back in place: its own language

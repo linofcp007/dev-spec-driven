@@ -420,8 +420,9 @@ function trimSlashEnd(s) {
 // command it names adds its test here (the list is the hook point): the hook's pre-filter and the engine's stay one.
 const RE_APPROVAL_NAMES = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
 // The words that make a CLI call an approval or a guard-down (approve, feature remove, init's guard-down flags; 1.36: add-track's
-// --remove — a gated track turned off —, feature unprotect — a protected test's lift).
-const RE_APPROVAL_VERB = /(?:^|[^\w-])(?:approve|remove|unprotect|--remove|--approval-guard|--stop-check|--evidence|--guard|--guardian|--roles|--check)(?![\w-])/i;
+// --remove — a gated track turned off —, feature unprotect — a protected test's lift; 1.36.0 review 3: feature protect --accept — a
+// protected test's content accepted).
+const RE_APPROVAL_VERB = /(?:^|[^\w-])(?:approve|remove|unprotect|--remove|--accept|--approval-guard|--stop-check|--evidence|--guard|--guardian|--roles|--check)(?![\w-])/i;
 const RE_APPROVAL_WRITE_WORD = /(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|remove-item|ri|mv|move|move-item|mi|cp|copy|copy-item|cpi|set-content|sc|add-content|ac|clear-content|clc|out-file|new-item|ni|tee|robocopy|xcopy|rsync)(?=[\s;&|)]|$)/i;
 const RE_GLOB_CHAR = /[*?[{]/;
 const approvalPlain = (text) => String(text).replace(/(["'])\s*\+\s*\1/g, "").replace(/[\\`^]\r?\n|['"\\`^]/g, "");
@@ -563,6 +564,7 @@ CLI_SWITCHES.add("explain"); // classify "<text>" --explain (= spec_classify {ex
 CLI_SWITCHES.add("adr"); // export [f] --adr (= spec_export {format: "adr"})
 CLI_SWITCHES.add("dry-run"); // import … --dry-run (= spec_import {dryRun: true} — nothing written, the same result + a preview)
 CLI_SWITCHES.add("tests"); // dupes [feature] --tests (= spec_scan {duplicates: true, tests: true} — test files too)
+CLI_SWITCHES.add("accept"); // feature protect <f> <file> --accept --reason "…" (= spec_feature {action: "protect", accept: true}) — 1.36.0 review 3
 
 // Did-you-mean — the one edit distance behind every suggestion: a track (tracks.js suggestTrack), a tool argument (the MCP server's
 // unknown-argument refusal), a CLI flag (cli/main.js — before the engine loads), an eval-harness flag. The engine's closestName IS this

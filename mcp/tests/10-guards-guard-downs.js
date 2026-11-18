@@ -307,6 +307,25 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, hookIn, __dirname, require
       candidates: () => globbed.every((c) => PR.approvalMayBe(c)) && !plain.some((c) => PR.approvalMayBe(c)),
       pt: () => /levantar a proteção do teste test\/auth\.test\.js \('login'\)/.test(S.approvalGuardDecision(pre(tmp, "mcp__x__spec_feature", { action: "unprotect", name: "login", file: "test/auth.test.js", reason: "r" }), "ask", { meta: {}, lang: "pt" }).reason),
     });
+    // 1.36.0 review 3: accepting a protected test's content (spec_feature protect {accept: true}, `feature protect <f> <file> --accept`) is
+    // a guard-down too — its own sentence and line; --accept is a switch (the file after it stays the file); accept false / absent is none
+    const mcpAcc = feat({ action: "protect", name: "login", file: "test/auth.test.js", accept: true, reason: "v2 is right" });
+    const mcpAccAsk = feat({ action: "protect", name: "login", file: "test/auth.test.js", accept: true, reason: "r" }, "ask");
+    const mcpAccOff = feat({ action: "protect", name: "login", file: "test/auth.test.js", accept: false, reason: "r" });
+    const bashAcc = dec("Bash", "node " + C + " feature protect login --accept test/auth.test.js --reason \"v2\"");
+    const psAcc = dec("PowerShell", "node " + C + " feature protect login test/auth.test.js --accept --reason 'v2'");
+    const bashAccOff = dec("Bash", "node " + C + " feature protect login test/auth.test.js");
+    const globAcc = "node cli/d*-spec.js feature protect f test/a.test.js --accept --reason x";
+    all("1.36.0 review 3 guard tests: spec_feature protect {accept: true} and `feature protect <f> <file> --accept` (Bash, PowerShell; --accept before the file too) are guard-downs — 'accept the current content of the protected test …', the line `feature protect <f> <file> --accept --reason \"…\"`; accept false or absent is none; a globbed CLI with --accept is an approval candidate (got " +
+      js([mcpAcc.actions, mcpAcc.command, mcpAccAsk.decision, mcpAccOff.decision, bashAcc.actions, psAcc.decision, bashAccOff.decision]) + ")", {
+      mcp: () => mcpAcc.decision === "deny" && mcpAcc.actions[0].setting === "accept" && mcpAcc.actions[0].file === "test/auth.test.js" && mcpAcc.actions[0].reason === "v2 is right",
+      sentence: () => mcpAcc.summary === S.msg("en").approvalGuard.action({ kind: "guard-down", setting: "accept", file: "test/auth.test.js", feature: "login" }) && /accept the current content/.test(mcpAcc.summary),
+      line: () => /feature protect login test\/auth\.test\.js --accept --reason "v2 is right"$/.test(mcpAcc.command), ask: () => mcpAccAsk.decision === "ask",
+      notAccept: () => mcpAccOff.decision === "allow" && bashAccOff.decision === "allow",
+      shells: () => bashAcc.decision === "deny" && bashAcc.actions[0].setting === "accept" && bashAcc.actions[0].file === "test/auth.test.js" && psAcc.decision === "deny",
+      candidate: () => PR.approvalMayBe(globAcc),
+      pt: () => /aceitar o conteúdo atual do teste protegido test\/auth\.test\.js \('login'\)/.test(S.approvalGuardDecision(pre(tmp, "mcp__x__spec_feature", { action: "protect", name: "login", file: "test/auth.test.js", accept: true, reason: "r" }), "ask", { meta: {}, lang: "pt" }).reason),
+    });
   }
 
   // C-I10 — the hook's 2 s stdin safety net fired on a partial payload: it used to exit 0 (allowed). Partial input naming dev-spec /

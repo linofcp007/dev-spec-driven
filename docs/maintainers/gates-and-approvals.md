@@ -310,10 +310,13 @@ review findings — is in History at the end.
   earliest expiry, else the first — the completing sign-off's own included; each role's record keeps its own). Metrics count `revokedApprovals` and `untickedTasks`.
 - **Lifts of protected tests (1.36, guard tests)** sit beside waivers: a waiver records why a GATE was forced, a lift why ONE
   protected test may change — `spec_feature {action: "unprotect", file, reason}` / `feature unprotect` (`reason` required:
-  `reasonInput()`; no expiry — it lasts until `feature protect <f> <file>`, and counts only while its own feature has open tasks and
-  was recorded after that feature's last finish; its own feature's finish counts it always), `{file, at, by, reason, confirmed?}` in
-  `.state.json → protectedTests.lifts`, a guard-down of the approval guard, listed by `spec_finish` (`protectedTests.lifted`, the
-  merge summary's "Protected tests" block). **The snapshot hook:** `approvePhase` records the feature's protected tests at its
+  `reasonInput()`; no expiry — it lasts until `feature protect <f> <file>` of any feature, whatever its own feature's tasks or
+  finish), `{file, at, by, reason, confirmed?}` in `.state.json → protectedTests.lifts`, a guard-down of the approval guard,
+  listed by `spec_finish` (`protectedTests.lifted`, the merge summary's "Protected tests" block). Beside it (1.36.0 review 3)
+  the **accept** — `spec_feature {action: "protect", file, accept: true, reason}` / `feature protect <f> <file> --accept
+  --reason …`: the user's decision that a test's CURRENT content is the right one (a guard-down too) — the hash re-baselined,
+  the lift ended, an accept record `{file, at, by, reason, accepted: true, confirmed?}` kept beside the lifts
+  (`protectedTests.accepted`, the merge summary). **The snapshot hook:** `approvePhase` records the feature's protected tests at its
   FIRST complete tasks approval at level tests — inside `if (!so || so.complete)`, before the one `writeFileAtomic` (a dry run
   returns earlier, a role's waiting sign-off takes none), from the walk the facade made before the lock (`opts.protectWalk` —
   `approveThrough` passes it to each phase), merged add-only into a list a `feature protect` began and marked via "approval"; a
@@ -589,6 +592,9 @@ here. "r5 review" is 1.23's fifth review.
 - **1.36.0 review 2** — the lift /spec-finish's warning asks for is recorded AFTER the written finish, and one in a feature all
   ticked but never finished never ended: a lift counts only while its feature has open tasks and was recorded after that
   feature's last finish (its own finish counts all of its lifts) — tasks-and-evidence.md → Protected tests.
+- **1.36.0 review 3** — both narrowings lost real cases (a lift recorded in the final review's window never in force, a dormant
+  lift revived by one task line, a cycle-1 lift explaining a cycle-2 change): back to "a lift lasts until protect <file>", and
+  the intended change finish warns about is recorded with the ACCEPT (a re-baseline), never a lift — tasks-and-evidence.md.
 
 ### Approvals the user confirmed over MCP, and the dry run
 - **1.21 F1b** — `confirmed` and the dry run.
