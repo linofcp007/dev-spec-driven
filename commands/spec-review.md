@@ -12,11 +12,12 @@ reviewer as candidate findings, its `within` runs to the simplifier; each is ver
 asks for, or one a report lists under "Duplicated on purpose", is none). A +ui feature of a project with a design-system
 registry: `spec_scan {designSystem: true, name}` too — its `problems` and `raw` values go to the reviewer the same way.
 
-**branch** — a local pre-merge review of `git diff <merge-base>..HEAD` (`git merge-base <base-branch> HEAD`) against the
-whole chain: spec compliance (the design, every AC); the **Constitution** — `.specs/steering/constitution.md`, a break
-justified in the design's Complexity Tracking or sent back; each active track's checks (`track-checklists.md` beside the
-protocols); security always; **Written rules** — the `CLAUDE.md` / `AGENTS.md` files and the comments around the changed
-code, a break quoted with its file:line; **History** — lines the branch rewrites (`git log -L` / `git blame`): a fixed bug
+**branch** — a local pre-merge review of `git diff <merge-base>..HEAD` (`git merge-base <base-branch> HEAD`; it reads
+commits only — commit the feature's work before it) against the whole chain: spec compliance (the design, every AC); the
+**Constitution** — `.specs/steering/constitution.md`, a break justified in the design's Complexity Tracking or sent back;
+each active track's checks (`track-checklists.md` beside the protocols); security always; **Written rules** — the
+`CLAUDE.md` / `AGENTS.md` files and the comments around the changed code, a break quoted with its file:line; **History** —
+lines the branch rewrites (`git log -L` / `git blame`): a fixed bug
 brought back is Critical. **Verify before you report.** Each Critical / Important finding: does it exist at HEAD, did
 this branch introduce it, is it not what an AC or `decisions.md` asks for? Rate each 0–100: **0** not real or pre-existing ·
 **25** might be real, unverified · **50** verified but minor · **75** verified and likely hit · **100** direct evidence.
@@ -27,10 +28,10 @@ line each under "Unconfirmed (below 80)"; then `trace_check {name}` (`matrix: tr
 **A review panel** (`spec_next_action {name}`'s `reviewPanel`) with a subagent tool: the reviewers are fresh — write the
 package as above and dispatch, in one message, one final-mode `dev-spec-driven:spec-reviewer` on the most capable model and
 one on each panel model not already it (`model` on each), instead of reviewing yourself; merge their findings, then verify
-each merged finding once (`subagent-execution.md` → Review on more than one model). Ledger `Final review: ×N (requested …)
-@ <git rev-parse --short HEAD>`. Without a subagent tool: review yourself as above, say the panel was not run, and ledger
-`Final review: ×1 (requested …) @ <git rev-parse --short HEAD> — inline, the panel was not run`. The ledger:
-`.specs/<feature>/.execution/ledger.md` (no `.execution/` yet: create it with a `.gitignore` holding `*`).
+each merged finding once (`subagent-execution.md` → Review on more than one model). Ledger `Final review: ×N (requested …)`.
+Without a subagent tool: review yourself as above, say the panel was not run, and ledger `Final review: ×1 (requested …) —
+inline, the panel was not run`. The ledger: `.specs/<feature>/.execution/ledger.md` (no `.execution/` yet: create it with a
+`.gitignore` holding `*`). A task done inline writes no ledger line — if you did one after the review, run it again.
 
 **converge** — the feature AC by AC against the code: `spec_status` + `trace_check {name, code: true}` (+ on a finished
 feature `spec_drift {name}`: its changed files go to the reviewer, the baseline only says that they changed), then

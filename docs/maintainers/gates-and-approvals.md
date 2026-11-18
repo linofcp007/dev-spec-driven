@@ -130,7 +130,8 @@ review findings — is in History at the end.
   `next.reviewBranch`: the branch review on every model before the step's own text, i.e. before the optional simplify pass
   and the project checks' line (a fix round from that review would make their runs stale). A hint on the step, never a
   step: verify / drift / finished set their own step and carry none, so nothing can loop; the controller's ledger line says
-  whether the review ran on this code — its latest `Final review: ×N` line names the current HEAD (the engine reads no ledger).
+  whether the review ran — a `Final review: ×N` line since the last task (the engine reads no ledger); a task done inline
+  writes no ledger line, so the hint says to run the review again after one.
 - **finish blockers** (stable ids, in order — the `execution` approval refuses on exactly these): `state`, `roadmap` (never
   inside `doctor`), `doctor`, `root-cause`, `placeholders` (anywhere in the chain), `changed-since-approval` (by content),
   `tasks` (none), `open-tasks`, `verification`, `port-recheck` (1.36 — +port: the differential check not passed again since a task
@@ -515,6 +516,10 @@ here. "r5 review" is 1.23's fifth review.
 - **1.36.0 review 2** (RP2-1) — the hint's exit "since the last task" could not be judged on inline work (no task line in the
   ledger): it is now "unless the ledger's latest `Final review: ×N` line names the current HEAD" — the line carries
   `@ <git rev-parse --short HEAD>` (tasks-and-evidence.md → History).
+- **1.36.0 review 3** (D3-1) — the HEAD exit went back out: every commit after the line (the review's own fixes, each simplify
+  commit, a `.specs/`-only commit) asked for the whole panel again, with no bound — against "nothing can loop". The exit is
+  round 1's again ("since the last task"), and the inline gap is closed in prose: "a task done inline writes no ledger line —
+  if you did one after the review, run it again" (tasks-and-evidence.md → History).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

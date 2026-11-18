@@ -72,7 +72,7 @@ Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4
 Task 3: parked — <finding> — Ruling: <why the code stands>
 Task 3: refactor candidate filed: refactor-pricing-rules (backlog)
 Task 3: complete (commits a1b2c3d..e4f5a6b, review clean)
-Final review: ×2 (requested opus, sonnet) @ c3d4e5f — 1 agreed, 3 single, 2 minor
+Final review: ×2 (requested opus, sonnet) — 1 agreed, 3 single, 2 minor
 Checkpoint US1: presented → approved
 Autonomy: through checkpoint US3 — granted by the user
 Checkpoint US2: summarized (autonomy) — not yet seen by the user
@@ -422,8 +422,7 @@ returns findings: verify each Critical / Important one (§6), then ONE fix dispa
 re-review, then adjudicate residuals as in the breaker. No second wave — residual load-bearing findings go to the human.
 **With a review panel** (`reviewPanel`): the same package to one final-mode reviewer on the most capable model and one
 on each panel model not already it, in one message; their findings merged before the verify pass (Review on more than one
-model); still ONE fix dispatch and ONE scoped re-review. Ledger the `Final review: ×N` line with the HEAD the review ended
-on — `@ <git rev-parse --short HEAD>`, after the fix and its re-review.
+model); still ONE fix dispatch and ONE scoped re-review. Ledger the `Final review: ×N` line.
 
 ## The simplification pass (optional, before finishing)
 
@@ -538,19 +537,18 @@ nothing and records nothing: what follows is yours.
   merged finding, not one per model's copy — the merge is the saving. Agreement only ranks a finding first: two models read
   the same package, so they can share a mistake about pre-existing lines or an AC that asks for the behaviour — it never
   skips the verifier. A ⚠️ from any model is yours to resolve. No vote: any confirmed finding or ❌ means Needs fixes.
-- **Ledger** `Final review: ×2 (requested opus, sonnet) @ c3d4e5f — 1 agreed, 3 single, 2 minor` (agreed = raised by two or
-  more models; `@` the HEAD the review ended on — `git rev-parse --short HEAD` as you write the line). Name the models you
-  REQUESTED: you can't see which one ran. **Resume:** the ledger's latest `Final review: ×N` line (any of its forms, below
-  too) names the current HEAD → the panel review ran on this code; don't dispatch it again. Another HEAD → it reviewed older
-  code (inline work ledgers no task line): run it again.
+- **Ledger** `Final review: ×2 (requested opus, sonnet) — 1 agreed, 3 single, 2 minor` (agreed = raised by two or more
+  models). Name the models you REQUESTED: you can't see which one ran. **Resume:** the ledger already has a
+  `Final review: ×N` line since the last task (any of its forms, below too) → the panel review ran; don't dispatch it again.
+  A task done inline writes no ledger line — if you did one after the review, run it again.
 - **When a model can't run.** Claude Code's Agent tool takes an alias only (`opus`, `sonnet`, `haiku`, `fable`) — a full model
   ID or another host's name can't be passed there. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` (no `model` parameter), a mod's
   `agent.spawn` hook that sets the model, an `availableModels` allowlist that substitutes it, or an `opus` alias whose family
   the provider can't tell (set `ANTHROPIC_DEFAULT_OPUS_MODEL`) runs every reviewer on one model: say so in the ledger line
-  and the report (`Final review: ×2 (requested opus, sonnet) @ c3d4e5f — the host ran one model`): fresh contexts, no model
-  diversity. Without a subagent tool (Cursor, Windsurf, Copilot, Gemini, claude.ai), review inline and say the panel was not
-  run — ledger `Final review: ×1 (requested opus, sonnet) @ c3d4e5f — inline, the panel was not run`, so a resumed session
-  doesn't run it again on the same HEAD.
+  and the report (`Final review: ×2 (requested opus, sonnet) — the host ran one model`): fresh contexts, no model diversity.
+  Without a subagent tool (Cursor, Windsurf, Copilot, Gemini, claude.ai), review inline and say the panel was not run —
+  ledger `Final review: ×1 (requested opus, sonnet) — inline, the panel was not run`, so a resumed session doesn't run it
+  again.
 - **Cost:** one more review dispatch per extra model per review it covers (the final review once a feature; converge and the
   gate critics when you run them) — and the task reviews move to a panel model (§5): with `diverse` and a `sonnet`
   implementer, every task review runs on `opus` (no extra dispatch, the priciest tier). Say so when the user turns it on
