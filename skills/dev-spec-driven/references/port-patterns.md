@@ -81,7 +81,8 @@ when `add-track port` appends the two tasks — a task of the plan is ticked alr
 task —, or when a project tasks template has no level-2 heading over its first task (Kiro's tasks right under the title,
 `###`-only sections): the scaffold then appends the baseline after the template's tasks. The way out: the baseline's section
 first, then those tasks under a **level-2 heading of their own** (`## …` — moved into the baseline's section, they would go
-with it: removing +port hides them), and the tasks renumbered in file order. It warns besides about a `_Depends:_` after the
+with it: removing +port hides them), the tasks keeping their numbers (a tick and its run are recorded by number; the
+plan is served by section, in file order). It warns besides about a `_Depends:_` after the
 baseline that never reaches it (a wave would start it first), and about a differential check's heading where no task cites a
 `[PORT]` criterion: its first task is then taken for the check — a preparation task there would open the fence for the
 improvements before the comparison runs; cite the criteria in the check's `_Requirements:_`.

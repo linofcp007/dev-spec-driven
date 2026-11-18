@@ -405,8 +405,9 @@ finish / execution gate, every track criterion scaffolded.
   reaches B, `port.dUncited`: no task under D's heading cites a `[PORT]` criterion) never refuse. A fresh built-in scaffold puts B
   first at every size, and so does spec_add_track +port while no task of tasks.md is ticked (1.36.0 review 3); a project tasks
   template with no level-2 heading over its first task gets B appended after them (templates-imports-exports.md), so its plan is
-  refused at m / l until B's section is moved first and those tasks put under a level-2 heading of their own, renumbered (the
-  move `port.baselineLate` names). The execution gate (Bugfix and finish → +port's execution gate) holds at every size.
+  refused at m / l until B's section is moved first and those tasks put under a level-2 heading of their own, keeping their
+  numbers (the move `port.baselineLate` names — 1.36.0 review 4: renumbered, a ticked task's run went to another task). The
+  execution gate (Bugfix and finish → +port's execution gate) holds at every size.
 - **m / l**: the full chain — and the design's **Reuse & Integration is an approval check** (1.28, `designReuseGated`):
   doctor fails `design-reuse` and the design gate refuses it until the section names what is reused, extended or new; a
   design approved before 1.28 (no `reuseGate` stamp) keeps the warning (quality.md → Reuse & Integration). At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
@@ -666,6 +667,9 @@ here. "r5 review" is 1.23's fifth review.
   the safe move. PF3-3: the finish step's +port line named `done <f> <D> --run` for a D with no runnable `_Verify:_` (exit 1):
   `portCheckNumber` is null for it — port-recheck never reads such a D either. PF3-5: `next --batch` added a held task beside a
   `[P]` baseline that was itself the next task (no hold then): the batch takes `portHeldNumbers`.
+- **1.36.0 review 4 (PF4-1)** — PF3-2's text also asked to renumber the moved tasks in file order: never needed once they sit under
+  a level-2 heading of their own (B's section first is served first), and after a tick it detached the ticked task's run (keyed
+  by number). The safe move keeps their numbers (templates-imports-exports.md).
 - **1.21 F3** — the bugfix prefill (no prefill = byte-identical to 1.20) and `commitTitle()`. **1.21 review A5** — a cut
   split a surrogate pair and a lone surrogate landed in merge-summary.md: `cutAt()`.
 - **1.21 F5 → 1.23.1** — 1.21 F5 introduced the short bugfix tasks.md for xs; 1.23.1 made it every size's (the XS and the

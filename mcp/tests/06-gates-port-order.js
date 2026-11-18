@@ -525,17 +525,17 @@ ${MAIN}
     S.approvePhase(km.p, km.slug, "tasks", "t", { force: true, reason: "fixture" });
     const pvKa = chk(S.specDoctor(km.p, km.slug), "port-verify");
     // the move baselineLate names (1.36 review 3, PF3-2): the baseline's section first, then the template's tasks under a level-2 heading of
-    // their own, the tasks renumbered in file order — approved; removing +port then leaves the template's tasks active (moved INTO the
-    // baseline's section, they were hidden with it)
+    // their own — approved; removing +port then leaves the template's tasks active (moved INTO the baseline's section, they were hidden with
+    // it). 1.36 review 4 (PF4-1): the tasks KEEP their numbers (renumbered, a ticked task's run went to another one): the plan is served by
+    // section in file order, so the baseline (#3) is next — never gated, never held by itself
     const L = rd(hm.f.dir, "tasks.md").split("\n");
     const at = L.indexOf(LEAD), end = L.indexOf(MAIN);
     const moved = [...L.slice(0, L.indexOf("### Setup")), ...L.slice(at, end), "## Build", "", ...L.slice(L.indexOf("### Setup"), at), ...L.slice(end)];
-    let num = 0;
-    fs.writeFileSync(path.join(hm.f.dir, "tasks.md"), moved.join("\n").replace(/^- \[ \] \d+\./gm, () => "- [ ] " + ++num + "."));
+    fs.writeFileSync(path.join(hm.f.dir, "tasks.md"), moved.join("\n"));
     const okHm = S.approvePhase(hm.p, hm.slug, "tasks", "t");
-    const ntHm = S.nextTask(hm.p, hm.slug), rmHm = S.addTrack(hm.p, hm.slug, "port", { remove: true });
+    const ntHm = S.nextTask(hm.p, hm.slug, { batch: true }), rmHm = S.addTrack(hm.p, hm.slug, "port", { remove: true });
     const leftHm = S.statusFeature(hm.p, hm.slug).tasks, ntRm = S.nextTask(hm.p, hm.slug);
-    const named = ["en", "pt", "es"].filter((l) => { const t = S.msg(l).port.baselineLate("#1", 2); return !(t.includes("## …") && /level-2|nível 2|nivel 2/.test(t) && /renumber|renumerad/.test(t)); });
+    const named = ["en", "pt", "es"].filter((l) => { const t = S.msg(l).port.baselineLate("#1", 2); return !(t.includes("## …") && /level-2|nível 2|nivel 2/.test(t) && /their numbers|seus números|sus números/.test(t) && !/renumber|renumerad/i.test(t)); });
     // a built-in scaffold, filled, at every size, with and without +tdd: the baseline first — no baselineLate
     const builtIn = [];
     for (const size of ["s", "m", "l"]) for (const tr of [["port"], ["tdd", "port"]]) {
@@ -567,14 +567,15 @@ ${MAIN}
         added.push([lang, size, tr, a.ok, pv, ap.failing, nt.next]);
       }
     }
-    all("1.36 review 2 (P2-1) + review 3 (PF3-1, PF3-2): Kiro's and a ###-only template at size m — the tasks approval refuses the plan on port-verify alone, naming the move (baselineLate: the baseline's section first, the template's tasks under a level-2 heading of their own, renumbered — EN / PT / ES), doctor fails it and next_action names it; approved anyway, a warn (approved already); that move made, approved, the baseline served, and removing +port leaves the template's tasks active; at s a warn and the approval passes; a built-in scaffold never trips it, nor add_track +port on one nobody wrote (got " +
+    all("1.36 review 2 (P2-1) + review 3 (PF3-1, PF3-2) + review 4 (PF4-1): Kiro's and a ###-only template at size m — the tasks approval refuses the plan on port-verify alone, naming the move (baselineLate: the baseline's section first, the template's tasks under a level-2 heading of their own, keeping their numbers — never renumbered — EN / PT / ES), doctor fails it and next_action names it; approved anyway, a warn (approved already); that move made with the numbers kept, approved, the baseline (#3) served first — no gated, no heldBy, a batch of itself —, and removing +port leaves the template's tasks active (#1, #2); at s a warn and the approval passes; a built-in scaffold never trips it, nor add_track +port on one nobody wrote (got " +
       js([refK.failing, refK.checks, refH.failing, pvK, okKs.ok, okHs.ok, pvKs, pvHs, pvKa, okHm.ok, okHm.failing, ntHm.next, rmHm.ok, leftHm, ntRm.next, named, builtIn, added]) + ")", [
       () => !refK.ok && js(refK.failing) === '["port-verify"]' && (refK.checks || []).some((c) => c.id === "port-verify" && c.detail === lateK),
       () => !refH.ok && js(refH.failing) === '["port-verify"]' && (refH.checks || []).some((c) => c.id === "port-verify" && c.detail === lateH),
       () => pvK.status === "fail" && pvK.detail === lateK, () => naK.step === "fix" && naK.recommendation.includes(lateK),
       () => pvKa.status === "warn" && pvKa.detail === lateK + " " + P.approvedAlready,
-      () => okHm.ok && !okHm.forced, () => ntHm.next && ntHm.next.number === 1, () => named.length === 0,
-      () => rmHm.ok && leftHm.total === 2 && js(leftHm.list.map((x) => x.number)) === "[2,3]" && ntRm.next && ntRm.next.number === 2,
+      () => okHm.ok && !okHm.forced, () => named.length === 0,
+      () => ntHm.next && ntHm.next.number === 3 && ntHm.gated === undefined && ntHm.heldBy === undefined && js((ntHm.batch || []).map((x) => x.number)) === "[3]",
+      () => rmHm.ok && leftHm.total === 2 && js(leftHm.list.map((x) => x.number)) === "[1,2]" && ntRm.next && ntRm.next.number === 1,
       () => okKs.ok && !okKs.forced && okHs.ok && !okHs.forced, () => pvKs.status === "warn" && pvKs.detail === lateK, () => pvHs.status === "warn" && pvHs.detail === lateH,
       () => !builtIn.length, () => !added.length,
     ]);
