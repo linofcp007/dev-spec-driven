@@ -301,6 +301,9 @@ const PTBR_WORDS = {
   guardado: "armazenado", guardada: "armazenada", guardados: "armazenados", guardadas: "armazenadas", "guarda-o": "armazena-o",
   "guarda-a": "armazena-a", "guarda-os": "armazena-os", "guarda-as": "armazena-as", fornecedor: "provedor", fornecedores: "provedores",
   gerir: "gerenciar", gerido: "gerenciado", gerida: "gerenciada", geridos: "gerenciados", geridas: "gerenciadas",
+  // software that manages something is a "gerenciador" in Brazil ("gerenciadores de senhas", "gerenciador de pacotes"); the
+  // pt strings say "gestor" of software only — a person in charge is "o responsável" (1.37.0 review 1)
+  gestor: "gerenciador", gestores: "gerenciadores",
   pormenor: "detalhe", pormenores: "detalhes", pormenorizado: "detalhado", pormenorizada: "detalhada", percentagem: "porcentagem",
   percentagens: "porcentagens", descarregar: "baixar", descarregado: "baixado", subscrição: "assinatura", subscrições: "assinaturas",
   correr: "executar", corre: "roda", correm: "rodam", correu: "rodou", correram: "rodaram", corrido: "executado", corrida: "executada",
