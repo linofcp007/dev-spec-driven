@@ -1592,7 +1592,7 @@ const msg = {
         "img-no-alt": "uma <img> sem alt — dizer o que mostra, ou alt=\"\" quando é decoração (WCAG 1.1.1)",
         "outline-removed": "o contorno de foco é removido e nenhum estilo de foco do projeto o substitui — manter um indicador visível (:focus-visible com um contorno, um anel ou uma borda; WCAG 2.4.7)",
         "click-no-keyboard": "um handler de clique num elemento que o teclado não alcança — usar um <button> ou um <a href>, ou torná-lo focável: um tabindex, com um role e um handler de tecla (WCAG 2.1.1)",
-        "paste-blocked": "um handler de colar cancela a colagem sem ler a área de transferência — nunca bloquear o colar: gestores de palavras-passe, códigos longos (WCAG 3.3.8)",
+        "paste-blocked": "um handler de colar cancela a colagem sem ler a área de transferência — nunca bloquear o colar: gestores de palavras-passe, códigos longos (WCAG 3.3.8 num passo de autenticação ou de código; noutros sítios, um defeito de usabilidade)",
         "transition-all": "transition: all (ou sem propriedade) anima todas as propriedades que mudam, também as de layout — listar as que se devem mover",
       },
       uiSilenced: (n) => `  (${n} ${n === 1 ? "silenciada" : "silenciadas"} por um comentário ui-check-off)`,

@@ -1652,7 +1652,7 @@ const msg = {
         "img-no-alt": "an <img> without alt — say what it shows, or alt=\"\" when it is decoration (WCAG 1.1.1)",
         "outline-removed": "the focus outline is removed and no focus style of the project replaces it — keep a visible indicator (:focus-visible with an outline, a ring or a border; WCAG 2.4.7)",
         "click-no-keyboard": "a click handler on an element the keyboard cannot reach — use a <button> or an <a href>, or make it focusable: a tabindex, with a role and a key handler (WCAG 2.1.1)",
-        "paste-blocked": "a paste handler cancels the paste without reading the clipboard — never block paste: password managers, long codes (WCAG 3.3.8)",
+        "paste-blocked": "a paste handler cancels the paste without reading the clipboard — never block paste: password managers, long codes (WCAG 3.3.8 at a sign-in or code step; a usability defect elsewhere)",
         "transition-all": "transition: all (or no property) animates every property that changes, layout ones too — list the ones that should move",
       },
       uiSilenced: (n) => `  (${n} silenced by a ui-check-off comment)`,

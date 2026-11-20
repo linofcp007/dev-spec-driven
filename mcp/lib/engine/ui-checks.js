@@ -4,7 +4,8 @@
  * dev-spec-driven engine — the UI checks (1.37): anti-patterns in a +ui feature's view / style files that are wrong whatever
  * the taste. Six rules, ids English-stable, each with a level:
  *   warn   — the feature report AND one finish warning (never a blocker): `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1),
- *            `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked` (3.3.8);
+ *            `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked` (3.3.8 at a sign-in or code step; a
+ *            usability defect elsewhere);
  *   report — the feature report only: `transition-all` (certain as syntax, a guideline as a finding — shadcn's own Button,
  *            Switch and Sidebar ship it, so `shadcn add` would earn a finish warning on kit code).
  * Static, bounded, linear in what it reads, read-only. A file is read through viewLines (design-system.js: the ONE line walk —

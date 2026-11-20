@@ -151,11 +151,13 @@ The feature report also reads the feature's view and style files for defects no 
 50 findings (rule, file, line), the total, a count per rule. For a +ui feature, a warning of `spec_finish` too, never a blocker:
 `zoom-disabled` (a viewport that blocks zoom — WCAG 1.4.4), `img-no-alt` (a rendered `<img>` with no alt — 1.1.1),
 `outline-removed` (`outline: none` on an element, `*` or `:focus` while neither the feature's files nor any stylesheet of the project holds a focus
-style — 2.4.7), `click-no-keyboard` (a click handler on an element the keyboard cannot reach: no role, `tabindex` or
-key handler — 2.1.1), `paste-blocked` (an inline paste handler that cancels — 3.3.8). In the report alone:
-`transition-all` (kits ship it). Silence one finding with a comment `ui-check-off: <rule-id> <why>` on its line or the
-line above: counted, never listed. A doubt is never judged: a named handler, a spread (`{...props}`), a tag inside an
-attribute or a one-line template literal, Pug, a tag past 100 attributes or 30 lines.
+style — 2.4.7), `click-no-keyboard` (a click handler on an element the keyboard cannot reach: no `tabindex` — a role or a
+key handler alone is not enough — 2.1.1), `paste-blocked` (an inline paste handler that cancels — 3.3.8 at a sign-in or
+code step, a usability defect elsewhere). In the report alone: `transition-all` (kits ship it). Silence one finding with a
+comment `ui-check-off: <rule-id> <why>` on its line or alone on the line above (a stylesheet's: its declaration's): counted,
+never listed; only this comment silences (a linter's is not read) — an `<a>` a parent gives its href (Next's
+`legacyBehavior`) is one to silence. A doubt is never judged: a named paste handler, a click whose body holds a control or a
+slot, a spread (`{...props}`), a tag inside an attribute or a one-line template literal, Pug, a tag past 100 attributes or 30 lines.
 
 ---
 

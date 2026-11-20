@@ -1200,7 +1200,9 @@ reads no view file for them (CRIT_X decision 3 — one shared project pass is 1.
 wrong finding sends a team to fix code that is right.
 - **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the feature report AND finish's warning, never a blocker:
   `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1), `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked`
-  (3.3.8); `report` — the feature report alone: `transition-all` (certain as syntax, a guideline as a finding: shadcn's own
+  (3.3.8 at a sign-in or code step — W3C scopes it to authentication; elsewhere a usability defect, Vercel's "never block
+  paste": review 1 of 1.37); `report` — the feature report alone: `transition-all` (certain as syntax, a guideline as a
+  finding: shadcn's own
   Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
 - **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
   `DS_LINE_MAX`, its comments out, `cut` when it was longer) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
@@ -1221,7 +1223,8 @@ wrong finding sends a team to fix code that is right.
   that looked again from the next `<` measured 1,230× plain JSX). What that leaves unjudged, and what else is (said in the
   user docs): a tag nested in an attribute (`icon={<img />}`), a tag starting in the lines a failed read took, a tag of more
   than `DS_TAG_ATTRS` (100) attributes, tags in a one-line template literal (lit, innerHTML), Pug, the JSX of a markup
-  file's `<script lang="tsx">`, a named handler (never followed).
+  file's `<script lang="tsx">`, a named handler's body (never followed: a named paste handler is not judged, a named click
+  handler is judged on its element and body alone — the user docs said "a named handler" of both: review 1 of 1.37).
 - **Attributes** (`attributesOf`) — a brace token where a name stands is a spread (`{...props}`, `{...getRootProps()}`,
   `{{attrs}}`: it may hold any attribute — img-no-alt and click-no-keyboard excuse it) unless it holds one identifier
   (Svelte's `{alt}`); so is a binding with no argument (`RE_OBJECT_BIND`: Vue's `v-bind="$attrs"`, Alpine's `x-bind="obj"` —
