@@ -374,17 +374,21 @@ function transitionAll(prop, value) {
 
 // --- Tailwind's utilities --------------------------------------------------------------------------------------------------------
 // A line's class-like tokens (cut at blanks, quotes and the punctuation code puts around a string) — variants, then the
-// utility: `transition-all` (any variants, `!`); an outline removal (`outline-none`, `outline-hidden`, `outline-0`) under
-// `focus:` / `focus-visible:` — a bare one is not judged (shadcn puts it on focus-managed containers and activedescendant
-// options); and a FOCUS STYLE: any other utility under a focus variant (`focus-visible:ring-2`, `group-focus:…`) that draws
-// something — never one valued `0` / `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`: the forms plugin's
-// ring removed — review 1 of 1.37).
+// utility: `transition-all` (any variants, `!`); an outline removal (`outline-none`, `outline-hidden`, `outline-0`) under a
+// focus variant — a bare one is not judged (shadcn puts it on focus-managed containers and activedescendant options); and a
+// FOCUS STYLE: any other utility under a focus variant (`focus-visible:ring-2`, `group-focus:…`) that draws something —
+// never one valued `0` / `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`: the forms plugin's ring
+// removed — review 1 of 1.37). A FOCUS VARIANT: one holding `focus` as a part delimited by `-`, `[`, `]` or its ends —
+// `focus`, `focus-visible`, `group-focus`, `peer-focus-within`, Headless UI's `data-[focus]` / `data-focus` /
+// `ui-focus-visible`, Tailwind 4's `has-focus-visible` — never one a `not` part negates (`not-data-focus`), a group's name
+// (`group-focus/item`) aside: ONE predicate for a removal under it and a focus style under it (review 1 of 1.37: Headless UI's
+// documented Button warned).
 // → whether the text holds a focus style.
 const RE_TW_PICK = /transition-all|outline-|focus/;
 const RE_TW_SPLIT = /[\s"'`{}(),;=<>]+/;
-const RE_TW_FOCUS = /^(?:(?:group|peer)-)?focus(?:-visible|-within)?(?:\/[\w-]+)?$/;
 const RE_TW_REMOVAL = /^outline-(?:none|hidden|0)$/;
 const RE_TW_NOTHING = /(?:^|-)(?:0|none|hidden|transparent)$/;
+const isFocusVariant = (v) => { const parts = v.replace(/\/[\w-]+$/, "").split(/[-[\]]/); return parts.includes("focus") && !parts.includes("not"); };
 function utilities(s, line, add) {
   if (!RE_TW_PICK.test(s)) return false;
   let focus = false;
@@ -393,8 +397,9 @@ function utilities(s, line, add) {
     const parts = tok.split(":");
     const util = parts.pop().replace(/^!|!$/g, "");
     if (util === "transition-all") { add("transition-all", line, tok); continue; }
-    if (!util) continue;
-    if (RE_TW_REMOVAL.test(util)) { if (parts.some((v) => v === "focus" || v === "focus-visible")) add("outline-removed", line, tok); } else if (!RE_TW_NOTHING.test(util) && parts.some((v) => RE_TW_FOCUS.test(v))) focus = true;
+    if (!util || !parts.some(isFocusVariant)) continue;
+    if (RE_TW_REMOVAL.test(util)) add("outline-removed", line, tok);
+    else if (!RE_TW_NOTHING.test(util)) focus = true;
   }
   return focus;
 }

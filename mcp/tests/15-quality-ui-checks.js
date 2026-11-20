@@ -237,7 +237,12 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       ["b.scss", ".field {\n  &:focus-within { border-color: $ring; }\n}\n", true], ["c.scss", ":focus-visible {\n  .icon { color: $ring; }\n}\n", true],
       ["d.css", ":focus { outline: none; }\n:focus-visible { outline: none; }\n", false], ["e.css", ".btn { @apply focus-visible:ring-2; }\n", true],
       ["f.css", ".btn:hover { color: red; }\n.btn { @apply focus:outline-none; }\n", false], ["G.tsx", "<a className=\"group-focus:underline\" />\n", true],
-      ["H.tsx", "<input className=\"focus:outline-none\" />\n", false], ["I.tsx", "<div className=\"hover:bg-muted [&:focus]:x\" />\n", false],
+      // (an arbitrary variant holding `focus` between its brackets is a focus variant: review 1 of 1.37, S4's one predicate)
+      ["H.tsx", "<input className=\"focus:outline-none\" />\n", false], ["I.tsx", "<div className=\"hover:bg-muted [&:focus]:x\" />\n", true],
+      // (S4: Headless UI's and Tailwind 4's focus variants are focus variants; a `not` part negates one; `focused` is no part)
+      ["Q.tsx", "<button className=\"focus:outline-none data-[focus]:outline-1 data-[focus]:outline-white\" />\n", true], ["R.tsx", "<button className=\"focus:not-data-focus:outline-none data-focus:outline\" />\n", true],
+      ["S.tsx", "<button className=\"focus:outline-hidden ui-focus-visible:ring-2\" />\n", true], ["T.tsx", "<label className=\"has-focus-visible:ring-2\" />\n", true],
+      ["U.tsx", "<a className=\"group-focus/item:underline\" />\n", true], ["V.tsx", "<a className=\"not-focus:ring-2 data-[state=focused]:ring-2\" />\n", false],
       // (review 1 of 1.37, S3: a declaration or a utility that draws nothing — `none`, a zero, `transparent` — is no focus style)
       ["j.css", ".btn:focus { outline: none; box-shadow: none; }\n", false], ["k.css", ".y:focus { outline: 2px solid transparent; }\n", false],
       ["l.css", ".z:focus { box-shadow: 0 0 0 2px transparent, 0 0 0 4px #2563eb; }\n", true], ["m.css", ".w:focus { border: 0 none; box-shadow: none !important; }\n", false],
@@ -245,10 +250,13 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       ["P.tsx", "<input className=\"focus:outline-none focus:ring-2\" />\n", true]];
     const facts = cases.map(([rel, text]) => run(text, "src/" + rel).focus);
     const removed = { bs: got(".form-control:focus,\n.btn:focus {\n  outline: none;\n  box-shadow: none;\n}\n", "src/styles/overrides.css"),
-      important: got("*:focus {\n  outline: none !important;\n  box-shadow: none !important;\n}\n", "src/styles/overrides.scss"), transparent: got(".close:focus { outline: 2px solid transparent; }\n", "src/close.css") };
+      important: got("*:focus {\n  outline: none !important;\n  box-shadow: none !important;\n}\n", "src/styles/overrides.scss"), transparent: got(".close:focus { outline: 2px solid transparent; }\n", "src/close.css"),
+      // (S4: a removal under any focus variant is a candidate — the same predicate as a focus style's; under a negated one it is not)
+      variants: got(lines("<i className=\"data-[focus]:outline-none\" />", "<i className=\"focus-within:outline-hidden\" />", "<i className=\"not-focus:outline-none\" />", "<i className=\"hover:outline-none\" />"), "src/V.tsx") };
     all("1.37 UI checks: a file's focus style — a :focus / :focus-visible / :focus-within rule that styles something (a list, nested, an inner rule), a Tailwind focus-variant utility (group-focus too, in an @apply too); never a removal alone, a hover style, a declaration or utility that draws nothing (`box-shadow: none`, a transparent outline, `focus:ring-0`, `focus:shadow-none`); Bootstrap's `outline: none; box-shadow: none` override is a candidate (got " + js({ facts, removed }) + ")", {
       exact: () => js(facts) === js(cases.map((c) => c[2])),
       candidates: () => js(removed.bs) === js(["outline-removed@3"]) && js(removed.important) === js(["outline-removed@2"]) && js(removed.transparent) === js([]),
+      variants: () => js(removed.variants) === js(["outline-removed@1", "outline-removed@2"]),
     });
   }
 

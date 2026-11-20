@@ -1262,11 +1262,15 @@ wrong finding sends a team to fix code that is right.
   an element focusable by default with no pseudo-class ("element"), or holds `:focus` itself — never -visible / -within —
   while the rule's extent, nested blocks included, declares nothing else that draws ("focus": Bootstrap's `outline: 0;
   box-shadow: …` replaces it; its `outline: none; box-shadow: none` override does not); never a selector naming
-  focus-visible, `@media print`, a class alone, a rule that never closes. Tailwind's
-  `focus:` / `focus-visible:` + `outline-none` / `outline-hidden` / `outline-0` too (a bare one is not: shadcn puts it on
-  focus-managed containers and activedescendant options). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` /
-  `:focus-within` (or inside one) that declares something that DRAWS; a Tailwind focus-variant utility (`group-` / `peer-`
-  too) that is no removal and draws, in a class list or an `@apply`. What draws nothing is decided BY VALUE, once for both
+  focus-visible, `@media print`, a class alone, a rule that never closes. Tailwind's `outline-none` / `outline-hidden` /
+  `outline-0` under a focus variant too (a bare one is not: shadcn puts it on focus-managed containers and activedescendant
+  options). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` / `:focus-within` (or inside one) that declares
+  something that DRAWS; a Tailwind utility under a focus variant that is no removal and draws, in a class list or an
+  `@apply`. A FOCUS VARIANT (`isFocusVariant`, ONE predicate for a removal under it and a focus style under it — review 1
+  of 1.37: Headless UI's documented Button warned): a variant holding `focus` as a part delimited by `-`, `[`, `]` or its
+  ends — `focus`, `focus-visible`, `group-focus/name`, `peer-focus-within`, `data-[focus]`, `data-focus`,
+  `ui-focus-visible`, `has-focus-visible`, an arbitrary `[&:focus]` — never one a `not` part negates (`not-data-focus`).
+  What draws nothing is decided BY VALUE, once for both
   readers (review 1 of 1.37 — a ring-killing override was a focus style that excused every removal of the project):
   `drawsNothing`, a declaration each of whose comma items has `transparent` as its colour or holds nothing but `none` and
   zeros (`box-shadow: none`, `border: 0`, `outline: 2px solid transparent`), and `RE_TW_NOTHING`, a utility valued `0` /
