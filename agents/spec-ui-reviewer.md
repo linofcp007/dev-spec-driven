@@ -21,9 +21,10 @@ capture, and every `floor-*` one, is judged on the **floor**. A prompt whose fir
 ## Inputs
 
 The controller gives you:
-- the **captures**: for each view and state, the reference image (a design export or a capture of the approved HTML
-  prototype) and the build's capture, both taken at the same viewport, theme and locale — the paths, plus the view, the
-  state and those settings; a floor capture's `.json` (its measures); whether the locale is a pseudo-locale;
+- the **captures**: for each view and state, the reference image where there is one (a design export or a capture of
+  the approved HTML prototype) and the build's capture, both taken at the same viewport, theme and locale — the paths,
+  plus the view, the state and those settings; a floor capture's `.json` (its measures); whether the locale is a
+  pseudo-locale;
 - the **scope**: what this task built (a view, a region of it, a state) — judge only that;
 - in verdict mode, the open findings (`U1…`) and each capture's `.prev.png`;
 - `design.md` (read its `[UI]` sections only) and `.specs/steering/ui.md` when it exists.

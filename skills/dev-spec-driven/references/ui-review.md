@@ -47,10 +47,11 @@ Capture the views and states this task built, never the whole app.
 - **No way to capture** (no headless browser, no script, no running app): ledger `Task N: ui review — skipped (no
   capture tool)` and say so at the checkpoint. Never "passed".
 
-**The floor** — for every build capture with no reference beside it, three measured captures, taken by a tool that
-sets the viewport and records the width it got (Playwright's `viewport`, Puppeteer's `setViewport`) — never the Chrome
-command line (it lays a 320-px window out ~489 px wide). Beside each, `<name>.json`: the document's `scrollWidth`,
-`clientWidth` and the width got. A measured width other than the one asked makes the capture INVALID.
+**The floor** — for each view with no reference, three measured captures of its worst case (else its first loaded
+state), taken by a tool that sets the viewport and records the width it got (Playwright's `viewport`, Puppeteer's
+`setViewport`) — never the Chrome command line (it lays a 320-px window out ~489 px wide). Beside each,
+`<name>.json`: the document's `scrollWidth`, `clientWidth` and the width got. A measured width other than the one
+asked makes the capture INVALID.
 
 | Kind | Settings | WCAG 2.2 |
 |---|---|---|
@@ -59,9 +60,9 @@ command line (it lays a 320-px window out ~489 px wide). Beside each, `<name>.js
 | `floor-focus` | the review viewport, Tab pressed until focus is inside the task's region (50 at most) — keys only, never a click or a script's `focus()` | 2.4.7, 2.4.11 |
 
 `floor-spacing` (1.5 line height, 2em paragraphs, .12em letters, .16em words — 1.4.12) only where the script can add a
-style. Its state: the worst case if built, else the first loaded one. On mobile: the smallest supported width and the OS
-text size closest to 200 % (iOS AX2, Android scale 2.0); Android's pseudo-locales only where the build enables them.
-A capture the tool can't take is listed under Not judged and ledgered — never clean.
+style. On mobile: the smallest supported width and the OS text size closest to 200 % (iOS AX2, Android scale 2.0);
+Android's pseudo-locales only where the build enables them. A capture the tool can't take is listed under Not judged
+and ledgered — never clean.
 
 ## 3. Dispatch — the images only
 
@@ -69,8 +70,9 @@ A capture the tool can't take is listed under Not judged and ledgered — never 
 viewport, theme, locale — say when the locale is a pseudo-locale), the task's scope in one line, the `design.md` path
 and `.specs/steering/ui.md` when it exists. Never the code, the diff, the brief or your view of it. **Pair or floor is a
 property of the files:** a `--build.png` with its `--ref.png` beside it is a pair; every other build capture, and every
-`floor-*` one, is judged on the floor. At most 16 images a dispatch, the `.prev.png` counted. Size l: two independent
-reviewers in one message; a difference both report counts at once, one only one reports is confirmed first (§4).
+`floor-*` one, is judged on the floor. At most 16 images a dispatch, the `.prev.png` counted — past that, one per
+view. Size l: two independent reviewers in one message; a difference both report counts at once, one only one reports
+is confirmed first (§4).
 
 ## 4. The verdict
 
