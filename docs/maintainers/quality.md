@@ -1232,9 +1232,22 @@ wrong finding sends a team to fix code that is right.
   not literally false —, no `display:none` in its own style: the Meta Pixel's `<noscript>` image), no spread.
 - **click-no-keyboard** — a click handler on a lower-case element (no `-`, `.`, `:`) the keyboard cannot reach: not focusable
   by default (`FOCUSABLE`: HTML's interactive content, `summary`, `option`; `a` / `area` only with `href` or `routerLink`),
-  no `role`, `tabindex`, key handler (keydown / keyup / keypress, any syntax), `aria-hidden`, `inert` or spread; never an
-  empty element (its closing tag on the line) or a self-closing one (a modal's backdrop), `.self` / `|self`, a bare
-  `@click.stop`, an inline handler holding `.focus(`, `stopPropagation` or `target` (CRIT_1 must-fix 6).
+  no `tabindex`, no role whose focus its container manages (`ROLE_REACHED`: ARIA's composite items — option, menuitem*,
+  treeitem, gridcell, row, tab, column / row header — and presentation / none), not `aria-hidden` / `inert`, no spread: a role
+  or a key handler ALONE reaches nothing (review 1 of 1.37: `<div role="button" onClick>` was excused, the legend said "a
+  role, a tabindex and a key handler" and any one silenced it). Never a listener off the element (`RE_OFF_ELEMENT`: `.self` /
+  `|self`, Alpine's `.outside` / `.away` / `.window` / `.document`), a bare `@click.stop`, an inline handler holding
+  `.focus(`, `stopPropagation` or `target` (CRIT_1 must-fix 6), a self-closing element (a modal's backdrop). Such a CANDIDATE
+  is judged by its BODY (`clickBodies`, inside the tag reader — review 1 of 1.37, Laravel's starter kits: a wrapper whose
+  slot holds the `<button>`, a backdrop holding its empty overlay layer, 8 of Jetstream's 8 findings): read to its matching
+  close tag within the tag reader's bound (30 lines / 4,000 characters from its `>`: past it not judged, counted as
+  `tag-length`), it is a finding only when the body holds content a user reads (literal text, an expression that is no slot
+  outlet) and nothing that is or may render a control — a tag focusable by default (its click bubbles), a component /
+  custom element / member, `<slot>` (and `<ng-content>`), a slot outlet (`{children}`, `{props.children}`, `{@render …}`, a
+  Blade `{{ $x }}`), a line cut at `DS_LINE_MAX`: a doubt, clearing every candidate open (the control is in each body). An
+  empty body or one of elements alone (an overlay layer, an icon `<svg>`) is a doubt too. Nested candidates each get the
+  text seen while they are open (`textMark`); a close tag pops the elements opened since to its own name, an unmatched one
+  costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below).
 - **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)
   and reads no `clipboardData` / `getData`, or a bare `.prevent` / `|preventDefault`; never a named handler.
 - **zoom-disabled** — a non-CSS line's `user-scalable=no | 0` or `maximum-scale` under 2 (a `<meta>`'s content), Next's

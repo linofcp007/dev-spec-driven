@@ -64,7 +64,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       "  if (count<limit && open) {", // 3: a comparison, no tag (A1) — the div below is still read
       "    track();", "  }", "  return (", "    <>",
       "      <div className=\"fixed inset-0 bg-black/50\" onClick={onClose} />", // 8: self-closing (a backdrop)
-      "      <div className=\"tile\" onClick={() => setOpen(true)}>", // 9: FINDING
+      "      <div className=\"tile\" onClick={() => setOpen(true)}>Open</div>", // 9: FINDING (text, no control in its body)
       "        <img src={items[0].src} />", // 10: FINDING
       "        <img src={a > b ? x : y} onLoad={() => go()} alt=\"\" />", // 11: braces hold the `>` (A4)
       "        <img src=\"/logo.svg\" alt=\"Acme\" />", "        <img src=\"/x.png\" aria-label=\"chart\" />", "        <img src=\"/x.png\" aria-labelledby=\"cap\" />",
@@ -74,7 +74,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       "        <img src=\"/x.png\" data-alt=\"x\" />", // 22: FINDING
       "        <img {...imgProps} />", "        <Image src=\"/x.png\" />", "        <img-viewer src=\"/x.png\" />",
       "        <div title=\"1 > 0\" onClick={go}>more</div>", // 26: FINDING (the quotes hold the `>`, A3)
-      "        <div onClick={go} role=\"button\" tabIndex={0} onKeyDown={key}>ok</div>", "        <div onClick={go} tabIndex={-1}>ok</div>", "        <div onClick={go} onKeyDown={key}>ok</div>",
+      "        <div onClick={go} role=\"button\" tabIndex={0} onKeyDown={key}>ok</div>", "        <div onClick={go} tabIndex={-1}>ok</div>", "        <div onClick={go} onKeyDown={key}>ok</div>", // 29: FINDING (a key handler alone: never focused)
       "        <div onClick={go} aria-hidden=\"true\">ok</div>", "        <div onClick={go} inert>ok</div>", "        <div {...getRootProps()} onClick={go}>ok</div>",
       "        <div onClick={go}></div>", // 33: empty
       "        <div onClick={() => inputRef.current?.focus()}>otp</div>", "        <div onClick={(e) => e.target === e.currentTarget && onClose()}>x</div>",
@@ -87,10 +87,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       "          row", "        </div>", "        <img", "          src=\"x\"", "          alt=\"multi", "          line\"", "        />", // 53: an alt over lines (B1)
       "        {count<limit && (", "          <div onClick={toggle}>more</div>", "        )}", // 59: FINDING (no tag after an identifier, A1)
       "        <li role=\"option\" aria-selected={sel} onClick={() => pick(o)}>o</li>",
-      "      </div>", "    </>", "  );", "}");
+      "      <p>end</p>", "    </>", "  );", "}");
     const g = got(jsx, "src/components/Gallery.tsx");
-    all("1.37 UI checks: img-no-alt / click-no-keyboard in JSX — every alt form (aria-label / -labelledby, role presentation, aria-hidden, hidden, own display:none, a spread) and every click excuse (role, tabIndex, a key handler, aria-hidden, inert, a spread, self-closing, empty, a focus-forwarding / target / stopPropagation handler, focusable by default: button, a href, summary, label) excuse; `role=\"img\"`, `aria-hidden={false}`, `display: block`, `data-alt`, `<a>` without href do not; components, custom elements, members and a nested tag are not judged; a string's tag, a comparison, a `>` in quotes or braces never derail the reader; a multi-line tag is judged at its first line (got " + js(g) + ")", {
-      exact: () => js(g) === js(["click-no-keyboard@9", "img-no-alt@10", "img-no-alt@16", "img-no-alt@18", "img-no-alt@21", "img-no-alt@22", "click-no-keyboard@26", "click-no-keyboard@37",
+    all("1.37 UI checks: img-no-alt / click-no-keyboard in JSX — every alt form (aria-label / -labelledby, role presentation, aria-hidden, hidden, own display:none, a spread) and every click excuse (tabIndex, a composite item's role, aria-hidden, inert, a spread, self-closing, empty, a focus-forwarding / target / stopPropagation handler, focusable by default: button, a href, summary, label) excuse — a key handler alone does not; `role=\"img\"`, `aria-hidden={false}`, `display: block`, `data-alt`, `<a>` without href do not; components, custom elements, members and a nested tag are not judged; a string's tag, a comparison, a `>` in quotes or braces never derail the reader; a multi-line tag is judged at its first line (got " + js(g) + ")", {
+      exact: () => js(g) === js(["click-no-keyboard@9", "img-no-alt@10", "img-no-alt@16", "img-no-alt@18", "img-no-alt@21", "img-no-alt@22", "click-no-keyboard@26", "click-no-keyboard@29", "click-no-keyboard@37",
         "click-no-keyboard@46", "click-no-keyboard@59"]),
     });
   }
@@ -98,14 +98,14 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
   { // the other syntaxes: a Vue SFC (@click, :alt, @paste.prevent, a <style scoped lang="scss"> judged as a sheet, a string in
     // its script), a Svelte component (on:click|self, a bare on:paste|preventDefault, {alt}), an Angular template ((click),
     // (keyup.enter), [attr.alt], routerLink), plain HTML with the Meta Pixel's <noscript> image and a <script> block
-    const vue = lines("<template>", "  <div class=\"card\" @click=\"open = true\">", // 2: FINDING
+    const vue = lines("<template>", "  <div class=\"card\" @click=\"open = true\">Open the card</div>", // 2: FINDING
       "    <img :src=\"cover\" />", // 3: FINDING
       "    <img :src=\"cover\" :alt=\"title\" />", "    <img :src=\"cover\" v-bind:alt=\"title\" />", "    <img :src=\"cover\" @click.alt=\"zoom\" />", // 6: FINDING (a key modifier is no alt)
       "    <span @click.stop>stop only</span>", "    <span @click.stop=\"toggle\">x</span>", // 8: FINDING (a handler)
       "    <div @click.self=\"close\">backdrop</div>", "    <li v-on:click=\"select(item)\" @keydown.enter=\"select(item)\" tabindex=\"0\">x</li>",
       "    <input @paste.prevent />", // 11: FINDING
       "    <input @paste.prevent=\"sanitize\" />", "    <p>Write outline: none in your CSS and transition: all if you must</p>", "    <router-link to=\"/x\" @click=\"go\">x</router-link>",
-      "  </div>", "</template>", "<script setup>", "const html = '<img src=\"x.png\">'", "const style = { transition: 'opacity .3s' }", "</script>",
+      "  <p>end</p>", "</template>", "<script setup>", "const html = '<img src=\"x.png\">'", "const style = { transition: 'opacity .3s' }", "</script>",
       "<style scoped lang=\"scss\">", ".card:focus { outline: none; }", // 22: FINDING (a candidate)
       ".card {", "  transition: all .3s ease;", "}", "</style>"); // 24: FINDING (report)
     const svelte = lines("<script>", "  export let open;", "  export let src, alt;", "</script>", "", "{#if open}", "  <div class=\"backdrop\" on:click|self={() => (open = false)}>",
@@ -131,6 +131,50 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       svelte: () => js(got(svelte, "src/lib/Modal.svelte")) === js(["click-no-keyboard@10", "click-no-keyboard@11", "img-no-alt@13", "paste-blocked@14"]),
       angular: () => js(got(ng, "src/app/rows/rows.component.html")) === js(["click-no-keyboard@1", "click-no-keyboard@3", "img-no-alt@5"]),
       html: () => js(got(html, "public/index.html")) === js(["click-no-keyboard@17", "img-no-alt@18", "paste-blocked@19"]),
+    });
+  }
+
+  { // click-no-keyboard by its body (review 1 of 1.37, Laravel's starter kits): a click candidate is judged only when its body —
+    // read to its matching close tag within 30 lines / 4,000 characters — holds content a user reads (text, an expression that is
+    // no slot outlet) and nothing that is or may render a control (focusable by default, a component / custom element, <slot>,
+    // `{children}`, `{@render}`, a Blade `{{ $slot }}`); Alpine's `.outside` / `.away` / `.window` / `.document` are no click on the
+    // element; a role or a key handler alone reaches nothing (D1) — a composite item's role, presentation / none do
+    const alpine = lines("<div x-data=\"{ open: false }\">", "    <button @click=\"open = ! open\">Toggle</button>", "    <div x-show=\"open\" @click.outside=\"open = false\">Contents...</div>",
+      "    <div x-show=\"open\" @click.away=\"open = false\">Contents...</div>", "    <div x-show=\"open\" x-on:click.outside=\"open = false\">Contents...</div>",
+      "    <div x-on:click.window=\"track($event)\">Page</div>", "    <div x-on:click.document=\"track($event)\">Page</div>", "    <div @click=\"open = ! open\">Contents...</div>", // 8: FINDING
+      "</div>");
+    const breeze = lines("<div class=\"relative\" x-data=\"{ open: false }\" @click.outside=\"open = false\" @close.stop=\"open = false\">", "    <div @click=\"open = ! open\">", "        {{ $trigger }}", "    </div>", "",
+      "    <div x-show=\"open\" class=\"absolute z-50 mt-2 rounded-md shadow-lg\" style=\"display: none;\" @click=\"open = false\">", "        <div class=\"rounded-md ring-1 ring-black ring-opacity-5\">",
+      "            {{ $content }}", "        </div>", "    </div>", "</div>", "<div x-show=\"show\" class=\"fixed inset-0 transform transition-all\" x-on:click=\"show = false\" x-transition:enter=\"ease-out duration-300\">",
+      "    <div class=\"absolute inset-0 bg-gray-500 opacity-75\"></div>", "</div>", "<div @click=\"open = true\">{{ __('Profile') }}</div>"); // 15: FINDING (an echo that is no bare variable)
+    const vue = lines("<template>", "  <div class=\"relative\">", "    <div @click=\"open = !open\">", "      <slot name=\"trigger\" />", "    </div>", "    <div @click=\"open = !open\">",
+      "      <button type=\"button\">Menu</button>", "    </div>", "    <div @click=\"toggle\">More <slot /></div>", "    <div @click=\"pick\">{{ item.name }}</div>", // 10: FINDING
+      "    <div class=\"fixed inset-0\" @click=\"close\">", "      <div class=\"absolute inset-0 bg-gray-500 opacity-75\" />", "    </div>", "  </div>", "</template>");
+    const jsx = lines("export const Trigger = ({ children, toggle, open, pick, label, save, props }) => (", "  <>", "    <div onClick={toggle}>", "      {children}", "    </div>",
+      "    <div onClick={toggle}>{props.children}</div>", "    <div onClick={open}>Open <ChevronIcon /></div>", "    <div onClick={pick}>{label}</div>", // 8: FINDING
+      "    <div onClick={save}>Save</div>", // 9: FINDING
+      "    <div onClick={toggle}>{/* an icon */}<svg viewBox=\"0 0 24 24\"><path d=\"M0 0h24v24H0z\" /></svg></div>", "    <div onClick={toggle}>", "      <div onClick={pick}>", // 12: FINDING (and 11, its text)
+      "        Pick", "      </div>", "    </div>", "    <div onClick={toggle}>", ...Array.from({ length: 31 }, (_, i) => "      line " + i), "    </div>", // 16: past 30 lines — not judged, counted
+      "    <div onClick={toggle}>", "      " + "w".repeat(2100), "    </div>", // a cut line — not judged
+      "    <div role=\"button\" onClick={save}>Save</div>", "    <div role=\"switch\" onClick={toggle}>On</div>", // 52, 53: FINDING (a widget role alone)
+      ...["option", "menuitem", "menuitemcheckbox", "menuitemradio", "treeitem", "gridcell", "row", "tab", "columnheader", "rowheader", "presentation", "none"].map((r) => "    <div role=\"" + r + "\" onClick={pick}>" + r + "</div>"),
+      "  </>", ");");
+    const svelte = lines("<div onclick={toggle}>{@render trigger()}</div>", "<div on:click={toggle}>{#if open}{/if}</div>", "<div on:click={toggle}>{count}</div>"); // 3: FINDING
+    const ng = lines("<div (click)=\"toggle()\">Pick <ng-content></ng-content></div>", "<div (click)=\"toggle()\">{{ row.name }}</div>"); // 2: FINDING
+    const html = lines("<div onclick=\"go()\"><p>a<p>b</div>", "<div onclick=\"go()\">x</span></div>", "<div onclick=\"go()\">x<!-- the end --></div>"); // 1, 2, 3: FINDING
+    const r = run(jsx, "src/components/Trigger.tsx");
+    const G = { alpine: got(alpine, "resources/views/components/menu.blade.php"), breeze: got(breeze, "resources/views/components/dropdown.blade.php").filter((x) => x.startsWith("click")), vue: got(vue, "src/components/Dropdown.vue"),
+      jsx: r.findings.map((f) => f.rule + "@" + f.line), svelte: got(svelte, "src/lib/Menu.svelte"), ng: got(ng, "src/app/menu/menu.component.html"), html: got(html, "public/menu.html") };
+    all("1.37 UI checks: click-no-keyboard by the element's body — text or a non-outlet expression with no control is judged; a slot / {children} / {@render} / {{ $slot }} / <ng-content> / a component / a button, an empty overlay layer, an icon, a body past 30 lines (counted) or a cut line is not; Alpine's .outside / .away / .window / .document are no click on the element; a widget role alone is judged, a composite item's role / presentation / none is not; nested candidates both judged; a close tag pops to its own name (got " +
+      js(Object.assign({ cut: r.cut }, G)) + ")", {
+      alpine: () => js(G.alpine) === js(["click-no-keyboard@8"]),
+      breeze: () => js(G.breeze) === js(["click-no-keyboard@15"]),
+      vue: () => js(G.vue) === js(["click-no-keyboard@10"]),
+      jsx: () => js(G.jsx) === js(["click-no-keyboard@8", "click-no-keyboard@9", "click-no-keyboard@12", "click-no-keyboard@11", "click-no-keyboard@52", "click-no-keyboard@53"]),
+      counted: () => js(r.cut) === js({ lines: 1, tags: 1 }),
+      svelte: () => js(G.svelte) === js(["click-no-keyboard@3"]),
+      ng: () => js(G.ng) === js(["click-no-keyboard@2"]),
+      html: () => js(G.html) === js(["click-no-keyboard@1", "click-no-keyboard@2", "click-no-keyboard@3"]),
     });
   }
 
@@ -411,7 +455,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
   { // the order, the cap (DS_LIST = 50 listed, `total` all) and the feature's file cap: 200 files read in all — a token file past
     // it is not read for the checks and `uiChecks.limits` says view-files while the report's own limits do not (its views were read)
     const g = feature("cap", ["src/rows/"]);
-    for (let i = 0; i < 30; i++) write(g.p, "src/rows/Row" + String(i).padStart(2, "0") + ".tsx", "export const R = () => (\n  <li onClick={go}>\n    <img src=\"x.png\" />\n  </li>\n);\n");
+    for (let i = 0; i < 30; i++) write(g.p, "src/rows/Row" + String(i).padStart(2, "0") + ".tsx", "export const R = () => (\n  <li onClick={go}>\n    <img src=\"x.png\" /> Row\n  </li>\n);\n");
     const r = S.designSystemReport(g.p, { name: g.slug });
     const full = feature("cap-files", ["src/views/", "src/app/globals.css"]);
     for (let i = 0; i < 200; i++) write(full.p, "src/views/V" + String(i).padStart(3, "0") + ".tsx", "export const V = () => <b>v</b>;\n");
@@ -543,6 +587,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       strings: [fill("const s = '<img src=x>' + \"<div onClick={go}>\" + `<a>`;\n"), "x.tsx"], focusRun: [fill("focus:".repeat(400) + "outline-none\n"), "x.tsx"],
       marks: [fill("{/* " + "ui-check-off:".repeat(150) + " */}\n<img src=\"x\" />\n"), "x.tsx"], transition: ["a { transition:\n" + fill("  all .2s,\n") + "}\n", "x.css"],
       nested: [fill("{".repeat(1999) + "\n"), "x.css"],
+      // (review 1 of 1.37: the click bodies — nested candidates never closed, unmatched close tags, a control in each body, an
+      // expression that never closes in a body)
+      clickNest: [fill("<div onClick={go}>".repeat(100) + "x\n"), "x.tsx"], clickClose: [fill("<div onClick={go}>x" + "</b>".repeat(200) + "</div>\n"), "x.tsx"],
+      clickControl: [fill("<div onClick={go}>x<button>b</button>\n"), "x.tsx"], clickBrace: [fill("<div onClick={go}>" + "{ (".repeat(300) + "<i>\n"), "x.tsx"],
     };
     const time = (f) => { const ts = []; for (let k = 0; k < 5; k++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
     run(plain, "x.tsx");

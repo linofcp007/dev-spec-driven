@@ -80,7 +80,7 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
 
   { // past the first 50 findings: how many more (the list is spec_scan's first 50)
     const g = feature("more", "en", ["src/rows/"]);
-    for (let i = 0; i < 30; i++) write(g.p, "src/rows/Row" + String(i).padStart(2, "0") + ".tsx", "export const R = () => (\n  <li onClick={go}>\n    <img src=\"x.png\" />\n  </li>\n);\n");
+    for (let i = 0; i < 30; i++) write(g.p, "src/rows/Row" + String(i).padStart(2, "0") + ".tsx", "export const R = () => (\n  <li onClick={go}>\n    <img src=\"x.png\" /> Row\n  </li>\n);\n");
     const r = runIn(["design-system", g.slug, "--project", g.p]);
     const T = MSG("en").cliOutput;
     all("1.37 design-system <feature> (CLI): 60 UI findings — 50 lines, then how many more, before what each means (got " + js(r.out.slice(-900)) + ")", {

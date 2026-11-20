@@ -1590,7 +1590,7 @@ const msg = {
         "zoom-disabled": "o viewport impede o zoom com os dedos (user-scalable=no, maximum-scale abaixo de 2) — deixar as pessoas ampliar (WCAG 1.4.4)",
         "img-no-alt": "uma <img> sem alt — dizer o que mostra, ou alt=\"\" quando é decoração (WCAG 1.1.1)",
         "outline-removed": "o contorno de foco é removido e nenhum estilo de foco do projeto o substitui — manter um indicador visível (:focus-visible com um contorno, um anel ou uma borda; WCAG 2.4.7)",
-        "click-no-keyboard": "um handler de clique num elemento que o teclado não alcança — usar um <button> ou um <a href>, ou dar-lhe um role, um tabindex e um handler de tecla (WCAG 2.1.1)",
+        "click-no-keyboard": "um handler de clique num elemento que o teclado não alcança — usar um <button> ou um <a href>, ou torná-lo focável: um tabindex, com um role e um handler de tecla (WCAG 2.1.1)",
         "paste-blocked": "um handler de colar cancela a colagem sem ler a área de transferência — nunca bloquear o colar: gestores de palavras-passe, códigos longos (WCAG 3.3.8)",
         "transition-all": "transition: all (ou sem propriedade) anima todas as propriedades que mudam, também as de layout — listar as que se devem mover",
       },

@@ -81,34 +81,37 @@ function readOn(cur, l, from) {
   return -1;
 }
 // → { line(n, l, cut), failed() }: each line of a file that holds tags, in order (cut: viewLines cut it at DS_LINE_MAX);
-// judge(tag, rest) for each tag read whole — tag: { name, line (its first), text (from `<` to `>`) }, rest: what follows it
-// on its last line. The next tag is looked for PAST the previous one's end (a tag nested in an attribute — `icon={<img />}` —
-// is not judged) and past a read that failed — no `>` within DS_TAG_LINES lines / DS_TAG_CHARS characters (neither it nor a
-// tag starting in the lines it read is judged; failed() counts them), or none before the end of a CUT line (what the line
-// held past the cut is unread: the read ends there, no quote or brace carried into the lines below — review 1 of 1.37) —
-// each character read once: linear (CRIT_1: a reader that looked again from the next `<` was 1,230× plain JSX on unclosed tags).
-function tagReader(script, judge) {
+// judge(tag) for each tag read whole — tag: { name, line (its first), text (from `<` to `>`) } — → CONTROL, a click candidate
+// (its body decides: clickBodies) or nothing. The next tag is looked for PAST the previous one's end (a tag nested in an
+// attribute — `icon={<img />}` — is not judged) and past a read that failed — no `>` within DS_TAG_LINES lines /
+// DS_TAG_CHARS characters (neither it nor a tag starting in the lines it read is judged; failed() counts them), or none
+// before the end of a CUT line (what the line held past the cut is unread: the read ends there, no quote or brace carried
+// into the lines below — review 1 of 1.37) — each character read once: linear (CRIT_1: a reader that looked again from the
+// next `<` was 1,230× plain JSX on unclosed tags). What lies between the tags reaches the click bodies being read (gap).
+function tagReader(script, judge, add) {
   let cur = null, inScript = false, failed = 0; // the tag being read · inside a markup file's <script> block · reads past a bound
+  const bodies = clickBodies(add, () => failed++);
   const line = (n, l, cut) => {
     let from = 0, masked = null;
     for (;;) {
       if (cur) {
         const end = readOn(cur, l, from);
         if (end === -1) {
+          // (a body being read past a tag not read whole is past its own bound by then — lineEnd)
           if (cut) cur = null; // (the line-length limit says it)
           else if (++cur.lines > DS_TAG_LINES || cur.text.length > DS_TAG_CHARS) { cur = null; failed++; } // not judged — the reader goes on below
-          return;
+          break;
         }
         const tag = cur;
         cur = null;
         from = end + 1;
         if (tag.text.length > DS_TAG_CHARS) { failed++; continue; }
-        judge(tag, l.slice(from));
+        bodies.tag(tag, judge(tag), n);
         if (!script && tag.name === "script" && !tag.text.endsWith("/>")) inScript = true;
         continue;
       }
-      if (inScript) { const e = l.indexOf("</script", from); if (e === -1) return; inScript = false; from = e + 8; continue; }
-      if (l.indexOf("<", from) === -1) return;
+      if (inScript) { const e = l.indexOf("</script", from); if (e === -1) break; inScript = false; from = e + 8; continue; }
+      if (l.indexOf("<", from) === -1) { if (bodies.pending()) bodies.gap(l, from, l.length); break; }
       if (masked === null) masked = script ? blankStrings(l) : l;
       RE_TAG_START.lastIndex = from;
       let m;
@@ -118,12 +121,82 @@ function tagReader(script, judge) {
         if (script && m.index > 0 && RE_TAG_AFTER.test(masked[m.index - 1])) continue;
         break;
       }
-      if (!m) return;
+      if (bodies.pending()) bodies.gap(masked, from, m ? m.index : masked.length);
+      if (!m) break;
       cur = { name: m[1], line: n, text: "<" + m[1], quote: "", braces: 0, lines: 1 };
       from = m.index + m[0].length;
     }
+    bodies.lineEnd(n, l.length, cut);
   };
   return { line, failed: () => failed };
+}
+// click-no-keyboard's BODIES (review 1 of 1.37: Laravel's starter kits — a wrapper whose slot holds the <button>, a backdrop
+// holding its empty overlay layer). A click candidate (an element the keyboard cannot reach — judgeTag) is judged only when
+// its body, read to its matching close tag within the tag reader's own bounds (DS_TAG_LINES lines / DS_TAG_CHARS characters
+// from its `>` — past them: not judged, counted), holds content a user reads — literal text, or an expression that is no slot
+// outlet — and nothing that is or may render a control (a CONTROL tag — a click on it bubbles to the candidate —, a slot
+// outlet, a line cut at DS_LINE_MAX): a doubt, which clears every candidate being read (the control is in each of their
+// bodies). Candidates nest: text marks each one open (textMark: those below it), a close tag pops the elements opened since,
+// to its own name (an element of that name open — counted by name: an unmatched close costs nothing). Each character once.
+const CONTROL = "control";
+// a slot outlet in a body: JSX's `{children}` / `{props.children}`, Svelte's `{@render …}`, a Blade echo of a bare variable
+// (`{{ $trigger }}`); `{#if}` / `{:else}` / `{/if}` and `{}` (a comment's braces) are no content
+const RE_OUTLET = /^(?:(?:[\w$]+\.)*children|@render\b[\s\S]*)$/, RE_BARE_ECHO = /^\$[A-Za-z_]\w*$/;
+function clickBodies(add, overBound) {
+  let cands = [], head = 0, textMark = 0, els = [], open = new Map(), seen = 0; // pending candidates (head: the outermost kept) · elements opened since
+  const pending = () => head < cands.length;
+  const reset = () => { cands = []; head = 0; textMark = 0; els = []; open = new Map(); };
+  const close = (name) => {
+    if (!open.get(name)) return;
+    for (;;) {
+      const e = els.pop();
+      open.set(e.name, open.get(e.name) - 1);
+      if (e.cand != null && e.cand >= head) { const c = cands.pop(); if (e.cand < textMark) add("click-no-keyboard", c.line, c.value); if (textMark > cands.length) textMark = cands.length; }
+      if (e.name === name) break;
+    }
+    if (!pending()) reset();
+  };
+  // what lies between tags, s[a..b): a close tag, an expression (`{…}`, `{{…}}`: an outlet is a doubt), text
+  const gap = (s, a, b) => {
+    for (let i = a; i < b && pending(); i++) {
+      const c = s[i];
+      if (c === " " || c === "\t") continue;
+      if (c === "<" && s[i + 1] === "/") {
+        let j = i + 2;
+        while (j < b && !/[\s<>]/.test(s[j])) j++;
+        close(s.slice(i + 2, j));
+        while (j < b && (s[j] === " " || s[j] === "\t")) j++;
+        i = j < b && s[j] === ">" ? j : j - 1;
+        continue;
+      }
+      if (c === "{") {
+        const two = s[i + 1] === "{", e = closing(s, i, b), end = e === -1 ? b : e;
+        const inner = s.slice(i + (two ? 2 : 1), two && s[end - 1] === "}" ? end - 1 : end).trim();
+        if ((two ? RE_BARE_ECHO : RE_OUTLET).test(inner)) { reset(); return; }
+        if (inner && !/^[#:/]/.test(inner)) textMark = cands.length;
+        i = end;
+        continue;
+      }
+      textMark = cands.length;
+    }
+  };
+  return {
+    pending, gap,
+    tag: (t, k, n) => {
+      if (k === CONTROL) { if (pending()) reset(); return; }
+      if (t.text.endsWith("/>") || (!k && !pending())) return;
+      if (k) cands.push({ line: t.line, value: k.value, n0: n, at: seen });
+      els.push({ name: t.name, cand: k ? cands.length - 1 : null });
+      open.set(t.name, (open.get(t.name) || 0) + 1);
+    },
+    // a line read: a cut one may hold a control past the cut; a candidate whose body went past the bound is not judged
+    lineEnd: (n, len, cut) => {
+      seen += len + 1;
+      if (cut && pending()) reset();
+      while (pending() && (n - cands[head].n0 >= DS_TAG_LINES || seen - cands[head].at > DS_TAG_CHARS)) { head++; overBound(); }
+      if (!pending() && els.length) reset();
+    },
+  };
 }
 
 // --- a tag's attributes ----------------------------------------------------------------------------------------------------------
@@ -133,9 +206,9 @@ function tagReader(script, judge) {
 // identifier, Svelte's shorthand `{alt}`, which names that attribute.
 const RE_NAME_STOP = /[\s=>/"'`{]/;
 const RE_IDENT = /^[A-Za-z_$][\w$]*$/;
-function closing(s, i) { // s[i] is `{` → the index of the `}` that closes it (quotes and nested braces in between), or -1
+function closing(s, i, to = s.length) { // s[i] is `{` → the index (before `to`) of the `}` that closes it (quotes and nested braces in between), or -1
   let depth = 0, quote = "";
-  for (let k = i; k < s.length; k++) {
+  for (let k = i; k < to; k++) {
     const c = s[k];
     if (quote) { if (c === BS) k++; else if (c === quote) quote = ""; continue; }
     if (c === "\"" || c === "'" || c === "`") quote = c;
@@ -205,14 +278,23 @@ const literal = (v) => (v == null ? "" : v.replace(/^[{\s"'`]+|[}\s"'`]+$/g, "")
 const FOCUSABLE = new Set(["a", "area", "audio", "button", "details", "embed", "iframe", "input", "label", "object", "option", "select", "summary", "textarea",
   "video"]);
 const RE_ELEMENT = /^[a-z][a-z0-9]*$/; // an element — never a component (`Card`), a custom element (`my-el`), a member (`motion.div`), `svelte:window`
-const RE_KEY_EVENT = /^key(?:down|up|press)$/;
+// a role the keyboard reaches without a tabindex of its own: ARIA's composite widget items, whose container moves focus to them
+// (a roving tabindex, aria-activedescendant), and presentation / none (no widget at all)
+const ROLE_REACHED = new Set(["option", "menuitem", "menuitemcheckbox", "menuitemradio", "treeitem", "gridcell", "row", "tab", "columnheader", "rowheader",
+  "presentation", "none"]);
+// a listener modifier that takes the click off the element itself: `.self` / `|self`, Alpine's `.outside` / `.away` (a click
+// elsewhere), `.window` / `.document` (the page's)
+const RE_OFF_ELEMENT = /^(?:self|outside|away|window|document)$/;
 const RE_DISPLAY_NONE = /display\s*:\s*["'`]?none(?![\w-])/i;
 const RE_DELEGATES = /\.focus\(|stopPropagation|target/i; // an inline click handler that forwards focus or reads the event's target
 const RE_CANCELS = /preventDefault|return\s+false/;
 const RE_READS_CLIPBOARD = /clipboardData|getData/;
-function judgeTag(tag, rest, add) {
+// → CONTROL (the tag is or may render a control: focusable by default, a component / custom element / member, `<slot>`, a tag
+// not read — a click inside a candidate's body reaches the keyboard through it), a click candidate { value } (clickBodies
+// judges it on its body) or nothing
+function judgeTag(tag, add) {
   const attrs = attributesOf(tag.text, tag.name.length + 1);
-  if (!attrs) return;
+  if (!attrs) return CONTROL;
   const spread = attrs.some((a) => a.spread);
   const named = new Map(), events = [];
   for (const a of attrs) {
@@ -231,21 +313,24 @@ function judgeTag(tag, rest, add) {
     const blocks = e.value == null ? e.mods.includes("prevent") || e.mods.includes("preventDefault") : RE_CANCELS.test(v);
     if (blocks && !RE_READS_CLIPBOARD.test(v)) { add("paste-blocked", tag.line, "<" + tag.name + " " + e.attr + ">"); break; }
   }
-  if (spread) return; // (a spread may hold any attribute)
+  const element = RE_ELEMENT.test(tag.name);
+  const focusable = tag.name === "a" || tag.name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(tag.name);
+  const kind = !element || focusable || tag.name === "slot" ? CONTROL : undefined;
+  if (spread) return kind; // (a spread may hold any attribute)
   // img-no-alt: `<img` (as written) with no alt in any binding, no accessible name, not decorative, rendered
   if (tag.name === "img" && !named.has("alt") && !named.has("aria-label") && !named.has("aria-labelledby") &&
     !["presentation", "none"].includes(literal(named.get("role"))) && !shown("aria-hidden") && !shown("hidden") &&
     !(named.has("style") && RE_DISPLAY_NONE.test(named.get("style") || ""))) add("img-no-alt", tag.line, "<img>");
-  // click-no-keyboard: a click handler on an element the keyboard cannot reach
+  // click-no-keyboard: a click handler on an element the keyboard cannot reach — not focusable by default, no tabindex, no role
+  // whose focus its container manages (ROLE_REACHED), not inert / aria-hidden: a role or a key handler alone reaches nothing
+  // (review 1 of 1.37); never a listener off the element itself (`.self`, Alpine's `.outside` / `.away` / `.window` /
+  // `.document`), a bare `@click.stop`, a delegating handler, a self-closing element (a modal's backdrop)
   const click = events.find((e) => e.event === "click");
-  if (!click || !RE_ELEMENT.test(tag.name)) return;
-  const focusable = tag.name === "a" || tag.name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(tag.name);
-  if (focusable || named.has("role") || named.has("tabindex") || named.has("inert") || shown("aria-hidden") || events.some((e) => RE_KEY_EVENT.test(e.event))) return;
-  // …an empty or self-closing element (a modal's backdrop), a handler for the element itself or a delegating one
-  const r = rest.trimStart();
-  if (tag.text.endsWith("/>") || (r.startsWith("</" + tag.name) && /^\s*>/.test(r.slice(2 + tag.name.length)))) return;
-  if (click.mods.includes("self") || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "")) return;
-  add("click-no-keyboard", tag.line, "<" + tag.name + " " + click.attr + ">");
+  if (!click || !element) return kind;
+  const role = literal(named.get("role")).split(/\s+/)[0];
+  if (focusable || named.has("tabindex") || ROLE_REACHED.has(role) || named.has("inert") || shown("aria-hidden")) return kind;
+  if (click.mods.some((m) => RE_OFF_ELEMENT.test(m)) || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "") || tag.text.endsWith("/>")) return kind;
+  return { value: "<" + tag.name + " " + click.attr + ">" };
 }
 
 // --- values ----------------------------------------------------------------------------------------------------------------------
@@ -443,7 +528,7 @@ function uiChecksOf(lines, rel) {
     else if (silenced) past.silenced++;
     else past.byRule[rule] = (past.byRule[rule] || 0) + 1;
   };
-  const tags = sheet ? null : tagReader(RE_SCRIPT_FILE.test(rel), (tag, rest) => judgeTag(tag, rest, add));
+  const tags = sheet ? null : tagReader(RE_SCRIPT_FILE.test(rel), (tag) => judgeTag(tag, add), add);
   for (const { n, src, l, css: isCss, cut } of lines) {
     if (src.includes("ui-check-off:") && !l.includes("ui-check-off:")) marks.set(n, markIds(src));
     if (cut) cutLines++;
