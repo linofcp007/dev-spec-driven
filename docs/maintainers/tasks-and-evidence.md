@@ -18,7 +18,11 @@ Phase 6, opt-in.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
   feature's `x/`; a T-ID is read by its number (T-01 = T-1); a file needs a boundary on both sides (US-1.AC-1 is not US-1.AC-10).
-  The task's own IDs fill the budget first, then the file / track ones, in design.md's order.
+  The task's own IDs fill the budget first, then the file / track ones, in design.md's order. A task proving a track's
+  criterion takes that track's marked sections (`trackMarks`); 1.37: a `uiTask()` task — one that builds what the user sees —
+  takes the `[UI]` sections whatever criterion it proves (the usage table, a contract under `## [UI] Component Contracts`,
+  the states), in the same budget: one that does not fit is named, never quoted. A task of the +ui feature that builds no
+  view takes none.
 - **A RED task's brief** (`_Expect: fail_`): its tests heading `BRIEF.testsRed` and definition of done `redRules`; its project-checks
   item is `projectChecks.briefDodRed` (only its new red tests may fail).
 - **`write: true`** writes `.specs/<f>/.execution/` (self-ignoring: `.gitignore` = `*`): the brief regenerated, `ledger.md` created
@@ -875,6 +879,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   in prose in the same places — "if you did one after the review, run it again". D3-2: the branch review reads
   `merge-base..HEAD`, so spec-review.md (branch) and spec-finish.md say to commit the feature's work before it (inline work
   is committed only when the user asks — executeTask.md). spec-review.md keeps round 2's ledger path.
+- **1.37** — the `[UI]` sections reached a brief only through a `[UI]` criterion (`trackMarks`): a task that builds a
+  component under a core criterion, its file named by no design section, read no contract and no states. `want()` takes
+  them on a `uiTask()` task too, within `BRIEF_DESIGN_BUDGET` — the cut form of item 4's design (its own contract quote in
+  the brief, through `briefDesignSystem`, would have repeated what Design context already carries and is null without a
+  registry).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
