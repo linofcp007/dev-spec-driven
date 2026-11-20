@@ -342,7 +342,8 @@ exports.run = async ({
       agent: () => /^model: inherit$/m.test(front("spec-ui-reviewer.md")) && ["never the code, the diff or the conversation", "the pair is **INVALID**",
         "**Blocker**: a user would notice it and the code can fix it", "its **place**: the region and the element", "### UI review: Match | Differences | Invalid",
         "Shopify's Helix"].every((s) => uiAgent.includes(s)),
-      neverPassed: () => /\*\*No reference → no review:\*\*[^.]*\. It is never "passed"\./.test(uiRef) && /skipped \(no capture tool\)` and say so at the checkpoint\. Never "passed"\./.test(uiRef),
+      // 1.37: no reference no longer means no review — the floor alone runs (the 1.37 block below); still never "passed"
+      neverPassed: () => /\*\*No reference → the floor alone\*\*[^.]*\. It is never "passed"\./.test(uiRef) && /skipped \(no capture tool\)` and say so at the checkpoint\. Never "passed"\./.test(uiRef),
       imagesOnly: () => /Never the code, the diff, the brief or your view of it\./.test(uiRef) && /Don't open the images yourself/.test(uiRef) &&
         /\*\*INVALID\*\* \(the two images show different states\) → capture both again in the same state/.test(uiRef),
       rerun: () => /\*\*Gates a fix can undo run again\.\*\*/.test(subW) && /## 5\. After a fix — run it again/.test(docsRef("ui-review.md")) &&
@@ -856,6 +857,170 @@ exports.run = async ({
     const refusal = [["verification", ver], ["subagent-execution", sub], ["spec-implementer", impl]].filter(([, t]) => /fast check[^.]{0,80}\b(?:refuses|blocks the tick)/i.test(t));
     all("1.36 fast check: the prose — SKILL.md's line, verification.md's section (one call, the statuses, never a refusal, the base branch), subagent-execution's report form and parallel merge, spec-implementer's loop and report line, spec-setup, tooling-reference, the READMEs' spec_init row; nothing calls it a refusal (got " + JSON.stringify(refusal.map(([k]) => k)) + ")",
       Object.assign(Object.fromEntries(rows.map(([k, text, re]) => [k, () => re.test(text)])), { noRefusal: () => refusal.length === 0 }));
+  }
+
+  { // 1.37 the visual review without a reference (the floor), the worst-case capture and the verdict pass after a fix (item 3),
+    // the component contract, motion, forms / interaction details, the accessibility finding line and the user's taste (item
+    // 4) — prose the agent follows. ONE assertion per prose rule: each fails with its rule undone (the 1.37 mutation pass)
+    // and failed against 1.36. A row is [label, text, ...checks]: a RegExp must match the whitespace-folded text, {not: re}
+    // must not, a function must return true. The budgets ride with a rule of their file (a budget alone held on 1.36).
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const refRaw = (f) => raw("skills", "dev-spec-driven", "references", f);
+    const bytes = (...p) => fs.statSync(path.join(root, ...p)).size;
+    const R = ws(refRaw("ui-review.md")), A = ws(raw("agents", "spec-ui-reviewer.md")), P = ws(refRaw("ui-design-patterns.md"));
+    const X = ws(refRaw("subagent-execution.md")), E = ws(raw("commands", "executeTask.md")), C = ws(raw("agents", "spec-critic.md"));
+    const T = ws(refRaw("track-checklists.md")), I = ws(refRaw("index.md")), F = ws(refRaw("review-feedback.md"));
+    // a section of a raw file: from its heading line to the next heading of the same or a higher level
+    const sectionOf = (text, head) => {
+      const lines = text.split("\n"), at = lines.findIndex((l) => l.startsWith(head)), level = (head.match(/^#+/) || [""])[0].length;
+      if (at < 0) return "";
+      const end = lines.findIndex((l, i) => i > at && /^#+ /.test(l) && l.match(/^#+/)[0].length <= level);
+      return ws(lines.slice(at, end < 0 ? lines.length : end).join("\n"));
+    };
+    const agentFront = raw("agents", "spec-ui-reviewer.md").split(/^---$/m)[1] || "";
+    const desc = ((agentFront.match(/^description: (.*)$/m) || [])[1] || "");
+    const motion = sectionOf(refRaw("ui-design-patterns.md"), "## Motion"), taste = sectionOf(refRaw("review-feedback.md"), "## A UI taste");
+    const contract = sectionOf(refRaw("ui-design-patterns.md"), "### Component contract"), worst = sectionOf(refRaw("ui-design-patterns.md"), "### The worst case");
+    const floorMode = sectionOf(raw("agents", "spec-ui-reviewer.md"), "## Floor mode"), verdictMode = sectionOf(raw("agents", "spec-ui-reviewer.md"), "## Verdict mode");
+    const checklist = sectionOf(refRaw("ui-design-patterns.md"), "## Design checklist");
+    const rows = [
+      // references/ui-review.md — the protocol
+      ["ui-review: no reference → the floor alone, ledgered, never passed; the file ≤ 10,000 bytes", R,
+        /\*\*No reference → the floor alone\*\* \(§2\): ledger `Task N: ui review — floor only \(no reference\)` and say at the checkpoint that the look was never compared with a design\. It is never "passed"\./,
+        () => bytes("skills", "dev-spec-driven", "references", "ui-review.md") <= 10000],
+      ["ui-review: the worst case's own capture, through the data boundary, never edited markup", R,
+        /\*\*The worst case\*\*[^.]*is a state of its own: `<view>--worst--build\.png`/, /never by editing the markup/],
+      ["ui-review: the floor through a tool that sets the viewport and records the width — never the Chrome command line", R,
+        /taken by a tool that sets the viewport and records the width it got \(Playwright's `viewport`, Puppeteer's `setViewport`\) — never the Chrome command line/],
+      ["ui-review: a measured width other than the one asked → INVALID", R, /A measured width other than the one asked makes the capture INVALID\./],
+      ["ui-review: the three measured captures", R, /\| `floor-320` \| 320 CSS px wide, device scale 2 \| 1\.4\.10 Reflow \|/,
+        /\| `floor-zoom` \| 640 × 360 CSS px, scale 2 — a 1280 × 720 window at 200 % \| 1\.4\.4 Resize Text \|/, /\| `floor-focus` \| the review viewport, Tab pressed until focus is inside the task's region/],
+      ["ui-review: floor-focus by keys only, 50 presses at most", R, /\(50 at most\) — keys only, never a click or a script's `focus\(\)`/],
+      ["ui-review: floor-spacing only where the script can add a style", R, /`floor-spacing` \([^)]*1\.4\.12\) only where the script can add a style/],
+      ["ui-review: the kept capture script, the same settings every round", R, /keep the capture script at `\.execution\/ui\/capture\.<ext>` — every round and the verdict pass take the same settings with it/],
+      ["ui-review: a retaken capture's old file kept as .prev.png", R, /before it retakes a capture it renames the old one `<name>\.prev\.png`/],
+      ["ui-review: wait for the fonts and the images", R, /It waits for the fonts \(`document\.fonts\.ready`\) and the images before each shot/],
+      ["ui-review: one viewport per image", R, /one viewport per image/],
+      ["ui-review: at most 16 images a dispatch, the .prev.png counted", R, /At most 16 images a dispatch, the `\.prev\.png` counted/],
+      ["ui-review: the reviewer told when the locale is a pseudo-locale", R, /say when the locale is a pseudo-locale/],
+      ["ui-review: mobile in one line — the text size closest to 200 %, Android pseudo-locales only where enabled", R,
+        /On mobile: the smallest supported width and the OS text size closest to 200 % \(iOS AX2, Android scale 2\.0\); Android's pseudo-locales only where the build enables them\./],
+      ["ui-review: a capture the tool can't take — Not judged, never clean", R, /A capture the tool can't take is listed under Not judged and ledgered — never clean\./],
+      ["ui-review: pair or floor is a property of the files", R, /\*\*Pair or floor is a property of the files:\*\* a `--build\.png` with its `--ref\.png` beside it is a pair; every other build capture, and every `floor-\*` one, is judged on the floor\./],
+      ["ui-review: floor findings Major by default, only a measured reflow a Blocker", R, /Each is a \*\*Major\*\* by default — confirmed first, as above; only a measured reflow is a Blocker\./],
+      ["ui-review: reflow only from the .json", R, /\*\*reflow\*\* \(from the `\.json` only[^)]*none → not judged\)/],
+      ["ui-review: WCAG 1.4.10's two-dimensional exception — a box that scrolls is not the page", R,
+        /a data table, a map, a diagram, a toolbar — scrolling inside its own box \(WCAG 1\.4\.10's exception: a box that scrolls inside the page is not the page scrolling\)/],
+      ["ui-review: below a stated minimum width — one checkpoint line per feature, never a fix round or a stop", R,
+        /\*\*Below a minimum width the design or `ui\.md` states\*\*: one checkpoint line per feature[^.]*, never a fix round, never a stop\./],
+      ["ui-review: truncation only when the design's row says the field wraps", R, /truncation, unless the design's row says the field wraps/],
+      ["ui-review: a floor finding carried into a report is an accessibility finding line", R, /A floor finding carried into the ledger or a report is written as an accessibility finding \(`ui-design-patterns\.md` → Testing accessibility\)\./],
+      ["ui-review: after a fix, a fresh reviewer in verdict mode — RESOLVED / PARTIAL / OPEN, never a new hunt", R,
+        /dispatch a fresh reviewer \*\*in verdict mode\*\* \(`Mode: verdict` on the prompt's first line\)/, /each is RESOLVED, PARTIAL or OPEN/, /a fix round never opens a new hunt/],
+      ["ui-review: verdict rule — one reviewer, at size l too", R, /1\. One reviewer, at size l too\./],
+      ["ui-review: verdict rule — a PARTIAL graded again, still open", R, /2\. A PARTIAL is graded again for what remains, and stays open\./],
+      ["ui-review: verdict rule — a confirmed finding not reconfirmed", R, /3\. A confirmed finding is not reconfirmed\./],
+      ["ui-review: verdict rule — a regression Major through the confirmation step", R, /4\. A regression Major goes through the confirmation step \(§4\)/],
+      ["ui-review: verdict rule — a missed-earlier finding keeps its severity", R, /5\. A finding missed earlier keeps its severity:[^.]*`Task N: ui deferred \(missed earlier, <severity>\): …`/],
+      ["ui-review: verdict rule — after a code-review round, regressions only; changed regions only", R,
+        /6\. After a code-review round: an empty open list — regressions only\./, /a regression counts only in a region that changed since the last capture/],
+      ["ui-review: verdict rule — the Breaker uses verdict mode", R, /7\. The Breaker \(`references\/subagent-execution\.md` → 7\) uses verdict mode\./],
+      ["ui-review: a full review instead — a new view, a reference changed with the user, the user's screenshot", R,
+        /A \*\*full\*\* review instead when the diff renders a view or state no review saw, the reference changed with the user, or the user's screenshot contradicts a verdict\./],
+      ["ui-review: the verdict pass credited to Impeccable", R, /The verdict pass follows Impeccable's finish reviewer \(Apache-2\.0\)/],
+      ["ui-review: the ledger lines — floor only, re-review, missed earlier", R, /Task 5: ui re-review \(round 1\) — U1 resolved, U2 partial; 0 regressions → fix round 2\/5/,
+        /Task 6: ui review — floor only \(no reference\): 1 view, 3 captures/, /Task 6: ui deferred \(missed earlier, minor\)/],
+      ["ui-review: a correction another view would repeat is a taste → ui.md's ## Taste", R, /that another view would repeat is a taste: propose it for `\.specs\/steering\/ui\.md` → `## Taste`/],
+      // agents/spec-ui-reviewer.md — the reviewer's modes
+      ["spec-ui-reviewer: the description names the floor and the verdict pass (≤ 250, never edits code)", desc,
+        /on the accessibility floor where it has none, or a verdict pass on its earlier findings/, /Never edits code\.$/, () => desc.length <= 250],
+      ["spec-ui-reviewer: ## Modes — pair, floor, verdict; the files decide", A, /## Modes The files decide, capture by capture: a `--build\.png` with its `--ref\.png` beside it is a \*\*pair\*\*/, /`Mode: verdict`/],
+      ["spec-ui-reviewer: floor — no \"should look like\", never a taste difference", floorMode, /Without a reference there is no "should look like": never a difference of spacing, colour, type or layout choice\./],
+      ["spec-ui-reviewer: floor — four findings", floorMode, /Four findings only/, /- \*\*reflow\*\* —/, /- \*\*lost\*\* —/, /- \*\*focus\*\* —/, /- \*\*defect\*\* —/],
+      ["spec-ui-reviewer: floor — Major, a measured reflow a Blocker", floorMode, /Each is \*\*Major\*\*; a reflow the `\.json` measures is a \*\*Blocker\*\*/],
+      ["spec-ui-reviewer: floor — reflow only from the .json, two-dimensional content scrolling in its box is none", floorMode,
+        /only from the `\.json`[^;]*; no `\.json` → Not judged\./, /scrolling inside its own box is no reflow/],
+      ["spec-ui-reviewer: floor — truncation only where the row says the field wraps", floorMode, /a truncation only where the design's state row says the field wraps/],
+      ["spec-ui-reviewer: floor — defect's examples illustrate a property, no list", floorMode, /illustrate the property; they are no list/],
+      ["spec-ui-reviewer: floor — never contrast from a picture", floorMode, /Never contrast from a picture/],
+      ["spec-ui-reviewer: floor — a pseudo-locale's text is no defect", floorMode, /A pseudo-locale's accented, padded text is no defect\./],
+      ["spec-ui-reviewer: floor — a .json of another width → INVALID", floorMode, /A `\.json` whose width is not the capture's → that capture is INVALID\./],
+      ["spec-ui-reviewer: verdict — resolved / partial / open, changed regions only, never a new hunt", verdictMode,
+        /\*\*RESOLVED\*\*, \*\*PARTIAL\*\* \(what remains, graded again\) or \*\*OPEN\*\*/, /A regression counts only in a region that differs between `\.prev\.png` and the new capture — never a new hunt elsewhere\./],
+      ["spec-ui-reviewer: verdict — missed earlier, with its severity", verdictMode, /goes under Missed earlier, with its severity\./],
+      ["spec-ui-reviewer: the floor and verdict outputs, Open: N counted; the file ≤ 7,000 bytes", A, /### UI review \(floor\): Clean \| Findings \| Invalid/,
+        /### UI re-review: Resolved \| Open: N \| Invalid/, /Open: N counts PARTIAL \+ OPEN \+ the Blocker \/ Major regressions\./, () => bytes("agents", "spec-ui-reviewer.md") <= 7000],
+      // references/ui-design-patterns.md — the worst case (item 3) and the prose of item 4
+      ["ui-design-patterns: the worst case — a matrix row, its kinds", worst, /One more row of the matrix: the view's data at its realistic extremes/,
+        /an unbroken email, URL or ID/, /a one-letter name, counts of 0, 1 and thousands, a missing image/, /the longest translation or a right-to-left locale/],
+      ["ui-design-patterns: the worst case — real data or the validation's limit, cited; no limit is a decision", worst, /Each extreme is real data or the validation's limit, its source cited/, /"no limit found" is a design decision/],
+      ["ui-design-patterns: the worst case — spread across the first rows", worst, /Spread them across the first rows/],
+      ["ui-design-patterns: the worst case — through the other states' boundary, never edited markup", worst, /through the boundary the other states use \(a story, a mock, a fixture route\), never by editing markup/],
+      ["ui-design-patterns: the worst case — per field wrap / truncate / clamp, never a compared figure", worst, /it wraps, truncates at the end \(or the middle, for a path or an ID\), or clamps/, /never truncate a figure the user compares/],
+      ["ui-design-patterns: the worst case credited to Emil Kowalski", worst, /After Emil Kowalski's break-ui skill \(MIT\)\./],
+      ["ui-design-patterns: every state a fixture — the worst case too", P, /— the worst case too, the regression fixture of the next change/],
+      ["ui-design-patterns: the contract — the optional section, a heading starting with the name, lists", contract,
+        /design\.md's optional `## \[UI\] Component Contracts`/, /a `### <Component>` heading starting with its name, written as lists/],
+      ["ui-design-patterns: the contract — its five parts", contract, /\*\*States\*\*/, /\*\*Keyboard\*\* \(the WAI-ARIA APG pattern's keys/, /\*\*Role and name\*\*/, /\*\*Variants\*\*/, /\*\*Slots\*\*/],
+      ["ui-design-patterns: the contract — one enumerated prop per axis, never a boolean per mode", contract, /one enumerated prop per visual axis[^·]*never a boolean per mode/],
+      ["ui-design-patterns: the contract — a mode that changes what renders is composition", contract, /a mode that changes what it renders is composition/],
+      ["ui-design-patterns: the contract — slots in each framework's terms", contract, /Vue `<slot name>`, Svelte slots \/ snippets, Angular `ng-content select`, a web component's `<slot>`/, /a server partial: `n\/a — a server include takes no children`/],
+      ["ui-design-patterns: the contract credited to designer-skills", contract, /After designer-skills' component spec \(MIT\)\./],
+      ["ui-design-patterns: forms — unsaved edits never dropped silently", P, /Unsaved edits are never dropped silently: leaving asks first \(`beforeunload` for the tab, a confirm in the app\) or keeps a draft and says so\./],
+      ["ui-design-patterns: forms — submit enabled until the request starts", P, /submit stays enabled until the request starts/],
+      ["ui-design-patterns: interaction — the URL holds the view's state", P, /\*\*The URL holds the view's state\*\* — filter, sort, tab, page, an open panel/],
+      ["ui-design-patterns: interaction — tabular numerals", P, /`font-variant-numeric: tabular-nums`/],
+      ["ui-design-patterns: interaction — translate=\"no\"", P, /\*\*`translate="no"`\*\* on codes, identifiers, commands and names/],
+      ["ui-design-patterns: motion — what each animation tells the user", motion, /\*\*Each animation says what it tells the user\*\*/],
+      ["ui-design-patterns: motion — durations and easings are tokens, the values the team's", motion, /\*\*Durations and easings are tokens\*\* in the registry; their values are the team's\./],
+      ["ui-design-patterns: motion — prefer transform / opacity, a measured height the exception", motion, /\*\*Prefer `transform` and `opacity`\*\*/, /The exception: a height that must be measured/],
+      ["ui-design-patterns: motion — reduced motion keeps information-bearing motion", motion, /movement becomes an instant change or a fade; motion that carries information \(a progress bar\) stays/],
+      ["ui-design-patterns: motion — no taste heuristic, no fixed duration", motion, /## Motion/,
+        { not: /the more often|less it moves|changes at once|don't animate|\b\d+ ?ms\b|\b0?\.\d+ ?s\b|ease-in|ease-out/i }],
+      ["ui-design-patterns: the accessibility finding line — criterion, element, impact, fix, found by; no [A11Y] tag", P,
+        /Each finding, one line — criterion — element — impact — fix — found by/, /\*\*Blocker\*\* \(a user can't finish the task\), \*\*Major\*\* \(finishes with real difficulty\) or \*\*Minor\*\* \(a workaround exists\)/,
+        { not: /\[A11Y\]/ }],
+      ["ui-design-patterns: the checklist — 13 References kept, 14 Motion appended, the worst case and the contract; the file ≤ 60,000 bytes", checklist,
+        /13\. \*\*References\*\*/, /14\. \*\*Motion\*\*/, /and the worst case/, /a New \/ Extend component's contract/,
+        () => bytes("skills", "dev-spec-driven", "references", "ui-design-patterns.md") <= 60000],
+      // references/subagent-execution.md — the controller's protocol
+      ["subagent-execution: the tree — the kept script, the floor captures, .prev.png", X, /ui\/capture\.<ext> written by you: the kept capture script/, /--floor-320\.png…; a retaken one's old file kept as \.prev\.png/],
+      ["subagent-execution: the re-review ledger line", X, /Task 3: ui re-review \(round 1\) — U1 resolved, U2 partial; 0 regressions → fix round 2\/5/],
+      ["subagent-execution: the fix loop — a fresh spec-ui-reviewer in verdict mode, both places", X,
+        /the captures it changed taken again and a fresh `spec-ui-reviewer` in verdict mode \(`references\/ui-review\.md` → 5\) —/,
+        /take the captures it changed again and a fresh `spec-ui-reviewer` in verdict mode \(`references\/ui-review\.md` → 5\), whichever review the round answered/],
+      ["subagent-execution: the Breaker — verdict mode", X, /a visual one on a fresh `spec-ui-reviewer`'s verdict, never yours \(verdict mode; you don't look at the images\)/],
+      ["subagent-execution: the checkpoint — floor only", X, /each task's visual review \(match · differences fixed · floor only · skipped and why\)/],
+      ["subagent-execution: no reference → the floor alone, never matching the design", X, /\| "No reference, so the review passed" \| No reference means only the floor ran\. Say so at the checkpoint; never count it as matching the design\. \|/],
+      ["subagent-execution: a UI taste → ui.md's ## Taste", X, /a UI taste under `ui\.md`'s `## Taste`, `references\/review-feedback\.md` → A UI taste/],
+      // the command, the critic, the checklists, the index
+      ["executeTask: the floor alone without a reference; the verdict pass after a fix", E, /after a fix round, a verdict pass on what was found/,
+        /No reference: the floor alone \(`ui-review\.md` → 1\) — never "matches the design"; no capture tool or no subagent tool: say it was not run — never that it passed\./],
+      ["spec-critic: the state matrix's worst case", C, /and the worst case — each field's realistic extreme and where its limit comes from/],
+      ["spec-critic: no reference → the floor alone, the old \"never runs\" gone", C, /none means the build is held to the accessibility floor alone/, { not: /none means that review never runs/ }],
+      ["spec-critic: a New / Extend component's contract", C, /each New \/ Extend one with its contract — states, APG keys, role and name, one enumerated prop per variant axis, slots/],
+      ["track-checklists: Phase 2 — the worst case, the optional Component Contracts", T, /UI States \(a state matrix with its worst case and a reference per view\)/, /optional, Component Contracts \(one per New \/ Extend component\)/],
+      ["track-checklists: Phase 3 — the floor without a reference, a contract's states and keys as tests", T,
+        /a contract's states as fixtures, its keys as component tests/, /each UI task's visual review against the view's reference — on the floor where it has none/],
+      ["track-checklists: finish — against its reference, or on the floor", T, /each built state's visual review — against its reference, or on the floor where it has none — passed, or why it was not run/],
+      ["index: ui-review's line — the floor, the worst case, the verdict pass", I, /the floor without a reference \(320 px, 200 % zoom, focus\), the worst-case capture, the fix loop, the verdict pass after a fix/],
+      ["index: ui-design-patterns' line — contracts, the worst case, interaction details, motion", I, /component contracts, UI states and the worst case, forms and interaction details, motion/],
+      // references/review-feedback.md — the user's taste, through the existing learning rule
+      ["review-feedback: the Project rule — a UI taste in ui.md's ## Taste", F, /a UI taste in `ui\.md`'s `## Taste`, below/],
+      ["review-feedback: taste — only the user's, never your preference", taste, /Only what the user said, edited \(a value they changed in a file you wrote\), picked or undid — never your own preference/],
+      ["review-feedback: taste — the class, never one screen's instance", taste, /The class of element \("raised surfaces"\), never one screen's instance\./],
+      ["review-feedback: taste — the entry format", taste, /`- \*\*<class> <value or token>, always \/ never\.\*\* Why: <their words>\. <!-- <date>, the user: "<their words>" -->`/],
+      ["review-feedback: taste — a contradiction shown with both dates", taste, /show both with their dates; the user keeps one/],
+      ["review-feedback: taste — a check offered where code can show a violation", taste, /Where code can show a violation, offer a check too/],
+      ["review-feedback: taste — the re-check it costs, proposed in a batch", taste, /warn `steering-changed-since-approval` — propose them in a batch at a checkpoint, not one per nudge/],
+      ["review-feedback: taste credited to Emil Kowalski", taste, /After Emil Kowalski's learn-taste skill \(MIT\)\./],
+    ];
+    const cond = (text, c) => c instanceof RegExp ? () => c.test(text) : typeof c === "function" ? c : () => !c.not.test(text);
+    const condName = (c, i) => c instanceof RegExp ? "matches " + c.source.slice(0, 70) : typeof c === "function" ? "check " + i : "never " + c.not.source.slice(0, 60);
+    for (const [label, text, ...checks] of rows) {
+      all("1.37 UI prose — " + label, Object.fromEntries(checks.map((c, i) => [condName(c, i), cond(text, c)])));
+    }
   }
 
   // Release hygiene: the three version fields agree.
