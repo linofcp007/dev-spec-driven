@@ -46,6 +46,16 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       "| Semi | src/Semi.tsx |  | _Deprecated: use DataGrid_; see ADR-7 |",
       "| Colon | src/Colon.tsx |  | _Deprecated_: use DataGrid |",
       "| Empty | src/Empty.tsx |  | _Deprecated: _ |",
+      // 1.37.0 review 1 (RB-3): whatever follows the word that is no letter or digit — the natural spellings; the label alone
+      // italic before a period too; a digit continues the word. (RB-6) an `İ` before the marker (two code units lower-cased)
+      "| Dash | src/Dash.tsx |  | _Deprecated — use DataGrid_ |",
+      "| Period | src/Period.tsx |  | _Deprecated. Use DataGrid instead._ |",
+      "| Commas | src/Commas.tsx |  | _Deprecated, use DataGrid_ |",
+      "| Favour | src/Favour.tsx |  | _Deprecated in favour of DataGrid_ |",
+      "| Dated | src/Dated.tsx |  | _Deprecated (v3): use DataGrid_ |",
+      "| LabelPeriod | src/LabelPeriod.tsx |  | _Deprecated._ Use DataGrid instead. |",
+      "| Digit | src/Digit.tsx |  | _deprecated2 notes_ |",
+      "| Turkish | src/Turkish.tsx |  | İptal akışı _Deprecated: use DataGrid_ |",
     ]);
     const dep = reg.deprecated;
     all("1.37 registry: `_Deprecated: use X_` in a component row (any cell after the name, any case; bare, closed, the label alone italic or never closed; at a cell's start or after a blank, `(` or `*` — never inside a word) marks it deprecated: `deprecated` maps its key to the replacement — the first OTHER listed component its text names, a word or two adjacent ones, as written there; \"\" when it names none —, the marker is cut out of its cell (a path stays a path) and shown first in the notes, whole; `_From:_` beside it is still read (got " +
@@ -74,29 +84,82 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       semi: () => dep.get("semi") === "DataGrid" && comp(reg, "Semi").notes === "_Deprecated: use DataGrid_ · ; see ADR-7",
       colon: () => dep.get("colon") === "" && comp(reg, "Colon").notes === "_Deprecated_ · : use DataGrid",
       empty: () => dep.get("empty") === "" && comp(reg, "Empty").notes === "_Deprecated_",
-      count: () => dep.size === 19 && !dep.has("datagrid"),
+      dash: () => dep.get("dash") === "DataGrid" && comp(reg, "Dash").notes === "_Deprecated — use DataGrid_",
+      period: () => dep.get("period") === "DataGrid" && comp(reg, "Period").notes === "_Deprecated. Use DataGrid instead._",
+      comma2: () => dep.get("commas") === "DataGrid" && comp(reg, "Commas").notes === "_Deprecated, use DataGrid_",
+      favour: () => dep.get("favour") === "DataGrid" && comp(reg, "Favour").notes === "_Deprecated in favour of DataGrid_",
+      dated: () => dep.get("dated") === "DataGrid" && comp(reg, "Dated").notes === "_Deprecated (v3): use DataGrid_",
+      labelPeriod: () => dep.get("labelperiod") === "DataGrid" && comp(reg, "LabelPeriod").notes === "_Deprecated. Use DataGrid instead._",
+      digit: () => !dep.has("digit") && comp(reg, "Digit").notes === "deprecated2 notes",
+      turkish: () => dep.get("turkish") === "DataGrid" && comp(reg, "Turkish").notes === "_Deprecated: use DataGrid_ · İptal akışı",
+      count: () => dep.size === 26 && !dep.has("datagrid"),
     });
   }
   {
-    // past the 500 rows read in full: a row there is still marked, and a replacement listed there is still found
+    // 1.37.0 review 1 (RB-5): the replacement is never a word pair across punctuation, never a fragment of a hyphenated / slashed /
+    // dotted name (a whole one still names it), never deprecated itself — the next one named is
+    const reg = registryOf("replacement", [
+      "| Card | src/Card.tsx |  |  |", "| CardHeader | src/CardHeader.tsx |  |  |", "| Data | src/Data.tsx |  |  |",
+      "| DataGrid | src/DataGrid.tsx |  |  |", "| Dialog | src/Dialog.tsx |  |  |",
+      "| Panel | src/Panel.tsx |  | _Deprecated: use Card. Header and footer are slots now_ |",
+      "| Slash | src/Slash.tsx |  | _Deprecated: see @acme/data_ |",
+      "| Hyphen | src/Hyphen.tsx |  | _Deprecated: see x-data_ |",
+      "| Dotted | src/Dotted.tsx |  | _Deprecated: see lib.data_ |",
+      "| Kebab | src/Kebab.tsx |  | _Deprecated: use data-grid_ |",
+      "| Popup | src/Popup.tsx |  | _Deprecated: use Dialog_ |",
+      "| Modal | src/Modal.tsx |  | _Deprecated: use Popup_ |",
+      "| Sheet | src/Sheet.tsx |  | _Deprecated: use Popup or Dialog_ |",
+    ]);
+    const dep = depOf(reg);
+    all("1.37.0 review 1: a deprecated row's replacement — a pair only across blanks (`Card. Header` is Card), a hyphenated / slashed / dotted name whole or not at all (`@acme/data`, `x-data`, `lib.data` name no Data; `data-grid` is DataGrid), never a component deprecated itself (`use Popup or Dialog` is Dialog) (got " + js([...dep]) + ")", {
+      sentence: () => dep.get("panel") === "Card",
+      slash: () => dep.get("slash") === "",
+      hyphen: () => dep.get("hyphen") === "",
+      dotted: () => dep.get("dotted") === "",
+      kebab: () => dep.get("kebab") === "data-grid",
+      chain: () => dep.get("modal") === "" && dep.get("popup") === "Dialog",
+      chainNext: () => dep.get("sheet") === "Dialog",
+    });
+  }
+  {
+    // 1.37.0 review 1 (RB-7): deprecated is a property of the NAME — a later row of a name read in full marks it when no row did yet
+    // (its text from that row, its marker first in the entry's notes, bounded); the first marked row wins
+    const p = project("twice");
+    write(p, REG, "# Design System\n\n## Components\n\n" + HEAD + "| Table | src/Table.tsx | dense | the old list |\n| DataGrid | src/DataGrid.tsx |  |  |\n| Dialog | src/Dialog.tsx |  |  |\n" +
+      "| Plain | src/Plain.tsx |  |  |\n| Long | src/Long.tsx |  | " + "n".repeat(190) + " |\n| Both | src/Both.tsx |  | _Deprecated: use DataGrid_ |\n\n## Deprecated\n\n" + HEAD +
+      "| Table | src/Table.tsx |  | _Deprecated: use DataGrid_ |\n| Plain | src/Plain.tsx |  | _Deprecated_ |\n| Long | src/Long.tsx |  | _Deprecated: use DataGrid_ |\n| Both | src/Both.tsx |  | _Deprecated: use Dialog_ |\n");
+    const reg = E.designSystemRegistry(path.join(p, ".specs"));
+    const dep = depOf(reg);
+    all("1.37.0 review 1: a name listed twice is deprecated by its later row's marker — the replacement read from that row, the marker shown first in the entry's notes (bounded, no empty part); a name already marked keeps its first marker (got " +
+      js({ dep: [...dep], notes: reg.components.map((c) => [c.name, c.notes]) }) + ")", {
+      twice: () => dep.get("table") === "DataGrid" && dep.get("plain") === "",
+      twiceNotes: () => comp(reg, "Table").notes === "_Deprecated: use DataGrid_ · the old list" && comp(reg, "Plain").notes === "_Deprecated_",
+      twiceBound: () => comp(reg, "Long").notes === ("_Deprecated: use DataGrid_ · " + "n".repeat(190)).slice(0, 200),
+      twiceFirstWins: () => dep.get("both") === "DataGrid" && comp(reg, "Both").notes === "_Deprecated: use DataGrid_",
+    });
+  }
+  {
+    // past the 500 rows read in full: a row there is NOT marked (1.37.0 review 1 — doctor and the brief read the same rows), nor by a
+    // later row of its name; a later row of a name read in full is; a replacement listed past them is still found (a listed name)
     const rows = Array.from({ length: 520 }, (_, i) => "| C" + i + " | src/c" + i + ".tsx |  | " + (i === 0 ? "_Deprecated: use C510_" : i === 519 ? "_Deprecated_" : "") + " |");
-    const big = registryOf("past-cap", rows);
+    const big = registryOf("past-cap", rows.concat(["| C1 | src/c1.tsx |  | _Deprecated: use C2_ |", "| C510 | src/c510.tsx |  | _Deprecated_ |"]));
     // `Data` AND `DataGrid` listed: `use Data Grid` names DataGrid (two words before one)
     const both = registryOf("pair-first", ["| Data | src/Data.tsx |  |  |", "| DataGrid | src/DataGrid.tsx |  |  |", "| Table | src/Table.tsx |  | _Deprecated: use Data Grid_ |"]);
-    // the text the notes show is bounded (120 characters, the blank its cut ends on dropped) — a replacement is looked for in all
-    // of it, among its first 20 words
-    const longText = "use the grid " + "x".repeat(106) + " DataGrid then " + "y".repeat(160);
+    // the text the notes show is bounded (120 characters from the label's word, as written — `: ` counts —, the blank its cut ends
+    // on dropped) — a replacement is looked for in all of it, among its first 20 words
+    const longText = "use the grid " + "x".repeat(104) + " DataGrid then " + "y".repeat(160);
     const words = (n) => Array.from({ length: n }, (_, i) => "w" + i).join(" ");
     const shown = registryOf("shown", ["| DataGrid | src/DataGrid.tsx |  |  |", "| Long | src/Long.tsx |  | _Deprecated: " + longText + "_ |",
       "| Busy | src/Busy.tsx | _Deprecated: use DataGrid_ | " + "n".repeat(190) + " |",
       "| Far | src/Far.tsx |  | _Deprecated: " + words(20) + " DataGrid_ |", "| Near | src/Near.tsx |  | _Deprecated: " + words(19) + " DataGrid_ |"]);
     const none = registryOf("none", ["| Button | src/Button.tsx |  | every action |"]);
-    all("1.37 registry: a deprecated row past the 500 read in full is still marked, and a replacement listed past them still found; two adjacent words are asked before one; the notes show the marker's first 120 characters, closed, BEFORE the other notes (their 200-character bound never cuts it), while its replacement is looked for among the first 20 words of all of it; a registry with no marker has an empty map (got " +
-      js({ big: [depOf(big).get("c0"), depOf(big).get("c519"), big.components.length], both: [...depOf(both)], shown: [...depOf(shown)], notes: shown.components.map((c) => c.notes), none: none.deprecated && none.deprecated.size }) + ")", {
-      pastCap: () => big.components.length === 500 && big.deprecated.has("c519") && big.deprecated.get("c519") === "",
+    all("1.37 registry: a deprecated row past the 500 read in full is not marked (1.37.0 review 1), by none of its rows, while a later row of a name read in full marks it, and a replacement listed past them is still found; two adjacent words are asked before one; the notes show the marker's first 120 characters, closed, BEFORE the other notes (their 200-character bound never cuts it), while its replacement is looked for among the first 20 words of all of it; a registry with no marker has an empty map (got " +
+      js({ big: [depOf(big).get("c0"), depOf(big).get("c1"), depOf(big).get("c510"), depOf(big).get("c519"), big.components.length], both: [...depOf(both)], shown: [...depOf(shown)], notes: shown.components.map((c) => c.notes), none: none.deprecated && none.deprecated.size }) + ")", {
+      pastCap: () => big.components.length === 500 && !big.deprecated.has("c519") && big.deprecated.size === 2,
+      twicePastCap: () => big.deprecated.get("c1") === "C2" && !big.deprecated.has("c510"),
       pastCapReplacement: () => big.deprecated.get("c0") === "C510",
       pairFirst: () => both.deprecated.get("table") === "Data Grid",
-      shown: () => comp(shown, "Long").notes === "_Deprecated: " + longText.slice(0, 120).trim() + "_",
+      shown: () => comp(shown, "Long").notes === "_Deprecated: " + longText.slice(0, 117) + "_",
       shownSearch: () => shown.deprecated.get("long") === "DataGrid",
       first: () => comp(shown, "Busy").notes === ("_Deprecated: use DataGrid_ · " + "n".repeat(190)).slice(0, 200) && comp(shown, "Busy").variants === "",
       wordBound: () => shown.deprecated.get("far") === "" && shown.deprecated.get("near") === "DataGrid",
@@ -187,6 +250,36 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     });
   }
   {
+    // 1.37.0 review 1 (RB-1): the notes name the replacement only AS A COMPONENT — in the letter case the registry writes its name
+    // (its row's; the marker's for a name past the rows read in full), in prose, a code span or a tag; a common word does not
+    const MREG = "# Design System\n\n" + HEAD + "| Modal | src/components/Modal.tsx |  | _Deprecated: use Dialog_ |\n| Dialog | src/components/Dialog.tsx |  |  |\n" +
+      "| Table | src/components/Table.tsx |  | _Deprecated: use DataGrid_ |\n| DataGrid | src/components/DataGrid.tsx |  |  |\n| Sheet | src/components/Sheet.tsx |  | _Deprecated: use datagrid_ |\n";
+    const st = {};
+    const one = (tag, rows, registry) => { st[tag] = checkOf(mk("as-" + tag, { registry: registry || MREG, rows })); };
+    one("prose", ["| Reuse | Modal | the delete-confirmation dialog |"]);
+    one("prosePair", ["| Reuse | Table | the users' data grid |"]);
+    one("word", ["| Reuse | Modal | Dialog lacks a sheet variant |"]);
+    one("code", ["| Reuse | Modal | uses `Dialog` for the rest |"]);
+    one("tag", ["| Reuse | Modal | <Dialog /> lacks a sheet |"]);
+    one("registryCase", ["| Reuse | Sheet | DataGrid lacks grouping |"]);
+    one("markerCase", ["| Reuse | Sheet | the datagrid lacks grouping |"]);
+    // a replacement listed past the 500 rows read in full: named as the marker writes it
+    const big = "# Design System\n\n" + HEAD + "| Table | src/components/Table.tsx |  | _Deprecated: use Z9_ |\n" +
+      Array.from({ length: 499 }, (_, i) => "| C" + i + " | src/c" + i + ".tsx |  |  |").join("\n") + "\n| Z9 | src/z9.tsx |  |  |\n";
+    one("pastCapName", ["| Reuse | Table | Z9 lacks the export |"], big);
+    const W = (name, use) => Q().dsDeprecated(1, Q().dsDeprecatedItem(name, use));
+    all("1.37.0 review 1: ui-deprecated is silenced only when the row's notes name the replacement as a component — in the registry's letter case (its row's name; the marker's spelling for a name past the rows read in full), a word, a code span or a tag; the same word in prose (`dialog`, `data grid`, `datagrid`) warns (got " + js(st) + ")", {
+      prose: () => st.prose.status === "warn" && st.prose.detail === W("Modal", "Dialog"),
+      prosePair: () => st.prosePair.status === "warn" && st.prosePair.detail === W("Table", "DataGrid"),
+      word: () => st.word.status === "pass",
+      code: () => st.code.status === "pass",
+      tag: () => st.tag.status === "pass",
+      registryCase: () => st.registryCase.status === "pass",
+      markerCase: () => st.markerCase.status === "warn" && st.markerCase.detail === W("Sheet", "datagrid"),
+      pastCapName: () => st.pastCapName.status === "pass",
+    });
+  }
+  {
     // more than six: the first six named, the rest counted
     const seven = "# Design System\n\n" + HEAD + Array.from({ length: 7 }, (_, i) => "| Old" + i + " | src/Old" + i + ".tsx |  | _Deprecated_ |").join("\n") + "\n";
     const many = checkOf(mk("many", { registry: seven, rows: Array.from({ length: 7 }, (_, i) => "| Reuse | Old" + i + " | a part |") }));
@@ -267,9 +360,9 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const read = (p) => E.designSystemRegistry(path.join(p, ".specs"));
     const linear = (s) => s.ms < 3 * s.calm + 300;
     const t = remeasure(() => { const t0 = Date.now(); const h = read(hostile); const t1 = Date.now(); const c = read(calm); return { ms: t1 - t0, calm: Date.now() - t1, h: depOf(h).size, c: depOf(c).size }; }, linear);
-    all("1.37 registry: the marker is read in linear time — 1,000 cells of `_Deprecated: ` and 190 `_a` (each `_` a closing candidate) within 3× + 0.3 s of 1,000 plain markers of the same length read at the same moment (got " + js(t) + ")", {
+    all("1.37 registry: the marker is read in linear time — 1,000 cells of `_Deprecated: ` and 190 `_a` (each `_` a closing candidate; the 500 read in full are marked) within 3× + 0.3 s of 1,000 plain markers of the same length read at the same moment (got " + js(t) + ")", {
       linear: () => linear(t),
-      read: () => t.h === 1000 && t.c === 1000,
+      read: () => t.h === 500 && t.c === 500,
     });
   }
 };

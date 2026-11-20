@@ -119,8 +119,9 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   one approved under the check and unchanged since only warns when the registry changes afterwards;
   `references/ui-design-patterns.md` → The registry) ·
   `ui-deprecated` (1.37 — a Reuse / Extend row naming a component the registry marks `_Deprecated: use X_`, naming its
-  replacement; silent when the row's notes name that replacement; a New row is not asked. A warn only — never a fail, never
-  an approval check —, run while the registry holds such a row and never on a finished feature; `spec_upgrade` lists it) ·
+  replacement; silent when the row's notes name that replacement in the registry's letter case; a New row is not asked. A
+  warn only — never a fail, never an approval check —, run while the registry holds such a row and never on a finished
+  feature; `spec_upgrade` lists it) ·
   `critical-flows` (1.33 — a plain feature whose spec names a critical flow, stock / a coupon / a balance / a booking / a
   payment…, while neither the requirements nor the design state the database rule for two identical requests at once nor a
   `## Critical flows` section — a read-only flow answers it with one line there; not with +dist / +api unless size s leaves
