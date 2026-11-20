@@ -2032,7 +2032,7 @@ function designSystemCheck(design, lang, opts = {}) {
 // a New row is not asked (`listed` is ui-design-system's). Never a fail, never an approval check, no stamp: the registry moves on
 // after an approval (a component deprecated later), and the warn is for the work still to do. opts: { registry } (none, or one
 // with no deprecated row: a pass).
-const dsLetters = (s) => String(s).normalize("NFD").replace(/[^\p{L}\p{N}]+/gu, ""); // dsKey with its letter case kept
+const dsLetters = (s) => String(s).replace(/[^\p{L}\p{N}]+/gu, ""); // its letters and digits as written (case and accents kept)
 function designSystemDeprecatedCheck(design, lang, opts = {}) {
   const Q = i18n.msg(lang).quality, id = "ui-deprecated";
   const dep = opts.registry && opts.registry.deprecated && opts.registry.deprecated.size ? opts.registry.deprecated : null;
