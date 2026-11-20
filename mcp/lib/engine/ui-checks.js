@@ -203,9 +203,11 @@ function clickBodies(add, overBound) {
 // → [{ name, value (as written, quotes / braces kept; null: none) } | { spread: true }] — null past DS_TAG_ATTRS of them (a tag
 // is not judged on what it was not read for). A `{…}` where a NAME stands is a spread
 // (`{...props}`, `{...getRootProps()}`, a template engine's `{{attrs}}`: it may hold any attribute) — unless it holds one
-// identifier, Svelte's shorthand `{alt}`, which names that attribute.
+// identifier, Svelte's shorthand `{alt}`, which names that attribute. So is a binding with no argument — Vue's `v-bind="$attrs"`,
+// Alpine's `x-bind="obj"` (the object form: it binds an object of attributes — review 1 of 1.37).
 const RE_NAME_STOP = /[\s=>/"'`{]/;
 const RE_IDENT = /^[A-Za-z_$][\w$]*$/;
+const RE_OBJECT_BIND = /^[vx]-bind$/;
 function closing(s, i, to = s.length) { // s[i] is `{` → the index (before `to`) of the `}` that closes it (quotes and nested braces in between), or -1
   let depth = 0, quote = "";
   for (let k = i; k < to; k++) {
@@ -243,7 +245,7 @@ function attributesOf(text, from) {
       while (k < n && /\s/.test(text[k])) k++;
       let e;
       if (text[k] === "\"" || text[k] === "'" || text[k] === "`") { e = text.indexOf(text[k], k + 1); e = e === -1 ? n : e + 1; } else if (text[k] === "{") { e = closing(text, k); e = e === -1 ? n : e + 1; } else { e = k; while (e < n && !/[\s>]/.test(text[e])) e++; }
-      if (out.push({ name, value: text.slice(k, e) }) > DS_TAG_ATTRS) return null;
+      if (out.push(RE_OBJECT_BIND.test(name) ? { spread: true } : { name, value: text.slice(k, e) }) > DS_TAG_ATTRS) return null;
       i = e;
       continue;
     }

@@ -1224,7 +1224,9 @@ wrong finding sends a team to fix code that is right.
   file's `<script lang="tsx">`, a named handler (never followed).
 - **Attributes** (`attributesOf`) — a brace token where a name stands is a spread (`{...props}`, `{...getRootProps()}`,
   `{{attrs}}`: it may hold any attribute — img-no-alt and click-no-keyboard excuse it) unless it holds one identifier
-  (Svelte's `{alt}`); a bound name is its attribute's (`boundName`: `:alt`, `v-bind:`, `x-bind:`, `bind:`, `[alt]`,
+  (Svelte's `{alt}`); so is a binding with no argument (`RE_OBJECT_BIND`: Vue's `v-bind="$attrs"`, Alpine's `x-bind="obj"` —
+  the object form; review 1 of 1.37, the design's M30–M37 fixture had been dropped); a bound name is its attribute's
+  (`boundName`: `:alt`, `v-bind:`, `x-bind:`, `bind:`, `[alt]`,
   `[attr.alt]`); an event (`eventOf`): JSX `onClick`, HTML / Svelte 5 `onclick`, Vue `@click` / `v-on:click` and Alpine
   `x-on:click` with `.modifiers`, Svelte 4 `on:click` with `|modifiers`, Angular `(click)` / `(keyup.enter)`.
 - **img-no-alt** — `<img` as written (`<Image>`, `<img-viewer>` are components) with no alt in any binding, no `aria-label` /

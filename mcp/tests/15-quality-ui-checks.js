@@ -178,6 +178,23 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // a spread of attributes is never judged (ITEM_1's M30–M37, review 1 of 1.37): `{...props}`, Svelte's `{...$$restProps}`, a
+    // template engine's `{{ $attributes }}`, and a binding with no argument — Vue's `v-bind="$attrs"` (an inheritAttrs: false
+    // wrapper), Alpine's `x-bind="obj"`; a binding WITH one names its attribute (`v-bind:alt`) or not (`v-bind:src`, `x-bind:src`)
+    const vue = lines("<template>", "  <figure class=\"frame\">", "    <img :src=\"src\" v-bind=\"$attrs\" loading=\"lazy\" />", "    <img v-bind:src=\"src\" />", // 4: FINDING
+      "    <img :src=\"src\" v-bind:alt=\"title\" />", "    <div v-bind=\"$attrs\" @click=\"open = true\">Open</div>", "  </figure>", "</template>");
+    const alpine = lines("<img x-bind=\"imageAttrs\" src=\"/a.png\">", "<div x-bind=\"trigger\" @click=\"open = !open\">Open</div>", "<img x-bind:src=\"logo\">", // 3: FINDING
+      "<img {{ $attributes }} src=\"/b.png\">");
+    const jsx = lines("export const Img = (props) => <img {...props} />;", "export const Box = ({ go, ...rest }) => <div {...rest} onClick={go}>Box</div>;");
+    const svelte = lines("<img {...$$restProps} />", "<div {...$$restProps} on:click={go}>x</div>");
+    const S2 = { vue: got(vue, "src/components/BaseImage.vue"), alpine: got(alpine, "resources/views/components/img.blade.php"), jsx: got(jsx, "src/Img.tsx"), svelte: got(svelte, "src/lib/Img.svelte") };
+    all("1.37 UI checks: a spread is never judged — `{...props}`, `{...$$restProps}`, `{{ $attributes }}`, Vue's `v-bind=\"$attrs\"`, Alpine's `x-bind=\"obj\"`; `v-bind:src` / `x-bind:src` alone are judged, `v-bind:alt` names the alt (got " + js(S2) + ")", {
+      vue: () => js(S2.vue) === js(["img-no-alt@4"]),
+      alpine: () => js(S2.alpine) === js(["img-no-alt@3"]),
+      others: () => js(S2.jsx) === js([]) && js(S2.svelte) === js([]),
+    });
+  }
+
   { // a `<` whose name is followed by neither a blank, `/` nor `>` starts no tag — `count <limit)` (A12): read as one, it swallowed the lines
     // below it up to the next `>`, a real tag's
     const pager = lines("export function Pager({ count, limit, go }) {", "  if (count <limit) {", "    return (", "      <div onClick={go}>next</div>", "    );", "  }", "  return null;", "}");
