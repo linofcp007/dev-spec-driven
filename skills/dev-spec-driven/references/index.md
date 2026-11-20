@@ -50,7 +50,8 @@ the whole library.
 - `references/code-reuse-and-quality.md` — search before you write, reuse / extend / create, module boundaries, code
   smells, the simplification pass, the refactor backlog
 - `references/ui-review.md` — the visual review of a +ui task: the reference per view, capturing the same state on both
-  sides, the image-only reviewer, INVALID → recapture, the fix loop, the re-run after a fix
+  sides, the image-only reviewer, INVALID → recapture, the floor without a reference (320 px, 200 % zoom, focus), the
+  worst-case capture, the fix loop, the verdict pass after a fix
 - `references/critic-review.md` — the deep review before a gate: who reviews by size (the critic, a cold read, two
   critics at l), keeping reviewers fresh, the triage (fix · contest · ask), the one re-audit
 - `references/review-feedback.md` — handling review comments against the spec · `references/red-flags.md` — the
@@ -68,8 +69,9 @@ the whole library.
   levels, locking, CAP / PACELC)
 - +api: `references/api-design-patterns.md` (versioning, breaking changes, problem+json, pagination, idempotency, ETag,
   rate limits, contract tests)
-- +ui: `references/ui-design-patterns.md` (design system first and its registry `.specs/steering/design-system.md`, UI
-  states, WCAG 2.2 AA and how to test it, i18n, performance budgets)
+- +ui: `references/ui-design-patterns.md` (design system first and its registry `.specs/steering/design-system.md`,
+  component contracts, UI states and the worst case, forms and interaction details, motion, WCAG 2.2 AA and how to
+  test it, i18n, performance budgets)
 - +obs: `references/observability-patterns.md` (SLOs and burn-rate alerts, telemetry, runbooks, feature flags,
   progressive delivery, operability tests)
 - +data: `references/data-pipeline-patterns.md` (data contracts and schema evolution, quality checks and quarantine,

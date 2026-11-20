@@ -23,8 +23,9 @@ Use the **dev-spec-driven** skill, Phase 6 (Execute). Target: $ARGUMENTS
 4. **A +ui task that changes what renders** (size m / l or none): once its `_Verify:_` is green, the visual review — the
    build captured beside the design's reference, state by state, judged by `dev-spec-driven:spec-ui-reviewer` from the
    images alone (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/ui-review.md`); fix its Blockers, and the
-   Majors a fresh reviewer confirms, before the tick. No reference, no capture tool or no subagent tool: say it was not
-   run — never that it passed.
+   Majors a fresh reviewer confirms, before the tick; after a fix round, a verdict pass on what was found. No reference:
+   the floor alone (`ui-review.md` → 1) — never "matches the design"; no capture tool or no subagent tool: say it was
+   not run — never that it passed.
 5. **Evidence before claims** — run the task's `_Verify:_` fresh and tick with `spec_complete_task {name, number,
    evidence: {command, exitCode, summary}}`: the `_Verify:_` command itself (several: all of them joined with ` && `). A
    non-zero exit refuses the tick (an `_Expect: fail_` task is proven by its red run); a note alone leaves a runnable

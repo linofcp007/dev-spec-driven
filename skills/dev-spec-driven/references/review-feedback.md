@@ -21,7 +21,7 @@ Adapted from the `receiving-code-review` skill of [obra/superpowers](https://git
 | **Out of scope / YAGNI** | It adds what the spec's `Out of Scope` excludes, or a "proper" feature nothing uses | Push back with the reference: *"Out of Scope lists X; happy to spec it separately."* Check usage (`grep`) before building "professional" extras. |
 | **Quality** | Correctness/robustness/security within scope (error handling, tenant scoping, a race) | Fix it; add a test when behaviour changes. |
 | **Nit / style** | Naming, formatting, preference | Apply if cheap and consistent with the codebase; otherwise say why not. |
-| **Project rule** | It holds for every later task, not just this diff ("money always as integer cents", "no modal for a confirmation") | Fix this diff, then propose the rule as a steering amendment (`constitution.md` for a non-negotiable, `structure.md` / `tech.md` / `ui.md` for a convention); on the user's OK every later brief carries it. |
+| **Project rule** | It holds for every later task, not just this diff ("money always as integer cents", "no modal for a confirmation") | Fix this diff, then propose the rule as a steering amendment (`constitution.md` for a non-negotiable, `structure.md` / `tech.md` / `ui.md` for a convention — a UI taste in `ui.md`'s `## Taste`, below); on the user's OK every later brief carries it. |
 | **Unclear** | You can't restate it | Ask. Never guess. |
 
 5. **Implement** one item at a time, in order: blocking (breaks things, security) → simple fixes →
@@ -30,6 +30,23 @@ Adapted from the `receiving-code-review` skill of [obra/superpowers](https://git
 6. **Reply** with the technical change, not gratitude: *"Fixed — `auth.js:88` now clears the cookie before
    redirecting (US-1.AC-1)."* A reviewer who was wrong gets the evidence, not agreement: *"Checked:
    `tenant_id` is scoped at `repo.js:41` (US-2.AC-1 test T-04 covers it)."*
+
+## A UI taste
+
+What the user says about how the product looks or feels ("raised surfaces get no border", "no modal for a
+confirmation") is a Project rule whose file is `.specs/steering/ui.md`, under `## Taste` — the visual reviewer reads
+it and every +ui brief lists it.
+- Only what the user said, edited (a value they changed in a file you wrote), picked or undid — never your own
+  preference; one you infer is written `(inferred)` until they confirm it.
+- The class of element ("raised surfaces"), never one screen's instance.
+- One entry each: `- **<class> <value or token>, always / never.** Why: <their words>. <!-- <date>, the user: "<their words>" -->`
+- One that contradicts an older entry: show both with their dates; the user keeps one.
+- Where code can show a violation, offer a check too (a registry token, a lint rule as a project check, a test); the
+  sentence keeps the why.
+- Each entry makes every approved +ui feature warn `steering-changed-since-approval` — propose them in a batch at a
+  checkpoint, not one per nudge.
+
+After Emil Kowalski's learn-taste skill (MIT).
 
 ## Forbidden
 

@@ -47,7 +47,9 @@ when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the us
   task-N-brief.md       regenerated per call — the implementer's requirements
   task-N-report.md      written by the implementer (+ appended fix reports)
   task-N-review.diff    written by you: the review package
-  ui/task-N/*.png       written by you: the visual review's pairs (<view>--<state>--ref.png / --build.png)
+  ui/capture.<ext>      written by you: the kept capture script (the same settings every round)
+  ui/task-N/*.png       written by you: the visual review's captures (<view>--<state>--ref.png / --build.png /
+                        --floor-320.png…; a retaken one's old file kept as .prev.png)
   task-N-ui-review.md   written by you: the visual reviewer's reply
 ```
 
@@ -68,6 +70,7 @@ Task 3: verify — 2 confirmed, 1 unconfirmed, 1 refuted
 Task 3: unconfirmed (65): <one-liner> — <why it isn't 80>
 Task 3: refuted (20, pre-existing): <one-liner>
 Task 3: ui review — 3 pairs: 2 match, 1 differences (1 blocker) → fix round 1/5
+Task 3: ui re-review (round 1) — U1 resolved, U2 partial; 0 regressions → fix round 2/5
 Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4f5a6b)
 Task 3: parked — <finding> — Ruling: <why the code stands>
 Task 3: refactor candidate filed: refactor-pricing-rules (backlog)
@@ -243,17 +246,18 @@ final review.
 - **Rounds 4–5:** a fresh implementer one model tier up: "A prior implementer attempted this N times;
   you own it now — read the report file for what was tried."
 - Every round: the implementer fixes, re-runs the covering tests, appends a fix report (tests, command, output). A round
-  that answered the visual review is checked by that review — the pairs captured again and a fresh `spec-ui-reviewer`
-  (`references/ui-review.md` → 5) —, then the code review: the task's first one if none ran yet, else a scoped re-review
+  that answered the visual review is checked by that review — the captures it changed taken again and a fresh
+  `spec-ui-reviewer` in verdict mode (`references/ui-review.md` → 5) —, then the code review: the task's first one if none ran yet, else a scoped re-review
   of the round's diff. A round that answered the code review gets a **scoped** re-review: package `FIX_BASE..HEAD`
   (FIX_BASE = the head the last review saw) and dispatch `dev-spec-driven:spec-reviewer` in **re-review** mode with the
   findings list. New breakage in the fix diff joins the list once its verify pass confirms it; out-of-scope observations
   become deferred minors.
-- **Gates a fix can undo run again.** A round's diff changes what a reviewed view renders → capture the pairs it
-  changed again and a fresh `spec-ui-reviewer` (`references/ui-review.md` → 5), whichever review the round answered.
+- **Gates a fix can undo run again.** A round's diff changes what a reviewed view renders → take the captures it
+  changed again and a fresh `spec-ui-reviewer` in verdict mode (`references/ui-review.md` → 5), whichever review the
+  round answered.
 - Never fix findings yourself — it pollutes your context and skips review.
 - **Breaker (after round 5):** adjudicate each open finding — a visual one on a fresh `spec-ui-reviewer`'s verdict,
-  never yours (you don't look at the images). Reviewer wrong/contestable, or real but
+  never yours (verdict mode; you don't look at the images). Reviewer wrong/contestable, or real but
   nothing builds on it → `parked` with a ruling. Real and load-bearing → rule on the smallest change
   that unblocks dependent work and carry it into the next dispatch. Every adjudication is a ledger line.
 
@@ -337,14 +341,15 @@ human **only** for:
 
 1. **A `**Checkpoint:**` line** (end of a story). Present: tasks done, commits, per-task review verdicts,
    deferred minors, unconfirmed findings (with their confidence), every `Ruling:` made so far (with its cost if wrong),
-   each task's visual review (match · differences fixed · skipped and why) and the next story. Continue on
+   each task's visual review (match · differences fixed · floor only · skipped and why) and the next story. Continue on
    approval; ledger `Checkpoint USn: presented → approved`. **The user's feedback there:** a change to this feature is
    a fix round, or a new task (`spec_append_tasks`, re-approved) through the same gates; a rule for every later task
    ("never a modal for a confirmation", "money always as integer cents") is a **learning** — propose it as a
-   steering amendment (`constitution.md` for a non-negotiable, `structure.md` / `tech.md` / `ui.md` for a convention)
-   and write it on the user's OK, so every later brief carries it; ledger `Learning: <rule> → steering/<file>`. An
-   amendment to `constitution.md` or a track's file (`ui.md`…) makes the approved requirements / design warn
-   `steering-changed-since-approval`: review them with the user.
+   steering amendment (`constitution.md` for a non-negotiable, `structure.md` / `tech.md` / `ui.md` for a convention —
+   a UI taste under `ui.md`'s `## Taste`, `references/review-feedback.md` → A UI taste) and write it on the user's
+   OK, so every later brief carries it; ledger `Learning: <rule> → steering/<file>`. An amendment to `constitution.md`
+   or a track's file (`ui.md`…) makes the approved requirements / design warn `steering-changed-since-approval`: review
+   them with the user.
 2. **A spec change.** Any finding or blocker that requires changing an AC, a design decision, or a
    planned test's expectation. Go back to that phase (requirements, design or test plan) — never
    rule on it, never let an implementer "fix" a test to pass.
@@ -584,7 +589,7 @@ Turn count beats token price: the cheapest models take 2–3× the turns on mult
 |---|---|
 | "Close enough on spec compliance" | An ❌ on an AC ID is not done. Fix it or hit the cap and adjudicate. |
 | "The tests pass, so the screen is right" | Tests check behaviour. Spacing, order and the wrong component pass every test — the visual review is what looks. |
-| "No reference, so the review passed" | No reference means the review didn't run. Say so at the checkpoint; never count it as passed. |
+| "No reference, so the review passed" | No reference means only the floor ran. Say so at the checkpoint; never count it as matching the design. |
 | "The brief looks complete — skip the pre-flight" | You wrote the spec, so you can't see what it leaves out. One cheap fresh read costs less than a NEEDS_CONTEXT round trip, or an implementer's silent guess. |
 | "I'll just fix it myself" | Controller fixes skip review and pollute your context. Resume the implementer. |
 | "The test is wrong, let the implementer adjust it" | That is a spec change — stop and go back to the test plan. |
