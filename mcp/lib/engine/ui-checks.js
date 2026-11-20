@@ -34,7 +34,7 @@ const DS_BLOCK_DEPTH = 64; // a sheet's blocks judged nested that deep — a dee
 // outline-removed is not judged — measured (review 1 of 1.37): the report with the pass at either bound within 2× the same
 // report with no candidate on 3,000 CSS modules (an open costs ~1 ms where an antivirus scans it; the parse ~0.15 ms a K)
 const DS_FOCUS_SHEETS = 32;
-const DS_FOCUS_CHARS = 256 * 1024;
+const DS_FOCUS_CHARS = 128 * 1024;
 const DS_MARK_IDS = 200; // characters after a `ui-check-off:` read for its ids
 const BS = String.fromCharCode(92);
 

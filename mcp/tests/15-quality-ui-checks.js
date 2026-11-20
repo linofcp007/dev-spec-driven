@@ -468,7 +468,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
-  { // the focus pass's bounds: the project's 32 first stylesheets (the shorter path first) and 256K characters of them, each
+  { // the focus pass's bounds: the project's 32 first stylesheets (the shorter path first) and 128K characters of them, each
     // sheet read WHOLE — a sheet past what is left of the characters ends the search: past either bound the removal is NOT
     // judged and `uiChecks.limits` says so (focus-sheets / focus-chars), never the report's own `limits`
     const proj = (tag, files) => { const g = feature("focus-" + tag, ["src/checkout/reset.css"]); write(g.p, "src/checkout/reset.css", RESET); for (const [rel, text] of files) write(g.p, rel, text); return S.designSystemReport(g.p, { name: g.slug }); };
@@ -478,13 +478,13 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const rm = proj("sheets", [...sheets(32), ["src/sheets/zz/late-focus.css", FOCUS]]); // the 33rd by path length
     const ru = proj("under", [...sheets(31), ["src/sheets/zz/late-focus.css", FOCUS]]);
     const rr = proj("root", [...sheets(32), ["z-focus.css", FOCUS]]); // the shortest path, the last by name
-    const rb = proj("chars", [["src/big/b0.css", fill(100)], ["src/big/b1.css", fill(100)], ["src/big/b2.css", fill(100)], ["src/big/zz-focus.css", FOCUS]]);
+    const rb = proj("chars", [["src/big/b0.css", fill(50)], ["src/big/b1.css", fill(50)], ["src/big/b2.css", fill(50)], ["src/big/zz-focus.css", FOCUS]]);
     // a sheet is read whole within the bound: its focus rule at its end, past what a head would hold, counts
-    const whole = proj("whole", [["src/styles/app.css", fill(200) + "a:focus-visible { outline: 2px solid; }\n"]]);
+    const whole = proj("whole", [["src/styles/app.css", fill(100) + "a:focus-visible { outline: 2px solid; }\n"]]);
     // a sheet past what is left ends the search, even with its focus rule first: never judged on a head
-    const past = proj("past", [["src/big/b0.css", fill(150)], ["src/big/b1.css", FOCUS + fill(150)]]);
-    const alone = proj("alone", [["src/styles/app.css", FOCUS + fill(300)]]);
-    all("1.37 UI checks: the focus pass stops at a bound — 32 stylesheets (focus-sheets) or 256K characters read (focus-chars), each sheet WHOLE (a 200K one's last rule counts; one past what is left ends the search, whatever its head holds): the removal is then not judged and `uiChecks.limits` says which (never the report's `limits` / `truncated`); 32 sheets with the focus style last read it; the shorter path first — a root sheet beside 32 deeper ones is read (got " +
+    const past = proj("past", [["src/big/b0.css", fill(70)], ["src/big/b1.css", FOCUS + fill(70)]]);
+    const alone = proj("alone", [["src/styles/app.css", FOCUS + fill(150)]]);
+    all("1.37 UI checks: the focus pass stops at a bound — 32 stylesheets (focus-sheets) or 128K characters read (focus-chars), each sheet WHOLE (a 100K one's last rule counts; one past what is left ends the search, whatever its head holds): the removal is then not judged and `uiChecks.limits` says which (never the report's `limits` / `truncated`); 32 sheets with the focus style last read it; the shorter path first — a root sheet beside 32 deeper ones is read (got " +
       js({ root: [rr.uiChecks.findings.length, rr.uiChecks.limits], many: [rm.uiChecks.findings.length, rm.uiChecks.limits, rm.limits, rm.truncated], big: [rb.uiChecks.findings.length, rb.uiChecks.limits], under: [ru.uiChecks.findings.length, ru.uiChecks.limits],
         whole: [whole.uiChecks.findings.length, whole.uiChecks.limits], past: [past.uiChecks.findings.length, past.uiChecks.limits], alone: [alone.uiChecks.findings.length, alone.uiChecks.limits] }) + ")", {
       sheets: () => rm.uiChecks.findings.length === 0 && js(rm.uiChecks.limits) === js([{ code: "focus-sheets", read: 32 }]) && js(rm.limits) === js([]) && rm.truncated === false,

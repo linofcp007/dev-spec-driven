@@ -1297,7 +1297,7 @@ wrong finding sends a team to fix code that is right.
   (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
   the walk's view files; never the name-ranked token candidates: a `focus.css`, an `_a11y.scss`, a .less file count) through
   `uiFocusPass`: the shorter path first, each read WHOLE within the bound (never cut at a line nor at a per-file read: a
-  sheet past what is left of `DS_FOCUS_CHARS` ends the search), `DS_FOCUS_SHEETS` (32) and `DS_FOCUS_CHARS` (256K) at most,
+  sheet past what is left of `DS_FOCUS_CHARS` ends the search), `DS_FOCUS_SHEETS` (32) and `DS_FOCUS_CHARS` (128K) at most,
   stopping at the first that holds one; only a sheet whose text names `focus` (any case) is parsed — every focus style does;
   asked ONLY when an UNSILENCED candidate exists (no candidate, no read — a silenced one is counted silenced whatever the
   pass would say), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
