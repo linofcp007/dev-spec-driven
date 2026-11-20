@@ -1716,9 +1716,9 @@ const unmaskInterpolation = (s) => s.split(INTERPOLATION[0]).join("{").split(INT
 //   on.block({ id, parent, prelude, line, global }) — a `{` opened block `id` (1, 2… in the file's order) inside `parent`
 //     (0: the top level); prelude: what stands before the `{` since the last statement ended, over lines, its last DS_PRELUDE
 //     characters; global: pageWide's answer when it opened.
-//   on.statement({ text, block, line }) — a statement read to its end: a `;` outside parentheses, or a `}`; text: its lines
-//     joined by a blank (each one's own indentation kept), trimmed, its last DS_PRELUDE characters, never blank; block: the
-//     innermost open block (0: none).
+//   on.statement({ text, block, line, from }) — a statement read to its end: a `;` outside parentheses, or a `}`; text: its
+//     lines joined by a blank (each one's own indentation kept), trimmed, its last DS_PRELUDE characters, never blank; block:
+//     the innermost open block (0: none); from: the line its text starts on (`transition:` then its items below: the first).
 //     A `;` inside parentheses (a Less mixin's parameters, an unquoted data: URL) ends none — and what stands before it is
 //     not kept (the walker keeps none); after a token declaration left open at its line's end, the next statement starts
 //     below it (the walker lists that declaration by its name).
@@ -1733,6 +1733,7 @@ function styleTokens(text, rel, on) {
   let opened = 0; // (a block's id: its place among the blocks the file opens)
   let ln = 0; // the line being read, 1-based (the events')
   let prelude = ""; // a block's prelude being read: it may start on the lines above its `{` (`:root,` then `.light {`)
+  let since = 0; // (the line the pending text above began on: a statement's `from`)
   // A declaration no `;` / `}` ends on its line goes on below (a multi-line shadow, a Sass map): listed by its NAME — its
   // first line alone is no value. Two things end one without a `;`: the line's end in an indented file, and the block's end —
   // a block's last declaration needs none (`--gap: 8px` then `}` — or a lone `;` — on the next line with text, or the file's
@@ -1808,7 +1809,7 @@ function styleTokens(text, rel, on) {
       // (the events' statement: a `;` outside parentheses or a `}` ends one — what is pending from the lines above, and the piece)
       if (on && on.statement && (ch === "}" || (ch === ";" && paren === 0))) {
         const whole = (prelude + " " + piece).trim().slice(-DS_PRELUDE);
-        if (whole) on.statement({ text: unmaskInterpolation(whole), block: top ? top.id : 0, line: ln });
+        if (whole) on.statement({ text: unmaskInterpolation(whole), block: top ? top.id : 0, line: ln, from: prelude.trim() ? since : ln });
       }
       const entry = within ? null : declare(piece, ch !== "");
       // (a mixin a page-wide block includes declares for the page: `:root { @include light-theme; }`)
@@ -1816,7 +1817,9 @@ function styleTokens(text, rel, on) {
       if (include && mixins.has(include[1])) themes.add(mixins.get(include[1]));
       if (ch === "}") { const closed = blocks.pop(); if (closed && on && on.close) on.close({ id: closed.id, line: ln }); }
       // (a line that ends on neither is a selector going on — or a value's further line: a `;` / `}` drops it)
-      prelude = ch === "" && !entry ? (prelude + " " + piece).trim().slice(-DS_PRELUDE) : "";
+      const pending = ch === "" && !entry ? (prelude + " " + piece).trim().slice(-DS_PRELUDE) : "";
+      if (prelude === "" && pending !== "") since = ln;
+      prelude = pending;
     }
   }
   settle(true);
@@ -3373,4 +3376,4 @@ function designSystemFinish(projectDir, slug, opts = {}) {
     unregistered: pending.map((c) => c.name).filter((n) => !registered.includes(n)) };
 }
 
-module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, styleTokens, __link };
+module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, styleTokens, opensString, quoteEnd, __link };

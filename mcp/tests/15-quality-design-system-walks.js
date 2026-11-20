@@ -88,4 +88,14 @@ exports.run = async ({ all, remeasure, require, __dirname }) => {
       steer: () => Array.isArray(steered) && plainTokens.length === 2 && js(steered) === js(plainTokens),
     });
   }
+
+  { // 1.37 (the UI checks): a statement event's `from` — the line its text STARTS on (a declaration Prettier breaks over lines is
+    // reported, and silenced, at its first line); `line` stays where it ends
+    const sheet = [".card {", "  transition:", "    opacity .2s,", "", "    all .3s;", "  outline: 0; color: red", "}", ".x { a: 1 }"].join("\n");
+    const st = [];
+    T.styleTokens(sheet, "src/card.scss", { statement: (e) => st.push([e.text.replace(/\s+/g, " "), e.from, e.line]) });
+    all("1.37 UI checks: styleTokens' statement events carry `from`, the line the statement's text starts on (a declaration over lines, a blank line inside it, two on one line, a one-line rule) (got " + js(st) + ")", {
+      from: () => js(st) === js([["transition: opacity .2s, all .3s", 2, 5], ["outline: 0", 6, 6], ["color: red", 6, 7], ["a: 1", 8, 8]]),
+    });
+  }
 };
