@@ -637,9 +637,12 @@ _Libraries: @mui/material_
 ```
 
 - Keep the first header cell of each table (`Token`, `Component` — or their PT / ES forms) and the markers in
-  English (`_Token sources:_`, `_Libraries:_`, `_From:_`): they are what the engine reads. Everything else is yours.
+  English (`_Token sources:_`, `_Libraries:_`, `_From:_`, `_Deprecated:_`): they are what the engine reads. Everything
+  else is yours.
 - `_From: <feature>_` is written by `spec_finish` on the rows it adds: the feature that built the component, whose own
   design keeps saying New. Add it by hand when you list a component a feature is still building.
+- `_Deprecated: use DataGrid_` in any cell after a component's name retires it (`_Deprecated_` alone too): doctor's
+  `ui-deprecated` warns when a design still reuses or extends it, naming the first other listed component the text names.
 - A feature's design lists what it uses in `[UI] Design System Usage` (`Kind | Component | Why / notes`);
   `spec_doctor`'s `ui-design-system` checks those rows against this file, the task brief quotes the entries a UI task
   needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds

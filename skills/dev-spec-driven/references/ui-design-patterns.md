@@ -112,16 +112,18 @@ name, `ui` or `components` (`antd Table` for `antd 5`; `flowbite-react`, `evergr
 `carbon-components-svelte`). Else only where a row cites it: `Modal (Bootstrap)` for `Bootstrap 5` in a project
 where no manifest it reads holds the package (a CDN, an undeclared sub-folder two levels down) — or say the short
 name yourself, `Bootstrap 5 (Bootstrap)`. The name of a framework taken from a bare number or a note (`React 19`,
-`Headless UI (react)`) cites only there too) and, in a component's row, `_From: checkout_` (the feature that built it).
+`Headless UI (react)`) cites only there too) and, in a component's row, `_From: checkout_` (the feature that built it)
+and `_Deprecated: use DataGrid_` (retired: in any cell after its name, `_Deprecated_` alone too; the replacement is the
+first other listed component its first 20 words name — after Impeccable, Apache-2.0).
 
 | Moment | What happens |
 |---|---|
 | **Create it** | `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**: the components it finds, the tokens of the token files and the UI libraries of the project's `package.json` files — the root's and its workspace packages': the folders `workspaces` (package.json), `pnpm-workspace.yaml`, `lerna.json` or `rush.json` declare, or — when none does and the root is no package of its own (its `package.json` has no `dependencies`) — the folders one level down (`frontend/`, `client/`) (what it reads, and what it doesn't: below). Review the rows, then add each component's variants and when to use it — that part is yours. A project template for the file is used as it is instead. Do it before the first +ui feature; on an existing codebase, at adoption. |
 | **Design** | `[UI] Design System Usage` lists one row per component: `Kind \| Component \| Why / notes` — **Reuse** (one the registry lists, used as is), **Extend** (a new variant of one it lists), **New** (none it lists fits — say why). A library's component is written `TextField (@mui/material)`; several components may share a cell, separated outside the parentheses, each naming its library (`TextField (@mui/material, outlined), Dialog (@mui/material)`) — a component's name is what stands outside its parentheses. A row whose first cell is none of the three kinds (EN / PT / ES) is no usage row: neither checked nor counted. The first 100 rows are read, and 4,000 characters of a cell. No component at all: one line, `n/a — <why, in four words or more>`. |
-| **`spec_doctor`** | `ui-design-system` compares the rows with the registry: a Reuse / Extend the registry doesn't list (with a did-you-mean), a New that is already listed, a New whose name is a listed one's with an affix or an edit away (`ButtonV2`, `NewButton`, `CustomCard`, `Buton` — unless its notes say why that component doesn't fit), a New without a reason, a section with no row. A warning — and for a feature of size **m / l** a failing check the design approval refuses, like Reuse & Integration. No registry yet: a warning that says how to create it, never a refusal — and so for a registry that lists no component and declares no library that is one (a dependency of a `package.json` of the project, or a scoped package such as `@mui/material`); a registry that is library-only on purpose is checked like any other — name the library by its package for that (`@mui/material`, or `Material UI (@mui/material)`): a display name alone only warns, and the warning names the libraries it did not recognise. Saving design.md shows the disagreeing rows at once. |
+| **`spec_doctor`** | `ui-design-system` compares the rows with the registry: a Reuse / Extend the registry doesn't list (with a did-you-mean), a New that is already listed, a New whose name is a listed one's with an affix or an edit away (`ButtonV2`, `NewButton`, `CustomCard`, `Buton` — unless its notes say why that component doesn't fit), a New without a reason, a section with no row. A warning — and for a feature of size **m / l** a failing check the design approval refuses, like Reuse & Integration. No registry yet: a warning that says how to create it, never a refusal — and so for a registry that lists no component and declares no library that is one (a dependency of a `package.json` of the project, or a scoped package such as `@mui/material`); a registry that is library-only on purpose is checked like any other — name the library by its package for that (`@mui/material`, or `Material UI (@mui/material)`): a display name alone only warns, and the warning names the libraries it did not recognise. Saving design.md shows the disagreeing rows at once. `ui-deprecated` warns — never refuses — when a Reuse / Extend row names a component the registry marks `_Deprecated:_`, naming its replacement; silent once the row's notes name it. |
 | **Task brief** | A task that builds a view gets a **Design system** part: the registry's entry of each component the design names (path, variants, notes), the New ones to build *through the system*, the names the registry doesn't list, where the tokens live. |
-| **Review** | `spec_scan {designSystem: true, name}` / `dev-spec design-system <feature>`: the rows that disagree with the registry and the **raw values** in the feature's view files (the first 50, with the total) — a hex or `rgb()` colour, a `margin: 13px`, a Tailwind `p-[13px]` — each a candidate finding ("use the token"; a colour equal to a token's value names that token). |
-| **Finish** | In a project with a registry: the raw values are a warning of `spec_finish`, never a blocker — when the registry holds tokens or names token files. A READY written finish **adds the feature's New components to the registry** (their path and `_From: <feature>_`) — the next feature finds them there, and the feature's own design keeps saying New. |
+| **Review** | `spec_scan {designSystem: true, name}` / `dev-spec design-system <feature>`: the rows that disagree with the registry and the **raw values** in the feature's view files (the first 50, with the total) — a hex or `rgb()` colour, a `margin: 13px`, a Tailwind `p-[13px]` — each a candidate finding ("use the token"; a colour equal to a token's value names that token) — and the **UI checks** of the same files (below). |
+| **Finish** | In a project with a registry: the raw values are a warning of `spec_finish`, never a blocker — when the registry holds tokens or names token files. The UI checks' findings are one more warning, registry or not. A READY written finish **adds the feature's New components to the registry** (their path and `_From: <feature>_`) — the next feature finds them there, and the feature's own design keeps saying New. |
 | **Later** | `spec_scan {designSystem: true}` / `dev-spec design-system` says what the code holds and the registry doesn't (components and tokens, each as a row to paste; a component an unfinished feature declares New is listed apart — its finish adds it), which rows name a code file of the project that is gone (what is never "gone": the table below), and token files or libraries it doesn't name. "In sync" is said of names: a token whose value changed in the code, a token the code no longer declares and a token file that is gone are not reported — review the token rows when the tokens change. |
 
 **What the check does not do.** It compares names. A new component under an unrelated name (`PrimaryAction` beside
@@ -137,11 +139,23 @@ name yourself, `Bootstrap 5 (Bootstrap)`. The name of a framework taken from a b
 | Registry paths (a stale row) | a path cell naming a code file of the project — with a blank, behind a markdown link, beside a note, with a `:12` anchor: gone when no file it names is there | a package (`next/link`), an alias (`~/components/…`), prose or `n/a`, a glob, a path without a file extension, a root-level file, a path whose first folder no longer exists, a document or an image a note cites; a row that also names a file that is there is not stale |
 | Raw values | a hex or functional colour in a string, an attribute or a Tailwind `[#…]`; `margin` / `padding` / `gap` / `font-size` / `border-radius` in px / rem / em in a stylesheet, a `<style>` block (a `.vue` / `.svelte` / `.astro` / `.html` file's, styled-jsx's in a `.jsx` / `.tsx`) or a CSS-in-JS declaration line; a Tailwind arbitrary size | a size in a JSX `style={{…}}` object; a token file — a source or its twin —, whole (a rule with a raw value written in the sheet that holds the tokens is not reported); the further lines of a value written over several (`box-shadow: …,` is read by its first line); an anchor or a selector target (`href="#abcdef"`, `data-bs-target="#add"`, `querySelector("#add")`, a 3 / 4-digit `gsap.to("#face")`), a comment, a selector, `rgb(var(--x))`, a 1px hairline, a value built from a variable or `calc()` |
 
-The registry is steering the team owns: edit it by hand at any time (a variant added, a component deprecated in its
-notes, a row for a component a feature is still building — with `_From: <feature>_`). It is not part of an approval's
+The registry is steering the team owns: edit it by hand at any time (a variant added, a component marked
+`_Deprecated:_`, a row for a component a feature is still building — with `_From: <feature>_`). It is not part of an approval's
 fingerprint, so a new row never asks an approved feature to be re-reviewed; and a design approved under the check is
 never *failed* later because the registry moved on (a row renamed, another feature's finish) — doctor warns, until the
 design itself is edited and approved again.
+
+### UI checks — defects whatever the taste
+
+The feature report also reads the feature's view and style files for defects no taste excuses — `uiChecks`: the first
+50 findings (rule, file, line), the total, a count per rule. For a +ui feature, a warning of `spec_finish` too, never a blocker:
+`zoom-disabled` (a viewport that blocks zoom — WCAG 1.4.4), `img-no-alt` (a rendered `<img>` with no alt — 1.1.1),
+`outline-removed` (`outline: none` on an element, `*` or `:focus` while neither the feature's files nor any stylesheet of the project holds a focus
+style — 2.4.7), `click-no-keyboard` (a click handler on an element the keyboard cannot reach: no role, `tabindex` or
+key handler — 2.1.1), `paste-blocked` (an inline paste handler that cancels — 3.3.8). In the report alone:
+`transition-all` (kits ship it). Silence one finding with a comment `ui-check-off: <rule-id> <why>` on its line or the
+line above: counted, never listed. A doubt is never judged: a named handler, a spread (`{...props}`), a tag inside an
+attribute or a one-line template literal, Pug, a tag past 100 attributes or 30 lines.
 
 ---
 
@@ -220,7 +234,7 @@ a figure the user compares. After Emil Kowalski's break-ui skill (MIT).
 - **Figures that are compared or change**: `font-variant-numeric: tabular-nums`. **`translate="no"`** on codes,
   identifiers, commands and names a page translator would mangle.
 
-After Vercel's Web Interface Guidelines (MIT).
+After Vercel's Web Interface Guidelines (MIT) — the UI checks' rules too.
 
 ---
 

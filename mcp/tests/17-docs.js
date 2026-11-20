@@ -1024,6 +1024,53 @@ exports.run = async ({
     }
   }
 
+  { // 1.37 the docs pass — items 1 and 2's user prose: the UI checks (engine/ui-checks.js) and the registry's `_Deprecated:_`
+    // marker with doctor's ui-deprecated (quality.js). The rule ids, their levels and the bounds the prose quotes are read from
+    // the engine's source, so a rule added, removed or moved between levels without the prose fails here.
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const refRaw = (f) => raw("skills", "dev-spec-driven", "references", f);
+    const P = refRaw("ui-design-patterns.md"), S = ws(refRaw("steering-templates.md")), T = ws(refRaw("track-checklists.md"));
+    const lines = P.split("\n"), at = lines.findIndex((l) => l.startsWith("### UI checks"));
+    const end = lines.findIndex((l, i) => i > at && /^#+ /.test(l));
+    const checks = at < 0 ? "" : ws(lines.slice(at, end < 0 ? lines.length : end).join("\n"));
+    const src = raw("mcp", "lib", "engine", "ui-checks.js");
+    const rulesSrc = (src.match(/const UI_RULES = \{([^}]*)\}/) || ["", ""])[1];
+    const rules = [...rulesSrc.matchAll(/"([a-z-]+)": "([a-z]+)"/g)].map((m) => ({ id: m[1], level: m[2] }));
+    const num = (name) => Number(((src.match(new RegExp("const " + name + " = (\\d+)")) || [])[1]));
+    const [warnPart, reportPart] = checks.split("In the report alone");
+    const registry = at < 0 ? "" : ws(lines.slice(lines.findIndex((l) => l.startsWith("### The registry")), at).join("\n"));
+    const rows = [
+      ["ui-design-patterns: the UI checks section — every warn rule before 'In the report alone', every report rule after it",
+        () => rules.length >= 6 && reportPart !== undefined
+          && rules.every((r) => (r.level === "warn" ? warnPart : reportPart).includes("`" + r.id + "`"))
+          && rules.every((r) => !(r.level === "warn" ? reportPart : warnPart).includes("`" + r.id + "`"))],
+      ["ui-design-patterns: the UI checks — each warn rule's WCAG criterion", () => /`zoom-disabled` \([^)]*WCAG 1\.4\.4\)/.test(checks)
+        && /`img-no-alt` \([^)]*1\.1\.1\)/.test(checks) && /`outline-removed` \(.*?2\.4\.7\)/.test(checks)
+        && /`click-no-keyboard` \(.*?2\.1\.1\)/.test(checks) && /`paste-blocked` \([^)]*3\.3\.8\)/.test(checks)],
+      ["ui-design-patterns: the UI checks — a +ui feature's finish warning, never a blocker; one more warning registry or not",
+        () => /For a \+ui feature, a warning of `spec_finish` too, never a blocker/.test(checks)
+          && /The UI checks' findings are one more warning, registry or not\./.test(registry)],
+      ["ui-design-patterns: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
+        () => /a comment `ui-check-off: <rule-id> <why>` on its line or the line above: counted, never listed/.test(checks)],
+      ["ui-design-patterns: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named handler, a spread/.test(checks)
+        && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")],
+      ["ui-design-patterns: the Review row points to the UI checks", () => /— and the \*\*UI checks\*\* of the same files \(below\)/.test(registry)],
+      ["ui-design-patterns: `_Deprecated:_` — the marker, its replacement rule, credited to Impeccable", () =>
+        /`_Deprecated: use DataGrid_` \(retired: in any cell after its name, `_Deprecated_` alone too; the replacement is the first other listed component its first 20 words name — after Impeccable, Apache-2\.0\)/.test(registry)],
+      ["ui-design-patterns: doctor's ui-deprecated — warns, never refuses, silent once the notes name the replacement", () =>
+        /`ui-deprecated` warns — never refuses — when a Reuse \/ Extend row names a component the registry marks `_Deprecated:_`, naming its replacement; silent once the row's notes name it/.test(registry)],
+      ["ui-design-patterns: one Vercel credit line, naming the UI checks too", () => (P.match(/Vercel's Web Interface Guidelines \(MIT\)/g) || []).length === 1
+        && /After Vercel's Web Interface Guidelines \(MIT\) — the UI checks' rules too\./.test(P)],
+      ["steering-templates: `_Deprecated:_` among the English markers, and its bullet", () =>
+        /\(`_Token sources:_`, `_Libraries:_`, `_From:_`, `_Deprecated:_`\): they are what the engine reads/.test(S)
+          && /`_Deprecated: use DataGrid_` in any cell after a component's name retires it \(`_Deprecated_` alone too\): doctor's `ui-deprecated` warns when a design still reuses or extends it/.test(S)],
+      ["track-checklists: finish — the UI checks' warnings fixed or silenced with a reason", () =>
+        /the UI checks' warnings \(`spec_scan \{designSystem: true, name\}`\) fixed or silenced with a reason/.test(T)],
+    ];
+    for (const [label, check] of rows) all("1.37 docs pass — " + label, { holds: check });
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

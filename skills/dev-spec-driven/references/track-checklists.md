@@ -155,8 +155,9 @@ own sections hold them. **Filled means your own text:** the template's guidance 
 - **+privacy:** data subject rights verified end to end on the real stores, retention scheduled.
 - **+dist:** failure-injection tests green, no dual write left.
 - **+api:** contract tests and the breaking-change diff green.
-- **+ui:** the accessibility check, a keyboard / screen-reader pass, the performance budget, and each built state's
-  visual review — against its reference, or on the floor where it has none — passed, or why it was not run.
+- **+ui:** the accessibility check, a keyboard / screen-reader pass, the performance budget, the UI checks' warnings
+  (`spec_scan {designSystem: true, name}`) fixed or silenced with a reason, and each built state's visual review —
+  against its reference, or on the floor where it has none — passed, or why it was not run.
 - **+obs:** an alert fired in a staged failure and a rollback drill.
 - **+data:** the data-quality checks, a partition re-run and a backfill rehearsal on real-sized data — the same rows as one run.
 - **+port:** behaviour first — the differential check green on the final build, run AGAIN after the last improvement (doctor
