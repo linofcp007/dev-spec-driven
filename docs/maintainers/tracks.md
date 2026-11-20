@@ -239,7 +239,15 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
   compares the build with (`references/ui-review.md`), appended so the 1.31 one-line block still reads as template text;
   Design System Usage's block has a second line and a `Kind | Component | Why / notes` table since 1.35 — the rows doctor's
   `ui-design-system` checks against the registry `.specs/steering/design-system.md` (a steering STUB, never in
-  `TRACK_STEERING`: quality.md → Design-system registry), appended the same way;
+  `TRACK_STEERING`: quality.md → Design-system registry), appended the same way; since 1.37 (one change, one re-pin of the
+  no-size sha1, mcp/tests/06-gates-sizes.js) UI States has a THIRD line — the worst-case row, its own capture — and Design
+  System Usage a LAST one after its table: a New / Extend row's contract goes in an optional `## [UI] Component Contracts` h2
+  (localized in PT / ES), never under the table — `designSystemUsage` would read its states table's `New` row as a usage row
+  and the m / l gate would fail. That h2 is NOT a `UI_SECTIONS` entry (`ui-sections` never asks for it, the scaffold writes
+  none) and no reader reads it — a task proving a `[UI]` criterion gets it in its brief's Design context like any
+  `[UI]`-titled h2. Each new line is ≤ 180 characters in
+  every language, appended (an edited line would turn a 1.36 design's guidance into its author's text: the 05 fixture's
+  `prefix` pins the 1.36 lines byte for byte);
   reserved frontend / front-end / ux / gui / wcag — **never `a11y` / `accessibility`**: the
   canonical pack example is a team's `a11y` pack, which keeps its name (its signals and +ui's both fire).
 - **Tiers** (lists: the last section): a login screen is NOT a page type; `snackbar` is one word (a "snack bar" is a food
