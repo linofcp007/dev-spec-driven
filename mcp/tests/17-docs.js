@@ -864,6 +864,7 @@ exports.run = async ({
     // 4) — prose the agent follows. ONE assertion per prose rule: each fails with its rule undone (the 1.37 mutation pass)
     // and failed against 1.36. A row is [label, text, ...checks]: a RegExp must match the whitespace-folded text, {not: re}
     // must not, a function must return true. The budgets ride with a rule of their file (a budget alone held on 1.36).
+    // Chain D's mutation pass: 117 mutants (each rule undone, each budget overrun) on a copy, 117 killed; 97 of 97 failed on 1.36.
     const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
     const ws = (t) => t.replace(/\s+/g, " ");
     const refRaw = (f) => raw("skills", "dev-spec-driven", "references", f);
