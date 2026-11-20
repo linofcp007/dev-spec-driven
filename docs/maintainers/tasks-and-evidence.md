@@ -21,8 +21,8 @@ Phase 6, opt-in.
   The task's own IDs fill the budget first, then the file / track ones, in design.md's order. A task proving a track's
   criterion takes that track's marked sections (`trackMarks`); 1.37: a `uiTask()` task — one that builds what the user sees —
   takes the `[UI]` sections whatever criterion it proves (the usage table, a contract under `## [UI] Component Contracts`,
-  the states), in the same budget: one that does not fit is named, never quoted. A task of the +ui feature that builds no
-  view takes none.
+  the states), in the same budget, AFTER every section another rule wants (`want()` → 2, read last in design.md's order;
+  1.37.0 review 1): one that does not fit is named, never quoted. A task of the +ui feature that builds no view takes none.
 - **A RED task's brief** (`_Expect: fail_`): its tests heading `BRIEF.testsRed` and definition of done `redRules`; its project-checks
   item is `projectChecks.briefDodRed` (only its new red tests may fail).
 - **`write: true`** writes `.specs/<f>/.execution/` (self-ignoring: `.gitignore` = `*`): the brief regenerated, `ledger.md` created
@@ -884,6 +884,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   them on a `uiTask()` task too, within `BRIEF_DESIGN_BUDGET` — the cut form of item 4's design (its own contract quote in
   the brief, through `briefDesignSystem`, would have repeated what Design context already carries and is null without a
   registry).
+- **1.37.0 review 1** (RB-2, MEDIUM) — that line put the `[UI]` sections in the budget loop like any other wanted one, in
+  design.md's order: on a +ui +obs feature (the scaffold puts `[OBS]` after `[UI]`) or with a trailing `## File Structure`,
+  the [UI] block filled the 4,000 characters and the section the task's metrics or its own file asked for — the one a 1.36
+  brief quoted — was only named. `want()` now ranks (1: every earlier rule, 2: the uiWork line alone) and the budget reads
+  the task's IDs first, then the other rank-1 sections, then the rank-2 ones, each group in design.md's order. Fixtures: the
+  reviewer's two shapes (08-tasks); the mutations: quality.md → History → 1.37.0 review 1.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

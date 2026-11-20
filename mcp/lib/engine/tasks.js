@@ -1775,26 +1775,29 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // on an +obs feature, its [OBS] Telemetry section (T review 6 — a task citing a core AC reached no [OBS] section).
   const obsMarker = tracks.includes("obs") ? trackMarker("obs") : null;
   const obsTelemetry = obsMarker ? ((trackSectionTable("obs") || []).find((x) => x.name === "Telemetry") || { syn: [] }).syn : [];
+  // → 0 not wanted · 1 a rule wants it · 2 only the uiWork line below does
   const want = (s) => {
-    if (s === reuseSection) return false;
+    if (s === reuseSection) return 0;
     const hay = s.title + "\n" + s.body;
-    if (idHit(s) || fileNeedles.some((r) => r.test(hay))) return true;
+    if (idHit(s) || fileNeedles.some((r) => r.test(hay))) return 1;
     const title = s.title.toLowerCase();
     const syn = (list, nm) => list.find((x) => x.name === nm).syn.some((y) => title.includes(y));
-    if (mk["emits metrics"].length && syn(SAAS_SECTIONS, "Observability")) return true;
-    if (mk["emits metrics"].length && obsTelemetry.length && s.title.includes(obsMarker) && obsTelemetry.some((y) => title.includes(y))) return true;
-    if (mk["affects evals"].length && (syn(AI_SECTIONS, "Prompt Architecture") || syn(AI_SECTIONS, "Eval Strategy"))) return true;
-    if (trackMarks.some((m) => s.title.includes(m))) return true; // the case-sensitive marker
+    if (mk["emits metrics"].length && syn(SAAS_SECTIONS, "Observability")) return 1;
+    if (mk["emits metrics"].length && obsTelemetry.length && s.title.includes(obsMarker) && obsTelemetry.some((y) => title.includes(y))) return 1;
+    if (mk["affects evals"].length && (syn(AI_SECTIONS, "Prompt Architecture") || syn(AI_SECTIONS, "Eval Strategy"))) return 1;
+    if (trackMarks.some((m) => s.title.includes(m))) return 1; // the case-sensitive marker
     // 1.37: a task that builds what the user sees (uiTask — a view file, the track's block) reads the [UI] sections too, whatever
     // criterion it proves (a component contract, the states), within the same budget — an omitted one is named
-    if (uiWork && s.title.includes(trackMarker("ui"))) return true;
-    return false;
+    return uiWork && s.title.includes(trackMarker("ui")) ? 2 : 0;
   };
   let budget = BRIEF_DESIGN_BUDGET;
   const included = [];
   const omitted = [];
-  const wanted = sections.filter(want);
-  for (const s of [...wanted.filter(idHit), ...wanted.filter((x) => !idHit(x))]) { // the task's own IDs first
+  const rank = new Map(sections.map((s) => [s, want(s)]));
+  const wanted = sections.filter((s) => rank.get(s) === 1);
+  // the task's own IDs first, then the other sections a rule wants, then those only the uiWork line wants (1.37.0 review 1: they
+  // took the budget from the section naming the task's own file or metrics — the one a 1.36 brief quoted)
+  for (const s of [...wanted.filter(idHit), ...wanted.filter((x) => !idHit(x)), ...sections.filter((x) => rank.get(x) === 2)]) {
     if (s.body.length <= budget) { included.push(s); budget -= s.body.length; }
     else omitted.push(s);
   }
