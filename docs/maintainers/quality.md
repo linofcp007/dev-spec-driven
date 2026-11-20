@@ -1203,16 +1203,21 @@ wrong finding sends a team to fix code that is right.
   (3.3.8); `report` — the feature report alone: `transition-all` (certain as syntax, a guideline as a finding: shadcn's own
   Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
 - **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
-  `DS_LINE_MAX`, its comments out) → `{findings: [{rule, line, value, silenced}], focus}`; one finding per rule and line, at a
-  tag's or a declaration's FIRST line, `DS_CHECK_PER_FILE` (200) a file — past it a file's further findings are not kept, as
-  a file's raw values past theirs. A stylesheet's lines are all CSS; a .tsx / .jsx / .js / .ts file is SCRIPT (its tags read as
+  `DS_LINE_MAX`, its comments out, `cut` when it was longer) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
+  one finding per rule and line, at a tag's or a declaration's FIRST line, silenced or not decided when it is found;
+  `DS_CHECK_PER_FILE` (200) kept a file — past it each is still COUNTED (`past`: {byRule, silenced}), never kept (review 1 of
+  1.37: 200 report-level findings hid a file's real ones, `total` read 200); `cut`: {lines (cut at `DS_LINE_MAX`), tags (the
+  tag reader's failed reads)}. A stylesheet's lines are all CSS; a .tsx / .jsx / .js / .ts file is SCRIPT (its tags read as
   JSX); anything else is MARKUP (an SFC, HTML and its template engines), its `<style>` block's lines CSS (viewLines' `css`).
 - **The tag reader** (`tagReader`) — an opening tag, `<` and a name (a letter, then letters, digits, `.`, `:`, `-`) followed by
   a blank, `/`, `>` or the line's end, read WHOLE to its first `>` outside quotes and `{…}`, over lines (a quote carries over
   a line's end; `\` escapes inside braces). In script mode never right after an identifier, `)`, `]` or a quote
   (`useState<div>`, `a<b`), nor inside a string that closes on its line (`blankStrings`); a markup file's `<script>` block
   is not read for tags. The next tag is looked for PAST the previous one's end, and past a read that failed (no `>` within
-  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters): each character read once (CRIT_1 must-fix 1 — a reader
+  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters — counted: `tag-length`; or none before the end of a line
+  viewLines CUT — the read ends there, no quote or brace carried into the lines below: review 1 of 1.37, an inline data-URI
+  logo hid every tag of the next 30 lines, and minified HTML judged an `<img>` on the attributes before its cut alt): each
+  character read once (CRIT_1 must-fix 1 — a reader
   that looked again from the next `<` measured 1,230× plain JSX). What that leaves unjudged, and what else is (said in the
   user docs): a tag nested in an attribute (`icon={<img />}`), a tag starting in the lines a failed read took, a tag of more
   than `DS_TAG_ATTRS` (100) attributes, tags in a one-line template literal (lit, innerHTML), Pug, the JSX of a markup
@@ -1254,23 +1259,33 @@ wrong finding sends a team to fix code that is right.
 - **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
   (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
   the walk's view files; never the name-ranked token candidates: a `focus.css`, an `_a11y.scss`, a .less file count) through
-  `uiFocusPass`: the shorter path first, each read whole (`DS_FOCUS_FILE_CHARS`; never cut at a line), `DS_FOCUS_SHEETS`
-  (1,000) and `DS_FOCUS_CHARS` (4 MB) at most, stopping at the first that holds one; asked ONLY when a candidate exists (no
-  candidate, no read), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
-  says which (`focus-sheets` / `focus-chars`). Any focus style excuses any removal: the reader cannot compute the cascade,
-  and a team that wrote focus styles designed focus.
+  `uiFocusPass`: the shorter path first, each read WHOLE within the bound (never cut at a line nor at a per-file read: a
+  sheet past what is left of `DS_FOCUS_CHARS` ends the search), `DS_FOCUS_SHEETS` (32) and `DS_FOCUS_CHARS` (256K) at most,
+  stopping at the first that holds one; only a sheet whose text names `focus` (any case) is parsed — every focus style does;
+  asked ONLY when an UNSILENCED candidate exists (no candidate, no read — a silenced one is counted silenced whatever the
+  pass would say), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
+  says which (`focus-sheets` / `focus-chars`). The bounds are measured, not chosen: the report with the pass at either
+  bound within 2× the same report with no candidate (an open costs ~1 ms where an antivirus scans each file — History).
+  Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
+  focus.
 - **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` on the finding's line or the line above (any
   comment syntax of the file: in `src`, absent from `l`); counted in `silenced`, never listed, never in finish. Two lines up,
   another id, a string's text, no id: nothing. No project switch in 1.37 (the `_UI checks off:_` marker is 1.38's).
 - **The feature report** (`featureReport`) — the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
   its token files (a globals.css it edits) are read for the checks ALONE — never for raw values, never in `viewFiles`, within
   `DS_VIEW_FILES` files read in all. `uiChecks` (`uiChecksReport`) = {findings (the first `DS_LIST`: rule, level, file, line,
-  value — warn first, then by file and line), total, byRule, silenced, limits}; its limits — `view-files` (the feature's file
-  cap cut what the checks read), `focus-sheets`, `focus-chars` — never reach the report's own `limits` / `truncated`. The CLI
-  prints it after the raw values (`uiHead`, what each rule that appears means — `uiRule` —, `uiSilenced`, a bound of the
-  checks' own once: `dsLimit`).
+  value — warn first, then by file and line), total, byRule, silenced, limits}; its limits — EVERY bound that cut a read or
+  dropped a finding, one code a bound (review 1 of 1.37: a long line, a file's 200 findings and its 256K read dropped real
+  findings with `limits` empty): `view-files` (the feature's file cap cut what the checks read), then with {read, count, file
+  (the first)} `view-size` (a file longer than `DS_READ_CHARS`: read DS_READ_CHARS + 1 to know), `line-length` (lines cut at
+  `DS_LINE_MAX`), `tag-length` (reads past the tag reader's bound), `file-findings` (findings past a file's 200: counted in
+  total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` — never reach the report's own `limits` /
+  `truncated`. Not named (hostile-input guards, no real file reaches them): a tag of more than `DS_TAG_ATTRS` attributes, a
+  block nested past `DS_BLOCK_DEPTH` — not judged. The CLI prints it after the raw values (`uiHead`, what each rule that
+  appears means — `uiRule` —, `uiSilenced`, a bound of the checks' own once: `dsLimit`, with its count and file).
 - **spec_finish** — `designSystemFinish` answers for a +ui feature WITH OR WITHOUT a registry (CRIT_X decision 5): `uiChecks`
-  (`uiFinishChecks`: the warn-level findings — {total, byRule, top: the first 3}); without a registry `registered` /
+  (`uiFinishChecks`: the warn-level findings — {total, byRule, top: the first 3, limits: the report's}; a warn finding past
+  a file's cap is counted, not listed, so `top` may be empty — the warning then reads `…`); without a registry `registered` /
   `unregistered` are `[]` and there is no `raw` / `tokens`, and every reader of `raw` guards it (finish.js, the CLI). ONE
   warning (`finish.uiChecks`), after the raw values', never a blocker; `res.designSystem.uiChecks` only when it has
   findings (the 1.35 shape otherwise).

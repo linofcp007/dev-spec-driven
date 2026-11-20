@@ -241,6 +241,29 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // the bounds that cut a read say so (review 1 of 1.37): a line viewLines cut at 2,000 ends the tag being read on it — no quote
+    // carried into the lines below (an inline data-URI logo hid the <img> under it), a tag reaching the cut is not judged on the
+    // attributes before it (minified HTML); a read past the tag reader's bound is counted (cut.tags), a closed tag past its
+    // characters too; past a file's 200 findings each is still counted (past: by rule, silenced) — never kept
+    const logo = "<img src=\"data:image/svg+xml;utf8," + "%3Cpath d='M0 0h24v24H0z'/%3E".repeat(80) + "\" alt=\"Acme\" />";
+    const header = lines("export const Header = ({ photo }) => (", "  <header>", "    " + logo, "    <p className=\"x\">text</p>", "    <img src={photo} />", "  </header>", ");");
+    const minified = "<main><p>" + "x".repeat(1975) + "</p><img src=\"/hero.jpg\" alt=\"Our team at work\"><p>more</p></main>\n<footer>f</footer>\n";
+    const unclosed = lines("export const A = () => (", "  <div onClick={() => go(", ...Array.from({ length: 40 }, (_, i) => "      a" + i + ","), "  <img src=\"after.png\" />", ");");
+    const wide = lines("export const W = () => <img", "  data-a=\"" + "x".repeat(1980) + "\"", "  data-b=\"" + "y".repeat(1980) + "\"", "  data-c=\"" + "z".repeat(1980) + "\" />;",
+      "export const V = () => <img src=\"v.png\" />;");
+    const cap = lines("export const List = () => (", "  <ul>", ...Array.from({ length: 200 }, (_, i) => "    <li className=\"transition-all\">Row " + i + "</li>"),
+      "    <img src=\"/hero.png\" />", "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/spacer.gif\" />", "  </ul>", ");");
+    const h = run(header, "src/Header.tsx"), m = run(minified, "public/index.html"), u = run(unclosed, "src/A.tsx"), w = run(wide, "src/W.tsx"), c = run(cap, "src/List.tsx");
+    all("1.37 UI checks: a line cut at 2,000 ends the tag being read (the <img> two lines below a cut data-URI line is judged; a tag the cut reaches is not, its alt past it), and is counted; a tag read past 30 lines, or a closed one past 4,000 characters, is counted; past a file's 200 findings each is counted by rule (silenced apart), never kept (got " +
+      js({ h: [h.findings.map((f) => f.rule + "@" + f.line), h.cut], m: [m.findings, m.cut], u: [u.findings.map((f) => f.rule + "@" + f.line), u.cut], w: [w.findings.map((f) => f.rule + "@" + f.line), w.cut], c: [c.findings.length, c.past, c.cut] }) + ")", {
+      cutLine: () => js(h.findings.map((f) => f.rule + "@" + f.line)) === js(["img-no-alt@5"]) && js(h.cut) === js({ lines: 1, tags: 0 }),
+      minified: () => js(m.findings) === js([]) && js(m.cut) === js({ lines: 1, tags: 0 }),
+      tagLines: () => js(u.findings.map((f) => f.rule + "@" + f.line)) === js(["img-no-alt@43"]) && js(u.cut) === js({ lines: 0, tags: 1 }),
+      tagChars: () => js(w.findings.map((f) => f.rule + "@" + f.line)) === js(["img-no-alt@5"]) && js(w.cut) === js({ lines: 0, tags: 1 }),
+      past: () => c.findings.length === 200 && c.findings.every((f) => f.rule === "transition-all") && js(c.past) === js({ byRule: { "img-no-alt": 1 }, silenced: 1 }),
+    });
+  }
+
   { // the readers' finer shapes: a quoted value that holds a `>` over lines, a brace in a string or a block inside a handler, a
     // capitalised IMG (a component), :focus-within, Tailwind's other removals and variants, an easing with no property, styled-jsx
     const jsx = lines("export const Toolbar = ({ open, close, inputRef, src }) => (", "  <>", "    <div", "      title=\"first", "      second > third\"", "      onClick={go}", "    >", // 3: FINDING
@@ -437,12 +460,54 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       order: () => rawAt(fw) !== -1 && uiAt(fw) === rawAt(fw) + 1,
       result: () => fw.designSystem.raw.total === 1 && js(fw.designSystem.uiChecks) === js({ total: 3, byRule: { "click-no-keyboard": 1, "img-no-alt": 1, "outline-removed": 1 },
         top: [{ rule: "click-no-keyboard", file: "src/checkout/Checkout.tsx", line: 2, value: "<div onClick>" }, { rule: "img-no-alt", file: "src/checkout/Checkout.tsx", line: 5, value: "<img>" },
-          { rule: "outline-removed", file: "src/checkout/reset.css", line: 3, value: "*:focus { outline: 0 }" }] }),
+          { rule: "outline-removed", file: "src/checkout/reset.css", line: 3, value: "*:focus { outline: 0 }" }], limits: [] }),
       noRegistry: () => js(fn.designSystem) === js({ uiChecks: { total: 2, byRule: { "click-no-keyboard": 1, "img-no-alt": 1 }, top: [{ rule: "click-no-keyboard", file: "src/checkout/Checkout.tsx", line: 2, value: "<div onClick>" },
-        { rule: "img-no-alt", file: "src/checkout/Checkout.tsx", line: 5, value: "<img>" }] }, registered: [], unregistered: [] }) && uiLine(fn).length === 1,
+        { rule: "img-no-alt", file: "src/checkout/Checkout.tsx", line: 5, value: "<img>" }], limits: [] }, registered: [], unregistered: [] }) && uiLine(fn).length === 1,
       neverBlocks: () => ![fw, fn].some((x) => (x.blockers || []).some((b) => /anti-pattern|ui-check/.test(b))),
       reportOnly: () => fr.designSystem === undefined && uiLine(fr).length === 0,
       plain: () => fp.designSystem === undefined && uiLine(fp).length === 0,
+    });
+  }
+
+  { // every bound that cut what the checks read, or dropped a finding, is named in `uiChecks.limits` with a count and the first
+    // file — in the report and in finish's designSystem.uiChecks (review 1 of 1.37: a long line, a file's 200 findings and its
+    // 256K read dropped real findings with `limits` empty); a finding past a file's cap is still counted in total / byRule
+    const R = (tag, files) => { const g = feature("bounds-" + tag, Object.keys(files)); for (const [rel, text] of Object.entries(files)) write(g.p, rel, text); return Object.assign(g, { r: S.designSystemReport(g.p, { name: g.slug }) }); };
+    const b64 = "iVBORw0KGgo" + "A".repeat(2600) + "=";
+    const page = lines("<!doctype html>", "<html lang=\"en\">", "<body>", "  <header><img src=\"data:image/png;base64," + b64 + "\" alt=\"Acme\"></header>", "  <main>", "    <h1>Welcome</h1>",
+      "    <img src=\"/team.jpg\">", "  </main>", "</body>", "</html>");
+    const filler = (k) => Array.from({ length: Math.ceil(k * 1024 / 100) }, () => "x".repeat(99)).join("\n");
+    const big = "<!doctype html>\n<!--\n" + filler(270) + "\n-->\n<img src=\"/late.jpg\">\n";
+    const exact = (() => { const head = "<!doctype html>\n<!--\n", tail = "\n-->\n<img src=\"/x.jpg\">", pad = 256 * 1024 - head.length - tail.length; return head + ("y".repeat(99) + "\n").repeat(Math.floor(pad / 100)) + "y".repeat(pad % 100) + tail; })();
+    const rows = Array.from({ length: 200 }, (_, i) => "    <li className=\"transition-all\">Row " + i + "</li>");
+    const list = lines("export const List = () => (", "  <ul>", ...rows, "    <img src=\"/hero.png\" />", "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/spacer.gif\" />", "  </ul>", ");");
+    const sheet200 = (focus) => lines(...Array.from({ length: 200 }, (_, i) => ".t" + i + " { transition: all .2s; }"), focus ? ":focus-visible { outline: 2px solid; }" : "", "button { outline: none; }");
+    const tokens = ":root {\n" + Array.from({ length: 3000 }, (_, i) => "  --space-" + i + ": " + i + "px; /* " + "s".repeat(60) + " */").join("\n") + "\n}\n* { transition: all .2s; }\n";
+    const longline = R("line", { "src/landing/index.html": page });
+    const size = R("size", { "src/landing/big.html": big });
+    const sizeExact = R("size-exact", { "src/landing/exact.html": exact });
+    const capped = R("cap", { "src/landing/List.tsx": list });
+    const ownFocus = R("cap-focus", { "src/landing/big.css": sheet200(true) });
+    const passFocus = R("cap-pass", { "src/landing/big.css": sheet200(false) });
+    write(passFocus.p, "src/styles/focus.css", ":focus-visible { outline: 2px solid; }\n");
+    passFocus.r = S.designSystemReport(passFocus.p, { name: passFocus.slug });
+    const tagged = R("tag", { "src/landing/A.tsx": lines("export const A = () => (", "  <div onClick={() => go(", ...Array.from({ length: 40 }, (_, i) => "      a" + i + ","), "  <img src=\"after.png\" />", ");") });
+    const tokenBig = R("token", { "src/landing/Hero.tsx": "export const Hero = () => <b>hi</b>;\n", "src/app/globals.css": tokens });
+    const fin = S.finishFeature(capped.p, capped.slug), finLine = S.finishFeature(longline.p, longline.slug);
+    const M = S.msg("en").finish;
+    const L = (x) => x.r.uiChecks.limits;
+    all("1.37 UI checks: the bounds named in `uiChecks.limits` — line-length (a cut line, the <img> below it judged), view-size (a file past 256K; one of exactly 256K is not), file-findings (past a file's 200: counted in total / byRule / silenced, never listed), tag-length (a read past 30 lines), a token file's view-size; a past-cap removal excused by the file's or the project's focus style is no finding; finish's designSystem.uiChecks carries the same limits, its warning `…` when no warn finding is listed (got " +
+      js({ line: [longline.r.uiChecks.total, L(longline)], size: [size.r.uiChecks.total, L(size)], exact: L(sizeExact), cap: [capped.r.uiChecks.total, capped.r.uiChecks.byRule, capped.r.uiChecks.silenced, L(capped)],
+        own: [ownFocus.r.uiChecks.total, L(ownFocus)], pass: [passFocus.r.uiChecks.total, L(passFocus)], tag: L(tagged), token: L(tokenBig), fin: fin.designSystem, finLine: finLine.designSystem }) + ")", {
+      lineLength: () => longline.r.uiChecks.findings.some((x) => x.rule === "img-no-alt" && x.line === 7) && js(L(longline)) === js([{ code: "line-length", read: 2000, count: 1, file: "src/landing/index.html" }]),
+      viewSize: () => size.r.uiChecks.total === 0 && js(L(size)) === js([{ code: "view-size", read: 262144, count: 1, file: "src/landing/big.html" }]) && js(L(sizeExact)) === js([]),
+      perFile: () => capped.r.uiChecks.total === 201 && js(capped.r.uiChecks.byRule) === js({ "transition-all": 200, "img-no-alt": 1 }) && capped.r.uiChecks.silenced === 1 &&
+        capped.r.uiChecks.findings.length === 50 && js(L(capped)) === js([{ code: "file-findings", read: 200, count: 2, file: "src/landing/List.tsx" }]),
+      pastExcused: () => ownFocus.r.uiChecks.total === 200 && js(L(ownFocus)) === js([]) && passFocus.r.uiChecks.total === 200 && js(L(passFocus)) === js([]),
+      tagLength: () => js(L(tagged)) === js([{ code: "tag-length", read: 30, count: 1, file: "src/landing/A.tsx" }]),
+      tokenFile: () => tokens.length > 262144 && tokenBig.r.viewFiles === 1 && js(L(tokenBig).map((x) => x.code + ":" + x.file)) === js(["view-size:src/app/globals.css"]),
+      finish: () => js(fin.designSystem.uiChecks) === js({ total: 1, byRule: { "img-no-alt": 1 }, top: [], limits: L(capped) }) && (fin.warnings || []).includes(M.uiChecks(1, "…", capped.slug))
+        && js(finLine.designSystem.uiChecks.limits) === js(L(longline)),
     });
   }
 

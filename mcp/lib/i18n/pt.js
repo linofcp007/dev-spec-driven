@@ -1566,6 +1566,11 @@ const msg = {
         "view-files": (n) => `  (só os primeiros ${n} ficheiros de vista da feature são lidos à procura de valores fixos)`,
         "focus-sheets": (n) => `  (os estilos de foco foram procurados nas primeiras ${n} folhas de estilo do projeto, um limite: nenhuma remoção do contorno foi avaliada)`,
         "focus-chars": (n) => `  (os estilos de foco foram procurados em ${n} folhas de estilo, até aos caracteres lidos, um limite: nenhuma remoção do contorno foi avaliada)`,
+        // (1.37 revisão 1: os outros limites das verificações de interface — count: quantos cortou, file: o primeiro)
+        "view-size": (n, file, count) => `  (${count} ${count === 1 ? "ficheiro de vista é maior" : "ficheiros de vista são maiores"} do que os ${n} caracteres lidos de cada ficheiro — o primeiro: ${file}: as verificações de interface não leram o resto)`,
+        "line-length": (n, file, count) => `  (${count} ${count === 1 ? "linha tem" : "linhas têm"} mais de ${n} caracteres — a primeira em ${file}: cada uma é lida até aí, e uma tag que ela corta não é avaliada)`,
+        "tag-length": (n, file, count) => `  (${count} ${count === 1 ? "tag não é avaliada" : "tags não são avaliadas"} — a primeira em ${file}: lida para lá de ${n} linhas ou do limite de caracteres do leitor)`,
+        "file-findings": (n, file, count) => `  (mais ${count} ${count === 1 ? "achado de interface" : "achados de interface"} além dos ${n} de um ficheiro — o primeiro em ${file}: contados, não listados)`,
         "component-files": (n) => `  (foram lidos ${n} ficheiros de componentes à procura dos outros componentes que exportam, e foi atingido um limite — os ficheiros ou caracteres lidos, ou os nomes guardados de um ficheiro: o resto não é comparado)`,
         "workspace-manifests": (n) => `  (foi atingido um limite dos padrões de workspace — lidos ${n} dos ficheiros package.json dos pacotes do workspace: as bibliotecas dos restantes não são comparadas)`,
       },

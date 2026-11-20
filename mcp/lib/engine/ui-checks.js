@@ -26,7 +26,7 @@ const UI_RULES = { "zoom-disabled": "warn", "img-no-alt": "warn", "outline-remov
 const DS_TAG_LINES = 30; // one opening tag read over lines…
 const DS_TAG_CHARS = 4000; // …and characters: past either it is not judged, nor is a tag that starts inside it
 const DS_TAG_ATTRS = 100; // a tag's attributes read: one that holds more is not judged
-const DS_CHECK_PER_FILE = 200; // findings kept per file (silenced ones too) — past it a file's further findings are not kept
+const DS_CHECK_PER_FILE = 200; // findings kept per file (silenced ones too) — past it a file's further findings are counted, never kept
 const DS_VALUE = 80; // a finding's value, cut
 const DS_BLOCK_DEPTH = 64; // a sheet's blocks judged nested that deep — a deeper one is not, nor what it holds
 // the project's stylesheets read for a focus style, and their characters (each sheet whole): past either `limits` says so and
@@ -80,26 +80,29 @@ function readOn(cur, l, from) {
   cur.text += l.slice(from) + "\n";
   return -1;
 }
-// → { line(n, l), }: each line of a file that holds tags, in order; judge(tag, rest) for each tag read whole — tag: { name,
-// line (its first), text (from `<` to `>`) }, rest: what follows it on its last line. The next tag is looked for PAST the
-// previous one's end (a tag nested in an attribute — `icon={<img />}` — is not judged) and past a read that failed (no `>`
-// within DS_TAG_LINES lines / DS_TAG_CHARS characters: neither it nor a tag starting in the lines it read is judged) — each
-// character read once: linear (CRIT_1: a reader that looked again from the next `<` was 1,230× plain JSX on unclosed tags).
+// → { line(n, l, cut), failed() }: each line of a file that holds tags, in order (cut: viewLines cut it at DS_LINE_MAX);
+// judge(tag, rest) for each tag read whole — tag: { name, line (its first), text (from `<` to `>`) }, rest: what follows it
+// on its last line. The next tag is looked for PAST the previous one's end (a tag nested in an attribute — `icon={<img />}` —
+// is not judged) and past a read that failed — no `>` within DS_TAG_LINES lines / DS_TAG_CHARS characters (neither it nor a
+// tag starting in the lines it read is judged; failed() counts them), or none before the end of a CUT line (what the line
+// held past the cut is unread: the read ends there, no quote or brace carried into the lines below — review 1 of 1.37) —
+// each character read once: linear (CRIT_1: a reader that looked again from the next `<` was 1,230× plain JSX on unclosed tags).
 function tagReader(script, judge) {
-  let cur = null, inScript = false; // the tag being read · inside a markup file's <script> block
-  const line = (n, l) => {
+  let cur = null, inScript = false, failed = 0; // the tag being read · inside a markup file's <script> block · reads past a bound
+  const line = (n, l, cut) => {
     let from = 0, masked = null;
     for (;;) {
       if (cur) {
         const end = readOn(cur, l, from);
         if (end === -1) {
-          if (++cur.lines > DS_TAG_LINES || cur.text.length > DS_TAG_CHARS) cur = null; // not judged — the reader goes on below
+          if (cut) cur = null; // (the line-length limit says it)
+          else if (++cur.lines > DS_TAG_LINES || cur.text.length > DS_TAG_CHARS) { cur = null; failed++; } // not judged — the reader goes on below
           return;
         }
         const tag = cur;
         cur = null;
         from = end + 1;
-        if (tag.text.length > DS_TAG_CHARS) continue;
+        if (tag.text.length > DS_TAG_CHARS) { failed++; continue; }
         judge(tag, l.slice(from));
         if (!script && tag.name === "script" && !tag.text.endsWith("/>")) inScript = true;
         continue;
@@ -120,7 +123,7 @@ function tagReader(script, judge) {
       from = m.index + m[0].length;
     }
   };
-  return { line };
+  return { line, failed: () => failed };
 }
 
 // --- a tag's attributes ----------------------------------------------------------------------------------------------------------
@@ -419,26 +422,34 @@ function markIds(src) {
   }
   return ids;
 }
-// One view / style file → { findings: [{ rule, line, value, silenced }], focus }. lines: viewLines(text, rel)'s (n 1-based, src,
-// l without its comments, css). A finding is at its tag's or declaration's FIRST line, one per rule and line, DS_CHECK_PER_FILE
-// at most; `silenced` when a `ui-check-off:` comment (in `src`, absent from `l`) on that line or the one above names its rule.
+// One view / style file → { findings: [{ rule, line, value, silenced }], focus, past, cut }. lines: viewLines(text, rel)'s (n
+// 1-based, src, l without its comments, css, cut). A finding is at its tag's or declaration's FIRST line, one per rule and
+// line; `silenced` when a `ui-check-off:` comment (in `src`, absent from `l`) on that line or the one above names its rule
+// (decided when it is found: the lines up to it are read). DS_CHECK_PER_FILE findings are kept; past them each is still
+// COUNTED — past: { byRule (the unsilenced ones), silenced } — never kept (review 1 of 1.37: a file of 200 report-level
+// findings hid its real ones, `total` read 200). cut: { lines (cut at DS_LINE_MAX), tags (tagReader's failed reads) }.
 // outline-removed findings are CANDIDATES (focus: does the file hold a focus style — uiChecksReport decides).
 function uiChecksOf(lines, rel) {
   const sheet = RE_STYLE_EXT.test(rel);
-  const findings = [], seen = new Set(), marks = new Map(), css = [];
-  let focus = false, anyCss = false;
+  const findings = [], seen = new Set(), marks = new Map(), css = [], past = { byRule: {}, silenced: 0 };
+  let focus = false, anyCss = false, cutLines = 0;
   const add = (rule, line, value) => {
     const k = rule + ":" + line;
-    if (seen.has(k) || findings.length >= DS_CHECK_PER_FILE) return;
+    if (seen.has(k)) return;
     seen.add(k);
-    findings.push({ rule, line, value: String(value).replace(/\s+/g, " ").trim().slice(0, DS_VALUE), silenced: false });
+    const here = marks.get(line), above = marks.get(line - 1);
+    const silenced = (here != null && here.has(rule)) || (above != null && above.has(rule));
+    if (findings.length < DS_CHECK_PER_FILE) findings.push({ rule, line, value: String(value).replace(/\s+/g, " ").trim().slice(0, DS_VALUE), silenced });
+    else if (silenced) past.silenced++;
+    else past.byRule[rule] = (past.byRule[rule] || 0) + 1;
   };
   const tags = sheet ? null : tagReader(RE_SCRIPT_FILE.test(rel), (tag, rest) => judgeTag(tag, rest, add));
-  for (const { n, src, l, css: isCss } of lines) {
+  for (const { n, src, l, css: isCss, cut } of lines) {
     if (src.includes("ui-check-off:") && !l.includes("ui-check-off:")) marks.set(n, markIds(src));
+    if (cut) cutLines++;
     css.push(isCss ? l : "");
     if (isCss) { anyCss = true; continue; }
-    tags.line(n, l);
+    tags.line(n, l, cut);
     if (/scal/i.test(l)) {
       const off = RE_ZOOM_OFF.exec(l);
       if (off) add("zoom-disabled", n, off[0]);
@@ -449,11 +460,7 @@ function uiChecksOf(lines, rel) {
     if (l.includes("transition")) scriptTransitions(l, n, add);
   }
   if (anyCss && sheetChecks(css.join("\n"), rel, add)) focus = true;
-  for (const f of findings) {
-    const here = marks.get(f.line), above = marks.get(f.line - 1);
-    f.silenced = (here != null && here.has(f.rule)) || (above != null && above.has(f.rule));
-  }
-  return { findings, focus };
+  return { findings, focus, past, cut: { lines: cutLines, tags: tags ? tags.failed() : 0 } };
 }
 
 // --- the feature's files ---------------------------------------------------------------------------------------------------------
@@ -484,37 +491,49 @@ function uiFocusPass(sheets) {
   return { focus: false, limits: [] };
 }
 // The feature report's `uiChecks` → { findings (the first `cap`: rule, level, file, line, value — warn first, then by file
-// and line), total, byRule, silenced, limits }. files: [{ rel, findings, focus }] (uiChecksOf of each file read). The
-// outline-removed candidates stand only while NO focus style exists — in the feature's files, else in the project's
+// and line), total, byRule, silenced, limits }. files: [{ rel, findings, focus, past, cut }] (uiChecksOf of each file read).
+// The outline-removed candidates stand only while NO focus style exists — in the feature's files, else in the project's
 // stylesheets (projectFocus(): uiFocusPass, called only then — no unsilenced candidate, no read); a search a bound cut judges
-// none. A silenced finding is counted silenced whatever the pass says.
+// none. A silenced finding is counted silenced whatever the pass says; a finding past a file's DS_CHECK_PER_FILE is counted,
+// never listed. limits — each bound that cut a read or dropped a finding, with a count (review 1 of 1.37): tag-length
+// ({read: DS_TAG_LINES, count: the tags read past the tag reader's bound, file: the first}), file-findings ({read:
+// DS_CHECK_PER_FILE, count: the findings past it, file: the first}), then the pass's focus-sheets / focus-chars ({read}).
 function uiChecksReport(files, projectFocus, cap) {
   let focus = files.some((f) => f.focus), limits = [];
-  if (!focus && files.some((f) => f.findings.some((x) => x.rule === "outline-removed" && !x.silenced))) ({ focus, limits } = projectFocus());
-  const list = [];
+  if (!focus && files.some((f) => f.past.byRule["outline-removed"] || f.findings.some((x) => x.rule === "outline-removed" && !x.silenced))) ({ focus, limits } = projectFocus());
+  const stands = (rule) => !(rule === "outline-removed" && (focus || limits.length));
+  const list = [], unlisted = [];
+  const tagCut = { code: "tag-length", read: DS_TAG_LINES, count: 0, file: null }, fileCut = { code: "file-findings", read: DS_CHECK_PER_FILE, count: 0, file: null };
+  const cut = (c, n, rel) => { if (n && !c.count) c.file = rel; c.count += n; };
   let silenced = 0;
   for (const f of files) {
     for (const x of f.findings) {
       if (x.silenced) { silenced++; continue; }
-      if (x.rule === "outline-removed" && (focus || limits.length)) continue;
-      list.push({ rule: x.rule, level: UI_RULES[x.rule], file: f.rel, line: x.line, value: x.value });
+      if (stands(x.rule)) list.push({ rule: x.rule, level: UI_RULES[x.rule], file: f.rel, line: x.line, value: x.value });
     }
+    let more = f.past.silenced;
+    silenced += f.past.silenced;
+    for (const [rule, n] of Object.entries(f.past.byRule)) if (stands(rule)) { unlisted.push([rule, n]); more += n; }
+    cut(tagCut, f.cut.tags, f.rel);
+    cut(fileCut, more, f.rel);
   }
   const rank = (x) => (x.level === "warn" ? 0 : 1);
   list.sort((a, b) => rank(a) - rank(b) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) || a.line - b.line);
   const byRule = {};
+  let total = list.length;
   for (const x of list) byRule[x.rule] = (byRule[x.rule] || 0) + 1;
-  return { findings: list.slice(0, cap), total: list.length, byRule, silenced, limits };
+  for (const [rule, n] of unlisted) { byRule[rule] = (byRule[rule] || 0) + n; total += n; }
+  return { findings: list.slice(0, cap), total, byRule, silenced, limits: [tagCut, fileCut].filter((c) => c.count).concat(limits) };
 }
 
-// spec_finish's part of a feature report's uiChecks → { total, byRule, top (the first 3: rule, file, line, value) } — the warn-level
-// findings alone (the report sorts them first; a report-level rule is never a finish warning)
+// spec_finish's part of a feature report's uiChecks → { total, byRule, top (the first 3: rule, file, line, value), limits (the
+// report's) } — the warn-level findings alone (the report sorts them first; a report-level rule is never a finish warning)
 function uiFinishChecks(report) {
   const byRule = {};
   let total = 0;
   for (const [rule, n] of Object.entries(report.byRule)) if (UI_RULES[rule] === "warn") { byRule[rule] = n; total += n; }
   const top = report.findings.filter((x) => x.level === "warn").slice(0, 3).map((x) => ({ rule: x.rule, file: x.file, line: x.line, value: x.value }));
-  return { total, byRule, top };
+  return { total, byRule, top, limits: report.limits };
 }
 
 module.exports = { uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, __link };

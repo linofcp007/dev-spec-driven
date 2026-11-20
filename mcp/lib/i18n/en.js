@@ -1626,6 +1626,11 @@ const msg = {
         "view-files": (n) => `  (only the feature's first ${n} view files are read for raw values)`,
         "focus-sheets": (n) => `  (focus styles were looked for in the project's first ${n} stylesheets, a bound: no outline removal was judged)`,
         "focus-chars": (n) => `  (focus styles were looked for in ${n} stylesheets, up to the characters read, a bound: no outline removal was judged)`,
+        // (1.37 review 1: the UI checks' other bounds — count: how many it cut, file: the first)
+        "view-size": (n, file, count) => `  (${count} view ${count === 1 ? "file is" : "files are"} longer than the ${n} characters read of a file — the first: ${file}: the UI checks did not read the rest)`,
+        "line-length": (n, file, count) => `  (${count} ${count === 1 ? "line is" : "lines are"} longer than ${n} characters — the first in ${file}: each is read up to there, and a tag it cuts is not judged)`,
+        "tag-length": (n, file, count) => `  (${count} ${count === 1 ? "tag is" : "tags are"} not judged — the first in ${file}: read past ${n} lines or the reader's character bound)`,
+        "file-findings": (n, file, count) => `  (${count} more UI ${count === 1 ? "finding" : "findings"} past a file's ${n} — the first in ${file}: counted, not listed)`,
         "component-files": (n) => `  (${n} component files were read for the further components they export, and a bound was reached — the files or characters read, or the names kept of one file: the rest is not compared)`,
         "workspace-manifests": (n) => `  (a bound of the workspace patterns was reached — ${n} of the workspace packages' package.json files read: the libraries of the rest are not compared)`,
       },
