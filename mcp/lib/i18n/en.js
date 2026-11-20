@@ -1044,6 +1044,8 @@ const msg = {
       duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "block of the feature's code repeats" : "blocks of the feature's code repeat"} another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       // 1.35: raw colours and sizes in the feature's view files, where the design-system registry has tokens — a warning, never a blocker
       designSystemRaw: (n, top, slug) => `the feature's view files hold ${n} raw ${n === 1 ? "value" : "values"} where the design system has tokens — ${top}${n > 3 ? "; …" : ""}: use the token, or note in the report why a literal is deliberate (the list: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
+      // 1.37: the UI checks of the feature's view files (the warn-level ones nobody silenced) — a warning, never a blocker
+      uiChecks: (n, top, slug) => `the feature's view files hold ${n} UI ${n === 1 ? "anti-pattern" : "anti-patterns"} — ${top}${n > 3 ? "; …" : ""}: fix each, or mark a deliberate one with a \`ui-check-off: <rule>\` comment on its line or the line above (the list: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
       // 1.30: no task names a file in _Implements:_ — what reads them sees no code of the feature. file: the one holding the tasks
       // (tasks.md; an xs change's change.md — review 9)
       noImplements: (file) => `no task names its files in _Implements:_ — the drift baseline, the duplicate check and dev-guardian's attribution see no code of this feature. Add _Implements: <path>_ to each task that wrote code (an edited ${file} is re-approved), or ignore this if none did.`,
@@ -1622,6 +1624,8 @@ const msg = {
         tokens: (n) => `  (only the first ${n} tokens of the code are read: the rest is not compared)`,
         "registry-rows": (n) => `  (only the registry's first ${n} components are checked for a path that is gone)`,
         "view-files": (n) => `  (only the feature's first ${n} view files are read for raw values)`,
+        "focus-sheets": (n) => `  (focus styles were looked for in the project's first ${n} stylesheets, a bound: no outline removal was judged)`,
+        "focus-chars": (n) => `  (focus styles were looked for in ${n} stylesheets, up to the characters read, a bound: no outline removal was judged)`,
         "component-files": (n) => `  (${n} component files were read for the further components they export, and a bound was reached — the files or characters read, or the names kept of one file: the rest is not compared)`,
         "workspace-manifests": (n) => `  (a bound of the workspace patterns was reached — ${n} of the workspace packages' package.json files read: the libraries of the rest are not compared)`,
       },
@@ -1632,6 +1636,20 @@ const msg = {
       dsNoViewFiles: "  no view or style file among its _Implements:_ files — nothing to read",
       dsRegistered: (list) => `  ✓ added to the design-system registry: ${list}`,
       dsUnregistered: (list) => `  ▲ not added to the design-system registry (no plain component name, or the file could not be written): ${list}`,
+      // 1.37: the UI checks of the feature's files (spec_scan {designSystem: true, name}'s `uiChecks`)
+      uiHead: (n) => `  UI checks (${n}) — spec_finish warns about each but the report-only ones:`,
+      uiNone: (files) => `  UI checks: nothing in its ${files} view ${files === 1 ? "file" : "files"}`,
+      uiReportTag: "(report only)",
+      uiLegend: "  what each means:",
+      uiRule: {
+        "zoom-disabled": "the viewport stops pinch-zoom (user-scalable=no, maximum-scale under 2) — let people zoom (WCAG 1.4.4)",
+        "img-no-alt": "an <img> without alt — say what it shows, or alt=\"\" when it is decoration (WCAG 1.1.1)",
+        "outline-removed": "the focus outline is removed and no focus style of the project replaces it — keep a visible indicator (:focus-visible with an outline, a ring or a border; WCAG 2.4.7)",
+        "click-no-keyboard": "a click handler on an element the keyboard cannot reach — use a <button> or an <a href>, or give it a role, a tabindex and a key handler (WCAG 2.1.1)",
+        "paste-blocked": "a paste handler cancels the paste without reading the clipboard — never block paste: password managers, long codes (WCAG 3.3.8)",
+        "transition-all": "transition: all (or no property) animates every property that changes, layout ones too — list the ones that should move",
+      },
+      uiSilenced: (n) => `  (${n} silenced by a ui-check-off comment)`,
       dsTokensNew: (n) => `  tokens in the code, not in the registry (${n}) — a row each:`,
       dsPending: (list) => `  in the code, built by an unfinished feature (its finish adds them): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,

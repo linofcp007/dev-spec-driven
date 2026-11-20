@@ -595,7 +595,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   The walk's EVENTS (1.37): `styleTokens(text, rel, on)` — the ONE CSS block walker, for a reader of a sheet's STRUCTURE (the
   UI checks: a rule's selector, what it declares, the blocks around it); never a second walker beside it (CRIT_1: this one
   took reviews 7–11 to get right). `on.block({ id, parent, prelude, line, global })` when a `{` opens a block (the prelude
-  over lines, its last DS_PRELUDE characters, `#{…}` as written), `on.statement({ text, block, line })` when a `;` OUTSIDE
+  over lines, its last DS_PRELUDE characters, `#{…}` as written), `on.statement({ text, block, line, from })` (`from`, 1.37: the line its text
+  starts on) when a `;` OUTSIDE
   parentheses or a `}` ends one (the walker's pending text and the piece — its lines joined by a blank; never blank, never
   a prelude), `on.close({ id, line })` when a `}` closes a block (a stray one closes none). Each handler is optional and is
   given a fresh object of plain values: nothing it does reaches the tokens. The events read the walker's state, they never
@@ -1028,7 +1029,7 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   design — `pendingNew`: its finish adds it; a row pasted for it would read as already listed), `stale` (`stalePath` —
   below), `newTokens` (against `tokenNames` — every token the file lists),
   `newSources` / `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`,
-  `counts`, `newComponents`. `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
+  `counts`, `newComponents`, `uiChecks` (1.37 — UI checks, below). `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
   total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `total`).
 - **`limits`** — the bounds that CUT what a report read, `[{code, read, file?}]`: files (the walk's cap) · token-files ·
   token-candidates · file-size (`file`) · tokens · registry-rows (rows past 500 are not checked for a gone path) ·
@@ -1104,7 +1105,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   of that name, or the one that exports it beside its own (1.35.1), the
   origin `_From: <slug>_`; a name that is no plain component name is never written (`RE_SAFE_NAME`); best-effort — a registry
   the write gate refuses is left as it is and the finish stands. Result: `designSystem` {raw, registered, unregistered,
-  note?}. A rename follows: `renameRegistryOrigin` (finish.js) rewrites `_From: <old>_` (`designSystemUpdated`).
+  note?}. A rename follows: `renameRegistryOrigin` (finish.js) rewrites `_From: <old>_` (`designSystemUpdated`). Since 1.37 it
+  answers for every +ui feature, a registry or not — its UI checks (UI checks, below).
 - **Linear, bounded** (review 1): a cell is cut BEFORE its replaces (`dsCell`, `dsSlot`), a token file's name parts are
   letters and digits only (`(?:[-_.][\w-]+)*` backtracked exponentially on `tokens-a-a-a-…`), `raw.trimEnd()` never a
   `\s+$` replace, every line of a view file capped (`DS_LINE_MAX`; a token file's line is read WHOLE since review 6 —
@@ -1190,6 +1192,99 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
+
+## UI checks (1.37)
+A +ui feature's view / style files read for anti-patterns that are wrong whatever the taste — engine/ui-checks.js (LAZY,
+after design-system.js), the feature report's `uiChecks` and ONE finish warning. FEATURE level only in 1.37: the project report
+reads no view file for them (CRIT_X decision 3 — one shared project pass is 1.38's). Every doubt reads as "not judged": a
+wrong finding sends a team to fix code that is right.
+- **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the feature report AND finish's warning, never a blocker:
+  `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1), `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked`
+  (3.3.8); `report` — the feature report alone: `transition-all` (certain as syntax, a guideline as a finding: shadcn's own
+  Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
+- **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
+  `DS_LINE_MAX`, its comments out) → `{findings: [{rule, line, value, silenced}], focus}`; one finding per rule and line, at a
+  tag's or a declaration's FIRST line, `DS_CHECK_PER_FILE` (200) a file — past it a file's further findings are not kept, as
+  a file's raw values past theirs. A stylesheet's lines are all CSS; a .tsx / .jsx / .js / .ts file is SCRIPT (its tags read as
+  JSX); anything else is MARKUP (an SFC, HTML and its template engines), its `<style>` block's lines CSS (viewLines' `css`).
+- **The tag reader** (`tagReader`) — an opening tag, `<` and a name (a letter, then letters, digits, `.`, `:`, `-`) followed by
+  a blank, `/`, `>` or the line's end, read WHOLE to its first `>` outside quotes and `{…}`, over lines (a quote carries over
+  a line's end; `\` escapes inside braces). In script mode never right after an identifier, `)`, `]` or a quote
+  (`useState<div>`, `a<b`), nor inside a string that closes on its line (`blankStrings`); a markup file's `<script>` block
+  is not read for tags. The next tag is looked for PAST the previous one's end, and past a read that failed (no `>` within
+  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters): each character read once (CRIT_1 must-fix 1 — a reader
+  that looked again from the next `<` measured 1,230× plain JSX). What that leaves unjudged, and what else is (said in the
+  user docs): a tag nested in an attribute (`icon={<img />}`), a tag starting in the lines a failed read took, a tag of more
+  than `DS_TAG_ATTRS` (100) attributes, tags in a one-line template literal (lit, innerHTML), Pug, the JSX of a markup
+  file's `<script lang="tsx">`, a named handler (never followed).
+- **Attributes** (`attributesOf`) — a brace token where a name stands is a spread (`{...props}`, `{...getRootProps()}`,
+  `{{attrs}}`: it may hold any attribute — img-no-alt and click-no-keyboard excuse it) unless it holds one identifier
+  (Svelte's `{alt}`); a bound name is its attribute's (`boundName`: `:alt`, `v-bind:`, `x-bind:`, `bind:`, `[alt]`,
+  `[attr.alt]`); an event (`eventOf`): JSX `onClick`, HTML / Svelte 5 `onclick`, Vue `@click` / `v-on:click` and Alpine
+  `x-on:click` with `.modifiers`, Svelte 4 `on:click` with `|modifiers`, Angular `(click)` / `(keyup.enter)`.
+- **img-no-alt** — `<img` as written (`<Image>`, `<img-viewer>` are components) with no alt in any binding, no `aria-label` /
+  `aria-labelledby`, no `role` presentation / none, rendered (CRIT_1 must-fix 5: not `hidden`, not `aria-hidden` — either
+  not literally false —, no `display:none` in its own style: the Meta Pixel's `<noscript>` image), no spread.
+- **click-no-keyboard** — a click handler on a lower-case element (no `-`, `.`, `:`) the keyboard cannot reach: not focusable
+  by default (`FOCUSABLE`: HTML's interactive content, `summary`, `option`; `a` / `area` only with `href` or `routerLink`),
+  no `role`, `tabindex`, key handler (keydown / keyup / keypress, any syntax), `aria-hidden`, `inert` or spread; never an
+  empty element (its closing tag on the line) or a self-closing one (a modal's backdrop), `.self` / `|self`, a bare
+  `@click.stop`, an inline handler holding `.focus(`, `stopPropagation` or `target` (CRIT_1 must-fix 6).
+- **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)
+  and reads no `clipboardData` / `getData`, or a bare `.prevent` / `|preventDefault`; never a named handler.
+- **zoom-disabled** — a non-CSS line's `user-scalable=no | 0` or `maximum-scale` under 2 (a `<meta>`'s content), Next's
+  `userScalable: false` or `maximumScale` under 2 (its viewport export).
+- **A stylesheet's structure** (`sheetChecks`) — through styleTokens' events (the ONE CSS walker, Token files above; CRIT_1
+  must-fix 2), over a file's CSS lines joined (the others blank: the line numbers hold) — a sheet, a Vue `<style scoped>`,
+  styled-jsx; a styled-components template has no block structure (its `outline` is not judged, its `transition:` line is).
+  outline-removed CANDIDATES: a removal (`outline: none | 0`, `outline-style: none`, `outline-width: 0`, `!important` too;
+  never `outline: 2px solid transparent`, which forced colours show) in a rule with a selector whose last compound is `*` or
+  an element focusable by default with no pseudo-class ("element"), or holds `:focus` itself — never -visible / -within —
+  while the rule's extent, nested blocks included, declares nothing else ("focus": Bootstrap's `outline: 0; box-shadow: …`
+  replaces it); never a selector naming focus-visible, `@media print`, a class alone, a rule that never closes. Tailwind's
+  `focus:` / `focus-visible:` + `outline-none` / `outline-hidden` / `outline-0` too (a bare one is not: shadcn puts it on
+  focus-managed containers and activedescendant options). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` /
+  `:focus-within` (or inside one) that declares anything but a removal; a Tailwind focus-variant utility (`group-` / `peer-`
+  too) that is no removal, in a class list or an `@apply`. transition-all: an item that is `all` or names no property, for a
+  literal time over 0 (`transitionAll`; a variable or a global keyword is a property or no time, never `all`),
+  `transition-property: all`, Tailwind's `transition-all` (variants, `!`, `@apply`), a style object / inline style /
+  CSS-in-JS line — never inside `@media (prefers-reduced-motion: reduce)` nor a block nested in one (CRIT_1 must-fix 7).
+  Blocks nested past `DS_BLOCK_DEPTH` (64) are not judged, nor what they hold, and their rule is never a "focus" candidate.
+  The statement events' `from` (the line a statement's text starts on) places a finding at a declaration's first line.
+- **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
+  (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
+  the walk's view files; never the name-ranked token candidates: a `focus.css`, an `_a11y.scss`, a .less file count) through
+  `uiFocusPass`: the shorter path first, each read whole (`DS_FOCUS_FILE_CHARS`; never cut at a line), `DS_FOCUS_SHEETS`
+  (1,000) and `DS_FOCUS_CHARS` (4 MB) at most, stopping at the first that holds one; asked ONLY when a candidate exists (no
+  candidate, no read), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
+  says which (`focus-sheets` / `focus-chars`). Any focus style excuses any removal: the reader cannot compute the cascade,
+  and a team that wrote focus styles designed focus.
+- **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` on the finding's line or the line above (any
+  comment syntax of the file: in `src`, absent from `l`); counted in `silenced`, never listed, never in finish. Two lines up,
+  another id, a string's text, no id: nothing. No project switch in 1.37 (the `_UI checks off:_` marker is 1.38's).
+- **The feature report** (`featureReport`) — the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
+  its token files (a globals.css it edits) are read for the checks ALONE — never for raw values, never in `viewFiles`, within
+  `DS_VIEW_FILES` files read in all. `uiChecks` (`uiChecksReport`) = {findings (the first `DS_LIST`: rule, level, file, line,
+  value — warn first, then by file and line), total, byRule, silenced, limits}; its limits — `view-files` (the feature's file
+  cap cut what the checks read), `focus-sheets`, `focus-chars` — never reach the report's own `limits` / `truncated`. The CLI
+  prints it after the raw values (`uiHead`, what each rule that appears means — `uiRule` —, `uiSilenced`, a bound of the
+  checks' own once: `dsLimit`).
+- **spec_finish** — `designSystemFinish` answers for a +ui feature WITH OR WITHOUT a registry (CRIT_X decision 5): `uiChecks`
+  (`uiFinishChecks`: the warn-level findings — {total, byRule, top: the first 3}); without a registry `registered` /
+  `unregistered` are `[]` and there is no `raw` / `tokens`, and every reader of `raw` guards it (finish.js, the CLI). ONE
+  warning (`finish.uiChecks`), after the raw values', never a blocker; `res.designSystem.uiChecks` only when it has
+  findings (the 1.35 shape otherwise).
+- **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
+  tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
+  of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{` — each ≤ 3× plain JSX of the same size
+  (measured 0.07–1.5×); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real ones); a finish without a
+  registry ≤ 1.5× the feature report it runs (~0.9×). The sheet of braces is the walker's every block: three allocation-free
+  fast paths in styleTokens (`unmaskInterpolation` of a text with no mask, `pageWide` of an empty prelude, `RE_MIXIN` only
+  after an `@` — the last a cost guard alone: +45 % on that sheet without it, under the bound) took it from ~5× to ~1.5× —
+  tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus.
+- **Not in 1.37** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion` raw kind and
+  `no-reduced-motion` (1.38, on one shared project pass), the `_UI checks off:_` marker (1.38), the `addEventListener` paste
+  form, a `hint` level.
 
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
