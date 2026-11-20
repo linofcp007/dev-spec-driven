@@ -1583,6 +1583,7 @@ const msg = {
       dsUnregistered: (list) => `  ▲ não acrescentado ao registo do design system (não é um nome simples de componente, ou o ficheiro não pôde ser escrito): ${list}`,
       // 1.37: as verificações de interface dos ficheiros da feature (o `uiChecks` de spec_scan {designSystem: true, name})
       uiHead: (n) => `  Verificações de interface (${n}) — o spec_finish avisa de cada uma, exceto as só do relatório:`,
+      uiHeadPlain: (n) => `  Verificações de interface (${n}):`,
       uiNone: (files) => `  Verificações de interface: nada ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`}`,
       uiReportTag: "(só no relatório)",
       uiLegend: "  o que cada uma significa:",

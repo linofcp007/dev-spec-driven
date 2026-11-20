@@ -1643,6 +1643,7 @@ const msg = {
       dsUnregistered: (list) => `  ▲ not added to the design-system registry (no plain component name, or the file could not be written): ${list}`,
       // 1.37: the UI checks of the feature's files (spec_scan {designSystem: true, name}'s `uiChecks`)
       uiHead: (n) => `  UI checks (${n}) — spec_finish warns about each but the report-only ones:`,
+      uiHeadPlain: (n) => `  UI checks (${n}):`,
       uiNone: (files) => `  UI checks: nothing in its ${files} view ${files === 1 ? "file" : "files"}`,
       uiReportTag: "(report only)",
       uiLegend: "  what each means:",

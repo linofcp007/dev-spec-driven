@@ -1230,8 +1230,10 @@ wrong finding sends a team to fix code that is right.
   `[attr.alt]`); an event (`eventOf`): JSX `onClick`, HTML / Svelte 5 `onclick`, Vue `@click` / `v-on:click` and Alpine
   `x-on:click` with `.modifiers`, Svelte 4 `on:click` with `|modifiers`, Angular `(click)` / `(keyup.enter)`.
 - **img-no-alt** — `<img` as written (`<Image>`, `<img-viewer>` are components) with no alt in any binding, no `aria-label` /
-  `aria-labelledby`, no `role` presentation / none, rendered (CRIT_1 must-fix 5: not `hidden`, not `aria-hidden` — either
-  not literally false —, no `display:none` in its own style: the Meta Pixel's `<noscript>` image), no spread.
+  `aria-labelledby`, no non-empty `title` (it names the image, as axe-core's image-alt reads it — review 1 of 1.37: 200
+  of cal.com's 202 were titled flags), no `role` presentation / none, rendered (CRIT_1 must-fix 5: not `hidden`, not
+  `aria-hidden` — either not literally false —, no `display:none` in its own style: the Meta Pixel's `<noscript>` image),
+  no spread.
 - **click-no-keyboard** — a click handler on a lower-case element (no `-`, `.`, `:`) the keyboard cannot reach: not focusable
   by default (`FOCUSABLE`: HTML's interactive content, `summary`, `option`; `a` / `area` only with `href` or `routerLink`),
   no `tabindex`, no role whose focus its container manages (`ROLE_REACHED`: ARIA's composite items — option, menuitem*,
@@ -1251,7 +1253,11 @@ wrong finding sends a team to fix code that is right.
   text seen while they are open (`textMark`); a close tag pops the elements opened since to its own name, an unmatched one
   costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below).
 - **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)
-  and reads no `clipboardData` / `getData`, or a bare `.prevent` / `|preventDefault`; never a named handler.
+  and reads no clipboard (`clipboard` — `e.clipboardData`, `navigator.clipboard` — or `getData`), or a bare `.prevent` /
+  `|preventDefault`; never a named handler, nor an inline one that hands its event on to a call (`forwardsEvent`: the
+  handler's parameter — an arrow's, a function's —, else `$event` / `event`, as an argument: `(e) => { e.preventDefault();
+  onPasteCode(e); }` is Vue's excused `@paste.prevent="onPasteCode"` spelled in JSX — review 1 of 1.37). The ONLY rule that
+  never follows a named handler: click-no-keyboard judges a named click handler on its element and body alone.
 - **zoom-disabled** — a non-CSS line's `user-scalable=no | 0` or `maximum-scale` under 2 (a `<meta>`'s content), Next's
   `userScalable: false` or `maximumScale` under 2 (its viewport export).
 - **A stylesheet's structure** (`sheetChecks`) — through styleTokens' events (the ONE CSS walker, Token files above; CRIT_1
@@ -1259,7 +1265,9 @@ wrong finding sends a team to fix code that is right.
   styled-jsx; a styled-components template has no block structure (its `outline` is not judged, its `transition:` line is).
   outline-removed CANDIDATES: a removal (`outline: none | 0`, `outline-style: none`, `outline-width: 0`, `!important` too;
   never `outline: 2px solid transparent`, which forced colours show) in a rule with a selector whose last compound is `*` or
-  an element focusable by default with no pseudo-class ("element"), or holds `:focus` itself — never -visible / -within —
+  an element focusable by default with no pseudo-class ("element"), or holds `:focus` itself — never -visible / -within —,
+  of no type or one focusable by default and never `[tabindex="-1"]` (`RE_TABINDEX_OFF` — review 1 of 1.37: `main:focus`,
+  `h1:focus`, `[tabindex="-1"]:focus` hold focus a script moves out of the tab order, a skip link's target) —
   while the rule's extent, nested blocks included, declares nothing else that draws ("focus": Bootstrap's `outline: 0;
   box-shadow: …` replaces it; its `outline: none; box-shadow: none` override does not); never a selector naming
   focus-visible, `@media print`, a class alone, a rule that never closes. Tailwind's `outline-none` / `outline-hidden` /
@@ -1294,9 +1302,13 @@ wrong finding sends a team to fix code that is right.
   bound within 2× the same report with no candidate (an open costs ~1 ms where an antivirus scans each file — History).
   Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
   focus.
-- **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` on the finding's line or the line above (any
-  comment syntax of the file: in `src`, absent from `l`); counted in `silenced`, never listed, never in finish. Two lines up,
-  another id, a string's text, no id: nothing. No project switch in 1.37 (the `_UI checks off:_` marker is 1.38's).
+- **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` (ids `,`-separated; what follows them, a
+  reason, is not read) on the finding's line, or ALONE on the line above (its `l` blank but for a JSX comment's braces — a
+  trailing marker silences its own line only, eslint's -line vs -next-line: review 1 of 1.37) — any comment syntax of the
+  file (in `src`, absent from `l`); a stylesheet's finding sits on its declaration's line. Counted in `silenced`, never
+  listed, never in finish. Two lines up, another id, a string's text, no id: nothing; a linter's own suppression
+  (`eslint-disable-next-line jsx-a11y/…`, `svelte-ignore a11y_…`) is not read (the user docs say so). No project switch in
+  1.37 (the `_UI checks off:_` marker is 1.38's).
 - **The feature report** (`featureReport`) — the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
   its token files (a globals.css it edits) are read for the checks ALONE — never for raw values, never in `viewFiles`, within
   `DS_VIEW_FILES` files read in all. `uiChecks` (`uiChecksReport`) = {findings (the first `DS_LIST`: rule, level, file, line,
@@ -1307,8 +1319,10 @@ wrong finding sends a team to fix code that is right.
   `DS_LINE_MAX`), `tag-length` (reads past the tag reader's bound), `file-findings` (findings past a file's 200: counted in
   total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` — never reach the report's own `limits` /
   `truncated`. Not named (hostile-input guards, no real file reaches them): a tag of more than `DS_TAG_ATTRS` attributes, a
-  block nested past `DS_BLOCK_DEPTH` — not judged. The CLI prints it after the raw values (`uiHead`, what each rule that
-  appears means — `uiRule` —, `uiSilenced`, a bound of the checks' own once: `dsLimit`, with its count and file).
+  block nested past `DS_BLOCK_DEPTH` — not judged. The CLI prints it after the raw values (`uiHead` — naming finish's
+  warning — for a +ui feature, `uiHeadPlain` for any other: finish reads no other feature's checks, review 1 of 1.37 —,
+  what each rule that appears means — `uiRule` —, `uiSilenced`, a bound of the checks' own once: `dsLimit`, with its count
+  and file).
 - **spec_finish** — `designSystemFinish` answers for a +ui feature WITH OR WITHOUT a registry (CRIT_X decision 5): `uiChecks`
   (`uiFinishChecks`: the warn-level findings — {total, byRule, top: the first 3, limits: the report's}; a warn finding past
   a file's cap is counted, not listed, so `top` may be empty — the warning then reads `…`); without a registry `registered` /

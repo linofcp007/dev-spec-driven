@@ -290,7 +290,17 @@ const RE_OFF_ELEMENT = /^(?:self|outside|away|window|document)$/;
 const RE_DISPLAY_NONE = /display\s*:\s*["'`]?none(?![\w-])/i;
 const RE_DELEGATES = /\.focus\(|stopPropagation|target/i; // an inline click handler that forwards focus or reads the event's target
 const RE_CANCELS = /preventDefault|return\s+false/;
-const RE_READS_CLIPBOARD = /clipboardData|getData/;
+const RE_READS_CLIPBOARD = /clipboard|getData/; // (`e.clipboardData`, `navigator.clipboard`)
+// An inline handler that hands its event on to a call — `(e) => { e.preventDefault(); onPasteCode(e); }`, Vue / Angular's
+// `$event`, an HTML handler's `event` — is not followed, as a named one is not: the call may read the clipboard (review 1 of
+// 1.37: the JSX spelling of Vue's excused `@paste.prevent="onPasteCode"` was a finding). Its event: the handler's parameter
+// (an arrow's, a function's), else `$event` / `event`.
+const RE_HANDLER_PARAM = /^[\s{"'`]*(?:async\s*)?(?:\(\s*([A-Za-z_$][\w$]*)|([A-Za-z_$][\w$]*)\s*=>|function\s*[\w$]*\s*\(\s*([A-Za-z_$][\w$]*))/;
+function forwardsEvent(v) {
+  const m = RE_HANDLER_PARAM.exec(v);
+  const body = m ? v.slice(m[0].length) : v;
+  return (m ? [m[1] || m[2] || m[3]] : ["$event", "event"]).some((id) => new RegExp("[(,]\\s*" + id.replace(/\$/g, "\\$") + "\\s*[,)]").test(body));
+}
 // → CONTROL (the tag is or may render a control: focusable by default, a component / custom element / member, `<slot>`, a tag
 // not read — a click inside a candidate's body reaches the keyboard through it), a click candidate { value } (clickBodies
 // judges it on its body) or nothing
@@ -308,19 +318,20 @@ function judgeTag(tag, add) {
   }
   const shown = (b) => named.has(b) && literal(named.get(b)) !== "false"; // present and not literally false
   // paste-blocked: any tag (a component passes it down) — an inline handler that cancels the paste and reads no clipboard,
-  // or a bare `.prevent` / `|preventDefault`; a named handler is not followed
+  // or a bare `.prevent` / `|preventDefault`; a named handler is not followed, nor one that hands its event on (forwardsEvent)
   for (const e of events) {
     if (e.event !== "paste") continue;
     const v = e.value == null ? "" : e.value;
     const blocks = e.value == null ? e.mods.includes("prevent") || e.mods.includes("preventDefault") : RE_CANCELS.test(v);
-    if (blocks && !RE_READS_CLIPBOARD.test(v)) { add("paste-blocked", tag.line, "<" + tag.name + " " + e.attr + ">"); break; }
+    if (blocks && !RE_READS_CLIPBOARD.test(v) && !forwardsEvent(v)) { add("paste-blocked", tag.line, "<" + tag.name + " " + e.attr + ">"); break; }
   }
   const element = RE_ELEMENT.test(tag.name);
   const focusable = tag.name === "a" || tag.name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(tag.name);
   const kind = !element || focusable || tag.name === "slot" ? CONTROL : undefined;
   if (spread) return kind; // (a spread may hold any attribute)
-  // img-no-alt: `<img` (as written) with no alt in any binding, no accessible name, not decorative, rendered
-  if (tag.name === "img" && !named.has("alt") && !named.has("aria-label") && !named.has("aria-labelledby") &&
+  // img-no-alt: `<img` (as written) with no alt in any binding, no accessible name (a non-empty `title` names it too, as axe-core's
+  // image-alt reads it — review 1 of 1.37), not decorative, rendered
+  if (tag.name === "img" && !named.has("alt") && !named.has("aria-label") && !named.has("aria-labelledby") && literal(named.get("title")) === "" &&
     !["presentation", "none"].includes(literal(named.get("role"))) && !shown("aria-hidden") && !shown("hidden") &&
     !(named.has("style") && RE_DISPLAY_NONE.test(named.get("style") || ""))) add("img-no-alt", tag.line, "<img>");
   // click-no-keyboard: a click handler on an element the keyboard cannot reach — not focusable by default, no tabindex, no role
@@ -409,8 +420,10 @@ function utilities(s, line, add) {
 // `outline: 2px solid transparent`, which forced colours show: no candidate, no focus style either) — in a rule whose selector list holds
 //   - "element": a selector whose last compound is `*` or an element focusable by default, with no pseudo-class / -element
 //     (`button { outline: none }`, `* { outline: 0 }`) — a class alone is never judged (`.modal { outline: 0 }`), or
-//   - "focus": a selector whose last compound holds `:focus` itself (never -visible / -within / -moz-focusring) — and the
-//     rule, its nested blocks included, declares nothing but removals (Bootstrap's `outline: 0; box-shadow: …` replaces it);
+//   - "focus": a selector whose last compound holds `:focus` itself (never -visible / -within / -moz-focusring), of no type or
+//     one focusable by default, never `[tabindex="-1"]` (`main:focus`, `h1:focus`: focus a script moves there, out of the tab
+//     order — review 1 of 1.37) — and the rule, its nested blocks included, declares nothing else that draws (Bootstrap's
+//     `outline: 0; box-shadow: …` replaces it);
 // never a selector that names focus-visible (`:focus:not(:focus-visible)`), inside `@media print`, nor a rule that never
 // closes. A CANDIDATE: any focus style of the file, the feature's files or the project's stylesheets excuses it (uiChecksReport).
 // A FOCUS STYLE: a rule naming a focus pseudo-class (or inside one) that declares something that draws (drawsNothing); a
@@ -424,6 +437,7 @@ const RE_PRINT = /^@media\b.*\bprint\b/i;
 const RE_REDUCED = /prefers-reduced-motion\s*(?:\)|:\s*reduce)/i;
 const RE_DECLARATION = /^([A-Za-z-]+)\s*:\s*([\s\S]*)$/;
 const RE_COMPOUND_TYPE = /^(\*|[A-Za-z][A-Za-z0-9]*)/;
+const RE_TABINDEX_OFF = /\[\s*tabindex\s*=\s*["']?-1["']?\s*\]/i;
 // A declaration that draws nothing: each of its comma items `transparent` as its colour, or nothing but `none` and zeros
 // (`outline: none`, `box-shadow: none`, `border: 0`, `outline: 2px solid transparent`). It is neither a focus style nor what
 // keeps a `:focus` rule from being a candidate (review 1 of 1.37: Bootstrap's `.btn:focus { outline: none; box-shadow: none }`
@@ -455,10 +469,8 @@ function outlineShape(prelude) {
     const sel = raw.trim();
     if (!sel || /focus-visible/i.test(sel)) continue;
     const last = lastCompound(sel);
-    if (!last.includes(":")) {
-      const t = RE_COMPOUND_TYPE.exec(last);
-      if (t && (t[1] === "*" || FOCUSABLE.has(t[1].toLowerCase()))) return "element";
-    } else if (RE_FOCUS_ITSELF.test(last)) shape = "focus";
+    const t = RE_COMPOUND_TYPE.exec(last), reached = !t || t[1] === "*" || FOCUSABLE.has(t[1].toLowerCase());
+    if (!last.includes(":")) { if (t && reached) return "element"; } else if (RE_FOCUS_ITSELF.test(last) && reached && !RE_TABINDEX_OFF.test(last)) shape = "focus";
   }
   return shape;
 }
@@ -519,7 +531,8 @@ function scriptTransitions(l, line, add) {
     RE_TRANSITION_PROP.lastIndex = Math.max(end, RE_TRANSITION_PROP.lastIndex); // (past the value: each character read once)
   }
 }
-// the rule ids a `ui-check-off:` comment names: ids (letters and `-`) separated by `,` / blanks, read up to the next marker
+// the rule ids a `ui-check-off:` comment names: ids (letters and `-`) separated by `,`, read up to the next marker (what
+// follows the ids — a reason — is not read)
 const RE_MARK_IDS = /^\s*([a-z]+(?:-[a-z]+)*(?:\s*,\s*[a-z]+(?:-[a-z]+)*)*)/;
 function markIds(src) {
   const ids = new Set();
@@ -533,8 +546,9 @@ function markIds(src) {
 }
 // One view / style file → { findings: [{ rule, line, value, silenced }], focus, past, cut }. lines: viewLines(text, rel)'s (n
 // 1-based, src, l without its comments, css, cut). A finding is at its tag's or declaration's FIRST line, one per rule and
-// line; `silenced` when a `ui-check-off:` comment (in `src`, absent from `l`) on that line or the one above names its rule
-// (decided when it is found: the lines up to it are read). DS_CHECK_PER_FILE findings are kept; past them each is still
+// line; `silenced` when a `ui-check-off:` comment (in `src`, absent from `l`) names its rule on that line, or on the line
+// above when that line holds no code (`l` blank but for a JSX comment's braces — a trailing marker silences its own line
+// alone: review 1 of 1.37) — decided when it is found (the lines up to it are read). DS_CHECK_PER_FILE findings are kept; past them each is still
 // COUNTED — past: { byRule (the unsilenced ones), silenced } — never kept (review 1 of 1.37: a file of 200 report-level
 // findings hid its real ones, `total` read 200). cut: { lines (cut at DS_LINE_MAX), tags (tagReader's failed reads) }.
 // outline-removed findings are CANDIDATES (focus: does the file hold a focus style — uiChecksReport decides).
@@ -547,14 +561,14 @@ function uiChecksOf(lines, rel) {
     if (seen.has(k)) return;
     seen.add(k);
     const here = marks.get(line), above = marks.get(line - 1);
-    const silenced = (here != null && here.has(rule)) || (above != null && above.has(rule));
+    const silenced = (here != null && here.ids.has(rule)) || (above != null && above.alone && above.ids.has(rule));
     if (findings.length < DS_CHECK_PER_FILE) findings.push({ rule, line, value: String(value).replace(/\s+/g, " ").trim().slice(0, DS_VALUE), silenced });
     else if (silenced) past.silenced++;
     else past.byRule[rule] = (past.byRule[rule] || 0) + 1;
   };
   const tags = sheet ? null : tagReader(RE_SCRIPT_FILE.test(rel), (tag) => judgeTag(tag, add), add);
   for (const { n, src, l, css: isCss, cut } of lines) {
-    if (src.includes("ui-check-off:") && !l.includes("ui-check-off:")) marks.set(n, markIds(src));
+    if (src.includes("ui-check-off:") && !l.includes("ui-check-off:")) marks.set(n, { ids: markIds(src), alone: /^[\s{}]*$/.test(l) });
     if (cut) cutLines++;
     css.push(isCss ? l : "");
     if (isCss) { anyCss = true; continue; }

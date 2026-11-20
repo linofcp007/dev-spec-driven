@@ -33,6 +33,14 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     write(pt.p, "src/checkout/Checkout.tsx", CHECKOUT);
     const rp = runIn(["design-system", pt.slug, "--project", pt.p]);
     const P = MSG("pt").cliOutput;
+    // (review 1 of 1.37: a feature without +ui — finish reads none of its checks — gets the plain head, in its language)
+    const plainP = path.join(tmp, "p137-uic-plain");
+    SR.initProject(plainP, ["core"], "es");
+    const plain = SR.createFeature(plainP, { name: "Reports", tracks: ["core"], summary: "x", lang: "es" });
+    fs.writeFileSync(path.join(plain.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build\n  - _Implements: src/reports/Chart.tsx_\n  - _Verify: npm test_\n");
+    write(plainP, "src/reports/Chart.tsx", "export const Chart = () => <img src=\"/chart.png\" />;\n");
+    const rn = runIn(["design-system", plain.slug, "--project", plainP]);
+    const E = MSG("es").cliOutput;
     all("1.37 design-system <feature> (CLI): the UI checks after the raw values — the head, each finding as `file:line  rule  value` (a report-level one tagged), what each rule that appears means, the silenced count; none: one line; --json IS spec_scan {designSystem: true, name}'s result; a Portuguese feature in Portuguese; exit 0 (got " +
       js([r.code, r.out, rc.out, rp.out]) + ")", {
       head: () => r.code === 0 && r.out.includes(T.uiHead(3)) && r.out.indexOf(T.uiHead(3)) > r.out.indexOf(T.dsRawNone(1)),
@@ -44,6 +52,7 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       none: () => rc.code === 0 && rc.out.includes(T.uiNone(1)) && !rc.out.includes(T.uiLegend),
       json: () => j.code === 0 && js(jsonOf(j).uiChecks) === js(SR.designSystemReport(g.p, { name: g.slug }).uiChecks),
       pt: () => rp.code === 0 && rp.out.includes(P.uiHead(3)) && rp.out.includes("click-no-keyboard — " + P.uiRule["click-no-keyboard"]) && rp.out.includes(P.uiSilenced(1)),
+      plainHead: () => rn.code === 0 && rn.out.includes(E.uiHeadPlain(1) + "\n") && !rn.out.includes(E.uiHead(1)) && !r.out.includes(T.uiHeadPlain(3)),
     });
   }
 
