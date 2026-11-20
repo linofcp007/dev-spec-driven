@@ -60,7 +60,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   dupes.js                     the duplicate-code detector (duplicationReport, duplicateRuns): spec_scan {duplicates}, finish — LAZY
   design-system.js             the design system against the code (designSystemReport, designSystemSeed, designSystemFinish):
                                spec_scan {designSystem}, the seeded registry, finish — LAZY (the registry's reader: quality.js)
-  ui-checks.js                 the UI checks (1.37: uiChecksOf): the anti-patterns of one view / style file — LAZY
+  ui-checks.js                 the UI checks (1.37: uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass): a +ui feature's
+                               anti-patterns — the feature report's `uiChecks`, finish's warning — LAZY (quality.md → UI checks)
   import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering —
                                LAZY (the tool lists IMPORT_TOOLS / STEERING_IMPORT_TOOLS: scaffold.js)
 mcp/lib/i18n.js · i18n/        the localized content: the facade (the tables, LAYOUTS — the structure every language shares)
