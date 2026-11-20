@@ -128,7 +128,15 @@ Reuse, Extend or New; `doctor` checks those rows against the registry (a compone
 beside an existing `Button`, is caught before it is built, and at size m / l the design approval refuses it), the task
 brief hands the implementer the components to build from, `finish` warns about hard-coded colours and sizes in the
 feature's screens (where the registry has tokens) and adds its new components to the registry.
-`dev-spec design-system` shows where the registry and the code have drifted apart.
+`dev-spec design-system` shows where the registry and the code have drifted apart. `dev-spec design-system <feature>`
+(`spec_scan {designSystem: true, name}`) also runs the UI checks on the feature's view and style files — defects no taste
+excuses, such as zoom blocked, an image with no text alternative or a click the keyboard can't reach: on a +ui feature
+they are one more `finish` warning, registry or not, never a blocker, and a comment `ui-check-off: <rule-id>` with its
+reason, on the finding's line or the line above, silences one. A registry row marked `_Deprecated: use DataGrid_` retires
+its component: `doctor` warns when a design still reuses or extends it, naming the replacement. A +ui task that changes
+what renders gets a visual review (not at size xs / s) — screenshots of the build compared with the design's reference by
+a reviewer that sees only the images —, and a view with no reference is held to the accessibility floor instead (320 px
+wide, text at 200 %, focus visible), never reported as matching the design.
 
 A track can be added or turned off later (`/spec-change <feature> track +sec`). Your team's own tracks:
 `/spec-setup tracks` — an example pack to copy is `examples/track-packs/mobile`. A bug goes through `/spec-bugfix`

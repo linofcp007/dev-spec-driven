@@ -1076,6 +1076,27 @@ exports.run = async ({
       ["track-checklists: finish — the UI checks' warnings fixed or silenced with a reason", () =>
         /the UI checks' warnings \(`spec_scan \{designSystem: true, name\}`\) fixed or silenced with a reason/.test(T)],
     ];
+    // 1.37.0 review 1 (D10): each README's +ui paragraph says what a user meets — the UI checks (how to run them, a finish
+    // warning never a blocker, how to silence one), `_Deprecated:_` and the visual review's floor —, in its own language
+    const cmd = /`dev-spec design-system <feature>` \(`spec_scan \{designSystem: true, name\}`\)/;
+    const readme = {
+      "README.md": [cmd, /also runs the UI checks on the feature's view and style files/, /one more `finish` warning, registry or not, never a blocker/,
+        /a comment `ui-check-off: <rule-id>` with its reason, on the finding's line or the line above, silences one\./,
+        /A registry row marked `_Deprecated: use DataGrid_` retires its component: `doctor` warns when a design still reuses or extends it, naming the replacement\./,
+        /a view with no reference is held to the accessibility floor instead \(320 px wide, text at 200 %, focus visible\)/],
+      "README.pt.md": [cmd, /corre também as verificações de interface sobre os ficheiros de vista e de estilos da feature/,
+        /mais um aviso do `finish`, com ou sem registo, nunca um bloqueio/, /um comentário `ui-check-off: <rule-id>` com o motivo, na linha do problema ou na de cima, silencia-o\./,
+        /Uma linha do registo marcada `_Deprecated: use DataGrid_` retira o seu componente: o `doctor` avisa quando um design ainda o reutiliza ou estende, e indica o que o substitui\./,
+        /uma vista sem referência é avaliada no mínimo de acessibilidade \(320 px de largura, texto a 200 %, foco visível\)/],
+      "README.es.md": [cmd, /ejecuta también las comprobaciones de interfaz sobre los ficheros de vista y de estilos de la funcionalidad/,
+        /un aviso más de `finish`, con o sin registro, nunca un bloqueo/, /un comentario `ui-check-off: <rule-id>` con su motivo, en la línea del hallazgo o en la de encima, lo silencia\./,
+        /Una fila del registro marcada `_Deprecated: use DataGrid_` retira su componente: `doctor` avisa cuando un diseño aún lo reutiliza o lo extiende, y nombra el que lo sustituye\./,
+        /una vista sin referencia se juzga en el mínimo de accesibilidad \(320 px de ancho, texto al 200 %, foco visible\)/],
+    };
+    for (const [f, res] of Object.entries(readme)) {
+      const t = ws(raw(f));
+      rows.push([f + ": the +ui paragraph — the UI checks (run, warn never block, ui-check-off), `_Deprecated:_`, the floor", () => res.every((re) => re.test(t))]);
+    }
     for (const [label, check] of rows) all("1.37 docs pass — " + label, { holds: check });
   }
 
