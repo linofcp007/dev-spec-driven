@@ -2015,3 +2015,32 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and the path / variants cells read after the cut): every earlier `15-quality-design-system*` test passed unchanged.
   The mutation list came before the fixtures: 41 of 41 on the reader, 20 of 20 on the check (one — the silence's word
   bound — only after a fixture with the replacement past the notes' twentieth word).
+- **1.37** (the base the UI checks read through, before them) — `viewLines`, rawValuesOf's loop head as a GENERATOR (CRIT_1
+  must-fix 3: over a list, the 200-value early exit still read every line), and styleTokens' walker handing its structure
+  to an observer (block / statement / close events — CRIT_1 must-fix 2: no second prelude tracker). Both proved
+  behaviour-preserving on a corpus of real files: the raw values of 5,256 view files (39,700 values) and the tokens of 2,493
+  stylesheets (27,663) byte-identical against 1.36, with and without an observer; the UI checks' chain added the
+  statements' `from` and three allocation-free fast paths with the walker's 206,379 events unchanged (one sha1). Cost:
+  rawValuesOf alone 1.03–1.28× the parent on a 20,000-line sheet (within the 1.5× bound); the walker without an observer
+  0.94×. Mutation passes: 10 of 10 (one equivalent in output — the pre-existing blank-line skip, a cost guard: 6× on
+  20,000 blank lines) and 14 of 14.
+
+### UI checks
+- **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
+  public design-skill collections — Vercel's Web Interface Guidelines for the rules) — designed with eleven rules; the
+  critique (CRIT_1) cut five on real shapes and the integration critique (CRIT_X) moved the project-level read to 1.38:
+  `autoplay-unmuted` (browsers refuse unmuted autoplay, so 1.4.2 cannot fail) and `img-no-size` (CSS-module and styled
+  sizing are invisible to a line reader; Lighthouse measures the layout shift), `motion-layout` and
+  the `motion` raw kind (they need item 2's raw-value redesign), `no-reduced-motion` and the `_UI checks off:_` marker (a
+  project fact — one shared project pass, 1.38), the `addEventListener` paste form. `transition-all` stays at `report`:
+  shadcn's own Button / Switch / Sidebar ship it. The tag reader resumes past the previous tag's end or a failed read's
+  horizon — the design's re-scan from the next `<` measured 1,230× plain JSX; ten hostile 256K inputs now run at
+  0.07–1.5× it (bound 3×), the sheet of braces from ~5–17× to ~1.5× with the walker's three fast paths. The focus facts
+  read ALL the project's stylesheets, and only when a candidate exists (CRIT_1 must-fix 4: the name-ranked token
+  candidates miss a `focus.css`). A real-file survey before release (4,612 view files, 13 roots, tests and stories out):
+  img-no-alt 11 and zoom-disabled 2, all real; outline-removed 0 of 99 candidates (each root holding one also holds focus
+  styles); paste-blocked 0; click-no-keyboard 50 unique, 45 real and 5 debatable (backdrops that wrap their dialog, a
+  trigger wrapper whose child is the control, a div wrapping its `<label>`) — left to the review. `res.designSystem.uiChecks`
+  only when it has findings: the 1.35 key shape an assertion pins. Mutation passes: 126 of 126 on `uiChecksOf` (three dead
+  branches deleted, eleven fixtures added that only one rule answers), 41 of 41 on the report / finish / CLI; one survivor
+  kept by design, the `RE_MIXIN` fast path — a cost guard alone (+45 % on the sheet of braces, under the bound).

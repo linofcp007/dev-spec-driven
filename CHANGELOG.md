@@ -3,6 +3,67 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.37.0] — 2026-11-20
+
+UI checks — what four public design-skill collections (designer-skills, Emil Kowalski's skills, Vercel's Web Interface
+Guidelines, Impeccable) know about interfaces that is right whatever the taste, as checks and criteria over the +ui track the
+plugin already had: a static scan for interface defects, a deprecated component in the registry, a visual review with no
+reference, the worst case of each view, and the prose a view task reads. No new tool, command, hook or dependency.
+
+- **UI checks: interface defects in a feature's own view and style files (warn only).** `spec_scan {designSystem: true,
+  name}` / `dev-spec design-system <feature>` now also reads the feature's view and style files (JSX / TSX, Vue, Svelte,
+  Astro, Angular templates, HTML, CSS / Sass / Less, styled-jsx and CSS-in-JS lines) for what is wrong whatever the taste —
+  a `uiChecks` part: the first 50 findings (rule, level, file, line, value), the total, a count per rule, the silenced
+  count and the checks' own `limits`. Five rules warn: `zoom-disabled` (a viewport `<meta>` or Next's viewport export that
+  blocks zoom — WCAG 1.4.4), `img-no-alt` (a rendered `<img>` with no text alternative — 1.1.1), `outline-removed` (an
+  outline removed on an element, `*` or `:focus` while neither the feature's files nor any stylesheet of the project holds
+  a focus style — 2.4.7), `click-no-keyboard` (a click handler on an element the keyboard cannot reach: no role, `tabindex`
+  or key handler — 2.1.1), `paste-blocked` (an inline paste handler that cancels — 3.3.8); for a +ui feature they are one
+  warning of `spec_finish` — never a blocker —, with or without a registry. `transition-all` is reported only (UI kits ship
+  it). A comment `ui-check-off: <rule-id>` (a reason may follow) on the finding's line or the line above silences it:
+  counted, never listed. What a line reader cannot be sure of is never judged: a named handler, a spread of props, a tag
+  inside an attribute or a one-line template literal, Pug. Every read is bounded and says what it dropped; hostile input
+  runs within 3× plain JSX of the same size. On 4,612 real view files: every alt, zoom and outline finding real, and 45 of
+  50 click findings.
+- **A registry component marked deprecated (`_Deprecated: use X_`).** A component row of `.specs/steering/design-system.md`
+  may carry `_Deprecated_` or `_Deprecated: <text>_` (English-stable, any case) in any cell after its name; the replacement
+  is the first other listed component the text names among its first 20 words. The marker is shown first in the row's
+  notes, so a task brief quotes it whole. doctor warns `ui-deprecated` (never a fail, no stamp) when a Reuse / Extend row of
+  a feature's [UI] Design System Usage names a deprecated component — naming its replacement, silent when the row's notes
+  already name it; a New row is not asked, nor a finished feature.
+- **The visual review without a reference: the accessibility floor.** A view with no approved reference is no longer left
+  unreviewed: spec-ui-reviewer judges it on the floor alone — three measured captures (320 px wide, text at 200 %, focus
+  moved by keys only) through a tool that sets the viewport and records its width; four findings (reflow, lost content,
+  focus, a visible defect), Major by default, only a measured reflow a Blocker; never "passed" nor "matches the design".
+  finish's +ui check names the floor (320 px, 200 % zoom, focus).
+- **The worst case of each view.** [UI] UI States gains a third line: each field at its realistic extreme (a very long
+  unbroken word, a one-letter name, counts 0 / 1 / 1,284, a missing image, a long translation where the project ships one),
+  what wraps or truncates, and its own capture in the visual review. Appended to the template — a 1.31…1.36 block still reads
+  as template.
+- **A fix round's re-review is a verdict pass.** After a fix, a fresh reviewer rules each earlier finding RESOLVED / PARTIAL /
+  OPEN and hunts only for regressions in the changed regions, so the rounds converge; a full review in three named cases.
+- **The component contract.** A New / Extend row of [UI] Design System Usage keeps its contract — interaction states,
+  keyboard map, ARIA role and name, variants as one enumerated prop per axis, slots — under an optional `## [UI] Component
+  Contracts` section (localized in PT / ES), never under the usage table. A task that builds a view now reads the [UI]
+  design sections in its brief even when it proves a core criterion (within the brief's design budget; one that does not fit
+  is named).
+- **UI prose.** ui-design-patterns.md gains Motion (what it is for, durations as tokens, transform / opacity, reduced motion —
+  no fixed duration, no taste rule), form and interaction details (unsaved edits, submit enabled until the request starts, the
+  URL holds filter and tab state, tabular numerals, `translate="no"`), the worst case and an accessibility finding's fixed
+  line (criterion, element, impact, fix); the user's stated taste goes to `ui.md` `## Taste` through the existing learning
+  rule. Credits: Emil Kowalski (MIT), designer-skills (MIT), Vercel Web Interface Guidelines (MIT), Impeccable (Apache-2.0).
+- **Under the hood.** design-system.js's one line walk (`viewLines`, a generator: the raw-value reader still stops at its
+  bound) and the one CSS block walk handing its structure to an observer (`styleTokens`) — byte-identical tokens on 2,493
+  real stylesheets and raw values on 5,256 real view files against 1.36.
+
+The MCP tool list and SKILL.md are unchanged (+0 characters, +0 bytes): the UI checks ride on `spec_scan {designSystem}`,
+doctor and finish.
+
+### Tests
+- `node mcp/test.js` 2697 assertions, `node cli/test-cli.js` 688 (was 2554 / 683). Each chain's mutation list was
+  written before its fixtures: the base 21, 10 and 14 of 14; the UI checks 126 of 126 and 41 of 41 (one survivor kept on
+  purpose — a cost guard under its bound); the registry and the brief 41, 20 and 3 of 3; the prose 117 of 117 and 18 of 18.
+
 ## [1.36.0] — 2026-11-18
 
 Four habits that made AI-assisted rewrites hold up — tests the agent cannot alter, a fast check after each small change, a

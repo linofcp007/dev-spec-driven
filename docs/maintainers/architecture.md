@@ -270,6 +270,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   with port.js, the other 1.36 module — The module rule, below).
 - **1.36.0 review 2** — the eager count (Few, cohesive files) and the entry above still said 24, protect.js alone: 25 with
   port.js; mcp/tests/17-docs-identifiers.js now holds the eager count to engine/index.js `MODULES`, as it holds README's tree.
+- **1.37** — engine/ui-checks.js, the UI checks (quality.md → UI checks): LAZY after design-system.js — only the feature
+  report and finish read it, never a hook — and a module of its own rather than ~500 more lines in design-system.js (3,400).
+  16-conventions' lazy-tier test now counts `LAZY`'s own files rather than a list of names.
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):

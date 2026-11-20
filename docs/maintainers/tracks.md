@@ -959,6 +959,13 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
 - **1.36.0 review 3** — PF3-1: spec_add_track +port on a feature whose tasks.md was still the built-in scaffold appended the
   baseline after Setup … Polish (the classifier never turns +port on, so "create, then add +port" is the documented flow):
   `applyTracks` now puts the lead section before the first task section while no task is ticked (templates-imports-exports.md).
+- **1.37** — +ui's template, ONE change for the release's two template lines (CRIT_X decision 8: two chains editing the same
+  block would each have re-pinned the no-size sha1): UI States' worst-case line (item 3, Emil Kowalski's break-ui idea) and
+  Design System Usage's contract line (item 4, designer-skills' component spec), both APPENDED (≤ 180 characters in EN / PT /
+  ES / pt-BR) so a 1.31…1.36 block still reads as template text; finish's `ui[1]` names the accessibility floor. The
+  contract lives under its own optional h2, not under the usage table — a states table's `New` row there is read as a usage
+  row and failed the m / l gate (the placement fixture pins it). Not in `UI_SECTIONS`, not scaffolded: a section the
+  template asked for would turn every feature without a New component into a doctor warning. Mutation pass 21 of 21.
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.
