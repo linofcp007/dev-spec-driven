@@ -134,7 +134,16 @@ esas filas contra el registro (un componente que el registro no enumera, o un `B
 existe, se detecta antes de construirlo y, en los tamaños m / l, la aprobación del diseño lo rechaza), el brief de la
 tarea entrega al implementador los componentes que debe usar, y `finish` avisa de los colores y tamaños fijos en las
 pantallas de la funcionalidad (donde el registro tiene tokens) y añade al registro sus componentes nuevos.
-`dev-spec design-system` muestra dónde se han separado el registro y el código.
+`dev-spec design-system` muestra dónde se han separado el registro y el código. `dev-spec design-system <feature>`
+(`spec_scan {designSystem: true, name}`) ejecuta también las comprobaciones de interfaz sobre los ficheros de vista y de
+estilos de la funcionalidad — defectos que ningún gusto excusa, como el zoom bloqueado, una imagen sin texto alternativo
+o un clic al que el teclado no llega: en una funcionalidad +ui son un aviso más de `finish`, con o sin registro, nunca un
+bloqueo, y un comentario `ui-check-off: <rule-id>` con su motivo, en la línea del hallazgo o en la de encima, lo
+silencia. Una fila del registro marcada `_Deprecated: use DataGrid_` retira su componente: `doctor` avisa cuando un
+diseño aún lo reutiliza o lo extiende, y nombra el que lo sustituye. Una tarea +ui que cambia lo que se ve pasa una
+revisión visual (salvo en los tamaños xs / s) — capturas de pantalla de lo construido comparadas con la referencia del
+diseño por un revisor que solo ve las imágenes —, y una vista sin referencia se juzga en el mínimo de accesibilidad
+(320 px de ancho, texto al 200 %, foco visible), nunca como igual al diseño.
 
 Un track se puede añadir o desactivar más adelante (`/spec-change <feature> track +sec`). Los tracks de tu equipo:
 `/spec-setup tracks` — un pack de ejemplo para copiar es `examples/track-packs/mobile`. Un bug pasa por `/spec-bugfix`

@@ -911,8 +911,11 @@ exports.run = async ({
       ["ui-review: pair or floor is a property of the files", R, /\*\*Pair or floor is a property of the files:\*\* a `--build\.png` with its `--ref\.png` beside it is a pair; every other build capture, and every `floor-\*` one, is judged on the floor\./],
       ["ui-review: floor findings Major by default, only a measured reflow a Blocker", R, /Each is a \*\*Major\*\* by default — confirmed first, as above; only a measured reflow is a Blocker\./],
       ["ui-review: reflow only from the .json", R, /\*\*reflow\*\* \(from the `\.json` only[^)]*none → not judged\)/],
-      ["ui-review: WCAG 1.4.10's two-dimensional exception — a box that scrolls is not the page", R,
-        /a data table, a map, a diagram, a toolbar — scrolling inside its own box \(WCAG 1\.4\.10's exception: a box that scrolls inside the page is not the page scrolling\)/],
+      // 1.37.0 review 1 (D4): the exception in W3C's terms — content that needs a two-dimensional layout, and no other; "a box
+      // that scrolls inside the page" excepted any box
+      ["ui-review: WCAG 1.4.10's exception — content that needs a two-dimensional layout scrolling in its own box, no other", R,
+        /Not findings: content that needs a two-dimensional layout for its meaning or use \(a data table, a map, a diagram, a toolbar…\) scrolling inside its own box — the only content WCAG 1\.4\.10 excepts;/,
+        { not: /a box that scrolls inside the page is not the page scrolling/ }],
       ["ui-review: below a stated minimum width — one checkpoint line per feature, never a fix round or a stop", R,
         /\*\*Below a minimum width the design or `ui\.md` states\*\*: one checkpoint line per feature[^.]*, never a fix round, never a stop\./],
       ["ui-review: truncation only when the design's row says the field wraps", R, /truncation, unless the design's row says the field wraps/],
@@ -923,7 +926,11 @@ exports.run = async ({
       ["ui-review: verdict rule — a PARTIAL graded again, still open", R, /2\. A PARTIAL is graded again for what remains, and stays open\./],
       ["ui-review: verdict rule — a confirmed finding not reconfirmed", R, /3\. A confirmed finding is not reconfirmed\./],
       ["ui-review: verdict rule — a regression Major through the confirmation step", R, /4\. A regression Major goes through the confirmation step \(§4\)/],
-      ["ui-review: verdict rule — a missed-earlier finding keeps its severity", R, /5\. A finding missed earlier keeps its severity:[^.]*`Task N: ui deferred \(missed earlier, <severity>\): …`/],
+      // 1.37.0 review 1 (D7): a Blocker / Major missed earlier was neither open nor parked — no round, no tick; it goes as a
+      // regression does (into the loop, a Major confirmed first), only a minor is deferred
+      ["ui-review: verdict rule — a finding missed earlier keeps its severity and goes as a regression does; a minor deferred", R,
+        /5\. A finding missed earlier keeps its severity and goes as a regression does \(rule 4\); a minor: `Task N: ui deferred \(missed earlier, minor\): …`, shown at the checkpoint\./,
+        { not: /never a round of its own/ }],
       ["ui-review: verdict rule — after a code-review round, regressions only; changed regions only", R,
         /6\. After a code-review round: an empty open list — regressions only\./, /a regression counts only in a region that changed since the last capture/],
       ["ui-review: verdict rule — the Breaker uses verdict mode", R, /7\. The Breaker \(`references\/subagent-execution\.md` → 7\) uses verdict mode\./],
@@ -951,7 +958,8 @@ exports.run = async ({
         /\*\*RESOLVED\*\*, \*\*PARTIAL\*\* \(what remains, graded again\) or \*\*OPEN\*\*/, /A regression counts only in a region that differs between `\.prev\.png` and the new capture — never a new hunt elsewhere\./],
       ["spec-ui-reviewer: verdict — missed earlier, with its severity", verdictMode, /goes under Missed earlier, with its severity\./],
       ["spec-ui-reviewer: the floor and verdict outputs, Open: N counted; the file ≤ 7,000 bytes", A, /### UI review \(floor\): Clean \| Findings \| Invalid/,
-        /### UI re-review: Resolved \| Open: N \| Invalid/, /Open: N counts PARTIAL \+ OPEN \+ the Blocker \/ Major regressions\./, () => bytes("agents", "spec-ui-reviewer.md") <= 7000],
+        /### UI re-review: Resolved \| Open: N \| Invalid/, /Open: N counts PARTIAL \+ OPEN \+ each Blocker \/ Major under Regressions or Missed earlier\./, // (D7)
+        () => bytes("agents", "spec-ui-reviewer.md") <= 7000],
       // references/ui-design-patterns.md — the worst case (item 3) and the prose of item 4
       ["ui-design-patterns: the worst case — a matrix row, its kinds", worst, /One more row of the matrix: the view's data at its realistic extremes/,
         /an unbroken email, URL or ID/, /a one-letter name, counts of 0, 1 and thousands, a missing image/, /the longest translation or a right-to-left locale/],
@@ -1068,6 +1076,27 @@ exports.run = async ({
       ["track-checklists: finish — the UI checks' warnings fixed or silenced with a reason", () =>
         /the UI checks' warnings \(`spec_scan \{designSystem: true, name\}`\) fixed or silenced with a reason/.test(T)],
     ];
+    // 1.37.0 review 1 (D10): each README's +ui paragraph says what a user meets — the UI checks (how to run them, a finish
+    // warning never a blocker, how to silence one), `_Deprecated:_` and the visual review's floor —, in its own language
+    const cmd = /`dev-spec design-system <feature>` \(`spec_scan \{designSystem: true, name\}`\)/;
+    const readme = {
+      "README.md": [cmd, /also runs the UI checks on the feature's view and style files/, /one more `finish` warning, registry or not, never a blocker/,
+        /a comment `ui-check-off: <rule-id>` with its reason, on the finding's line or the line above, silences one\./,
+        /A registry row marked `_Deprecated: use DataGrid_` retires its component: `doctor` warns when a design still reuses or extends it, naming the replacement\./,
+        /a view with no reference is held to the accessibility floor instead \(320 px wide, text at 200 %, focus visible\)/],
+      "README.pt.md": [cmd, /corre também as verificações de interface sobre os ficheiros de vista e de estilos da feature/,
+        /mais um aviso do `finish`, com ou sem registo, nunca um bloqueio/, /um comentário `ui-check-off: <rule-id>` com o motivo, na linha do problema ou na de cima, silencia-o\./,
+        /Uma linha do registo marcada `_Deprecated: use DataGrid_` retira o seu componente: o `doctor` avisa quando um design ainda o reutiliza ou estende, e indica o que o substitui\./,
+        /uma vista sem referência é avaliada no mínimo de acessibilidade \(320 px de largura, texto a 200 %, foco visível\)/],
+      "README.es.md": [cmd, /ejecuta también las comprobaciones de interfaz sobre los ficheros de vista y de estilos de la funcionalidad/,
+        /un aviso más de `finish`, con o sin registro, nunca un bloqueo/, /un comentario `ui-check-off: <rule-id>` con su motivo, en la línea del hallazgo o en la de encima, lo silencia\./,
+        /Una fila del registro marcada `_Deprecated: use DataGrid_` retira su componente: `doctor` avisa cuando un diseño aún lo reutiliza o lo extiende, y nombra el que lo sustituye\./,
+        /una vista sin referencia se juzga en el mínimo de accesibilidad \(320 px de ancho, texto al 200 %, foco visible\)/],
+    };
+    for (const [f, res] of Object.entries(readme)) {
+      const t = ws(raw(f));
+      rows.push([f + ": the +ui paragraph — the UI checks (run, warn never block, ui-check-off), `_Deprecated:_`, the floor", () => res.every((re) => re.test(t))]);
+    }
     for (const [label, check] of rows) all("1.37 docs pass — " + label, { holds: check });
   }
 

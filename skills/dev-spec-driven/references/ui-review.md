@@ -90,9 +90,9 @@ is confirmed first (§4).
 **On the floor**, four findings: **reflow** (from the `.json` only: the page wider than the window; none → not judged),
 **lost** (content cut, covered or unreadable), **focus** (none visible, or hidden), **defect** (a value never resolved
 or formatted, a broken image). Each is a **Major** by default — confirmed first, as above; only a measured reflow is a
-Blocker. Not findings: a data table, a map, a diagram, a toolbar — scrolling inside its own box (WCAG 1.4.10's
-exception: a box that scrolls inside the page is not the page scrolling); truncation, unless the design's row says the
-field wraps. **Below a minimum width the design or `ui.md` states**: one checkpoint line per feature, never a fix
+Blocker. Not findings: content that needs a two-dimensional layout for its meaning or use (a data table, a map, a
+diagram, a toolbar…) scrolling inside its own box — the only content WCAG 1.4.10 excepts; truncation, unless the
+design's row says the field wraps. **Below a minimum width the design or `ui.md` states**: one checkpoint line per feature, never a fix
 round, never a stop. A floor finding carried into the ledger or a report is written as an accessibility finding
 (`ui-design-patterns.md` → Testing accessibility).
 
@@ -111,8 +111,8 @@ a region that changed since the last capture — a fix round never opens a new h
 2. A PARTIAL is graded again for what remains, and stays open.
 3. A confirmed finding is not reconfirmed.
 4. A regression Major goes through the confirmation step (§4); a regression Blocker enters the loop.
-5. A finding missed earlier keeps its severity: `Task N: ui deferred (missed earlier, <severity>): …`, shown at the
-   checkpoint — never a round of its own.
+5. A finding missed earlier keeps its severity and goes as a regression does (rule 4); a minor: `Task N: ui deferred
+   (missed earlier, minor): …`, shown at the checkpoint.
 6. After a code-review round: an empty open list — regressions only.
 7. The Breaker (`references/subagent-execution.md` → 7) uses verdict mode.
 
