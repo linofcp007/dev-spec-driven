@@ -2950,12 +2950,43 @@ const RE_STYLE_CLOSE = /<\/style\s*>/i;
 // The `>` that ends a tag, from `from` on (never an arrow's: `onLoad={() => x}`) → its index, -1 when the line holds none.
 const styleTagEnd = (s, from) => { let g = s.indexOf(">", from); while (g > 0 && s[g - 1] === "=") g = s.indexOf(">", g + 1); return g; };
 const isQuote = (c) => c === "\"" || c === "'" || c === "`";
-function rawValuesOf(text, rel) {
-  const out = [], seen = new Set();
+// A view / style file's lines as its readers read them (1.37: the ONE walk — rawValuesOf's, and the UI checks') → yields, line
+// by line, { n (1-based), src (the line, cut at DS_LINE_MAX), l (src without its comments — withoutComments, its state carried
+// from line to line), css (a stylesheet's line: a .css / .scss… file's, or one inside a <style> block of a markup or JSX file,
+// its opening line and its closing one included) }. A GENERATOR: a reader that stops early reads no further line —
+// rawValuesOf stops at DS_RAW_PER_FILE values, and a 20,000-line sheet costs it its first few hundred lines.
+function* viewLines(text, rel) {
   const sheet = RE_STYLE_EXT.test(rel), plainCss = /\.css$/i.test(rel);
   const open = sheet ? null : RE_STYLE_BLOCK_EXT.test(rel) ? RE_STYLE_OPEN : RE_STYLE_OPEN_JSX;
   const st = { block: false, html: false };
   let inStyle = false, inTag = false; // inside a <style> block of a markup or JSX file · inside its opening tag (no `>` yet)
+  const lines = text.split(/\r?\n/);
+  for (let n = 0; n < lines.length; n++) {
+    const src = lines[n].length > DS_LINE_MAX ? lines[n].slice(0, DS_LINE_MAX) : lines[n];
+    let block = inStyle, l;
+    // the opening tag from `from` on: its `>` ends it — `/>` (a self-closing <style … />) and there is no block
+    const tag = (s, from) => { const end = styleTagEnd(s, from); if (end !== -1) { inTag = false; if (s[end - 1] === "/") inStyle = block = false; } };
+    if (!open || inStyle) {
+      // a stylesheet's line, or one inside a <style> block: its opening tag may still be open, `</style>` ends the block
+      if (open && inTag) tag(src, 0);
+      if (open && inStyle && RE_STYLE_CLOSE.test(src)) inStyle = false;
+      l = withoutComments(src, st, { slashSlash: !plainCss, sheet: sheet || block });
+    } else {
+      // code or markup: its comments first — a <style> named in one (`// injects a <style> tag`, `{/* the <style> */}`,
+      // `<!-- the <style> below -->`) opens nothing (review 5: read on the raw line, it blinded the rest of the file)
+      l = withoutComments(src, st, { slashSlash: !plainCss, sheet: false });
+      const m = open.exec(l);
+      if (m) {
+        inStyle = inTag = block = true;
+        tag(l, m.index + 6);
+        if (inStyle && RE_STYLE_CLOSE.test(l)) inStyle = false;
+      }
+    }
+    yield { n: n + 1, src, l, css: sheet || block };
+  }
+}
+function rawValuesOf(text, rel) {
+  const out = [], seen = new Set();
   const add = (line, kind, value) => {
     const k = line + ":" + value;
     if (seen.has(k) || out.length >= DS_RAW_PER_FILE) return;
@@ -2995,32 +3026,12 @@ function rawValuesOf(text, rel) {
       }
     }
   };
-  const lines = text.split(/\r?\n/);
-  for (let n = 0; n < lines.length && out.length < DS_RAW_PER_FILE; n++) {
-    const src = lines[n].length > DS_LINE_MAX ? lines[n].slice(0, DS_LINE_MAX) : lines[n];
-    let block = inStyle, l;
-    // the opening tag from `from` on: its `>` ends it — `/>` (a self-closing <style … />) and there is no block
-    const tag = (s, from) => { const end = styleTagEnd(s, from); if (end !== -1) { inTag = false; if (s[end - 1] === "/") inStyle = block = false; } };
-    if (!open || inStyle) {
-      // a stylesheet's line, or one inside a <style> block: its opening tag may still be open, `</style>` ends the block
-      if (open && inTag) tag(src, 0);
-      if (open && inStyle && RE_STYLE_CLOSE.test(src)) inStyle = false;
-      l = withoutComments(src, st, { slashSlash: !plainCss, sheet: sheet || block });
-    } else {
-      // code or markup: its comments first — a <style> named in one (`// injects a <style> tag`, `{/* the <style> */}`,
-      // `<!-- the <style> below -->`) opens nothing (review 5: read on the raw line, it blinded the rest of the file)
-      l = withoutComments(src, st, { slashSlash: !plainCss, sheet: false });
-      const m = open.exec(l);
-      if (m) {
-        inStyle = inTag = block = true;
-        tag(l, m.index + 6);
-        if (inStyle && RE_STYLE_CLOSE.test(l)) inStyle = false;
-      }
-    }
+  for (const { n, l, css } of viewLines(text, rel)) {
+    if (out.length >= DS_RAW_PER_FILE) break; // (the early exit: the generator reads no further line)
     if (!l.trim()) continue;
-    if (sheet || block || RE_DECL_LINE.test(l)) { styleLine(l, n + 1); continue; }
-    colours(l, n + 1, true);
-    for (const m of l.matchAll(RE_TW_SIZE)) add(n + 1, "size", m[0]);
+    if (css || RE_DECL_LINE.test(l)) { styleLine(l, n); continue; }
+    colours(l, n, true);
+    for (const m of l.matchAll(RE_TW_SIZE)) add(n, "size", m[0]);
   }
   return out;
 }
@@ -3338,4 +3349,4 @@ function designSystemFinish(projectDir, slug, opts = {}) {
     unregistered: pending.map((c) => c.name).filter((n) => !registered.includes(n)) };
 }
 
-module.exports = { designSystemReport, designSystemSeed, designSystemFinish, __link };
+module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, __link };

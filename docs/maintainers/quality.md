@@ -1038,7 +1038,13 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `picker.select("#1d4ed8")`), an entity, a
   comment (`withoutComments`: outside a stylesheet a `/*` opens one only at a line's start, after a blank or `{ ( ; ,` —
   `accept="image/*"` holds none). A colour equal to a registry token's value carries `token` (`colorKey`). Not read: a size
-  in a JSX `style={{…}}` object.
+  in a JSX `style={{…}}` object. The line walk (1.37) is `viewLines(text, rel)` — rawValuesOf's loop head, the ONE walk of a
+  view file's lines its readers share (the raw values, the UI checks): a GENERATOR of `{ n (1-based), src (cut at
+  DS_LINE_MAX), l (without its comments), css (a stylesheet's line — a `<style>` block's opening and closing lines too) }`.
+  A generator, never a list: rawValuesOf stops at DS_RAW_PER_FILE values and reads no further line (over a list, a
+  20,000-line sheet cost every line — CRIT_1: 1.1 → 6.4 ms; mcp/tests/15-quality-design-system-walks.js times the stop as a
+  ratio against a sheet with no value). Behaviour-preserving when it came: the raw values of 5,256 real view files
+  byte-identical to 1.36's, every earlier assertion unchanged.
 - **spec_finish** (`designSystemFinish`; +ui and a registry, never on the `gateOnly` path) — the raw values as a WARNING, never
   a blocker, and only when the registry holds tokens or names token files (`tokens`: else there is nothing to replace them
   with) — `finish.designSystemRaw`: the count, the first 3, the call that lists them. A READY written finish appends the
