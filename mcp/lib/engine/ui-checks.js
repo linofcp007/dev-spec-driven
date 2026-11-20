@@ -17,22 +17,27 @@
  * the code loads on first use.
  */
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
-let opensString, quoteEnd, styleTokens;
-function __link(E) { ({ opensString, quoteEnd, styleTokens } = E); }
+let opensString, quoteEnd, readFileHeads, styleTokens, RE_STYLE_EXT;
+function __link(E) { ({ opensString, quoteEnd, readFileHeads, styleTokens, RE_STYLE_EXT } = E); }
 
 // The rules: id → level (the report sorts warn first; finish counts warn alone).
 const UI_RULES = { "zoom-disabled": "warn", "img-no-alt": "warn", "outline-removed": "warn", "click-no-keyboard": "warn", "paste-blocked": "warn",
   "transition-all": "report" };
 const DS_TAG_LINES = 30; // one opening tag read over lines…
 const DS_TAG_CHARS = 4000; // …and characters: past either it is not judged, nor is a tag that starts inside it
+const DS_TAG_ATTRS = 100; // a tag's attributes read: one that holds more is not judged
 const DS_CHECK_PER_FILE = 200; // findings kept per file (silenced ones too) — past it a file's further findings are not kept
 const DS_VALUE = 80; // a finding's value, cut
+const DS_BLOCK_DEPTH = 64; // a sheet's blocks judged nested that deep — a deeper one is not, nor what it holds
+const DS_FOCUS_SHEETS = 1000; // the project's stylesheets read for a focus style…
+const DS_FOCUS_CHARS = 4 * 1024 * 1024; // …and their characters: past either, `limits` says so and outline-removed is not judged
+const DS_FOCUS_FILE_CHARS = 256 * 1024; // one stylesheet's characters read
 const DS_MARK_IDS = 200; // characters after a `ui-check-off:` read for its ids
 const BS = String.fromCharCode(92);
 
-// What a file is: a stylesheet (its lines are all css — no tag), a script that holds JSX (tags in script mode throughout: a
-// .tsx / .jsx file, a PascalCase .js component, an Angular *.component.ts), or markup (an SFC, HTML and its template engines).
-const RE_SHEET_FILE = /\.(?:css|scss|sass|less|styl)$/i;
+// What a file is: a stylesheet (RE_STYLE_EXT, design-system.js: its lines are all css — no tag), a script that holds JSX (tags in
+// script mode throughout: a .tsx / .jsx file, a PascalCase .js component, an Angular *.component.ts), or markup (an SFC, HTML and
+// its template engines).
 const RE_SCRIPT_FILE = /\.[cm]?[jt]sx?$/i;
 
 // --- the tag reader ------------------------------------------------------------------------------------------------------------
@@ -117,7 +122,8 @@ function tagReader(script, judge) {
 }
 
 // --- a tag's attributes ----------------------------------------------------------------------------------------------------------
-// → [{ name, value (as written, quotes / braces kept; null: none) } | { spread: true }]. A `{…}` where a NAME stands is a spread
+// → [{ name, value (as written, quotes / braces kept; null: none) } | { spread: true }] — null past DS_TAG_ATTRS of them (a tag
+// is not judged on what it was not read for). A `{…}` where a NAME stands is a spread
 // (`{...props}`, `{...getRootProps()}`, a template engine's `{{attrs}}`: it may hold any attribute) — unless it holds one
 // identifier, Svelte's shorthand `{alt}`, which names that attribute.
 const RE_NAME_STOP = /[\s=>/"'`{]/;
@@ -143,7 +149,7 @@ function attributesOf(text, from) {
     if (c === "{") {
       const e = closing(text, i);
       const inner = text.slice(i + 1, e === -1 ? n : e).trim();
-      out.push(RE_IDENT.test(inner) ? { name: inner, value: null } : { spread: true });
+      if (out.push(RE_IDENT.test(inner) ? { name: inner, value: null } : { spread: true }) > DS_TAG_ATTRS) return null;
       if (e === -1) break;
       i = e + 1;
       continue;
@@ -154,12 +160,12 @@ function attributesOf(text, from) {
       const name = text.slice(i, j);
       let k = j;
       while (k < n && /\s/.test(text[k])) k++;
-      if (text[k] !== "=") { out.push({ name, value: null }); i = j; continue; }
+      if (text[k] !== "=") { if (out.push({ name, value: null }) > DS_TAG_ATTRS) return null; i = j; continue; }
       k++;
       while (k < n && /\s/.test(text[k])) k++;
       let e;
       if (text[k] === "\"" || text[k] === "'" || text[k] === "`") { e = text.indexOf(text[k], k + 1); e = e === -1 ? n : e + 1; } else if (text[k] === "{") { e = closing(text, k); e = e === -1 ? n : e + 1; } else { e = k; while (e < n && !/[\s>]/.test(text[e])) e++; }
-      out.push({ name, value: text.slice(k, e) });
+      if (out.push({ name, value: text.slice(k, e) }) > DS_TAG_ATTRS) return null;
       i = e;
       continue;
     }
@@ -201,6 +207,7 @@ const RE_CANCELS = /preventDefault|return\s+false/;
 const RE_READS_CLIPBOARD = /clipboardData|getData/;
 function judgeTag(tag, rest, add) {
   const attrs = attributesOf(tag.text, tag.name.length + 1);
+  if (!attrs) return;
   const spread = attrs.some((a) => a.spread);
   const named = new Map(), events = [];
   for (const a of attrs) {
@@ -345,14 +352,17 @@ function outlineShape(prelude) {
 function sheetChecks(text, rel, add) {
   let focus = false;
   const open = []; // the open blocks, innermost last: { selector, shape, print, reduced, focus, removals, other }
+  let deep = 0; // the blocks open past DS_BLOCK_DEPTH (their rule's extent is then unknown: never a "focus" candidate)
   styleTokens(text, rel, {
     block: (e) => {
+      if (deep || open.length >= DS_BLOCK_DEPTH) { if (deep++ === 0) open[open.length - 1].other = true; return; }
       const p = open.length ? open[open.length - 1] : null, at = e.prelude[0] === "@";
       open.push({ selector: e.prelude, shape: at ? null : outlineShape(e.prelude), print: (p != null && p.print) || (at && RE_PRINT.test(e.prelude)),
         reduced: (p != null && p.reduced) || (at && RE_REDUCED.test(e.prelude)), focus: (p != null && p.focus) || (!at && RE_FOCUS_PSEUDO.test(e.prelude)),
         removals: [], other: false });
     },
     statement: (e) => {
+      if (deep) return;
       const b = open.length ? open[open.length - 1] : null, reduced = b != null && b.reduced;
       const removal = RE_REMOVAL.test(e.text);
       if (b != null && b.focus && !removal) focus = true;
@@ -366,6 +376,7 @@ function sheetChecks(text, rel, add) {
       if ((prop === "transition" || prop === "transition-property") && transitionAll(prop, d[2])) add("transition-all", e.from, e.text);
     },
     close: () => {
+      if (deep) { deep--; return; }
       const b = open.pop();
       if (!b) return;
       if (b.other && open.length) open[open.length - 1].other = true; // (a rule's extent holds its nested blocks)
@@ -411,7 +422,7 @@ function markIds(src) {
 // at most; `silenced` when a `ui-check-off:` comment (in `src`, absent from `l`) on that line or the one above names its rule.
 // outline-removed findings are CANDIDATES (focus: does the file hold a focus style — uiChecksReport decides).
 function uiChecksOf(lines, rel) {
-  const sheet = RE_SHEET_FILE.test(rel);
+  const sheet = RE_STYLE_EXT.test(rel);
   const findings = [], seen = new Set(), marks = new Map(), css = [];
   let focus = false, anyCss = false;
   const add = (rule, line, value) => {
@@ -443,4 +454,61 @@ function uiChecksOf(lines, rel) {
   return { findings, focus };
 }
 
-module.exports = { uiChecksOf, __link };
+// --- the feature's files ---------------------------------------------------------------------------------------------------------
+// Does any of the project's stylesheets hold a focus style (sheetChecks over the WHOLE file — never the name-ranked token
+// candidates: `focus.css`, `_a11y.scss`, a .less file count)? sheets: [{rel, full}], read the shorter path first, each up
+// to DS_FOCUS_FILE_CHARS, DS_FOCUS_SHEETS files / DS_FOCUS_CHARS characters at most; it stops at the first that holds one.
+// → { focus, limits: [{code: focus-sheets | focus-chars, read}] — a bound that cut the search }
+function uiFocusPass(sheets) {
+  const list = sheets.slice().sort((a, b) => a.rel.length - b.rel.length || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  const heads = readFileHeads(list.slice(0, DS_FOCUS_SHEETS).map((s) => s.full), DS_FOCUS_FILE_CHARS);
+  let read = 0, chars = 0;
+  try {
+    for (const s of list) {
+      if (read >= DS_FOCUS_SHEETS) return { focus: false, limits: [{ code: "focus-sheets", read }] };
+      if (chars >= DS_FOCUS_CHARS) return { focus: false, limits: [{ code: "focus-chars", read }] };
+      const text = heads.next();
+      read++;
+      if (text == null) continue;
+      chars += text.length;
+      if (sheetChecks(text, s.rel, null)) return { focus: true, limits: [] };
+    }
+  } finally {
+    heads.stop();
+  }
+  return { focus: false, limits: [] };
+}
+// The feature report's `uiChecks` → { findings (the first `cap`: rule, level, file, line, value — warn first, then by file
+// and line), total, byRule, silenced, limits }. files: [{ rel, findings, focus }] (uiChecksOf of each file read). The
+// outline-removed candidates stand only while NO focus style exists — in the feature's files, else in the project's
+// stylesheets (projectFocus(): uiFocusPass, called only then — no candidate, no read); a search a bound cut judges none.
+function uiChecksReport(files, projectFocus, cap) {
+  let focus = files.some((f) => f.focus), limits = [];
+  if (!focus && files.some((f) => f.findings.some((x) => x.rule === "outline-removed"))) ({ focus, limits } = projectFocus());
+  const list = [];
+  let silenced = 0;
+  for (const f of files) {
+    for (const x of f.findings) {
+      if (x.rule === "outline-removed" && (focus || limits.length)) continue;
+      if (x.silenced) { silenced++; continue; }
+      list.push({ rule: x.rule, level: UI_RULES[x.rule], file: f.rel, line: x.line, value: x.value });
+    }
+  }
+  const rank = (x) => (x.level === "warn" ? 0 : 1);
+  list.sort((a, b) => rank(a) - rank(b) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) || a.line - b.line);
+  const byRule = {};
+  for (const x of list) byRule[x.rule] = (byRule[x.rule] || 0) + 1;
+  return { findings: list.slice(0, cap), total: list.length, byRule, silenced, limits };
+}
+
+// spec_finish's part of a feature report's uiChecks → { total, byRule, top (the first 3: rule, file, line, value) } — the warn-level
+// findings alone (the report sorts them first; a report-level rule is never a finish warning)
+function uiFinishChecks(report) {
+  const byRule = {};
+  let total = 0;
+  for (const [rule, n] of Object.entries(report.byRule)) if (UI_RULES[rule] === "warn") { byRule[rule] = n; total += n; }
+  const top = report.findings.filter((x) => x.level === "warn").slice(0, 3).map((x) => ({ rule: x.rule, file: x.file, line: x.line, value: x.value }));
+  return { total, byRule, top };
+}
+
+module.exports = { uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, __link };

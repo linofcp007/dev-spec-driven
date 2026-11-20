@@ -1889,7 +1889,7 @@ const COMMANDS = [
     args: ["@feature"],
     help: `  design-system [feature]         The design-system registry (.specs/steering/design-system.md) against the code: the components,
                                   tokens, token files and UI libraries it lacks, the rows whose path is gone; a feature: its Design System Usage rows
-                                  against the registry and the raw colours / sizes in its view files`,
+                                  against the registry, the raw colours / sizes and the UI checks (anti-patterns) in its view files`,
     run(c) {
       // dev-spec design-system [feature] (= spec_scan {designSystem: true, name}) — read-only, exit 0
       const { out, fail, log } = c;
@@ -1913,6 +1913,18 @@ const COMMANDS = [
             r.raw.forEach((x) => log(`    ${x.file}:${x.line}  ${x.value}` + (x.token ? `  → ${x.token}` : "")));
             more(r.total, r.raw.length);
           }
+          // 1.37: the UI checks — each finding, a line of what each rule means, how many a comment silenced
+          const u = r.uiChecks;
+          if (u.total) {
+            log(T.uiHead(u.total));
+            u.findings.forEach((x) => log(`    ${x.file}:${x.line}  ${x.rule}  ${x.value}` + (x.level === "report" ? "  " + T.uiReportTag : "")));
+            more(u.total, u.findings.length);
+            log(T.uiLegend);
+            Object.keys(u.byRule).forEach((id) => log("    " + id + " — " + T.uiRule[id]));
+          } else if (r.viewFiles) log(T.uiNone(r.viewFiles));
+          if (u.silenced) log(T.uiSilenced(u.silenced));
+          // (a bound of the checks' own: the report's lines below say the ones they share)
+          u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.file)));
         } else {
           log(T.dsFound(r.found.components, r.found.tokens, r.found.sources.length));
           if (r.registry.exists && r.missingTotal) {

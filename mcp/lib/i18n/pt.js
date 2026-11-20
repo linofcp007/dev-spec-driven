@@ -1035,6 +1035,8 @@ const msg = {
       // 1.30: nenhuma tarefa indica ficheiros em _Implements:_ — quem os lê não vê código da feature
       // 1.35: cores e tamanhos fixos nos ficheiros de vista da feature, onde o registo do design system tem tokens — um aviso, nunca um bloqueio
       designSystemRaw: (n, top, slug) => `os ficheiros de vista da feature têm ${n} ${n === 1 ? "valor fixo" : "valores fixos"} onde o design system tem tokens — ${top}${n > 3 ? "; …" : ""}: usar o token, ou explicar no relatório a razão de um literal ser deliberado (a lista: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
+      // 1.37: as verificações de interface dos ficheiros de vista da feature (as de aviso que ninguém silenciou) — um aviso, nunca um bloqueio
+      uiChecks: (n, top, slug) => `os ficheiros de vista da feature têm ${n} ${n === 1 ? "antipadrão de interface" : "antipadrões de interface"} — ${top}${n > 3 ? "; …" : ""}: corrigir cada um, ou marcar um deliberado com um comentário \`ui-check-off: <regra>\` na sua linha ou na linha acima (a lista: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
       noImplements: (file) => `nenhuma tarefa indica os seus ficheiros em _Implements:_ — a baseline de deriva, a deteção de duplicados e a atribuição do dev-guardian não veem código desta feature. Acrescenta _Implements: <caminho>_ a cada tarefa que escreveu código (um ${file} editado volta a ser aprovado), ou ignora isto se nenhuma o fez.`,
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
@@ -1562,6 +1564,8 @@ const msg = {
         tokens: (n) => `  (só os primeiros ${n} tokens do código são lidos: o resto não é comparado)`,
         "registry-rows": (n) => `  (só os primeiros ${n} componentes do registo são verificados quanto a um caminho que já não existe)`,
         "view-files": (n) => `  (só os primeiros ${n} ficheiros de vista da feature são lidos à procura de valores fixos)`,
+        "focus-sheets": (n) => `  (os estilos de foco foram procurados nas primeiras ${n} folhas de estilo do projeto, um limite: nenhuma remoção do contorno foi avaliada)`,
+        "focus-chars": (n) => `  (os estilos de foco foram procurados em ${n} folhas de estilo, até aos caracteres lidos, um limite: nenhuma remoção do contorno foi avaliada)`,
         "component-files": (n) => `  (foram lidos ${n} ficheiros de componentes à procura dos outros componentes que exportam, e foi atingido um limite — os ficheiros ou caracteres lidos, ou os nomes guardados de um ficheiro: o resto não é comparado)`,
         "workspace-manifests": (n) => `  (foi atingido um limite dos padrões de workspace — lidos ${n} dos ficheiros package.json dos pacotes do workspace: as bibliotecas dos restantes não são comparadas)`,
       },
@@ -1572,6 +1576,20 @@ const msg = {
       dsNoViewFiles: "  nenhum ficheiro de vista ou de estilo entre os ficheiros de _Implements:_ — nada a ler",
       dsRegistered: (list) => `  ✓ acrescentado ao registo do design system: ${list}`,
       dsUnregistered: (list) => `  ▲ não acrescentado ao registo do design system (não é um nome simples de componente, ou o ficheiro não pôde ser escrito): ${list}`,
+      // 1.37: as verificações de interface dos ficheiros da feature (o `uiChecks` de spec_scan {designSystem: true, name})
+      uiHead: (n) => `  Verificações de interface (${n}) — o spec_finish avisa de cada uma, exceto as só do relatório:`,
+      uiNone: (files) => `  Verificações de interface: nada ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`}`,
+      uiReportTag: "(só no relatório)",
+      uiLegend: "  o que cada uma significa:",
+      uiRule: {
+        "zoom-disabled": "o viewport impede o zoom com os dedos (user-scalable=no, maximum-scale abaixo de 2) — deixar as pessoas ampliar (WCAG 1.4.4)",
+        "img-no-alt": "uma <img> sem alt — dizer o que mostra, ou alt=\"\" quando é decoração (WCAG 1.1.1)",
+        "outline-removed": "o contorno de foco é removido e nenhum estilo de foco do projeto o substitui — manter um indicador visível (:focus-visible com um contorno, um anel ou uma borda; WCAG 2.4.7)",
+        "click-no-keyboard": "um handler de clique num elemento que o teclado não alcança — usar um <button> ou um <a href>, ou dar-lhe um role, um tabindex e um handler de tecla (WCAG 2.1.1)",
+        "paste-blocked": "um handler de colar cancela a colagem sem ler a área de transferência — nunca bloquear o colar: gestores de palavras-passe, códigos longos (WCAG 3.3.8)",
+        "transition-all": "transition: all (ou sem propriedade) anima todas as propriedades que mudam, também as de layout — listar as que se devem mover",
+      },
+      uiSilenced: (n) => `  (${n} ${n === 1 ? "silenciada" : "silenciadas"} por um comentário ui-check-off)`,
       dsTokensNew: (n) => `  tokens no código, fora do registo (${n}) — uma linha por cada:`,
       dsPending: (list) => `  no código, construídos por uma feature ainda não concluída (entram no registo no finish dela): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,

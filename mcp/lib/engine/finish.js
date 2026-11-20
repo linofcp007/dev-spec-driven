@@ -32,7 +32,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
-let designSystemFinish; // design-system.js — raw values in a +ui feature's view files, its New components into the registry (1.35)
+let designSystemFinish; // design-system.js — raw values in a +ui feature's view files, its New components into the registry (1.35), its UI checks (1.37)
 let DESIGN_SYSTEM_FILE; // quality.js — the registry's file name (a rename follows its `_From:_` rows)
 let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian, accepted gaps
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
@@ -322,10 +322,12 @@ function finishFeature(projectDir, name, opts = {}) {
   // 1.35: a +ui feature of a project that keeps a design-system registry (.specs/steering/design-system.md) — the raw colours and
   // sizes in its view files, when the registry holds tokens (or names token files — else there is nothing to replace them
   // with): a warning, never a blocker (how many, the first 3 as `file:line value`, the call that lists them); and a READY
-  // written finish adds the design's New components to the registry, so the next feature finds them there. null for any other
-  // feature (nothing read).
+  // written finish adds the design's New components to the registry, so the next feature finds them there. 1.37: with or without
+  // a registry, the UI checks of its view files — the warn-level ones nobody silenced: ONE warning, never a blocker, after the
+  // raw values' (no registry: no `raw`, empty registered / unregistered). null for any other feature (nothing read).
   const ds = tracks.includes("ui") ? designSystemFinish(projectDir, slug, { write, ready }) : null;
-  if (ds && ds.tokens && ds.raw.total) warnings.push(F.designSystemRaw(ds.raw.total, ds.raw.top.map((x) => `${x.file}:${x.line} ${x.value}`).join("; "), slug));
+  if (ds && ds.raw && ds.tokens && ds.raw.total) warnings.push(F.designSystemRaw(ds.raw.total, ds.raw.top.map((x) => `${x.file}:${x.line} ${x.value}`).join("; "), slug));
+  if (ds && ds.uiChecks.total) warnings.push(F.uiChecks(ds.uiChecks.total, ds.uiChecks.top.map((x) => `${x.file}:${x.line} ${x.rule}`).join("; "), slug));
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null;
   const res = {
@@ -352,11 +354,11 @@ function finishFeature(projectDir, name, opts = {}) {
   if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
   if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats, partial? (1.30)} — spec_scan {duplicates: true} lists all
   if (protectedTests) res.protectedTests = protectedTests; // 1.36: {count, unexplained: [{file, status: changed | deleted}], lifted: [{file, by, at, reason}]}
-  // 1.35: {raw: {total, counts: {color, size}, top}, registered (New components this call added to the registry), unregistered,
-  // note? (the localized line, when it added some)} — only when there is something to say; spec_scan {designSystem: true, name}
-  // lists the raw values
-  if (ds && (ds.raw.total || ds.registered.length || ds.unregistered.length)) {
-    res.designSystem = Object.assign({ raw: ds.raw, registered: ds.registered, unregistered: ds.unregistered },
+  // 1.35: {raw: {total, counts: {color, size}, top} (a registry's alone), uiChecks? (1.37: {total, byRule, top} — warn-level, when
+  // there is one), registered (New components this call added to the registry), unregistered (both [] without a registry), note? (the localized
+  // line, when it added some)} — only when there is something to say; spec_scan {designSystem: true, name} lists them all
+  if (ds && ((ds.raw && ds.raw.total) || ds.uiChecks.total || ds.registered.length || ds.unregistered.length)) {
+    res.designSystem = Object.assign(ds.raw ? { raw: ds.raw } : {}, ds.uiChecks.total ? { uiChecks: ds.uiChecks } : {}, { registered: ds.registered, unregistered: ds.unregistered },
       ds.registered.length ? { note: i18n.msg(lng).quality.dsRegistered(ds.registered.join(", ")) } : {});
   }
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code

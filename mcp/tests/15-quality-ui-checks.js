@@ -1,11 +1,14 @@
 "use strict";
 // The UI checks (1.37) — engine/ui-checks.js: zoom-disabled, img-no-alt, outline-removed, click-no-keyboard, paste-blocked (warn)
 // and transition-all (report) over one view / style file (uiChecksOf, on real-shaped files of each syntax), the tag reader,
-// the stylesheet's structure through styleTokens' events, the inline `ui-check-off:` comment.
+// the stylesheet's structure through styleTokens' events, the inline `ui-check-off:` comment; the feature report's `uiChecks`
+// (the focus pass over the project's stylesheets and its bounds, the token files, the order and the cap), spec_finish's warning
+// with and without a registry, the hostile inputs' cost as ratios.
 
+const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ all, require, __dirname }) => {
+exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const T = require(path.join(__dirname, "lib", "engine", "index.js")).loadLazyTier();
   const run = (text, rel) => T.uiChecksOf(T.viewLines(text, rel), rel);
@@ -250,6 +253,257 @@ exports.run = async ({ all, require, __dirname }) => {
     all("1.37 UI checks: a quoted value with a `>` read over lines keeps the tag open (its onClick judged); a `{` in a string and a block inside a handler never cut a brace value (the alt, the focus call after it are read); `<IMG>` is a component; `focus:outline-0`, `focus-visible:outline-none` are candidates, `hover:outline-none` none; a styled-jsx block is a sheet: `button:focus` a candidate, an easing with no property is transition-all, `:focus-within` is never the focus a removal is judged on (got " +
       js(got(jsx, "src/Toolbar.tsx")) + ")", {
       exact: () => js(got(jsx, "src/Toolbar.tsx")) === js(["click-no-keyboard@3", "outline-removed@13", "outline-removed@14", "outline-removed@17", "transition-all@18"]),
+    });
+  }
+
+  // --- the feature report's uiChecks, finish --------------------------------------------------------------------------------------
+  const write = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
+  // a project with one +ui feature whose tasks name `files` in _Implements: (no registry unless `registry`)
+  const feature = (tag, files, registry) => {
+    const p = path.join(tmp, "proj-uic-" + tag);
+    S.initProject(p, ["ui"], "en");
+    if (registry != null) write(p, ".specs/steering/design-system.md", registry);
+    const f = S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" });
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the checkout\n  - _Requirements: US-1.AC-1_\n  - _Implements: " + files.join(", ") + "_\n  - _Verify: npm test_\n");
+    return { p, slug: f.slug, dir: f.dir };
+  };
+  const CHECKOUT = lines("export const Checkout = ({ items, go }) => (", "  <div className=\"grid transition-all\" onClick={go}>",
+    "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/spacer.gif\" />", "    {items.map((i) => <img key={i.id} src={i.src} />)}", "  </div>", ");");
+  const GLOBALS = lines(":root {", "  --background: #ffffff;", "  --foreground: #0a0a0a;", "  --primary: #1d4ed8;", "  --radius: 0.5rem;", "  --ring: #2563eb;", "}",
+    "* { transition: all .2s; }", ".legacy { color: #123456; margin: 13px; }");
+  const RESET = lines("/* the team's reset */", "*:focus {", "  outline: 0;", "}");
+
+  { // the feature report: its files' findings (warn first, then file, then line), byRule, silenced; its token file (globals.css, a
+    // source by its custom properties) read for the checks alone — never for raw values, never in viewFiles; MCP = engine
+    const g = feature("report", ["src/checkout/Checkout.tsx", "src/checkout/reset.css", "src/app/globals.css"]);
+    write(g.p, "src/checkout/Checkout.tsx", CHECKOUT);
+    write(g.p, "src/checkout/reset.css", RESET);
+    write(g.p, "src/app/globals.css", GLOBALS);
+    const r = S.designSystemReport(g.p, { name: g.slug });
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_scan", arguments: { projectDir: g.p, designSystem: true, name: g.slug } }));
+    all("1.37 UI checks: the feature report's `uiChecks` — {findings (rule, level, file, line, value: warn first, then by file and line), total, byRule, silenced, limits}; the feature's token file (globals.css) is read for the checks (its transition-all) and never for raw values (its #123456 is not listed) nor counted in viewFiles; a reset's `*:focus { outline: 0 }` with no focus style anywhere stands; the MCP result is the engine's (got " +
+      js({ ui: r.uiChecks, raw: r.raw.map((x) => x.file + ":" + x.line), viewFiles: r.viewFiles, limits: r.limits }) + ")", {
+      findings: () => js(r.uiChecks.findings.map((x) => [x.rule, x.level, x.file, x.line])) === js([["click-no-keyboard", "warn", "src/checkout/Checkout.tsx", 2],
+        ["img-no-alt", "warn", "src/checkout/Checkout.tsx", 5], ["outline-removed", "warn", "src/checkout/reset.css", 3], ["transition-all", "report", "src/app/globals.css", 8],
+        ["transition-all", "report", "src/checkout/Checkout.tsx", 2]]),
+      counts: () => r.uiChecks.total === 5 && js(r.uiChecks.byRule) === js({ "click-no-keyboard": 1, "img-no-alt": 1, "outline-removed": 1, "transition-all": 2 }) && r.uiChecks.silenced === 1,
+      tokenFile: () => r.viewFiles === 2 && !r.raw.some((x) => x.file === "src/app/globals.css") && js(r.uiChecks.limits) === js([]) && js(r.limits) === js([]),
+      mcp: () => js(viaMcp.uiChecks) === js(r.uiChecks),
+    });
+  }
+
+  { // the focus facts (CRIT_1 must-fix 4): ANY focus style excuses an outline removal — in the feature's own files (a Vue <style>),
+    // else in any of the project's stylesheets, a .less or an `_a11y.scss` no name ranks; read only when a candidate exists
+    const mk = (tag, extra) => {
+      const g = feature("focus-" + tag, ["src/checkout/reset.css"].concat(extra.mine || []));
+      write(g.p, "src/checkout/reset.css", RESET);
+      for (const [rel, text] of extra.files || []) write(g.p, rel, text);
+      return g;
+    };
+    const verdict = (g) => S.designSystemReport(g.p, { name: g.slug }).uiChecks.findings.map((x) => x.rule + "@" + x.file);
+    const cases = {
+      none: mk("none", {}),
+      focusCss: mk("css", { files: [["src/styles/focus.css", ":focus-visible {\n  outline: 2px solid var(--ring);\n  outline-offset: 2px;\n}\n"]] }),
+      a11y: mk("a11y", { files: [["src/styles/_a11y.scss", "a:focus-visible, button:focus-visible { box-shadow: 0 0 0 2px $ring; }\n"]] }),
+      less: mk("less", { files: [["styles/site.less", ".btn { &:focus { border-color: @brand; } }\n"]] }),
+      vue: mk("vue", { mine: ["src/checkout/Field.vue"], files: [["src/checkout/Field.vue", "<template>\n  <input class=\"field\" />\n</template>\n<style scoped>\n.field:focus-visible { box-shadow: 0 0 0 2px #2563eb; }\n</style>\n"]] }),
+      removalOnly: mk("removal", { files: [["src/styles/focus.css", ":focus { outline: none; }\n:focus:not(:focus-visible) { outline: none; }\n"]] }),
+    };
+    const got1 = Object.fromEntries(Object.entries(cases).map(([k, g]) => [k, verdict(g)]));
+    // no candidate → no stylesheet of the project is read for the facts (an open counted on the one that holds one)
+    const quiet = feature("focus-quiet", ["src/checkout/Checkout.tsx"]);
+    write(quiet.p, "src/checkout/Checkout.tsx", "export const C = () => <button>ok</button>;\n");
+    write(quiet.p, "src/styles/focus.css", ":focus-visible { outline: 2px solid; }\n");
+    const opens = (g, file) => {
+      const real = fs.openSync;
+      let n = 0;
+      fs.openSync = function (p) { if (path.resolve(String(p)) === path.resolve(g.p, file)) n++; return real.apply(this, arguments); };
+      try { S.designSystemReport(g.p, { name: g.slug }); } finally { fs.openSync = real; }
+      return n;
+    };
+    const reads = { quiet: opens(quiet, "src/styles/focus.css"), asked: opens(cases.focusCss, "src/styles/focus.css"), own: opens(cases.none, "src/checkout/reset.css") };
+    all("1.37 UI checks: an outline removal stands only while NO focus style exists — a focus.css elsewhere, an `_a11y.scss` (never a name-ranked sheet), a .less file, a .vue <style> among the feature's files each excuse it; a sheet that only removes does not; with no candidate no stylesheet is read for the facts, and a file the report read is never read again (got " + js({ got1, reads }) + ")", {
+      stands: () => js(got1.none) === js(["outline-removed@src/checkout/reset.css"]) && js(got1.removalOnly) === js(got1.none),
+      excused: () => ["focusCss", "a11y", "less", "vue"].every((k) => js(got1[k]) === js([])),
+      lazy: () => reads.quiet === 0 && reads.asked === 1 && reads.own === 1,
+    });
+  }
+
+  { // the focus pass's bounds: the project's 1,000 first stylesheets (the shorter path first) and 4 MB of them — past either the
+    // removal is NOT judged and `uiChecks.limits` says so (focus-sheets / focus-chars), never the report's own `limits`
+    const many = feature("focus-sheets", ["src/checkout/reset.css"]);
+    write(many.p, "src/checkout/reset.css", RESET);
+    for (let i = 0; i < 1000; i++) write(many.p, "src/sheets/s" + String(i).padStart(4, "0") + ".css", ".s" + i + " { color: red; }\n");
+    write(many.p, "src/sheets/zz/late-focus.css", ":focus-visible { outline: 2px solid; }\n"); // the 1,001st by path length
+    const big = feature("focus-chars", ["src/checkout/reset.css"]);
+    write(big.p, "src/checkout/reset.css", RESET);
+    const blob = ".b { color: red; }\n".repeat(13000); // ~247K characters each
+    for (let i = 0; i < 17; i++) write(big.p, "src/big/b" + String(i).padStart(2, "0") + ".css", blob);
+    write(big.p, "src/big/zz-focus.css", ":focus-visible { outline: 2px solid; }\n");
+    const under = feature("focus-under", ["src/checkout/reset.css"]);
+    write(under.p, "src/checkout/reset.css", RESET);
+    for (let i = 0; i < 998; i++) write(under.p, "src/sheets/s" + String(i).padStart(4, "0") + ".css", ".s" + i + " { color: red; }\n");
+    write(under.p, "src/sheets/zz/late-focus.css", ":focus-visible { outline: 2px solid; }\n");
+    const root1 = feature("focus-root", ["src/checkout/reset.css"]);
+    write(root1.p, "src/checkout/reset.css", RESET);
+    for (let i = 0; i < 1000; i++) write(root1.p, "src/sheets/s" + String(i).padStart(4, "0") + ".css", ".s" + i + " { color: red; }\n");
+    write(root1.p, "z-focus.css", ":focus-visible { outline: 2px solid; }\n"); // the shortest path, the last by name
+    const rr = S.designSystemReport(root1.p, { name: root1.slug });
+    const rm = S.designSystemReport(many.p, { name: many.slug }), rb = S.designSystemReport(big.p, { name: big.slug }), ru = S.designSystemReport(under.p, { name: under.slug });
+    all("1.37 UI checks: the focus pass stops at a bound — 1,000 stylesheets (focus-sheets) or 4 MB read (focus-chars): the removal is then not judged and `uiChecks.limits` says which (never the report's `limits` / `truncated`); 999 sheets with the focus style last read it; the shorter path first — a root sheet beside 1,000 deeper ones is read (got " +
+      js({ root: [rr.uiChecks.findings.length, rr.uiChecks.limits], many: [rm.uiChecks.findings.length, rm.uiChecks.limits, rm.limits, rm.truncated], big: [rb.uiChecks.findings.length, rb.uiChecks.limits], under: [ru.uiChecks.findings.length, ru.uiChecks.limits] }) + ")", {
+      sheets: () => rm.uiChecks.findings.length === 0 && js(rm.uiChecks.limits) === js([{ code: "focus-sheets", read: 1000 }]) && js(rm.limits) === js([]) && rm.truncated === false,
+      chars: () => rb.uiChecks.findings.length === 0 && rb.uiChecks.limits.length === 1 && rb.uiChecks.limits[0].code === "focus-chars" && rb.uiChecks.limits[0].read === 17,
+      under: () => ru.uiChecks.findings.length === 0 && js(ru.uiChecks.limits) === js([]),
+      shorterFirst: () => rr.uiChecks.findings.length === 0 && js(rr.uiChecks.limits) === js([]),
+    });
+  }
+
+  { // the order, the cap (DS_LIST = 50 listed, `total` all) and the feature's file cap: 200 files read in all — a token file past
+    // it is not read for the checks and `uiChecks.limits` says view-files while the report's own limits do not (its views were read)
+    const g = feature("cap", ["src/rows/"]);
+    for (let i = 0; i < 30; i++) write(g.p, "src/rows/Row" + String(i).padStart(2, "0") + ".tsx", "export const R = () => (\n  <li onClick={go}>\n    <img src=\"x.png\" />\n  </li>\n);\n");
+    const r = S.designSystemReport(g.p, { name: g.slug });
+    const full = feature("cap-files", ["src/views/", "src/app/globals.css"]);
+    for (let i = 0; i < 200; i++) write(full.p, "src/views/V" + String(i).padStart(3, "0") + ".tsx", "export const V = () => <b>v</b>;\n");
+    write(full.p, "src/app/globals.css", GLOBALS);
+    const rf = S.designSystemReport(full.p, { name: full.slug });
+    const over = feature("cap-over", ["src/views/"]);
+    for (let i = 0; i < 201; i++) write(over.p, "src/views/V" + String(i).padStart(3, "0") + ".tsx", "export const V = () => <b>v</b>;\n");
+    const ro = S.designSystemReport(over.p, { name: over.slug });
+    const vue = feature("cap-order", ["src/checkout/Panel.vue"]);
+    write(vue.p, "src/checkout/Panel.vue", "<style>\nbutton:focus { outline: none; }\n</style>\n<template>\n  <div class=\"panel\">\n    <div @click=\"open = !open\">more</div>\n  </div>\n</template>\n");
+    const rv = S.designSystemReport(vue.p, { name: vue.slug });
+    all("1.37 UI checks: 60 findings → the first 50 listed (by file, then line), `total` 60; a feature of 200 view files and a token file: the token file is not read for the checks (uiChecks.limits: view-files) while the report's limits stay empty; 201 view files: both say it; a Vue <style> before its template: its findings sorted by line (got " +
+      js({ order: rv.uiChecks.findings.map((x) => x.rule + "@" + x.line), over: [ro.uiChecks.limits, ro.limits], listed: r.uiChecks.findings.length, total: r.uiChecks.total, first: r.uiChecks.findings.slice(0, 3).map((x) => x.file + ":" + x.line), cap: [rf.viewFiles, rf.uiChecks.total, rf.uiChecks.limits, rf.limits] }) + ")", {
+      cap: () => r.uiChecks.findings.length === 50 && r.uiChecks.total === 60 && js(r.uiChecks.byRule) === js({ "click-no-keyboard": 30, "img-no-alt": 30 }),
+      order: () => js(r.uiChecks.findings.slice(0, 3).map((x) => x.file.slice(-9) + ":" + x.line)) === js(["Row00.tsx:2", "Row00.tsx:3", "Row01.tsx:2"]),
+      files: () => rf.viewFiles === 200 && rf.uiChecks.total === 0 && js(rf.uiChecks.limits) === js([{ code: "view-files", read: 200 }]) && js(rf.limits) === js([]),
+      viewCut: () => ro.viewFiles === 200 && js(ro.uiChecks.limits) === js([{ code: "view-files", read: 200 }]) && js(ro.limits) === js([{ code: "view-files", read: 200 }]),
+      byLine: () => js(rv.uiChecks.findings.map((x) => x.rule + "@" + x.line)) === js(["outline-removed@2", "click-no-keyboard@6"]),
+    });
+  }
+
+  { // spec_finish: ONE warning for the warn-level findings nobody silenced, never a blocker, after the raw values' — with or without a
+    // registry (without: `designSystem` = {uiChecks, registered: [], unregistered: []}, no `raw`); report-level findings alone say
+    // nothing; a feature without +ui reads nothing
+    const REGISTRY = "# Design System\n\n| Token | Value | Use |\n|---|---|---|\n| --primary | #1d4ed8 | actions |\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| Button | `src/components/Button.tsx` |  |  |\n";
+    const with1 = feature("finish-reg", ["src/checkout/Checkout.tsx", "src/checkout/reset.css"], REGISTRY);
+    write(with1.p, "src/checkout/Checkout.tsx", CHECKOUT.replace("className=\"grid transition-all\"", "className=\"grid transition-all\" style={{ color: \"#ff0000\" }}"));
+    write(with1.p, "src/checkout/reset.css", RESET);
+    const without = feature("finish-noreg", ["src/checkout/Checkout.tsx"]);
+    write(without.p, "src/checkout/Checkout.tsx", CHECKOUT);
+    const reportOnly = feature("finish-report", ["src/checkout/Grid.tsx"]);
+    write(reportOnly.p, "src/checkout/Grid.tsx", "export const G = () => <div className=\"transition-all\">g</div>;\n");
+    const plainP = path.join(tmp, "proj-uic-finish-plain");
+    S.initProject(plainP, ["core"], "en");
+    const plain = S.createFeature(plainP, { name: "Checkout", tracks: ["core"], summary: "x" });
+    fs.writeFileSync(path.join(plain.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build\n  - _Implements: src/A.tsx_\n  - _Verify: npm test_\n");
+    write(plainP, "src/A.tsx", "export const A = () => <div onClick={go}><img src=\"x\" /></div>;\n");
+    const F = (p, slug) => S.finishFeature(p, slug);
+    const fw = F(with1.p, with1.slug), fn = F(without.p, without.slug), fr = F(reportOnly.p, reportOnly.slug), fp = F(plainP, plain.slug);
+    const M = S.msg("en").finish;
+    const uiLine = (w) => (w.warnings || []).filter((x) => / UI anti-patterns? — /.test(x));
+    const rawAt = (w) => (w.warnings || []).findIndex((x) => /raw value/.test(x)), uiAt = (w) => (w.warnings || []).findIndex((x) => /UI anti-pattern/.test(x));
+    all("1.37 UI checks: spec_finish — one warning for the warn-level findings (silenced and report-level ones never), after the raw values', never a blocker; with a registry `designSystem` gains `uiChecks` {total, byRule, top}; without one it is {uiChecks, registered: [], unregistered: []} and holds no `raw`; a feature whose only finding is report-level, and a feature without +ui, carry none (got " +
+      js({ with1: [fw.designSystem, uiLine(fw)], without: [fn.designSystem, uiLine(fn)], report: fr.designSystem, plain: fp.designSystem }) + ")", {
+      warning: () => uiLine(fw).length === 1 && uiLine(fw)[0] === M.uiChecks(3, "src/checkout/Checkout.tsx:2 click-no-keyboard; src/checkout/Checkout.tsx:5 img-no-alt; src/checkout/reset.css:3 outline-removed", with1.slug),
+      order: () => rawAt(fw) !== -1 && uiAt(fw) === rawAt(fw) + 1,
+      result: () => fw.designSystem.raw.total === 1 && js(fw.designSystem.uiChecks) === js({ total: 3, byRule: { "click-no-keyboard": 1, "img-no-alt": 1, "outline-removed": 1 },
+        top: [{ rule: "click-no-keyboard", file: "src/checkout/Checkout.tsx", line: 2, value: "<div onClick>" }, { rule: "img-no-alt", file: "src/checkout/Checkout.tsx", line: 5, value: "<img>" },
+          { rule: "outline-removed", file: "src/checkout/reset.css", line: 3, value: "*:focus { outline: 0 }" }] }),
+      noRegistry: () => js(fn.designSystem) === js({ uiChecks: { total: 2, byRule: { "click-no-keyboard": 1, "img-no-alt": 1 }, top: [{ rule: "click-no-keyboard", file: "src/checkout/Checkout.tsx", line: 2, value: "<div onClick>" },
+        { rule: "img-no-alt", file: "src/checkout/Checkout.tsx", line: 5, value: "<img>" }] }, registered: [], unregistered: [] }) && uiLine(fn).length === 1,
+      neverBlocks: () => ![fw, fn].some((x) => (x.blockers || []).some((b) => /anti-pattern|ui-check/.test(b))),
+      reportOnly: () => fr.designSystem === undefined && uiLine(fr).length === 0,
+      plain: () => fp.designSystem === undefined && uiLine(fp).length === 0,
+    });
+  }
+
+  // --- bounds and cost (step 4: the hostile inputs, as ratios measured at the same moment) -------------------------------------------
+  { // a tag's attributes (DS_TAG_ATTRS = 100) and a sheet's depth (DS_BLOCK_DEPTH = 64): past either, not judged
+    // (ten attributes a line: the tag stays within its 30 lines)
+    const attrs = (n) => lines("export const P = () => (", "  <img src=\"/pixel.gif\"", ...Array.from({ length: Math.ceil((n - 1) / 10) }, (_, l) => "   " + Array.from({ length: Math.min(10, n - 1 - l * 10) }, (_, i) => " data-k" + (l * 10 + i) + "=\"v\"").join("")), "  />", ");");
+    const wrap = (n, inner) => lines(...Array.from({ length: n }, () => ".w {"), ...inner, ...Array.from({ length: n }, () => "}"));
+    const depth = { judged: got(wrap(63, ["button { outline: none; }"]), "src/deep.scss"), deeper: got(wrap(64, ["button { outline: none; }"]), "src/deep.scss"),
+      extent: got(wrap(63, [":focus { outline: none;", "  .x { outline: none; }", "}"]), "src/deep.scss"), near: got(wrap(2, [":focus { outline: none;", "  .x { outline: none; }", "}"]), "src/deep.scss"),
+      // what a too-deep block holds is not judged either (its transition), and once it closes the sheet is judged again (130: `a`)
+      inside: got(wrap(64, [".t { transition: all .2s; }"]), "src/deep.scss"), after: got(wrap(64, [".t { transition: all .2s; }"]) + "a { outline: none; }\n", "src/deep.scss") };
+    all("1.37 UI checks: a tag holding more than 100 attributes is not judged (100: judged); a sheet's block nested past 64 is not, nor what it holds, and a rule whose extent holds one is never a `:focus` candidate; the sheet is judged again after it (got " +
+      js({ a100: got(attrs(100), "src/P.tsx"), a101: got(attrs(101), "src/P.tsx"), depth }) + ")", {
+      attrs: () => js(got(attrs(100), "src/P.tsx")) === js(["img-no-alt@2"]) && js(got(attrs(101), "src/P.tsx")) === js([]),
+      depth: () => js(depth.judged) === js(["outline-removed@64"]) && js(depth.deeper) === js([]),
+      extent: () => js(depth.extent) === js([]) && js(depth.near) === js(["outline-removed@3"]),
+      inside: () => js(depth.inside) === js([]) && js(depth.after) === js(["outline-removed@130"]),
+    });
+  }
+
+  { // the cost of hostile inputs (CRIT_1 must-fix 1, the decisions' ruling): each 256K file within 3× plain JSX of the same size —
+    // unclosed tags, a line of tag starts one `>` closes (a reader that looked again from each `<` was quadratic: 1,230× on CRIT_1's
+    // probe), braces and quotes that never close, a string's tags, runs of focus variants and of `ui-check-off:`, a transition of
+    // endless items, a sheet of nothing but `{` (the walker's every block)
+    const SIZE = 256 * 1024;
+    const fill = (unit) => unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE);
+    const plain = fill(lines("export const Card = ({ title, items, onOpen }) => (", "  <section className=\"card grid gap-2 p-4\">", "    <h2 className=\"text-lg font-medium\">{title}</h2>", "    <ul>",
+      "      {items.map((i) => (", "        <li key={i.id}>", "          <a href={i.href} onClick={onOpen}>{i.label}</a>", "        </li>", "      ))}", "    </ul>", "  </section>", ");"));
+    const hostile = {
+      imgLines: [fill("<img ".repeat(400) + "\n"), "x.tsx"], starts: [fill("<b ".repeat(600) + ">\n"), "x.tsx"], clickOpen: [fill("<div onClick={\n"), "x.tsx"],
+      braces: [fill("<img src={a ? (b ? {c: {d: 1}} : x) : y} " + "{".repeat(100) + "\n"), "x.tsx"], quotes: [fill("<img alt=\"" + "'".repeat(200) + "\n"), "x.html"],
+      strings: [fill("const s = '<img src=x>' + \"<div onClick={go}>\" + `<a>`;\n"), "x.tsx"], focusRun: [fill("focus:".repeat(400) + "outline-none\n"), "x.tsx"],
+      marks: [fill("{/* " + "ui-check-off:".repeat(150) + " */}\n<img src=\"x\" />\n"), "x.tsx"], transition: ["a { transition:\n" + fill("  all .2s,\n") + "}\n", "x.css"],
+      nested: [fill("{".repeat(1999) + "\n"), "x.css"],
+    };
+    const time = (f) => { const ts = []; for (let k = 0; k < 5; k++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
+    run(plain, "x.tsx");
+    const sample = remeasure(() => {
+      const base = time(() => run(plain, "x.tsx"));
+      const ratios = {};
+      for (const [k, [text, rel]] of Object.entries(hostile)) { run(text, rel); ratios[k] = Math.round(time(() => run(text, rel)) / base * 100) / 100; }
+      return { base: Math.round(base * 10) / 10, ratios };
+    }, (s) => Object.values(s.ratios).every((r) => r <= 3));
+    all("1.37 UI checks: every hostile 256K input costs at most 3× plain JSX of the same size, measured at the same moment (got " + js(sample) + ")",
+      Object.fromEntries(Object.keys(hostile).map((k) => [k, () => sample.ratios[k] <= 3])));
+  }
+
+  { // the checks against the read they share a text with: uiChecksOf over real-shaped files costs at most 3× rawValuesOf over the
+    // same texts (CRIT_X decision 6: the text read once feeds both); finish without a registry costs at most 1.5× the feature
+    // report — it IS one (CRIT_X decision 5: measured as a ratio)
+    const texts = [];
+    for (let k = 0; k < 40; k++) {
+      texts.push(["src/components/ui/button.tsx", lines("const v = cva(\"inline-flex transition-all outline-none focus-visible:ring-[3px] rounded-md\", { variants: {} })",
+        "export function Button({ asChild, ...props }) {", "  const Comp = asChild ? Slot : \"button\"", "  return <Comp data-slot=\"button\" className={cn(v({ className }))} {...props} />", "}")]);
+      texts.push(["src/components/Card.vue", lines("<template>", "  <div class=\"card\" @click=\"open = true\">", "    <img :src=\"cover\" :alt=\"title\" />", "  </div>", "</template>",
+        "<style scoped>", ".card { padding: 13px; color: #123456; transition: opacity .2s; }", ".card:focus-visible { outline: 2px solid; }", "</style>")]);
+      texts.push(["src/styles/app.scss", lines(":root { --gap: 8px; }", ".nav {", "  a { color: #0a0a0a; &:hover { color: #1d4ed8; } }", "  &:focus-within { box-shadow: 0 0 0 2px $ring; }", "}")]);
+    }
+    const time = (f) => { const ts = []; for (let k = 0; k < 7; k++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[3]; };
+    const checks = () => { for (const [rel, t] of texts) run(t, rel); }, raw = () => { for (const [rel, t] of texts) T.rawValuesOf(t, rel); };
+    checks(); raw();
+    const g = feature("cost", ["src/checkout/"]);
+    for (let i = 0; i < 60; i++) write(g.p, "src/checkout/V" + i + ".tsx", CHECKOUT.repeat(20));
+    for (let i = 0; i < 200; i++) write(g.p, "src/other/O" + i + ".tsx", CHECKOUT);
+    S.designSystemReport(g.p, { name: g.slug });
+    const s = remeasure(() => {
+      const c = time(checks), r = time(raw);
+      const fin = time(() => T.designSystemFinish(g.p, g.slug)), rep = time(() => S.designSystemReport(g.p, { name: g.slug }));
+      return { checks: Math.round(c / r * 100) / 100, finish: Math.round(fin / rep * 100) / 100 };
+    }, (x) => x.checks <= 3 && x.finish <= 1.5);
+    all("1.37 UI checks: the checks cost at most 3× the raw-value read of the same 120 real-shaped files, and a finish without a registry at most 1.5× the feature report it runs (got " + js(s) + ")", {
+      checks: () => s.checks <= 3,
+      finish: () => s.finish <= 1.5,
+    });
+  }
+
+  { // tooling-reference.md names the result keys: spec_scan {designSystem, name}'s `uiChecks` (its keys, the rule ids and levels,
+    // the limit codes) and spec_finish's `designSystem.uiChecks` with or without a registry
+    const ref = fs.readFileSync(path.join(__dirname, "..", "skills", "dev-spec-driven", "references", "tooling-reference.md"), "utf8");
+    const row = (tool) => (ref.split("\n").find((l) => l.startsWith("| `" + tool)) || "");
+    const scan = row("spec_scan {designSystem: true}"), finish = row("spec_finish");
+    all("1.37 UI checks: tooling-reference's spec_scan {designSystem} row names `uiChecks` — findings (each rule id, its level, file / line / value), total, byRule, silenced, limits (view-files, focus-sheets, focus-chars) — and its spec_finish row `designSystem.uiChecks`, with or without a registry (got " +
+      js({ scan: scan.length, finish: finish.length }) + ")", {
+      scanKeys: () => ["`uiChecks`", "`total`", "`byRule`", "`silenced`", "`limits`", "`view-files`", "`focus-sheets`", "`focus-chars`", "`rule`", "`level`"].every((k) => scan.includes(k)),
+      rules: () => ["zoom-disabled", "img-no-alt", "outline-removed", "click-no-keyboard", "paste-blocked", "transition-all"].every((id) => scan.includes(id)) && /`level` warn/.test(scan) && /`level` report/.test(scan),
+      finish: () => finish.includes("`designSystem.uiChecks`") && /with or without a registry/.test(finish) && /no `raw`/.test(finish),
     });
   }
 };
