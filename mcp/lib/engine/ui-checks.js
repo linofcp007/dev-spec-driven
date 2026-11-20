@@ -338,12 +338,13 @@ function judgeTag(tag, add) {
   // click-no-keyboard: a click handler on an element the keyboard cannot reach — not focusable by default, no tabindex, no role
   // whose focus its container manages (ROLE_REACHED), not inert / aria-hidden: a role or a key handler alone reaches nothing
   // (review 1 of 1.37); never a listener off the element itself (`.self`, Alpine's `.outside` / `.away` / `.window` /
-  // `.document`), a bare `@click.stop`, a delegating handler, a self-closing element (a modal's backdrop)
+  // `.document`), a bare `@click.stop`, a delegating handler (a self-closing element — a modal's backdrop — has no body:
+  // clickBodies opens none)
   const click = events.find((e) => e.event === "click");
   if (!click || !element) return kind;
   const role = literal(named.get("role")).split(/\s+/)[0];
   if (focusable || named.has("tabindex") || ROLE_REACHED.has(role) || named.has("inert") || shown("aria-hidden")) return kind;
-  if (click.mods.some((m) => RE_OFF_ELEMENT.test(m)) || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "") || tag.text.endsWith("/>")) return kind;
+  if (click.mods.some((m) => RE_OFF_ELEMENT.test(m)) || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "")) return kind;
   return { value: "<" + tag.name + " " + click.attr + ">" };
 }
 

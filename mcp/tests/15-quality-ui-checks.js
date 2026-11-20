@@ -158,8 +158,15 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       "    <div onClick={toggle}>", "      " + "w".repeat(2100), "    </div>", // a cut line — not judged
       "    <div role=\"button\" onClick={save}>Save</div>", "    <div role=\"switch\" onClick={toggle}>On</div>", // 52, 53: FINDING (a widget role alone)
       ...["option", "menuitem", "menuitemcheckbox", "menuitemradio", "treeitem", "gridcell", "row", "tab", "columnheader", "rowheader", "presentation", "none"].map((r) => "    <div role=\"" + r + "\" onClick={pick}>" + r + "</div>"),
+      // (the mutation pass's fixtures: an outlet beside text, a self-closing element of the candidate's name, an empty candidate
+      // after a judged sibling, a body past 4,000 characters within 30 lines, a tag of more than 100 attributes in a body)
+      "    <div onClick={toggle}>Open {children}</div>", "    <div onClick={save}>Save <div className=\"sep\" /></div>", // 67: FINDING
+      "    <div onClick={toggle}>", "      <div onClick={pick}>Pick</div>", "      <div onClick={toggle}></div>", "    </div>", // 68, 69: FINDING
+      "    <div onClick={save}>", ...Array.from({ length: 3 }, () => "      " + "x".repeat(1500)), "    </div>", // 72: past 4,000 characters — counted
+      "    <div onClick={save}>Pick <span" + Array.from({ length: 101 }, (_, i) => " data-k" + i + "=\"v\"").join("") + " /></div>",
       "  </>", ");");
-    const svelte = lines("<div onclick={toggle}>{@render trigger()}</div>", "<div on:click={toggle}>{#if open}{/if}</div>", "<div on:click={toggle}>{count}</div>"); // 3: FINDING
+    const svelte = lines("<div onclick={toggle}>{@render trigger()}</div>", "<div on:click={toggle}>{#if open}{/if}</div>", "<div on:click={toggle}>{count}</div>", // 3: FINDING
+      "<div on:click={toggle}>{$count}</div>"); // 4: FINDING (a store's value: `$` names a bare echo's outlet in `{{ }}` alone)
     const ng = lines("<div (click)=\"toggle()\">Pick <ng-content></ng-content></div>", "<div (click)=\"toggle()\">{{ row.name }}</div>"); // 2: FINDING
     const html = lines("<div onclick=\"go()\"><p>a<p>b</div>", "<div onclick=\"go()\">x</span></div>", "<div onclick=\"go()\">x<!-- the end --></div>"); // 1, 2, 3: FINDING
     const r = run(jsx, "src/components/Trigger.tsx");
@@ -170,9 +177,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       alpine: () => js(G.alpine) === js(["click-no-keyboard@8"]),
       breeze: () => js(G.breeze) === js(["click-no-keyboard@15"]),
       vue: () => js(G.vue) === js(["click-no-keyboard@10"]),
-      jsx: () => js(G.jsx) === js(["click-no-keyboard@8", "click-no-keyboard@9", "click-no-keyboard@12", "click-no-keyboard@11", "click-no-keyboard@52", "click-no-keyboard@53"]),
-      counted: () => js(r.cut) === js({ lines: 1, tags: 1 }),
-      svelte: () => js(G.svelte) === js(["click-no-keyboard@3"]),
+      jsx: () => js(G.jsx) === js(["click-no-keyboard@8", "click-no-keyboard@9", "click-no-keyboard@12", "click-no-keyboard@11", "click-no-keyboard@52", "click-no-keyboard@53",
+        "click-no-keyboard@67", "click-no-keyboard@69", "click-no-keyboard@68"]),
+      counted: () => js(r.cut) === js({ lines: 1, tags: 2 }),
+      svelte: () => js(G.svelte) === js(["click-no-keyboard@3", "click-no-keyboard@4"]),
       ng: () => js(G.ng) === js(["click-no-keyboard@2"]),
       html: () => js(G.html) === js(["click-no-keyboard@1", "click-no-keyboard@2", "click-no-keyboard@3"]),
     });
