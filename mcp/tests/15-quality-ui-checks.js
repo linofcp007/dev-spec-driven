@@ -237,10 +237,18 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       ["b.scss", ".field {\n  &:focus-within { border-color: $ring; }\n}\n", true], ["c.scss", ":focus-visible {\n  .icon { color: $ring; }\n}\n", true],
       ["d.css", ":focus { outline: none; }\n:focus-visible { outline: none; }\n", false], ["e.css", ".btn { @apply focus-visible:ring-2; }\n", true],
       ["f.css", ".btn:hover { color: red; }\n.btn { @apply focus:outline-none; }\n", false], ["G.tsx", "<a className=\"group-focus:underline\" />\n", true],
-      ["H.tsx", "<input className=\"focus:outline-none\" />\n", false], ["I.tsx", "<div className=\"hover:bg-muted [&:focus]:x\" />\n", false]];
+      ["H.tsx", "<input className=\"focus:outline-none\" />\n", false], ["I.tsx", "<div className=\"hover:bg-muted [&:focus]:x\" />\n", false],
+      // (review 1 of 1.37, S3: a declaration or a utility that draws nothing — `none`, a zero, `transparent` — is no focus style)
+      ["j.css", ".btn:focus { outline: none; box-shadow: none; }\n", false], ["k.css", ".y:focus { outline: 2px solid transparent; }\n", false],
+      ["l.css", ".z:focus { box-shadow: 0 0 0 2px transparent, 0 0 0 4px #2563eb; }\n", true], ["m.css", ".w:focus { border: 0 none; box-shadow: none !important; }\n", false],
+      ["N.tsx", "<input className=\"border-0 focus:ring-0 focus:outline-none\" />\n", false], ["O.tsx", "<input className=\"focus:shadow-none focus:ring-transparent\" />\n", false],
+      ["P.tsx", "<input className=\"focus:outline-none focus:ring-2\" />\n", true]];
     const facts = cases.map(([rel, text]) => run(text, "src/" + rel).focus);
-    all("1.37 UI checks: a file's focus style — a :focus / :focus-visible / :focus-within rule that styles something (a list, nested, an inner rule), a Tailwind focus-variant utility (group-focus too, in an @apply too); never a removal alone, a hover style (got " + js(facts) + ")", {
+    const removed = { bs: got(".form-control:focus,\n.btn:focus {\n  outline: none;\n  box-shadow: none;\n}\n", "src/styles/overrides.css"),
+      important: got("*:focus {\n  outline: none !important;\n  box-shadow: none !important;\n}\n", "src/styles/overrides.scss"), transparent: got(".close:focus { outline: 2px solid transparent; }\n", "src/close.css") };
+    all("1.37 UI checks: a file's focus style — a :focus / :focus-visible / :focus-within rule that styles something (a list, nested, an inner rule), a Tailwind focus-variant utility (group-focus too, in an @apply too); never a removal alone, a hover style, a declaration or utility that draws nothing (`box-shadow: none`, a transparent outline, `focus:ring-0`, `focus:shadow-none`); Bootstrap's `outline: none; box-shadow: none` override is a candidate (got " + js({ facts, removed }) + ")", {
       exact: () => js(facts) === js(cases.map((c) => c[2])),
+      candidates: () => js(removed.bs) === js(["outline-removed@3"]) && js(removed.important) === js(["outline-removed@2"]) && js(removed.transparent) === js([]),
     });
   }
 
@@ -392,6 +400,9 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       less: mk("less", { files: [["styles/site.less", ".btn { &:focus { border-color: @brand; } }\n"]] }),
       vue: mk("vue", { mine: ["src/checkout/Field.vue"], files: [["src/checkout/Field.vue", "<template>\n  <input class=\"field\" />\n</template>\n<style scoped>\n.field:focus-visible { box-shadow: 0 0 0 2px #2563eb; }\n</style>\n"]] }),
       removalOnly: mk("removal", { files: [["src/styles/focus.css", ":focus { outline: none; }\n:focus:not(:focus-visible) { outline: none; }\n"]] }),
+      // (S3: Bootstrap's ring-killing override in a project sheet, and a feature SearchBox's `focus:ring-0`, excuse nothing)
+      bsOverride: mk("bs", { files: [["src/styles/vendor-overrides.css", ".form-control:focus,\n.btn:focus {\n  outline: none;\n  box-shadow: none;\n}\n"]] }),
+      ring0: mk("ring0", { mine: ["src/checkout/SearchBox.tsx"], files: [["src/checkout/SearchBox.tsx", "export const SearchBox = () => (\n  <input className=\"w-full border-0 focus:ring-0 focus:outline-none\" />\n);\n"]] }),
     };
     const got1 = Object.fromEntries(Object.entries(cases).map(([k, g]) => [k, verdict(g)]));
     // no candidate → no stylesheet of the project is read for the facts (an open counted on the one that holds one)
@@ -407,7 +418,8 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     };
     const reads = { quiet: opens(quiet, "src/styles/focus.css"), asked: opens(cases.focusCss, "src/styles/focus.css"), own: opens(cases.none, "src/checkout/reset.css") };
     all("1.37 UI checks: an outline removal stands only while NO focus style exists — a focus.css elsewhere, an `_a11y.scss` (never a name-ranked sheet), a .less file, a .vue <style> among the feature's files each excuse it; a sheet that only removes does not; with no candidate no stylesheet is read for the facts, and a file the report read is never read again (got " + js({ got1, reads }) + ")", {
-      stands: () => js(got1.none) === js(["outline-removed@src/checkout/reset.css"]) && js(got1.removalOnly) === js(got1.none),
+      stands: () => js(got1.none) === js(["outline-removed@src/checkout/reset.css"]) && js(got1.removalOnly) === js(got1.none) && js(got1.bsOverride) === js(got1.none) &&
+        js(got1.ring0) === js(["outline-removed@src/checkout/SearchBox.tsx", "outline-removed@src/checkout/reset.css"]),
       excused: () => ["focusCss", "a11y", "less", "vue"].every((k) => js(got1[k]) === js([])),
       lazy: () => reads.quiet === 0 && reads.asked === 1 && reads.own === 1,
     });

@@ -376,12 +376,15 @@ function transitionAll(prop, value) {
 // A line's class-like tokens (cut at blanks, quotes and the punctuation code puts around a string) — variants, then the
 // utility: `transition-all` (any variants, `!`); an outline removal (`outline-none`, `outline-hidden`, `outline-0`) under
 // `focus:` / `focus-visible:` — a bare one is not judged (shadcn puts it on focus-managed containers and activedescendant
-// options); and a FOCUS STYLE: any other utility under a focus variant (`focus-visible:ring-2`, `group-focus:…`).
+// options); and a FOCUS STYLE: any other utility under a focus variant (`focus-visible:ring-2`, `group-focus:…`) that draws
+// something — never one valued `0` / `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`: the forms plugin's
+// ring removed — review 1 of 1.37).
 // → whether the text holds a focus style.
 const RE_TW_PICK = /transition-all|outline-|focus/;
 const RE_TW_SPLIT = /[\s"'`{}(),;=<>]+/;
 const RE_TW_FOCUS = /^(?:(?:group|peer)-)?focus(?:-visible|-within)?(?:\/[\w-]+)?$/;
 const RE_TW_REMOVAL = /^outline-(?:none|hidden|0)$/;
+const RE_TW_NOTHING = /(?:^|-)(?:0|none|hidden|transparent)$/;
 function utilities(s, line, add) {
   if (!RE_TW_PICK.test(s)) return false;
   let focus = false;
@@ -391,22 +394,22 @@ function utilities(s, line, add) {
     const util = parts.pop().replace(/^!|!$/g, "");
     if (util === "transition-all") { add("transition-all", line, tok); continue; }
     if (!util) continue;
-    if (RE_TW_REMOVAL.test(util)) { if (parts.some((v) => v === "focus" || v === "focus-visible")) add("outline-removed", line, tok); } else if (parts.some((v) => RE_TW_FOCUS.test(v))) focus = true;
+    if (RE_TW_REMOVAL.test(util)) { if (parts.some((v) => v === "focus" || v === "focus-visible")) add("outline-removed", line, tok); } else if (!RE_TW_NOTHING.test(util) && parts.some((v) => RE_TW_FOCUS.test(v))) focus = true;
   }
   return focus;
 }
 
 // --- a stylesheet's structure (the walker's events) ------------------------------------------------------------------------------
 // outline-removed: an outline removal — `outline: none | 0`, `outline-style: none`, `outline-width: 0` (`!important` too; never
-// `outline: 2px solid transparent`, which forced colours show) — in a rule whose selector list holds
+// `outline: 2px solid transparent`, which forced colours show: no candidate, no focus style either) — in a rule whose selector list holds
 //   - "element": a selector whose last compound is `*` or an element focusable by default, with no pseudo-class / -element
 //     (`button { outline: none }`, `* { outline: 0 }`) — a class alone is never judged (`.modal { outline: 0 }`), or
 //   - "focus": a selector whose last compound holds `:focus` itself (never -visible / -within / -moz-focusring) — and the
 //     rule, its nested blocks included, declares nothing but removals (Bootstrap's `outline: 0; box-shadow: …` replaces it);
 // never a selector that names focus-visible (`:focus:not(:focus-visible)`), inside `@media print`, nor a rule that never
 // closes. A CANDIDATE: any focus style of the file, the feature's files or the project's stylesheets excuses it (uiChecksReport).
-// A FOCUS STYLE: a rule naming a focus pseudo-class (or inside one) that declares anything but a removal; a Tailwind focus
-// utility in an `@apply`.
+// A FOCUS STYLE: a rule naming a focus pseudo-class (or inside one) that declares something that draws (drawsNothing); a
+// Tailwind focus utility in an `@apply`.
 // transition-all: a `transition` / `transition-property` declaration (transitionAll), a Tailwind `transition-all` in an
 // `@apply` — never inside `@media (prefers-reduced-motion: reduce)`.
 const RE_REMOVAL = /^(?:outline\s*:\s*(?:none|0(?:px)?)|outline-style\s*:\s*none|outline-width\s*:\s*0(?:px)?)(?:\s*!\s*important)?$/i;
@@ -416,6 +419,20 @@ const RE_PRINT = /^@media\b.*\bprint\b/i;
 const RE_REDUCED = /prefers-reduced-motion\s*(?:\)|:\s*reduce)/i;
 const RE_DECLARATION = /^([A-Za-z-]+)\s*:\s*([\s\S]*)$/;
 const RE_COMPOUND_TYPE = /^(\*|[A-Za-z][A-Za-z0-9]*)/;
+// A declaration that draws nothing: each of its comma items `transparent` as its colour, or nothing but `none` and zeros
+// (`outline: none`, `box-shadow: none`, `border: 0`, `outline: 2px solid transparent`). It is neither a focus style nor what
+// keeps a `:focus` rule from being a candidate (review 1 of 1.37: Bootstrap's `.btn:focus { outline: none; box-shadow: none }`
+// override was a FOCUS STYLE excusing every removal of the project); an outline removal is one.
+const RE_NOTHING_WORD = /^(?:none|[+-]?0(?:\.0+)?[a-z%]*)$/i;
+function drawsNothing(text) {
+  const d = RE_DECLARATION.exec(text);
+  if (!d) return false;
+  const v = d[2].replace(/\s*!\s*important\s*$/i, "").trim();
+  return v !== "" && splitTop(v, isComma).every((item) => {
+    const words = splitTop(item.trim(), isBlank).filter(Boolean);
+    return words.some((w) => w.toLowerCase() === "transparent") || words.every((w) => RE_NOTHING_WORD.test(w));
+  });
+}
 // a selector's last compound: what follows its last combinator (a blank, `>`, `+`, `~`) outside parentheses and brackets
 function lastCompound(sel) {
   let depth = 0, from = 0;
@@ -456,13 +473,13 @@ function sheetChecks(text, rel, add) {
     statement: (e) => {
       if (deep) return;
       const b = open.length ? open[open.length - 1] : null, reduced = b != null && b.reduced;
-      const removal = RE_REMOVAL.test(e.text);
-      if (b != null && b.focus && !removal) focus = true;
+      const removal = RE_REMOVAL.test(e.text), nothing = drawsNothing(e.text);
+      if (b != null && b.focus && !nothing) focus = true;
       // (a Tailwind `@apply`: its utilities, as a class list's — no motion rule inside a reduced-motion block)
       const apply = /^@apply\s/i.test(e.text);
       if (apply && utilities(e.text, e.from, (rule, line, value) => { if (add && !(reduced && rule === "transition-all")) add(rule, line, value); })) focus = true;
       if (!add) return;
-      if (b != null) { if (!removal) b.other = true; else if (!b.print) b.removals.push({ line: e.from, text: e.text }); }
+      if (b != null) { if (removal) { if (!b.print) b.removals.push({ line: e.from, text: e.text }); } else if (!nothing) b.other = true; }
       const d = apply || reduced ? null : RE_DECLARATION.exec(e.text);
       const prop = d ? d[1].toLowerCase() : "";
       if ((prop === "transition" || prop === "transition-property") && transitionAll(prop, d[2])) add("transition-all", e.from, e.text);
