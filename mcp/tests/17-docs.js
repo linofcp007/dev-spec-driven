@@ -911,8 +911,11 @@ exports.run = async ({
       ["ui-review: pair or floor is a property of the files", R, /\*\*Pair or floor is a property of the files:\*\* a `--build\.png` with its `--ref\.png` beside it is a pair; every other build capture, and every `floor-\*` one, is judged on the floor\./],
       ["ui-review: floor findings Major by default, only a measured reflow a Blocker", R, /Each is a \*\*Major\*\* by default — confirmed first, as above; only a measured reflow is a Blocker\./],
       ["ui-review: reflow only from the .json", R, /\*\*reflow\*\* \(from the `\.json` only[^)]*none → not judged\)/],
-      ["ui-review: WCAG 1.4.10's two-dimensional exception — a box that scrolls is not the page", R,
-        /a data table, a map, a diagram, a toolbar — scrolling inside its own box \(WCAG 1\.4\.10's exception: a box that scrolls inside the page is not the page scrolling\)/],
+      // 1.37.0 review 1 (D4): the exception in W3C's terms — content that needs a two-dimensional layout, and no other; "a box
+      // that scrolls inside the page" excepted any box
+      ["ui-review: WCAG 1.4.10's exception — content that needs a two-dimensional layout scrolling in its own box, no other", R,
+        /Not findings: content that needs a two-dimensional layout for its meaning or use \(a data table, a map, a diagram, a toolbar…\) scrolling inside its own box — the only content WCAG 1\.4\.10 excepts;/,
+        { not: /a box that scrolls inside the page is not the page scrolling/ }],
       ["ui-review: below a stated minimum width — one checkpoint line per feature, never a fix round or a stop", R,
         /\*\*Below a minimum width the design or `ui\.md` states\*\*: one checkpoint line per feature[^.]*, never a fix round, never a stop\./],
       ["ui-review: truncation only when the design's row says the field wraps", R, /truncation, unless the design's row says the field wraps/],
@@ -923,7 +926,11 @@ exports.run = async ({
       ["ui-review: verdict rule — a PARTIAL graded again, still open", R, /2\. A PARTIAL is graded again for what remains, and stays open\./],
       ["ui-review: verdict rule — a confirmed finding not reconfirmed", R, /3\. A confirmed finding is not reconfirmed\./],
       ["ui-review: verdict rule — a regression Major through the confirmation step", R, /4\. A regression Major goes through the confirmation step \(§4\)/],
-      ["ui-review: verdict rule — a missed-earlier finding keeps its severity", R, /5\. A finding missed earlier keeps its severity:[^.]*`Task N: ui deferred \(missed earlier, <severity>\): …`/],
+      // 1.37.0 review 1 (D7): a Blocker / Major missed earlier was neither open nor parked — no round, no tick; it goes as a
+      // regression does (into the loop, a Major confirmed first), only a minor is deferred
+      ["ui-review: verdict rule — a finding missed earlier keeps its severity and goes as a regression does; a minor deferred", R,
+        /5\. A finding missed earlier keeps its severity and goes as a regression does \(rule 4\); a minor: `Task N: ui deferred \(missed earlier, minor\): …`, shown at the checkpoint\./,
+        { not: /never a round of its own/ }],
       ["ui-review: verdict rule — after a code-review round, regressions only; changed regions only", R,
         /6\. After a code-review round: an empty open list — regressions only\./, /a regression counts only in a region that changed since the last capture/],
       ["ui-review: verdict rule — the Breaker uses verdict mode", R, /7\. The Breaker \(`references\/subagent-execution\.md` → 7\) uses verdict mode\./],
@@ -951,7 +958,8 @@ exports.run = async ({
         /\*\*RESOLVED\*\*, \*\*PARTIAL\*\* \(what remains, graded again\) or \*\*OPEN\*\*/, /A regression counts only in a region that differs between `\.prev\.png` and the new capture — never a new hunt elsewhere\./],
       ["spec-ui-reviewer: verdict — missed earlier, with its severity", verdictMode, /goes under Missed earlier, with its severity\./],
       ["spec-ui-reviewer: the floor and verdict outputs, Open: N counted; the file ≤ 7,000 bytes", A, /### UI review \(floor\): Clean \| Findings \| Invalid/,
-        /### UI re-review: Resolved \| Open: N \| Invalid/, /Open: N counts PARTIAL \+ OPEN \+ the Blocker \/ Major regressions\./, () => bytes("agents", "spec-ui-reviewer.md") <= 7000],
+        /### UI re-review: Resolved \| Open: N \| Invalid/, /Open: N counts PARTIAL \+ OPEN \+ each Blocker \/ Major under Regressions or Missed earlier\./, // (D7)
+        () => bytes("agents", "spec-ui-reviewer.md") <= 7000],
       // references/ui-design-patterns.md — the worst case (item 3) and the prose of item 4
       ["ui-design-patterns: the worst case — a matrix row, its kinds", worst, /One more row of the matrix: the view's data at its realistic extremes/,
         /an unbroken email, URL or ID/, /a one-letter name, counts of 0, 1 and thousands, a missing image/, /the longest translation or a right-to-left locale/],

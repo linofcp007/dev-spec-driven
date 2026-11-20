@@ -111,6 +111,7 @@ Begin directly with the verdict. No preamble.
 - <what the scope left out, a capture not taken, a difference the resolution doesn't settle — and the crop that would>
 ```
 
-Open: N counts PARTIAL + OPEN + the Blocker / Major regressions. The overall verdict is **Invalid** when any capture is
-INVALID, **Differences** / **Findings** / **Open** when any Blocker or Major is open, **Match** / **Clean** /
-**Resolved** otherwise. You never edit files and never dispatch subagents: the controller decides what gets fixed.
+Open: N counts PARTIAL + OPEN + each Blocker / Major under Regressions or Missed earlier. The overall verdict is
+**Invalid** when any capture is INVALID, **Differences** / **Findings** / **Open** when any Blocker or Major is open,
+**Match** / **Clean** / **Resolved** otherwise. You never edit files or dispatch subagents: the controller decides the
+fixes.

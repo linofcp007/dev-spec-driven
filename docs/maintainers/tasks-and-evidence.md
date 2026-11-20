@@ -42,7 +42,9 @@ Phase 6, opt-in.
   logic, nor a bare folder — a glob of view files, `src/components/*.tsx`, is one); never a red `_Expect: fail_` task
   (it renders nothing yet). On true the controller runs `references/ui-review.md` after the task's `_Verify:_` is green
   and before the code review; its Blockers, and the Majors a fresh reviewer confirms, are fix rounds, and a later round
-  that changes a reviewed view runs it again.
+  that changes a reviewed view runs it again, in verdict mode (1.37): a Blocker / Major that pass reports — a regression or
+  one missed earlier — enters the loop like any other (a Major confirmed first), a minor is deferred; so every finding a
+  tick waits on can be fixed or, past round 5, parked.
 - **The protocol is prose; the engine never dispatches anything** (it stays cross-tool): `references/subagent-execution.md` and the
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
@@ -835,6 +837,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and server templates / Android layouts were misread. **Review 16:** three surfaces still sent every Major straight to a
   fix round; the reference check had no diff range (a committed round passed it); the breaker judged visual findings it
   can't see; an autonomy summary could be logged as "approved".
+- **1.37.0 review 1 (D7, D4)** — the verdict pass (1.37) put a finding "missed earlier" on the ledger only, "never a round of
+  its own", while every tick rule (ui-review.md §5, subagent-execution.md §8) let nothing but a parked finding stay open: a
+  Blocker the pass noticed outside the changed regions could be neither fixed nor ticked past, and the agent's `Open: N` left
+  it out. It goes as a regression does now (ui-review.md §5 rule 5) and `Open: N` counts it; the tick rules were right
+  already. D4: the floor's WCAG 1.4.10 exception read "a box that scrolls inside the page is not the page scrolling" — any
+  box; it is W3C's again, content that needs a two-dimensional layout for its meaning or use.
 - **1.31** — the brief's `preflight` key and the pre-flight (from google/elephant-goldfish-model's zero-decision rule): a
   brief that left a design choice open was found only when the implementer came back NEEDS_CONTEXT — a dispatch spent — or
   not at all when it chose alone.
