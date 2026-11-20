@@ -641,8 +641,10 @@ _Libraries: @mui/material_
   else is yours.
 - `_From: <feature>_` is written by `spec_finish` on the rows it adds: the feature that built the component, whose own
   design keeps saying New. Add it by hand when you list a component a feature is still building.
-- `_Deprecated: use DataGrid_` in any cell after a component's name retires it (`_Deprecated_` alone too): doctor's
-  `ui-deprecated` warns when a design still reuses or extends it, naming the first other listed component the text names.
+- `_Deprecated: use DataGrid_` in any cell after a component's name retires it (`_Deprecated_` alone too, any punctuation
+  after the word): doctor's `ui-deprecated` warns when a design still reuses or extends it, naming the first other listed
+  component, not retired itself, the text names — silent when the row's notes name that one as this file writes it
+  (`DataGrid`, not "the data grid"). It retires the WHOLE component: write a retired variant or prop without the marker.
 - A feature's design lists what it uses in `[UI] Design System Usage` (`Kind | Component | Why / notes`);
   `spec_doctor`'s `ui-design-system` checks those rows against this file, the task brief quotes the entries a UI task
   needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds

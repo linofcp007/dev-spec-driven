@@ -1114,6 +1114,33 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
       notUi: () => !store.designSections.some((t) => /\[UI\]/.test(t)) && !/\[UI\]/.test(relevant(store)),
     });
   }
+  // 1.37.0 review 1 (RB-2) — the [UI] sections only that line wants come AFTER every section another rule wants: a view task on a
+  // core criterion keeps the section its metrics ask for ([OBS] Telemetry) or the one naming its own file (a trailing File
+  // Structure), placed after a [UI] block that alone would fill the budget — what a 1.36 brief quoted; the [UI] ones follow.
+  {
+    const js = JSON.stringify;
+    const pr = path.join(tmp, "proj-137r1-ui-order");
+    S.initProject(pr, ["ui", "obs"], "en");
+    const uiBlock = "## [UI] Design System Usage\n\n" + "Reuse the table. ".repeat(111) + "\n\n## [UI] UI States\n\n" + "Loading: a skeleton. ".repeat(90) + "\n\n";
+    const req = (what) => "# Req\n\n### US-1 " + what + "\n\n- US-1.AC-1: WHEN the buyer opens the " + what + " page THE SYSTEM SHALL list them.\n";
+    const feature = (name, tracks, tail, task) => {
+      const f = S.createFeature(pr, name, tracks, "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "requirements.md"), req(name.toLowerCase()));
+      fs.writeFileSync(path.join(f.dir, "design.md"), "# Design\n\n## Overview\n\nOne page.\n\n" + uiBlock + tail);
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [ ] 1. Build the page\n  - _Requirements: US-1.AC-1_\n" + task);
+      return S.taskBrief(pr, f.slug, 1);
+    };
+    const obs = feature("Orders", ["core", "ui", "obs"], "## [OBS] Telemetry\n\n" + "The page emits `orders_page_view` with its route. ".repeat(6) + "\n",
+      "  - _Implements: src/orders/OrdersPage.tsx_\n  - _Emits metrics: orders_page_view_\n");
+    const file = feature("Invoices", ["core", "ui"], "## File Structure\n\n" + "- src/invoices/InvoicesPage.tsx — the page and its query. ".repeat(6) + "\n",
+      "  - _Implements: src/invoices/InvoicesPage.tsx_\n");
+    const relevant = (b) => (b.brief.match(/^Relevant[^\n]*$/m) || [""])[0];
+    all("1.37.0 review 1: a view task's brief reads the sections its metrics or its file ask for BEFORE the [UI] sections only the view rule wants — [OBS] Telemetry / a trailing File Structure quoted, the [UI] one past the budget named (got " +
+      js({ obs: [obs.designSections, relevant(obs)], file: [file.designSections, relevant(file)] }) + ")", {
+      obsAfterUi: () => js(obs.designSections) === js(["[UI] Design System Usage", "[OBS] Telemetry"]) && obs.brief.includes("emits `orders_page_view`") && /\[UI\] UI States/.test(relevant(obs)),
+      fileAfterUi: () => js(file.designSections) === js(["[UI] Design System Usage", "File Structure"]) && /\[UI\] UI States/.test(relevant(file)),
+    });
+  }
 
   // Review 5 — CommonMark's indented code block holds no task: `    - [ ] 1. example` after a blank line, outside every list, is
   // code (complete_task ticked that example — the first open task 1 — instead of the real one); doctor's unread-tasks names it.
