@@ -358,6 +358,23 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   Name/tokens.css` are files). ≤ `DS_MARKER_LINES` lines, `DS_MARKER_ENTRIES` entries, each cut before it is cleaned
   (`stripEnds`, never a trailing-run replace). And in a
   component's row `_From: <feature>_` (`RE_DS_FROM` → the entry's `from`, left out of its `notes`).
+- **`_Deprecated: use X_`** (1.37, `dsDeprecated`) — the team retires a component in its row: English-stable, any case, in
+  any cell after the name; `_Deprecated_` alone, `_Deprecated: <text>_`, the label alone italic (`_Deprecated:_ <text>` —
+  any `_` right after the colon: the text runs to the cell's end, as `_Libraries:_ a` does) or never closed (to the cell's
+  end). It starts the cell or follows a blank, `(` or `*` (never `snake_deprecated_flag`, `config_deprecated: true`; a
+  letter after the label — `_deprecatedness` — is no marker either); its closing `_` is one the cell's end, a blank or one
+  of `.,;:)*` follows (`use Data_Grid now` keeps its `_`); the row's first marker counts, a later occurrence after one
+  that is none is still looked at. Read past the 500-row cap, like `origins`: `deprecated`, a Map — the row's key → its
+  REPLACEMENT, the first OTHER component the file lists (`keys`, past the cap too) that the marker's text names among its
+  first `DS_DEPRECATED_WORDS` (20) words, a word or two adjacent ones — the pair first: `use Data Grid` is DataGrid even
+  beside a `Data` row (`dsNameIn`) —, as written there; "" when it names none (no word list says which word is the
+  replacement: a listed name is). The marker is cut out of whichever cell holds it — a path stays a path, a variants cell
+  stays the variants — and the notes show it FIRST as one text, `_Deprecated: <its first DS_DEPRECATED_SHOWN (120)
+  characters>_`: `dsCell` drops a closing `_` after a letter and the notes' 200-character bound cuts what comes last, so
+  the brief quotes the marker whole. Linear: `indexOf`, each `_` looked at once (a hostile-vs-plain ratio check: 1,000
+  cells of `_Deprecated: ` and 190 `_a`). A token row's marker is not read; nor `__Deprecated__` (bold) or a marker in the
+  NAME cell (`Table _Deprecated_` is a name); `_Deprecated_: x` is the bare marker (the colon outside the italics, as the
+  other markers never read it).
 - **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
   mcp/tests/06-gates-sizes.js changed on purpose). `designSystemUsage(design)` → the table rows whose first cell is a kind word
@@ -408,9 +425,22 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   (`quality.dsLegacy`, `DS_SINCE`) — never flagged, at any size. An approval's context has no `root`: the view reads
   `specsRoot(c.projectDir)`. `designSaveCheck` (the design.md save hook) adds a ▲ note for mismatch / no-rows and carries
   `designSystem` (the state) — a note, never unclean, and never for a missing registry (doctor says that once, not every save).
+- **Doctor `ui-deprecated`** (1.37, `designSystemDeprecatedCheck`; the `DOCTOR_CHECKS` entry right after `ui-design-system`,
+  phase 2, the same `uiDesigned` feature) — each component a Reuse / Extend row names that the registry's `deprecated` holds
+  is a WARN naming its replacement (`quality.dsDeprecatedItem`: `'Table' (use DataGrid)`, the name alone when the marker
+  names none); silent when the row's notes name that replacement (`dsNameIn` over the WHOLE notes, a word or two adjacent
+  ones — `the Data Grid lacks grouping`: the team keeps this one on purpose and says why; never with no replacement); once
+  per component, a silenced row hiding no later one; a New row is not asked (`listed` is ui-design-system's); six named,
+  the rest counted. It runs only while the registry holds a deprecated row (no registry: never — the applies asks it
+  first) and never on a feature with a finish recorded (`state.finished`: what it built is history; an archived feature
+  never reaches doctor). Never a fail, not `warnsOnly`, not in `GATES`, NO stamp: it reports the registry of today — a
+  component deprecated after the design's approval —, not a rule an approval was held to, so a design is never failed for
+  it and the warn says what is still to migrate; `spec_upgrade` lists it (attention `warnings`, the default — no
+  design-writing warn). Detail only (`{id, status, detail}` — doctor keeps no other key).
 - **The brief** — `briefDesignSystem(root, design)` for a task `uiTask()` says builds a view (the visual review's rule): each
   component the design names with its registry entry (kind, path, variants, notes, the row's reason; ≤ 12 / 1,500 characters),
-  the names the registry doesn't list (`unknown`), the token count and sources, the libraries; null without a registry.
+  the names the registry doesn't list (`unknown`), the token count and sources, the libraries; null without a registry. A
+  deprecated component's entry carries its `_Deprecated: use X_` marker whole, first among its notes (1.37).
   `renderBrief` writes it after Reuse; the result's `designSystem` holds identifiers (`write: true`: `refs.designSystem`, the
   names).
 - **The code** (engine/design-system.js, LAZY — entries `designSystemReport`, `designSystemSeed`, `designSystemFinish`) —
@@ -1862,3 +1892,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (nine), the user reference's barrel rule; the barrel taken through another barrel is said. The corpus (32 repos and
   the synced shadcn-svelte) lists the same rows as review 3's fix. Lesson: a rule that asks "is this X?" must ask it
   of the case where X lost to another (a file shadowed by a namesake) — the corpus had one such source, with no row lost.
+- **1.37** (the owner's "doctor warns when a Reuse / Extend row names a deprecated component" — item 2(a) of the 1.37 "UI
+  checks" list, cut by its critique and the integration critique to the marker and the check) — `_Deprecated: use X_`
+  read beside `_From:_`, past the cap; doctor `ui-deprecated`, a warn with no stamp and no gate (folding it into
+  `ui-design-system` would have entered that check's gate / legacy / settled states and `designSaveCheck`). Kept for
+  1.38: the files that still render a deprecated component (the project scan — it needs one shared read pass; a second
+  read of every script cost 25–90× the report). The settled reader was touched in one place (the marker's read and cut,
+  and the path / variants cells read after the cut): every earlier `15-quality-design-system*` test passed unchanged.
+  The mutation list came before the fixtures: 41 of 41 on the reader, 20 of 20 on the check (one — the silence's word
+  bound — only after a fixture with the replacement past the notes' twentieth word).

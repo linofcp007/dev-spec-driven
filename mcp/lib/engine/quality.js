@@ -2004,6 +2004,28 @@ function designSystemCheck(design, lang, opts = {}) {
   // (the note is about the COMPONENT rows this check reads — a token table past its cap changes nothing here)
   return out("pass", Q.dsOk(f.reuse.length, f.extend.length, f.news.length) + (reg.total.components > reg.components.length ? "; " + Q.dsTruncated(reg.components.length, reg.total.components) : ""), "ok");
 }
+// doctor's ui-deprecated (1.37) over an (active) design of a +ui feature → { id, status, detail }: each component a Reuse / Extend
+// row names that the registry marks `_Deprecated:_` (registry.deprecated: its key → its replacement) is a WARN naming the
+// replacement — unless the row's notes name it (a word or two adjacent ones, as the marker's text is read: the team keeps this
+// one on purpose and says why); once per component; a New row is not asked (`listed` is ui-design-system's). Never a fail, never
+// an approval check, no stamp: the registry moves on after an approval (a component deprecated later), and the warn is for the
+// work still to do. opts: { registry } (none, or one with no deprecated row: a pass).
+function designSystemDeprecatedCheck(design, lang, opts = {}) {
+  const Q = i18n.msg(lang).quality, id = "ui-deprecated";
+  const dep = opts.registry && opts.registry.deprecated && opts.registry.deprecated.size ? opts.registry.deprecated : null;
+  const usage = dep ? designSystemUsage(design) : null;
+  const items = [], seen = new Set();
+  for (const r of usage ? usage.rows : []) {
+    if (r.kind === "new" || !dep.has(r.key) || seen.has(r.key)) continue;
+    const use = dep.get(r.key), k = dsKey(use);
+    if (dsNameIn(r.why, Infinity, (x) => x === k)) continue;
+    seen.add(r.key);
+    items.push(Q.dsDeprecatedItem(r.name, use));
+  }
+  if (!items.length) return { id, status: "pass", detail: Q.dsDeprecatedNone };
+  const shown = items.slice(0, 6).concat(items.length > 6 ? [Q.xacMore(items.length - 6)] : []);
+  return { id, status: "warn", detail: Q.dsDeprecated(items.length, shown.join("; ")) };
+}
 // The task brief's "Design system" part, for a task that builds what the user sees (tasks.js uiTask) → null (no registry, or it
 // lists nothing) | { file (the registry, as given), components: [{ kind, name, path, variants, notes, why }] (the design's rows
 // with their registry entry, bounded), omitted, unknown (names the registry doesn't list), sources, libraries, tokens (how
@@ -2894,4 +2916,4 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain, __link };
+  designSystemDeprecatedCheck, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain, __link };

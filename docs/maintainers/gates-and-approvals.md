@@ -51,7 +51,10 @@ review findings — is in History at the end.
   `critical-flows` / `critical-flow-tests` (`critical`, 1.33), `ui-design-system` (`designSystem`, 1.35 — quality.md →
   Design-system registry; this check reads a file OUTSIDE the feature, so a design approved cleanly under it and unchanged
   since only warns when the registry moves on — `designSystemSettled`): a finished feature is never asked to reopen what it signed off (quality.md →
-  The stamp scheme, Critical flows). A new warn on an approved artifact → a new stamp key here.
+  The stamp scheme, Critical flows). A new warn on an approved artifact → a new stamp key here. The one warn with none, on
+  purpose: `ui-deprecated` (1.37 — quality.md → Design-system registry) reports the registry of TODAY, a component the team
+  marked `_Deprecated:_` after the design's approval, never a rule the approval was held to — so it is never a fail, and it
+  is not run once the feature has a finish recorded (what it built is history).
 - **Phase order.** An EARLIER phase in `pendingGateList()` (phases with an artifact — a missing file never blocks forever),
   or an earlier approved phase whose content changed (`changedApprovedPhases()`: by content — never `byDate` or whitespace;
   a deleted approved artifact counts), adds the failing check `phase-order` (`gates.phaseOrder` / `phaseOrderChanged`) —
@@ -527,6 +530,9 @@ here. "r5 review" is 1.23's fifth review.
   commit, a `.specs/`-only commit) asked for the whole panel again, with no bound — against "nothing can loop". The exit is
   round 1's again ("since the last task"), and the inline gap is closed in prose: "a task done inline writes no ledger line —
   if you did one after the review, run it again" (tasks-and-evidence.md → History).
+- **1.37** — `ui-deprecated`, the first warn on an approved artifact with no stamp: it reports a team edit to the registry
+  after the approval, not a release's new rule, so there is nothing an older approval could have been held to (quality.md →
+  History, Design-system registry); `ui-design-system` and it share one `applies` (`uiDesigned`).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12
