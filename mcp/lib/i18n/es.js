@@ -3414,6 +3414,11 @@ const quality = {
     // la nota de la fila que spec_finish añade por cada componente Nuevo y la tabla que agrega cuando el fichero no termina en una.
     dsLegacy: (d, v) => `diseño aprobado antes de la ${v} — solo se exige a partir de su próxima aprobación (${d})`,
     dsNoSection: "el diseño no tiene sección Uso del Design System — nada que comprobar contra el registro",
+    // 1.37 la comprobación ui-deprecated de spec_doctor: una fila Reutilizar / Extender que nombra un componente que el registro
+    // marca con `_Deprecated: use X_` (un aviso)
+    dsDeprecatedNone: "la sección Uso del Design System no reutiliza ningún componente que el registro marque como obsoleto",
+    dsDeprecated: (n, list) => `la sección Uso del Design System reutiliza o extiende ${n} ${n === 1 ? "componente que el registro (.specs/steering/design-system.md) marca como obsoleto" : "componentes que el registro (.specs/steering/design-system.md) marca como obsoletos"} — ${list}: pasar a lo que indica su marcador, o nombrar ese componente en las notas de la fila para decir por qué este se queda`,
+    dsDeprecatedItem: (name, use) => (use ? `'${name}' (usar ${use})` : `'${name}'`),
     dsUnfilled: "la sección Uso del Design System aún no está escrita — se comprueba contra el registro cuando lo esté",
     dsNoRegistry: `todavía no hay registro del design system (.specs/steering/design-system.md) — el inventario único de componentes y tokens a partir del cual construyen todas las funcionalidades +ui. Para crearlo a partir del código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `el registro del design system (.specs/steering/design-system.md) todavía no enumera ningún componente — falta añadir los que ya existen (spec_scan {designSystem: true} · ${DEV_SPEC} design-system muestra lo que tiene el código)`,

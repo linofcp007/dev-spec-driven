@@ -1166,6 +1166,49 @@ const RE_DS_NONE_WHOLE = /^(?:none|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|
 // `_From: <feature>_` in a component's row: the feature whose finish added the row (a slug — spec_finish writes it, a rename
 // follows it). That feature's own `New` row for the component stays New: its design says what it built.
 const RE_DS_FROM = /_From:[ \t]*([a-z0-9][a-z0-9-]*)_/i;
+// 1.37 `_Deprecated: use X_` in a component's row (English-stable, any case, like `_From:_`): the team retires the component and
+// names what replaces it. In any cell after the name — `_Deprecated_` alone, `_Deprecated: <text>_`, the label alone italic
+// (`_Deprecated:_ <text>`, the text to the cell's end) or never closed (`_Deprecated: <text>`, to the cell's end). It starts the
+// cell or follows a blank, `(` or `*` (never `snake_deprecated_flag`); its closing `_` is one the cell's end, a blank or one of
+// `.,;:)*` follows (`use Data_Grid now` keeps its `_`). Linear: indexOf, each `_` looked at once; the first marker of the row
+// counts. → null | { cell (its index), text (trimmed), cut (the cell without it) }
+const DS_DEPRECATED = "_deprecated";
+const DS_DEPRECATED_SHOWN = 120; // the marker's text the notes show (a replacement is looked for in all of it)…
+const DS_DEPRECATED_WORDS = 20; // …among its first 20 words
+const dsMarkEnd = (c, k) => k >= c.length || /[\s.,;:)*]/.test(c[k]);
+function dsDeprecated(cells) {
+  for (let n = 0; n < cells.length; n++) {
+    const c = cells[n], low = c.toLowerCase();
+    for (let i = low.indexOf(DS_DEPRECATED); i >= 0; i = low.indexOf(DS_DEPRECATED, i + 1)) {
+      if (i > 0 && !/[\s(*]/.test(c[i - 1])) continue;
+      const j = i + DS_DEPRECATED.length;
+      let text = "", end;
+      if (c[j] === "_" && dsMarkEnd(c, j + 1)) end = j + 1;
+      else if (c[j] !== ":") continue;
+      else if (c[j + 1] === "_") { text = c.slice(j + 2); end = c.length; }
+      else {
+        let k = c.indexOf("_", j + 1);
+        while (k >= 0 && !dsMarkEnd(c, k + 1)) k = c.indexOf("_", k + 1);
+        end = k < 0 ? c.length : k + 1;
+        text = c.slice(j + 1, k < 0 ? c.length : k);
+      }
+      return { cell: n, text: text.trim(), cut: c.slice(0, i) + " " + c.slice(end) };
+    }
+  }
+  return null;
+}
+// The first name a text gives that `pred` takes (its key) — at each of its first `max` words, that word and the next one
+// together first (`Data Grid` is DataGrid), then the word alone — as written there: { key, text } | null. Linear.
+function dsNameIn(text, max, pred) {
+  const words = [];
+  for (const m of String(text).matchAll(/[\p{L}\p{N}]+/gu)) if (words.push(m) >= max) break;
+  for (let i = 0; i < words.length; i++) {
+    const a = words[i], b = words[i + 1];
+    if (b && pred(dsKey(a[0] + b[0]))) return { key: dsKey(a[0] + b[0]), text: text.slice(a.index, b.index + b[0].length) };
+    if (pred(dsKey(a[0]))) return { key: dsKey(a[0]), text: a[0] };
+  }
+  return null;
+}
 const DS_PIPE = String.fromCharCode(92) + "|"; // a `|` as a table cell holds it, escaped
 // A cell's own text: its code span, emphasis and JSX brackets dropped (`<Button />`, **Button**), trimmed, bounded — bounded
 // BEFORE the replaces: a trailing-run replace is quadratic on a cell of 80,000 `>`.
@@ -1196,15 +1239,17 @@ function mdTables(text) {
 // name the file lists, past the cap too — what "is it listed?" asks), origins (a Map: name → the feature of its `_From:_`, past
 // the cap too), tokenNames (a Set: every token name, lower-cased, past the cap too), tokens: [{ name, value, use }], sources,
 // libraries, packaged (it lists no component and declares a library that IS one — dsPackaged), total: { components, tokens }
-// (the rows the file holds), truncated }. A row whose name is a slot ("[Button]"), blank or generic is
-// none; a name listed twice counts once (the first row). Every component / token table of the file is read (finish appends a
-// table when the file doesn't end in one that can take its rows). `from`: the row's `_From: <feature>_` (left out of `notes`).
+// (the rows the file holds), truncated, deprecated (1.37, a Map: the key of each row marked `_Deprecated:_` → its replacement as
+// the marker writes it, "" when it names no other listed component — past the cap too) }. A row whose name is a slot ("[Button]"),
+// blank or generic is none; a name listed twice counts once (the first row). Every component / token table of the file is read
+// (finish appends a table when the file doesn't end in one that can take its rows). `from`: the row's `_From: <feature>_` (left
+// out of `notes`); the `_Deprecated:_` marker is cut out of whichever cell holds it and shown FIRST in `notes`, whole.
 function designSystemRegistry(root) {
   const file = path.join(root, "steering", DESIGN_SYSTEM_FILE);
   const raw = readIfExists(file);
   if (raw == null) return null;
   const body = steeringFrontMatter(raw).body;
-  const components = [], tokens = [], keys = new Set(), origins = new Map(), seenT = new Set();
+  const components = [], tokens = [], keys = new Set(), origins = new Map(), seenT = new Set(), deprecated = new Map();
   const total = { components: 0, tokens: 0 };
   for (const t of mdTables(body)) {
     const head = dsCell(t.header[0] || "");
@@ -1224,9 +1269,15 @@ function designSystemRegistry(root) {
         const own = r.slice(1).map((x) => String(x == null ? "" : x).slice(0, DS_CELL_MAX * 2));
         const from = RE_DS_FROM.exec(own.join(" | "));
         if (from) origins.set(key, from[1].toLowerCase()); // past the cap too: finish appends at the END of a long registry
+        // (1.37: past the cap too — doctor's ui-deprecated asks it of every row; cut out of its cell, the path's too)
+        const dep = dsDeprecated(own);
+        if (dep) { deprecated.set(key, dep.text); own[dep.cell] = dep.cut; }
         if (components.length >= DS_MAX_COMPONENTS) continue;
         const rest = own.filter((x, i) => i + 1 !== cols.a && i + 1 !== cols.b).map((x) => x.replace(RE_DS_FROM, " ")).filter((x) => !dsSlot(x)).map(dsCell);
-        components.push(Object.assign({ name, key, path: cell(cols.a), variants: cell(cols.b), notes: rest.join(" · ").slice(0, DS_CELL_MAX) }, from ? { from: from[1].toLowerCase() } : {}));
+        // (the marker first, as ONE text the brief quotes whole: dsCell would drop its closing `_`, and the notes' bound its end)
+        if (dep) rest.unshift(dep.text ? "_Deprecated: " + dep.text.slice(0, DS_DEPRECATED_SHOWN).trim() + "_" : "_Deprecated_");
+        const ownCell = (i) => (dsSlot(own[i - 1]) ? "" : dsCell(own[i - 1]));
+        components.push(Object.assign({ name, key, path: ownCell(cols.a), variants: ownCell(cols.b), notes: rest.join(" · ").slice(0, DS_CELL_MAX) }, from ? { from: from[1].toLowerCase() } : {}));
       } else {
         // (a `|` the report's pasted row escaped is the name's own again — else that row never read as listed)
         const token = name.split(DS_PIPE).join("|");
@@ -1238,6 +1289,8 @@ function designSystemRegistry(root) {
       }
     }
   }
+  // (a deprecated row's replacement: the first OTHER component the file lists that its marker's text names — once every name is known)
+  for (const [key, text] of deprecated) deprecated.set(key, (dsNameIn(text, DS_DEPRECATED_WORDS, (k) => k !== key && keys.has(k)) || { text: "" }).text);
   const lists = { "token sources": [], libraries: [] };
   const weak = new Set(); // the libraries' WEAK aliases, lower-cased (dsAlias): cited only in a row's parenthesis
   let deps = null; // the project's package.json dependencies — read once, and only when a marker asks
@@ -1303,7 +1356,7 @@ function designSystemRegistry(root) {
   // review 9: `Design System (acme-ui)` with no row refused `Reuse | acme-ui Button`)
   const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(lists.libraries.filter((l) => !weak.has(l.toLowerCase())), dependencies);
   return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, weakLibraries: weak,
-    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length };
+    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length, deprecated };
 }
 // A text outside its parentheses, nested ones too (an unclosed one hides what follows it; a `)` nothing opened stays) —
 // and what its CLOSED parentheses and square brackets hold, nested ones with them (an unclosed one holds nothing:
@@ -1950,6 +2003,28 @@ function designSystemCheck(design, lang, opts = {}) {
   }
   // (the note is about the COMPONENT rows this check reads — a token table past its cap changes nothing here)
   return out("pass", Q.dsOk(f.reuse.length, f.extend.length, f.news.length) + (reg.total.components > reg.components.length ? "; " + Q.dsTruncated(reg.components.length, reg.total.components) : ""), "ok");
+}
+// doctor's ui-deprecated (1.37) over an (active) design of a +ui feature → { id, status, detail }: each component a Reuse / Extend
+// row names that the registry marks `_Deprecated:_` (registry.deprecated: its key → its replacement) is a WARN naming the
+// replacement — unless the row's notes name it (a word or two adjacent ones, as the marker's text is read: the team keeps this
+// one on purpose and says why); once per component; a New row is not asked (`listed` is ui-design-system's). Never a fail, never
+// an approval check, no stamp: the registry moves on after an approval (a component deprecated later), and the warn is for the
+// work still to do. opts: { registry } (none, or one with no deprecated row: a pass).
+function designSystemDeprecatedCheck(design, lang, opts = {}) {
+  const Q = i18n.msg(lang).quality, id = "ui-deprecated";
+  const dep = opts.registry && opts.registry.deprecated && opts.registry.deprecated.size ? opts.registry.deprecated : null;
+  const usage = dep ? designSystemUsage(design) : null;
+  const items = [], seen = new Set();
+  for (const r of usage ? usage.rows : []) {
+    if (r.kind === "new" || !dep.has(r.key) || seen.has(r.key)) continue;
+    const use = dep.get(r.key), k = dsKey(use);
+    if (dsNameIn(r.why, Infinity, (x) => x === k)) continue;
+    seen.add(r.key);
+    items.push(Q.dsDeprecatedItem(r.name, use));
+  }
+  if (!items.length) return { id, status: "pass", detail: Q.dsDeprecatedNone };
+  const shown = items.slice(0, 6).concat(items.length > 6 ? [Q.xacMore(items.length - 6)] : []);
+  return { id, status: "warn", detail: Q.dsDeprecated(items.length, shown.join("; ")) };
 }
 // The task brief's "Design system" part, for a task that builds what the user sees (tasks.js uiTask) → null (no registry, or it
 // lists nothing) | { file (the registry, as given), components: [{ kind, name, path, variants, notes, why }] (the design's rows
@@ -2841,4 +2916,4 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain, __link };
+  designSystemDeprecatedCheck, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain, __link };

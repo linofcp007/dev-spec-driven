@@ -1785,6 +1785,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     if (mk["emits metrics"].length && obsTelemetry.length && s.title.includes(obsMarker) && obsTelemetry.some((y) => title.includes(y))) return true;
     if (mk["affects evals"].length && (syn(AI_SECTIONS, "Prompt Architecture") || syn(AI_SECTIONS, "Eval Strategy"))) return true;
     if (trackMarks.some((m) => s.title.includes(m))) return true; // the case-sensitive marker
+    // 1.37: a task that builds what the user sees (uiTask — a view file, the track's block) reads the [UI] sections too, whatever
+    // criterion it proves (a component contract, the states), within the same budget — an omitted one is named
+    if (uiWork && s.title.includes(trackMarker("ui"))) return true;
     return false;
   };
   let budget = BRIEF_DESIGN_BUDGET;

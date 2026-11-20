@@ -1091,6 +1091,30 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
       js([b1.designSections, (b1.brief.match(/^Relevant[^\n]*$/m) || [""])[0], b2.designSections]) + ")");
   }
 
+  // 1.37 — a task that builds what the user sees (uiTask: a view file in _Implements:_, the track's block) reads the design's [UI]
+  // sections whatever criterion it proves — a component contract, the states, the usage table — within the same design budget (an
+  // omitted one is named); a task of the same +ui feature that builds no view does not.
+  {
+    const js = JSON.stringify;
+    const pu = path.join(tmp, "proj-137-ui-brief");
+    S.initProject(pu, ["ui"], "en");
+    const fu = S.createFeature(pu, "Orders", ["core", "ui"], "", undefined, "en");
+    fs.writeFileSync(path.join(fu.dir, "requirements.md"), "# Req\n\n### US-1 Orders\n\n- US-1.AC-1: WHEN the buyer opens the orders page THE SYSTEM SHALL list the orders.\n" +
+      "- US-1.AC-2: WHEN an order is placed THE SYSTEM SHALL store it.\n");
+    fs.writeFileSync(path.join(fu.dir, "design.md"), "# Design\n\n## Overview\n\nOne page.\n\n## [UI] Design System Usage\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| New | OrderRow | no listed row shows a status |\n\n" +
+      "## [UI] Component Contracts\n\n### OrderRow — contract\n- _States:_ default · selected\n\n## [UI] UI States\n\nLoading: a skeleton.\n\n## [UI] Accessibility\n\n" + "Every control has a name. ".repeat(180) + "\n");
+    fs.writeFileSync(path.join(fu.dir, "tasks.md"), "- [ ] 1. Build the orders page\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/OrdersPage.tsx_\n" +
+      "- [ ] 2. Store an order\n  - _Requirements: US-1.AC-2_\n  - _Implements: src/orders/store.ts_\n");
+    const view = S.taskBrief(pu, fu.slug, 1), store = S.taskBrief(pu, fu.slug, 2);
+    const relevant = (b) => (b.brief.match(/^Relevant[^\n]*$/m) || [""])[0];
+    all("1.37: a view task's brief takes the [UI] design sections whatever criterion it proves (the usage table, a contract, the states — in design.md's order), within the design budget (the one past it named, not quoted); a non-view task of the same +ui feature takes none (got " +
+      js({ view: [view.designSections, relevant(view)], store: [store.designSections, relevant(store)] }) + ")", {
+      uiWork: () => js(view.designSections) === js(["[UI] Design System Usage", "[UI] Component Contracts", "[UI] UI States"]) && view.brief.includes("### OrderRow — contract"),
+      budget: () => /Relevant but not included \(size\)[^\n]*\[UI\] Accessibility/.test(relevant(view)) && !view.brief.includes("Every control has a name."),
+      notUi: () => !store.designSections.some((t) => /\[UI\]/.test(t)) && !/\[UI\]/.test(relevant(store)),
+    });
+  }
+
   // Review 5 — CommonMark's indented code block holds no task: `    - [ ] 1. example` after a blank line, outside every list, is
   // code (complete_task ticked that example — the first open task 1 — instead of the real one); doctor's unread-tasks names it.
   // Inside a list (`- Phase A` then a 4-space task, a task's sub-lines) the indentation is the item's, as before.

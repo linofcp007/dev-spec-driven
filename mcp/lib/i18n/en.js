@@ -3656,6 +3656,10 @@ const quality = {
     // row spec_finish adds for a New component and the table it appends when the file ends in none.
     dsLegacy: (d, v) => `design approved before ${v} — asked only from its next approval (${d})`,
     dsNoSection: "no Design System Usage section in the design — nothing to check against the registry",
+    // 1.37 doctor's ui-deprecated: a Reuse / Extend row naming a component the registry marks `_Deprecated: use X_` (a warn)
+    dsDeprecatedNone: "Design System Usage reuses no component the registry marks deprecated",
+    dsDeprecated: (n, list) => `Design System Usage reuses or extends ${n} ${n === 1 ? "component" : "components"} the registry (.specs/steering/design-system.md) marks deprecated — ${list}: move to what its marker names, or name that component in the row's notes to say why this one stays`,
+    dsDeprecatedItem: (name, use) => (use ? `'${name}' (use ${use})` : `'${name}'`),
     dsUnfilled: "Design System Usage is not written yet — checked against the registry once it is",
     dsNoRegistry: `no design-system registry yet (.specs/steering/design-system.md) — the one inventory of components and tokens every +ui feature builds from. Create it from the code: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `the design-system registry (.specs/steering/design-system.md) lists no component yet — add the existing ones (spec_scan {designSystem: true} · ${DEV_SPEC} design-system lists what the code holds)`,
