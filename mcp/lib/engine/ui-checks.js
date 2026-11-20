@@ -29,9 +29,11 @@ const DS_TAG_ATTRS = 100; // a tag's attributes read: one that holds more is not
 const DS_CHECK_PER_FILE = 200; // findings kept per file (silenced ones too) — past it a file's further findings are not kept
 const DS_VALUE = 80; // a finding's value, cut
 const DS_BLOCK_DEPTH = 64; // a sheet's blocks judged nested that deep — a deeper one is not, nor what it holds
-const DS_FOCUS_SHEETS = 1000; // the project's stylesheets read for a focus style…
-const DS_FOCUS_CHARS = 4 * 1024 * 1024; // …and their characters: past either, `limits` says so and outline-removed is not judged
-const DS_FOCUS_FILE_CHARS = 256 * 1024; // one stylesheet's characters read
+// the project's stylesheets read for a focus style, and their characters (each sheet whole): past either `limits` says so and
+// outline-removed is not judged — measured (review 1 of 1.37): the report with the pass at either bound within 2× the same
+// report with no candidate on 3,000 CSS modules (an open costs ~1 ms where an antivirus scans it; the parse ~0.15 ms a K)
+const DS_FOCUS_SHEETS = 32;
+const DS_FOCUS_CHARS = 256 * 1024;
 const DS_MARK_IDS = 200; // characters after a `ui-check-off:` read for its ids
 const BS = String.fromCharCode(92);
 
@@ -456,22 +458,25 @@ function uiChecksOf(lines, rel) {
 
 // --- the feature's files ---------------------------------------------------------------------------------------------------------
 // Does any of the project's stylesheets hold a focus style (sheetChecks over the WHOLE file — never the name-ranked token
-// candidates: `focus.css`, `_a11y.scss`, a .less file count)? sheets: [{rel, full}], read the shorter path first, each up
-// to DS_FOCUS_FILE_CHARS, DS_FOCUS_SHEETS files / DS_FOCUS_CHARS characters at most; it stops at the first that holds one.
+// candidates: `focus.css`, `_a11y.scss`, a .less file count)? sheets: [{rel, full}], read the shorter path first, each WHOLE,
+// DS_FOCUS_SHEETS files / DS_FOCUS_CHARS characters at most — a sheet past what is left of them ends the search; it stops at
+// the first that holds one. Only a sheet whose text names `focus` (any case) is parsed: every focus style does — `:focus`,
+// `:focus-visible`, `:focus-within`, a focus variant in an `@apply` (review 1 of 1.37: the parse of ~800 sheets was 8× the report).
 // → { focus, limits: [{code: focus-sheets | focus-chars, read}] — a bound that cut the search }
+const RE_FOCUS_WORD = /focus/i;
 function uiFocusPass(sheets) {
   const list = sheets.slice().sort((a, b) => a.rel.length - b.rel.length || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
-  const heads = readFileHeads(list.slice(0, DS_FOCUS_SHEETS).map((s) => s.full), DS_FOCUS_FILE_CHARS);
+  const heads = readFileHeads(list.slice(0, DS_FOCUS_SHEETS).map((s) => s.full), DS_FOCUS_CHARS + 1);
   let read = 0, chars = 0;
   try {
     for (const s of list) {
       if (read >= DS_FOCUS_SHEETS) return { focus: false, limits: [{ code: "focus-sheets", read }] };
-      if (chars >= DS_FOCUS_CHARS) return { focus: false, limits: [{ code: "focus-chars", read }] };
       const text = heads.next();
+      if (text != null && chars + text.length > DS_FOCUS_CHARS) return { focus: false, limits: [{ code: "focus-chars", read }] };
       read++;
       if (text == null) continue;
       chars += text.length;
-      if (sheetChecks(text, s.rel, null)) return { focus: true, limits: [] };
+      if (RE_FOCUS_WORD.test(text) && sheetChecks(text, s.rel, null)) return { focus: true, limits: [] };
     }
   } finally {
     heads.stop();
@@ -481,16 +486,17 @@ function uiFocusPass(sheets) {
 // The feature report's `uiChecks` → { findings (the first `cap`: rule, level, file, line, value — warn first, then by file
 // and line), total, byRule, silenced, limits }. files: [{ rel, findings, focus }] (uiChecksOf of each file read). The
 // outline-removed candidates stand only while NO focus style exists — in the feature's files, else in the project's
-// stylesheets (projectFocus(): uiFocusPass, called only then — no candidate, no read); a search a bound cut judges none.
+// stylesheets (projectFocus(): uiFocusPass, called only then — no unsilenced candidate, no read); a search a bound cut judges
+// none. A silenced finding is counted silenced whatever the pass says.
 function uiChecksReport(files, projectFocus, cap) {
   let focus = files.some((f) => f.focus), limits = [];
-  if (!focus && files.some((f) => f.findings.some((x) => x.rule === "outline-removed"))) ({ focus, limits } = projectFocus());
+  if (!focus && files.some((f) => f.findings.some((x) => x.rule === "outline-removed" && !x.silenced))) ({ focus, limits } = projectFocus());
   const list = [];
   let silenced = 0;
   for (const f of files) {
     for (const x of f.findings) {
-      if (x.rule === "outline-removed" && (focus || limits.length)) continue;
       if (x.silenced) { silenced++; continue; }
+      if (x.rule === "outline-removed" && (focus || limits.length)) continue;
       list.push({ rule: x.rule, level: UI_RULES[x.rule], file: f.rel, line: x.line, value: x.value });
     }
   }
