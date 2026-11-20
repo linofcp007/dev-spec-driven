@@ -562,6 +562,19 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   values unread — the
   files whose values ARE read come first (21 `tailwind.config.ts` must not take tokens.css's place). Libraries =
   `UI_LIBRARIES` ∩ the project's dependencies (`projectDependencies`).
+  The walk's EVENTS (1.37): `styleTokens(text, rel, on)` — the ONE CSS block walker, for a reader of a sheet's STRUCTURE (the
+  UI checks: a rule's selector, what it declares, the blocks around it); never a second walker beside it (CRIT_1: this one
+  took reviews 7–11 to get right). `on.block({ id, parent, prelude, line, global })` when a `{` opens a block (the prelude
+  over lines, its last DS_PRELUDE characters, `#{…}` as written), `on.statement({ text, block, line })` when a `;` OUTSIDE
+  parentheses or a `}` ends one (the walker's pending text and the piece — its lines joined by a blank; never blank, never
+  a prelude), `on.close({ id, line })` when a `}` closes a block (a stray one closes none). Each handler is optional and is
+  given a fresh object of plain values: nothing it does reaches the tokens. The events read the walker's state, they never
+  steer it — so they inherit its view: a `;` inside parentheses (a Less mixin's parameters, an unquoted `data:` URL) ends no
+  statement and what stands before it is not kept; after a token declaration left open at its line's end the next statement
+  starts below it; an indented .sass file has no block. Behaviour-preserving when it came: the tokens of 2,493 real
+  stylesheets byte-identical to 1.36's, with and without an observer; an observer costs ~1.3–1.6× the walk
+  (mcp/tests/15-quality-design-system-walks.js pins the events on one sheet and that a handler writing into what it is
+  given changes no token).
 - **The project's manifests** (`projectDependencies`, quality.js — 1.35.1) — the dependency names the registry's reader
   (`dsNamed`, `dsAlias`, `packaged`) and the seed's `_Libraries:_` stand on: the root package.json AND its workspace
   packages'. Until 1.35.1 the root one alone (left knowingly in review 6; 1.35 review 10's MEDIUM: `antd 5` + `antd

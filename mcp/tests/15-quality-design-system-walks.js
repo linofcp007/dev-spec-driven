@@ -1,6 +1,7 @@
 "use strict";
 // The design-system code readers' shared walks (1.37): `viewLines` — a view / style file's lines as rawValuesOf reads them (cut,
-// comments out, the <style> block state), a generator, so the raw-value reader's early exit stays.
+// comments out, the <style> block state), a generator, so the raw-value reader's early exit stays; styleTokens' block walker
+// and its events (a block, a statement, a close) for a reader of a sheet's structure — the tokens unchanged.
 
 const path = require("path");
 
@@ -49,4 +50,42 @@ exports.run = async ({ all, remeasure, require, __dirname }) => {
     });
   }
 
+  { // 1.37 F0c: styleTokens' walker — the ONE CSS block walker — hands its structure to an observer: a block opening (its prelude
+    // over lines, its parent, pageWide's `global`), a statement read to its end (a `;` outside parentheses or a `}`; its lines
+    // joined), a block closing; the tokens are the same with or without one, and nothing a handler does reaches them
+    const sheet = ["// a reset { a brace in a comment", ":root { --ring: #2563eb; }", "", "*:focus { outline: 0 }", "a:focus,", "button:focus {", "  outline: none;", "}",
+      ".#{$p}-btn:focus-visible { outline: 2px solid var(--ring);; }", ".card {", "  --gap: 4px;", "  transition:", "    opacity .2s,", "    transform .3s cubic-bezier(.2, 0, 0, 1);",
+      "  content: \"}\";", "  .x { color: red }", "}", "@media (prefers-reduced-motion: reduce) {", "  .card { transition: none; }", "}", ".m { .button-variant(@color; @bg); }", "}"].join("\n");
+    const seen = { block: [], statement: [], close: [] };
+    const record = { block: (e) => seen.block.push(e), statement: (e) => seen.statement.push(e), close: (e) => seen.close.push(e) };
+    const safe = (f) => { try { return f(); } catch (e) { return "threw: " + e.message; } };
+    const plainTokens = safe(() => T.styleTokens(sheet, "src/styles/reset.scss"));
+    const observed = safe(() => T.styleTokens(sheet, "src/styles/reset.scss", record));
+    // a handler that writes into what it is given (a block made page-wide, a statement's block moved) changes no token
+    const steered = safe(() => T.styleTokens(sheet, "src/styles/reset.scss", { block: (e) => { e.global = true; e.id = 1; }, statement: (e) => { e.block = 1; } }));
+    const onlyClose = safe(() => T.styleTokens(sheet, "src/styles/reset.scss", { close: () => {} }));
+    const B = seen.block.map((e) => [e.id, e.parent, e.prelude, e.line, e.global]);
+    const St = seen.statement.map((e) => [e.text.replace(/\s+/g, " "), e.block, e.line]);
+    const C = seen.close.map((e) => [e.id, e.line]);
+    all("1.37 F0c: styleTokens(text, rel, on) — block events (id, parent, the prelude over lines with `#{…}` as written, line, global), statement events (a `;` outside parentheses or a `}` ends one; its lines joined; a Less mixin's `;` ends none; `;;` none; a quoted `}` none; a prelude never one) and close events (a stray `}` none), lines counted over blank and comment lines; the tokens identical with or without an observer, whatever it does (got " +
+      js({ B, St, C, plainTokens }) + ")", {
+      blocks: () => js(B) === js([[1, 0, ":root", 2, true], [2, 0, "*:focus", 4, false], [3, 0, "a:focus, button:focus", 6, false], [4, 0, ".#{$p}-btn:focus-visible", 9, false],
+        [5, 0, ".card", 10, false], [6, 5, ".x", 16, false], [7, 0, "@media (prefers-reduced-motion: reduce)", 18, false], [8, 7, ".card", 19, false], [9, 0, ".m", 21, false]]),
+      interp: () => seen.block[3].prelude === ".#{$p}-btn:focus-visible",
+      parent: () => js(B.map((b) => b[1])) === js([0, 0, 0, 0, 0, 5, 0, 7, 0]),
+      lines: () => js(B.map((b) => b[3])) === js([2, 4, 6, 9, 10, 16, 18, 19, 21]) && js(St.map((x) => x[2])) === js([2, 4, 7, 9, 11, 14, 15, 16, 19, 21]),
+      global: () => js(B.map((b) => b[4])) === js([true, false, false, false, false, false, false, false, false]),
+      statements: () => js(St) === js([["--ring: #2563eb", 1, 2], ["outline: 0", 2, 4], ["outline: none", 3, 7], ["outline: 2px solid var(--ring)", 4, 9], ["--gap: 4px", 5, 11],
+        ["transition: opacity .2s, transform .3s cubic-bezier(.2, 0, 0, 1)", 5, 14], ["content: \"}\"", 5, 15], ["color: red", 6, 16], ["transition: none", 8, 19], ["@bg)", 9, 21]]),
+      multiLine: () => /^transition: opacity \.2s, transform \.3s cubic-bezier\(\.2, 0, 0, 1\)$/.test((St.find((x) => x[2] === 14) || [""])[0]),
+      blockOf: () => (St.find((x) => x[0] === "color: red") || [])[1] === 6 && (St.find((x) => x[0] === "transition: none") || [])[1] === 8,
+      lessParams: () => St.filter((x) => x[1] === 9).length === 1 && !St.some((x) => /@color/.test(x[0])),
+      blank: () => St.every((x) => x[0].trim() !== "") && St.filter((x) => x[1] === 4).length === 1,
+      noPrelude: () => St.length === 10 && !St.some((x) => seen.block.some((b) => b.prelude === x[0])),
+      close: () => js(C) === js([[1, 2], [2, 4], [3, 8], [4, 9], [6, 16], [5, 17], [8, 19], [7, 20], [9, 21]]),
+      same: () => js(plainTokens) === js([{ name: "--ring", value: "#2563eb", global: true, block: 1 }, { name: "--gap", value: "4px", global: false, block: 5 }]) &&
+        js(observed) === js(plainTokens) && js(onlyClose) === js(plainTokens),
+      steer: () => Array.isArray(steered) && plainTokens.length === 2 && js(steered) === js(plainTokens),
+    });
+  }
 };
