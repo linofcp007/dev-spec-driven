@@ -33,9 +33,10 @@ in the UI), [security-track.md](security-track.md) (never trust the client; secr
      with a visible focus indicator.
   ```
 
-- **design.md** — the component inventory (reused, extended, new), a **state matrix** per view and the **reference**
-  each view is built against (a design export, or an HTML prototype the user approved — its path), the form rules,
-  breakpoints, the accessibility plan, i18n decisions and the performance budget.
+- **design.md** — the component inventory (reused, extended, new), the **state matrix** (a row per state, a column per
+  view) and the **reference** each view is built against (a design export, or an HTML prototype the user approved — its
+  path), the form rules, what each view changes per breakpoint, the accessibility plan, i18n decisions and the
+  performance budget.
 - **Steering** — the **registry** `design-system.md` (the components and tokens every feature builds from — below),
   the design-system rules in a scoped `ui-components.md` (`dev-spec steering ui-components.md`,
   `inclusion: fileMatch` on the component folders), and the target level in `tech.md`'s Accessibility line
@@ -146,18 +147,47 @@ design itself is edited and approved again.
 A view that only designs the happy path shows a blank page, a frozen spinner or a raw error the first time
 something is slow or wrong. Design each state and write the matrix in design.md:
 
-| State | When | What the user sees | Common mistake |
-|---|---|---|---|
-| **Loading** | first fetch | skeleton or indicator (below) | a spinner that never ends when the request fails |
-| **Empty** — first use | nothing exists yet | what this is for + the primary action ("Create your first invoice") | a bare "No data" |
-| **Empty** — no results | a filter or search matched nothing | what was searched + how to broaden it / clear filters | the same text as first use |
-| **Error** — recoverable | a request failed | what happened in plain words + **Retry**; keep what was already shown | a toast that disappears while the list stays empty |
-| **Partial** | one region failed, others loaded | the failed region shows its own error; the rest works | the whole page failing for one widget |
-| **Offline** | no connection | an offline notice; queued or disabled actions; cached data marked as such | silent failures on submit |
-| **Permission denied** | signed in, not allowed (403) | why and what to do (ask an admin) — not a 404 look-alike unless hiding existence is the point | a broken page |
-| **Signed out / expired** | 401 | a sign-in prompt that returns the user to where they were, input kept | losing the draft |
-| **Success** | an action completed | confirmation proportional to the action; the result visible | no feedback, so users click again |
-| **Stale** | data may be out of date (cache, eventual consistency) | a timestamp or "updating…" | showing old data as current |
+| State | When | What the user sees | Announced · focus | Common mistake |
+|---|---|---|---|---|
+| **Loading** | first fetch | skeleton or indicator (below) | nothing for a short wait (`aria-busy="true"` on the region); focus stays | a spinner that never ends when the request fails |
+| **Slow network** | the wait passes the design's threshold | a "still working" message where the result will appear, and **Cancel**; a timeout becomes Error | the message as a status; focus stays | a spinner with no way out |
+| **Empty — first use** | nothing exists yet | what this is for + the primary action ("Create your first invoice") | the view's heading says it; focus not moved | a bare "No data" |
+| **Empty — no results** | a filter or search matched nothing | what was searched + how to broaden it / clear filters | the count as a status ("0 results"); focus stays in the search | the same text as first use |
+| **Error** | a request failed; a retry may work | what happened in plain words + **Retry**; keep what was already shown | an alert when the user's own action failed, else a status; focus stays | a toast that disappears while the list stays empty |
+| **Partial** | one region failed, others loaded | the failed region shows its own error; the rest works | the region's error as a status; focus stays | the whole page failing for one widget |
+| **Offline** | no connection | an offline notice; queued or disabled actions; cached data marked as such | a status when the connection drops and when it returns | silent failures on submit |
+| **Permission denied** | signed in, not allowed (403) | why and what to do (ask an admin) — not a 404 look-alike unless hiding existence is the point | as Not found | a broken page |
+| **Not found** | a route or a record that doesn't exist (404) | the title and h1 say so, with a way on (search, the list) | announced: the framework's route announcer, or focus to the h1 | a blank page, or the home page |
+| **Signed out** | the session expired (401) | a sign-in prompt that returns the user to where they were, input kept | a dialog takes focus and gives it back on close | losing the draft |
+| **Conflict** | someone changed it first (409 / 412) | what changed, and **Reload** or **Keep mine** — the user's input kept | an alert; focus stays on the action — one mechanism, never both | overwriting the other change silently |
+| **Stale** | data may be out of date (cache, eventual consistency) | a timestamp or "updating…" | nothing for a background refresh; focus stays | showing old data as current |
+| **Success** | an action completed | confirmation proportional to the action; the result visible | a status ("Saved"); focus stays, or back to the trigger when a dialog closes | no feedback, so users click again |
+| **Undo** | right after a reversible delete, archive or move | the item gone, and **Undo** until dismissed — or a second home (the trash) | a status; focus to the next item, never lost to `<body>` | Undo only in a toast that disappears |
+| **Form validation** | a submit, or a field left, with invalid values | each error by its field, a summary on submit linking to each, every value kept | on submit, focus to the summary; on leaving a field, its message tied to it (`aria-describedby`), focus not moved | errors in colour alone; values cleared |
+| **Worst case** | the view's data at its realistic extremes | below | as the state it shows | a layout tried only on short sample data |
+
+**The matrix in design.md.** `[UI] UI States` holds the template's table: a row per state, labelled as above, and a
+column per view between `State` and `Announced · focus` — rename `View` after the first view and add one for each other
+(a screen, a route, a dialog; a component's own states belong to its contract). Each cell says what the user sees and
+can do there, or `n/a — why` in four words or more; an `n/a — why` alone in its row answers every view. Doctor's
+`ui-states` finds each state by its label — a qualifier after it is fine (`Error — payment`) — and warns about a state
+with no row and each cell left open (blank, a `[slot]`, an `n/a` without its four words): at size m / l or with no size;
+a note at size s; never a refusal, never part of a gate, never on a finished feature. It reads only the table whose
+header holds `Announced · focus` (in the feature's language) and never judges that column — the critic does; a prose
+matrix is not checked.
+
+**Announced, and where focus goes.** A status message — "Saved", "3 results", "Upload failed" — reaches a screen reader
+through a live region that exists before its text changes, without moving focus (4.1.3): `role="status"`, or
+`role="alert"` for what needs attention now; W3C's own example is "5 errors on page", added after an unsuccessful fill
+of a form. A message that takes focus is a change of context instead, so each row picks one mechanism — a live region,
+or focus moved, never both. Focus moves when its place goes away or the user must act: to the next item after a delete,
+back to the trigger when a dialog closes (2.4.3), to the summary on a failed submit — never lost to `<body>`. A toast is
+never the only record of what happened, and never hides the focused element entirely (2.4.11 — partly covering it still
+passes AA; Focus Not Obscured (Enhanced), AAA, asks for none of it covered). A message that disappears on a timer is a
+time limit (2.2.1) only when nothing else shows the same: W3C's example, a new-mail notice gone after 5 s, is none
+because the inbox shows the mail — so an Undo that leaves with its toast needs a second home (the trash), or stays until
+dismissed. Undo is one of 3.3.4's three ways for a delete (reversible, checked, confirmed): a design that confirms in a
+dialog instead writes that in its Undo row, not n/a.
 
 **Loading — pick by duration and certainty.** The classic response-time limits (Nielsen): about **0.1 s** feels
 instant, about **1 s** keeps the user's flow, about **10 s** is the limit of attention.
@@ -417,9 +447,11 @@ team's — write them in steering and enforce them with a size-check script as a
 
 - **Component tests query like a user**: by role and accessible name (`getByRole("button", { name: "Pay now" })`),
   not by CSS class or test ID — they break on real regressions and double as a check that names exist.
-- **Every state is a fixture**: a story or test case per state of the matrix above (loading, empty, error,
-  partial…), so none is only reachable by breaking the network — the worst case too, the regression fixture of the next
-  change.
+- **Every state is a fixture**: a story or test case per state of the matrix above (loading, slow network, empty,
+  error, conflict…), reached through a mocked response (a delay, a 404, a 409), so none is only reachable by breaking the
+  network — the worst case too, the regression fixture of the next change. Each asserts its row's Announced · focus: the
+  live region's role and text, and where focus is, with a focus assertion (Playwright's `toBeFocused`, Cypress's
+  `have.focus`, Testing Library's `toHaveFocus`).
 - **Visual snapshots** for the system's components and key screens, in both themes, at the key breakpoints and in
   one RTL locale. Render them in a pinned environment (a container image with fixed fonts) — the same screenshot
   differs across operating systems and font versions, and a flaky visual suite gets ignored.
@@ -430,10 +462,10 @@ team's — write them in steering and enforce them with a size-check script as a
 
 **Matching the design — the visual review.** A snapshot only says the screen didn't change since last time. Whether
 it is the screen the design asked for is the visual review's question ([ui-review.md](ui-review.md)): each state a
-task built is captured beside the view's reference, in the same state and settings, and a reviewer that sees only
-the two images lists every difference with its severity and place on screen. No design to compare with? An HTML
-prototype the user clicks through and approves before the UI is built is the cheapest reference — and the first
-place to settle what the screen should be.
+task built is captured beside the view's reference, in the same state and settings (each at one width, the worst case
+at each breakpoint), and a reviewer that sees only the two images lists every difference with its severity and place
+on screen. No design to compare with? An HTML prototype the user clicks through and approves before the UI is built is
+the cheapest reference — and the first place to settle what the screen should be.
 
 ---
 
@@ -444,12 +476,15 @@ Before the design gate, the design names:
 1. **Components** — one row each in `[UI] Design System Usage` (Reuse · Extend · New), agreeing with the registry
    (`.specs/steering/design-system.md`); a new system component's API and owner, and why no listed one fits; tokens
    only, no hard-coded values; a New / Extend component's contract.
-2. **The state matrix** — loading (and which technique), empty (first use and no results), error, partial,
-   offline, permission denied, signed out, success, stale — per view, and the worst case.
+2. **The state matrix** — a column per view, a row per state: loading (and which technique), slow network, empty
+   (first use and no results), error, partial, offline, permission denied, not found, signed out, conflict, stale,
+   success, undo, form validation and the worst case — each designed or `n/a — why`, with how it is announced and where
+   focus goes.
 3. **Forms** — labels, validation timing, messages, the error summary and focus, input kept on every error (unsaved
    edits too), server errors mapped to fields, double-submit prevention, `autocomplete` tokens.
-4. **Layout** — breakpoints, reflow at 320 CSS px, 200% text, touch targets (44 × 44 designed, never under 24 × 24),
-   no hover-only or drag-only interactions.
+4. **Layout** — the project's breakpoints and what each view changes at each ([ui-responsive.md](ui-responsive.md)),
+   reflow at 320 CSS px, 200% text, touch targets (44 × 44 designed, never under 24 × 24), no hover-only or drag-only
+   interactions.
 5. **Themes** — semantic tokens for light and dark, the system setting followed, contrast checked in both.
 6. **Accessibility** — WCAG 2.2 AA; native elements first; keyboard order and visible focus; names; contrast
    4.5:1 / 3:1; live regions for status messages; dialogs' focus handling; reduced motion.

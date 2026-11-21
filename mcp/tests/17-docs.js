@@ -887,9 +887,10 @@ exports.run = async ({
     const checklist = sectionOf(refRaw("ui-design-patterns.md"), "## Design checklist");
     const rows = [
       // references/ui-review.md — the protocol
-      ["ui-review: no reference → the floor alone, ledgered, never passed; the file ≤ 10,000 bytes", R,
+      // (1.38.0: the cap 10,000 → 12,000 — §2 takes the capture matrix, CRIT_X D1)
+      ["ui-review: no reference → the floor alone, ledgered, never passed; the file ≤ 12,000 bytes", R,
         /\*\*No reference → the floor alone\*\* \(§2\): ledger `Task N: ui review — floor only \(no reference\)` and say at the checkpoint that the look was never compared with a design\. It is never "passed"\./,
-        () => bytes("skills", "dev-spec-driven", "references", "ui-review.md") <= 10000],
+        () => bytes("skills", "dev-spec-driven", "references", "ui-review.md") <= 12000],
       ["ui-review: the worst case's own capture, through the data boundary, never edited markup", R,
         /\*\*The worst case\*\*[^.]*is a state of its own: `<view>--worst--build\.png`/, /never by editing the markup/],
       ["ui-review: the floor through a tool that sets the viewport and records the width — never the Chrome command line", R,
@@ -905,7 +906,8 @@ exports.run = async ({
       ["ui-review: one viewport per image", R, /one viewport per image/],
       ["ui-review: at most 16 images a dispatch, the .prev.png counted", R, /At most 16 images a dispatch, the `\.prev\.png` counted/],
       ["ui-review: the reviewer told when the locale is a pseudo-locale", R, /say when the locale is a pseudo-locale/],
-      ["ui-review: mobile in one line — the text size closest to 200 %, Android pseudo-locales only where enabled", R,
+      // (1.38.0: the line moved to ui-responsive.md → Checking it, CRIT_X D1 / D2)
+      ["ui-responsive: mobile in one line — the text size closest to 200 %, Android pseudo-locales only where enabled", ws(refRaw("ui-responsive.md")),
         /On mobile: the smallest supported width and the OS text size closest to 200 % \(iOS AX2, Android scale 2\.0\); Android's pseudo-locales only where the build enables them\./],
       ["ui-review: a capture the tool can't take — Not judged, never clean", R, /A capture the tool can't take is listed under Not judged and ledgered — never clean\./],
       ["ui-review: pair or floor is a property of the files", R, /\*\*Pair or floor is a property of the files:\*\* a `--build\.png` with its `--ref\.png` beside it is a pair; every other build capture, and every `floor-\*` one, is judged on the floor\./],
@@ -1029,6 +1031,196 @@ exports.run = async ({
     const condName = (c, i) => c instanceof RegExp ? "matches " + c.source.slice(0, 70) : typeof c === "function" ? "check " + i : "never " + c.not.source.slice(0, 60);
     for (const [label, text, ...checks] of rows) {
       all("1.37 UI prose — " + label, Object.fromEntries(checks.map((c, i) => [condName(c, i), cond(text, c)])));
+    }
+  }
+
+  { // 1.38.0 D — items 3 and 4's prose (DECISIONS "D", CRIT_3 must-fix 7, CRIT_4 must-fixes 7–11): ui-responsive.md's
+    // content, the state matrix grown IN PLACE in ui-design-patterns.md (the template's 16 labels, the Announced · focus
+    // column, what doctor's ui-states reads), ui-review.md §2's capture matrix (each designed state at one width, the worst
+    // case at every breakpoint, ≤ 6 widths, the dispatch split) and the critic / reviewer / checklist / index clauses. The
+    // 1.37 UI prose block's form: ONE assertion per prose rule, each failing with its rule undone (chain D's mutation pass)
+    // and failing on F0 (8b4ece4a). The state labels and the matrix's a11y header are read from the template's source
+    // (i18n's quality.uiState*, by their English-stable ids), the UI rule ids and doctor's steering check from the engine.
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const refRaw = (f) => raw("skills", "dev-spec-driven", "references", f);
+    const bytes = (...p) => fs.statSync(path.join(root, ...p)).size;
+    const sectionOf = (text, head) => {
+      const lines = text.split("\n"), at = lines.findIndex((l) => l.startsWith(head)), level = (head.match(/^#+/) || [""])[0].length;
+      if (at < 0) return "";
+      const end = lines.findIndex((l, i) => i > at && /^#+ /.test(l) && l.match(/^#+/)[0].length <= level);
+      return ws(lines.slice(at, end < 0 ? lines.length : end).join("\n"));
+    };
+    // a table under a line that starts with `after` (the first table past it): its header cells and its rows' cells
+    const tableAfter = (text, after) => {
+      const lines = text.split("\n"), at = lines.findIndex((l) => l.startsWith(after));
+      const h = at < 0 ? -1 : lines.findIndex((l, i) => i > at && l.startsWith("|"));
+      const cells = (l) => l.split("|").slice(1, -1).map((c) => c.trim());
+      const rows = [];
+      for (let i = h + 2; h >= 0 && i < lines.length && lines[i].startsWith("|"); i++) rows.push(cells(lines[i]));
+      return { head: h < 0 ? [] : cells(lines[h]), rows };
+    };
+    const Q = require(path.join(root, "mcp", "lib", "i18n.js")).msg("en").quality;
+    const L = Q.uiStateLabels || {}, labels = Object.values(L);
+    const RS = ws(refRaw("ui-responsive.md")), R = ws(refRaw("ui-review.md")), Praw = refRaw("ui-design-patterns.md");
+    const P = ws(Praw), states = sectionOf(Praw, "## The states every view needs"), checklist = sectionOf(Praw, "## Design checklist");
+    const matrix = tableAfter(Praw, "## The states every view needs"), capture = tableAfter(refRaw("ui-review.md"), "**What to capture, per view**");
+    const rowOf = (id) => ws((matrix.rows.find((r) => r[0] === "**" + L[id] + "**") || []).join(" | "));
+    const item = (n) => (checklist.match(new RegExp(" " + n + "\\. (.*?)(?= " + (n + 1) + "\\. \\*\\*|$)")) || ["", ""])[1];
+    const C = ws(raw("agents", "spec-critic.md")), V = ws(raw("agents", "spec-reviewer.md")), T = ws(refRaw("track-checklists.md"));
+    const I = ws(refRaw("index.md")), uiRules = raw("mcp", "lib", "engine", "ui-checks.js"), doctorSrc = raw("mcp", "lib", "engine", "doctor.js");
+    const rows = [
+      // references/ui-responsive.md — item 3's prose (ITEM_3 §6 as CRIT_3 and the DECISIONS cut it)
+      ["responsive: the design says per view what changes at each of the project's breakpoints", RS,
+        /The design says, per view, what changes at each of the project's breakpoints — columns, navigation, what moves or hides\./],
+      ["responsive: where the widths come from — ui.md's line, a Tailwind 4 @theme, else the default set; ≤ 6, 320 first", RS,
+        /1\. `\.specs\/steering\/ui\.md`'s `- Breakpoints:` line — the lengths before its first ` · ` \(px, or rem \/ em at 16 px\); 2\. a Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads/,
+        /\(a theme that only adds to Tailwind's own five: the default set joins them — list them all in ui\.md to choose\); 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
+        /At most six widths, 320 first \(the reflow width\); `dev-spec design-system <feature>` prints them and where they came from\./],
+      ["responsive: what is never read, and the lines to paste into ui.md (Tailwind's defaults, Bootstrap 5)", RS,
+        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a Sass map are never read: paste the line into ui\.md instead/,
+        /- Tailwind's defaults: `- Breakpoints: 640 \/ 768 \/ 1024 \/ 1280 \/ 1536 px`/, /- Bootstrap 5: `- Breakpoints: 576 \/ 768 \/ 992 \/ 1200 \/ 1400 px`/],
+      ["responsive: editing the line re-flags approved designs — doctor's steering check, by its engine id", RS,
+        /editing the line makes doctor warn `steering-changed-since-approval` on approved designs — on purpose/,
+        () => doctorSrc.includes('"steering-changed-since-approval"')],
+      ["responsive: container queries — a component answers to its own width", RS, /`container-type: inline-size` on the wrapper, `@container \(min-width: 30rem\)` in the component/],
+      ["responsive: the intrinsic grid — one column at 320 px, no media query, min(100%, …) against overflow", RS,
+        /`grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 16rem\), 1fr\)\)` holds as many columns as fit, one at 320 px, with no media query; the `min\(100%, …\)` keeps a column from overflowing a narrower box\./],
+      ["responsive: fluid type — a token with a rem term; viewport units alone fail 1.4.4 (F94), the UI check by its engine id", RS,
+        /A fluid size is a \*\*token\*\* with a rem term: `--text-3xl: clamp\(1\.75rem, 1\.2rem \+ 2vw, 2\.5rem\)`\. The rem part grows when the user zooms or sets a larger font; viewport units alone don't — WCAG 1\.4\.4, failure F94, the UI check `font-size-viewport`/,
+        () => /"font-size-viewport": "warn"/.test(uiRules)],
+      ["responsive: the largest size ≤ 2.5 × the smallest, credited to Maxwell Barvian", RS,
+        /Keep the largest size at most \*\*2\.5 ×\*\* the smallest: the browser's zoom can then still double the text at any window width \(Maxwell Barvian, Smashing Magazine, 2023\)\./],
+      ["responsive: which unit for what — rem text, % / fr layout, dvh / svh sections, px borders; a convention; the units table", RS,
+        /\| Text, and the space that grows with it \| `rem` \(`em` inside a component\) \| follows the user's font size and zoom \|/, /\| Borders, hairlines, shadows \| `px` \| stays crisp \|/,
+        /A convention, not a WCAG rule: px-only text still zooms in every current browser — it only ignores the user's default font size\./,
+        /Write the team's choice in `design-system\.md`'s units table, which the code scan compares the code with \(\[ui-code-scan\.md\]\(ui-code-scan\.md\)\)\./],
+      ["responsive: 100vw and the classic scrollbar — 100 % in flow, a fixed overlay fine, no check; Chrome 145's condition", RS,
+        /an in-flow box at `width: 100vw` is a scrollbar wider than the page — a sideways scroll\. Use `100%` there\./,
+        /A fixed overlay \(`position: fixed; inset: 0`\) or a decoration its parent clips is fine, so no check flags `100vw`: the visual review measures the sideways scroll instead\./,
+        /Chrome 145 subtracts the scrollbar from `vw` only where the root reserves its room \(`scrollbar-gutter: stable`, `overflow-y: scroll`\) — Bramus Van Damme, bram\.us, 2026\./],
+      ["responsive: 100vh on a phone — svh / dvh / lvh, the 100vh; 100dvh pair, min-height harmless", RS,
+        /`svh` is the smallest viewport, `dvh` follows the toolbars \(relaid out as they move\), `lvh` the largest\./,
+        /A full-height app shell: `height: 100vh; height: 100dvh;`/, /`min-height: 100vh` only lets a box grow — harmless unless something is pinned to its bottom\./],
+      ["responsive: 2.5.8 — the 24-px circle, and its other exceptions", RS,
+        /2\.5\.8 \(AA\) accepts a target under 24 × 24 CSS px when a 24-px circle centred on it touches no other target and no other small target's circle/,
+        /exempts a control whose function another one on the page offers at full size, a link inside a sentence, a size the browser sets and a size that is essential\./],
+      ["responsive: pointer and hover media queries; never an action only hover reaches", RS,
+        /`@media \(pointer: coarse\)` — a finger is the main pointer: larger targets and gaps\. `@media \(hover: hover\)` — hover effects only where the main pointer hovers; `any-pointer` \/ `any-hover`/,
+        /Never an action that only hover reaches\./],
+      ["responsive: safe areas — viewport-fit=cover, env(safe-area-inset-*) never under the padding; never maximum-scale (zoom-disabled)", RS,
+        /`viewport-fit=cover` in the viewport meta/, /`padding-bottom: max\(1rem, env\(safe-area-inset-bottom\)\)`/,
+        /Never `maximum-scale=1` or `user-scalable=no` in that meta: they block zoom \(1\.4\.4 — the UI check `zoom-disabled`\)\./, () => /"zoom-disabled": "warn"/.test(uiRules)],
+      ["responsive: images — srcset and sizes, picture, aspect-ratio", RS, /`srcset` with the widths you have and `sizes` that says the layout/, /`<picture>` where a layout wants another crop, `width` \/ `height` or `aspect-ratio` so nothing shifts as it loads/],
+      ["responsive: tables at small widths — a labelled, focusable scroll box or stacked rows; what is around it reflows; never a column hidden silently", RS,
+        /1\.4\.10 excepts content that needs two dimensions, not what is around it: the heading, the search and the pagination still reflow\./,
+        /`<div role="region" aria-labelledby="orders-title" tabindex="0">` with `overflow-x: auto`, so a keyboard user can scroll it\./,
+        /Never hide a column silently at a width: say it is hidden and how to show it\./],
+      ["responsive: orientation — no lock (F97), no rotate message (F100), unless essential", RS,
+        /Never lock the page to portrait or landscape \(1\.3\.4, AA — failure F97\), and never ask the user to rotate the device \(F100\), unless one orientation is essential/],
+      ["responsive: zoom — 400 % of 1280 px is 320 CSS px; 1.4.12's spacing clips nothing", RS,
+        /400 % zoom of a 1280-px window lays the page out at 320 CSS px: the reflow width is what a desktop user who zooms gets, not only a phone/,
+        /a 1\.5 line height, paragraphs 2 × the font size apart, letters 0\.12em and words 0\.16em \(1\.4\.12\) clips nothing/],
+      ["responsive: inputs — type, inputmode, autocomplete, enterkeyhint; 16 px so iOS does not zoom, never maximum-scale", RS,
+        /`enterkeyhint` \(`search`, `send`, `next`\) names the Enter key\./, /Inputs take a font of at least 16 px: iOS Safari zooms into a smaller one on focus — never cured with `maximum-scale=1`\./],
+      ["responsive: checking it — the worst case at every width, the other states at one (ui-review.md → 2)", RS,
+        /The visual review captures each view's worst case at every width above, measured, and its other states at one \(\[ui-review\.md\]\(ui-review\.md\) → 2\)\./],
+      ["responsive: credited to Vercel's Web Interface Guidelines; the file ≤ 12,000 bytes", RS,
+        /After Vercel's Web Interface Guidelines \(MIT\) for the 16-px inputs, the safe areas and the target sizes\./,
+        () => bytes("skills", "dev-spec-driven", "references", "ui-responsive.md") <= 12000],
+      // references/ui-review.md §2 — the capture matrix of items 3 and 4 (CRIT_X D1) and §3's split (CRIT_3 must-fix 7)
+      ["ui-review: what to capture per view — states plus widths, never every state at every width, never an n/a state", R,
+        /\*\*What to capture, per view\*\* — its states plus its widths, never every state at every width; a state the matrix answers `n\/a` is never captured:/],
+      ["ui-review: each designed state at one width — the reference's, else 320 — a pair where the reference shows it", () =>
+        JSON.stringify(capture.rows[0]) === JSON.stringify(["Each designed state", "one: the reference's; no reference, 320", "a pair where the reference shows it, else a build capture judged on the floor"])],
+      ["ui-review: the worst case at every breakpoint, named by width, its .json; at 320 floor-320", () =>
+        JSON.stringify(capture.rows[1]) === JSON.stringify(["The worst case", "each of the project's breakpoints", "`<view>--worst--w<width>--build.png` and its `.json`; at 320, `floor-320`"])
+          && JSON.stringify(capture.head) === JSON.stringify(["What", "Width", "Captured as"])],
+      ["ui-review: the widths — ≤ 6, 320 first, their sources, the CLI that prints them; scale 1 above 320; a pair by its ref; a sideways scroll a Blocker", R,
+        /\*\*Widths:\*\* the project's breakpoints, at most 6, 320 first — ui\.md's `- Breakpoints:` line, else the code's, else 320 · 390 · 768 · 1024 · 1440; `dev-spec design-system <feature>` prints them \(\[ui-responsive\.md\]\(ui-responsive\.md\) → The project's breakpoints\)\./,
+        /Scale 1 above 320; a `--w<width>--ref\.png` beside a capture makes it a pair\. Each has its `\.json`, as the floor's do: a measured sideways scroll at any width is a Blocker\./],
+      ["ui-review: each state through its data boundary; the script waits for its own element; never the default page", R,
+        /a delayed response for Slow network, a 409 \/ 412 for Conflict, a 404 route for Not found, an invalid submit for Form validation, the moment after a delete for Undo\./,
+        /The script waits for the state's own element \(its text or role\) before the shot; a state it can't reach is `not captured \(no data boundary\)`, never shot as the default page\./],
+      ["ui-review: Announced · focus never judged from an image — each state's fixture asserts it", R,
+        /\*\*Announced · focus is never judged from an image:\*\* each state's fixture test asserts it — the live region's role and text, a focus assertion/],
+      ["ui-review: a view past 16 images — its states, then its widths, in dispatches of their own", R,
+        /At most 16 images a dispatch, the `\.prev\.png` counted — past that, one per view; a view past that alone: its states, then its widths, in dispatches of their own\./],
+      ["ui-review: On mobile moved to ui-responsive.md, a pointer left", R, /On mobile: \[ui-responsive\.md\]\(ui-responsive\.md\) → Checking it\./,
+        { not: /On mobile: the smallest supported width/ }],
+      ["ui-review: the worst case's name at a breakpoint", R, /`<view>--worst--build\.png` \(`--w768--` in the name at a breakpoint, below\)/],
+      // references/ui-design-patterns.md — the state matrix in place (item 4, CRIT_4 must-fixes 7–11)
+      ["ui-design-patterns: the matrix's rows are the template's labels in order, its header the template's State and a11y cells", () =>
+        labels.length === 16 && JSON.stringify(matrix.rows.map((r) => r[0])) === JSON.stringify(labels.map((l) => "**" + l + "**"))
+          && JSON.stringify(matrix.head) === JSON.stringify([Q.uiStateHead, "When", "What the user sees", Q.uiStateA11y, "Common mistake"])
+          && matrix.rows.every((r) => r.length === 5 && r.every((c) => c.length > 0))],
+      ["ui-design-patterns: Slow network — a status and Cancel; a timeout is Error", () =>
+        /a "still working" message where the result will appear, and \*\*Cancel\*\*; a timeout becomes Error \| the message as a status; focus stays/.test(rowOf("slow-network"))],
+      ["ui-design-patterns: Not found — said in the title and h1; announced by the route announcer or focus to the h1", () =>
+        /the title and h1 say so, with a way on \(search, the list\) \| announced: the framework's route announcer, or focus to the h1/.test(rowOf("not-found"))],
+      ["ui-design-patterns: Conflict — Reload or Keep mine, input kept; one mechanism", () =>
+        /what changed, and \*\*Reload\*\* or \*\*Keep mine\*\* — the user's input kept \| an alert; focus stays on the action — one mechanism, never both/.test(rowOf("conflict"))],
+      ["ui-design-patterns: Undo — until dismissed or a second home; focus to the next item, never lost", () =>
+        /the item gone, and \*\*Undo\*\* until dismissed — or a second home \(the trash\) \| a status; focus to the next item, never lost to `<body>`/.test(rowOf("undo"))],
+      ["ui-design-patterns: Form validation — focus to the summary on submit; a field's message tied to it, focus kept", () =>
+        /on submit, focus to the summary; on leaving a field, its message tied to it \(`aria-describedby`\), focus not moved/.test(rowOf("form-validation"))],
+      ["ui-design-patterns: the matrix in design.md — the views between State and Announced · focus, n/a — why, a row's n/a", states,
+        /a column per view between `State` and `Announced · focus` — rename `View` after the first view and add one for each other \(a screen, a route, a dialog; a component's own states belong to its contract\)\./,
+        /or `n\/a — why` in four words or more; an `n\/a — why` alone in its row answers every view\./],
+      ["ui-design-patterns: what doctor's ui-states reads — a warn at m / l / no size, a note at s, never a gate; the a11y column unjudged", states,
+        /Doctor's `ui-states` finds each state by its label — a qualifier after it is fine \(`Error — payment`\) — and warns about a state with no row and each cell left open \(blank, a `\[slot\]`, an `n\/a` without its four words\)/,
+        /at size m \/ l or with no size; a note at size s; never a refusal, never part of a gate, never on a finished feature\./,
+        /It reads only the table whose header holds `Announced · focus` \(in the feature's language\) and never judges that column — the critic does; a prose matrix is not checked\./],
+      ["ui-design-patterns: 4.1.3 — a live region before its text, no focus move; W3C's 5-errors example after an unsuccessful fill", states,
+        /through a live region that exists before its text changes, without moving focus \(4\.1\.3\)/,
+        /W3C's own example is "5 errors on page", added after an unsuccessful fill of a form\./, { not: /5 errors on page"?,? (?:shown |added )?after a submit/ }],
+      ["ui-design-patterns: one mechanism a row — a message that takes focus is a change of context", states,
+        /A message that takes focus is a change of context instead, so each row picks one mechanism — a live region, or focus moved, never both\./],
+      ["ui-design-patterns: where focus moves — the next item, the trigger (2.4.3), the summary; never lost to <body>", states,
+        /Focus moves when its place goes away or the user must act: to the next item after a delete, back to the trigger when a dialog closes \(2\.4\.3\), to the summary on a failed submit — never lost to `<body>`\./],
+      ["ui-design-patterns: 2.4.11 — never entirely hidden; partly covered passes AA, Enhanced is AAA", states,
+        /never hides the focused element entirely \(2\.4\.11 — partly covering it still passes AA; Focus Not Obscured \(Enhanced\), AAA, asks for none of it covered\)/,
+        { not: /never covers (?:the )?focus/ }],
+      ["ui-design-patterns: 2.2.1 per W3C's example — a timed message is a time limit only when nothing else shows it", states,
+        /A message that disappears on a timer is a time limit \(2\.2\.1\) only when nothing else shows the same: W3C's example, a new-mail notice gone after 5 s, is none because the inbox shows the mail/,
+        /an Undo that leaves with its toast needs a second home \(the trash\), or stays until dismissed\./],
+      ["ui-design-patterns: Undo is one of 3.3.4's three ways — a confirm-dialog design writes its row", states,
+        /Undo is one of 3\.3\.4's three ways for a delete \(reversible, checked, confirmed\): a design that confirms in a dialog instead writes that in its Undo row, not n\/a\./],
+      ["ui-design-patterns: each state's fixture through a mocked response, asserting its announcement and focus by property", P,
+        /reached through a mocked response \(a delay, a 404, a 409\)/,
+        /Each asserts its row's Announced · focus: the live region's role and text, and where focus is, with a focus assertion \(Playwright's `toBeFocused`, Cypress's `have\.focus`/],
+      ["ui-design-patterns: checklist 2 — a column per view, every template state, n/a — why, announced and focus", () =>
+        /^\*\*The state matrix\*\* — a column per view, a row per state: .*empty \(first use and no results\).*and the worst case — each designed or `n\/a — why`, with how it is announced and where focus goes\.$/.test(item(2))
+          && labels.filter((l) => !/—/.test(l) && l !== L["worst-case"]).every((l) => item(2).includes(" " + l.toLowerCase()))],
+      ["ui-design-patterns: checklist 4 — the project's breakpoints and what each view changes at each", () =>
+        /^\*\*Layout\*\* — the project's breakpoints and what each view changes at each \(\[ui-responsive\.md\]\(ui-responsive\.md\)\)/.test(item(4))],
+      ["ui-design-patterns: where the decisions go — the matrix's shape, what each view changes per breakpoint", P,
+        /the \*\*state matrix\*\* \(a row per state, a column per view\)/, /what each view changes per breakpoint, the accessibility plan/],
+      ["ui-design-patterns: the visual review — each state at one width, the worst case at each breakpoint", P,
+        /in the same state and settings \(each at one width, the worst case at each breakpoint\)/],
+      // the critic, the reviewer, the checklists, the index (CRIT_X D7.7: items 3 and 4 in one edit; Z adds item 2's line)
+      ["spec-critic: every listed state designed or n/a, how each is announced, where focus goes — the worst-case phrase kept", C,
+        /and the worst case — each field's realistic extreme and where its limit comes from; every listed state designed or n\/a with a reason, how each is announced and where focus goes\)/],
+      ["spec-critic: what each view changes at the project's breakpoints", C, /say what each view changes at the project's breakpoints, cover i18n, and set a Core Web Vitals budget\./],
+      ["spec-reviewer: every state handled, with the announcement and focus its row names", V,
+        /every state of the design's state matrix handled, with the announcement and focus its row names;/],
+      ["track-checklists: Phase 2 — Responsiveness & i18n says what each view changes per breakpoint", T,
+        /Responsiveness & i18n \(what each view changes at the project's breakpoints — `references\/ui-responsive\.md`\)/],
+      ["track-checklists: Phase 2 — the matrix: a column per view, n/a — why, announced and focus", T,
+        /The matrix: a column per view, a row per state — each designed or `n\/a — why`, with how it is announced and where focus goes\./],
+      ["track-checklists: Phase 3 — each state a fixture asserting its announcement and focus; the worst case at each breakpoint", T,
+        /\(each state a fixture asserting its announcement and focus; a contract's states as fixtures, its keys as component tests\)/,
+        /on the floor where it has none, the worst case at each breakpoint \(`references\/ui-review\.md`\)/],
+      ["index: ui-review's line — what to capture per view", I, /what to capture per view \(each state at one width, the worst case at every breakpoint\)/],
+      ["index: ui-responsive's line — its contents", I,
+        /`references\/ui-responsive\.md` \(the project's breakpoints and the lines to paste, layouts without breakpoints, fluid type, which unit for what, viewport units, reflow at 320 px, zoom and text size, touch targets and pointers, safe areas, images, tables, orientation, inputs\)/],
+      ["index: ui-design-patterns' line — how each state is announced and where focus goes", I, /motion, how each state is announced and where focus goes, WCAG 2\.2 AA/],
+    ];
+    const cond = (text, c) => c instanceof RegExp ? () => c.test(text) : typeof c === "function" ? c : () => !c.not.test(text);
+    const condName = (c, i) => c instanceof RegExp ? "matches " + c.source.slice(0, 70) : typeof c === "function" ? "check " + i : "never " + c.not.source.slice(0, 60);
+    for (const [label, text, ...checks] of rows) {
+      const cs = typeof text === "function" ? [text] : checks;
+      all("1.38 UI prose — " + label, Object.fromEntries(cs.map((c, i) => [condName(c, i), cond(text, c)])));
     }
   }
 
