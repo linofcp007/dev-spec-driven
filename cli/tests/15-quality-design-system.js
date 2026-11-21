@@ -270,10 +270,10 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     const pt = bp("pt", "pt", null, null), ptOut = runIn(["design-system", "--project", pt]);
     const P = MSG("pt").cliOutput;
     const DEF = "320 · 390 · 768 · 1024 · 1440";
-    all("1.38 design-system (CLI): the breakpoints line — the widths and where they come from (ui.md's line, the code's @theme, partial: the default set and what the code adds, none: the default set), the unread ones, its own bounds (the 7th width, ui.md's 200 characters); right after the project's counts, after a feature's UI checks; PT; --json is the engine's, both shapes (got " +
+    all("1.38 design-system (CLI): the breakpoints line — the widths and where they come from (ui.md's line, the code's @theme, partial: the default set and what the code adds — the default set's give way first past six, 1.38.0 review 1 —, none: the default set), the unread ones, its own bounds (the 7th width, ui.md's 200 characters); right after the project's counts, after a feature's UI checks; PT; --json is the engine's, both shapes (got " +
       js([pOut.out, cOut.out, lOut.out, nOut.out, fOut.out, ptOut.out]) + ")", {
-      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 390 · 768 · 1024 · 1440 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
-        pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1600)),
+      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 390 · 768 · 1024 · 1600 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
+        pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1440)),
       json: () => js(pJson.breakpoints) === js(SR.designSystemReport(partial).breakpoints) && pJson.breakpoints.partial === true,
       code: () => cOut.out.includes(T.bpHead("320 · 800", T.bpFrom.code("src/app.css:4"))) &&
         cOut.out.includes(T.bpUnread(6, "--breakpoint-x calc(40rem + 1px) (src/app.css:3), --breakpoint-u0 var(--w) (src/app.css:5), --breakpoint-u1 auto (src/app.css:6), --breakpoint-u2 40vw (src/app.css:7), --breakpoint-u3 250rem (src/app.css:8) … +1")),
@@ -282,6 +282,20 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       feature: () => fOut.code === 0 && at(fOut.out, T.bpHead(DEF, T.bpFrom.default())) > at(fOut.out, T.uiNone(1)) && at(fOut.out, T.uiNone(1)) > 0 &&
         js(fJson.breakpoints) === js(SR.designSystemReport(none, { name: f.slug }).breakpoints),
       pt: () => ptOut.out.includes(P.bpHead(DEF, P.bpFrom.default())),
+    });
+
+    // 1.38.0 review 1 (BS-1): the widths as the CLI prints them, pasted over the stub's slot as its message says, are read whole —
+    // EN / PT / ES (the stub's ` · text expansion …` still ends the value)
+    const pasted = ["en", "pt", "es"].map((lang) => {
+      const d = bp("paste-" + lang, lang, null, null), X = MSG(lang).cliOutput;
+      const first = runIn(["design-system", "--project", d]).out, printed = (/^ {2}breakpoints: (.+?) px — /m.exec(first) || ["", "?"])[1];
+      fs.writeFileSync(path.join(d, UI), fs.readFileSync(path.join(d, UI), "utf8").replace("[360 / 768 / 1280 px]", printed + " px"));
+      const again = runIn(["design-system", "--project", d]);
+      return { lang, printed, line: (fs.readFileSync(path.join(d, UI), "utf8").match(/^- Breakpoints: .*$/m) || [""])[0], ok: again.out.includes(X.bpHead(DEF, X.bpFrom["ui.md"](uiAt(d)))) };
+    });
+    all("1.38.0 review 1 design-system (CLI): the default widths as printed (`320 · 390 · 768 · 1024 · 1440`), pasted into ui.md's Breakpoints line, read back whole from the line — EN / PT / ES (got " + js(pasted) + ")", {
+      printed: () => pasted.every((x) => x.printed === DEF),
+      read: () => pasted.every((x) => x.ok),
     });
   }
 

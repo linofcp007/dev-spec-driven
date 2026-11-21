@@ -59,7 +59,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
-  { // BP-ui-cut (U8) and BP-ui-slot (U9): the value ends at the first `·`; a `[…]` slot — closed or not — is not read; the stub
+  { // BP-ui-cut (U8) and BP-ui-slot (U9): the value ends at a `·` before a word; a `[…]` slot — closed or not — is not read; the stub
     const dot = report("- Breakpoints: 480 / 960 px · max content width 1200 px\n");
     const slot = report("- Breakpoints: 480 / 960 px [1200 in print]\n"), open = report("- Breakpoints: 480 px [tablet 1200, desktop 1600\n");
     const stubs = {};
@@ -69,12 +69,37 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       const text = fs.readFileSync(path.join(p, UI), "utf8");
       stubs[lang] = { line: (text.match(/^- Breakpoints: .*$/m) || [""])[0].slice(0, 40), r: T.breakpointsReport(p, null) };
     }
-    all("1.38 breakpoints (ui.md): the value ends at the first `·`; a `[…]` slot is not read, closed or not — so the +ui stub's own line (`[360 / 768 / 1280 px]`, EN / PT / ES / pt-BR) gives the default set (got " +
+    all("1.38 breakpoints (ui.md): the value ends at a `·` before a word; a `[…]` slot is not read, closed or not — so the +ui stub's own line (`[360 / 768 / 1280 px]`, EN / PT / ES / pt-BR) gives the default set (got " +
       js({ dot: dot.widths, slot: slot.widths, open: open.widths, stubs }) + ")", {
       dot: () => widths(dot) === js([320, 480, 960]),
       slot: () => widths(slot) === js([320, 480, 960]),
       open: () => widths(open) === js([320, 480]),
       stubs: () => Object.values(stubs).every((s) => s.line.startsWith("- Breakpoints: [360") && s.r.from === "default" && js(s.r.widths) === js(DEFAULT) && s.r.at === null && s.r.unreadTotal === 0),
+    });
+  }
+
+  { // BP-ui-list (U8b — 1.38.0 review 1, BS-1): the value ends at the first `·` no length follows — the widths as the CLI prints
+    // them (cli/commands.js joins them with " · ") pasted over the stub's slot, in EN / PT / ES / pt-BR, read whole, the stub's
+    // ` · text expansion …` still ending it; seven pasted widths → six, the seventh said; blanks after a `·` (a tab, two); a length
+    // written `.5rem` continues the list; three dots are no length
+    const print = (ws) => ws.join(" · ") + " px";
+    const pasted = {};
+    for (const lang of ["en", "pt", "es", "pt-BR"]) {
+      const p = path.join(tmp, "proj-bp-pasted-" + lang), file = path.join(p, UI);
+      S.initProject(p, ["ui"], lang);
+      fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("[360 / 768 / 1280 px]", print(DEFAULT)));
+      pasted[lang] = T.breakpointsReport(p, null);
+    }
+    const seven = report("- Breakpoints: " + print([320, 390, 768, 1024, 1440, 1600, 2000]) + " · text expansion +30–40 % · RTL: no\n");
+    const tab = report("- Breakpoints: 480 px ·\t960 px · text\n"), two = report("- Breakpoints: 480 px ·  960 px\n");
+    const dotted = report("- Breakpoints: 480 px · .5rem · 960 px\n"), dots = report("- Breakpoints: 480 px · ... 960 px\n");
+    all("1.38.0 review 1 breakpoints (ui.md): a `·` a length follows separates a list — the CLI's printed widths pasted into the stub's line read whole (EN / PT / ES / pt-BR), its ` · text expansion` still ends the value; seven → six and `breakpoint-widths`; blanks skipped after the `·`; `.5rem` is a length, `...` none (got " +
+      js({ pasted: Object.fromEntries(Object.entries(pasted).map(([k, r]) => [k, [r.from, r.widths]])), seven, tab: tab.widths, two: two.widths, dotted: dotted.widths, dots: dots.widths }) + ")", {
+      pasted: () => Object.values(pasted).every((r) => r.from === "ui.md" && js(r.widths) === js(DEFAULT) && r.unreadTotal === 0 && js(r.limits) === js([])),
+      seven: () => widths(seven) === js([320, 390, 768, 1024, 1440, 2000]) && js(seven.limits) === js([{ code: "breakpoint-widths", read: 6, count: 1, first: 1600 }]),
+      blanks: () => widths(tab) === js([320, 480, 960]) && widths(two) === js([320, 480, 960]),
+      dotted: () => widths(dotted) === js([320, 480, 960]),
+      dots: () => widths(dots) === js([320, 480]),
     });
   }
 
@@ -176,6 +201,19 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // BP-partial-cap (R2b — 1.38.0 review 1, BS-2): partial past six widths — the default set's give way first, its narrowest kept
+    // in the places the declared ones leave (a declared width is never dropped for a default one); past six declared, the narrowest
+    // five and the widest of them, no default; the limit counts every width left out and names the narrowest
+    const add = (...ws) => "@theme inline {\n" + ws.map((w, i) => "  --breakpoint-w" + i + ": " + w + "px;\n").join("") + "}\n";
+    const two = report(null, add(1600, 2000)), four = report(null, add(1600, 1800, 2000, 2400)), seven = report(null, add(400, 500, 600, 700, 800, 900, 1000));
+    all("1.38.0 review 1 breakpoints (@theme, partial): past six widths the default set's give way first, its narrowest kept; seven declared → the narrowest five and the widest of them; `breakpoint-widths` counts all left out, `first` the narrowest (got " +
+      js({ two, four: [four.widths, four.limits], seven: [seven.widths, seven.limits] }) + ")", {
+      two: () => widths(two) === js([320, 390, 768, 1024, 1600, 2000]) && two.partial === true && two.from === "code" && js(two.limits) === js([{ code: "breakpoint-widths", read: 6, count: 1, first: 1440 }]),
+      four: () => widths(four) === js([320, 390, 1600, 1800, 2000, 2400]) && js(four.limits) === js([{ code: "breakpoint-widths", read: 6, count: 3, first: 768 }]),
+      seven: () => widths(seven) === js([320, 400, 500, 600, 700, 1000]) && seven.partial === true && js(seven.limits) === js([{ code: "breakpoint-widths", read: 6, count: 6, first: 390 }]),
+    });
+  }
+
   // --- through the scan: the walks that already run, both shapes, the report's own fields ------------------------------------------------
   // shadcn v4's app/globals.css (apps/v4, MIT) as written: imports, @source and @custom-variant lines, then `@theme inline` ADDING two
   // breakpoints to Tailwind's own five (its first declaration at line 45), then the page's tokens
@@ -204,10 +242,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const ui = fs.readFileSync(path.join(p, UI), "utf8");
     fs.writeFileSync(path.join(p, UI), ui.replace(/^- Breakpoints: .*$/m, "- Breakpoints: 600 / 1200 px " + "x".repeat(220)));
     const cutRep = S.designSystemReport(p);
-    all("1.38 breakpoints (shadcn v4's globals.css, through the token walk): `@theme inline` adds 3xl / 4xl to Tailwind's own → partial: the default set joins, 6 widths (1600 left out, said), at app/globals.css:45; the project and the feature carry the same `breakpoints`, last; its limits never reach the report's `limits` / `truncated` / `inSync`; MCP = engine (got " +
+    all("1.38 breakpoints (shadcn v4's globals.css, through the token walk): `@theme inline` adds 3xl / 4xl to Tailwind's own → partial: the default set joins, 6 widths (the default set's 1440 left out — the declared 1600 kept since 1.38.0 review 1 —, said), at app/globals.css:45; the project and the feature carry the same `breakpoints`, last; its limits never reach the report's `limits` / `truncated` / `inSync`; MCP = engine (got " +
       js({ bp: proj.breakpoints, inSync: proj.inSync, limits: proj.limits, cut: [cutRep.breakpoints, cutRep.inSync, cutRep.limits] }) + ")", {
-      real: () => js(proj.breakpoints) === js({ widths: [320, 390, 768, 1024, 1440, 2000], from: "code", partial: true, at: "app/globals.css:45", unread: [], unreadTotal: 0,
-        limits: [{ code: "breakpoint-widths", read: 6, count: 1, first: 1600 }] }),
+      real: () => js(proj.breakpoints) === js({ widths: [320, 390, 768, 1024, 1600, 2000], from: "code", partial: true, at: "app/globals.css:45", unread: [], unreadTotal: 0,
+        limits: [{ code: "breakpoint-widths", read: 6, count: 1, first: 1440 }] }),
       inSync: () => proj.inSync === true && js(proj.limits) === js([]) && proj.truncated === false,
       shapes: () => js(feat.breakpoints) === js(proj.breakpoints) && Object.keys(proj).pop() === "breakpoints" && Object.keys(feat).pop() === "breakpoints",
       mcp: () => js(viaMcp.breakpoints) === js(proj.breakpoints) && js(featMcp.breakpoints) === js(feat.breakpoints),
@@ -285,26 +323,35 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
 
   // --- cost ------------------------------------------------------------------------------------------------------------------------------
   { // K2: hostile inputs stay linear — a 256K sheet of @theme breakpoint statements against the same sheet the walk reads with no
-    // observer (`@themx`: no `@theme` in its text); a ui.md of one 256K Breakpoints line and one of 50,000 Breakpoints lines against
-    // an ordinary ui.md of the same size (a 256K line of prose, 50,000 other list items) whose one Breakpoints line comes last;
-    // ratios at the same moment, ≤ 3×
+    // observer (`@themx`: no `@theme` in its text); a ui.md of one 256K Breakpoints line — a list of `1 · ` (a length follows each
+    // `·`: the value's end is searched over the whole line, 1.38.0 review 1) — and one of 50,000 Breakpoints lines against an
+    // ordinary ui.md of the same size (a 256K line of prose, 50,000 other list items) whose one Breakpoints line comes last. Each
+    // pair timed interleaved, the median of 5 rounds, a round tens of milliseconds long (the ui.md line pair: 15 reports a round —
+    // review 1's BS-7: over 3 calls the denominator was ~5 ms, noise on a loaded machine); ≤ 3× + 50 ms (a GC pause)
     const body = "--breakpoint-a: 1px;\n".repeat(12000);
     const theme = "@theme {\n" + body + "}\n", themx = "@themx {\n" + body + "}\n";
     const ui = (tag, text) => { const d = path.join(tmp, "bp-k2-" + tag); write(d, UI, text); return d; };
-    const dLine = ui("line", "- Breakpoints: " + "1 ".repeat(128 * 1024) + "\n"), dProse = ui("prose", "Layout " + "a ".repeat(128 * 1024) + "\n- Breakpoints: 480 px\n");
+    const dLine = ui("line", "- Breakpoints: " + "1 · ".repeat(64 * 1024) + "\n"), dProse = ui("prose", "Layout " + "a ".repeat(128 * 1024) + "\n- Breakpoints: 480 px\n");
     const dMany = ui("many", "- Breakpoints: 480 px\n".repeat(50000)), dList = ui("list", "- Spacing: 4800 px\n".repeat(50000) + "- Breakpoints: 480 px\n");
-    const time = (fn) => { const t0 = process.hrtime.bigint(); for (let k = 0; k < 3; k++) fn(); return Number(process.hrtime.bigint() - t0) / 1e6; };
+    const time = (fn, k) => { const t0 = process.hrtime.bigint(); for (let i = 0; i < k; i++) fn(); return Number(process.hrtime.bigint() - t0) / 1e6; };
+    const pair = (a, b, k) => {
+      const xa = [], xb = [];
+      for (let r = 0; r < 5; r++) { xa.push(time(a, k)); xb.push(time(b, k)); }
+      const med = (xs) => xs.sort((x, y) => x - y)[2];
+      return [med(xa), med(xb)];
+    };
     const walk = (text) => { const w = T.breakpointWatch(); T.styleTokens(text, "a.css", w.on("a.css", text)); return w.found; };
     const rep = (d) => () => T.breakpointsReport(d, null);
-    walk(theme); walk(themx); rep(dLine)(); rep(dList)(); // warm
-    const s = remeasure(() => [time(() => walk(theme)), time(() => walk(themx)), time(rep(dLine)), time(rep(dProse)), time(rep(dMany)), time(rep(dList))],
-      (x) => x[0] <= 3 * x[1] && x[2] <= 3 * x[3] && x[4] <= 3 * x[5]);
+    walk(theme); walk(themx); rep(dLine)(); rep(dProse)(); rep(dMany)(); rep(dList)(); // warm
+    const within = (x, i) => x[i] <= 3 * x[i + 1] + 50;
+    const s = remeasure(() => [...pair(() => walk(theme), () => walk(themx), 1), ...pair(rep(dLine), rep(dProse), 15), ...pair(rep(dMany), rep(dList), 1)],
+      (x) => within(x, 0) && within(x, 2) && within(x, 4), 3);
     const decls = walk(theme).files[0].decls;
-    all("1.38 breakpoints (cost): a 256K @theme of breakpoint statements walks ≤ 3× the same sheet with no observer; ui.md's 256K Breakpoints line and 50,000 Breakpoints lines read ≤ 3× an ordinary ui.md of the same size (got [theme, themx, line, prose, many, list] ms " +
+    all("1.38 breakpoints (cost): a 256K @theme of breakpoint statements walks ≤ 3× (+ 50 ms) the same sheet with no observer; ui.md's 256K Breakpoints line (a `1 · ` list) and 50,000 Breakpoints lines read ≤ 3× (+ 50 ms) an ordinary ui.md of the same size — medians of 5 interleaved rounds (got [theme, themx, line ×15, prose ×15, many, list] ms " +
       js(s.map((x) => Math.round(x))) + ")", {
-      theme: () => s[0] <= 3 * s[1] && decls.size === 1,
-      line: () => s[2] <= 3 * s[3] && js(rep(dLine)().limits.map((l) => l.code)) === js(["breakpoint-line"]),
-      many: () => s[4] <= 3 * s[5] && rep(dMany)().at === UI + ":1" && rep(dList)().at === UI + ":50001",
+      theme: () => within(s, 0) && decls.size === 1,
+      line: () => within(s, 2) && js(rep(dLine)().limits.map((l) => l.code)) === js(["breakpoint-line"]),
+      many: () => within(s, 4) && rep(dMany)().at === UI + ":1" && rep(dList)().at === UI + ":50001",
     });
   }
 };

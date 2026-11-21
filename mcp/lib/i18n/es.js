@@ -1573,7 +1573,7 @@ const msg = {
       },
       bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint cuyo ancho no se leyó" : "breakpoints cuyo ancho no se leyó"} — ${list}: escribe los anchos del proyecto (320–3840 px) en la línea Breakpoints de .specs/steering/ui.md`,
       bpLimit: {
-        "breakpoint-widths": (read, count, first) => `  (${count} ${count === 1 ? "ancho no capturado" : "anchos no capturados"}, el primero ${first} px — la revisión captura ${read}: los ${read - 1} más estrechos y el más ancho)`,
+        "breakpoint-widths": (read, count, first) => `  (${count} ${count === 1 ? "ancho no capturado" : "anchos no capturados"}, el primero ${first} px — la revisión captura ${read})`,
         "breakpoint-line": (read, count, first, at) => `  (${at}: solo se leen los primeros ${read} caracteres de la línea Breakpoints)`,
       },
       dsMissingHead: (n) => `  en el código, fuera del registro (${n}) — una fila por cada uno:`,
