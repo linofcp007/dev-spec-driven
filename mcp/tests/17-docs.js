@@ -1396,11 +1396,12 @@ exports.run = async ({
     const end = scan.findIndex((l, i) => i > at && /^#+ /.test(l));
     const checks = at < 0 ? "" : ws(scan.slice(at, end < 0 ? scan.length : end).join("\n"));
     const tool = (raw("skills", "dev-spec-driven", "references", "tooling-reference.md").split("\n").find((l) => l.startsWith("| `spec_scan {designSystem: true}`")) || "");
-    all("1.38.0 F0c: ui-code-scan.md's UI checks name font-size-viewport (WCAG 1.4.4, failure F94), what keeps it certain (a stylesheet's size only when its file sizes no text conditionally, an element's own style attribute, a bare text-[…vw] with no variant text- utility on its line) and what is not seen; tooling-reference's spec_scan row lists it among the warn rules", {
+    all("1.38.0 F0c: ui-code-scan.md's UI checks name font-size-viewport (WCAG 1.4.4, failure F94), what keeps it certain (a stylesheet's size only when its file sizes no text conditionally, an element's own style attribute, a bare text-[…vw] with no variant text- utility in its file — review 1 of 1.38) and what is not seen; tooling-reference's spec_scan row lists it among the warn rules", {
       criterion: () => /`font-size-viewport` \(text sized in viewport units alone.*?which zooming does not enlarge: WCAG 1\.4\.4, failure F94/.test(checks),
       sheet: () => /only when that file declares no font size inside `@media`, `@container`, `@supports` or a Sass `@include` \(nested too\)/.test(checks),
       inline: () => /an element's own `style` attribute, never a component's prop or a CSS-in-JS object \(`sx`, `css\(\)`, `style\(\)`\)/.test(checks),
-      tailwind: () => /a bare `text-\[…vw\]` only when its line holds no `text-` utility under a variant \(`md:text-6xl`\)/.test(checks),
+      // (review 1 of 1.38: decided per FILE — the per-line test went)
+      tailwind: () => /a bare `text-\[…vw\]` only when its file holds no `text-` utility under a variant \(`md:text-6xl`\)/.test(checks),
       notSeen: () => /An override in another file is not seen: silence that one\./.test(checks),
       tooling: () => /paste-blocked · font-size-viewport, `level` warn/.test(tool),
     });
@@ -1622,6 +1623,44 @@ exports.run = async ({
     ];
     // (a label without a file's name is ui-code-scan.md's)
     for (const [label, check] of rows) all("1.38.0 Z docs — " + label, { holds: check });
+  }
+
+  { // 1.38.0 review 1 (area ui) — the prose of its fixes, each clause read where the user meets it, its bounds from the engine's
+    // SOURCE: a file read in part judges no per-file font size (UP-4), Astro's define:vars block (UP-5, the 1.39 backlog), why a
+    // feature report may warn where the inventory does not (UP-6), the marker's real spellings (UP-7)
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const js = (v) => JSON.stringify(v);
+    const num = (src, name) => { const m = src.match(new RegExp("const " + name + " = ([0-9.e* -]+);")); return m ? m[1].split("*").reduce((a, x) => a * Number(x.trim()), 1) : NaN; };
+    const DS = raw("mcp", "lib", "engine", "design-system.js");
+    const C = ws(raw("skills", "dev-spec-driven", "references", "ui-code-scan.md")), ST = ws(raw("skills", "dev-spec-driven", "references", "steering-templates.md"));
+    const read = num(DS, "DS_READ_CHARS") / 1024, line = num(DS, "DS_LINE_MAX").toLocaleString("en-US");
+    // (the spellings the prose names, through the registry's reader and uiOff: a list item, a bold line — no entry at all —,
+    // an id in a code span — not applied; the bare line applied)
+    const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
+    const offOf = (name, text) => {
+      const d = path.join(tmp, "r138-marker-" + name, ".specs");
+      fs.mkdirSync(path.join(d, "steering"), { recursive: true });
+      fs.writeFileSync(path.join(d, "steering", "design-system.md"), "# Design System\n\n" + text + "\n");
+      const o = T.uiOff(E.designSystemRegistry(d));
+      return [o.off.size, o.ignored.map((x) => x.why)];
+    };
+    const spell = { bare: offOf("bare", "_UI checks off: img-no-alt (decorative)_"), item: offOf("item", "- _UI checks off: img-no-alt (decorative)_"),
+      bold: offOf("bold", "**UI checks off:** img-no-alt (decorative)"), code: offOf("code", "_UI checks off: `img-no-alt` (decorative)_") };
+    const spelled = js(spell) === js({ bare: [1, []], item: [0, []], bold: [0, []], code: [0, ["unreadable"]] });
+    const R1 = [
+      ["ui-code-scan: a file read in part judges neither per-file font size (the read and the line bounds, design-system.js)", () =>
+        C.includes("Neither the stylesheet's nor the bare one is judged in a file read in part (past " + read + "K, a line past " + line + " characters).")],
+      ["ui-code-scan: an Astro define:vars block's first at-rule — silence what it gives", () =>
+        /An Astro `<style define:vars>` block's first at-rule reads as a selector: silence what it gives\./.test(C)],
+      ["ui-code-scan: a feature report's focus search is narrower than the inventory's — it may warn where the inventory does not", () =>
+        /A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a removal the inventory excuses by one in another view file \(a `focus-visible:ring-2`\): check that the removal's elements get it, or silence it\./.test(C)],
+      ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare (the engine agrees)", () => spelled
+        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(a list item or a bold line is not read\), the marker in English, each id bare \(one in a code span is not applied\)/.test(C)],
+      ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare (the engine agrees)", () => spelled
+        && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare \(in a code span it is not applied\), entries separated by commas/.test(ST)],
+    ];
+    for (const [label, check] of R1) all("1.38.0 review 1 docs — " + label + (label.includes("spellings") ? " (got " + js(spell) + ")" : ""), { holds: check });
   }
 
   // Release hygiene: the three version fields agree.

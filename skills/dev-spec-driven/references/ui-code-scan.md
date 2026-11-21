@@ -31,8 +31,10 @@ zooming does not enlarge: WCAG 1.4.4, failure F94; a size with a rem / em term z
 F94's note — a size media queries adjust may not fail — keeps it to what is certain: a stylesheet's (a `<style>` block's)
 size only when that file declares no font size inside `@media`, `@container`, `@supports` or a Sass `@include` (nested
 too); an element's own `style` attribute, never a component's prop or a CSS-in-JS object (`sx`, `css()`, `style()`);
-a bare `text-[…vw]` only when its line holds no `text-` utility under a variant (`md:text-6xl`). An override in another
-file is not seen: silence that one.
+a bare `text-[…vw]` only when its file holds no `text-` utility under a variant (`md:text-6xl`). Neither the stylesheet's
+nor the bare one is judged in a file read in part (past 256K, a line past 2,000 characters). An override in another file
+is not seen: silence that one. An Astro `<style define:vars>` block's first at-rule reads as a selector: silence what it
+gives.
 In the report alone: `transition-all` (kits ship it), what a bound cut. Silence one with a comment
 `ui-check-off: <rule-id> <why>` on its line (a declaration's, a class's) or the line above — `//`, `/* */`, `<!-- -->`,
 not Blade's or Twig's: counted, never listed; only this comment silences (a linter's is not read) — an `<a>` a parent gives its
@@ -51,15 +53,18 @@ a line's first 2,000 characters (`view-size`, `line-length`; a tag past 30 lines
 first file): its own limits, never the report's `limits` or `truncated`. A test, a story, a mock or a fixture is no view
 file. `outline-removed` keeps its rule — any focus style in any file read excuses every removal —, so the removals a feature
 report leaves unjudged past the project's first 48 stylesheets are judged here; a cut pass that read no focus style judges
-none.
+none. A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a
+removal the inventory excuses by one in another view file (a `focus-visible:ring-2`): check that the removal's elements
+get it, or silence it.
 
 The fact `no-reduced-motion` (WCAG 2.3.3, AAA): the view files declare motion — an animation, a transform's transition,
 smooth scrolling — and none of the files read mentions reduced motion (`prefers-reduced-motion`, `motion-safe:` /
 `motion-reduce:`, `useReducedMotion`). Said only when no read was cut (the walk, `ui-files`, a file's 256K); a mention
 only in a script (a `.ts` hook) is not seen.
 
-**Off for the project.** `_UI checks off: <rule-id> (reason)_` — a line of its own in design-system.md, the marker in
-English, entries separated by commas (`_UI checks off: transition-all (the kit animates on purpose)_`) — switches a UI check
+**Off for the project.** `_UI checks off: <rule-id> (reason)_` — a line of its own in design-system.md (a list item or a
+bold line is not read), the marker in English, each id bare (one in a code span is not applied), entries separated by
+commas (`_UI checks off: transition-all (the kit animates on purpose)_`) — switches a UI check
 or a project fact off everywhere: the inventory, every feature report (`off`: the rule, its reason, the findings it hid)
 and so finish — counted, never listed (an inline-silenced finding stays `silenced`). An entry with no reason in
 parentheses, an id that is no check or fact, another shape or one past the first 50 entries is not applied, and the report
