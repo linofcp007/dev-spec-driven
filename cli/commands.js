@@ -1898,6 +1898,13 @@ const COMMANDS = [
       const T = r.feature ? c.featureText(r.feature) : c.projectText();
       const more = (total, shown) => { if (total > shown) log(T.dsMore(total - shown)); };
       const cell = (s) => String(s).split("|").join(String.fromCharCode(92) + "|"); // a pasted row's cell: its `|` escaped
+      // 1.38: the breakpoints (both shapes) — the widths and where they come from, the ones not read, their own bounds (never the
+      // report's limits)
+      const breakpoints = (b) => {
+        log(T.bpHead(b.widths.join(" · "), b.partial ? T.bpFrom.partial(b.at) : b.from === "default" ? T.bpFrom.default : T.bpFrom[b.from](b.at)));
+        if (b.unreadTotal) log(T.bpUnread(b.unreadTotal, b.unread.map((u) => `${u.name} ${u.value} (${u.at})`).join(", ") + (b.unreadTotal > b.unread.length ? " … +" + (b.unreadTotal - b.unread.length) : "")));
+        b.limits.forEach((l) => log(T.bpLimit[l.code](l.read, l.count, l.first, l.at)));
+      };
       return out(r, (r) => {
         if (!r.feature) log(r.registry.exists ? T.dsHead(r.registry.file, r.registry.components, r.registry.tokens) : T.dsHeadNone(r.registry.file));
         else log(T.dsFeatureHead(r.feature, r.usage ? r.usage.reuse : 0, r.usage ? r.usage.extend : 0, r.usage ? r.usage.new : 0));
@@ -1928,8 +1935,10 @@ const COMMANDS = [
           if (u.silenced) log(T.uiSilenced(u.silenced));
           // (a bound of the checks' own: the report's lines below say the ones they share)
           u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count, l.sheet, l.chars, l.alone)));
+          breakpoints(r.breakpoints);
         } else {
           log(T.dsFound(r.found.components, r.found.tokens, r.found.sources.length));
+          breakpoints(r.breakpoints);
           if (r.registry.exists && r.missingTotal) {
             log(T.dsMissingHead(r.missingTotal));
             r.missing.forEach((m) => log("    | " + cell(m.name) + " | `" + cell(m.path) + "` |  |  |")); // a row to paste into the registry

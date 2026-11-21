@@ -235,7 +235,8 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
 ### +ui
 - **Registries:** `[UI]`; `UI_SECTIONS` Design System Usage · UI States · Accessibility · Responsiveness & i18n · UI
   Performance Budget — every ordinary name `loose` (a core "## Accessibility" or "[SaaS] Performance Budget" never stands in);
-  steering `ui.md`; US-1.AC-24..27; UI States' block has a SECOND line since 1.32 — the reference per view the visual review
+  steering `ui.md` (its `- Breakpoints:` line is read since 1.38 — the widths the visual review captures: quality.md →
+  Design-system registry, Breakpoints); US-1.AC-24..27; UI States' block has a SECOND line since 1.32 — the reference per view the visual review
   compares the build with (`references/ui-review.md`), appended so the 1.31 one-line block still reads as template text;
   Design System Usage's block has a second line and a `Kind | Component | Why / notes` table since 1.35 — the rows doctor's
   `ui-design-system` checks against the registry `.specs/steering/design-system.md` (a steering STUB, never in
@@ -984,6 +985,9 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   1.37.0's. The no-size sha1 re-pinned once (743f91a0… → c44d3054…). Mutation pass: 9, 8 killed at first — the survivor
   (the key on a line STARTING with `|`) let a pipe-less copy of the untouched matrix read as written; any line holding `|` is
   keyed by its cells now, the pipe-less shape a fixture, the key's three mutants rerun on it: killed.
+- **1.38.0** (chain R, item 3) — the `ui.md` stub's `- Breakpoints:` line is READ: spec_scan {designSystem}'s `breakpoints`
+  takes its widths from it first (quality.md → Design-system registry, Breakpoints). No stub changed (CRIT_X D3: rewording it
+  is the harmful hash change); its `[360 / 768 / 1280 px]` slot is not read, so an untouched stub gives the default set.
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.

@@ -28,12 +28,12 @@ let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, desi
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
   isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
   stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep,
-  uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass;
+  uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, breakpointWatch, breakpointsReport;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
   isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
   stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns,
-  fenceStep, uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass } = E); }
+  fenceStep, uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, breakpointWatch, breakpointsReport } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
@@ -2716,7 +2716,7 @@ function settle(results, scripts, markups, read, places) {
   }
   return { dropped, rendered };
 }
-function scanCode(root, withComponents = true) {
+function scanCode(root, withComponents = true, withBreakpoints = false) {
   const realRoot = realRootOf(root);
   const byKey = new Map(), views = [], tokenFiles = [], sheets = [], found = [], routerRoots = new Set(), pageDirs = new Set(), nextConfigs = new Set();
   const fullOf = new Map(); // a component file's full path, by its relative one
@@ -2895,6 +2895,9 @@ function scanCode(root, withComponents = true) {
     take(f, list);
   };
   const order = (a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
+  // (1.38, withBreakpoints — the report's scan alone, never finish's or the seed's: the walks below carry breakpoints.js's
+  // observer, which reads a top-level `@theme` block's --breakpoint-*; the sheets the walks read, no other)
+  const bp = withBreakpoints ? breakpointWatch() : null;
   // (the files whose values ARE read first: 21 `tailwind.config.ts` — listed, unread — must not take tokens.css's place)
   const unread = (f) => (/\.json$/i.test(f.rel) || RE_STYLE_EXT.test(f.rel) ? 0 : 1);
   for (const f of tokenFiles.sort((a, b) => unread(a) - unread(b) || order(a, b))) {
@@ -2903,7 +2906,7 @@ function scanCode(root, withComponents = true) {
     if (read >= DS_TOKEN_READS) { capped.candidates = true; break; }
     const { text, over } = head(f);
     cut(f, over); // a token file by its NAME
-    if (!/\.json$/i.test(f.rel)) { source(f, text == null ? [] : styleTokens(text, f.rel)); continue; }
+    if (!/\.json$/i.test(f.rel)) { source(f, text == null ? [] : styleTokens(text, f.rel, bp && bp.on(f.rel, text))); continue; }
     const j = text == null ? null : jsonTokens(text);
     if (!j || !jsonSource(j)) continue; // no design file after all (unreadable, unparsable, credentials, nothing that says design)
     if (j.more) capped.tokens = true;
@@ -2919,7 +2922,7 @@ function scanCode(root, withComponents = true) {
   for (const f of sheets.sort((a, b) => a.rank - b.rank || a.depth - b.depth || order(a, b))) {
     if (capped.tokenFiles || read >= DS_TOKEN_READS) break;
     const { text, over } = head(f);
-    const list = text == null ? [] : styleTokens(text, f.rel).filter((t) => t.name.startsWith("--") && (f.rank === 0 || t.global));
+    const list = text == null ? [] : styleTokens(text, f.rel, bp && bp.on(f.rel, text)).filter((t) => t.name.startsWith("--") && (f.rank === 0 || t.global));
     if (list.length < GLOBAL_CSS_MIN) continue; // no token file: it takes no place and says no bound
     // (a twin takes no source's place — and is a token file all the same: a feature that edits it is never told to "use
     // the token" on the line that declares it; review 9: of three apps' identical globals.css only the first was one)
@@ -2931,7 +2934,8 @@ function scanCode(root, withComponents = true) {
   const packages = packageLibraries(root);
   capped.workspaces = packages.cut;
   capped.manifests = packages.read;
-  return { components, tokens, sources, twins, libraries: packages.libraries, views, files: walk.files, truncated: walk.truncated, capped, realRoot };
+  return { components, tokens, sources, twins, libraries: packages.libraries, views, files: walk.files, truncated: walk.truncated, capped, realRoot,
+    breakpoints: bp ? bp.found : null };
 }
 
 // --- raw values: what a feature's view files hard-code ------------------------------------------------------------------------
@@ -3158,8 +3162,9 @@ function pendingNew(projectDir) {
 // null: its design names no row), problems ([{code, name, near?, text}] — doctor's ui-design-system findings), viewFiles, raw
 // (the first DS_LIST: [{file, line, kind: color | size, value, token? (a registry token of that colour)}]), counts: {color,
 // size}, total, uiChecks (1.37 — {findings (the first DS_LIST: [{rule, level, file, line, value}]), total, byRule, silenced, limits}:
-// engine/ui-checks.js), newComponents ([{name, path, registered}]), scanned, limits, truncated }. Stable keys, English; the CLI
-// renders it.
+// engine/ui-checks.js), newComponents ([{name, path, registered}]), scanned, limits, truncated }. Both shapes end in breakpoints
+// (1.38 — {widths, from, partial, at, unread, unreadTotal, limits}: engine/breakpoints.js; its limits are its own). Stable keys,
+// English; the CLI renders it.
 // `limits`: the bounds that CUT what was read — [{code, read, file?}], code: files (the walk's file cap) · token-files (a
 // token file found the DS_TOKEN_FILES sources full) · token-candidates (files named like a token file left unread past
 // DS_TOKEN_READS) · file-size (a token file longer than a file's read: `file`, the first) · tokens · component-files (a
@@ -3183,8 +3188,9 @@ function designSystemReport(projectDir, opts = {}) {
   const f = named ? existingFeature(projectDir, opts.name) : null;
   if (f && !f.ok) return { ok: false, error: f.error, code: f.code };
   const reg = designSystemRegistry(specsRoot(projectDir));
-  const scan = scanCode(root, !f); // (a feature's report reads no component's name: neither what files export nor what the others tell)
-  if (f) return featureReport(projectDir, root, f, reg, scan);
+  const scan = scanCode(root, !f, true); // (a feature's report reads no component's name: neither what files export nor what the others tell)
+  // (1.38: the breakpoints — both shapes, the same; here, never in featureReport: finish calls that too)
+  if (f) return Object.assign(featureReport(projectDir, root, f, reg, scan), { breakpoints: breakpointsReport(projectDir, scan.breakpoints) });
   const listed = reg ? reg.keys : new Set();
   const building = pendingNew(projectDir);
   const missing = [], pending = [];
@@ -3210,7 +3216,8 @@ function designSystemReport(projectDir, opts = {}) {
     stale: stale.slice(0, DS_LIST), staleTotal: stale.length,
     newTokens: newTokens.slice(0, DS_LIST), newTokensTotal: newTokens.length, newSources, newLibraries,
     inSync: !!reg && !limits.length && !missing.length && !stale.length && !newTokens.length && !newSources.length && !newLibraries.length,
-    scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
+    scanned: { files: scan.files }, limits, truncated: limits.length > 0,
+    breakpoints: breakpointsReport(projectDir, scan.breakpoints) };
 }
 // The feature's part: its usage rows against the registry, the raw values in its view files (its _Implements:_ view / style
 // files, token files and tests aside), its UI checks (the same text read once feeds both — and its token files, read for the

@@ -1058,7 +1058,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   design — `pendingNew`: its finish adds it; a row pasted for it would read as already listed), `stale` (`stalePath` —
   below), `newTokens` (against `tokenNames` — every token the file lists),
   `newSources` / `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`,
-  `counts`, `newComponents`, `uiChecks` (1.37 — UI checks, below). `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
+  `counts`, `newComponents`, `uiChecks` (1.37 — UI checks, below). Both shapes end in `breakpoints` (1.38 — Breakpoints,
+  below). `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
   total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `total`).
 - **`limits`** — the bounds that CUT what a report read, `[{code, read, file?}]`: files (the walk's cap) · token-files ·
   token-candidates · file-size (`file`) · tokens · registry-rows (rows past 500 are not checked for a gone path) ·
@@ -1072,6 +1073,48 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   read it cannot vouch for (the CLI prints `cliOutput.dsLimit[code](read, file)`, never "the registry and the code agree"
   beside one). A new bound gets its OWN code and line in en / pt / es, and is said only when it cut something: a false
   bound is a false alarm for good.
+- **Breakpoints** (1.38 — engine/breakpoints.js, LAZY after ui-checks.js: `breakpointWatch`, `breakpointsReport`) — the widths
+  the visual review captures: `breakpoints` {widths, from: `ui.md` | `code` | `default`, partial, at (the source's first place,
+  file:line; null for the default set), unread, unreadTotal, limits}, the LAST key of both shapes, the same in each. Built by
+  designSystemReport alone — never in featureReport, which finish calls too —, and its observer rides only the report's scan
+  (`scanCode(root, withComponents, withBreakpoints)`): finish's scan and the seed's carry none (CRIT_3 must-fix 4: they ran it
+  and dropped it — V8 coverage of a child proves no breakpoints.js function runs there: "BP-never" in
+  mcp/tests/15-quality-design-system-breakpoints.js). The first source that gives a width in [320, 3840] decides:
+  - `ui.md` — `.specs/steering/ui.md`'s FIRST `- Breakpoints:` line: a list item (`-`, `*`, `+`), the label in any case, `**` /
+    `_` around it; outside the front matter, fenced / indented code and HTML comments — read line for line (`commentLines`,
+    then `codeBlockLines` over what it leaves), so `at` is the file's own line. Its value runs to the first `·` (the stub goes
+    on: text expansion · RTL · locale) and is read up to `BP_LINE` (200) characters — past them `breakpoint-line` {read, at}, and
+    a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot, closed or not, is not read: the +ui stub's own
+    `[360 / 768 / 1280 px]` gives the default set. A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
+    size), a bare number in the unit written NEXT (`360 / 768 / 1280 px`, `30 / 48 / 80 rem`) else px; a thousands group
+    (`1.280`, `1,440`, a no-break space — one digit before it: a width is ≤ 3840) before px or none is an integer, before rem /
+    em a decimal (`1.250rem`); a plain blank is never a group (`360 768 1280` is a list), so `1 280` reads as 1 and 280. A width
+    is a min edge, its fraction rounded up (767.5px → 768). Why ui.md and not design-system.md (DECISIONS D3): every stub holds
+    the line in EN / PT / ES under that label, +ui creates it, and it is fingerprinted into the approvals — editing it re-flags
+    the approved designs, which is right (a design says what each view does per breakpoint); design-system.md holds what the
+    code scan compares.
+  - `code` — Tailwind 4's `--breakpoint-<name>` among the OWN statements of a TOP-LEVEL block whose whole prelude is `@theme`
+    and its options (`RE_THEME`: inline, static, reference, default; a nested @theme is not read — Tailwind 4 declares its theme at the top level), read through the
+    observer the token walk already carries (the token loop and the global-sheet loop, in their order: token files, then the
+    sheet candidates; a sheet that is no source counts too) — never a second walk (CRIT_3 must-fix 5); an observer only for a
+    text holding `@theme` (else the walk builds no event). The last declaration of a name is kept; `--breakpoint-<name>:
+    initial` drops it; `--breakpoint-*: initial` / `--*: initial` drop the file's earlier ones and set `reset`. `partial` = a
+    length read and no reset anywhere: Tailwind keeps its own five, which the engine never holds (stale data) — the default
+    set joins them. A value other than `0` or a px / rem / em length, or wider than 3840 → `unread` {name, value, at} (the
+    first 5, `unreadTotal` — of the sources asked: never the code's beside a deciding ui.md; `cliOutput.bpUnread` points to
+    ui.md's line, never "rewrite the value" — must-fix 6). What it inherits from the walk: the sheets the token scan reads —
+    a token file by name, a global sheet by name (`sheetRank`) up to `DS_TOKEN_READS`, where that search ends without a word
+    (its own rule, review 5); a Tailwind 4 project's `@theme` is in its entry sheet (globals / app / index / tailwind.css),
+    which ranks first.
+  - `default` — `[320, 390, 768, 1024, 1440]`.
+  The widths: 320 first (WCAG 1.4.10's reflow width — 1280 at 400 %; a narrower edge is the floor's), ascending, once each,
+  `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —, past it the narrowest 5 and the widest,
+  `breakpoint-widths` {read, count, first}. `breakpoints.limits` never feed the report's `limits`, `truncated` or `inSync`
+  (they bound the widths, not the registry's comparison — CRIT_X D5d; a fixture: an in-sync project whose ui.md line is cut
+  stays in sync). Not read (1.39, or never): a Sass map, `@custom-media`, a file named for breakpoints, a JS config
+  (Tailwind 3's `screens` — and `container.screens`, a max width, the trap), `@container`. CLI: `cliOutput.bp*` (`bpHead`,
+  `bpFrom` per source and partial, `bpUnread`, `bpLimit`), after the project's counts (`dsFound`) and after a feature's UI
+  checks.
 - **A stale row** (`stalePath`) names a CODE FILE OF THE PROJECT that is gone. A reading counts only when its last segment
   has a file extension (`src/components/Card` may be Card.tsx or a folder) that is no document's or image's (`RE_DOC_EXT`: a
   note cites README.md) and its FIRST segment is on disk — `next/link`, `primereact/button`, `~/components/Button.vue`, a
@@ -2231,6 +2274,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   rawValuesOf alone 1.03–1.28× the parent on a 20,000-line sheet (within the 1.5× bound); the walker without an observer
   0.94×. Mutation passes: 10 of 10 (one equivalent in output — the pre-existing blank-line skip, a cost guard: 6× on
   20,000 blank lines) and 14 of 14.
+- **1.38.0** (item 3 of the owner's 1.38 list, "Responsive": the widths the visual review captures — Breakpoints, above) —
+  designed with three code readers (Tailwind 4 `@theme`, `@custom-media`, a Sass map named `…breakpoints`), a loop over files
+  named for breakpoints, 8 widths and a `declared` list; the critique (CRIT_3) and the ruling (DECISIONS) cut the last four —
+  a framework's own breakpoints sit in node_modules or in files the scan never opens, Bulma's map is nested, a file-name list
+  is a name list — and moved the `@theme` reader onto the token walk's events (no second walk; the critic measured one at
+  +0.2–3 % of the report: a should). Must-fixes kept: computed for spec_scan {designSystem} alone (4 — finish and the seed
+  had run it and dropped it), the walk's observer (5), `bpUnread` pointing to ui.md's line (6), 6 widths (16 images a
+  dispatch), `at` for `declared`. Real shapes: shadcn v4 (`apps/v4/app/globals.css:44`: `@theme inline` adding 3xl / 4xl —
+  partial, the default set and 2000, 1600 left out and said), shadcn-svelte (the same), tailwindcss.com (two `@theme` blocks,
+  no breakpoint — the default set; `@media (width <= theme(--breakpoint-sm))` declares nothing), Tailwind's own reset example
+  (complete), Breeze / Jetstream / taxonomy / sakai-vue / Bootstrap / Bulma / Open Props (nothing read — the default set).
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four

@@ -155,7 +155,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
   costs ~0.65 ms before any compile (the open is the expensive part): 25 modules loaded with the engine (+ dupes.js,
-  design-system.js, ui-checks.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
+  design-system.js, ui-checks.js, breakpoints.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
   the module of the concept; a new file must earn its load cost. The facade's first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
   loads SLOWER with it. Measure by interleaving the variants in fresh processes, p50 + spread — never one run. On a slow file
@@ -273,6 +273,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.37** — engine/ui-checks.js, the UI checks (quality.md → UI checks): LAZY after design-system.js — only the feature
   report and finish read it, never a hook — and a module of its own rather than ~500 more lines in design-system.js (3,400).
   16-conventions' lazy-tier test now counts `LAZY`'s own files rather than a list of names.
+- **1.38.0** — engine/breakpoints.js, the widths the visual review captures (quality.md → Design-system registry,
+  Breakpoints): LAZY after ui-checks.js — only spec_scan {designSystem}'s report reads it, through design-system.js, never a hook,
+  finish or the seed — a concern of its own (~150 lines: ui.md's line, Tailwind 4's `@theme` through the token walk's
+  observer, the report). The load-cost line above names it; the Layout tree and CLAUDE.md's LAZY list are the release's docs
+  pass.
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):
