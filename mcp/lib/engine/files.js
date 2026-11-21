@@ -961,7 +961,9 @@ function readFileHead(file, maxChars) {
 // the probe —, "off", "fail" — no worker starts.
 // AHEAD_START_US, measured once (2026-11-21, Windows 11, 24 cores, ~70 other node processes running): 32 + 64 paths that do
 // not exist (an open fails at once: nothing for the pool to save) read with the pool forced on vs off, interleaved, median of
-// 21, three runs — the pool's start 68–81 ms (single runs 44–153 ms).
+// 21, three runs — the pool's start 68–81 ms (single runs 44–153 ms). It moves with the machine's load (32 ms with ~55 other
+// node processes; 100–250 ms with ~128, review 1's): a bound too high forgoes at most ~50 ms where opens are cheap, one too low
+// pays a pool's whole start where they are not — the higher one kept.
 const AHEAD_PROBE = 32, AHEAD_MIN = 64, AHEAD_SLOW_US = 200, AHEAD_START_US = 80000, AHEAD_WORKERS = 8, AHEAD_WINDOW = 4, AHEAD_STALL_MS = 2000;
 // (the worker: st[0] says stop; st[1 + 2j] counts the files worker j gave, st[2 + 2j] the ones taken of them)
 const AHEAD_SRC = [

@@ -3275,7 +3275,7 @@ const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files
 // is 70–85 % of the pass, CRIT_X D4): the walk's view files that pass uiViewFile, the stylesheets first (a pass a bound cuts
 // has read the focus styles it could), then the shorter path; each file's first DS_READ_CHARS characters, as the feature
 // report reads them (one more asked for: `over`); DS_UI_FILES files / DS_UI_CHARS characters at most — `ui-files` then. A
-// STYLESHEET longer than the read — a compiled bundle — is fed unparsed (review 1 of 1.38: Bulma's 13 were ~2/3 of its pass):
+// STYLESHEET longer than the read — a compiled bundle — is fed unparsed (review 1 of 1.38: Bulma's 13 were over half of its pass):
 // counted in `read` and in view-size, which names it; its rules, focus styles and motion unseen (a feature report and finish
 // keep 1.37's read of its first DS_READ_CHARS). Never in a feature report, finish or the seed. Its limits never reach the
 // report's `limits`, `truncated` or `inSync`. reg: the registry (its `_UI checks off:_` marker — uiOff).
