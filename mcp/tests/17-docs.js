@@ -1588,7 +1588,7 @@ exports.run = async ({
         const line = (ST.match(/- `(_UI checks off: [^`]*_)`/) || [])[1] || "";
         const off = T.uiOff(regOf("marker", line + "\n"));
         return off.off.size === 1 && rules.includes([...off.off.keys()][0]) && !off.ignored.length
-          && /switches a UI check off for the whole project: the project's report and every feature's count what it hides, never list it, and finish never warns about it\. An entry without its reason in parentheses, or naming no check, is not applied — the report says why\./.test(ST);
+          && /switches a UI check off for the whole project: the project's report and every feature's count what it hides, never list it, and finish never warns about it\. An entry without its reason in parentheses, or naming no check or project fact, is not applied — the report says why\./.test(ST);
       }],
       ["steering-templates: the marker's cost — the registry it enrols; the inline comment without one", () =>
         /A design-system\.md written only for this line enrols the project in the registry \(doctor's `ui-design-system`, finish's New components\); without one, silence a single finding with the inline `ui-check-off:` comment/.test(ST)],
