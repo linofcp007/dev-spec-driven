@@ -416,6 +416,65 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38: MOTION declared (the project fact no-reduced-motion's — uiChecksOf's `motion`, never a finding): `@keyframes`, an
+    // animation naming one, a transform's transition for a literal time, smooth scrolling, Tailwind's animate-* /
+    // transition-transform / scroll-smooth under any variant — never an opacity / colour / `all` transition, `animation: none`,
+    // a global keyword, a lone var(), `animate-none`, a time of 0, a transition-property; one count a line, its first line
+    const mo = (text, rel) => { const r = run(text, rel); return [r.motion.count, r.motion.line]; };
+    const M = {
+      // (a shadcn dialog: tailwindcss-animate's animate-in under a data variant)
+      dialog: mo(lines("export const O = () => (", "  <DialogPrimitive.Overlay className=\"data-[state=open]:animate-in data-[state=closed]:animate-out fixed inset-0\" />", ");"), "src/components/ui/dialog.tsx"),
+      // (a Vue SFC: its <style scoped> keyframes after a template animate-spin — the first line is the smallest)
+      vue: mo(lines("<template>", "  <i class=\"animate-spin\" />", "</template>", "<style scoped>", ".pop { animation: pop .2s ease-out; }", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>"), "src/Pop.vue"),
+      keyframes: mo(lines("@-webkit-keyframes spin { to { transform: rotate(1turn) } }", ".a { color: red; }"), "src/spin.css"),
+      // (the first rule of a <style> block: its prelude carries the `<style scoped>` line before it)
+      vueFirst: mo(lines("<template>", "  <p>hi</p>", "</template>", "<style scoped>", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>"), "src/P.vue"),
+      // (a <style> before the template: its keyframes, found after the template's utility, is still the first line)
+      vueStyleFirst: mo(lines("<style>", ".a { animation: pop 1s; }", "</style>", "<template>", "  <i class=\"animate-spin\" />", "</template>"), "src/Q.vue"),
+      // (an HTML inline style: smooth scrolling on a markup line)
+      inline: mo(lines("<main style=\"scroll-behavior: smooth\">x</main>"), "src/a.html"),
+      svelte: mo(lines("<button class=\"transition-transform hover:scale-105\">a</button>", "<main class=\"md:scroll-smooth\">b</main>"), "src/Card.svelte"),
+      sheet: mo(lines("html { scroll-behavior: smooth; }", ".a { transition: transform 150ms ease, opacity 1s; }", ".b { transition: translate .2s; }", ".c { animation-name: fade; }"), "src/a.css"),
+      // (a style object and an inline style: a line each — two on one line count once)
+      script: mo(lines("const s = { transition: \"transform .3s\", animation: \"spin 1s linear infinite\" };", "const t = <div style={{ animation: \"pulse 2s\" }} />;"), "src/S.tsx"),
+      none: mo(lines(".a { transition: opacity .2s; }", ".b { transition: color .2s, background-color .2s; }", ".c { transition: all .3s; }", ".d { animation: none; }", ".e { animation: inherit; }",
+        ".f { animation-name: var(--anim); }", ".g { transition: transform 0s 1s; }", ".h { transition: transform var(--d); }", ".i { transition-property: transform; transition-duration: .2s; }",
+        ".j { scroll-behavior: auto; }"), "src/none.css"),
+      noneTw: mo(lines("<div class=\"motion-reduce:animate-none transition-opacity transition-colors\">x</div>"), "src/N.vue"),
+      apply: mo(lines(".btn { @apply animate-bounce; }"), "src/apply.css"),
+    };
+    // (an `animation:` value is no transition: `animation: 1s` never reads as transition-all — and a transition-all stays one)
+    const anim = got(lines("const s = { animation: \"1s ease\" };", "const t = { transition: \"all .3s\" };"), "src/A.tsx");
+    all("1.38: motion declared — keyframes (a vendor prefix too), an animation naming one, a transform's transition for a literal time, smooth scrolling, Tailwind's animate-* / transition-transform / scroll-smooth under a variant (an @apply's too), a style object's; never opacity / colour / all transitions, animation none / inherit / a lone var(), animate-none, a 0s duration, a var() time, transition-property; one a line, the first line (got " +
+      js({ M, anim }) + ")", {
+      dialog: () => js(M.dialog) === js([1, 2]),
+      vue: () => js(M.vue) === js([3, 2]),
+      keyframes: () => js(M.keyframes) === js([1, 1]) && js(M.vueFirst) === js([1, 5]) && js(M.vueStyleFirst) === js([2, 2]) && js(M.inline) === js([1, 1]),
+      svelte: () => js(M.svelte) === js([2, 1]),
+      sheet: () => js(M.sheet) === js([4, 1]),
+      script: () => js(M.script) === js([2, 1]),
+      none: () => js(M.none) === js([0, 0]) && js(M.noneTw) === js([0, 0]),
+      apply: () => js(M.apply) === js([1, 1]),
+      anim: () => js(anim) === js(["transition-all@2"]),
+    });
+  }
+
+  { // 1.38 (found by chain P): a markup file's <style> block — its opening tag's line is a CSS line, so its FIRST rule read the
+    // tag in its prelude and an at-rule there read as none since 1.37: a print / reduced-motion / conditional block — the same
+    // sheet as a .css file is silent; a first rule's value holds no tag; a later block is read as before
+    const sfc = (body, rel) => got("<template><h1>x</h1></template>\n<style scoped>\n" + body + "</style>\n", rel);
+    const S1 = { print: "@media print { button { outline: none; } }\n", reduced: "@media (prefers-reduced-motion: reduce) { .a { transition: all .2s; } }\n",
+      cond: "@media (min-width: 600px) { h1 { font-size: 2rem; } }\nh1 { font-size: 5vw; }\n" };
+    const R1 = Object.fromEntries(Object.entries(S1).map(([k, b]) => [k, [sfc(b, "src/A.vue"), sfc(b, "src/A.svelte"), got(b, "src/a.css")]]));
+    const first = run("<style>\nbutton:focus { outline: none; }\n</style>\n<template><b>x</b></template>\n", "src/P.vue").findings.map((f) => f.value);
+    const later = got("<style>\n.a { color: red; }\n@media print { button { outline: none; } }\nbutton { outline: none; }\n</style>\n", "src/L.vue");
+    all("1.38: a <style> block's first rule is read without its tag — an at-rule there is one (print, reduced motion, a condition: silent, as in a .css file), a first rule's value names no tag; later blocks as before (got " + js({ R1, first, later }) + ")", {
+      atRule: () => Object.values(R1).every((x) => x.every((y) => js(y) === "[]")),
+      value: () => js(first) === js(["button:focus { outline: none }"]),
+      later: () => js(later) === js(["outline-removed@4"]),
+    });
+  }
+
   { // silencing: one inline comment, any syntax of the file, on the finding's line or the one above
     const jsx = lines("export const A = () => (", "  <>", "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/spacer.gif\" />", // 4: silenced (above)
       "    <img src=\"/b.png\" /> {/* ui-check-off: click-no-keyboard, img-no-alt */}", // 5: silenced (same line)
@@ -800,6 +859,37 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38: the project's `_UI checks off:_` marker hides a rule PROJECT-WIDE — the feature report's findings, total, byRule never
+    // hold it (counted in `off`, the rules alone: the fact is the inventory's), an inline-silenced one stays `silenced`, a finding
+    // past a file's cap is counted there too, the focus search never runs for an off outline-removed (49 sheets: no focus-sheets),
+    // and finish never warns of it; a registry without the marker keeps the 1.37 shape (no off keys)
+    const OFF = "# Design System\n\n_UI checks off: outline-removed (what-input: mouse and touch only), transition-all (kit code), no-reduced-motion (our own setting), img-no-alt_\n";
+    const QUIET = lines("*:focus {", "  /* ui-check-off: outline-removed */", "  outline: 0;", "}");
+    const LIST = lines("export const L = () => (", "  <ul>", ...Array.from({ length: 201 }, (_, i) => "    <li className=\"transition-all\">Row " + i + "</li>"), "  </ul>", ");");
+    const mk = (tag, registry) => {
+      const g = feature("off-" + tag, ["src/checkout/Checkout.tsx", "src/checkout/reset.css", "src/checkout/quiet.css", "src/checkout/List.tsx"], registry);
+      write(g.p, "src/checkout/Checkout.tsx", CHECKOUT);
+      write(g.p, "src/checkout/reset.css", RESET);
+      write(g.p, "src/checkout/quiet.css", QUIET);
+      write(g.p, "src/checkout/List.tsx", LIST);
+      for (let i = 0; i < 49; i++) write(g.p, "src/sheets/s" + String(i).padStart(3, "0") + ".css", ".s" + i + " { color: red; }\n");
+      return Object.assign(g, { r: S.designSystemReport(g.p, { name: g.slug }), fin: S.finishFeature(g.p, g.slug) });
+    };
+    const on = mk("on", OFF), plain = mk("plain", "# Design System\n");
+    const u = on.r.uiChecks, M = S.msg("en").finish;
+    const ui = (x) => (x.fin.warnings || []).filter((w) => /UI anti-pattern|outline removals? not judged/.test(w));
+    all("1.38: `_UI checks off:_` hides a rule project-wide — the feature report counts its findings in `off` (an inline-silenced one stays silenced, one past a file's cap counted too), never in findings / total / byRule; the focus search is not run for it; finish never warns of it; the fact and an entry without a reason are no rule off here; without the marker the 1.37 shape (got " +
+      js({ u, plainKeys: Object.keys(plain.r.uiChecks), fin: [on.fin.designSystem, ui(on)], plainFin: ui(plain) }) + ")", {
+      listed: () => js(u.findings.map((x) => x.rule)) === js(["click-no-keyboard", "img-no-alt"]) && u.total === 2 && js(u.byRule) === js({ "click-no-keyboard": 1, "img-no-alt": 1 }),
+      off: () => js(u.off) === js([{ rule: "outline-removed", reason: "what-input: mouse and touch only", count: 1 }, { rule: "transition-all", reason: "kit code", count: 202 }]),
+      ignored: () => js(u.offIgnored) === js([{ entry: "img-no-alt", why: "no-reason" }]),
+      silenced: () => u.silenced === 2,
+      noSearch: () => js(u.limits) === js([]) && plain.r.uiChecks.limits.some((l) => l.code === "focus-sheets"),
+      finish: () => js(on.fin.designSystem.uiChecks.byRule) === js({ "click-no-keyboard": 1, "img-no-alt": 1 }) && js(ui(on)) === js([M.uiChecks(2, "src/checkout/Checkout.tsx:2 click-no-keyboard; src/checkout/Checkout.tsx:5 img-no-alt", on.slug)]),
+      plain: () => js(Object.keys(plain.r.uiChecks)) === js(["findings", "total", "byRule", "silenced", "limits"]) && plain.r.uiChecks.byRule["transition-all"] === 202,
+    });
+  }
+
   { // every bound that cut what the checks read, or dropped a finding, is named in `uiChecks.limits` with a count and the first
     // file — in the report and in finish's designSystem.uiChecks (review 1 of 1.37: a long line, a file's 200 findings and its
     // 256K read dropped real findings with `limits` empty); a finding past a file's cap is still counted in total / byRule
@@ -923,6 +1013,11 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       // statement's last 2,000 characters —, styles of non-viewport font sizes read to their end)
       textRun: [fill("text-[".repeat(300) + "\n"), "x.tsx"], textList: [fill("<p className=\"" + "text-[5vw] ".repeat(150) + "md:text-[2vw]\">x</p>\n"), "x.tsx"],
       vwCalc: [fill("a { font-size: calc(" + "1vw + ".repeat(300) + "1vw); }\n"), "x.css"], styleRun: [fill("<h1 style=\"" + "font-size: 1rem; ".repeat(100) + "\">x</h1>\n"), "x.html"],
+      // (1.38, motion — CRIT_X D4's combined line: `animate-` widens the pick too; runs of it, class lists of motion utilities, a
+      // transition of endless transform items, a sheet of keyframes, a style object's endless animation list)
+      animRun: [fill("animate-".repeat(300) + "\n"), "x.tsx"], animList: [fill("<i className=\"" + "data-[state=open]:animate-in ".repeat(60) + "\">x</i>\n"), "x.tsx"],
+      motionSheet: ["a { transition:\n" + fill("  transform 1s,\n") + "}\n", "x.css"], keyframesRun: [fill("@keyframes k { }\n"), "x.css"],
+      animStyle: [fill("const s = { animation: \"" + "spin 1s, ".repeat(100) + "\" };\n"), "x.tsx"],
     };
     const time = (f) => { const ts = []; for (let k = 0; k < 5; k++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
     // (a stylesheet is read through the ONE CSS walk the registry's token reader already makes — styleTokens —: its ratio is to

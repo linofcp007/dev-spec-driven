@@ -1049,7 +1049,7 @@ const msg = {
       // (1.37 revisión 2: las eliminaciones del contorno que una búsqueda de foco detenida en un límite dejó sin evaluar — sheet:
       // la hoja que detuvo la búsqueda en el límite de caracteres, chars: ese límite, alone: esa hoja sola lo supera (revisión
       // 3); la última frase del aviso, o el aviso solo)
-      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} ${n === 1 ? "eliminación del contorno sin evaluar" : "eliminaciones del contorno sin evaluar"} (la primera: ${at}): las hojas de estilo del proyecto ${sheet ? `desde ${sheet}` : `más allá de las primeras ${read}`} no se leyeron en busca de un estilo de foco${sheet ? ` (esa hoja ${alone ? "por sí sola supera" : "llevaría el análisis más allá de"} los ${chars / 1024}K caracteres que analiza una búsqueda de foco)` : ""} — comprobar que el proyecto dibuja uno, o ${n === 1 ? "silenciarla" : "silenciarlas"}`,
+      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} ${n === 1 ? "eliminación del contorno sin evaluar" : "eliminaciones del contorno sin evaluar"} (la primera: ${at}): las hojas de estilo del proyecto ${sheet ? `desde ${sheet}` : `más allá de las primeras ${read}`} no se leyeron en busca de un estilo de foco${sheet ? ` (esa hoja ${alone ? "por sí sola supera" : "llevaría el análisis más allá de"} los ${chars / 1024}K caracteres que analiza una búsqueda de foco)` : ""} — las comprobaciones de interfaz del proyecto ${n === 1 ? "la evalúan" : "las evalúan"} (spec_scan {designSystem: true} · ${DEV_SPEC} design-system); comprobar que el proyecto dibuja uno, o ${n === 1 ? "silenciarla" : "silenciarlas"}`,
       noImplements: (file) => `ninguna tarea indica sus ficheros en _Implements:_ — la línea base de deriva, la detección de duplicados y la atribución de dev-guardian no ven código de esta funcionalidad. Añade _Implements: <ruta>_ a cada tarea que escribió código (un ${file} editado se vuelve a aprobar), o ignóralo si ninguna lo hizo.`,
       untrackedApproval: (list, slug) => `aprobado antes del registro de cambios — no se registró nada del fichero aprobado, así que una edición no puede detectarse: ${list} — vuelve a aprobar para empezar a seguirlo (/approve ${slug} design)`,
     },
@@ -1597,13 +1597,15 @@ const msg = {
         "view-files": (n) => `  (solo se leen los primeros ${n} ficheros de vista de la funcionalidad en busca de valores fijos)`,
         // (1.37 revisión 2: at — el fichero:línea de la primera eliminación sin evaluar, count — cuántas, sheet — la hoja que detuvo la búsqueda;
         // revisión 3: chars — el límite de caracteres, alone — esa hoja sola lo supera)
-        "focus-sheets": (n, at, count) => `  (${count} ${count === 1 ? "eliminación del contorno sin evaluar" : "eliminaciones del contorno sin evaluar"} — la primera: ${at}: los estilos de foco se buscaron en las primeras ${n} hojas de estilo del proyecto, un límite)`,
-        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} ${count === 1 ? "eliminación del contorno sin evaluar" : "eliminaciones del contorno sin evaluar"} — la primera: ${at}: los estilos de foco se buscaron en ${n} ${n === 1 ? "hoja de estilo" : "hojas de estilo"}, ${alone ? `hasta ${sheet}, que por sí sola supera` : `hasta que ${sheet} hubiera llevado el análisis más allá de`} los ${chars / 1024}K caracteres que analiza una búsqueda de foco)`,
+        "focus-sheets": (n, at, count) => `  (${count} ${count === 1 ? "eliminación del contorno sin evaluar" : "eliminaciones del contorno sin evaluar"} — la primera: ${at}: los estilos de foco se buscaron en las primeras ${n} hojas de estilo del proyecto, un límite — las comprobaciones de interfaz del proyecto las evalúan: ${DEV_SPEC} design-system)`,
+        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} ${count === 1 ? "eliminación del contorno sin evaluar" : "eliminaciones del contorno sin evaluar"} — la primera: ${at}: los estilos de foco se buscaron en ${n} ${n === 1 ? "hoja de estilo" : "hojas de estilo"}, ${alone ? `hasta ${sheet}, que por sí sola supera` : `hasta que ${sheet} hubiera llevado el análisis más allá de`} los ${chars / 1024}K caracteres que analiza una búsqueda de foco — las comprobaciones de interfaz del proyecto las evalúan: ${DEV_SPEC} design-system)`,
         // (1.37 revisión 1: los demás límites de las comprobaciones de interfaz — count: cuántos cortó, file: el primero)
         "view-size": (n, file, count) => `  (${count} ${count === 1 ? "fichero de vista es mayor" : "ficheros de vista son mayores"} que los ${n} caracteres que se leen de cada fichero — el primero: ${file}: las comprobaciones de interfaz no leyeron el resto)`,
         "line-length": (n, file, count) => `  (${count} ${count === 1 ? "línea tiene" : "líneas tienen"} más de ${n} caracteres — la primera en ${file}: cada una se lee hasta ahí, y una etiqueta que corta no se evalúa)`,
         "tag-length": (n, file, count) => `  (${count} ${count === 1 ? "etiqueta no se evalúa" : "etiquetas no se evalúan"} — la primera en ${file}: leída más allá de ${n} líneas o del límite de caracteres del lector)`,
         "file-findings": (n, file, count) => `  (${count} ${count === 1 ? "hallazgo de interfaz más" : "hallazgos de interfaz más"} allá de los ${n} de un fichero — el primero en ${file}: contados, no listados)`,
+        // (1.38: las comprobaciones de interfaz del proyecto — n: los ficheros de vista leídos; at / count: las eliminaciones del contorno sin evaluar)
+        "ui-files": (n, at, count) => `  (las comprobaciones de interfaz leyeron ${n === 1 ? "el primer fichero de vista" : `los primeros ${n} ficheros de vista`} del proyecto, un límite: el resto no se cuenta${count ? ` — ${count} ${count === 1 ? "eliminación del contorno sin evaluar" : "eliminaciones del contorno sin evaluar"}, la primera: ${at}` : ""})`,
         "component-files": (n) => `  (se leyeron ${n} ficheros de componentes en busca de los demás componentes que exportan, y se alcanzó un límite — los ficheros o caracteres leídos, o los nombres guardados de un fichero: el resto no se compara)`,
         "workspace-manifests": (n) => `  (se alcanzó un límite de los patrones de workspace — leídos ${n} de los ficheros package.json de los paquetes del workspace: las bibliotecas de los demás no se comparan)`,
         "font-values": (n, file) => `  (solo se leen las primeras ${n} pilas de fuentes de un fichero — el primer fichero que lo superó: ${file})`,
@@ -1638,6 +1640,24 @@ const msg = {
         "transition-all": "transition: all (o sin propiedad) anima todas las propiedades que cambian, también las de maquetación — enumerar las que deben moverse",
       },
       uiSilenced: (n) => `  (${n} ${n === 1 ? "silenciada" : "silenciadas"} por un comentario ui-check-off)`,
+      // 1.38: las comprobaciones de interfaz de los ficheros de vista del proyecto (el `uiChecks` de spec_scan {designSystem: true}:
+      // un inventario — recuentos y el primer lugar de cada regla, nunca una lista; tag: uiReportTag de una regla solo del informe, o "")
+      uiProjectHead: (n, files) => `  Comprobaciones de interfaz en los ficheros de vista del proyecto (${n} en ${files === 1 ? "el fichero leído" : `los ${files} leídos`}) — el informe de cada funcionalidad lista las suyas; spec_finish avisa de las de una funcionalidad +ui:`,
+      uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} en ${files} ${files === 1 ? "fichero" : "ficheros"}${tag ? " " + tag : ""} — la primera: ${at}`,
+      uiProjectNone: (files) => `  Comprobaciones de interfaz: nada en ${files === 1 ? "el fichero de vista" : `los ${files} ficheros de vista`} del proyecto`,
+      // (los hechos del proyecto por código — at: el primer lugar, fichero:línea)
+      uiFact: {
+        "no-reduced-motion": (n, at) => `  ▲ el código declara movimiento — una animación, una transición de transform o un desplazamiento suave (${n} ${n === 1 ? "lugar" : "lugares"}, el primero: ${at}) — y ninguno de los ficheros de vista del proyecto leídos menciona el movimiento reducido: ofrecer una variante reducida — @media (prefers-reduced-motion: reduce), motion-reduce: / motion-safe: de Tailwind (WCAG 2.3.3, AAA)`,
+      },
+      // (el marcador `_UI checks off:_` del proyecto en design-system.md — list: `<regla> <cuántos ocultó> — <motivo>`, unidas por `; `;
+      // e: una entrada no aplicada, como la nombra el informe; n: las entradas leídas)
+      uiOff: (list) => `  (desactivadas en el proyecto — _UI checks off:_ en design-system.md: ${list})`,
+      uiOffIgnored: {
+        "no-reason": (e) => `  ▲ _UI checks off:_ nombra ${e} sin un motivo entre paréntesis — no se aplica: escribir \`${e} (por qué)\``,
+        "unknown-rule": (e) => `  ▲ _UI checks off:_ nombra ${e}, que no es una comprobación de interfaz ni un hecho del proyecto — no se aplica`,
+        unreadable: (e) => `  ▲ _UI checks off:_ contiene "${e}", que no sigue \`<id-de-regla> (motivo)\` — no se aplica`,
+        "past-bound": (e, n) => `  ▲ _UI checks off:_ se lee hasta sus primeras ${n} entradas — "${e}" y las siguientes no se aplican`,
+      },
       dsTokensNew: (n) => `  tokens en el código, fuera del registro (${n}) — una fila por cada uno:`,
       dsPending: (list) => `  en el código, construidos por una funcionalidad sin terminar (entran en el registro con su finish): ${list}`,
       clarify: (f, tracks, verdict, n) => `Aclarar: ${f}  [${tracks}]  → ${verdict} (${n} pregunta(s))`,

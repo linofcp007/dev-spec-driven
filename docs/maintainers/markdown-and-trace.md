@@ -136,7 +136,16 @@ matrix. The rules come first; how they came to be — the releases and review fi
   `isTestFile()` calls a test — ONE rule (engine/scan.js; trace's `isTestCodePath` is it): the test folders (`TEST_DIRS`;
   `t/` / `xt/` for Perl's `.t`) and each language's naming convention (`RE_TEST_NAME`, `RE_TEST_NAME_EXTRA`), anchored and
   linear. A name merely ending in "spec" / "test", or a name-only `test_*.sh` / `test_*.c` / `*Spec.hs`, is code outside a
-  test folder.
+  test folder. (1.38) A test harness's files too: Cypress's `*.cy.<script>` (`\.cy\.[cm]?[jt]sx?$` — a script only: a Welsh
+  locale's `strings.cy.json` is data; a Welsh locale MODULE named so, `messages.cy.ts`, reads as a test — the documented caveat,
+  no syntax tells them apart), Jest's `__mocks__/` and `__fixtures__/` (`TEST_DIRS`, any case). `.storybook/` (hidden: the walk
+  never enters it) and `playwright/` (a scraper's `src/playwright/` is production code) are not added. **The blast radius** of
+  any change to the rule — every caller: the guard (`test-file` at the scope level, `tests-phase` in Phase 4 — guards.js),
+  protected tests (protect.js `isTest`: at level tests a manual mock is a protected test), the brownfield scan and coverage
+  (scan.js — test counts, entrypoints, `isTestFixture`), trace's test-code scan (`isTestCodePath`), dupes.js (its default
+  `tests: false` skips them), design-system.js (scanCode's components — a `__mocks__/` component is no row; cal.com's eight each have a
+  real twin, so its report does not move —, its barrels, settle's test / story readers, and `uiViewFile`: the feature report's view files and the
+  project's UI checks); run both full suites, 10-guards and 13-imports (13-imports holds the matrix).
 - **Fixtures:** `isTestFixture()` — a `TEST_DATA_EXT` file (`.sql`, `.ipynb`) in a test folder with no test name
   (`testNamed()`, + pgTAP's), or any file under `testdata/`, is data: the scans and coverage skip it (guard mode still asks).
   A plan's File column claims one (`fixtureClaim()`; `scannableTestPath()` keeps it) by the file itself or the folder
@@ -236,6 +245,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and a 'T-01' in a seed counted as the test. `readFileHead()` replaced reading the whole file then slicing. The 1.21.1 review
   dropped the name-only `test_*.sh` / `test_*.c` / `*Spec.hs` rules (`scripts/test_data.sh`, `src/test_utils.c`,
   `lib/DevSpec.hs` were tests).
+- **1.38.0** (chain P, item 1 — the 1.37 review's S12, deferred: a mock's `<img>`, a `cy.mount(<div onClick>)` warned in the
+  UI checks) — `isTestFile` gains Cypress's `*.cy.<script>`, `__mocks__/` and `__fixtures__/` for EVERY reader, never for the UI
+  checks alone (one rule: a test file is one everywhere). The design missed dupes.js, scan.js's entrypoints / counts and
+  scanCode's components in the blast radius (CRIT_1 must-fix 12); the Welsh-locale `.cy.ts` caveat is CRIT_1's. The last
+  commit of its chain, on its own, so it can be dropped.
 - **1.21.1 review 2** — a plan-claimed fixture is read (`fixtureClaim()`, pgTAP's `test/sql/users.sql`); `scannableTestPath()`
   stopped dropping fixtures (a plan naming one warned forever). `readFileHead`'s cap became characters: a byte cap lost a T-ID
   behind 150,000 'é'.

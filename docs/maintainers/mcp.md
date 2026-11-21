@@ -40,6 +40,10 @@ told apart by a `mode` or a `when(args)` test), `legacy`, `cli`, `engine`, `args
   flags in the table's order, then `cliOnly` — conventions.md → The CLI is one table and one call).
 - `createFeature` / `completeTask` take an options object; their positional forms still work (told apart by type —
   `featureLocked` reads either).
+- **A call may opt into what the engine's default leaves out** (1.38): `design-system`'s call passes `{uiPass: true}` beside
+  `name` — the project report's UI-checks inventory (quality.md → UI checks → The project inventory) — while the engine's
+  default runs none, so the suites' direct `designSystemReport(` calls keep their result and timings. Such an option is
+  never an argument (no `args` entry: neither surface can turn it off) and both surfaces get it through the one call.
 - **Parity is structural**: `mcp/tests/02-mcp-server-tools.js` (every tool and alias runs an operation, every argument mapped
   and typed, server.js calls no operation's engine function, each operation on twin projects answers MCP and the CLI alike)
   and `cli/tests/02-surfaces-parity.js` (every command runs one through `c.call` or is a known non-operation, every flag is
@@ -256,6 +260,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.35** — `spec_scan {designSystem: true, name?}`, the 42nd operation (`design-system`), a mode on spec_scan's third key;
   steering_scaffold names design-system.md and spec_finish says it writes the registry. ~520 characters of tools/list, not
   paid back (about 44,100 of the 44,500 cap): the next argument trims wording first.
+- **1.38** (chain P) — `design-system`'s call opts into the project's UI-checks inventory (`{uiPass: true}`), an engine
+  option no argument exposes: the 204 direct `designSystemReport(` calls of the suites (81 of them timing checks) stay on
+  the engine's default, no pass (CRIT_X D4 — the alternative, a `{uiPass: false}` seam in every timed call, was the design's).
+  tools/list: 0 characters.
 - **1.36** — four opt-in settings, each in its trimmed form: `TOOLS_LIST_CAP` 44,500 → 45,000. The review panel's
   `spec_init {reviewModels}` is a bare `{type: "array", items: {type: "string"}}` plus "`reviewModels` (2–3 review models,
   diverse or [])" in the settings sentence: +109 characters (44,123 → 44,232); the design's described property was +214.

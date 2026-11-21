@@ -1061,7 +1061,7 @@ const msg = {
       // (1.37 review 2: the outline removals a focus search ended at its bound left unjudged — sheet: the one that ended a
       // search at the characters bound, chars: that bound, alone: that sheet alone is longer (review 3); the warning's last
       // clause, or the warning alone)
-      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} outline ${n === 1 ? "removal" : "removals"} not judged (the first: ${at}): the project's stylesheets ${sheet ? `from ${sheet} on` : `past the first ${read}`} were not read for a focus style${sheet ? ` (that sheet ${alone ? "alone is longer than" : "would have taken the search past"} the ${chars / 1024}K characters a focus search parses)` : ""} — check the project draws one, or silence ${n === 1 ? "it" : "them"}`,
+      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} outline ${n === 1 ? "removal" : "removals"} not judged (the first: ${at}): the project's stylesheets ${sheet ? `from ${sheet} on` : `past the first ${read}`} were not read for a focus style${sheet ? ` (that sheet ${alone ? "alone is longer than" : "would have taken the search past"} the ${chars / 1024}K characters a focus search parses)` : ""} — the project's UI checks judge ${n === 1 ? "it" : "them"} (spec_scan {designSystem: true} · ${DEV_SPEC} design-system); check the project draws one, or silence ${n === 1 ? "it" : "them"}`,
       // 1.30: no task names a file in _Implements:_ — what reads them sees no code of the feature. file: the one holding the tasks
       // (tasks.md; an xs change's change.md — review 9)
       noImplements: (file) => `no task names its files in _Implements:_ — the drift baseline, the duplicate check and dev-guardian's attribution see no code of this feature. Add _Implements: <path>_ to each task that wrote code (an edited ${file} is re-approved), or ignore this if none did.`,
@@ -1661,13 +1661,15 @@ const msg = {
         "view-files": (n) => `  (only the feature's first ${n} view files are read for raw values)`,
         // (1.37 review 2: at — the first unjudged removal's file:line, count — how many, sheet — the one that ended the search;
         // review 3: chars — the characters bound, alone — that sheet alone is longer)
-        "focus-sheets": (n, at, count) => `  (${count} outline ${count === 1 ? "removal" : "removals"} not judged — the first: ${at}: focus styles were looked for in the project's first ${n} stylesheets, a bound)`,
-        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} outline ${count === 1 ? "removal" : "removals"} not judged — the first: ${at}: focus styles were looked for in ${n} ${n === 1 ? "stylesheet" : "stylesheets"}, until ${sheet}, ${alone ? "longer alone than" : "which would have taken the search past"} the ${chars / 1024}K characters a focus search parses)`,
+        "focus-sheets": (n, at, count) => `  (${count} outline ${count === 1 ? "removal" : "removals"} not judged — the first: ${at}: focus styles were looked for in the project's first ${n} stylesheets, a bound — the project's UI checks judge them: ${DEV_SPEC} design-system)`,
+        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} outline ${count === 1 ? "removal" : "removals"} not judged — the first: ${at}: focus styles were looked for in ${n} ${n === 1 ? "stylesheet" : "stylesheets"}, until ${sheet}, ${alone ? "longer alone than" : "which would have taken the search past"} the ${chars / 1024}K characters a focus search parses — the project's UI checks judge them: ${DEV_SPEC} design-system)`,
         // (1.37 review 1: the UI checks' other bounds — count: how many it cut, file: the first)
         "view-size": (n, file, count) => `  (${count} view ${count === 1 ? "file is" : "files are"} longer than the ${n} characters read of a file — the first: ${file}: the UI checks did not read the rest)`,
         "line-length": (n, file, count) => `  (${count} ${count === 1 ? "line is" : "lines are"} longer than ${n} characters — the first in ${file}: each is read up to there, and a tag it cuts is not judged)`,
         "tag-length": (n, file, count) => `  (${count} ${count === 1 ? "tag is" : "tags are"} not judged — the first in ${file}: read past ${n} lines or the reader's character bound)`,
         "file-findings": (n, file, count) => `  (${count} more UI ${count === 1 ? "finding" : "findings"} past a file's ${n} — the first in ${file}: counted, not listed)`,
+        // (1.38: the project's UI checks — n: the view files read; at / count: the outline removals the cut left unjudged, if any)
+        "ui-files": (n, at, count) => `  (the UI checks read the project's first ${n} view ${n === 1 ? "file" : "files"}, a bound: the rest is not counted${count ? ` — ${count} outline ${count === 1 ? "removal" : "removals"} not judged, the first: ${at}` : ""})`,
         "component-files": (n) => `  (${n} component files were read for the further components they export, and a bound was reached — the files or characters read, or the names kept of one file: the rest is not compared)`,
         "workspace-manifests": (n) => `  (a bound of the workspace patterns was reached — ${n} of the workspace packages' package.json files read: the libraries of the rest are not compared)`,
         // (1.38: the new kinds' own bound a file — file: the first it cut)
@@ -1704,6 +1706,24 @@ const msg = {
         "transition-all": "transition: all (or no property) animates every property that changes, layout ones too — list the ones that should move",
       },
       uiSilenced: (n) => `  (${n} silenced by a ui-check-off comment)`,
+      // 1.38: the UI checks of the project's view files (spec_scan {designSystem: true}'s `uiChecks`: an inventory — counts and
+      // each rule's first place, never a list; tag: uiReportTag for a report-level rule, else "")
+      uiProjectHead: (n, files) => `  UI checks in the project's view files (${n} in the ${files} read) — each feature's report lists its own; spec_finish warns about a +ui feature's:`,
+      uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} in ${files} ${files === 1 ? "file" : "files"}${tag ? " " + tag : ""} — the first: ${at}`,
+      uiProjectNone: (files) => `  UI checks: nothing in the project's ${files} view ${files === 1 ? "file" : "files"}`,
+      // (the project's facts by code — at: the first place, file:line)
+      uiFact: {
+        "no-reduced-motion": (n, at) => `  ▲ the code declares motion — an animation, a transform's transition or smooth scrolling (${n} ${n === 1 ? "place" : "places"}, the first: ${at}) — and none of the project's view files read mentions reduced motion: offer a reduced variant — @media (prefers-reduced-motion: reduce), Tailwind's motion-reduce: / motion-safe: (WCAG 2.3.3, AAA)`,
+      },
+      // (the project's `_UI checks off:_` marker in design-system.md — list: `<rule> <count hidden> — <reason>`, `; `-joined; e: an entry
+      // not applied, as the report names it; n: the entries read)
+      uiOff: (list) => `  (off for the project — _UI checks off:_ in design-system.md: ${list})`,
+      uiOffIgnored: {
+        "no-reason": (e) => `  ▲ _UI checks off:_ names ${e} without a reason in parentheses — not applied: write \`${e} (why)\``,
+        "unknown-rule": (e) => `  ▲ _UI checks off:_ names ${e}, no UI check or project fact — not applied`,
+        unreadable: (e) => `  ▲ _UI checks off:_ holds "${e}", not \`<rule-id> (reason)\` — not applied`,
+        "past-bound": (e, n) => `  ▲ _UI checks off:_ is read up to its first ${n} entries — "${e}" and the ones after it are not applied`,
+      },
       dsTokensNew: (n) => `  tokens in the code, not in the registry (${n}) — a row each:`,
       dsPending: (list) => `  in the code, built by an unfinished feature (its finish adds them): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,

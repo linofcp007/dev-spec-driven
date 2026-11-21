@@ -60,8 +60,9 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   dupes.js                     the duplicate-code detector (duplicationReport, duplicateRuns): spec_scan {duplicates}, finish — LAZY
   design-system.js             the design system against the code (designSystemReport, designSystemSeed, designSystemFinish):
                                spec_scan {designSystem}, the seeded registry, finish — LAZY (the registry's reader: quality.js)
-  ui-checks.js                 the UI checks (1.37: uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass): a +ui feature's
-                               anti-patterns — the feature report's `uiChecks`, finish's warning — LAZY (quality.md → UI checks)
+  ui-checks.js                 the UI checks (1.37: uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass; 1.38: uiProjectPass, uiOff): a
+                               +ui feature's anti-patterns — the feature report's `uiChecks`, finish's warning; the project inventory
+                               (design-system.js uiProject reads, the opt-in pass), the `_UI checks off:_` marker — LAZY (quality.md → UI checks)
   import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering —
                                LAZY (the tool lists IMPORT_TOOLS / STEERING_IMPORT_TOOLS: scaffold.js)
 mcp/lib/i18n.js · i18n/        the localized content: the facade (the tables, LAYOUTS — the structure every language shares)
@@ -281,6 +282,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   finish or the seed — a concern of its own (~150 lines: ui.md's line, Tailwind 4's `@theme` through the token walk's
   observer, the report). The load-cost line above names it; the Layout tree and CLAUDE.md's LAZY list are the release's docs
   pass.
+- **1.38** (chain P) — no module: the project's UI checks live where their parts do — the READ (`uiProject`, the opt-in pass
+  after scanCode, and `uiViewFile`, the one view-reader predicate) in design-system.js, the COUNTS (`uiProjectPass`) and the
+  marker's ids (`uiOff`, `UI_FACTS`) in ui-checks.js, the marker's reader (`dsChecksOff`) in quality.js, which names no rule
+  id. design-system.js exports `uiProject` for one test (a truncated walk's scan).
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):

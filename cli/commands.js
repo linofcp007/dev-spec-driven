@@ -1907,6 +1907,13 @@ const COMMANDS = [
       };
       // (1.38) what a raw value is against the scale: the token it is, or the colour it is close to
       const judged = (x) => (x.token ? `  → ${x.token}` : x.near ? "  " + T.dsRawNear(x.near.token) : "");
+      // (1.38: the rules the project's `_UI checks off:_` marker switched off — each with the findings it hid and its reason —, and each
+      // entry not applied, why)
+      const offLines = (u) => {
+        if (!u.off) return;
+        if (u.off.length) log(T.uiOff(u.off.map((o) => o.rule + " " + o.count + " — " + o.reason).join("; ")));
+        u.offIgnored.forEach((e) => log(T.uiOffIgnored[e.why](e.entry, e.read)));
+      };
       return out(r, (r) => {
         if (!r.feature) log(r.registry.exists ? T.dsHead(r.registry.file, r.registry.components, r.registry.tokens) : T.dsHeadNone(r.registry.file));
         else log(T.dsFeatureHead(r.feature, r.usage ? r.usage.reuse : 0, r.usage ? r.usage.extend : 0, r.usage ? r.usage.new : 0));
@@ -1946,6 +1953,7 @@ const COMMANDS = [
           // (never "nothing" beside the removals a focus search left unjudged — review 2 of 1.37: its limit line names them)
           } else if (r.viewFiles && !u.limits.some((l) => l.code === "focus-sheets" || l.code === "focus-chars")) log(T.uiNone(r.viewFiles));
           if (u.silenced) log(T.uiSilenced(u.silenced));
+          offLines(u);
           // (a bound of the checks' own: the report's lines below say the ones they share)
           u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count, l.sheet, l.chars, l.alone)));
           breakpoints(r.breakpoints);
@@ -1982,6 +1990,19 @@ const COMMANDS = [
           if (r.unitsTable && r.unitsTable.past) log(T.dsUnitsPast(r.unitsTable.past, r.unitsTable.rows + r.unitsTable.unread.length));
           // (never beside a component an unfinished feature is building: the registry does not list THAT one yet)
           if (r.inSync && !r.pendingTotal) log(T.dsInSync);
+          // 1.38: the UI checks of the project's view files — an inventory (each rule's count, files, first place), never a list
+          const u = r.uiChecks;
+          if (u) {
+            if (u.total) {
+              log(T.uiProjectHead(u.total, u.read));
+              Object.entries(u.rules).forEach(([id, x]) => log(T.uiProjectRule(id, u.byRule[id], x.files, x.line ? x.file + ":" + x.line : x.file, x.level === "report" ? T.uiReportTag : "")));
+            // (never "nothing" beside the removals a cut pass left unjudged: its limit line names them)
+            } else if (u.read && !u.limits.some((l) => l.code === "ui-files" && l.count)) log(T.uiProjectNone(u.read));
+            if (u.silenced) log(T.uiSilenced(u.silenced));
+            offLines(u);
+            u.facts.forEach((x) => log(T.uiFact[x.code](x.count, x.file + ":" + x.line)));
+            u.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count)));
+          }
         }
         r.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.file)));
       });

@@ -46,7 +46,8 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     stale: () => drift.out.includes(T.dsStaleHead(1)) && drift.out.includes("    DatePicker — src/components/date-picker.tsx"),
     lists: () => drift.out.includes(T.dsSourcesNew("src/styles/theme.css")) && drift.out.includes(T.dsLibrariesNew("antd")) && !drift.out.includes(T.dsInSync) && drift.code === 0,
     tokens: () => drift.out.includes(T.dsTokensNew(1)) && drift.out.includes("    | --radius | 8px |  |"),
-    json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.designSystemReport(p)),
+    // (1.38: the operation opts into the project's UI checks — the engine's default runs none, CRIT_X D4)
+    json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.designSystemReport(p, { uiPass: true })),
   });
 
   // --- a feature against the registry: its rows, its raw values; an unknown feature; PT; help ----------------------------------------
