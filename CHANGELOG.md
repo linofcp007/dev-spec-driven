@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.37.0] — 2026-11-20
+## [1.37.0] — 2026-11-21
 
 UI checks — what four public design-skill collections (designer-skills, Emil Kowalski's skills, Vercel's Web Interface
 Guidelines, Impeccable) know about interfaces that is right whatever the taste, as checks and criteria over the +ui track the
@@ -17,7 +17,7 @@ reference, the worst case of each view, and the prose a view task reads. No new 
   count and the checks' own `limits`. Five rules warn: `zoom-disabled` (a viewport `<meta>` or Next's viewport export that
   blocks zoom — WCAG 1.4.4), `img-no-alt` (a rendered `<img>` with no text alternative — 1.1.1), `outline-removed` (an
   outline removed on an element, `*`, `:focus` or under the element's own focus variant — a `focus-within:` or a `group-`
-  / `peer-` / `has-` / `in-` one is a doubt — while neither the feature's files nor the project's first 48 stylesheets hold
+  / `peer-` / `has-` / `in-` one is a doubt, its bracket spelling too (`has-[:focus-visible]:`) — while neither the feature's files nor the project's first 48 stylesheets hold
   a focus style — one that draws: `box-shadow: none`, `focus:ring-0`, an `outline-offset` or an `@apply outline-none` is
   none; past that bound the removals are named, unjudged, in the report and in finish's warning — 2.4.7),
   `click-no-keyboard` (a click handler on an element the keyboard cannot reach — no `tabindex`; a role or a key handler
@@ -33,7 +33,7 @@ reference, the worst case of each view, and the prose a view task reads. No new 
   file reaches says what it cut in `uiChecks.limits`, with a count (a line past 2,000 characters, an element's tag — or one
   naming a click or paste handler — or a click's content read past 30 lines, a file's 200 findings — still counted —, a
   file's 256K, the project's first 48 stylesheets read and 384K characters parsed for a focus style: that bound names the
-  outline removals it left unjudged, and finish says so); hostile input runs within 3× plain JSX of the same size — a file
+  outline removals it left unjudged — and whether one sheet alone was longer —, and finish says so); hostile input runs within 3× plain JSX of the same size — a file
   whose every line is a finding up to ~4× (a 256K HTML file of an `<img>` a line: 4.0–4.3×). On the 2,591 view files of ten public UI repositories: 17 img-no-alt, 3 zoom-disabled and 11 click-no-keyboard findings,
   all real; no outline-removed finding (each repository with a candidate also holds focus styles).
 - **A registry component marked deprecated (`_Deprecated: use X_`).** A component row of `.specs/steering/design-system.md`
@@ -82,7 +82,8 @@ doctor and finish.
   purpose — a cost guard under its bound); the registry and the brief 41, 20 and 3 of 3; the prose 117 of 117 and 18 of 18.
   Review 1's fixes: the UI checks 105 of 106 (a cost guard, timed) and 22 of 22, the registry and the brief 33 of 34 (one
   dead step deleted), the prose 30 of 30. Review 2's fixes: the UI checks 51 of 51 (review 1's lists run whole again: 99 of
-  99 applicable, the follow-up's 22 of 22), the registry 16 of 16.
+  99 applicable, the follow-up's 22 of 22), the registry 16 of 16. Review 3's fixes: the UI checks 10 of 10, the
+  focus-chars wording and the prose 26 of 26 (one survivor answered by a fixture: a sheet of exactly 384K read whole).
 
 ## [1.36.0] — 2026-11-18
 
