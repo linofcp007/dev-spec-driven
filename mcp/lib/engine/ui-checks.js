@@ -87,10 +87,14 @@ function readOn(cur, l, from) {
 // judge(tag) for each tag read whole — tag: { name, line (its first), text (from `<` to `>`) } — → CONTROL, a click candidate
 // (its body decides: clickBodies) or nothing. The next tag is looked for PAST the previous one's end (a tag nested in an
 // attribute — `icon={<img />}` — is not judged) and past a read that failed — no `>` within DS_TAG_LINES lines /
-// DS_TAG_CHARS characters (neither it nor a tag starting in the lines it read is judged; failed() counts them), or none
+// DS_TAG_CHARS characters (neither it nor a tag starting in the lines it read is judged; failed() counts them — mayFind's), or none
 // before the end of a CUT line (what the line held past the cut is unread: the read ends there, no quote or brace carried
 // into the lines below — review 1 of 1.37) — each character read once: linear (CRIT_1: a reader that looked again from the
 // next `<` was 1,230× plain JSX on unclosed tags). What lies between the tags reaches the click bodies being read (gap).
+// (a read that failed is counted only for a tag that could have held a finding: an element, or one whose read part names a
+// click or paste handler — review 2 of 1.37: a component's 30-line props, shadcn's `<DayPicker classNames={{…}}>`, were a
+// limit line nobody could act on)
+const mayFind = (t) => (RE_ELEMENT.test(t.name) || /click|paste/i.test(t.text) ? 1 : 0);
 function tagReader(script, judge, add) {
   let cur = null, inScript = false, failed = 0; // the tag being read · inside a markup file's <script> block · reads past a bound
   const bodies = clickBodies(add, () => failed++);
@@ -102,13 +106,13 @@ function tagReader(script, judge, add) {
         if (end === -1) {
           // (a body being read past a tag not read whole is past its own bound by then — lineEnd)
           if (cut) cur = null; // (the line-length limit says it)
-          else if (++cur.lines > DS_TAG_LINES || cur.text.length > DS_TAG_CHARS) { cur = null; failed++; } // not judged — the reader goes on below
+          else if (++cur.lines > DS_TAG_LINES || cur.text.length > DS_TAG_CHARS) { failed += mayFind(cur); cur = null; } // not judged — the reader goes on below
           break;
         }
         const tag = cur;
         cur = null;
         from = end + 1;
-        if (tag.text.length > DS_TAG_CHARS) { failed++; continue; }
+        if (tag.text.length > DS_TAG_CHARS) { failed += mayFind(tag); continue; }
         bodies.tag(tag, judge(tag), n);
         if (!script && tag.name === "script" && !tag.text.endsWith("/>")) inScript = true;
         continue;
@@ -131,7 +135,9 @@ function tagReader(script, judge, add) {
     }
     bodies.lineEnd(n, l.length, cut);
   };
-  return { line, failed: () => failed };
+  // (a candidate whose close tag never came — an end tag HTML lets one omit: `<li onclick>…</ul>` — is counted at the file's
+  // end, never dropped silently: review 2 of 1.37)
+  return { line, failed: () => failed + bodies.left() };
 }
 // click-no-keyboard's BODIES (review 1 of 1.37: Laravel's starter kits — a wrapper whose slot holds the <button>, a backdrop
 // holding its empty overlay layer). A click candidate (an element the keyboard cannot reach — judgeTag) is judged only when
@@ -142,9 +148,10 @@ function tagReader(script, judge, add) {
 // bodies). Candidates nest: text marks each one open (textMark: those below it), a close tag pops the elements opened since,
 // to its own name (an element of that name open — counted by name: an unmatched close costs nothing). Each character once.
 const CONTROL = "control";
-// a slot outlet in a body: JSX's `{children}` / `{props.children}`, Svelte's `{@render …}`, a Blade echo of a bare variable
-// (`{{ $trigger }}`); `{#if}` / `{:else}` / `{/if}` and `{}` (a comment's braces) are no content
-const RE_OUTLET = /^(?:(?:[\w$]+\.)*children|@render\b[\s\S]*)$/, RE_BARE_ECHO = /^\$[A-Za-z_]\w*$/;
+// a slot outlet in a body: JSX's `{children}` / `{props.children}` — called too, a render prop's `{children(state)}` /
+// `{children?.()}` —, Svelte's `{@render …}`, a Blade echo of a bare variable (`{{ $trigger }}`, the raw `{!! $slot !!}` —
+// review 2 of 1.37); `{#if}` / `{:else}` / `{/if}` and `{}` (a comment's braces) are no content
+const RE_OUTLET = /^(?:(?:[\w$]+\.)*children(?:(?:\?\.)?\([\s\S]*\))?|@render\b[\s\S]*|!!\s*\$[A-Za-z_]\w*\s*!!)$/, RE_BARE_ECHO = /^\$[A-Za-z_]\w*$/;
 function clickBodies(add, overBound) {
   let cands = [], head = 0, textMark = 0, els = [], open = new Map(), seen = 0; // pending candidates (head: the outermost kept) · elements opened since
   const pending = () => head < cands.length;
@@ -184,7 +191,7 @@ function clickBodies(add, overBound) {
     }
   };
   return {
-    pending, gap,
+    pending, gap, left: () => cands.length - head,
     tag: (t, k, n) => {
       if (k === CONTROL) { if (pending()) reset(); return; }
       if (t.text.endsWith("/>") || (!k && !pending())) return;
@@ -297,7 +304,9 @@ const VOID = new Set(["area", "base", "br", "col", "hr", "img", "link", "meta", 
 const RE_DISPLAY_NONE = /display\s*:\s*["'`]?none(?![\w-])/i;
 const RE_DELEGATES = /\.focus\(|stopPropagation|target/i; // an inline click handler that forwards focus or reads the event's target
 const RE_CANCELS = /preventDefault|return\s+false/;
-const RE_READS_CLIPBOARD = /clipboard|getData/; // (`e.clipboardData`, `navigator.clipboard`)
+// (the API — `e.clipboardData`, `navigator.clipboard`, `getData` —, never the word: review 2 of 1.37, a blocking handler's
+// own message "Pasting from the clipboard is disabled" read as a read)
+const RE_READS_CLIPBOARD = /clipboardData|navigator\s*\.\s*clipboard|getData/;
 // An inline handler that hands its event on to a call — `(e) => { e.preventDefault(); onPasteCode(e); }`, Vue / Angular's
 // `$event`, an HTML handler's `event` — is not followed, as a named one is not: the call may read the clipboard (review 1 of
 // 1.37: the JSX spelling of Vue's excused `@paste.prevent="onPasteCode"` was a finding). Its event: the handler's parameter
@@ -334,7 +343,8 @@ function judgeTag(tag, add) {
   }
   const element = RE_ELEMENT.test(tag.name);
   const focusable = tag.name === "a" || tag.name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(tag.name);
-  const kind = !element || focusable || tag.name === "slot" ? CONTROL : undefined;
+  // (a `<label>` is no control in a body — never focused itself, the control it names is its own tag: review 2 of 1.37)
+  const kind = !element || (focusable && tag.name !== "label") || tag.name === "slot" ? CONTROL : undefined;
   if (spread) return kind; // (a spread may hold any attribute)
   // img-no-alt: `<img` (as written) with no alt in any binding, no accessible name (a non-empty `title` names it too, as axe-core's
   // image-alt reads it — review 1 of 1.37), not decorative, rendered
@@ -477,6 +487,12 @@ function lastCompound(sel) {
   }
   return sel.slice(from);
 }
+// s without what its parentheses hold (a pseudo-class's arguments: `:not(…)`, `:is(…)`), each character once
+function outsideParens(s) {
+  let depth = 0, out = "";
+  for (const c of s) { if (c === "(") depth++; else if (c === ")") depth--; else if (depth === 0) out += c; }
+  return out;
+}
 function outlineShape(prelude) {
   let shape = null;
   for (const raw of splitTop(prelude, isComma)) {
@@ -484,7 +500,8 @@ function outlineShape(prelude) {
     if (!sel || /focus-visible/i.test(sel)) continue;
     const last = lastCompound(sel);
     const t = RE_COMPOUND_TYPE.exec(last), reached = !t || t[1] === "*" || FOCUSABLE.has(t[1].toLowerCase());
-    if (!last.includes(":")) { if (t && reached) return "element"; } else if (RE_FOCUS_ITSELF.test(last) && reached && !RE_TABINDEX_OFF.test(last)) shape = "focus";
+    // (`[tabindex="-1"]` the compound REQUIRES: outside a pseudo-class's arguments — review 2 of 1.37, `:not([tabindex="-1"])`)
+    if (!last.includes(":")) { if (t && reached) return "element"; } else if (RE_FOCUS_ITSELF.test(last) && reached && !RE_TABINDEX_OFF.test(outsideParens(last))) shape = "focus";
   }
   return shape;
 }

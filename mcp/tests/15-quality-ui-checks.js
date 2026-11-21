@@ -379,6 +379,45 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // review 2 of 1.37's LOWs, by subtraction: a clipboard read is the API, never the word (S3); `[tabindex="-1"]` skips a
+    // `:focus` removal only where the compound REQUIRES it — outside a pseudo-class's arguments (S4); a `<label>` in a body is no
+    // control, a candidate whose close tag never comes is counted (S5); a render prop's `{children(…)}` / `{children?.()}` and
+    // Blade's raw `{!! $slot !!}` are slot outlets (S7); a tag read past the bound is counted only when it could have held a
+    // finding — an element, a click or paste handler named (D4). Each with the shapes the earlier rules judged right
+    const paste = got(lines("export const P = ({ set, fill }) => (", "  <form>",
+      "    <input onPaste={(e) => { e.preventDefault(); toast.error(\"Pasting from the clipboard is disabled\"); }} />", // 3: FINDING
+      "    <input onPaste={(e) => { e.preventDefault(); const d = e.clipboardData; set(d); }} />", "    <input onPaste={(e) => { e.preventDefault(); fill(e.nativeEvent.getData(\"text\")); }} />",
+      "    <input", "      onPaste={(e) => {", "        e.preventDefault();", "        navigator", "          .clipboard", "          .readText()", "          .then(set);", "      }}", "    />",
+      "  </form>", ");"), "src/P.tsx");
+    const htmlPaste = got(lines("<input type=\"password\" onpaste=\"alert('No clipboard pasting'); return false\">"), "public/login.html"); // 1: FINDING
+    const tabindex = got(lines(":not([tabindex=\"-1\"]):focus { outline: none; }", "button:not([tabindex=\"-1\"]):focus { outline: none; }", // 1, 2: FINDING
+      "a:not(:where([tabindex=\"-1\"], [disabled])):focus { outline: none; }", // 3: FINDING
+      "[tabindex=\"-1\"]:not(.x):focus { outline: none; }", "[tabindex = '-1']:focus { outline: none; }", "a:not(.btn)[tabindex=\"-1\"]:focus { outline: none; }"), "src/a11y.css");
+    const body = got(lines("export const B = ({ toggle, children, render, open }) => (", "  <>", "    <div className=\"option\" onClick={toggle}><label>Dark mode</label></div>", // 3: FINDING
+      "    <div onClick={toggle}><label><input type=\"checkbox\" /> Dark</label></div>", "    <div onClick={toggle}>{children({ open })}</div>", "    <div onClick={toggle}>{children?.()}</div>",
+      "    <div onClick={toggle}>{renderChildren(open)}</div>", // 7: FINDING (no outlet)
+      "    <label onClick={toggle}>Pick</label>", "  </>", ");"), "src/B.tsx");
+    const blade = got(lines("<div @click=\"open = ! open\">{!! $slot !!}</div>", "<div @click=\"open = ! open\">{!! __('Profile') !!}</div>"), "resources/views/components/menu.blade.php"); // 2: FINDING
+    const unclosed = run(lines("<ul><li onclick=\"a()\">One<li onclick=\"b()\">Two</ul>"), "public/list.html");
+    // (an outer candidate past the bound — counted then — and an inner one still waiting at the end: each counted once; the
+    // file's last, empty line is the outer one's 30th)
+    const nested = run(lines("<div onclick=\"a()\">", "<div onclick=\"b()\">", ...Array.from({ length: 28 }, (_, i) => "text " + i)), "public/nested.html");
+    const props = (name, attr) => lines("export const C = () => (", "  <" + name, "    " + attr, ...Array.from({ length: 34 }, (_, i) => "    data-k" + i + "=\"v\""), "  />", ");");
+    const D4 = { comp: run(props("DayPicker", "mode=\"single\""), "src/C.tsx").cut.tags, paste: run(props("Input", "onPaste={block}"), "src/C.tsx").cut.tags,
+      click: run(props("Card", "onClick={go}"), "src/C.tsx").cut.tags, element: run(props("section", "role=\"region\""), "src/C.tsx").cut.tags,
+      // (a closed component tag past the characters bound — its props alone — is not counted either)
+      wide: run(lines("export const W = () => <Chart", "  data-a=\"" + "x".repeat(1980) + "\"", "  data-b=\"" + "y".repeat(1980) + "\"", "  data-c=\"" + "z".repeat(1980) + "\" />;"), "src/W.tsx").cut.tags };
+    all("1.37 UI checks (review 2's LOWs): a paste handler's own message naming the clipboard reads nothing, `clipboardData` / `getData` / `navigator.clipboard` (over lines too) do; `:not([tabindex=\"-1\"]):focus` is a candidate, a compound requiring the tabindex is not; a `<label>` in a body is no control, an `<input>` in it is; `{children(…)}`, `{children?.()}`, `{!! $slot !!}` are outlets; an `<li onclick>` whose end tag is omitted is counted; a long component tag of props is not counted, one naming a click or paste handler is, an element is (got " +
+      js({ paste, htmlPaste, tabindex, body, blade, unclosed: [unclosed.findings.length, unclosed.cut], D4 }) + ")", {
+      paste: () => js(paste) === js(["paste-blocked@3"]) && js(htmlPaste) === js(["paste-blocked@1"]),
+      tabindex: () => js(tabindex) === js(["outline-removed@1", "outline-removed@2", "outline-removed@3"]),
+      body: () => js(body) === js(["click-no-keyboard@3", "click-no-keyboard@7"]),
+      blade: () => js(blade) === js(["click-no-keyboard@2"]),
+      unclosed: () => unclosed.findings.length === 0 && js(unclosed.cut) === js({ lines: 0, tags: 2 }) && js(nested.cut) === js({ lines: 0, tags: 2 }),
+      tagLength: () => js(D4) === js({ comp: 0, paste: 1, click: 1, element: 1, wide: 0 }),
+    });
+  }
+
   { // the reader's bounds: an unclosed tag is not judged, nor what starts inside its read; the reader goes on below it; a long
     // tag inside the bounds is judged; DS_CHECK_PER_FILE findings a file
     const filler = (n) => Array.from({ length: n }, (_, i) => "      a" + i + ",");

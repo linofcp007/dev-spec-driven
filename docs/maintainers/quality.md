@@ -1233,7 +1233,9 @@ wrong finding sends a team to fix code that is right.
   a line's end; `\` escapes inside braces). In script mode never right after an identifier, `)`, `]` or a quote
   (`useState<div>`, `a<b`), nor inside a string that closes on its line (`blankStrings`); a markup file's `<script>` block
   is not read for tags. The next tag is looked for PAST the previous one's end, and past a read that failed (no `>` within
-  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters — counted: `tag-length`; or none before the end of a line
+  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters — counted, `tag-length`, when the tag could have held a
+  finding (`mayFind`: an element, or one whose read part names a click or paste handler — review 2 of 1.37: a component's
+  30-line props, shadcn's `<DayPicker classNames={{…}}>`, were a limit line on 6 % of cal.com's view files); or none before the end of a line
   viewLines CUT — the read ends there, no quote or brace carried into the lines below: review 1 of 1.37, an inline data-URI
   logo hid every tag of the next 30 lines, and minified HTML judged an `<img>` on the attributes before its cut alt): each
   character read once (CRIT_1 must-fix 1 — a reader
@@ -1267,15 +1269,18 @@ wrong finding sends a team to fix code that is right.
   is judged by its BODY (`clickBodies`, inside the tag reader — review 1 of 1.37, Laravel's starter kits: a wrapper whose
   slot holds the `<button>`, a backdrop holding its empty overlay layer, 8 of Jetstream's 8 findings): read to its matching
   close tag within the tag reader's bound (30 lines / 4,000 characters from its `>`: past it not judged, counted as
-  `tag-length`), it is a finding only when the body holds content a user reads (literal text, an expression that is no slot
-  outlet) and nothing that is or may render a control — a tag focusable by default (its click bubbles), a component /
-  custom element / member, `<slot>` (and `<ng-content>`), a slot outlet (`{children}`, `{props.children}`, `{@render …}`, a
-  Blade `{{ $x }}`), a line cut at `DS_LINE_MAX`: a doubt, clearing every candidate open (the control is in each body). An
+  `tag-length`; one still waiting at the file's end — an end tag HTML lets one omit, `<li onclick>…</ul>` — counted too,
+  review 2 of 1.37), it is a finding only when the body holds content a user reads (literal text, an expression that is no slot
+  outlet) and nothing that is or may render a control — a tag focusable by default (its click bubbles; a `<label>` is none,
+  never focused itself: review 2 of 1.37), a component / custom element / member, `<slot>` (and `<ng-content>`), a slot
+  outlet (`{children}`, `{props.children}`, called too — `{children(state)}`, `{children?.()}` —, `{@render …}`, a Blade
+  `{{ $x }}` or `{!! $x !!}`: review 2 of 1.37), a line cut at `DS_LINE_MAX`: a doubt, clearing every candidate open (the control is in each body). An
   empty body or one of elements alone (an overlay layer, an icon `<svg>`) is a doubt too. Nested candidates each get the
   text seen while they are open (`textMark`); a close tag pops the elements opened since to its own name, an unmatched one
   costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below).
 - **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)
-  and reads no clipboard (`clipboard` — `e.clipboardData`, `navigator.clipboard` — or `getData`), or a bare `.prevent` /
+  and reads no clipboard (`RE_READS_CLIPBOARD`, the API — `clipboardData`, `navigator.clipboard`, `getData` —, never the
+  word: review 2 of 1.37, a handler's own "Pasting from the clipboard is disabled" excused it), or a bare `.prevent` /
   `|preventDefault`; never a named handler, nor an inline one that hands its event on to a call (`forwardsEvent`: the
   handler's parameter — an arrow's, a function's —, else `$event` / `event`, as an argument: `(e) => { e.preventDefault();
   onPasteCode(e); }` is Vue's excused `@paste.prevent="onPasteCode"` spelled in JSX — review 1 of 1.37). The ONLY rule that
@@ -1288,8 +1293,9 @@ wrong finding sends a team to fix code that is right.
   outline-removed CANDIDATES: a removal (`outline: none | 0`, `outline-style: none`, `outline-width: 0`, `!important` too;
   never `outline: 2px solid transparent`, which forced colours show) in a rule with a selector whose last compound is `*` or
   an element focusable by default with no pseudo-class ("element"), or holds `:focus` itself — never -visible / -within —,
-  of no type or one focusable by default and never `[tabindex="-1"]` (`RE_TABINDEX_OFF` — review 1 of 1.37: `main:focus`,
-  `h1:focus`, `[tabindex="-1"]:focus` hold focus a script moves out of the tab order, a skip link's target) —
+  of no type or one focusable by default and never one REQUIRING `[tabindex="-1"]` (`RE_TABINDEX_OFF` outside a pseudo-class's
+  arguments, `outsideParens` — review 1 of 1.37: `main:focus`, `h1:focus`, `[tabindex="-1"]:focus` hold focus a script
+  moves out of the tab order, a skip link's target; review 2: `:not([tabindex="-1"]):focus` is every reachable one) —
   while the rule's extent, nested blocks included, declares nothing else that draws ("focus": Bootstrap's `outline: 0;
   box-shadow: …` replaces it; its `outline: none; box-shadow: none` override does not); never a selector naming
   focus-visible, `@media print`, a class alone, a rule that never closes. An `@apply` in a rule naming a focus pseudo-class
@@ -1383,7 +1389,8 @@ wrong finding sends a team to fix code that is right.
   fast paths in styleTokens (`unmaskInterpolation` of a text with no mask, `pageWide` of an empty prelude, `RE_MIXIN` only
   after an `@` — the last a cost guard alone: +45 % on that sheet without it, under the bound) took it from ~5× to ~1.5× —
   tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus.
-- **Not in 1.37** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion` raw kind and
+- **Not in 1.37** (cut — CRIT_1, the decisions; review 1's S12, deferred to 1.38: test-harness files — `*.cy.tsx`,
+  `__mocks__/`, `__fixtures__/`, `.storybook/`, `playwright/` — still read as view files): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion` raw kind and
   `no-reduced-motion` (1.38, on one shared project pass), the `_UI checks off:_` marker (1.38), the `addEventListener` paste
   form, a `hint` level.
 
