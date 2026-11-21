@@ -3174,7 +3174,8 @@ function pendingNew(projectDir) {
 // null: its design names no row), problems ([{code, name, near?, text}] — doctor's ui-design-system findings), viewFiles, raw
 // (the first DS_LIST: [{file, line, kind: color | size, value, token? (a registry token of that colour)}]), counts: {color,
 // size}, total, uiChecks (1.37 — {findings (the first DS_LIST: [{rule, level, file, line, value}]), total, byRule, silenced, off?,
-// offIgnored? (1.38: the registry's `_UI checks off:_` — only when it holds an entry), limits}: engine/ui-checks.js), newComponents ([{name, path, registered}]), scanned, limits, truncated }. Stable keys, English; the CLI
+// offIgnored? (1.38: the registry's `_UI checks off:_` — only when it holds an entry), limits}: engine/ui-checks.js),
+// newComponents ([{name, path, registered}]), scanned, limits, truncated }. Stable keys, English; the CLI
 // renders it.
 // `limits`: the bounds that CUT what was read — [{code, read, file?}], code: files (the walk's file cap) · token-files (a
 // token file found the DS_TOKEN_FILES sources full) · token-candidates (files named like a token file left unread past

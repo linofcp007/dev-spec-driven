@@ -302,21 +302,26 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const parse = () => { let n = 0; for (const [rel, t] of texts) n += T.uiChecksOf(T.viewLines(t, rel), rel).findings.length; return n; };
     const med = (xs) => xs.slice().sort((a, b) => a - b)[Math.floor(xs.length / 2)];
     const ms = (f) => { const t0 = process.hrtime.bigint(); f(); return Number(process.hrtime.bigint() - t0) / 1e6; };
-    S.designSystemReport(p); S.designSystemReport(p, { uiPass: true }); bare(); parse(); // (warm)
+    // (the pass itself — uiProject over the walk's files, as the report runs it — never a difference of two reports: the scan's
+    // own time would be the noise; the report runs it: the opted-in report holds the same inventory)
+    const scan = { views: list, truncated: false };
+    const pass = () => T.uiProject(scan, null);
+    const same = js(pass()) === js(S.designSystemReport(p, { uiPass: true }).uiChecks);
+    bare(); parse(); // (warm)
     const sample = remeasure(() => {
-      const xs = { plain: [], pass: [], bare: [], parse: [] };
+      const xs = { pass: [], bare: [], parse: [] };
       for (let k = 0; k < 5; k++) {
-        xs.plain.push(ms(() => S.designSystemReport(p)));
-        xs.pass.push(ms(() => S.designSystemReport(p, { uiPass: true })));
+        xs.pass.push(ms(pass));
         xs.bare.push(ms(bare));
         xs.parse.push(ms(parse));
       }
       const m = Object.fromEntries(Object.entries(xs).map(([k, v]) => [k, Math.round(med(v) * 10) / 10]));
-      return Object.assign(m, { ratio: Math.round((m.pass - m.plain) / (m.bare + m.parse) * 100) / 100 });
+      return Object.assign(m, { ratio: Math.round(m.pass / (m.bare + m.parse) * 100) / 100 });
     }, (s) => s.ratio <= 1.5);
-    all("1.38 project UI checks (G1′): the pass — the report with it less the report without — costs at most 1.5× a bare read of its 400 files plus uiChecksOf of the same texts in memory, a Sass-heavy share (" +
+    all("1.38 project UI checks (G1′): the pass costs at most 1.5× a bare read of its 400 files plus uiChecksOf of the same texts in memory, a Sass-heavy share (" +
       Math.round(sass / all1 * 100) + " % of the characters) among them, measured interleaved at the same moment (got " + js(sample) + ")", {
       ratio: () => sample.ratio <= 1.5,
+      same: () => same,
       sassShare: () => sass * 3 >= all1,
     });
   }
