@@ -793,6 +793,71 @@ function uiChecksReport(files, projectFocus, cap) {
   return { findings: list.slice(0, cap), total, byRule, silenced, limits: [tagCut, fileCut].filter((c) => c.count).concat(pass) };
 }
 
+// --- the project's view files (1.38) -----------------------------------------------------------------------------------------------
+// The project INVENTORY — spec_scan {designSystem: true} / `dev-spec design-system` without a feature, when the operation asks
+// for it (designSystemReport's opts.uiPass; the engine's default runs none): each view file the pass reads (design-system.js
+// uiProject — the feature report's own predicate, uiViewFile) is fed ONCE and its findings are COUNTED, never kept — per rule
+// its count, the files holding one, the first place (by file, then line: a finding past a file's DS_CHECK_PER_FILE has no
+// line — its file is named only when no other place is) —, its memory bounded by the rules, never the files. outline-removed:
+// the 1.37 excuse rule at project scope — ANY focus style in any file read excuses every candidate (the feature report's rule
+// over every view file: the removals its focus search leaves unjudged past DS_FOCUS_SHEETS are judged here); a pass a bound
+// cut (`cut`: the files read) with no focus style read judges none, and its limit `ui-files` names them (count, first place).
+// bounds: the reader's — { size: the characters read of a file, line: of a line } (the limits view-size / line-length name them).
+// → { feed(rel, lines, over) (lines: viewLines of the file's text as read; over: the file is longer than that read),
+//     done(cut) → { read, total, silenced, byRule, rules: { id: {level, files, file, line?} }, limits } }
+function uiProjectPass(bounds) {
+  const rules = new Map(); // id → { count, files, file, line } (line null: the first place is a file's past its cap)
+  let read = 0, silenced = 0, focus = false;
+  const cuts = { "view-size": { read: bounds.size, count: 0, file: null }, "line-length": { read: bounds.line, count: 0, file: null }, "tag-length": { read: DS_TAG_LINES, count: 0, file: null } };
+  const cutAt = (c, n, rel) => { if (!n) return; c.count += n; if (c.file == null || rel < c.file) c.file = rel; };
+  // (a listed place — a line — before a place past a file's cap; then the smaller path: each file is fed once)
+  const place = (e, rel, line) => {
+    if (e.file != null && ((line == null) !== (e.line == null) ? line == null : rel >= e.file)) return;
+    e.file = rel;
+    e.line = line;
+  };
+  return {
+    feed(rel, lines, over) {
+      const r = uiChecksOf(lines, rel);
+      read++;
+      if (r.focus) focus = true;
+      const here = new Map(); // this file's: rule → { n, line (its smallest, null: past the cap alone) }
+      const take = (rule, n, line) => { const h = here.get(rule); if (!h) here.set(rule, { n, line }); else { h.n += n; if (line != null && (h.line == null || line < h.line)) h.line = line; } };
+      for (const x of r.findings) { if (x.silenced) silenced++; else take(x.rule, 1, x.line); }
+      silenced += r.past.silenced;
+      for (const [rule, n] of Object.entries(r.past.byRule)) take(rule, n, null);
+      for (const [rule, h] of here) {
+        if (!rules.has(rule)) rules.set(rule, { count: 0, files: 0, file: null, line: null });
+        const e = rules.get(rule);
+        e.count += h.n;
+        e.files++;
+        place(e, rel, h.line);
+      }
+      if (over) cutAt(cuts["view-size"], 1, rel);
+      cutAt(cuts["line-length"], r.cut.lines, rel);
+      cutAt(cuts["tag-length"], r.cut.tags, rel);
+    },
+    done(cut) {
+      // (the excuse — any focus style read; a cut pass with none judges no removal)
+      const removal = rules.get("outline-removed");
+      let unjudged = null;
+      if (removal && (focus || cut)) { rules.delete("outline-removed"); if (!focus) unjudged = removal; }
+      const byRule = {}, out = {};
+      let total = 0;
+      for (const id of Object.keys(UI_RULES)) {
+        const e = rules.get(id);
+        if (!e) continue;
+        byRule[id] = e.count;
+        total += e.count;
+        out[id] = Object.assign({ level: UI_RULES[id], files: e.files, file: e.file }, e.line != null ? { line: e.line } : {});
+      }
+      const limits = cut ? [Object.assign({ code: "ui-files", read }, unjudged ? Object.assign({ count: unjudged.count, file: unjudged.file }, unjudged.line != null ? { line: unjudged.line } : {}) : {})] : [];
+      for (const code of ["view-size", "line-length", "tag-length"]) { const c = cuts[code]; if (c.count) limits.push({ code, read: c.read, count: c.count, file: c.file }); }
+      return { read, total, silenced, byRule, rules: out, limits };
+    },
+  };
+}
+
 // spec_finish's part of a feature report's uiChecks → { total, byRule, top (the first 3: rule, file, line, value), limits (the
 // report's) } — the warn-level findings alone (the report sorts them first; a report-level rule is never a finish warning)
 function uiFinishChecks(report) {
@@ -803,4 +868,4 @@ function uiFinishChecks(report) {
   return { total, byRule, top, limits: report.limits };
 }
 
-module.exports = { uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, __link };
+module.exports = { uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass, __link };

@@ -28,12 +28,12 @@ let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, desi
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
   isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
   stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep,
-  uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass;
+  uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
   isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
   stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns,
-  fenceStep, uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass } = E); }
+  fenceStep, uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
@@ -44,6 +44,8 @@ const DS_TOKENS_MAX = 1000; // tokens kept from the code — what the registry's
 const DS_SEED_COMPONENTS = 500; // components the seed writes — what the registry's reader reads with their details
 const DS_LIST = 50; // rows a report lists (`missingTotal`, `staleTotal`, `newTokensTotal`, `total` count them all)
 const DS_VIEW_FILES = 200; // a feature's view files read
+const DS_UI_FILES = 5000; // (1.38) the project's view files the UI checks' inventory reads…
+const DS_UI_CHARS = 32 * 1024 * 1024; // …and their characters: past either, its `ui-files` limit says so
 const DS_RAW_PER_FILE = 200; // raw values kept per file
 const BS = String.fromCharCode(92); // a backslash, built: an escaped pipe in a table cell
 
@@ -1433,6 +1435,9 @@ const RE_STYLE_EXT = /\.(?:css|scss|sass|less|styl)$/i;
 // A view or style file — what a feature's raw values are read in (tasks.js RE_VIEW_FILE's text formats, and a component's .js).
 const RE_VIEW_EXT = /\.(?:tsx|jsx|vue|svelte|astro|html?|css|scss|sass|less|styl|erb|cshtml|razor|twig|hbs|handlebars|mustache|ejs|pug)$|\.blade\.php$/i;
 const isViewFile = (rel) => RE_VIEW_EXT.test(rel) || RE_NG_COMPONENT.test(rel) || (RE_JS_COMPONENT.test(rel) && componentOf(rel) != null);
+// (1.38) THE view READER's predicate — a view or style file that is no test, story, mock, fixture or type declaration: what a
+// feature report reads for raw values and UI checks, and what the project's UI checks read (one predicate, both readers)
+const uiViewFile = (rel) => isViewFile(rel) && !isTestFile(rel) && !RE_NOT_COMPONENT_FILE.test(rel);
 // The third-party UI libraries a package.json names (dependencies of any kind) — the registry's `_Libraries:_`.
 const UI_LIBRARIES = ["@mui/material", "@mui/joy", "antd", "@chakra-ui/react", "@mantine/core", "@headlessui/react", "@headlessui/vue", "react-bootstrap",
   "reactstrap", "primereact", "primevue", "vuetify", "element-plus", "naive-ui", "quasar", "@angular/material", "@ionic/react", "@ionic/vue", "@ionic/angular",
@@ -3164,7 +3169,8 @@ function pendingNew(projectDir) {
 // that an unfinished feature's design declares New — its finish adds them: [{name, path, feature}]), pendingTotal, stale (the
 // registry rows naming a file of the project that is gone: [{name, path}]), staleTotal, newTokens (the code's tokens the registry doesn't list, the first
 // DS_LIST: [{name, value}]), newTokensTotal, newSources / newLibraries (token files / UI libraries the registry doesn't name),
-// inSync, scanned: {files}, limits, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} |
+// inSync, uiChecks (1.38, opts.uiPass alone — the operation's: the inventory of the project's view files, uiProject), scanned:
+// {files}, limits, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} |
 // null: its design names no row), problems ([{code, name, near?, text}] — doctor's ui-design-system findings), viewFiles, raw
 // (the first DS_LIST: [{file, line, kind: color | size, value, token? (a registry token of that colour)}]), counts: {color,
 // size}, total, uiChecks (1.37 — {findings (the first DS_LIST: [{rule, level, file, line, value}]), total, byRule, silenced, limits}:
@@ -3185,6 +3191,33 @@ const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files
   scan.capped.tokens ? { code: "tokens", read: DS_TOKENS_MAX } : null,
   scan.capped.exports ? { code: "component-files", read: scan.capped.exports } : null,
   scan.capped.workspaces ? { code: "workspace-manifests", read: scan.capped.manifests } : null].filter(Boolean);
+// The project's UI checks (1.38 — the project report's `uiChecks`, when the operation asks: opts.uiPass) → the inventory of
+// engine/ui-checks.js uiProjectPass. Its OWN read, after scanCode (sharing settle's reads saves the bare read alone — parsing
+// is 70–85 % of the pass, CRIT_X D4): the walk's view files that pass uiViewFile, the stylesheets first (a pass a bound cuts
+// has read the focus styles it could), then the shorter path; each file's first DS_READ_CHARS characters, as the feature
+// report reads them (one more asked for: `over`); DS_UI_FILES files / DS_UI_CHARS characters at most — `ui-files` then.
+// Never in a feature report, finish or the seed. Its limits never reach the report's `limits`, `truncated` or `inSync`.
+function uiProject(scan) {
+  const order = (a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
+  const list = scan.views.filter((x) => uiViewFile(x.rel)).sort((a, b) => RE_STYLE_EXT.test(b.rel) - RE_STYLE_EXT.test(a.rel) || a.rel.length - b.rel.length || order(a, b));
+  const pass = uiProjectPass({ size: DS_READ_CHARS, line: DS_LINE_MAX });
+  const heads = readFileHeads(list.slice(0, DS_UI_FILES).map((x) => x.full), DS_READ_CHARS + 1);
+  let n = 0, chars = 0, cut = false;
+  try {
+    for (const x of list) {
+      if (n >= DS_UI_FILES || chars >= DS_UI_CHARS) { cut = true; break; }
+      const t = heads.next();
+      n++;
+      if (t == null) continue;
+      const over = t.length > DS_READ_CHARS, text = over ? t.slice(0, DS_READ_CHARS) : t;
+      chars += text.length;
+      pass.feed(x.rel, viewLines(text, x.rel), over);
+    }
+  } finally {
+    heads.stop();
+  }
+  return pass.done(cut);
+}
 function designSystemReport(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
   const lang = projectLang(projectDir);
@@ -3220,6 +3253,7 @@ function designSystemReport(projectDir, opts = {}) {
     stale: stale.slice(0, DS_LIST), staleTotal: stale.length,
     newTokens: newTokens.slice(0, DS_LIST), newTokensTotal: newTokens.length, newSources, newLibraries,
     inSync: !!reg && !limits.length && !missing.length && !stale.length && !newTokens.length && !newSources.length && !newLibraries.length,
+    ...(opts.uiPass ? { uiChecks: uiProject(scan) } : {}), // (1.38: the operation's opt-in — the engine's default reads no view file)
     scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
 }
 // The feature's part: its usage rows against the registry, the raw values in its view files (its _Implements:_ view / style
@@ -3234,9 +3268,8 @@ function featureReport(projectDir, root, f, reg, scan) {
   const find = reg && usage && usage.rows.length ? designSystemFindings(usage, reg, f.slug) : null;
   const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
   const tokenFiles = new Set([...scan.sources, ...scan.twins, ...(reg ? reg.sources : [])].map((s) => fold(s.replace(/^(?:\.\/)+/, ""))));
-  const want = (rel) => isViewFile(rel) && !isTestFile(rel) && !RE_NOT_COMPONENT_FILE.test(rel);
-  const found = scan.views.filter((x) => want(x.rel));
-  const mine = [...featureFilesOf(root, scan.realRoot, f.dir, found, want)].sort();
+  const found = scan.views.filter((x) => uiViewFile(x.rel));
+  const mine = [...featureFilesOf(root, scan.realRoot, f.dir, found, uiViewFile)].sort();
   const byRel = new Map(found.map((x) => [x.rel, x.full]));
   const tokenOf = new Map();
   for (const t of reg ? reg.tokens : []) { const k = colorKey(t.value); if (k && !tokenOf.has(k)) tokenOf.set(k, t.name); }

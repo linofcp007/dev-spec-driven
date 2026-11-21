@@ -1950,6 +1950,17 @@ const COMMANDS = [
           if (r.registry.exists && r.newLibraries.length) log(T.dsLibrariesNew(r.newLibraries.join(", ")));
           // (never beside a component an unfinished feature is building: the registry does not list THAT one yet)
           if (r.inSync && !r.pendingTotal) log(T.dsInSync);
+          // 1.38: the UI checks of the project's view files — an inventory (each rule's count, files, first place), never a list
+          const u = r.uiChecks;
+          if (u) {
+            if (u.total) {
+              log(T.uiProjectHead(u.total, u.read));
+              Object.entries(u.rules).forEach(([id, x]) => log(T.uiProjectRule(id, u.byRule[id], x.files, x.line ? x.file + ":" + x.line : x.file, x.level === "report" ? T.uiReportTag : "")));
+            // (never "nothing" beside the removals a cut pass left unjudged: its limit line names them)
+            } else if (u.read && !u.limits.some((l) => l.code === "ui-files" && l.count)) log(T.uiProjectNone(u.read));
+            if (u.silenced) log(T.uiSilenced(u.silenced));
+            u.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count)));
+          }
         }
         r.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.file)));
       });

@@ -361,7 +361,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, require, __dirn
       synced: () => synced.inSync === true && synced.missingTotal === 0 && synced.staleTotal === 0 && synced.registry.components === 5 && synced.registry.tokens === 12,
       drift: () => js(drift.missing) === js([{ name: "Badge", path: "src/components/Badge.tsx" }]) && js(drift.stale) === js([{ name: "Dialog", path: "src/ui/dialog.vue" }]) &&
         js(drift.newSources) === js(["src/styles/theme.css"]) && js(drift.newLibraries) === js(["antd"]) && drift.inSync === false,
-      mcp: () => js(viaMcp) === js(drift),
+      // (1.38: the operation opts into the project's UI checks — `uiChecks` beside the engine default's keys, CRIT_X D4)
+      mcp: () => js(Object.fromEntries(Object.entries(viaMcp).filter(([k]) => k !== "uiChecks"))) === js(drift) && js(viaMcp.uiChecks) === js(S.designSystemReport(p, { uiPass: true }).uiChecks),
       refusals: () => bad[0].result.isError === true && bad[1].result.isError === true && payload(bad[2]).ok === false,
     });
     // nothing in the code: the plain stub; a project template wins; a PT project: its headings

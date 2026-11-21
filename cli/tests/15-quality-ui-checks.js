@@ -160,4 +160,43 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       finish: () => f.out.includes("  ▲ " + MSG("en").finish.uiChecks(2, "src/errors/NotFound.tsx:3 font-size-viewport; src/errors/NotFound.tsx:4 font-size-viewport", ge.slug)),
     });
   }
+
+  { // 1.38: the project's UI checks — `design-system` without a feature (the operation opts in): after the registry part, the
+    // inventory's head, a line per rule (count, files, the first place; a report-level one tagged; warn first), the silenced
+    // count, its limits; nothing found: one line; a cut pass that left a removal unjudged: its limit line, never "nothing"
+    const proj = (tag, lang, files) => { const p = path.join(tmp, "p138-uip-" + tag); SR.initProject(p, ["ui"], lang); for (const [rel, text] of Object.entries(files)) write(p, rel, text); return p; };
+    const IMG = "export const Hero = () => <img src=\"/hero.png\" />;\n";
+    const A = ["export const A = () => (", "  <div className=\"transition-all\">", "    <img src=\"/a.png\" />", "    <img src=\"/b.png\" />", "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/c.png\" />", "  </div>", ");", ""].join("\n");
+    const p = proj("en", "en", { "src/A.tsx": A, "src/B.tsx": IMG });
+    const r = runIn(["design-system", "--project", p]);
+    const clean = runIn(["design-system", "--project", proj("clean", "en", { "src/Ok.tsx": "export const Ok = () => <button type=\"button\">ok</button>;\n" })]);
+    const pt = runIn(["design-system", "--project", proj("pt", "pt", { "src/A.tsx": A, "src/B.tsx": IMG })]);
+    // (a cut pass: 129 view files of 256K after a reset — 32 MB read —, no focus style read: the removal unjudged)
+    const big = { "a/r.css": "*:focus {\n  outline: none;\n}\n" }, body = "<!--\n" + ("y".repeat(99) + "\n").repeat(2700) + "-->\n";
+    for (let i = 0; i < 129; i++) big["src/p/p" + String(i).padStart(3, "0") + ".html"] = body;
+    const cut = runIn(["design-system", "--project", proj("cut", "en", big)]);
+    const T = MSG("en").cliOutput, P = MSG("pt").cliOutput;
+    const lineOf = (out, s) => out.split("\n").indexOf(s);
+    all("1.38 design-system (CLI): the project's UI checks — after the registry part the inventory's head, a line per rule (its count, its files, the first place; report-level tagged), the silenced count; nothing found: one line; a cut pass leaving a removal unjudged prints its limit, never \"nothing\"; Portuguese in Portuguese (got " +
+      js([r.code, r.out, clean.out, cut.out.slice(-700), pt.out.slice(-500)]) + ")", {
+      head: () => r.code === 0 && lineOf(r.out, T.uiProjectHead(4, 2)) > lineOf(r.out, T.dsCreate) && lineOf(r.out, T.dsCreate) > 0,
+      rules: () => lineOf(r.out, T.uiProjectRule("img-no-alt", 3, 2, "src/A.tsx:3", "")) === lineOf(r.out, T.uiProjectHead(4, 2)) + 1 &&
+        lineOf(r.out, T.uiProjectRule("transition-all", 1, 1, "src/A.tsx:2", T.uiReportTag)) === lineOf(r.out, T.uiProjectHead(4, 2)) + 2,
+      silenced: () => lineOf(r.out, T.uiSilenced(1)) === lineOf(r.out, T.uiProjectHead(4, 2)) + 3,
+      none: () => clean.code === 0 && clean.out.includes(T.uiProjectNone(1) + "\n") && !clean.out.includes(T.uiProjectHead(0, 1)),
+      cut: () => cut.code === 0 && cut.out.includes(T.dsLimit["ui-files"](129, "a/r.css:2", 1)) && !cut.out.includes(T.uiProjectNone(129)),
+      pt: () => pt.code === 0 && pt.out.includes(P.uiProjectHead(4, 2)) && pt.out.includes(P.uiProjectRule("transition-all", 1, 1, "src/A.tsx:2", P.uiReportTag)),
+    });
+    // (each language: the inventory's lines and its bound name what they say; the unjudged clauses of the feature report and
+    // finish point to the project's checks — P4)
+    const said = ["en", "pt", "pt-BR", "es"].map((l) => {
+      const C = MSG(l).cliOutput, D = C.dsLimit, u = D["ui-files"](5000, "a/r.css:3", 7), plain = D["ui-files"](5000);
+      const point = [D["focus-sheets"](48, "a/b.css:3", 7), D["focus-chars"](2, "a/b.css:3", 7, "big/c.css", 393216, true), MSG(l).finish.uiUnjudged(7, "a/b.css:3", 48)];
+      return [/7/.test(u) && u.includes("a/r.css:3") && u.includes("5000"), plain.includes("5000") && !/undefined|7/.test(plain), point.every((x) => x.includes("design-system")),
+        C.uiProjectRule("img-no-alt", 3, 2, "src/A.tsx:3", "").includes("src/A.tsx:3"), !/undefined/.test(C.uiProjectHead(4, 2) + C.uiProjectNone(1))];
+    });
+    all("1.38 design-system (CLI): every language says the inventory's bound (its count and first place when it left removals unjudged, none of it else) and the rule line, and the unjudged clauses point to the project's UI checks (got " + js(said) + ")", {
+      strings: () => said.every((x) => x.every(Boolean)),
+    });
+  }
 };

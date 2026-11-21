@@ -1049,7 +1049,7 @@ const msg = {
       // (1.37 revisão 2: as remoções do contorno que uma procura de foco parada num limite deixou por avaliar — sheet: a folha
       // que parou a procura no limite de caracteres, chars: esse limite, alone: essa folha sozinha excede-o (revisão 3); a
       // última frase do aviso, ou o aviso sozinho)
-      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} ${n === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} (a primeira: ${at}): as folhas de estilo do projeto ${sheet ? `a partir de ${sheet}` : `além das primeiras ${read}`} não foram lidas à procura de um estilo de foco${sheet ? ` (essa folha ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa)` : ""} — confirmar que o projeto desenha um, ou ${n === 1 ? "silenciá-la" : "silenciá-las"}`,
+      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} ${n === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} (a primeira: ${at}): as folhas de estilo do projeto ${sheet ? `a partir de ${sheet}` : `além das primeiras ${read}`} não foram lidas à procura de um estilo de foco${sheet ? ` (essa folha ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa)` : ""} — as verificações de interface do projeto ${n === 1 ? "avaliam-na" : "avaliam-nas"} (spec_scan {designSystem: true} · ${DEV_SPEC} design-system); confirmar que o projeto desenha um, ou ${n === 1 ? "silenciá-la" : "silenciá-las"}`,
       noImplements: (file) => `nenhuma tarefa indica os seus ficheiros em _Implements:_ — a baseline de deriva, a deteção de duplicados e a atribuição do dev-guardian não veem código desta feature. Acrescenta _Implements: <caminho>_ a cada tarefa que escreveu código (um ${file} editado volta a ser aprovado), ou ignora isto se nenhuma o fez.`,
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
@@ -1579,13 +1579,15 @@ const msg = {
         "view-files": (n) => `  (só os primeiros ${n} ficheiros de vista da feature são lidos à procura de valores fixos)`,
         // (1.37 revisão 2: at — o ficheiro:linha da primeira remoção não avaliada, count — quantas, sheet — a folha que parou a procura;
         // revisão 3: chars — o limite de caracteres, alone — essa folha sozinha excede-o)
-        "focus-sheets": (n, at, count) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados nas primeiras ${n} folhas de estilo do projeto, um limite)`,
-        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados em ${n} ${n === 1 ? "folha de estilo" : "folhas de estilo"}, até ${sheet}, que ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa)`,
+        "focus-sheets": (n, at, count) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados nas primeiras ${n} folhas de estilo do projeto, um limite — as verificações de interface do projeto avaliam-nas: ${DEV_SPEC} design-system)`,
+        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados em ${n} ${n === 1 ? "folha de estilo" : "folhas de estilo"}, até ${sheet}, que ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa — as verificações de interface do projeto avaliam-nas: ${DEV_SPEC} design-system)`,
         // (1.37 revisão 1: os outros limites das verificações de interface — count: quantos cortou, file: o primeiro)
         "view-size": (n, file, count) => `  (${count} ${count === 1 ? "ficheiro de vista é maior" : "ficheiros de vista são maiores"} do que os ${n} caracteres lidos de cada ficheiro — o primeiro: ${file}: as verificações de interface não leram o resto)`,
         "line-length": (n, file, count) => `  (${count} ${count === 1 ? "linha tem" : "linhas têm"} mais de ${n} caracteres — a primeira em ${file}: cada uma é lida até aí, e uma tag que ela corta não é avaliada)`,
         "tag-length": (n, file, count) => `  (${count} ${count === 1 ? "tag não é avaliada" : "tags não são avaliadas"} — a primeira em ${file}: lida além de ${n} linhas ou do limite de caracteres do leitor)`,
         "file-findings": (n, file, count) => `  (mais ${count} ${count === 1 ? "achado de interface" : "achados de interface"} além dos ${n} de um ficheiro — o primeiro em ${file}: contados, não listados)`,
+        // (1.38: as verificações de interface do projeto — n: os ficheiros de vista lidos; at / count: as remoções do contorno não avaliadas)
+        "ui-files": (n, at, count) => `  (as verificações de interface leram ${n === 1 ? "o primeiro ficheiro de vista" : `os primeiros ${n} ficheiros de vista`} do projeto, um limite: o resto não é contado${count ? ` — ${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"}, a primeira: ${at}` : ""})`,
         "component-files": (n) => `  (foram lidos ${n} ficheiros de componentes à procura dos outros componentes que exportam, e foi atingido um limite — os ficheiros ou caracteres lidos, ou os nomes guardados de um ficheiro: o resto não é comparado)`,
         "workspace-manifests": (n) => `  (foi atingido um limite dos padrões de workspace — lidos ${n} dos ficheiros package.json dos pacotes do workspace: as bibliotecas dos restantes não são comparadas)`,
       },
@@ -1613,6 +1615,11 @@ const msg = {
         "transition-all": "transition: all (ou sem propriedade) anima todas as propriedades que mudam, também as de layout — listar as que se devem mover",
       },
       uiSilenced: (n) => `  (${n} ${n === 1 ? "silenciada" : "silenciadas"} por um comentário ui-check-off)`,
+      // 1.38: as verificações de interface dos ficheiros de vista do projeto (o `uiChecks` de spec_scan {designSystem: true}: um
+      // inventário — contagens e o primeiro sítio de cada regra, nunca uma lista; tag: uiReportTag de uma regra só do relatório, ou "")
+      uiProjectHead: (n, files) => `  Verificações de interface nos ficheiros de vista do projeto (${n} ${files === 1 ? "no ficheiro lido" : `nos ${files} lidos`}) — o relatório de cada feature lista as suas; o spec_finish avisa das de uma feature +ui:`,
+      uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} em ${files} ${files === 1 ? "ficheiro" : "ficheiros"}${tag ? " " + tag : ""} — a primeira: ${at}`,
+      uiProjectNone: (files) => `  Verificações de interface: nada ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`} do projeto`,
       dsTokensNew: (n) => `  tokens no código, fora do registo (${n}) — uma linha por cada:`,
       dsPending: (list) => `  no código, construídos por uma feature ainda não concluída (entram no registo no finish dela): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,

@@ -226,7 +226,8 @@ const OPERATIONS = [
     // registry, with the raw values in its view files; a mode of its own key (spec_scan {designSystem: true})
     id: "design-system", tool: "spec_scan", mode: { key: "designSystem", values: [true] }, cli: ["design-system"], engine: "designSystemReport",
     args: { name: NAME },
-    call: (S, dir, o) => S.designSystemReport(dir, { name: o.name }),
+    // (1.38: the operation opts into the project's UI checks — never an argument; the engine's default reads no view file)
+    call: (S, dir, o) => S.designSystemReport(dir, { name: o.name, uiPass: true }),
   },
   {
     id: "clarify", tool: "spec_clarify", cli: ["clarify"], engine: "clarify",
