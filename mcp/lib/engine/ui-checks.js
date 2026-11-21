@@ -565,8 +565,11 @@ function utilities(s, line, add, move) {
 // holding a `text-` utility) or a block past DS_BLOCK_DEPTH went unread — F94's note, a size media queries adjust may not fail
 // (CRIT_3 must-fix 2). An override in another file is not seen.
 const RE_LAYER = /^@layer\b/i;
-// (anywhere in the prelude after a blank or a `>`: a markup file's first rule carries its `<style scoped>` line before it)
-const RE_KEYFRAMES = /(?:^|[\s>])@(?:-[a-z]+-)?keyframes\b/i;
+const RE_KEYFRAMES = /^@(?:-[a-z]+-)?keyframes\b/i;
+// A markup file's <style> block: its opening tag's line is a CSS line too (viewLines), so the block's FIRST rule reads it in its
+// prelude — `<style scoped> @media print` — read without it (1.38: an at-rule there read as none — a print / reduced-motion /
+// conditional block, keyframes — since 1.37)
+const RE_STYLE_TAG = /^<style\b[^>]*>\s*/i;
 const RE_TW_TEXT_ANY = /(?:^|[\s:!])text-/;
 const RE_REMOVAL = /^(?:outline\s*:\s*(?:none|0(?:px)?)|outline-style\s*:\s*none|outline-width\s*:\s*0(?:px)?)(?:\s*!\s*important)?$/i;
 const RE_FOCUS_PSEUDO = /:focus(?:-visible|-within)?(?![\w-])/i;
@@ -633,11 +636,12 @@ function sheetChecks(text, rel, add, move) {
   styleTokens(text, rel, {
     block: (e) => {
       if (deep || open.length >= DS_BLOCK_DEPTH) { if (deep++ === 0) { open[open.length - 1].other = true; condSize = true; } return; }
-      const p = open.length ? open[open.length - 1] : null, at = e.prelude[0] === "@";
-      if (move && RE_KEYFRAMES.test(e.prelude)) move(e.line);
-      open.push({ selector: e.prelude, shape: at ? null : outlineShape(e.prelude), print: (p != null && p.print) || (at && RE_PRINT.test(e.prelude)),
-        reduced: (p != null && p.reduced) || (at && RE_REDUCED.test(e.prelude)), cond: (p != null && p.cond) || (at && !RE_LAYER.test(e.prelude)),
-        focus: (p != null && p.focus) || (!at && RE_FOCUS_PSEUDO.test(e.prelude)), removals: [], other: false });
+      const pre = e.prelude[0] === "<" ? e.prelude.replace(RE_STYLE_TAG, "") : e.prelude;
+      const p = open.length ? open[open.length - 1] : null, at = pre[0] === "@";
+      if (move && at && RE_KEYFRAMES.test(pre)) move(e.line);
+      open.push({ selector: pre, shape: at ? null : outlineShape(pre), print: (p != null && p.print) || (at && RE_PRINT.test(pre)),
+        reduced: (p != null && p.reduced) || (at && RE_REDUCED.test(pre)), cond: (p != null && p.cond) || (at && !RE_LAYER.test(pre)),
+        focus: (p != null && p.focus) || (!at && RE_FOCUS_PSEUDO.test(pre)), removals: [], other: false });
     },
     statement: (e) => {
       if (deep) return;

@@ -459,6 +459,22 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38 (found by chain P): a markup file's <style> block — its opening tag's line is a CSS line, so its FIRST rule read the
+    // tag in its prelude and an at-rule there read as none since 1.37: a print / reduced-motion / conditional block — the same
+    // sheet as a .css file is silent; a first rule's value holds no tag; a later block is read as before
+    const sfc = (body, rel) => got("<template><h1>x</h1></template>\n<style scoped>\n" + body + "</style>\n", rel);
+    const S1 = { print: "@media print { button { outline: none; } }\n", reduced: "@media (prefers-reduced-motion: reduce) { .a { transition: all .2s; } }\n",
+      cond: "@media (min-width: 600px) { h1 { font-size: 2rem; } }\nh1 { font-size: 5vw; }\n" };
+    const R1 = Object.fromEntries(Object.entries(S1).map(([k, b]) => [k, [sfc(b, "src/A.vue"), sfc(b, "src/A.svelte"), got(b, "src/a.css")]]));
+    const first = run("<style>\nbutton:focus { outline: none; }\n</style>\n<template><b>x</b></template>\n", "src/P.vue").findings.map((f) => f.value);
+    const later = got("<style>\n.a { color: red; }\n@media print { button { outline: none; } }\nbutton { outline: none; }\n</style>\n", "src/L.vue");
+    all("1.38: a <style> block's first rule is read without its tag — an at-rule there is one (print, reduced motion, a condition: silent, as in a .css file), a first rule's value names no tag; later blocks as before (got " + js({ R1, first, later }) + ")", {
+      atRule: () => Object.values(R1).every((x) => x.every((y) => js(y) === "[]")),
+      value: () => js(first) === js(["button:focus { outline: none }"]),
+      later: () => js(later) === js(["outline-removed@4"]),
+    });
+  }
+
   { // silencing: one inline comment, any syntax of the file, on the finding's line or the one above
     const jsx = lines("export const A = () => (", "  <>", "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/spacer.gif\" />", // 4: silenced (above)
       "    <img src=\"/b.png\" /> {/* ui-check-off: click-no-keyboard, img-no-alt */}", // 5: silenced (same line)
