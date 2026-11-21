@@ -12,7 +12,8 @@
  * its lines cut at DS_LINE_MAX, comments out) and a stylesheet's structure through styleTokens' walker (the ONE CSS block
  * walker, its events), never a second walker. Every doubt reads as "not judged": a wrong finding sends a team to fix code that
  * is right. A team silences ONE occurrence with a comment `ui-check-off: <rule-id>[, <rule-id>]` on its line or the line
- * above (any comment syntax of the file); a silenced finding is counted, never listed.
+ * above (an HTML, JS or CSS comment; never a template engine's own: Blade's `{{-- --}}`, Twig's `{# #}`); a silenced
+ * finding is counted, never listed.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js. LAZY (the tier): what reads
  * the code loads on first use.
@@ -86,10 +87,14 @@ function readOn(cur, l, from) {
 // judge(tag) for each tag read whole — tag: { name, line (its first), text (from `<` to `>`) } — → CONTROL, a click candidate
 // (its body decides: clickBodies) or nothing. The next tag is looked for PAST the previous one's end (a tag nested in an
 // attribute — `icon={<img />}` — is not judged) and past a read that failed — no `>` within DS_TAG_LINES lines /
-// DS_TAG_CHARS characters (neither it nor a tag starting in the lines it read is judged; failed() counts them), or none
+// DS_TAG_CHARS characters (neither it nor a tag starting in the lines it read is judged; failed() counts them — mayFind's), or none
 // before the end of a CUT line (what the line held past the cut is unread: the read ends there, no quote or brace carried
 // into the lines below — review 1 of 1.37) — each character read once: linear (CRIT_1: a reader that looked again from the
 // next `<` was 1,230× plain JSX on unclosed tags). What lies between the tags reaches the click bodies being read (gap).
+// (a read that failed is counted only for a tag that could have held a finding: an element, or one whose read part names a
+// click or paste handler — review 2 of 1.37: a component's 30-line props, shadcn's `<DayPicker classNames={{…}}>`, were a
+// limit line nobody could act on)
+const mayFind = (t) => (RE_ELEMENT.test(t.name) || /click|paste/i.test(t.text) ? 1 : 0);
 function tagReader(script, judge, add) {
   let cur = null, inScript = false, failed = 0; // the tag being read · inside a markup file's <script> block · reads past a bound
   const bodies = clickBodies(add, () => failed++);
@@ -101,13 +106,13 @@ function tagReader(script, judge, add) {
         if (end === -1) {
           // (a body being read past a tag not read whole is past its own bound by then — lineEnd)
           if (cut) cur = null; // (the line-length limit says it)
-          else if (++cur.lines > DS_TAG_LINES || cur.text.length > DS_TAG_CHARS) { cur = null; failed++; } // not judged — the reader goes on below
+          else if (++cur.lines > DS_TAG_LINES || cur.text.length > DS_TAG_CHARS) { failed += mayFind(cur); cur = null; } // not judged — the reader goes on below
           break;
         }
         const tag = cur;
         cur = null;
         from = end + 1;
-        if (tag.text.length > DS_TAG_CHARS) { failed++; continue; }
+        if (tag.text.length > DS_TAG_CHARS) { failed += mayFind(tag); continue; }
         bodies.tag(tag, judge(tag), n);
         if (!script && tag.name === "script" && !tag.text.endsWith("/>")) inScript = true;
         continue;
@@ -130,7 +135,9 @@ function tagReader(script, judge, add) {
     }
     bodies.lineEnd(n, l.length, cut);
   };
-  return { line, failed: () => failed };
+  // (a candidate whose close tag never came — an end tag HTML lets one omit: `<li onclick>…</ul>` — is counted at the file's
+  // end, never dropped silently: review 2 of 1.37)
+  return { line, failed: () => failed + bodies.left() };
 }
 // click-no-keyboard's BODIES (review 1 of 1.37: Laravel's starter kits — a wrapper whose slot holds the <button>, a backdrop
 // holding its empty overlay layer). A click candidate (an element the keyboard cannot reach — judgeTag) is judged only when
@@ -141,9 +148,10 @@ function tagReader(script, judge, add) {
 // bodies). Candidates nest: text marks each one open (textMark: those below it), a close tag pops the elements opened since,
 // to its own name (an element of that name open — counted by name: an unmatched close costs nothing). Each character once.
 const CONTROL = "control";
-// a slot outlet in a body: JSX's `{children}` / `{props.children}`, Svelte's `{@render …}`, a Blade echo of a bare variable
-// (`{{ $trigger }}`); `{#if}` / `{:else}` / `{/if}` and `{}` (a comment's braces) are no content
-const RE_OUTLET = /^(?:(?:[\w$]+\.)*children|@render\b[\s\S]*)$/, RE_BARE_ECHO = /^\$[A-Za-z_]\w*$/;
+// a slot outlet in a body: JSX's `{children}` / `{props.children}` — called too, a render prop's `{children(state)}` /
+// `{children?.()}` —, Svelte's `{@render …}`, a Blade echo of a bare variable (`{{ $trigger }}`, the raw `{!! $slot !!}` —
+// review 2 of 1.37); `{#if}` / `{:else}` / `{/if}` and `{}` (a comment's braces) are no content
+const RE_OUTLET = /^(?:(?:[\w$]+\.)*children(?:(?:\?\.)?\([\s\S]*\))?|@render\b[\s\S]*|!!\s*\$[A-Za-z_]\w*\s*!!)$/, RE_BARE_ECHO = /^\$[A-Za-z_]\w*$/;
 function clickBodies(add, overBound) {
   let cands = [], head = 0, textMark = 0, els = [], open = new Map(), seen = 0; // pending candidates (head: the outermost kept) · elements opened since
   const pending = () => head < cands.length;
@@ -183,7 +191,7 @@ function clickBodies(add, overBound) {
     }
   };
   return {
-    pending, gap,
+    pending, gap, left: () => cands.length - head,
     tag: (t, k, n) => {
       if (k === CONTROL) { if (pending()) reset(); return; }
       if (t.text.endsWith("/>") || (!k && !pending())) return;
@@ -296,7 +304,9 @@ const VOID = new Set(["area", "base", "br", "col", "hr", "img", "link", "meta", 
 const RE_DISPLAY_NONE = /display\s*:\s*["'`]?none(?![\w-])/i;
 const RE_DELEGATES = /\.focus\(|stopPropagation|target/i; // an inline click handler that forwards focus or reads the event's target
 const RE_CANCELS = /preventDefault|return\s+false/;
-const RE_READS_CLIPBOARD = /clipboard|getData/; // (`e.clipboardData`, `navigator.clipboard`)
+// (the API — `e.clipboardData`, `navigator.clipboard`, `getData` —, never the word: review 2 of 1.37, a blocking handler's
+// own message "Pasting from the clipboard is disabled" read as a read)
+const RE_READS_CLIPBOARD = /clipboardData|navigator\s*\.\s*clipboard|getData/;
 // An inline handler that hands its event on to a call — `(e) => { e.preventDefault(); onPasteCode(e); }`, Vue / Angular's
 // `$event`, an HTML handler's `event` — is not followed, as a named one is not: the call may read the clipboard (review 1 of
 // 1.37: the JSX spelling of Vue's excused `@paste.prevent="onPasteCode"` was a finding). Its event: the handler's parameter
@@ -333,7 +343,8 @@ function judgeTag(tag, add) {
   }
   const element = RE_ELEMENT.test(tag.name);
   const focusable = tag.name === "a" || tag.name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(tag.name);
-  const kind = !element || focusable || tag.name === "slot" ? CONTROL : undefined;
+  // (a `<label>` is no control in a body — never focused itself, the control it names is its own tag: review 2 of 1.37)
+  const kind = !element || (focusable && tag.name !== "label") || tag.name === "slot" ? CONTROL : undefined;
   if (spread) return kind; // (a spread may hold any attribute)
   // img-no-alt: `<img` (as written) with no alt in any binding, no accessible name (a non-empty `title` names it too, as axe-core's
   // image-alt reads it — review 1 of 1.37), not decorative, rendered
@@ -393,20 +404,24 @@ function transitionAll(prop, value) {
 // --- Tailwind's utilities --------------------------------------------------------------------------------------------------------
 // A line's class-like tokens (cut at blanks, quotes and the punctuation code puts around a string) — variants, then the
 // utility: `transition-all` (any variants, `!`); an outline removal (`outline-none`, `outline-hidden`, `outline-0`) under a
-// focus variant — a bare one is not judged (shadcn puts it on focus-managed containers and activedescendant options); and a
-// FOCUS STYLE: any other utility under a focus variant (`focus-visible:ring-2`, `group-focus:…`) that draws something —
-// never one valued `0` / `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`: the forms plugin's ring
-// removed — review 1 of 1.37). A FOCUS VARIANT: one holding `focus` as a part delimited by `-`, `[`, `]` or its ends —
-// `focus`, `focus-visible`, `group-focus`, `peer-focus-within`, Headless UI's `data-[focus]` / `data-focus` /
-// `ui-focus-visible`, Tailwind 4's `has-focus-visible` — never one a `not` part negates (`not-data-focus`), a group's name
-// (`group-focus/item`) aside: ONE predicate for a removal under it and a focus style under it (review 1 of 1.37: Headless UI's
-// documented Button warned).
+// variant of the element's OWN focus (isOwnFocus) — a bare one is not judged (shadcn puts it on focus-managed containers and
+// activedescendant options); and a FOCUS STYLE: any other utility under a focus variant (`focus-visible:ring-2`,
+// `group-focus:…`) that draws something — never one valued `0` / `none` / `hidden` / `transparent` (`focus:ring-0`,
+// `focus:shadow-none`: the forms plugin's ring removed — review 1 of 1.37). A FOCUS VARIANT: one holding `focus` as a part
+// delimited by `-`, `[`, `]` or its ends — `focus`, `focus-visible`, `group-focus`, `peer-focus-within`, Headless UI's
+// `data-[focus]` / `data-focus` / `ui-focus-visible`, Tailwind 4's `has-focus-visible` — never one a `not` part negates
+// (`not-data-focus`), a group's name (`group-focus/item`) aside (review 1 of 1.37: Headless UI's documented Button warned). The
+// element's OWN focus — what a removal is judged under, as the CSS reader judges `:focus` and never `:focus-within`: `focus`,
+// `focus-visible` or an attribute form of them (`data-focus`, `data-[focus]`, `ui-focus-visible`); a relational one (a
+// `group` / `peer` / `has` / `in` part, `focus-within`) is a doubt — the outline it removes is not the focused element's
+// (review 2 of 1.37: a popover panel's `focus-within:outline-none` around its buttons was a candidate).
 // → whether the text holds a focus style.
 const RE_TW_PICK = /transition-all|outline-|focus/;
 const RE_TW_SPLIT = /[\s"'`{}(),;=<>]+/;
 const RE_TW_REMOVAL = /^outline-(?:none|hidden|0)$/;
 const RE_TW_NOTHING = /(?:^|-)(?:0|none|hidden|transparent)$/;
 const isFocusVariant = (v) => { const parts = v.replace(/\/[\w-]+$/, "").split(/[-[\]]/); return parts.includes("focus") && !parts.includes("not"); };
+const isOwnFocus = (v) => /^(?:(?:data|ui)-)?focus(?:-visible)?$/.test(v.split(/[-[\]]/).filter(Boolean).join("-"));
 function utilities(s, line, add) {
   if (!RE_TW_PICK.test(s)) return false;
   let focus = false;
@@ -416,8 +431,7 @@ function utilities(s, line, add) {
     const util = parts.pop().replace(/^!|!$/g, "");
     if (util === "transition-all") { add("transition-all", line, tok); continue; }
     if (!util || !parts.some(isFocusVariant)) continue;
-    if (RE_TW_REMOVAL.test(util)) add("outline-removed", line, tok);
-    else if (!RE_TW_NOTHING.test(util)) focus = true;
+    if (RE_TW_REMOVAL.test(util)) { if (parts.some(isOwnFocus)) add("outline-removed", line, tok); } else if (!RE_TW_NOTHING.test(util)) focus = true;
   }
   return focus;
 }
@@ -433,8 +447,8 @@ function utilities(s, line, add) {
 //     `outline: 0; box-shadow: …` replaces it);
 // never a selector that names focus-visible (`:focus:not(:focus-visible)`), inside `@media print`, nor a rule that never
 // closes. A CANDIDATE: any focus style of the file, the feature's files or the project's stylesheets excuses it (uiChecksReport).
-// A FOCUS STYLE: a rule naming a focus pseudo-class (or inside one) that declares something that draws (drawsNothing); a
-// Tailwind focus utility in an `@apply`.
+// A FOCUS STYLE: a rule naming a focus pseudo-class (or inside one) that declares something that draws (drawsNothing; an
+// `@apply` there by its bare utilities); a Tailwind focus utility in an `@apply`.
 // transition-all: a `transition` / `transition-property` declaration (transitionAll), a Tailwind `transition-all` in an
 // `@apply` — never inside `@media (prefers-reduced-motion: reduce)`.
 const RE_REMOVAL = /^(?:outline\s*:\s*(?:none|0(?:px)?)|outline-style\s*:\s*none|outline-width\s*:\s*0(?:px)?)(?:\s*!\s*important)?$/i;
@@ -446,13 +460,16 @@ const RE_DECLARATION = /^([A-Za-z-]+)\s*:\s*([\s\S]*)$/;
 const RE_COMPOUND_TYPE = /^(\*|[A-Za-z][A-Za-z0-9]*)/;
 const RE_TABINDEX_OFF = /\[\s*tabindex\s*=\s*["']?-1["']?\s*\]/i;
 // A declaration that draws nothing: each of its comma items `transparent` as its colour, or nothing but `none` and zeros
-// (`outline: none`, `box-shadow: none`, `border: 0`, `outline: 2px solid transparent`). It is neither a focus style nor what
-// keeps a `:focus` rule from being a candidate (review 1 of 1.37: Bootstrap's `.btn:focus { outline: none; box-shadow: none }`
-// override was a FOCUS STYLE excusing every removal of the project); an outline removal is one.
+// (`outline: none`, `box-shadow: none`, `border: 0`, `outline: 2px solid transparent`), or an `outline-offset` (it moves an
+// outline: beside one that draws, that outline is the focus style — review 2 of 1.37: Tailwind v3's compiled `outline-none`,
+// `outline: 2px solid transparent; outline-offset: 2px`, excused every removal of the project). It is neither a focus style
+// nor what keeps a `:focus` rule from being a candidate (review 1 of 1.37: Bootstrap's `.btn:focus { outline: none;
+// box-shadow: none }` override was a FOCUS STYLE excusing every removal of the project); an outline removal is one.
 const RE_NOTHING_WORD = /^(?:none|[+-]?0(?:\.0+)?[a-z%]*)$/i;
 function drawsNothing(text) {
   const d = RE_DECLARATION.exec(text);
   if (!d) return false;
+  if (d[1].toLowerCase() === "outline-offset") return true;
   const v = d[2].replace(/\s*!\s*important\s*$/i, "").trim();
   return v !== "" && splitTop(v, isComma).every((item) => {
     const words = splitTop(item.trim(), isBlank).filter(Boolean);
@@ -470,6 +487,12 @@ function lastCompound(sel) {
   }
   return sel.slice(from);
 }
+// s without what its parentheses hold (a pseudo-class's arguments: `:not(…)`, `:is(…)`), each character once
+function outsideParens(s) {
+  let depth = 0, out = "";
+  for (const c of s) { if (c === "(") depth++; else if (c === ")") depth--; else if (depth === 0) out += c; }
+  return out;
+}
 function outlineShape(prelude) {
   let shape = null;
   for (const raw of splitTop(prelude, isComma)) {
@@ -477,7 +500,8 @@ function outlineShape(prelude) {
     if (!sel || /focus-visible/i.test(sel)) continue;
     const last = lastCompound(sel);
     const t = RE_COMPOUND_TYPE.exec(last), reached = !t || t[1] === "*" || FOCUSABLE.has(t[1].toLowerCase());
-    if (!last.includes(":")) { if (t && reached) return "element"; } else if (RE_FOCUS_ITSELF.test(last) && reached && !RE_TABINDEX_OFF.test(last)) shape = "focus";
+    // (`[tabindex="-1"]` the compound REQUIRES: outside a pseudo-class's arguments — review 2 of 1.37, `:not([tabindex="-1"])`)
+    if (!last.includes(":")) { if (t && reached) return "element"; } else if (RE_FOCUS_ITSELF.test(last) && reached && !RE_TABINDEX_OFF.test(outsideParens(last))) shape = "focus";
   }
   return shape;
 }
@@ -497,13 +521,18 @@ function sheetChecks(text, rel, add) {
     statement: (e) => {
       if (deep) return;
       const b = open.length ? open[open.length - 1] : null, reduced = b != null && b.reduced;
-      const removal = RE_REMOVAL.test(e.text), nothing = drawsNothing(e.text);
-      if (b != null && b.focus && !nothing) focus = true;
-      // (a Tailwind `@apply`: its utilities, as a class list's — no motion rule inside a reduced-motion block)
       const apply = /^@apply\s/i.test(e.text);
+      // (an `@apply` in a focus rule: its bare utilities read as declarations — `outline-none` / `-hidden` / `-0` a removal,
+      // RE_TW_NOTHING's nothing, any other draws; one with a variant draws — review 2 of 1.37: `*:focus { @apply outline-none }`
+      // was a focus style)
+      const own = apply && b != null && b.focus ? e.text.replace(/\s*!\s*important$/i, "").split(/\s+/).slice(1).map((u) => u.replace(/^!|!$/g, "")) : null;
+      const removal = own ? own.some((u) => RE_TW_REMOVAL.test(u)) : RE_REMOVAL.test(e.text);
+      const draws = own ? own.some((u) => u.includes(":") || !(RE_TW_REMOVAL.test(u) || RE_TW_NOTHING.test(u))) : !drawsNothing(e.text);
+      if (b != null && b.focus && draws) focus = true;
+      // (a Tailwind `@apply`: its utilities, as a class list's — no motion rule inside a reduced-motion block)
       if (apply && utilities(e.text, e.from, (rule, line, value) => { if (add && !(reduced && rule === "transition-all")) add(rule, line, value); })) focus = true;
       if (!add) return;
-      if (b != null) { if (removal) { if (!b.print) b.removals.push({ line: e.from, text: e.text }); } else if (!nothing) b.other = true; }
+      if (b != null) { if (removal && !b.print) b.removals.push({ line: e.from, text: e.text }); if (draws) b.other = true; }
       const d = apply || reduced ? null : RE_DECLARATION.exec(e.text);
       const prop = d ? d[1].toLowerCase() : "";
       if ((prop === "transition" || prop === "transition-property") && transitionAll(prop, d[2])) add("transition-all", e.from, e.text);
@@ -552,10 +581,11 @@ function markIds(src) {
   return ids;
 }
 // One view / style file → { findings: [{ rule, line, value, silenced }], focus, past, cut }. lines: viewLines(text, rel)'s (n
-// 1-based, src, l without its comments, css, cut). A finding is at its tag's or declaration's FIRST line, one per rule and
-// line; `silenced` when a `ui-check-off:` comment (in `src`, absent from `l`) names its rule on that line, or on the line
-// above when that line holds no code (`l` blank but for a JSX comment's braces — a trailing marker silences its own line
-// alone: review 1 of 1.37) — decided when it is found (the lines up to it are read). DS_CHECK_PER_FILE findings are kept; past them each is still
+// 1-based, src, l without its comments, css, cut). A finding is at its tag's or declaration's FIRST line (a class utility's:
+// its class's line), one per rule and line; `silenced` when a `ui-check-off:` comment (in `src`, absent from `l`: a comment
+// viewLines strips — `//`, `/* */`, `<!-- -->`, `{/* */}`; never a template engine's own) names its rule on that line or on
+// the line above, whatever else that line holds (review 2 of 1.37: `button:focus { /* ui-check-off: … */` above its
+// declaration — 1.37's first rule, back) — decided when it is found (the lines up to it are read). DS_CHECK_PER_FILE findings are kept; past them each is still
 // COUNTED — past: { byRule (the unsilenced ones), silenced } — never kept (review 1 of 1.37: a file of 200 report-level
 // findings hid its real ones, `total` read 200). cut: { lines (cut at DS_LINE_MAX), tags (tagReader's failed reads) }.
 // outline-removed findings are CANDIDATES (focus: does the file hold a focus style — uiChecksReport decides).
@@ -568,14 +598,14 @@ function uiChecksOf(lines, rel) {
     if (seen.has(k)) return;
     seen.add(k);
     const here = marks.get(line), above = marks.get(line - 1);
-    const silenced = (here != null && here.ids.has(rule)) || (above != null && above.alone && above.ids.has(rule));
+    const silenced = (here != null && here.has(rule)) || (above != null && above.has(rule));
     if (findings.length < DS_CHECK_PER_FILE) findings.push({ rule, line, value: String(value).replace(/\s+/g, " ").trim().slice(0, DS_VALUE), silenced });
     else if (silenced) past.silenced++;
     else past.byRule[rule] = (past.byRule[rule] || 0) + 1;
   };
   const tags = sheet ? null : tagReader(RE_SCRIPT_FILE.test(rel), (tag) => judgeTag(tag, add), add);
   for (const { n, src, l, css: isCss, cut } of lines) {
-    if (src.includes("ui-check-off:") && !l.includes("ui-check-off:")) marks.set(n, { ids: markIds(src), alone: /^[\s{}]*$/.test(l) });
+    if (src.includes("ui-check-off:") && !l.includes("ui-check-off:")) marks.set(n, markIds(src));
     if (cut) cutLines++;
     css.push(isCss ? l : "");
     if (isCss) { anyCss = true; continue; }
@@ -601,7 +631,8 @@ function uiChecksOf(lines, rel) {
 // of 1.37: the parse of ~800 sheets was 8× the report) — and DS_FOCUS_CHARS bounds the characters PARSED: a sheet that names
 // no focus costs an open and a read, never the parse budget. A sheet longer than DS_FOCUS_CHARS (not read whole), or one to
 // parse past what is left of the budget, ends the search.
-// → { focus, limits: [{code: focus-sheets | focus-chars, read}] — a bound that cut the search }
+// → { focus, limits: [{code: focus-sheets | focus-chars, read, sheet (focus-chars: the sheet that ended the search)}] — a
+// bound that cut the search }
 const RE_FOCUS_WORD = /focus/i;
 function uiFocusPass(sheets) {
   const list = sheets.slice().sort((a, b) => a.rel.length - b.rel.length || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
@@ -611,7 +642,7 @@ function uiFocusPass(sheets) {
     for (const s of list) {
       if (read >= DS_FOCUS_SHEETS) return { focus: false, limits: [{ code: "focus-sheets", read }] };
       const text = heads.next(), names = text != null && RE_FOCUS_WORD.test(text);
-      if (text != null && (text.length > DS_FOCUS_CHARS || (names && parsed + text.length > DS_FOCUS_CHARS))) return { focus: false, limits: [{ code: "focus-chars", read }] };
+      if (text != null && (text.length > DS_FOCUS_CHARS || (names && parsed + text.length > DS_FOCUS_CHARS))) return { focus: false, limits: [{ code: "focus-chars", read, sheet: s.rel }] };
       read++;
       if (!names) continue;
       parsed += text.length;
@@ -629,7 +660,10 @@ function uiFocusPass(sheets) {
 // none. A silenced finding is counted silenced whatever the pass says; a finding past a file's DS_CHECK_PER_FILE is counted,
 // never listed. limits — each bound that cut a read or dropped a finding, with a count (review 1 of 1.37): tag-length
 // ({read: DS_TAG_LINES, count: the tags read past the tag reader's bound, file: the first}), file-findings ({read:
-// DS_CHECK_PER_FILE, count: the findings past it, file: the first}), then the pass's focus-sheets / focus-chars ({read}).
+// DS_CHECK_PER_FILE, count: the findings past it, file: the first}), then the pass's focus-sheets / focus-chars ({read,
+// count: the unsilenced candidates it left unjudged, file and line: the first of them (no line: one past a file's cap),
+// sheet: focus-chars' — a bound never hides a KNOWN candidate silently: review 2 of 1.37, an Angular app of 60 components
+// lost its true finding).
 function uiChecksReport(files, projectFocus, cap) {
   let focus = files.some((f) => f.focus), limits = [];
   if (!focus && files.some((f) => f.past.byRule["outline-removed"] || f.findings.some((x) => x.rule === "outline-removed" && !x.silenced))) ({ focus, limits } = projectFocus());
@@ -637,15 +671,17 @@ function uiChecksReport(files, projectFocus, cap) {
   const list = [], unlisted = [];
   const tagCut = { code: "tag-length", read: DS_TAG_LINES, count: 0, file: null }, fileCut = { code: "file-findings", read: DS_CHECK_PER_FILE, count: 0, file: null };
   const cut = (c, n, rel) => { if (n && !c.count) c.file = rel; c.count += n; };
+  const unjudged = { count: 0, file: null }; // (the candidates a cut pass left: limits non-empty means no focus style was found)
   let silenced = 0;
   for (const f of files) {
     for (const x of f.findings) {
       if (x.silenced) { silenced++; continue; }
       if (stands(x.rule)) list.push({ rule: x.rule, level: UI_RULES[x.rule], file: f.rel, line: x.line, value: x.value });
+      else if (limits.length) { unjudged.count++; if (unjudged.line == null || f.rel < unjudged.file || (f.rel === unjudged.file && x.line < unjudged.line)) Object.assign(unjudged, { file: f.rel, line: x.line }); }
     }
     let more = f.past.silenced;
     silenced += f.past.silenced;
-    for (const [rule, n] of Object.entries(f.past.byRule)) if (stands(rule)) { unlisted.push([rule, n]); more += n; }
+    for (const [rule, n] of Object.entries(f.past.byRule)) if (stands(rule)) { unlisted.push([rule, n]); more += n; } else if (limits.length) cut(unjudged, n, f.rel);
     cut(tagCut, f.cut.tags, f.rel);
     cut(fileCut, more, f.rel);
   }
@@ -655,7 +691,8 @@ function uiChecksReport(files, projectFocus, cap) {
   let total = list.length;
   for (const x of list) byRule[x.rule] = (byRule[x.rule] || 0) + 1;
   for (const [rule, n] of unlisted) { byRule[rule] = (byRule[rule] || 0) + n; total += n; }
-  return { findings: list.slice(0, cap), total, byRule, silenced, limits: [tagCut, fileCut].filter((c) => c.count).concat(limits) };
+  const pass = limits.map((l) => Object.assign({ code: l.code, read: l.read }, unjudged, l.sheet ? { sheet: l.sheet } : {}));
+  return { findings: list.slice(0, cap), total, byRule, silenced, limits: [tagCut, fileCut].filter((c) => c.count).concat(pass) };
 }
 
 // spec_finish's part of a feature report's uiChecks → { total, byRule, top (the first 3: rule, file, line, value), limits (the

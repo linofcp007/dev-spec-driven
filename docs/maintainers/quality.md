@@ -1235,7 +1235,8 @@ wrong finding sends a team to fix code that is right.
   Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
 - **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
   `DS_LINE_MAX`, its comments out, `cut` when it was longer) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
-  one finding per rule and line, at a tag's or a declaration's FIRST line, silenced or not decided when it is found;
+  one finding per rule and line, at a tag's or a declaration's FIRST line (a Tailwind utility's: its class's line),
+  silenced or not decided when it is found;
   `DS_CHECK_PER_FILE` (200) kept a file — past it each is still COUNTED (`past`: {byRule, silenced}), never kept (review 1 of
   1.37: 200 report-level findings hid a file's real ones, `total` read 200); `cut`: {lines (cut at `DS_LINE_MAX`), tags (the
   tag reader's failed reads)}. A stylesheet's lines are all CSS; a .tsx / .jsx / .js / .ts file is SCRIPT (its tags read as
@@ -1245,7 +1246,9 @@ wrong finding sends a team to fix code that is right.
   a line's end; `\` escapes inside braces). In script mode never right after an identifier, `)`, `]` or a quote
   (`useState<div>`, `a<b`), nor inside a string that closes on its line (`blankStrings`); a markup file's `<script>` block
   is not read for tags. The next tag is looked for PAST the previous one's end, and past a read that failed (no `>` within
-  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters — counted: `tag-length`; or none before the end of a line
+  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters — counted, `tag-length`, when the tag could have held a
+  finding (`mayFind`: an element, or one whose read part names a click or paste handler — review 2 of 1.37: a component's
+  30-line props, shadcn's `<DayPicker classNames={{…}}>`, were a limit line on 6 % of cal.com's view files); or none before the end of a line
   viewLines CUT — the read ends there, no quote or brace carried into the lines below: review 1 of 1.37, an inline data-URI
   logo hid every tag of the next 30 lines, and minified HTML judged an `<img>` on the attributes before its cut alt): each
   character read once (CRIT_1 must-fix 1 — a reader
@@ -1279,15 +1282,18 @@ wrong finding sends a team to fix code that is right.
   is judged by its BODY (`clickBodies`, inside the tag reader — review 1 of 1.37, Laravel's starter kits: a wrapper whose
   slot holds the `<button>`, a backdrop holding its empty overlay layer, 8 of Jetstream's 8 findings): read to its matching
   close tag within the tag reader's bound (30 lines / 4,000 characters from its `>`: past it not judged, counted as
-  `tag-length`), it is a finding only when the body holds content a user reads (literal text, an expression that is no slot
-  outlet) and nothing that is or may render a control — a tag focusable by default (its click bubbles), a component /
-  custom element / member, `<slot>` (and `<ng-content>`), a slot outlet (`{children}`, `{props.children}`, `{@render …}`, a
-  Blade `{{ $x }}`), a line cut at `DS_LINE_MAX`: a doubt, clearing every candidate open (the control is in each body). An
+  `tag-length`; one still waiting at the file's end — an end tag HTML lets one omit, `<li onclick>…</ul>` — counted too,
+  review 2 of 1.37), it is a finding only when the body holds content a user reads (literal text, an expression that is no slot
+  outlet) and nothing that is or may render a control — a tag focusable by default (its click bubbles; a `<label>` is none,
+  never focused itself: review 2 of 1.37), a component / custom element / member, `<slot>` (and `<ng-content>`), a slot
+  outlet (`{children}`, `{props.children}`, called too — `{children(state)}`, `{children?.()}` —, `{@render …}`, a Blade
+  `{{ $x }}` or `{!! $x !!}`: review 2 of 1.37), a line cut at `DS_LINE_MAX`: a doubt, clearing every candidate open (the control is in each body). An
   empty body or one of elements alone (an overlay layer, an icon `<svg>`) is a doubt too. Nested candidates each get the
   text seen while they are open (`textMark`); a close tag pops the elements opened since to its own name, an unmatched one
   costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below).
 - **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)
-  and reads no clipboard (`clipboard` — `e.clipboardData`, `navigator.clipboard` — or `getData`), or a bare `.prevent` /
+  and reads no clipboard (`RE_READS_CLIPBOARD`, the API — `clipboardData`, `navigator.clipboard`, `getData` —, never the
+  word: review 2 of 1.37, a handler's own "Pasting from the clipboard is disabled" excused it), or a bare `.prevent` /
   `|preventDefault`; never a named handler, nor an inline one that hands its event on to a call (`forwardsEvent`: the
   handler's parameter — an arrow's, a function's —, else `$event` / `event`, as an argument: `(e) => { e.preventDefault();
   onPasteCode(e); }` is Vue's excused `@paste.prevent="onPasteCode"` spelled in JSX — review 1 of 1.37). The ONLY rule that
@@ -1300,25 +1306,32 @@ wrong finding sends a team to fix code that is right.
   outline-removed CANDIDATES: a removal (`outline: none | 0`, `outline-style: none`, `outline-width: 0`, `!important` too;
   never `outline: 2px solid transparent`, which forced colours show) in a rule with a selector whose last compound is `*` or
   an element focusable by default with no pseudo-class ("element"), or holds `:focus` itself — never -visible / -within —,
-  of no type or one focusable by default and never `[tabindex="-1"]` (`RE_TABINDEX_OFF` — review 1 of 1.37: `main:focus`,
-  `h1:focus`, `[tabindex="-1"]:focus` hold focus a script moves out of the tab order, a skip link's target) —
+  of no type or one focusable by default and never one REQUIRING `[tabindex="-1"]` (`RE_TABINDEX_OFF` outside a pseudo-class's
+  arguments, `outsideParens` — review 1 of 1.37: `main:focus`, `h1:focus`, `[tabindex="-1"]:focus` hold focus a script
+  moves out of the tab order, a skip link's target; review 2: `:not([tabindex="-1"]):focus` is every reachable one) —
   while the rule's extent, nested blocks included, declares nothing else that draws ("focus": Bootstrap's `outline: 0;
   box-shadow: …` replaces it; its `outline: none; box-shadow: none` override does not); never a selector naming
-  focus-visible, `@media print`, a class alone, a rule that never closes. Tailwind's `outline-none` / `outline-hidden` /
-  `outline-0` under a focus variant too (a bare one is not: shadcn puts it on focus-managed containers and activedescendant
-  options). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` / `:focus-within` (or inside one) that declares
-  something that DRAWS; a Tailwind utility under a focus variant that is no removal and draws, in a class list or an
-  `@apply`. A FOCUS VARIANT (`isFocusVariant`, ONE predicate for a removal under it and a focus style under it — review 1
-  of 1.37: Headless UI's documented Button warned): a variant holding `focus` as a part delimited by `-`, `[`, `]` or its
-  ends — `focus`, `focus-visible`, `group-focus/name`, `peer-focus-within`, `data-[focus]`, `data-focus`,
-  `ui-focus-visible`, `has-focus-visible`, an arbitrary `[&:focus]` — never one a `not` part negates (`not-data-focus`).
-  What draws nothing is decided BY VALUE, once for both
-  readers (review 1 of 1.37 — a ring-killing override was a focus style that excused every removal of the project):
-  `drawsNothing`, a declaration each of whose comma items has `transparent` as its colour or holds nothing but `none` and
-  zeros (`box-shadow: none`, `border: 0`, `outline: 2px solid transparent`), and `RE_TW_NOTHING`, a utility valued `0` /
-  `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`). Still read as drawing (no value says otherwise):
-  an `@apply` inside a `:focus` rule, and `outline-offset` beside a transparent outline (Tailwind v3's compiled
-  `outline-none` written by hand). transition-all: an item that is `all` or names no property, for a
+  focus-visible, `@media print`, a class alone, a rule that never closes. An `@apply` in a rule naming a focus pseudo-class
+  reads as its bare utilities would as declarations (review 2 of 1.37: `*:focus { @apply outline-none }` was a focus
+  style): `outline-none` / `outline-hidden` / `outline-0` a removal of that rule, a `RE_TW_NOTHING` one nothing, any other
+  — and one with a variant, as before — draws. Tailwind's `outline-none` / `outline-hidden` / `outline-0` in a class list
+  under a variant of the element's OWN focus too (`isOwnFocus`: `focus`, `focus-visible` or an attribute form of them —
+  `data-focus`, `data-[focus]`, `ui-focus-visible`; a bare one is not: shadcn puts it on focus-managed containers and
+  activedescendant options; a RELATIONAL one — a `group` / `peer` / `has` / `in` part, `focus-within` — is a doubt, as
+  `:focus-within` in a sheet: review 2 of 1.37, a popover panel's `focus-within:outline-none` around its buttons, 7 of the
+  corpus's candidates). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` / `:focus-within` (or inside one)
+  that declares something that DRAWS; a Tailwind utility under a FOCUS VARIANT that is no removal and draws, in a class list
+  or an `@apply`. A focus variant (`isFocusVariant` — review 1 of 1.37: Headless UI's documented Button warned): a variant
+  holding `focus` as a part delimited by `-`, `[`, `]` or its ends — `focus`, `focus-visible`, `group-focus/name`,
+  `peer-focus-within`, `data-[focus]`, `data-focus`, `ui-focus-visible`, `has-focus-visible`, an arbitrary `[&:focus]` —
+  never one a `not` part negates (`not-data-focus`); every own-focus variant is one. What draws nothing is decided BY VALUE,
+  once for both readers (review 1 of 1.37 — a ring-killing override was a focus style that excused every removal of the
+  project): `drawsNothing`, a declaration each of whose comma items has `transparent` as its colour or holds nothing but
+  `none` and zeros (`box-shadow: none`, `border: 0`, `outline: 2px solid transparent`), or an `outline-offset` (it moves an
+  outline; beside one that draws, that outline is the focus style — review 2 of 1.37: Tailwind v3's compiled `outline-none`,
+  `outline: 2px solid transparent; outline-offset: 2px`, in a CLI's `-o src/output.css` excused every removal), and
+  `RE_TW_NOTHING`, a utility valued `0` / `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`).
+  transition-all: an item that is `all` or names no property, for a
   literal time over 0 (`transitionAll`; a variable or a global keyword is a property or no time, never `all`),
   `transition-property: all`, Tailwind's `transition-all` (variants, `!`, `@apply`), a style object / inline style /
   CSS-in-JS line — never inside `@media (prefers-reduced-motion: reduce)` nor a block nested in one (CRIT_1 must-fix 7).
@@ -1333,15 +1346,24 @@ wrong finding sends a team to fix code that is right.
   read whole) or one to parse past what is left of it ends the search; stopping at the first that holds one;
   asked ONLY when an UNSILENCED candidate exists (no candidate, no read — a silenced one is counted silenced whatever the
   pass would say), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
-  says which (`focus-sheets` / `focus-chars`). The bounds are measured, not chosen (History): the highest that kept, in
+  says which (`focus-sheets` / `focus-chars`) NAMING the removals it left unjudged — a bound never hides a KNOWN candidate
+  silently (review 2 of 1.37: an Angular app of 60 components, a Next app of 140 CSS modules lost their true warning, the
+  report read "nothing"): `count` (the unsilenced candidates, past a file's cap too), `file` / `line` (the first, by file
+  then line; no `line` when every one sits past a file's cap), `sheet` (focus-chars: the sheet that ended the search). The
+  CLI prints that line in place of `uiNone`; spec_finish says it (below). The bounds are measured, not chosen (History): the highest that kept, in
   every series where an antivirus scans each open (~1 ms), the report with the pass at its sheets bound ≤ 2.5× the same
   report with no candidate, finish's part ≤ 2×, and modules that all name `:focus` at the chars bound ≤ 3×.
   Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
   focus.
 - **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` (ids `,`-separated; what follows them, a
-  reason, is not read) on the finding's line, or ALONE on the line above (its `l` blank but for a JSX comment's braces — a
-  trailing marker silences its own line only, eslint's -line vs -next-line: review 1 of 1.37) — any comment syntax of the
-  file (in `src`, absent from `l`); a stylesheet's finding sits on its declaration's line. Counted in `silenced`, never
+  reason, is not read) on the finding's line or the line above, whatever else that line holds (review 2 of 1.37 took
+  review 1's "alone on the line above" out: `button:focus { /* ui-check-off: … */` above its declaration, the line a
+  stylesheet's team writes it on, stopped silencing while finish and the READMEs said "the line above") — a comment
+  viewLines strips (in `src`, absent from `l`: `//`, `/* */`, `<!-- -->`, `{/* */}`), never a template engine's own (Blade's
+  `{{-- --}}`, Twig / Jinja's `{# #}`, ERB's `<%# %>`, Handlebars' `{{!-- --}}`: in a template, `<!-- -->`); a
+  stylesheet's finding sits on its declaration's line, a Tailwind utility's on its CLASS's line — not its tag's first: in
+  a multi-line markup tag no comment fits beside a later line's class (keep the class on the tag's first line, or a `//`
+  line inside a JSX tag). Counted in `silenced`, never
   listed, never in finish. Two lines up, another id, a string's text, no id: nothing; a linter's own suppression
   (`eslint-disable-next-line jsx-a11y/…`, `svelte-ignore a11y_…`) is not read (the user docs say so). No project switch in
   1.37 (the `_UI checks off:_` marker is 1.38's).
@@ -1353,30 +1375,37 @@ wrong finding sends a team to fix code that is right.
   findings with `limits` empty): `view-files` (the feature's file cap cut what the checks read), then with {read, count, file
   (the first)} `view-size` (a file longer than `DS_READ_CHARS`: read DS_READ_CHARS + 1 to know), `line-length` (lines cut at
   `DS_LINE_MAX`), `tag-length` (reads past the tag reader's bound), `file-findings` (findings past a file's 200: counted in
-  total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` — never reach the report's own `limits` /
-  `truncated`. Not named (hostile-input guards, no real file reaches them): a tag of more than `DS_TAG_ATTRS` attributes, a
+  total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` (with {count, file, line?, sheet?}: the
+  removals they left unjudged, above) — never reach the report's own `limits` / `truncated`. `view-size`, `line-length`,
+  `tag-length` and `file-findings` stay in the report alone: they hide no KNOWN candidate (a file-findings finding is
+  counted in `total`, and so in finish's warning). Not named (hostile-input guards, no real file reaches them): a tag of more than `DS_TAG_ATTRS` attributes, a
   block nested past `DS_BLOCK_DEPTH` — not judged. The CLI prints it after the raw values (`uiHead` — naming finish's
   warning — for a +ui feature, `uiHeadPlain` for any other: finish reads no other feature's checks, review 1 of 1.37 —,
   what each rule that appears means — `uiRule` —, `uiSilenced`, a bound of the checks' own once: `dsLimit`, with its count
   and file).
 - **spec_finish** — `designSystemFinish` answers for a +ui feature WITH OR WITHOUT a registry (CRIT_X decision 5): `uiChecks`
   (`uiFinishChecks`: the warn-level findings — {total, byRule, top: the first 3, limits: the report's}; a warn finding past
-  a file's cap is counted, not listed, so `top` may be empty — the warning then reads `…`); without a registry `registered` /
-  `unregistered` are `[]` and there is no `raw` / `tokens`, and every reader of `raw` guards it (finish.js, the CLI). ONE
-  warning (`finish.uiChecks`), after the raw values', never a blocker; `res.designSystem.uiChecks` only when it has
-  findings (the 1.35 shape otherwise).
+  a file's cap is counted, not listed, so `top` may be empty — the warning then reads `— …:`, one ellipsis: review 2 of
+  1.37); without a registry `registered` / `unregistered` are `[]` and there is no `raw` / `tokens`, and every reader of
+  `raw` guards it (finish.js, the CLI). ONE warning (`finish.uiChecks`), after the raw values', never a blocker — the
+  removals a focus search left unjudged its last clause (`finish.uiUnjudged`: the count, the first file:line, why), or,
+  with no finding, that clause the warning alone (review 2 of 1.37); `res.designSystem.uiChecks` only when it has findings
+  or that limit (the 1.35 shape otherwise). The report's other bounds never reach finish's text.
 - **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
   tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
   of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —
   nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes — each ≤ 3×
-  plain JSX of the same size (measured 0.07–2.5×); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real
+  plain JSX of the same size (measured 0.07–2.5×) — a file whose every line is a finding is not one of them and is not
+  bounded: ~4× (review 2 of 1.37, hostile3: a 256K HTML file of an `<img>` a line 4.0–4.3×, a TSX one 3.3–3.6×, a sheet
+  of removals 2.7×, the same on the parent); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real
   ones); a finish without a registry ≤ 1.5× the feature report it runs (~0.9×); the feature report with the focus pass AT
   its bound ≤ 2.5× the same report with no candidate (the owner's bar after review 1's follow-up; one project, two features
   reading the same views, 1,000 sheets none naming focus: 1.2–1.3× at 48). The sheet of braces is the walker's every block: three allocation-free
   fast paths in styleTokens (`unmaskInterpolation` of a text with no mask, `pageWide` of an empty prelude, `RE_MIXIN` only
   after an `@` — the last a cost guard alone: +45 % on that sheet without it, under the bound) took it from ~5× to ~1.5× —
   tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus.
-- **Not in 1.37** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion` raw kind and
+- **Not in 1.37** (cut — CRIT_1, the decisions; review 1's S12, deferred to 1.38: test-harness files — `*.cy.tsx`,
+  `__mocks__/`, `__fixtures__/`, `.storybook/`, `playwright/` — still read as view files): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion` raw kind and
   `no-reduced-motion` (1.38, on one shared project pass), the `_UI checks off:_` marker (1.38), the `addEventListener` paste
   form, a `hint` level.
 
@@ -2236,3 +2265,32 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   style). A click on an HTML void element is judged at once as a self-closing one (`VOID`): `<img onclick>` no longer waits
   for a close tag and is counted as `tag-length`. Mutation pass of the new lines: 22 of 22, the list written first — the
   focus pre-test among them, killed now: with the budget counting parsed characters it changes a result, no cost guard alone.
+- **1.37.0 review 2** (four reviewers again; this area's fix round) — three of the four MEDIUMs were review 1's own fixes,
+  each wider than its finding. R2-S1 (regression): S4's ONE predicate also widened the removal side — a `focus-within:` /
+  `group-focus:` / `peer-focus:` / `has-focus:` removal on an element nobody focuses was a candidate (7 of the corpus's
+  candidates, cal.com's popover panels and inputs' wrappers, Headless UI's comboboxes); a removal is judged now only under
+  the element's OWN focus (`isOwnFocus`), as the sheet reader judges `:focus` and never `:focus-within`, the focus-style
+  side keeping `isFocusVariant`. R2-S2 (S3's remainder): `outline-offset` draws nothing — Tailwind v3's compiled
+  `outline-none` (`outline: 2px solid transparent; outline-offset: 2px`, in the CLI's `-o src/output.css`) excused every
+  `focus:outline-none` of its own project — and an `@apply` in a focus rule reads by its bare utilities (`*:focus { @apply
+  outline-none }` was a focus style, its own excuse). R2-E1 (regression) + R2-E2: past 48 project sheets (an Angular app
+  of ~47 components, a CSS-modules app) the rule could never fire, and the report said "nothing" — a bound never hides a
+  KNOWN candidate silently now: the pass's limit names the removals it left (count, first file:line, focus-chars' sheet —
+  R2-D2), the CLI prints it in place of "nothing", finish says it (the warning's last clause, or alone — `uiUnjudged`);
+  the reviewer's 60-component Angular and 140-module Next apps: a finish note now. The other bounds stay in the report:
+  none hides a known candidate. R2-D1 (regression of S5): S5's "alone on the line above" taken out — a stylesheet's team
+  writes the marker after the rule's `{`, and finish's own text said "the line above"; 457d3da's rule is back (two
+  branches had each pinned its own wording: the user-facing sentence is the rule's test too). LOWs by subtraction: R2-S3
+  the clipboard API, not the word (a blocking handler's message excused it); R2-S4 `[tabindex="-1"]` only where the
+  compound requires it (`:not(…)` skipped every reachable one); R2-S5 `<label>` no control in a body, a candidate whose
+  end tag HTML omits counted at the file's end (it was dropped silently); R2-S7 render-prop `{children(…)}` and Blade's
+  `{!! $slot !!}` are outlets; R2-D3 one ellipsis; R2-D4 `tag-length` only for a tag that could have held a finding (shadcn's
+  `<DayPicker>` props were a limit line nobody could act on). Prose: R2-S6 (a component or an icon alone in a click's
+  content is a doubt — the docs said "a control"), R2-D5, R2-F4 (the comment forms that silence), R2-F5 (a finding on
+  every line ~4×, unbounded). The corpus again (2,591 view files): the 7 focus-within candidates gone, nothing else moved —
+  img-no-alt 17, zoom-disabled 3, click-no-keyboard 11, no outline-removed finding. Mutation pass: this round's 51, the list
+  written before the fixtures — 49 caught at first, two wanted a fixture (a `)` before the tabindex the compound requires;
+  an outer candidate counted past the bound while an inner one waits at the file's end) — and the whole list again on the
+  final tree, 51 of 51; review 1's lists run whole on it: 83 of its 106 as written, 16 ported to the lines this round
+  rewrote (all caught), 4 superseded by the follow-up's list, 2 gone with S5's rule, 1 moved into the i18n strings with
+  its line (the empty top's ellipsis — this round's D3 mutants); the follow-up's 22 of 22 (one ported).

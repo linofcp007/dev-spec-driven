@@ -327,8 +327,13 @@ function finishFeature(projectDir, name, opts = {}) {
   // raw values' (no registry: no `raw`, empty registered / unregistered). null for any other feature (nothing read).
   const ds = tracks.includes("ui") ? designSystemFinish(projectDir, slug, { write, ready }) : null;
   if (ds && ds.raw && ds.tokens && ds.raw.total) warnings.push(F.designSystemRaw(ds.raw.total, ds.raw.top.map((x) => `${x.file}:${x.line} ${x.value}`).join("; "), slug));
-  // (top may be empty: a warn-level finding past a file's cap is counted, never listed — review 1 of 1.37)
-  if (ds && ds.uiChecks.total) warnings.push(F.uiChecks(ds.uiChecks.total, ds.uiChecks.top.map((x) => `${x.file}:${x.line} ${x.rule}`).join("; ") || "…", slug));
+  // (top may be empty: a warn-level finding past a file's cap is counted, never listed — review 1 of 1.37; the outline removals
+  // a focus search ended at its bound left unjudged are said, the warning's last clause or the warning alone — review 2 of 1.37:
+  // a bound never hides a known candidate silently. The report's other bounds hide none: they stay in the report.)
+  const pass = ds ? ds.uiChecks.limits.find((l) => l.code === "focus-sheets" || l.code === "focus-chars") : null;
+  const unjudged = pass ? F.uiUnjudged(pass.count, pass.line ? pass.file + ":" + pass.line : pass.file, pass.read, pass.sheet) : "";
+  if (ds && ds.uiChecks.total) warnings.push(F.uiChecks(ds.uiChecks.total, ds.uiChecks.top.map((x) => `${x.file}:${x.line} ${x.rule}`).join("; "), slug, unjudged));
+  else if (unjudged) warnings.push(unjudged);
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null;
   const res = {
@@ -356,10 +361,10 @@ function finishFeature(projectDir, name, opts = {}) {
   if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats, partial? (1.30)} — spec_scan {duplicates: true} lists all
   if (protectedTests) res.protectedTests = protectedTests; // 1.36: {count, unexplained: [{file, status: changed | deleted}], lifted: [{file, by, at, reason}]}
   // 1.35: {raw: {total, counts: {color, size}, top} (a registry's alone), uiChecks? (1.37: {total, byRule, top, limits} — warn-level, when
-  // there is one), registered (New components this call added to the registry), unregistered (both [] without a registry), note? (the localized
+  // there is one or a focus search left a removal unjudged), registered (New components this call added to the registry), unregistered (both [] without a registry), note? (the localized
   // line, when it added some)} — only when there is something to say; spec_scan {designSystem: true, name} lists them all
-  if (ds && ((ds.raw && ds.raw.total) || ds.uiChecks.total || ds.registered.length || ds.unregistered.length)) {
-    res.designSystem = Object.assign(ds.raw ? { raw: ds.raw } : {}, ds.uiChecks.total ? { uiChecks: ds.uiChecks } : {}, { registered: ds.registered, unregistered: ds.unregistered },
+  if (ds && ((ds.raw && ds.raw.total) || ds.uiChecks.total || pass || ds.registered.length || ds.unregistered.length)) {
+    res.designSystem = Object.assign(ds.raw ? { raw: ds.raw } : {}, ds.uiChecks.total || pass ? { uiChecks: ds.uiChecks } : {}, { registered: ds.registered, unregistered: ds.unregistered },
       ds.registered.length ? { note: i18n.msg(lng).quality.dsRegistered(ds.registered.join(", ")) } : {});
   }
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code

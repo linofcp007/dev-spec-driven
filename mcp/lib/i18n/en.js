@@ -1045,7 +1045,11 @@ const msg = {
       // 1.35: raw colours and sizes in the feature's view files, where the design-system registry has tokens — a warning, never a blocker
       designSystemRaw: (n, top, slug) => `the feature's view files hold ${n} raw ${n === 1 ? "value" : "values"} where the design system has tokens — ${top}${n > 3 ? "; …" : ""}: use the token, or note in the report why a literal is deliberate (the list: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
       // 1.37: the UI checks of the feature's view files (the warn-level ones nobody silenced) — a warning, never a blocker
-      uiChecks: (n, top, slug) => `the feature's view files hold ${n} UI ${n === 1 ? "anti-pattern" : "anti-patterns"} — ${top}${n > 3 ? "; …" : ""}: fix each, or mark a deliberate one with a \`ui-check-off: <rule>\` comment on its line or the line above (the list: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
+      // (top: "" when every one sits past a file's cap — counted, not listed; unjudged: uiUnjudged's clause, or "")
+      uiChecks: (n, top, slug, unjudged) => `the feature's view files hold ${n} UI ${n === 1 ? "anti-pattern" : "anti-patterns"} — ${top || "…"}${top && n > 3 ? "; …" : ""}: fix each, or mark a deliberate one with a \`ui-check-off: <rule>\` comment on its line or the line above (the list: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})${unjudged ? "; " + unjudged : ""}`,
+      // (1.37 review 2: the outline removals a focus search ended at its bound left unjudged — sheet: the one that ended a
+      // search at the characters bound; the warning's last clause, or the warning alone)
+      uiUnjudged: (n, at, read, sheet) => `${n} outline ${n === 1 ? "removal" : "removals"} not judged (the first: ${at}): the project's stylesheets ${sheet ? `past the characters parsed at most (from ${sheet} on)` : `past the first ${read}`} were not read for a focus style — check the project draws one, or silence ${n === 1 ? "it" : "them"}`,
       // 1.30: no task names a file in _Implements:_ — what reads them sees no code of the feature. file: the one holding the tasks
       // (tasks.md; an xs change's change.md — review 9)
       noImplements: (file) => `no task names its files in _Implements:_ — the drift baseline, the duplicate check and dev-guardian's attribution see no code of this feature. Add _Implements: <path>_ to each task that wrote code (an edited ${file} is re-approved), or ignore this if none did.`,
@@ -1624,8 +1628,9 @@ const msg = {
         tokens: (n) => `  (only the first ${n} tokens of the code are read: the rest is not compared)`,
         "registry-rows": (n) => `  (only the registry's first ${n} components are checked for a path that is gone)`,
         "view-files": (n) => `  (only the feature's first ${n} view files are read for raw values)`,
-        "focus-sheets": (n) => `  (focus styles were looked for in the project's first ${n} stylesheets, a bound: no outline removal was judged)`,
-        "focus-chars": (n) => `  (focus styles were looked for in ${n} stylesheets, up to the characters read, a bound: no outline removal was judged)`,
+        // (1.37 review 2: at — the first unjudged removal's file:line, count — how many, sheet — the one that ended the search)
+        "focus-sheets": (n, at, count) => `  (${count} outline ${count === 1 ? "removal" : "removals"} not judged — the first: ${at}: focus styles were looked for in the project's first ${n} stylesheets, a bound)`,
+        "focus-chars": (n, at, count, sheet) => `  (${count} outline ${count === 1 ? "removal" : "removals"} not judged — the first: ${at}: focus styles were looked for in ${n} ${n === 1 ? "stylesheet" : "stylesheets"}, until ${sheet} would have taken the characters parsed past their bound)`,
         // (1.37 review 1: the UI checks' other bounds — count: how many it cut, file: the first)
         "view-size": (n, file, count) => `  (${count} view ${count === 1 ? "file is" : "files are"} longer than the ${n} characters read of a file — the first: ${file}: the UI checks did not read the rest)`,
         "line-length": (n, file, count) => `  (${count} ${count === 1 ? "line is" : "lines are"} longer than ${n} characters — the first in ${file}: each is read up to there, and a tag it cuts is not judged)`,
