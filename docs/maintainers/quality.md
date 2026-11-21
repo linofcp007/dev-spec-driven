@@ -1222,7 +1222,8 @@ wrong finding sends a team to fix code that is right.
   Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
 - **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
   `DS_LINE_MAX`, its comments out, `cut` when it was longer) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
-  one finding per rule and line, at a tag's or a declaration's FIRST line, silenced or not decided when it is found;
+  one finding per rule and line, at a tag's or a declaration's FIRST line (a Tailwind utility's: its class's line),
+  silenced or not decided when it is found;
   `DS_CHECK_PER_FILE` (200) kept a file — past it each is still COUNTED (`past`: {byRule, silenced}), never kept (review 1 of
   1.37: 200 report-level findings hid a file's real ones, `total` read 200); `cut`: {lines (cut at `DS_LINE_MAX`), tags (the
   tag reader's failed reads)}. A stylesheet's lines are all CSS; a .tsx / .jsx / .js / .ts file is SCRIPT (its tags read as
@@ -1336,9 +1337,14 @@ wrong finding sends a team to fix code that is right.
   Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
   focus.
 - **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` (ids `,`-separated; what follows them, a
-  reason, is not read) on the finding's line, or ALONE on the line above (its `l` blank but for a JSX comment's braces — a
-  trailing marker silences its own line only, eslint's -line vs -next-line: review 1 of 1.37) — any comment syntax of the
-  file (in `src`, absent from `l`); a stylesheet's finding sits on its declaration's line. Counted in `silenced`, never
+  reason, is not read) on the finding's line or the line above, whatever else that line holds (review 2 of 1.37 took
+  review 1's "alone on the line above" out: `button:focus { /* ui-check-off: … */` above its declaration, the line a
+  stylesheet's team writes it on, stopped silencing while finish and the READMEs said "the line above") — a comment
+  viewLines strips (in `src`, absent from `l`: `//`, `/* */`, `<!-- -->`, `{/* */}`), never a template engine's own (Blade's
+  `{{-- --}}`, Twig / Jinja's `{# #}`, ERB's `<%# %>`, Handlebars' `{{!-- --}}`: in a template, `<!-- -->`); a
+  stylesheet's finding sits on its declaration's line, a Tailwind utility's on its CLASS's line — not its tag's first: in
+  a multi-line markup tag no comment fits beside a later line's class (keep the class on the tag's first line, or a `//`
+  line inside a JSX tag). Counted in `silenced`, never
   listed, never in finish. Two lines up, another id, a string's text, no id: nothing; a linter's own suppression
   (`eslint-disable-next-line jsx-a11y/…`, `svelte-ignore a11y_…`) is not read (the user docs say so). No project switch in
   1.37 (the `_UI checks off:_` marker is 1.38's).

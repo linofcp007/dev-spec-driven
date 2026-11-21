@@ -12,7 +12,8 @@
  * its lines cut at DS_LINE_MAX, comments out) and a stylesheet's structure through styleTokens' walker (the ONE CSS block
  * walker, its events), never a second walker. Every doubt reads as "not judged": a wrong finding sends a team to fix code that
  * is right. A team silences ONE occurrence with a comment `ui-check-off: <rule-id>[, <rule-id>]` on its line or the line
- * above (any comment syntax of the file); a silenced finding is counted, never listed.
+ * above (an HTML, JS or CSS comment; never a template engine's own: Blade's `{{-- --}}`, Twig's `{# #}`); a silenced
+ * finding is counted, never listed.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js. LAZY (the tier): what reads
  * the code loads on first use.
@@ -563,10 +564,11 @@ function markIds(src) {
   return ids;
 }
 // One view / style file → { findings: [{ rule, line, value, silenced }], focus, past, cut }. lines: viewLines(text, rel)'s (n
-// 1-based, src, l without its comments, css, cut). A finding is at its tag's or declaration's FIRST line, one per rule and
-// line; `silenced` when a `ui-check-off:` comment (in `src`, absent from `l`) names its rule on that line, or on the line
-// above when that line holds no code (`l` blank but for a JSX comment's braces — a trailing marker silences its own line
-// alone: review 1 of 1.37) — decided when it is found (the lines up to it are read). DS_CHECK_PER_FILE findings are kept; past them each is still
+// 1-based, src, l without its comments, css, cut). A finding is at its tag's or declaration's FIRST line (a class utility's:
+// its class's line), one per rule and line; `silenced` when a `ui-check-off:` comment (in `src`, absent from `l`: a comment
+// viewLines strips — `//`, `/* */`, `<!-- -->`, `{/* */}`; never a template engine's own) names its rule on that line or on
+// the line above, whatever else that line holds (review 2 of 1.37: `button:focus { /* ui-check-off: … */` above its
+// declaration — 1.37's first rule, back) — decided when it is found (the lines up to it are read). DS_CHECK_PER_FILE findings are kept; past them each is still
 // COUNTED — past: { byRule (the unsilenced ones), silenced } — never kept (review 1 of 1.37: a file of 200 report-level
 // findings hid its real ones, `total` read 200). cut: { lines (cut at DS_LINE_MAX), tags (tagReader's failed reads) }.
 // outline-removed findings are CANDIDATES (focus: does the file hold a focus style — uiChecksReport decides).
@@ -579,14 +581,14 @@ function uiChecksOf(lines, rel) {
     if (seen.has(k)) return;
     seen.add(k);
     const here = marks.get(line), above = marks.get(line - 1);
-    const silenced = (here != null && here.ids.has(rule)) || (above != null && above.alone && above.ids.has(rule));
+    const silenced = (here != null && here.has(rule)) || (above != null && above.has(rule));
     if (findings.length < DS_CHECK_PER_FILE) findings.push({ rule, line, value: String(value).replace(/\s+/g, " ").trim().slice(0, DS_VALUE), silenced });
     else if (silenced) past.silenced++;
     else past.byRule[rule] = (past.byRule[rule] || 0) + 1;
   };
   const tags = sheet ? null : tagReader(RE_SCRIPT_FILE.test(rel), (tag) => judgeTag(tag, add), add);
   for (const { n, src, l, css: isCss, cut } of lines) {
-    if (src.includes("ui-check-off:") && !l.includes("ui-check-off:")) marks.set(n, { ids: markIds(src), alone: /^[\s{}]*$/.test(l) });
+    if (src.includes("ui-check-off:") && !l.includes("ui-check-off:")) marks.set(n, markIds(src));
     if (cut) cutLines++;
     css.push(isCss ? l : "");
     if (isCss) { anyCss = true; continue; }

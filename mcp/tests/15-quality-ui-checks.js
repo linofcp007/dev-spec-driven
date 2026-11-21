@@ -349,14 +349,16 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
-  { // review 1 of 1.37's LOWs: a TRAILING marker silences its own line alone (S5 — a marker alone on its line silences the one
-    // below), ids `,`-separated; an inline paste handler that hands its event on is not followed, a `navigator.clipboard` read
-    // is a read (S6); a non-empty title names an <img> (S7, axe-core's image-alt); a `:focus` removal on a type no keyboard
+  { // review 1 of 1.37's LOWs: ids `,`-separated (a TRAILING marker silences its own line and the one below whatever its line
+    // holds — review 2 of 1.37 took S5's narrowing out: `button:focus { /* ui-check-off: … */` above its declaration); an
+    // inline paste handler that hands its event on is not followed, a `navigator.clipboard` read is a read (S6); a non-empty title names an <img> (S7, axe-core's image-alt); a `:focus` removal on a type no keyboard
     // reaches by default or on `[tabindex="-1"]` is no candidate (S9)
     const trailing = { jsx: got(lines("export const Logos = () => (", "  <div>", "    <img src=\"/spacer.gif\" /> {/* ui-check-off: img-no-alt */}", "    <img src=\"/logo-acme.png\" />", "  </div>", ");"), "src/Logos.tsx"),
       html: got(lines("<img src=\"/spacer.gif\"> <!-- ui-check-off: img-no-alt -->", "<img src=\"/logo.png\">"), "index.html"),
       css: got(lines("*:focus { outline: 0; } /* ui-check-off: outline-removed */", "button { outline: none; }"), "src/reset.css"),
-      blank: got(lines("export const Row = ({ go }) => (", "  // ui-check-off: img-no-alt click-no-keyboard", "  <div onClick={go}>Pick <img src=\"/a.png\" /></div>", ");"), "src/Row.tsx") };
+      blank: got(lines("export const Row = ({ go }) => (", "  // ui-check-off: img-no-alt click-no-keyboard", "  <div onClick={go}>Pick <img src=\"/a.png\" /></div>", ");"), "src/Row.tsx"),
+      rule: got(lines(".menu-item:focus { /* ui-check-off: outline-removed — the ring is drawn by box-shadow in JS */", "  outline: none;", "}", ".x:focus {", "  outline: none;", "}"), "src/menu.css"),
+      tag: got(lines("export const F = () => (", "  <figure> {/* ui-check-off: img-no-alt */}", "    <img src=\"/a.png\" />", "    <img src=\"/b.png\" />", "  </figure>", ");"), "src/F.tsx") };
     const paste = got(lines("export const Code = ({ onPasteCode, set, other }) => (", "  <form>", "    <input onPaste={(e) => { e.preventDefault(); onPasteCode(e); }} />",
       "    <input onPaste={function (ev) { ev.preventDefault(); handle(ev, 6); }} />", "    <input onPaste={(e) => { e.preventDefault(); navigator.clipboard.readText().then(set); }} />",
       "    <input onPaste={(e) => { e.preventDefault(); log(other); }} />", // 6: FINDING (what it hands on is not the event)
@@ -366,9 +368,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const titled = got(lines("<img title=\"Andorra\" class=\"CountryFlag\" src=\"./AD.svg\"/>", "<img title=\"\" src=\"./x.svg\"/>", "<img title src=\"./y.svg\"/>"), "public/flags.html"); // 2, 3: FINDING
     const programmatic = got(lines("[tabindex=\"-1\"]:focus {", "  outline: 0 !important;", "}", "main:focus { outline: none; }", "h1:focus { outline: none; }", "div:focus { outline: none; }",
       ".btn:focus { outline: none; }", "a:focus { outline: none; }", "#main [tabindex='-1']:focus { outline: none; }"), "src/a11y.css"); // 7, 8: FINDING
-    all("1.37 UI checks: a trailing ui-check-off silences its own line alone, blank-separated ids are not read past the first; a paste handler that hands its event on (an arrow's, a function's, $event, event) is not followed, a navigator.clipboard read is a read; a non-empty title names an <img>; `[tabindex=\"-1\"]:focus`, `main:focus`, `h1:focus`, `div:focus` are no candidates (got " +
+    all("1.37 UI checks: a trailing ui-check-off silences its own line and the one below (after a rule's `{`, an opening tag), never two below; blank-separated ids are not read past the first; a paste handler that hands its event on (an arrow's, a function's, $event, event) is not followed, a navigator.clipboard read is a read; a non-empty title names an <img>; `[tabindex=\"-1\"]:focus`, `main:focus`, `h1:focus`, `div:focus` are no candidates (got " +
       js({ trailing, paste, pasteNg, titled, programmatic }) + ")", {
-      trailing: () => js(trailing.jsx) === js(["~img-no-alt@3", "img-no-alt@4"]) && js(trailing.html) === js(["~img-no-alt@1", "img-no-alt@2"]) && js(trailing.css) === js(["~outline-removed@1", "outline-removed@2"]),
+      trailing: () => js(trailing.jsx) === js(["~img-no-alt@3", "~img-no-alt@4"]) && js(trailing.html) === js(["~img-no-alt@1", "~img-no-alt@2"]) && js(trailing.css) === js(["~outline-removed@1", "~outline-removed@2"]),
+      after: () => js(trailing.rule) === js(["~outline-removed@2", "outline-removed@5"]) && js(trailing.tag) === js(["~img-no-alt@3", "img-no-alt@4"]),
       blank: () => js(trailing.blank) === js(["~img-no-alt@3", "click-no-keyboard@3"]),
       paste: () => js(paste) === js(["paste-blocked@6", "paste-blocked@7"]) && js(pasteNg) === js(["paste-blocked@3"]),
       title: () => js(titled) === js(["img-no-alt@2", "img-no-alt@3"]),
