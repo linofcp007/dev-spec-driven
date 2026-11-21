@@ -21,7 +21,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
   {
     const reg = registryOf("reader", [
       "| Table | src/components/Table.tsx | dense | old grid _Deprecated: use DataGrid_ |",
-      "| DataGrid | src/components/DataGrid.tsx |  |  |",
+      // (1.37.0 review 2: the successor's own note on the deprecation is no marker — read as one, it voided every `use DataGrid`)
+      "| DataGrid | src/components/DataGrid.tsx |  | replaces the _deprecated Table_ (see below) |",
       "| Grid | src/components/Grid.tsx | _Deprecated_ |  |",
       "| Pager | src/components/Pager.tsx _Deprecated: use DataGrid_ |  |  |",
       "| Inner | src/Inner.tsx |  | _Deprecated: use Data_Grid now_ |",
@@ -46,19 +47,30 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       "| Semi | src/Semi.tsx |  | _Deprecated: use DataGrid_; see ADR-7 |",
       "| Colon | src/Colon.tsx |  | _Deprecated_: use DataGrid |",
       "| Empty | src/Empty.tsx |  | _Deprecated: _ |",
-      // 1.37.0 review 1 (RB-3): whatever follows the word that is no letter or digit — the natural spellings; the label alone
-      // italic before a period too; a digit continues the word. (RB-6) an `İ` before the marker (two code units lower-cased)
+      // 1.37.0 review 1 (RB-3): a punctuation mark after the word — the natural spellings, with or without a blank; the label
+      // alone italic before a period too; a digit continues the word. (RB-6) an `İ` before the marker (two code units lower-cased)
       "| Dash | src/Dash.tsx |  | _Deprecated — use DataGrid_ |",
+      "| Tight | src/Tight.tsx |  | _Deprecated—use DataGrid_ |",
+      "| Hyphen | src/Hyphen.tsx |  | _Deprecated - use DataGrid_ |",
       "| Period | src/Period.tsx |  | _Deprecated. Use DataGrid instead._ |",
       "| Commas | src/Commas.tsx |  | _Deprecated, use DataGrid_ |",
-      "| Favour | src/Favour.tsx |  | _Deprecated in favour of DataGrid_ |",
       "| Dated | src/Dated.tsx |  | _Deprecated (v3): use DataGrid_ |",
       "| LabelPeriod | src/LabelPeriod.tsx |  | _Deprecated._ Use DataGrid instead. |",
       "| Digit | src/Digit.tsx |  | _deprecated2 notes_ |",
       "| Turkish | src/Turkish.tsx |  | İptal akışı _Deprecated: use DataGrid_ |",
+      // 1.37.0 review 2 (R2-1): a WORD after the word — past any blanks — makes a note (an italic phrase about something else, as
+      // 457d3da read it), and `-` / `/` / `.` before a letter or digit join it into a longer name (a flag, a folder, a file)
+      "| Favour | src/Favour.tsx |  | _Deprecated in favour of DataGrid_ |",
+      "| Since | src/Since.tsx |  | _Deprecated since 2.0: use DataGrid_ |",
+      "| Props | src/Props.tsx |  | _deprecated props removed in v3: size, kind_ |",
+      "| Wide | src/Wide.tsx |  | _deprecated  props removed_ |",
+      "| Prop | src/Prop.tsx |  | `dense` prop (_deprecated in v2_) |",
+      "| Kebab | src/Kebab.tsx |  | reads _deprecated-flag_ from config |",
+      "| Folder | _deprecated/Folder.tsx |  | the list |",
+      "| DotFile | _deprecated.tsx |  | the list |",
     ]);
     const dep = reg.deprecated;
-    all("1.37 registry: `_Deprecated: use X_` in a component row (any cell after the name, any case; bare, closed, the label alone italic or never closed; at a cell's start or after a blank, `(` or `*` — never inside a word) marks it deprecated: `deprecated` maps its key to the replacement — the first OTHER listed component its text names, a word or two adjacent ones, as written there; \"\" when it names none —, the marker is cut out of its cell (a path stays a path) and shown first in the notes, whole; `_From:_` beside it is still read (got " +
+    all("1.37 registry: `_Deprecated: use X_` in a component row (any cell after the name, any case; bare, closed, the label alone italic or never closed; at a cell's start or after a blank, `(` or `*` — never inside a word; a punctuation mark after the word, never a word — 1.37.0 review 2: `_deprecated props removed_`, `_Deprecated in favour of X_` are notes, `_deprecated-flag_` / `_deprecated/Folder.tsx` longer names) marks it deprecated: `deprecated` maps its key to the replacement — the first OTHER listed component its text names, a word or two adjacent ones, as written there; \"\" when it names none —, the marker is cut out of its cell (a path stays a path) and shown first in the notes, whole; `_From:_` beside it is still read (got " +
       js({ dep: [...depOf(reg)], comps: reg.components.map((c) => [c.name, c.path, c.variants, c.notes]), origin: reg.origins.get("origin") }) + ")", {
       notes: () => dep.get("table") === "DataGrid" && comp(reg, "Table").notes === "_Deprecated: use DataGrid_ · old grid" && comp(reg, "Table").variants === "dense",
       variantsCell: () => dep.get("grid") === "" && comp(reg, "Grid").variants === "" && comp(reg, "Grid").notes === "_Deprecated_",
@@ -85,19 +97,31 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       colon: () => dep.get("colon") === "" && comp(reg, "Colon").notes === "_Deprecated_ · : use DataGrid",
       empty: () => dep.get("empty") === "" && comp(reg, "Empty").notes === "_Deprecated_",
       dash: () => dep.get("dash") === "DataGrid" && comp(reg, "Dash").notes === "_Deprecated — use DataGrid_",
+      tight: () => dep.get("tight") === "DataGrid" && comp(reg, "Tight").notes === "_Deprecated—use DataGrid_",
+      hyphen: () => dep.get("hyphen") === "DataGrid" && comp(reg, "Hyphen").notes === "_Deprecated - use DataGrid_",
       period: () => dep.get("period") === "DataGrid" && comp(reg, "Period").notes === "_Deprecated. Use DataGrid instead._",
       comma2: () => dep.get("commas") === "DataGrid" && comp(reg, "Commas").notes === "_Deprecated, use DataGrid_",
-      favour: () => dep.get("favour") === "DataGrid" && comp(reg, "Favour").notes === "_Deprecated in favour of DataGrid_",
       dated: () => dep.get("dated") === "DataGrid" && comp(reg, "Dated").notes === "_Deprecated (v3): use DataGrid_",
       labelPeriod: () => dep.get("labelperiod") === "DataGrid" && comp(reg, "LabelPeriod").notes === "_Deprecated. Use DataGrid instead._",
       digit: () => !dep.has("digit") && comp(reg, "Digit").notes === "deprecated2 notes",
       turkish: () => dep.get("turkish") === "DataGrid" && comp(reg, "Turkish").notes === "_Deprecated: use DataGrid_ · İptal akışı",
-      count: () => dep.size === 26 && !dep.has("datagrid"),
+      // (review 2: notes as 457d3da read them, the path a path)
+      successor: () => !dep.has("datagrid") && comp(reg, "DataGrid").notes === "replaces the _deprecated Table_ (see below)",
+      favour: () => !dep.has("favour") && comp(reg, "Favour").notes === "Deprecated in favour of DataGrid",
+      since: () => !dep.has("since") && comp(reg, "Since").notes === "Deprecated since 2.0: use DataGrid",
+      props: () => !dep.has("props") && comp(reg, "Props").notes === "deprecated props removed in v3: size, kind",
+      wide: () => !dep.has("wide") && comp(reg, "Wide").notes === "deprecated  props removed",
+      prop: () => !dep.has("prop") && comp(reg, "Prop").notes === "dense` prop (_deprecated in v2_)",
+      kebab: () => !dep.has("kebab") && comp(reg, "Kebab").notes === "reads _deprecated-flag_ from config",
+      folder: () => !dep.has("folder") && /^_?deprecated\/Folder\.tsx$/.test(comp(reg, "Folder").path) && comp(reg, "Folder").notes === "the list",
+      dotFile: () => !dep.has("dotfile") && /^_?deprecated\.tsx$/.test(comp(reg, "DotFile").path),
+      count: () => dep.size === 27,
     });
   }
   {
     // 1.37.0 review 1 (RB-5): the replacement is never a word pair across punctuation, never a fragment of a hyphenated / slashed /
     // dotted name (a whole one still names it), never deprecated itself — the next one named is
+    const NFD = "Dia" + String.fromCharCode(0x301) + "logo", NFC = NFD.normalize("NFC");
     const reg = registryOf("replacement", [
       "| Card | src/Card.tsx |  |  |", "| CardHeader | src/CardHeader.tsx |  |  |", "| Data | src/Data.tsx |  |  |",
       "| DataGrid | src/DataGrid.tsx |  |  |", "| Dialog | src/Dialog.tsx |  |  |",
@@ -109,9 +133,12 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       "| Popup | src/Popup.tsx |  | _Deprecated: use Dialog_ |",
       "| Modal | src/Modal.tsx |  | _Deprecated: use Popup_ |",
       "| Sheet | src/Sheet.tsx |  | _Deprecated: use Popup or Dialog_ |",
+      // (1.37.0 review 2: a marker writing the accent as a combining mark names the NFC row — as 457d3da's folded key did)
+      "| " + NFC + " | src/Dialogo.tsx |  |  |",
+      "| Accent | src/Accent.tsx |  | _Deprecated: use " + NFD + "_ |",
     ]);
     const dep = depOf(reg);
-    all("1.37.0 review 1: a deprecated row's replacement — a pair only across blanks (`Card. Header` is Card), a hyphenated / slashed / dotted name whole or not at all (`@acme/data`, `x-data`, `lib.data` name no Data; `data-grid` is DataGrid), never a component deprecated itself (`use Popup or Dialog` is Dialog) (got " + js([...dep]) + ")", {
+    all("1.37.0 review 1: a deprecated row's replacement — a pair only across blanks (`Card. Header` is Card), a hyphenated / slashed / dotted name whole or not at all (`@acme/data`, `x-data`, `lib.data` name no Data; `data-grid` is DataGrid), never a component deprecated itself (`use Popup or Dialog` is Dialog); review 2: read in NFC (got " + js([...dep]) + ")", {
       sentence: () => dep.get("panel") === "Card",
       slash: () => dep.get("slash") === "",
       hyphen: () => dep.get("hyphen") === "",
@@ -119,6 +146,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       kebab: () => dep.get("kebab") === "data-grid",
       chain: () => dep.get("modal") === "" && dep.get("popup") === "Dialog",
       chainNext: () => dep.get("sheet") === "Dialog",
+      nfc: () => dep.get("accent") === NFC,
     });
   }
   {
@@ -267,16 +295,28 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const big = "# Design System\n\n" + HEAD + "| Table | src/components/Table.tsx |  | _Deprecated: use Z9_ |\n" +
       Array.from({ length: 499 }, (_, i) => "| C" + i + " | src/c" + i + ".tsx |  |  |").join("\n") + "\n| Z9 | src/z9.tsx |  |  |\n";
     one("pastCapName", ["| Reuse | Table | Z9 lacks the export |"], big);
+    one("pastCapWarn", ["| Reuse | Table | the export |"], big);
+    // 1.37.0 review 2 (R2-3): the letters compared in one Unicode form (NFC) — an accent written as a combining mark, in the notes or
+    // in the registry's name, is the precomposed one; accents are still kept (an unaccented word warns)
+    const NFD = "Dia" + String.fromCharCode(0x301) + "logo", NFC = NFD.normalize("NFC");
+    const AREG = (name) => "# Design System\n\n" + HEAD + "| " + name + " | src/components/Dialogo.tsx |  |  |\n| Modal | src/components/Modal.tsx |  | _Deprecated: use " + name + "_ |\n";
+    one("nfdNotes", ["| Reuse | Modal | kept: the " + NFD + " lacks a sheet |"], AREG(NFC));
+    one("nfdName", ["| Reuse | Modal | kept: the " + NFC + " lacks a sheet |"], AREG(NFD));
+    one("unaccented", ["| Reuse | Modal | kept: the Dialogo lacks a sheet |"], AREG(NFC));
     const W = (name, use) => Q().dsDeprecated(1, Q().dsDeprecatedItem(name, use));
-    all("1.37.0 review 1: ui-deprecated is silenced only when the row's notes name the replacement as a component — in the registry's letter case (its row's name; the marker's spelling for a name past the rows read in full), a word, a code span or a tag; the same word in prose (`dialog`, `data grid`, `datagrid`) warns (got " + js(st) + ")", {
+    all("1.37.0 review 1: ui-deprecated is silenced only when the row's notes name the replacement as a component — in the registry's letter case (its row's name; the marker's spelling for a name past the rows read in full), a word, a code span or a tag; the same word in prose (`dialog`, `data grid`, `datagrid`) warns; review 2: the warn prints the replacement in that spelling — the one that silences it — and the letters compare in NFC (got " + js(st) + ")", {
       prose: () => st.prose.status === "warn" && st.prose.detail === W("Modal", "Dialog"),
       prosePair: () => st.prosePair.status === "warn" && st.prosePair.detail === W("Table", "DataGrid"),
       word: () => st.word.status === "pass",
       code: () => st.code.status === "pass",
       tag: () => st.tag.status === "pass",
       registryCase: () => st.registryCase.status === "pass",
-      markerCase: () => st.markerCase.status === "warn" && st.markerCase.detail === W("Sheet", "datagrid"),
+      markerCase: () => st.markerCase.status === "warn" && st.markerCase.detail === W("Sheet", "DataGrid"),
       pastCapName: () => st.pastCapName.status === "pass",
+      pastCapWarn: () => st.pastCapWarn.status === "warn" && st.pastCapWarn.detail === W("Table", "Z9"),
+      nfdNotes: () => st.nfdNotes.status === "pass",
+      nfdName: () => st.nfdName.status === "pass",
+      unaccented: () => st.unaccented.status === "warn" && st.unaccented.detail === W("Modal", NFC),
     });
   }
   {

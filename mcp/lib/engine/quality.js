@@ -1167,16 +1167,18 @@ const RE_DS_NONE_WHOLE = /^(?:none|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|
 // follows it). That feature's own `New` row for the component stays New: its design says what it built.
 const RE_DS_FROM = /_From:[ \t]*([a-z0-9][a-z0-9-]*)_/i;
 // 1.37 `_Deprecated: use X_` in a component's row (English-stable, any case, like `_From:_`): the team retires the component and
-// names what replaces it. An `_…_` emphasis whose first word is Deprecated, whatever follows the word that is no letter or digit
-// (1.37.0 review 1: `:`, `—`, `.`, `,`, a blank, `(`), in any cell after the name — `_Deprecated_` alone, `_Deprecated: <text>_`,
-// the label alone italic (`_Deprecated:_ <text>`: the emphasis holds no word after the label, the text runs to the cell's end)
-// or never closed (to the cell's end). It starts the cell or follows a blank, `(` or `*` (never `snake_deprecated_flag`;
-// `_deprecated_flag` and `_deprecatedness` are other words); its closing `_` is one the cell's end, a blank or one of `.,;:)*`
-// follows (`use Data_Grid now` keeps its `_`). Found in the cell AS WRITTEN by one case-insensitive regex (review 1: an index
-// found in its toLowerCase() was read in the cell, and every `İ` before the marker shifted it). Linear: each `_` looked at once;
-// the first marker of the row counts. → null | { cell (its index), text (what follows the word, as written; "" when it holds no
-// letter or digit), cut (the cell without it) }
-const RE_DS_DEPRECATED = /(?<![^\s(*])_deprecated(?![\p{L}\p{N}])/giu;
+// names what replaces it. An `_…_` emphasis whose first word is Deprecated and whose first non-blank character after the word is
+// no letter or digit (1.37.0 review 1: `:`, `—`, `.`, `,`, `(`; review 2: a word after it makes a note — `_deprecated props
+// removed_`, `_Deprecated in favour of X_` —, and `-`, `/` or `.` before a letter or digit joins it into a longer name, as the
+// name reader joins one: `_deprecated-flag_`, a path `_deprecated/Table.tsx`), in any cell after the name — `_Deprecated_` alone,
+// `_Deprecated: <text>_`, the label alone italic (`_Deprecated:_ <text>`: the emphasis holds no word after the label, the text
+// runs to the cell's end) or never closed (to the cell's end). It starts the cell or follows a blank, `(` or `*` (never
+// `snake_deprecated_flag`; `_deprecated_flag` and `_deprecatedness` are other words); its closing `_` is one the cell's end, a
+// blank or one of `.,;:)*` follows (`use Data_Grid now` keeps its `_`). Found in the cell AS WRITTEN by one case-insensitive
+// regex (review 1: an index found in its toLowerCase() was read in the cell, and every `İ` before the marker shifted it).
+// Linear: each `_` looked at once, each blank run after the word once; the first marker of the row counts. → null | { cell (its
+// index), text (what follows the word, as written; "" when it holds no letter or digit), cut (the cell without it) }
+const RE_DS_DEPRECATED = /(?<![^\s(*])_deprecated(?!\s*[\p{L}\p{N}])(?![-/.][\p{L}\p{N}])/giu;
 const RE_DS_WORD = /[\p{L}\p{N}]/u;
 const DS_DEPRECATED_SHOWN = 120; // the marker's text the notes show (a replacement is looked for in all of it)…
 const DS_DEPRECATED_WORDS = 20; // …among its first 20 words
@@ -1206,11 +1208,12 @@ const dsDeprecatedShown = (dep) => "_Deprecated" + dep.text.slice(0, DS_DEPRECAT
 // The first name a text gives that `pred(key, as written)` takes — at each of its first `max` words, that word and the next one
 // together first when only blanks part them (`Data Grid` is DataGrid; review 1: never across `Card. Header`), then the word
 // alone — as written there: { key, text } | null. A word is a hyphenated / slashed / dotted / snake name WHOLE (`data-grid`,
-// `Data_Grid`): never a fragment of one (review 1: `@mui/x-data-grid-pro` named DataGrid). Linear.
+// `Data_Grid`): never a fragment of one (review 1: `@mui/x-data-grid-pro` named DataGrid). The text is read in NFC (review 2:
+// an accent written as a combining mark split `Diálogo` in two words). Linear.
 const RE_DS_NAME_WORD = /[\p{L}\p{N}]+(?:[-/._][\p{L}\p{N}]+)*/gu;
-function dsNameIn(text, max, pred) {
-  const words = [];
-  for (const m of String(text).matchAll(RE_DS_NAME_WORD)) if (words.push(m) >= max) break;
+function dsNameIn(text0, max, pred) {
+  const text = String(text0).normalize("NFC"), words = [];
+  for (const m of text.matchAll(RE_DS_NAME_WORD)) if (words.push(m) >= max) break;
   for (let i = 0; i < words.length; i++) {
     const a = words[i], b = words[i + 1], pair = b && text.slice(a.index, b.index + b[0].length);
     if (b && !text.slice(a.index + a[0].length, b.index).trim() && pred(dsKey(pair), pair)) return { key: dsKey(pair), text: pair };
@@ -2026,13 +2029,16 @@ function designSystemCheck(design, lang, opts = {}) {
 }
 // doctor's ui-deprecated (1.37) over an (active) design of a +ui feature → { id, status, detail }: each component a Reuse / Extend
 // row names that the registry marks `_Deprecated:_` (registry.deprecated: its key → its replacement) is a WARN naming the
-// replacement — unless the row's notes name it AS A COMPONENT (a word or two adjacent ones, as the marker's text is read, in the
-// letter case the registry writes its name — its row's, else the marker's: review 1, "the delete-confirmation dialog" is prose,
-// `Dialog` / <Dialog /> / "Dialog lacks a sheet" name it: the team keeps this one on purpose and says why); once per component;
+// replacement as the registry writes it (its row's name, else the marker's spelling — review 2: the name the warn prints is the
+// one that silences it) — unless the row's notes name it AS A COMPONENT (a word or two adjacent ones, as the marker's text is
+// read, in that letter case: review 1, "the delete-confirmation dialog" is prose, `Dialog` / <Dialog /> / "Dialog lacks a
+// sheet" name it: the team keeps this one on purpose and says why); once per component;
 // a New row is not asked (`listed` is ui-design-system's). Never a fail, never an approval check, no stamp: the registry moves on
 // after an approval (a component deprecated later), and the warn is for the work still to do. opts: { registry } (none, or one
 // with no deprecated row: a pass).
-const dsLetters = (s) => String(s).replace(/[^\p{L}\p{N}]+/gu, ""); // its letters and digits as written (case and accents kept)
+// (its letters and digits as written, case and accents kept — in one Unicode form: review 2, an NFD `á` in the notes is the
+// registry's NFC `á`)
+const dsLetters = (s) => String(s).normalize("NFC").replace(/[^\p{L}\p{N}]+/gu, "");
 function designSystemDeprecatedCheck(design, lang, opts = {}) {
   const Q = i18n.msg(lang).quality, id = "ui-deprecated";
   const dep = opts.registry && opts.registry.deprecated && opts.registry.deprecated.size ? opts.registry.deprecated : null;
@@ -2041,7 +2047,7 @@ function designSystemDeprecatedCheck(design, lang, opts = {}) {
   const items = [], seen = new Set();
   for (const r of usage ? usage.rows : []) {
     if (r.kind === "new" || !dep.has(r.key) || seen.has(r.key)) continue;
-    const use = dep.get(r.key), as = dsLetters(names.get(dsKey(use)) || use);
+    const use = names.get(dsKey(dep.get(r.key))) || dep.get(r.key), as = dsLetters(use);
     if (dsNameIn(r.why, Infinity, (x, t) => dsLetters(t) === as)) continue;
     seen.add(r.key);
     items.push(Q.dsDeprecatedItem(r.name, use));
