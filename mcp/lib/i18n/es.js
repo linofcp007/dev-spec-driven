@@ -8,7 +8,15 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, stopLineClaim } = require("./common.js"); // load time
+const { DEV_SPEC, stopLineClaim, uiStateTable } = require("./common.js"); // load time
+// +ui's state matrix (1.38) — en.js's UI_STATES, the same ids in the same order: the template's table and quality's uiState* keys
+const UI_STATES = {
+  labels: { loading: "Cargando", "slow-network": "Red lenta", "empty-first-use": "Vacío — primer uso", "empty-no-results": "Vacío — sin resultados",
+    error: "Error", partial: "Parcial", offline: "Sin conexión", "permission-denied": "Sin permiso", "not-found": "No encontrado",
+    "signed-out": "Sesión cerrada", conflict: "Conflicto", stale: "Desactualizado", success: "Éxito", undo: "Deshacer",
+    "form-validation": "Validación del formulario", "worst-case": "Peor caso" },
+  head: "Estado", view: "Vista", a11y: "Anunciado · foco",
+};
 // The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
 let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
@@ -79,7 +87,7 @@ const text = {
     ],
     ui: [
       ["Uso del Design System", "- Los componentes del design system usados y los tokens (color, espaciado, tipografía) · cada componente nuevo: por qué no sirven los existentes y cómo entra en el sistema (documentado, revisado, en la biblioteca de componentes) · ningún estilo suelto ni color fijo en el código.\n- Una fila por componente, comprobada contra el registro (.specs/steering/design-system.md — la comprobación ui-design-system de spec_doctor): Reutilizar = uno que el registro enumera, usado tal cual · Extender = una variante nueva de uno que enumera · Nuevo = ninguno de los enumerados sirve — con el motivo; entra en el registro cuando la funcionalidad se termina. Sin ningún componente: una sola línea en lugar de la tabla, n/a — el motivo.\n\n| Tipo | Componente | Por qué / notas |\n|---|---|---|\n| Reutilizar | [componente que el registro enumera] | [qué hace en esta vista] |\n| Nuevo | [componente nuevo] | [por qué no sirve ninguno de los enumerados] |\n\n- Una fila Nuevo / Extender tiene contrato — estados, teclado, rol / nombre, variantes en una prop enumerada, slots — en una sección opcional `## [UI] Contratos de Componentes`."],
-      ["Estados de la Interfaz", "- Por vista, una matriz de estados: cargando · vacío · error (con Reintentar) · parcial · sin conexión · sin permiso · éxito — qué ve y qué puede hacer el usuario en cada uno; validación de formularios (en el campo + un resumen, los valores conservados).\n- La referencia con la que se construye cada vista: una exportación del diseño o un prototipo HTML que el usuario aprobó — uno por estado cuando difieren — y su ruta · la revisión visual compara lo construido con ella, estado a estado (references/ui-review.md).\n- Una fila de peor caso: cada campo en su extremo realista (valor más largo, 0 / 1 / miles, sin imagen, el idioma más largo o RTL) · qué se parte o se trunca · su propia captura."],
+      ["Estados de la Interfaz", "- Por vista, una matriz de estados: cargando · vacío · error (con Reintentar) · parcial · sin conexión · sin permiso · éxito — qué ve y qué puede hacer el usuario en cada uno; validación de formularios (en el campo + un resumen, los valores conservados).\n- La referencia con la que se construye cada vista: una exportación del diseño o un prototipo HTML que el usuario aprobó — uno por estado cuando difieren — y su ruta · la revisión visual compara lo construido con ella, estado a estado (references/ui-review.md).\n- Una fila de peor caso: cada campo en su extremo realista (valor más largo, 0 / 1 / miles, sin imagen, el idioma más largo o RTL) · qué se parte o se trunca · su propia captura.\n- Matriz: columna por vista, fila por estado — qué se ve, o n/a — por qué (4+ palabras); Anunciado · foco: qué se dice, adónde va el foco (references/ui-design-patterns.md).\n\n" + uiStateTable(UI_STATES)],
       ["Accesibilidad", "- WCAG 2.2 AA: operable con el teclado y orden de foco visible · nombre / etiqueta en cada control · contraste (4,5:1 en el texto, 3:1 en la interfaz) · tamaño de los objetivos (24×24 px) · movimiento reducido · errores identificados en texto · cómo se prueba (una comprobación automática + una pasada manual con teclado y lector de pantalla)."],
       ["Diseño Adaptable e i18n", "- Breakpoints y cómo se adapta el layout · expansión del texto (+30–40 %) · layouts de derecha a izquierda · formatos del locale (fechas, números, moneda) · todas las cadenas en el catálogo de traducciones."],
       ["Presupuesto de Rendimiento de la Interfaz", "- Core Web Vitals en el percentil 75: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 · el presupuesto de JS / imágenes de esta vista · cómo se mide (laboratorio + usuarios reales)."],
@@ -3450,6 +3458,9 @@ const quality = {
     dsDeprecatedNone: "la sección Uso del Design System no reutiliza ningún componente que el registro marque como obsoleto",
     dsDeprecated: (n, list) => `la sección Uso del Design System reutiliza o extiende ${n} ${n === 1 ? "componente que el registro (.specs/steering/design-system.md) marca como obsoleto" : "componentes que el registro (.specs/steering/design-system.md) marca como obsoletos"} — ${list}: pasar a lo que indica su marcador, o nombrar ese componente en las notas de la fila para decir por qué este se queda`,
     dsDeprecatedItem: (name, use) => (use ? `'${name}' (usar ${use})` : `'${name}'`),
+    // 1.38 la matriz de estados de +ui: la etiqueta de cada estado por su id (estable, en inglés) y las celdas de la cabecera
+    // (UI_STATES — la tabla de la plantilla se construye con los mismos valores)
+    uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,
     dsUnfilled: "la sección Uso del Design System aún no está escrita — se comprueba contra el registro cuando lo esté",
     dsNoRegistry: `todavía no hay registro del design system (.specs/steering/design-system.md) — el inventario único de componentes y tokens a partir del cual construyen todas las funcionalidades +ui. Para crearlo a partir del código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `el registro del design system (.specs/steering/design-system.md) todavía no enumera ningún componente — falta añadir los que ya existen (spec_scan {designSystem: true} · ${DEV_SPEC} design-system muestra lo que tiene el código)`,

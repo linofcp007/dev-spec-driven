@@ -590,8 +590,15 @@ function sectionState(design, sections, marker, opts = {}) {
 // user edited is theirs. Fenced code is the user's too (no track block holds a fence: a section answered by a
 // ```json schema, an OpenAPI ```yaml or a ```mermaid diagram read as "only the template's guidance"): its content lines count,
 // its fence lines don't. A pack's guidance line holding the feature's {{name}} / {{slug}} (the scaffold filled them in) is a
-// LINEAR wildcard (wildcardMatch, the project templates' rule — never a regex built from template text).
-const sectionLineKey = (s) => String(s).replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
+// LINEAR wildcard (wildcardMatch, the project templates' rule — never a regex built from template text). A table row (a line
+// starting with `|`) is keyed by its NON-EMPTY cells, trimmed, on both sides (1.38, CRIT_4 must-fix 2): a blank column added
+// (a second view), one deleted (the a11y column) or compact pipes (`|Loading|||`) leave the scaffold's rows template — an
+// untouched state matrix never reads as written at m / l.
+const sectionLineKey = (s) => {
+  const t = String(s).replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/, "");
+  const key = /^\s*\|/.test(t) ? "| " + tableCells(t).filter(Boolean).join(" | ") + " |" : t;
+  return key.replace(/\s+/g, " ").trim().toLowerCase();
+};
 let SECTION_TEMPLATE_LINES = null; // process-wide: the built-in track blocks (EN / PT / ES)
 let SECTION_TEMPLATE_LINES_BR = null; // … their pt-BR twins, built on the first pt-BR feature
 const PACK_SECTION_LINES = new WeakMap(); // a call's pack registry → its packs' design-block lines (every language): { set, wild }

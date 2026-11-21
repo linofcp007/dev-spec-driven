@@ -8,7 +8,17 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, stopLineClaim } = require("./common.js"); // load time
+const { DEV_SPEC, stopLineClaim, uiStateTable } = require("./common.js"); // load time
+// +ui's state matrix (1.38): each state's label by its English-stable id, in the matrix's order, and the header's cells — the
+// UI States template's table is built from them (uiStateTable) and quality's uiStateLabels / uiStateHead / uiStateView /
+// uiStateA11y are the same values: one source.
+const UI_STATES = {
+  labels: { loading: "Loading", "slow-network": "Slow network", "empty-first-use": "Empty — first use", "empty-no-results": "Empty — no results",
+    error: "Error", partial: "Partial", offline: "Offline", "permission-denied": "Permission denied", "not-found": "Not found",
+    "signed-out": "Signed out", conflict: "Conflict", stale: "Stale", success: "Success", undo: "Undo", "form-validation": "Form validation",
+    "worst-case": "Worst case" },
+  head: "State", view: "View", a11y: "Announced · focus",
+};
 // The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
 let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
@@ -81,9 +91,10 @@ const text = {
       // (1.35: the second line and the table — the rows spec_doctor's ui-design-system checks against the registry; appended, so
       // a 1.34 one-line block still reads as template text) (1.37: a last line, the contracts — in an optional h2 of their own,
       // never under the table: a contract's states table with a New row would be read as a usage row; UI States: a third line,
-      // the worst case — both appended, so a 1.36 block still reads as template text)
+      // the worst case — both appended, so a 1.36 block still reads as template text) (1.38: UI States' matrix — a fourth line and
+      // the State | View | Announced · focus table, its rows UI_STATES', appended: a 1.37 block still reads as template text)
       ["Design System Usage", "- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours.\n- One row per component, checked against the registry (.specs/steering/design-system.md — spec_doctor's ui-design-system): Reuse = one it lists, used as is · Extend = a new variant of one it lists · New = none it lists fits — say why; it joins the registry when the feature is finished. No component at all: replace the table with one line, n/a — why.\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| Reuse | [component the registry lists] | [what it does in this view] |\n| New | [new component] | [why no listed component fits] |\n\n- A New / Extend row gets its contract — states, keyboard, role / name, variants as one enumerated prop, slots — under an optional `## [UI] Component Contracts` section."],
-      ["UI States", "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).\n- The reference each view is built against: a design export or an HTML prototype the user approved — one per state where they differ — and its path · the visual review compares what is built with it, state by state (references/ui-review.md).\n- A worst-case row: each field at its realistic extreme (longest value, 0 / 1 / thousands, no image, the longest or RTL locale) · what wraps or truncates · its own capture."],
+      ["UI States", "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).\n- The reference each view is built against: a design export or an HTML prototype the user approved — one per state where they differ — and its path · the visual review compares what is built with it, state by state (references/ui-review.md).\n- A worst-case row: each field at its realistic extreme (longest value, 0 / 1 / thousands, no image, the longest or RTL locale) · what wraps or truncates · its own capture.\n- Matrix: a column per view, a row per state — what the user sees, or n/a — why (4+ words); Announced · focus: what is said, where focus goes (references/ui-design-patterns.md).\n\n" + uiStateTable(UI_STATES)],
       ["Accessibility", "- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass)."],
       ["Responsiveness & i18n", "- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue."],
       ["UI Performance Budget", "- Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users)."],
@@ -3691,6 +3702,9 @@ const quality = {
     dsDeprecatedNone: "Design System Usage reuses no component the registry marks deprecated",
     dsDeprecated: (n, list) => `Design System Usage reuses or extends ${n} ${n === 1 ? "component" : "components"} the registry (.specs/steering/design-system.md) marks deprecated — ${list}: move to what its marker names, or name that component in the row's notes to say why this one stays`,
     dsDeprecatedItem: (name, use) => (use ? `'${name}' (use ${use})` : `'${name}'`),
+    // 1.38 +ui's state matrix: each state's label by its English-stable id and the header's cells (UI_STATES — the template's
+    // table is built from the same values)
+    uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,
     dsUnfilled: "Design System Usage is not written yet — checked against the registry once it is",
     dsNoRegistry: `no design-system registry yet (.specs/steering/design-system.md) — the one inventory of components and tokens every +ui feature builds from. Create it from the code: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `the design-system registry (.specs/steering/design-system.md) lists no component yet — add the existing ones (spec_scan {designSystem: true} · ${DEV_SPEC} design-system lists what the code holds)`,

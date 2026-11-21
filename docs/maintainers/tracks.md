@@ -245,7 +245,13 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
   (localized in PT / ES), never under the table — `designSystemUsage` would read its states table's `New` row as a usage row
   and the m / l gate would fail. That h2 is NOT a `UI_SECTIONS` entry (`ui-sections` never asks for it, the scaffold writes
   none) and no reader reads it — a task proving a `[UI]` criterion gets it in its brief's Design context like any
-  `[UI]`-titled h2. Each new line is ≤ 180 characters in
+  `[UI]`-titled h2. Since 1.38 (one change, one re-pin) UI States has a FOURTH line — the state matrix's shape, pointing to
+  `references/ui-design-patterns.md` — and, after a blank line, the matrix itself: `State | View | Announced · focus`, one
+  row per state, every other cell blank (no slot: `placeholderReport` reads nothing in it). Its rows and header are built
+  from each language file's `UI_STATES` (`uiStateTable`, i18n/common.js) — the same values quality's `uiStateLabels` /
+  `uiStateHead` / `uiStateView` / `uiStateA11y` hold, the state ids English-stable: one source. A table row's template key is
+  its NON-EMPTY cells (markdown-and-trace.md → Readers), so a view column added, the a11y column deleted or compact pipes
+  keep the untouched matrix template. Each new line is ≤ 180 characters in
   every language, appended (an edited line would turn a 1.36 design's guidance into its author's text: the 05 fixture's
   `prefix` pins the 1.36 lines byte for byte);
   reserved frontend / front-end / ux / gui / wcag — **never `a11y` / `accessibility`**: the
@@ -966,6 +972,16 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   contract lives under its own optional h2, not under the usage table — a states table's `New` row there is read as a usage
   row and failed the m / l gate (the placement fixture pins it). Not in `UI_SECTIONS`, not scaffolded: a section the
   template asked for would turn every feature without a New component into a doctor warning. Mutation pass 21 of 21.
+- **1.38.0** (F0b — CRIT_X D6 as the owner's DECISIONS 4 amends it) — +ui's template changes ONCE: UI States' fourth line and
+  the state matrix (item 4: 16 states — the five new ones Slow network, Not found, Conflict, Undo, Form validation — and the
+  `Announced · focus` column), appended; item 3's Responsiveness line was cut (the block's first line already asks for the
+  breakpoints and how the layout adapts). The line names ui-design-patterns.md, where the matrix's guide stays (no
+  ui-states.md). The rows come from each language's `UI_STATES`, which quality's `uiStateLabels` exposes for doctor's
+  `ui-states` (chain S). CRIT_4 must-fix 2: with a whole-line key, the first edit of every multi-view feature (a blank view
+  column) turned the 16 untouched rows into the author's lines and the m / l gate passed an empty matrix — a table row is now
+  keyed by its non-empty cells. The 1.37 fixtures that read the block's LAST line (`short`, `worstWritten`, `prefix`,
+  `threeLines`) read its first lines by place; the scaffold's section report at s / m / l and the corpus's 1,723 texts are
+  1.37.0's. The no-size sha1 re-pinned once (743f91a0… → c44d3054…).
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.

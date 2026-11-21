@@ -9,7 +9,15 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, stopLineClaim } = require("./common.js"); // load time
+const { DEV_SPEC, stopLineClaim, uiStateTable } = require("./common.js"); // load time
+// +ui's state matrix (1.38) — en.js's UI_STATES, the same ids in the same order: the template's table and quality's uiState* keys
+const UI_STATES = {
+  labels: { loading: "A carregar", "slow-network": "Rede lenta", "empty-first-use": "Vazio — primeiro uso", "empty-no-results": "Vazio — sem resultados",
+    error: "Erro", partial: "Parcial", offline: "Offline", "permission-denied": "Sem permissão", "not-found": "Não encontrado",
+    "signed-out": "Sessão terminada", conflict: "Conflito", stale: "Desatualizado", success: "Sucesso", undo: "Desfazer",
+    "form-validation": "Validação do formulário", "worst-case": "Pior caso" },
+  head: "Estado", view: "Vista", a11y: "Anunciado · foco",
+};
 // The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
 let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
@@ -80,7 +88,7 @@ const text = {
     ],
     ui: [
       ["Uso do Design System", "- Os componentes do design system usados e os tokens (cor, espaçamento, tipografia) · cada componente novo: porque os existentes não servem e como entra no sistema (documentado, revisto, na biblioteca de componentes) · nenhum estilo avulso nem cor fixa no código.\n- Uma linha por componente, verificada contra o registo (.specs/steering/design-system.md — a verificação ui-design-system do spec_doctor): Reutilizar = um que o registo lista, usado tal como está · Estender = uma variante nova de um que ele lista · Novo = nenhum dos listados serve — com a razão; entra no registo quando a feature é concluída. Sem nenhum componente: uma só linha em vez da tabela, n/a — a razão.\n\n| Tipo | Componente | Porquê / notas |\n|---|---|---|\n| Reutilizar | [componente que o registo lista] | [o que faz nesta vista] |\n| Novo | [componente novo] | [a razão de nenhum dos listados servir] |\n\n- Uma linha Novo / Estender tem contrato — estados, teclado, papel / nome, variantes numa só prop enumerada, slots — numa secção opcional `## [UI] Contratos de Componentes`."],
-      ["Estados da Interface", "- Por vista, uma matriz de estados: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso — o que o utilizador vê e pode fazer em cada um; validação de formulários (no campo + um resumo, os valores mantidos).\n- A referência com que cada vista é construída: uma exportação do design ou um protótipo HTML que o utilizador aprovou — um por estado quando diferem — e o seu caminho · a revisão visual compara o que foi construído com ela, estado a estado (references/ui-review.md).\n- Uma linha de pior caso: cada campo no seu extremo realista (valor mais longo, 0 / 1 / milhares, sem imagem, o idioma mais longo ou RTL) · o que quebra ou trunca · a sua captura."],
+      ["Estados da Interface", "- Por vista, uma matriz de estados: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso — o que o utilizador vê e pode fazer em cada um; validação de formulários (no campo + um resumo, os valores mantidos).\n- A referência com que cada vista é construída: uma exportação do design ou um protótipo HTML que o utilizador aprovou — um por estado quando diferem — e o seu caminho · a revisão visual compara o que foi construído com ela, estado a estado (references/ui-review.md).\n- Uma linha de pior caso: cada campo no seu extremo realista (valor mais longo, 0 / 1 / milhares, sem imagem, o idioma mais longo ou RTL) · o que quebra ou trunca · a sua captura.\n- Matriz: coluna por vista, linha por estado — o que se vê, ou n/a — porquê (4+ palavras); Anunciado · foco: o que se diz, onde vai o foco (references/ui-design-patterns.md).\n\n" + uiStateTable(UI_STATES)],
       ["Acessibilidade", "- WCAG 2.2 AA: operável com o teclado e ordem de foco visível · nome / etiqueta em cada controlo · contraste (4,5:1 no texto, 3:1 na interface) · tamanho dos alvos (24×24 px) · movimento reduzido · erros identificados em texto · como é testado (uma verificação automática + uma passagem manual com teclado e leitor de ecrã)."],
       ["Design Responsivo e i18n", "- Breakpoints e como o layout se adapta · expansão do texto (+30–40 %) · layouts da direita para a esquerda · formatos do locale (datas, números, moeda) · todas as strings no catálogo de traduções."],
       ["Orçamento de Desempenho da Interface", "- Core Web Vitals no percentil 75: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 · o orçamento de JS / imagens desta vista · como é medido (laboratório + utilizadores reais)."],
@@ -3450,6 +3458,9 @@ const quality = {
     dsDeprecatedNone: "a secção Uso do Design System não reutiliza nenhum componente que o registo marca como obsoleto",
     dsDeprecated: (n, list) => `a secção Uso do Design System reutiliza ou estende ${n} ${n === 1 ? "componente que o registo (.specs/steering/design-system.md) marca como obsoleto" : "componentes que o registo (.specs/steering/design-system.md) marca como obsoletos"} — ${list}: passar para o que o marcador indica, ou nomear esse componente nas notas da linha para dizer a razão de este ficar`,
     dsDeprecatedItem: (name, use) => (use ? `'${name}' (usar ${use})` : `'${name}'`),
+    // 1.38 a matriz de estados do +ui: o rótulo de cada estado pelo seu id (estável, em inglês) e as células do cabeçalho
+    // (UI_STATES — a tabela do modelo é construída com os mesmos valores)
+    uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,
     dsUnfilled: "a secção Uso do Design System ainda não está escrita — é verificada contra o registo quando estiver",
     dsNoRegistry: `ainda não há registo do design system (.specs/steering/design-system.md) — o inventário único de componentes e tokens a partir do qual todas as features +ui constroem. Cria-o a partir do código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `o registo do design system (.specs/steering/design-system.md) ainda não lista nenhum componente — falta acrescentar os que já existem (spec_scan {designSystem: true} · ${DEV_SPEC} design-system mostra o que o código tem)`,

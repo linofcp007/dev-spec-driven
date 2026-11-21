@@ -31,7 +31,10 @@ matrix. The rules come first; how they came to be — the releases and review fi
     quality.js's `genericUnit` is `genericAnswer`.
   - **Template:** every visible line is a scaffold line of a track design block (`sectionOwnLines()` — exact lines, every
     language, the packs' with `{{name}}` / `{{slug}}` as a linear wildcard); an edited guidance line is the user's, a TBD
-    beside it is not. It fails a new approval and warns on an approved design.
+    beside it is not. It fails a new approval and warns on an approved design. A line's key (`sectionLineKey`, the corpus's
+    `sectionLines` too) is whitespace-folded and lower-cased, a list bullet or quote marker dropped; a TABLE row's (a line
+    starting with `|`) is its non-empty cells, trimmed (`tableCells`), on both sides (1.38): a blank column added, a column
+    deleted or compact pipes leave a scaffold row a scaffold row — a cell written makes it the author's.
 - **Doctor's `mermaid`:** `mermaidState(design)` → present · template · missing, over the ```` ``` ```` / `~~~` blocks
   whose info string starts with `mermaid`, outside comments. `template` — each holds a scaffold diagram
   (`templateDiagramSet()`, every language and design size, from the corpus; `renderTemplateDiagrams()` when it is stale) —
@@ -289,6 +292,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   placeholders failed and status said phase requirements. `RE_IMPL_ANNOTATED`: `_Implements: src/lib/a.ts (the helper)_` was a
   missing file that blocked doctor and finish. `criterionBlocks` takes SETEXT headings: "Acceptance Criteria" over `-------`
   opened no AC context.
+- **1.38.0** (F0b, CRIT_4 must-fix 2) — the template key of a table row is its non-empty cells: +ui's new state matrix is
+  16 rows of a label and blank cells, and with the whole line as the key the first edit of a multi-view design (a blank view
+  column), deleting the a11y column or a compact `|Loading|||` turned every untouched row into the author's line —
+  `ui-sections` and the m / l gate passed an empty matrix. The Design System Usage rows (no blank cell) keep their keys; a
+  separator row's key changed and reaches no reader (separators are structure). A one-column user table whose cells are all
+  state labels (`| Error |`) now reads as template wherever it stands: it says nothing a label does not.
 
 ### Requirements traceability matrix
 - **1.14 F5** — the matrix: `trace_check {matrix: true}`, `trace --matrix` / `--csv`, the export's section and `.rtm.csv`.
