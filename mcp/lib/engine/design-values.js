@@ -6,11 +6,12 @@
  * design-system report (engine/design-system.js); the lazy tier.
  *   - colours: hex (3 / 4 / 6 / 8 digits), rgb / rgba, hsl / hsla, oklab, oklch (CSS Color 4: comma or space syntax, %
  *     channels, an alpha after `/` or as a 4th argument, a hue in deg / turn / rad / grad, `none` = 0) → OKLab. `token`: the
- *     SAME colour — exact within one notation (float noise, a powerless hue), across two within the rounding of the pair as
- *     written (0.011 with an HSL side — integer HSL's rounding —, 0.001 otherwise — a hex written as 3-decimal oklch is within
- *     0.0007: Tailwind's zinc is NOT shadcn's neutral, 0.003–0.008 apart); `near`, a hint: the nearest token within the
- *     just-noticeable difference (0.02 ΔEOK). hwb / lab / lch / color() / a named colour are not parsed: the same TEXT names
- *     the token (1.37's rule, colorKey);
+ *     nearest token of the SAME colour — exact within one notation (float noise, a powerless hue), across two within the
+ *     rounding of the pair as written (0.011 with an HSL side — integer HSL's rounding —, 0.001 otherwise — a hex written as
+ *     3-decimal oklch is within 0.0007: Tailwind's zinc is NOT shadcn's neutral, 0.003–0.008 apart); an HSL side against a
+ *     hex / rgb one also by its written precision (roundsTo: zinc's #18181b is not hsl(0 0% 9%), 0.0083 apart); `near`, a
+ *     hint: the nearest token within the just-noticeable difference (0.02 ΔEOK). hwb / lab / lch / color() / a named colour
+ *     are not parsed: the same TEXT names the token (1.37's rule, colorKey);
  *   - fonts: a `font-family` stack (its last family a generic one, one family that is not) by its primary family, against
  *     the font tokens of the REGISTRY's rows (a code token's stack is never read: designValue drops it);
  *   - motion: the literal times (above 1 ms) and easing functions of a transition / animation declaration or a Tailwind
@@ -23,7 +24,8 @@
  */
 
 const DS_EXACT = 1e-4; // ΔEOK within one notation: float noise, a hue that is powerless at chroma 0
-const DS_SAME_HSL = 0.011; // …across two notations, one of them HSL (integer HSL's rounding: #05787d = hsl(183 92% 25%), 0.0106)
+const DS_SAME_HSL = 0.011; // …across two notations, one of them HSL (integer HSL's rounding: #05787d = hsl(183 92% 25%), 0.0106 —
+// against a hex / rgb, roundsTo narrows it to the precision written: sameAt)
 const DS_SAME_CROSS = 0.001; // …across any other two (a hex as 3-decimal oklch: within 0.0007)
 const DS_JND = 0.02; // `near`: the just-noticeable difference
 const DS_ALPHA = 0.01; // alphas that differ by more are never the same colour, nor near
@@ -39,6 +41,8 @@ const argOf = (tok) => {
   return m ? { v: Number(m[1]), u: (m[2] || "").toLowerCase() } : null;
 };
 const hueOf = (x) => (x.u === "" || x.u === "deg" ? x.v : x.u === "turn" ? x.v * 360 : x.u === "rad" ? (x.v * 180) / Math.PI : x.u === "grad" ? x.v * 0.9 : NaN);
+// half a unit of a number's last written digit: `96.1%` 0.05, `25%` 0.5, `.5turn` 0.05, `1.83e2` 0.5 (`none` 0.5)
+const halfDigit = (t) => { const m = /^[+-]?\d*(?:\.(\d+))?(?:e([+-]?\d+))?/i.exec(t); return 0.5 * 10 ** (Number(m[2] || 0) - (m[1] || "").length); };
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 // sRGB (0..1, gamma-encoded) → OKLab (Björn Ottosson's matrices)
@@ -64,7 +68,7 @@ function parseColor(s0) {
     let h = hex[1];
     if (h.length < 6) h = h.split("").map((c) => c + c).join("");
     const ch = (i) => parseInt(h.slice(i, i + 2), 16) / 255;
-    return { n: "hex", ok: okFromRgb(ch(0), ch(2), ch(4)), alpha: h.length === 8 ? ch(6) : 1 };
+    return { n: "hex", ok: okFromRgb(ch(0), ch(2), ch(4)), alpha: h.length === 8 ? ch(6) : 1, rgb: [ch(0), ch(2), ch(4)] };
   }
   const call = RE_COLOR_CALL.exec(s);
   if (!call) return null;
@@ -86,24 +90,45 @@ function parseColor(s0) {
     alpha = clamp01(x.u === "%" ? x.v / 100 : x.v);
   }
   const pct = (x, full) => (x.u === "%" ? (x.v / 100) * full : x.u === "" ? x.v : NaN);
-  let ok;
+  let ok, rgb, hsl;
   if (n === "rgb") {
-    const c = a.map((x) => (x.u === "%" ? x.v / 100 : x.u === "" ? x.v / 255 : NaN));
-    ok = okFromRgb(c[0], c[1], c[2]);
+    rgb = a.map((x) => clamp01(x.u === "%" ? x.v / 100 : x.u === "" ? x.v / 255 : NaN));
+    ok = okFromRgb(rgb[0], rgb[1], rgb[2]);
   } else if (n === "hsl") {
-    const h = hueOf(a[0]), sat = pct(a[1], 100) / 100, light = pct(a[2], 100) / 100; // (a bare number is a percentage's: CSS Color 4)
-    ok = okFromRgb(...rgbFromHsl(h, clamp01(sat), clamp01(light)));
+    const h = hueOf(a[0]), sat = clamp01(pct(a[1], 100) / 100), light = clamp01(pct(a[2], 100) / 100); // (a bare number is a percentage's: CSS Color 4)
+    ok = okFromRgb(...rgbFromHsl(h, sat, light));
+    // (its numbers as written, and half a unit of each one's last written digit — the hue's in degrees: `.5turn` 18)
+    hsl = { h, s: sat * 100, l: light * 100, half: [hueOf({ v: halfDigit(parts[0]), u: a[0].u }), halfDigit(parts[1]), halfDigit(parts[2])] };
   } else if (n === "oklab") ok = [pct(a[0], 1), pct(a[1], 0.4), pct(a[2], 0.4)];
   else {
     const L = pct(a[0], 1), C = pct(a[1], 0.4), h = (hueOf(a[2]) * Math.PI) / 180;
     ok = [L, C * Math.cos(h), C * Math.sin(h)];
   }
-  return ok.every(Number.isFinite) ? { n, ok, alpha } : null;
+  return ok.every(Number.isFinite) ? { n, ok, alpha, rgb, hsl } : null;
 }
 const deltaE = (p, q) => Math.hypot(p.ok[0] - q.ok[0], p.ok[1] - q.ok[1], p.ok[2] - q.ok[2]);
-// Two parsed colours are the same colour: within the tolerance of their notations' pair, alphas alike.
+// Two parsed colours are the same colour: within the tolerance of their notations' pair, alphas alike. (sameColor is drift's,
+// in one notation; the judge's is sameAt, below.)
 const sameTolerance = (p, q) => (p.n === q.n ? DS_EXACT : p.n === "hsl" || q.n === "hsl" ? DS_SAME_HSL : DS_SAME_CROSS);
 const sameColor = (p, q) => Math.abs(p.alpha - q.alpha) <= DS_ALPHA && deltaE(p, q) <= sameTolerance(p, q);
+// (1.38.0 review 1) An HSL colour as written and an sRGB triple (a hex's, an rgb()'s): the triple, written in HSL as precisely
+// as the HSL side is, gives its numbers — each channel within half a unit of its last written digit; the hue moot at s 0, the
+// saturation at l 0 / 100. `#05787d` rounds to hsl(183 92% 25%); zinc's #18181b (s 5.9%) never to hsl(0 0% 9%).
+function roundsTo(hsl, [r, g, b]) {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, within = (x, y, half) => Math.abs(x - y) <= half + 1e-9;
+  if (!within((max + min) * 50, hsl.l, hsl.half[2])) return false;
+  if (hsl.l === 0 || hsl.l === 100) return true;
+  if (!within((d / (1 - Math.abs(max + min - 1))) * 100, hsl.s, hsl.half[1])) return false;
+  if (hsl.s === 0) return true;
+  // (the hue's distance round the circle: either side's turns and sign never matter)
+  const dh = Math.abs((max === r ? (g - b) / d : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 - hsl.h) % 360;
+  return within(Math.min(dh, 360 - dh), 0, hsl.half[0]);
+}
+// Two parsed colours (alphas alike) at ΔEOK d are the same colour: within their pair's tolerance — and an HSL one against a
+// hex / rgb one rounds to it as written. (The tolerance stays the ceiling, the round trip only narrows it: 479 of the 16.7M
+// hexes are farther than 0.011 from their own integer HSL — near black, #020200 = hsl(60 100% 0%) at 0.084; saturated yellows
+// to 0.013 — and are not its token, as in 1.38.)
+const sameAt = (p, q, d) => d <= sameTolerance(p, q) && (p.hsl && q.rgb ? roundsTo(p.hsl, q.rgb) : q.hsl && p.rgb ? roundsTo(q.hsl, p.rgb) : true);
 // A colour as text is compared (1.37's rule — for what is not parsed: hwb / lab / lch / color() / a name): lower-cased, blanks
 // out. (1.37 also wrote a 3 / 4-digit hex out: a hex is always parsed now.)
 const colorKey = (v) => String(v).trim().toLowerCase().replace(/\s+/g, "");
@@ -180,18 +205,19 @@ function tokenScale(registry, code) {
   for (const t of code) put(t, false);
   return s;
 }
-// What a raw colour is against the scale → { token } (the first token of the same colour) · { near: {token, delta} } · {}
+// What a raw colour is against the scale → { token } (the NEAREST token of the same colour — of equals, the first: an exact
+// token listed after an HSL one wins) · { near: {token, delta} } · {}
 function judgeColor(v, scale) {
   const p = parseColor(v);
   if (!p) { const t = scale.text.get(colorKey(v)); return t ? { token: t } : {}; }
-  let near = null, best = Infinity;
+  let token = null, same = Infinity, near = null, best = Infinity;
   for (const c of scale.colors) {
     if (Math.abs(c.p.alpha - p.alpha) > DS_ALPHA) continue;
     const d = deltaE(p, c.p);
-    if (d <= sameTolerance(p, c.p)) return { token: c.name };
+    if (d < same && sameAt(p, c.p, d)) { same = d; token = c.name; }
     if (d <= DS_JND && d < best) { best = d; near = c.name; }
   }
-  return near ? { near: { token: near, delta: Math.round(best * 10000) / 10000 } } : {};
+  return token ? { token } : near ? { near: { token: near, delta: Math.round(best * 10000) / 10000 } } : {};
 }
 // A raw value (or a group: {kind, value}) against the scale → the fields it carries: colours `token` / `near`; a font stack
 // `token` (its primary family a font token's); a motion value `token` when EVERY literal time and easing it holds is a
@@ -228,7 +254,7 @@ function tokenDrift(reg0, code0) {
 // --- the units table -------------------------------------------------------------------------------------------------------------
 // A value's FIRST top-level literal with a unit the row does not allow → that unit, lower-cased | null. Top-level: outside
 // parentheses (`calc()`, `clamp()`, `var()` are a doubt — an unclosed one holds the rest); never 0, a unitless number, a hex
-// colour's digits, a word's.
+// colour's digits, a word's, a negative length's (a digit after `-`: `margin: 0 -8px` — said, 1.38.0 review 1's T2).
 const RE_UNIT_LITERAL = /(?<![\w.#-])(\d+(?:\.\d+)?|\.\d+)([a-z]+|%)(?![\w-])/gi;
 function offUnit(v0, allowed) {
   const v = String(v0);

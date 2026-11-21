@@ -1185,11 +1185,19 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   registry's rows first (a value both hold names the registry's token; a name the registry holds keeps the registry's value
   — the code's is not on the scale). COLOURS (`parseColor`: hex 3 / 4 / 6 / 8, rgb / rgba, hsl / hsla, oklab, oklch —
   comma or space syntax, % channels, an alpha after `/` or as a 4th argument, a hue in deg / turn / rad / grad, `none` = 0
-  as CSS Color 4 says: Tailwind 4 writes `--color-neutral-900: oklch(20.5% 0 none)`) → OKLab. `token`: the SAME colour —
-  exact within one notation (ΔEOK ≤ 1e-4: float noise, a powerless hue), across two within the rounding of the PAIR as
-  written (0.011 with an HSL side: integer HSL's — `#05787d` = `hsl(183 92% 25%)` at 0.0106; 0.001 otherwise: a hex
-  written as 3-decimal oklch is within 0.0007) — CRIT_2 must-fix 2: one 0.011 for every pair made Tailwind's zinc
-  (`#18181b`, `#09090b`, `#e4e4e7`, `#f4f4f5`) shadcn v4's neutral tokens, 0.003–0.008 apart; alphas within 0.01. `near`
+  as CSS Color 4 says: Tailwind 4 writes `--color-neutral-900: oklch(20.5% 0 none)`) → OKLab. `token`: the NEAREST token
+  of the SAME colour (of equals the first: the registry's) — exact within one notation (ΔEOK ≤ 1e-4: float noise, a
+  powerless hue), across two within the rounding of the PAIR as written (0.011 with an HSL side: integer HSL's as CRIT_2
+  measured it — `#05787d` = `hsl(183 92% 25%)` at 0.0106; 0.001 otherwise: a hex written as 3-decimal oklch is within 0.0007) — CRIT_2 must-fix 2:
+  one 0.011 for every pair made Tailwind's zinc (`#18181b`, `#09090b`, `#e4e4e7`, `#f4f4f5`) shadcn v4's neutral tokens,
+  0.003–0.008 apart; alphas within 0.01. An HSL side against a hex / rgb one (1.38.0 review 1) is ALSO judged by its
+  written precision (`roundsTo`, `sameAt`): the sRGB triple, written in HSL as precisely as the HSL side is, gives its
+  numbers — each channel within half a unit of its last written digit (`halfDigit`: `96.1%` 0.05, an exponent counted;
+  the hue's in its own unit, `.5turn` 18°), the hue moot at s 0, s at l 0 / 100, a hue's turns and sign never matter;
+  CSS's clamps first (`rgb(300 0 0)` = `#f00`, `hsl(0 150% 50%)` too). The 0.011 stays the CEILING — the round trip only
+  narrows 1.38's rule, never widens it: integer HSL is NOT within 0.011 of every hex (479 of the 16.7M hexes are farther
+  from their own integer HSL: `#020200` = `hsl(60 100% 0%)`, black, at 0.084 — OKLab's L is steep near black —, saturated
+  yellows to 0.013), and those stay what 1.38 said. HSL against oklab / oklch keeps the 0.011 alone. `near`
   (a hint, `{token, delta}`): the NEAREST token within the JND (0.02 ΔEOK), never the first. hwb / lab / lch / `color()` / a
   named colour are not parsed: the same TEXT names the token (1.37's rule, `colorKey`, moved here; a hex is always parsed
   now, so its 3-digit spelling-out went). FONTS: a `font-family` STACK (`fontStackOf`: its LAST family a generic one — CSS
@@ -1230,8 +1238,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   project). NEITHER is part of `inSync` (DECISIONS: what "in sync" compares stays the names, and `dsInSync` says so); the
   CLI prints a drifted token as the row the code has, then the registry's value and the file.
 - **The units table** (1.38 — the team's convention, a report, never a default) — in design-system.md, found by its header
-  wherever it stands: the first cell Property / Propriedade / Propiedad (`RE_DS_PROPERTY_HEAD`), a column headed Units /
-  Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place) holding at least one CSS unit (`CSS_UNITS`: the
+  wherever it stands: the first cell Property / Propriedade / Propiedad (`RE_DS_PROPERTY_HEAD`), a column whose header
+  STARTS with Units / Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place; a table headed
+  `| Property | Allowed units |` is none and nothing says so: 1.38.0 review 1's T3, said in ui-code-scan.md, the reader for
+  1.39's backlog) holding at least one CSS unit (`CSS_UNITS`: the
   CSS Values 4 lengths, `%`, `fr` — a closed list in quality.js, the eager reader's) — a component's props table
   (`| Property | Type | Default |`) is none (CRIT_2). `dsUnitsTable` → the registry's `units` {rows: [{props (a property or `prefix-*`;
   never `--x`), units}], unread (a row with no CSS unit or no property, by its first cell), past (rows past `DS_UNIT_ROWS`,
@@ -1239,8 +1249,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   byProperty} — null without a table; never finish, doctor or the brief: `unitsOf` over the file's ONE walk — a declaration
   whose property has a row (`unitRows`: the exact row, else the LONGEST `prefix-*`; `margin-*` covers `margin`), its FIRST
   top-level length the row does not allow (`offUnit`: never inside calc() / clamp() / var() — an unclosed one holds the
-  rest —, never 0, a unitless number, a hex colour's digits; one finding a declaration; a custom property or a Sass variable
-  has no row), and a Tailwind arbitrary size by the property it sets (`twProperty`); every finding counted, the first 50
+  rest —, never 0, a unitless number, a hex colour's digits, a negative length — `RE_UNIT_LITERAL`'s lookbehind: a digit
+  after `-` is no literal, so `margin: 0 -8px` is not judged (1.38.0 review 1's T2: said in ui-code-scan.md, 1.39's
+  backlog) —; one finding a declaration; a custom property or a Sass variable has no row), and a Tailwind arbitrary size in
+  px / rem / em (1.37's `RE_TW_SIZE`: `text-[2vw]` and a negative `-mt-[12px]` are not read — T2 again, said) by the
+  property it sets (`twProperty`); every finding counted, the first 50
   made into rows. The third reader of the one walk measured 0.9–1.0× the report without a table on the real corpora,
   1.0–1.4× on 60 component sheets and ≤ 1.5× when every declaration is a finding (mcp/tests/15-quality-design-system-cost.js:
   ≤ 1.5× and ≤ 3×); a digit and a "names a property of the table" prefilter measured no gain (1.2× either way) and went.
@@ -2530,6 +2543,32 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (declarations' piece rules, rawValuesIn's 1.37 lines, take()) mutated again — 14, 12 killed by the area's older files at
   first; two wanted a fixture no file had (a value written twice on one line is one value; a colour in a selector's
   attribute — what a `{` follows — is none): 14 of 14.
+- **1.38.0 review 1** (tokens: T1 MEDIUM; T2 / T3 LOW, prose) — T1: one 0.011 for every pair with an HSL side absorbed
+  any colour that close, however precisely the HSL side was written: once shadcn's Tailwind 4 upgrade wraps its neutrals in
+  `hsl()`, Tailwind's zinc hexes were its tokens again (`#18181b` → `--primary: hsl(0 0% 9%)`, 0.0083 — what CRIT_2's
+  must-fix 2 had taken out for oklch), cal.com's `#efefef` its bluish `--cal-bg-subtle: hsla(220, 14%, 94%, 1)`, 51
+  Tailwind v3 hexes ANOTHER palette colour's token against a 1-decimal hsl palette; and the judge returned the FIRST colour
+  within tolerance, so an exact token listed after an HSL one lost. Now an HSL side against a hex / rgb one also round-trips
+  at its written precision (`roundsTo`) and the judge keeps the nearest. The 0.011 stays the ceiling — the narrower reading
+  of the owner's decision, said: the round trip alone would have WIDENED 1.38 where the HSL is coarser than the 0.011
+  (CRIT_2's 0.0106 was one hex's distance, not integer HSL's worst: measured over all 16.7M hexes, 479 are farther from their
+  own integer HSL, `#020200` = `hsl(60 100% 0%)` at 0.084 — a token past the JND —, 0.013 at l 10–95), so every judgement
+  the fix changes goes token → near or none, never the other way. Trade-off: Tailwind v3's 286 hexes against their own hsl
+  as shadcn's _legacy-colors.ts writes it (1 decimal) — 240 stay `token`, 46 become `near`: those hsl values are not their
+  hex's rounding (mauve / olive / mist / taupe derived from oklch; slate-950's hue 222.2 against its hex's 228.6); each
+  hex against its own HSL rounded ONCE (0, 1 or 2 decimals): 286 of 286; another palette colour's token: 51 → 0. Replays
+  against the parent: the 12 real clones' reports identical but cal.com's `#efefef` and `#eee` (→ near); finish's part on
+  7 clones identical; the CLI's EN / PT / ES lines differ only on the `#18181b` row the fix meant, `--json` = the engine;
+  cal.com's tokens.css, hex by hex: 37 token → near, 0 differences with the reviewer's prototype. Cost, ratios at the same moment: the hostile judge — 100
+  hexes against 2,000 HSL tokens all within 0.011, where 1.38 returned at the first — 1.5× 1.38's own worst case (the
+  full scan with no token: 24 against 15 ms); a feature report of 100 files × 200 such hexes 1.03×. The mutation list came
+  before the fixtures and took three lines out as dead (the saturation's `d = 0` guard, the hue's sign and turn
+  normalisations — the circular distance covers both —, the judge's `else` between its two trackers): 45 of 45 killed (39
+  in design-values.js, 6 prose clauses), one equivalent left (`within`'s `<=` against `<`: the epsilon absorbs the
+  boundary). T2 / T3, said and the readers left to 1.39's backlog: a negative length (`margin: 0 -8px`, `-mt-[12px]`) and a
+  Tailwind size outside px / rem / em (`text-[2vw]`) are not judged; the units column's header STARTS with Units, so
+  `| Property | Allowed units |` is no table and nothing says so — ui-code-scan.md says both, 17-docs pins each clause
+  against the engine (offUnit, RE_TW_SIZE, RE_DS_COL.units).
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
