@@ -2157,4 +2157,5 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   series' (a reviewer's machine). Chosen: 48 / 384K. gen-angular's 900 components still end at `focus-sheets` (they would
   need ~900 sheets read, ~8×); a 40-component app is judged again (its correct warning stands, excused with a deep focus
   style). A click on an HTML void element is judged at once as a self-closing one (`VOID`): `<img onclick>` no longer waits
-  for a close tag and is counted as `tag-length`. Mutation pass of the new lines: MUTF.
+  for a close tag and is counted as `tag-length`. Mutation pass of the new lines: 22 of 22, the list written first — the
+  focus pre-test among them, killed now: with the budget counting parsed characters it changes a result, no cost guard alone.
