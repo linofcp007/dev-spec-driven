@@ -24,7 +24,14 @@ warning of `spec_finish` too, never a blocker: `zoom-disabled` (zoom blocked —
 with no alt — 1.1.1), `outline-removed` (`outline: none` on an element, `*` or `:focus` with no focus style in the
 feature's files or the project's first 48 stylesheets — past them, named unjudged — 2.4.7), `click-no-keyboard` (a click
 handler on an element the keyboard cannot reach: no `tabindex` — a role or a key handler alone is not enough — 2.1.1),
-`paste-blocked` (an inline paste handler that cancels — 3.3.8 at a sign-in or code step, a usability defect elsewhere).
+`paste-blocked` (an inline paste handler that cancels — 3.3.8 at a sign-in or code step, a usability defect elsewhere),
+`font-size-viewport` (text sized in viewport units alone — `font-size: 5vw`, `calc(1vw + 1vh)`, `text-[5vw]` — which
+zooming does not enlarge: WCAG 1.4.4, failure F94; a size with a rem / em term zooms: `clamp(1rem, 0.5rem + 2vw, 2.5rem)`).
+F94's note — a size media queries adjust may not fail — keeps it to what is certain: a stylesheet's (a `<style>` block's)
+size only when that file declares no font size inside `@media`, `@container`, `@supports` or a Sass `@include` (nested
+too); an element's own `style` attribute, never a component's prop or a CSS-in-JS object (`sx`, `css()`, `style()`);
+a bare `text-[…vw]` only when its line holds no `text-` utility under a variant (`md:text-6xl`). An override in another
+file is not seen: silence that one.
 In the report alone: `transition-all` (kits ship it), what a bound cut. Silence one with a comment
 `ui-check-off: <rule-id> <why>` on its line (a declaration's, a class's) or the line above — `//`, `/* */`, `<!-- -->`,
 not Blade's or Twig's: counted, never listed; only this comment silences (a linter's is not read) — an `<a>` a parent gives its

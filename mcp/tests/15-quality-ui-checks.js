@@ -315,6 +315,105 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38.0 F0c: font-size-viewport (warn — WCAG 1.4.4, failure F94): text sized in viewport units ALONE does not grow when the
+    // page is zoomed. F94's note — "if media queries were used to adjust the size of text … it may not be a failure" — is held
+    // by three narrowings (CRIT_3 must-fix 1–3): outside a stylesheet only an element's OWN `style` attribute is read (never a
+    // free `fontSize:` line: CSS-in-JS, `sx`, `css()` nest their media queries where no line reader sees them); a stylesheet's
+    // viewport-only size is judged only when the FILE declares no font size inside a conditional block (`@media`, `@container`,
+    // `@supports`, a Sass `@include`, a nested `@media`); a bare Tailwind `text-[…vw]` only when its class list (its line, an
+    // `@apply`) holds no variant `text-` utility. The real shapes are CRIT_3's (its probe's shapes/ folder).
+    const PLAIN = lines(".hero h1 { font-size: 6vw; }", "@media (min-width: 900px) { .hero h1 { font-size: 4rem; } }");
+    const NESTING = lines(".hero h1 {", "  font-size: 6vw;", "  @media (width >= 48rem) {", "    font-size: 3rem;", "  }", "}");
+    const SASS = lines(".hero-title {", "  font-size: 6vw;", "  @include media-breakpoint-up(md) {", "    font-size: 3rem;", "  }", "}");
+    const VANILLA = lines("import { style } from \"@vanilla-extract/css\";", "export const title = style({", "  fontSize: \"8vw\",",
+      "  \"@media\": { \"screen and (min-width: 768px)\": { fontSize: \"4rem\" } },", "});");
+    const EMOTION = lines("const title = css({", "  fontSize: '6vw',", "  '@media (min-width: 768px)': { fontSize: '3rem' },", "});",
+      "export const Hero = () => <h1 css={title}>Hello</h1>;");
+    const MUI = lines("export function Hero() {", "  return (", "    <Typography", "      sx={(theme) => ({", "        fontSize: \"7vw\",",
+      "        [theme.breakpoints.up(\"md\")]: { fontSize: \"3rem\" },", "      })}", "    >", "      Ship faster", "    </Typography>", "  );", "}");
+    const TW = lines("export const A = () => <h1 className=\"text-[6vw] font-bold md:text-6xl\">Big</h1>;", // 1: a variant text- — silent
+      "export const B = () => <h1 className=\"text-[5vw] sm:text-[1.2vw]\">Big</h1>;", // 2: silent (R16, flipped)
+      "export const B2 = () => <h1 className=\"sm:text-[1.2vw] text-[5vw]\">Big</h1>;", // 3: silent (the other order)
+      "export const C = () => <p className=\"text-[5vw]\">404</p>;", // 4: FINDING (a lone text-[5vw])
+      "export const D = () => <h1 style={{ fontSize: \"5vw\" }}>Inline</h1>;", // 5: FINDING (the element's own style)
+      "export const E = () => <h1 className=\"sm:text-[5vw]\">x</h1>;", // 6: a variant one — never judged
+      "export const F1 = () => <i className=\"text-[length:5vw]\" />;", // 7: FINDING (a length: hint)
+      "export const F2 = () => <i className=\"text-[4dvw]/7\" />;", // 8: FINDING (a /line-height)
+      "export const F3 = () => <i className=\"!text-[3vmax]\" />;", // 9: FINDING
+      "export const F4 = () => <i className=\"text-[2vw]!\" />;", // 10: FINDING
+      "export const G = () => <i className=\"text-[2rem] text-[5vw] hover:text-red-500\" />;", // 11: silent (a variant text-)
+      "export const H = () => <i className=\"text-[0] text-[5px] text-[var(--h)] text-[calc(1vw_+_1rem)] text-[vw]\" />;", // 12: nothing viewport
+      "export const I = () => <Heading style={{ fontSize: \"5vw\" }} />;", // 13: a component's style prop — silent
+      "export const J = () => <h1 {...p} style={{ fontSize: \"5vw\" }} />;", // 14: a spread — silent
+      "export const K = () => <h1 style={{ fontSize: \"5vw\", padding: \"1rem\" }} />;", // 15: FINDING (read to its quote)
+      "export const L = () => <h1 style={{ fontSize: \"1rem\", width: \"5vw\" }} />;", // 16: silent (another property's vw)
+      "export const M = () => <h1 style={{ fontSize: { xs: \"8vw\", md: \"3rem\" } }} />;", // 17: silent (an object value)
+      "export const N = () => <h1 style={{ fontSize: big ? \"5vw\" : \"2rem\" }} />;", // 18: silent (no one literal)
+      "export const O = () => <p style={{ fontSize: \"5vmin\" }} />;", // 19: FINDING (vmin)
+      "const Box = styled.h1`", "  font-size: 5vw;", "`;", // 20-22: a CSS-in-JS template line — silent
+      "export const Q = () => <i className=\"text-[5vw] md:text-6xl\" />;"); // 23: silent
+    const VUE = lines("<template>", "  <h1 style=\"font-size: 5vw\">a</h1>", "  <h2 :style=\"{ 'font-size': '5vw' }\">b</h2>", "  <h3 :style=\"{ fontSize: size }\">c</h3>",
+      "  <p style=\"color: red; font-size:4vw !important\">d</p>", "  <p style=\"font-size: clamp(1rem, 0.5rem + 2vw, 2.5rem)\">e</p>", "</template>");
+    const SVELTE = lines("<h1 style=\"font-size: 8vw\">Hello</h1>", "<style>", "  .lead { font-size: 3vw; }", "</style>");
+    const BLADE = lines("<h1 style=\"font-size:4vw\">{{ $title }}</h1>");
+    // a stylesheet's values: numbers, viewport lengths, calc / clamp / min / max and arithmetic only — one a viewport length
+    const VALUES = lines(":root { font-size: calc(1vw + 1vh + .5vmin); }", // 1: FINDING
+      ".a { font-size: 0; }", ".b { font-size: calc(1.375rem + 1.5vw); }", ".c { font-size: calc(12px + 1vw); }", ".d { font-size: max(1em, 4vw); }",
+      ".e { font-size: calc(var(--s) * 1vw); }", ".f { font-size: math.div(16, 375) * 100vw; }", ".g { font: 5vw/1 sans-serif; }",
+      ".h { --font-size-fluid-3: clamp(2rem, 9vw, 3.5rem); }", // 2-9: silent
+      ".i { font-size: 5vw !important; }", ".j { font-size: 4dvw; }", ".k {", "  font-size:", "    clamp(2vw, 3svw, 4lvh);", "}", // 10, 11, 13: FINDINGS
+      ".l { font-size: 5VW; }", "@layer base { h1 { font-size: 5vw; } }", // 16, 17: FINDINGS (a layer is no condition)
+      ".m { font-size: 5vw !importantly; }", ".n { font-size: vw; }", ".o { font-size: 5 vw; }"); // 18-20: silent
+    const COND = { // one conditional font size anywhere in the file: every viewport-only size of the file is a doubt
+      below: lines("h1 { font-size: 5vw; }", "@media (min-width: 60rem) { h2 { font-size: 2rem; } }"),
+      above: lines("@supports (font-size: 1cqi) { h2 { font-size: 2rem; } }", "h1 { font-size: 5vw; }"),
+      container: lines("h1 { font-size: 5vw; }", "@container (min-width: 30rem) { h1 { font-size: 3rem; } }"),
+      nestedDeep: lines("h1 { font-size: 5vw; }", "@media (min-width: 60rem) { .a { .b { font-size: 2rem; } } }"),
+      shorthand: lines("h1 { font-size: 5vw; }", "@media (min-width: 60rem) { h1 { font: 2rem/1 serif; } }"),
+      inside: lines("@media (min-width: 60rem) { h1 { font-size: 3vw; } }"),
+      applyCond: lines("h1 { @apply text-[5vw]; }", "@media (min-width: 60rem) { h1 { @apply text-6xl; } }"),
+      applyIn: lines("@media (min-width: 60rem) { h1 { @apply text-[4vw]; } }"),
+      // (a block nested past DS_BLOCK_DEPTH is not read: what it holds may be a conditional size — a doubt)
+      deep: lines("h1 { font-size: 5vw; }", ...Array.from({ length: 65 }, () => ".w {"), "x: y;", ...Array.from({ length: 65 }, () => "}")),
+    };
+    const NOCOND = { // what is no condition: a layer, an at-rule block that sizes no text, an @apply alone
+      layerOnly: lines("@layer base { h1 { font-size: 5vw; } }", "@layer components { h2 { font-size: 2rem; } }"),
+      mediaOther: lines("h1 { font-size: 5vw; }", "@media (min-width: 60rem) { h1 { color: red; } }"),
+      shallow: lines("h1 { font-size: 5vw; }", ...Array.from({ length: 63 }, () => ".w {"), "x: y;", ...Array.from({ length: 63 }, () => "}")),
+      apply: lines("h1 { @apply text-[5vw] font-bold; }"),
+      applyVariant: lines("h1 { @apply text-[5vw] md:text-6xl; }"),
+    };
+    const SILENCED = lines("/* ui-check-off: font-size-viewport (a hero sized to the screen on purpose) */", "h1 { font-size: 5vw; }");
+    const SILENCED_TW = lines("export const P = () => (", "  // ui-check-off: font-size-viewport (decorative 404 digits)", "  <p className=\"text-[30vw]\">404</p>", ");");
+    const g = (text, rel) => got(text, rel).filter((f) => /font-size-viewport/.test(f));
+    const at = (...ns) => ns.map((n) => "font-size-viewport@" + n);
+    const R = {
+      plain: g(PLAIN, "src/plain.css"), nesting: g(NESTING, "src/nesting.css"), sass: g(SASS, "src/_hero.scss"), vanilla: g(VANILLA, "src/vanilla-hero.css.ts"),
+      emotion: g(EMOTION, "src/EmotionHero.tsx"), mui: g(MUI, "src/MuiHero.tsx"), tw: g(TW, "src/TwHero.tsx"), vue: g(VUE, "src/Hero.vue"), svelte: g(SVELTE, "src/Hero.svelte"),
+      blade: g(BLADE, "resources/views/hero.blade.php"), values: g(VALUES, "src/values.css"),
+      cond: Object.fromEntries(Object.entries(COND).map(([k, t]) => [k, g(t, "src/" + k + ".css")])),
+      nocond: Object.fromEntries(Object.entries(NOCOND).map(([k, t]) => [k, g(t, "src/" + k + ".css")])),
+      silenced: g(SILENCED, "src/s.css"), silencedTw: g(SILENCED_TW, "src/S.tsx"),
+    };
+    // a warn rule: listed before the report-level ones and counted in finish's warning
+    const files = [["src/Hero.svelte", SVELTE], ["src/Box.tsx", lines("export const B = () => <div className=\"transition-all\" />;")]].map(([rel, t]) => Object.assign({ rel }, run(t, rel)));
+    const rep = T.uiChecksReport(files, () => ({ focus: false, limits: [] }), 50), fin = T.uiFinishChecks(rep);
+    all("1.38.0 F0c: font-size-viewport (warn) — a stylesheet's viewport-only font size when the file declares no font size in a conditional block (CRIT_3's plain, nesting and Sass shapes silent; a layer is no condition), an element's own `style` attribute (JSX, HTML, Vue, Svelte, Blade — never a component's, never past a spread, never a free `fontSize:` line: vanilla-extract, emotion, MUI's sx), a bare `text-[…vw]` whose line holds no variant `text-` utility (R16 silent); values of numbers, viewport lengths and calc / clamp / min / max only (got " +
+      js({ R, report: rep.findings.map((f) => f.rule + ":" + f.level), finish: fin.byRule }) + ")", {
+      plain: () => js(R.plain) === "[]" && js(R.nesting) === "[]" && js(R.sass) === "[]",
+      cssInJs: () => js(R.vanilla) === "[]" && js(R.emotion) === "[]" && js(R.mui) === "[]",
+      tw: () => js(R.tw) === js(at(4, 5, 7, 8, 9, 10, 15, 19)),
+      markup: () => js(R.vue) === js(at(2, 3, 5)) && js(R.svelte) === js(at(1, 3)) && js(R.blade) === js(at(1)),
+      values: () => js(R.values) === js(at(1, 10, 11, 13, 16, 17)),
+      cond: () => Object.values(R.cond).every((x) => js(x) === "[]"),
+      nocond: () => js(R.nocond.layerOnly) === js(at(1)) && js(R.nocond.mediaOther) === js(at(1)) && js(R.nocond.shallow) === js(at(1))
+        && js(R.nocond.apply) === js(at(1)) && js(R.nocond.applyVariant) === "[]",
+      silenced: () => js(R.silenced) === js(["~font-size-viewport@2"]) && js(R.silencedTw) === js(["~font-size-viewport@3"]),
+      warn: () => js(rep.findings.map((f) => f.rule + ":" + f.level)) === js(["font-size-viewport:warn", "font-size-viewport:warn", "transition-all:report"])
+        && js(fin.byRule) === js({ "font-size-viewport": 2 }),
+    });
+  }
+
   { // silencing: one inline comment, any syntax of the file, on the finding's line or the one above
     const jsx = lines("export const A = () => (", "  <>", "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/spacer.gif\" />", // 4: silenced (above)
       "    <img src=\"/b.png\" /> {/* ui-check-off: click-no-keyboard, img-no-alt */}", // 5: silenced (same line)
@@ -817,6 +916,11 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       // expression that never closes in a body)
       clickNest: [fill("<div onClick={go}>".repeat(100) + "x\n"), "x.tsx"], clickClose: [fill("<div onClick={go}>x" + "</b>".repeat(200) + "</div>\n"), "x.tsx"],
       clickControl: [fill("<div onClick={go}>x<button>b</button>\n"), "x.tsx"], clickBrace: [fill("<div onClick={go}>" + "{ (".repeat(300) + "<i>\n"), "x.tsx"],
+      // (1.38.0 F0c, font-size-viewport — ITEM_3's K2: runs of `text-[` the pick lets through, a class list of bare viewport sizes
+      // ended by a variant one, a sheet of `calc(1vw + 1vw + …)` values each as long as a line is read — the walker keeps a
+      // statement's last 2,000 characters —, styles of non-viewport font sizes read to their end)
+      textRun: [fill("text-[".repeat(300) + "\n"), "x.tsx"], textList: [fill("<p className=\"" + "text-[5vw] ".repeat(150) + "md:text-[2vw]\">x</p>\n"), "x.tsx"],
+      vwCalc: [fill("a { font-size: calc(" + "1vw + ".repeat(300) + "1vw); }\n"), "x.css"], styleRun: [fill("<h1 style=\"" + "font-size: 1rem; ".repeat(100) + "\">x</h1>\n"), "x.html"],
     };
     const time = (f) => { const ts = []; for (let k = 0; k < 5; k++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
     // (a stylesheet is read through the ONE CSS walk the registry's token reader already makes — styleTokens —: its ratio is to

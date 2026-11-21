@@ -144,4 +144,18 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       json: () => fin.designSystem && fin.designSystem.raw === undefined && fin.designSystem.uiChecks.total === 2 && js(fin.designSystem.registered) === js([]) && js(fin.designSystem.unregistered) === js([]),
     });
   }
+
+  { // 1.38.0 F0c: font-size-viewport on the CLI — a lone `text-[5vw]` and an inline `fontSize: "5vw"`: their lines, what the rule
+    // means (EN / PT / ES), and finish's warning counts them (a warn rule)
+    const HERO = ["export const NotFound = () => (", "  <main>", "    <p className=\"text-[30vw] font-bold\">404</p>", "    <h1 style={{ fontSize: \"5vw\" }}>Lost</h1>", "  </main>", ");", ""].join("\n");
+    const runs = ["en", "pt", "es"].map((lang) => { const g = feature("vw-" + lang, lang, ["src/errors/NotFound.tsx"]); write(g.p, "src/errors/NotFound.tsx", HERO); return [lang, g, runIn(["design-system", g.slug, "--project", g.p])]; });
+    const [, ge, re] = runs[0];
+    const f = runIn(["finish", ge.slug, "--project", ge.p]);
+    all("1.38.0 design-system <feature> / finish (CLI): font-size-viewport — each finding's line, what the rule means in the feature's language, and finish's UI warning names both (got " +
+      js(runs.map(([, , r]) => [r.code, r.out.slice(-700)]).concat([f.out.slice(0, 600)])) + ")", {
+      lines: () => re.code === 0 && re.out.includes("    src/errors/NotFound.tsx:3  font-size-viewport  text-[30vw]\n") && re.out.includes("    src/errors/NotFound.tsx:4  font-size-viewport  <h1 style> fontSize: 5vw\n"),
+      legend: () => runs.every(([lang, , r]) => r.out.includes("    font-size-viewport — " + MSG(lang).cliOutput.uiRule["font-size-viewport"])),
+      finish: () => f.out.includes("  ▲ " + MSG("en").finish.uiChecks(2, "src/errors/NotFound.tsx:3 font-size-viewport; src/errors/NotFound.tsx:4 font-size-viewport", ge.slug)),
+    });
+  }
 };

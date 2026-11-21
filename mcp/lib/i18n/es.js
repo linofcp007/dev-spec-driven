@@ -1608,6 +1608,8 @@ const msg = {
         "outline-removed": "el contorno de foco se elimina y ningún estilo de foco del proyecto lo sustituye — mantener un indicador visible (:focus-visible con un contorno, un anillo o un borde; WCAG 2.4.7)",
         "click-no-keyboard": "un handler de clic en un elemento que el teclado no alcanza — usar un <button> o un <a href>, o hacerlo enfocable: un tabindex, con un role y un handler de tecla (WCAG 2.1.1)",
         "paste-blocked": "un handler de pegar cancela el pegado sin leer el portapapeles — nunca bloquear el pegado: gestores de contraseñas, códigos largos (WCAG 3.3.8 en un paso de inicio de sesión o de código; en otros, un defecto de usabilidad)",
+        // 1.38
+        "font-size-viewport": "texto dimensionado solo en unidades del viewport (font-size: 5vw, text-[5vw]) no crece al ampliar la página — darle un término en rem / em: clamp(1rem, 0.5rem + 2vw, 2.5rem) (WCAG 1.4.4, fallo F94)",
         "transition-all": "transition: all (o sin propiedad) anima todas las propiedades que cambian, también las de maquetación — enumerar las que deben moverse",
       },
       uiSilenced: (n) => `  (${n} ${n === 1 ? "silenciada" : "silenciadas"} por un comentario ui-check-off)`,

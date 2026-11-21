@@ -1232,9 +1232,32 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
 - **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the feature report AND finish's warning, never a blocker:
   `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1), `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked`
   (3.3.8 at a sign-in or code step — W3C scopes it to authentication; elsewhere a usability defect, Vercel's "never block
-  paste": review 1 of 1.37); `report` — the feature report alone: `transition-all` (certain as syntax, a guideline as a
-  finding: shadcn's own
+  paste": review 1 of 1.37), `font-size-viewport` (1.4.4, failure F94 — 1.38); `report` — the feature report alone:
+  `transition-all` (certain as syntax, a guideline as a finding: shadcn's own
   Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
+- **font-size-viewport** (1.38) — text sized in viewport units ALONE, which zooming does not enlarge. `viewportOnly(value)`:
+  ONE hand pass (a regex of alternations under `+` backtracks on `calc(1vw + 1vw …)`), lower-cased — numbers, the 24
+  viewport units (`vw vh vi vb vmin vmax`, each with `s` / `l` / `d`: CSS Values 4's closed list), `calc( clamp( min( max(`,
+  `( ) , + - * /`, blanks, a last `!important`; any other term (rem / em / px / %, `var()`, `math.div`, a word) → false; one
+  viewport length at least (`font-size: 0` is none). F94's own note — "if media queries were used to adjust the size of text
+  … it may not be a failure" — makes three NARROWINGS (CRIT_3 must-fix 1–3; the design judged the enclosing block alone and
+  warned on six real shapes): (1) outside a stylesheet ONLY an element's own `style` attribute, read in `judgeTag` through
+  `attributesOf` (`styleFontSize`: `font-size` / `fontSize`, quoted or not, its value a quoted literal or read to `;` / a
+  quote / `}` — JSX `style={{}}`, HTML / Blade `style=""`, Vue `:style`, Angular `[style]`), never a component's prop (`sx`,
+  `style` on `<Heading>`), never past a spread, never a free `fontSize:` line (vanilla-extract `style({})`, emotion
+  `css({})`, MUI `sx` nest their media queries where no line reader sees them); (2) a stylesheet's `font-size` (a sheet, a
+  `<style>` block, styled-jsx — `sheetChecks`) is a CANDIDATE outside any conditional block (an at-rule block but `@layer`'s,
+  inherited: `@media`, `@container`, `@supports`, a Sass `@include` / `@if`, a nested `@media`) and the candidates are added
+  when the walk ENDS, only if the file declared no font size inside one (`font-size`, the `font` shorthand, an `@apply` holding
+  a `text-` utility) and no block past `DS_BLOCK_DEPTH` went unread — a cross-file override (`style.css` + `responsive.css`)
+  is not seen (the user docs say so: silence it); the declaration is read inside a reduced-motion block too, transition-all
+  alone skipped there (behaviour-preserving); (3) Tailwind (`utilities` — `RE_TW_PICK` widened by `text-\[`): a BARE
+  `text-[<v>]` (`length:` hint, a `/<line-height>`, `!`; `_` a blank; a value holding `(` is cut by the split) whose value is
+  viewport-only, only when the class list — the line read, or an `@apply` statement — holds no `text-` utility under a variant
+  (variants cut outside brackets, `variantsOf`); one finding a line. Never: the `font` shorthand, a custom property
+  (`--font-size-fluid-3`), a CSS-in-JS template line of a script. The walker keeps a statement's last 2,000 characters, so a
+  longer declaration's property is not seen (a hostile shape only). `width-viewport` (`100vw` / `w-screen`) was cut to prose
+  (ui-responsive.md): 1 real defect in 16 corpus hits — fixed overlays, compiled utilities, clipped decorations.
 - **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
   `DS_LINE_MAX`, its comments out, `cut` when it was longer) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
   one finding per rule and line, at a tag's or a declaration's FIRST line (a Tailwind utility's: its class's line),
@@ -1405,7 +1428,9 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
 - **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
   tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
   of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —
-  nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes — each ≤ 3×
+  nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes, and (1.38)
+  four for font-size-viewport — runs of `text-[`, class lists of bare viewport sizes a variant one ends, a sheet of
+  line-long `calc(1vw + 1vw + …)` values, inline styles of non-viewport sizes — each ≤ 3×
   plain JSX of the same size (measured 0.07–2.5×) — a file whose every line is a finding is not one of them and is not
   bounded: ~4× (review 2 of 1.37, hostile3: a 256K HTML file of an `<img>` a line 4.0–4.3×, a TSX one 3.3–3.6×, a sheet
   of removals 2.7×, the same on the parent); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real

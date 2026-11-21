@@ -1153,6 +1153,25 @@ exports.run = async ({
     });
   }
 
+  { // 1.38.0 F0c — font-size-viewport's prose: its criterion and failure (CRIT_3 §7), the three narrowings (CRIT_3 must-fix 1–3)
+    // and what is not seen, in ui-code-scan.md's UI checks section (the 1.37 docs pass places it among the warn rules, read from
+    // UI_RULES); tooling-reference's spec_scan row names it at its level
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const scan = raw("skills", "dev-spec-driven", "references", "ui-code-scan.md").split("\n"), at = scan.findIndex((l) => l.startsWith("### UI checks"));
+    const end = scan.findIndex((l, i) => i > at && /^#+ /.test(l));
+    const checks = at < 0 ? "" : ws(scan.slice(at, end < 0 ? scan.length : end).join("\n"));
+    const tool = (raw("skills", "dev-spec-driven", "references", "tooling-reference.md").split("\n").find((l) => l.startsWith("| `spec_scan {designSystem: true}`")) || "");
+    all("1.38.0 F0c: ui-code-scan.md's UI checks name font-size-viewport (WCAG 1.4.4, failure F94), what keeps it certain (a stylesheet's size only when its file sizes no text conditionally, an element's own style attribute, a bare text-[…vw] with no variant text- utility on its line) and what is not seen; tooling-reference's spec_scan row lists it among the warn rules", {
+      criterion: () => /`font-size-viewport` \(text sized in viewport units alone.*?which zooming does not enlarge: WCAG 1\.4\.4, failure F94/.test(checks),
+      sheet: () => /only when that file declares no font size inside `@media`, `@container`, `@supports` or a Sass `@include` \(nested too\)/.test(checks),
+      inline: () => /an element's own `style` attribute, never a component's prop or a CSS-in-JS object \(`sx`, `css\(\)`, `style\(\)`\)/.test(checks),
+      tailwind: () => /a bare `text-\[…vw\]` only when its line holds no `text-` utility under a variant \(`md:text-6xl`\)/.test(checks),
+      notSeen: () => /An override in another file is not seen: silence that one\./.test(checks),
+      tooling: () => /paste-blocked · font-size-viewport, `level` warn/.test(tool),
+    });
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;
