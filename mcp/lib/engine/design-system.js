@@ -3017,7 +3017,29 @@ function* viewLines(text, rel) {
     yield { n: n + 1, src, l, css: sheet || block, cut };
   }
 }
+// A stylesheet's line, piece by piece → cb(property, value) for each declaration it holds (RE_DECL's: a custom property, a
+// Sass variable, a property): what a `{` follows is a selector or an at-rule's prelude, and so is a line ending in `,` (a
+// selector list going on: `#fab,`) — unless it reads `prop: value,` (a multi-value declaration going on: `box-shadow: 0 0 0
+// 1px #1d4ed8,`). The ONE split the readers of a view file's declarations share (1.38: the raw values, the units table).
+function declarations(l, cb) {
+  let start = 0;
+  for (let i = 0; i <= l.length; i++) {
+    const ch = i < l.length ? l[i] : "";
+    if (ch !== "" && ch !== ";" && ch !== "{" && ch !== "}") continue;
+    const piece = l.slice(start, i);
+    start = i + 1;
+    if (ch === "{" || (ch === "" && /,\s*$/.test(piece) && !RE_DECL_GOES_ON.test(piece))) continue;
+    const d = RE_DECL.exec(piece);
+    if (d) cb(d[1], d[2]);
+  }
+}
+// A view / style file's raw values → [{ line, kind, value }], the first DS_RAW_PER_FILE. rawValuesOf reads the text through
+// its own viewLines generator (its early exit: a 20,000-line sheet costs its first few hundred lines); rawValuesIn reads lines
+// already walked — the feature report walks each file ONCE into a list its readers share (1.38).
 function rawValuesOf(text, rel) {
+  return rawValuesIn(viewLines(text, rel));
+}
+function rawValuesIn(lines) {
   const out = [], seen = new Set();
   const add = (line, kind, value) => {
     const k = line + ":" + value;
@@ -3038,27 +3060,15 @@ function rawValuesOf(text, rel) {
     }
     for (const m of s.matchAll(RE_COLOR_FN)) add(line, "color", m[0].replace(/\s+/g, " "));
   };
-  // a stylesheet's line, piece by piece: what a `{` follows is a selector or an at-rule's prelude, and so is a line ending in
-  // `,` (a selector list going on: `#fab,`) — unless it reads `prop: value,` (a multi-value declaration going on:
-  // `box-shadow: 0 0 0 1px #1d4ed8,`)
-  const styleLine = (l, line) => {
-    let start = 0;
-    for (let i = 0; i <= l.length; i++) {
-      const ch = i < l.length ? l[i] : "";
-      if (ch !== "" && ch !== ";" && ch !== "{" && ch !== "}") continue;
-      const piece = l.slice(start, i);
-      start = i + 1;
-      if (ch === "{" || (ch === "" && /,\s*$/.test(piece) && !RE_DECL_GOES_ON.test(piece))) continue;
-      const d = RE_DECL.exec(piece);
-      if (!d) continue;
-      colours(d[2], line, false);
-      if (!RE_SIZE_PROP.test(d[1]) || RE_SIZE_BUILT.test(d[2])) continue;
-      for (const v of d[2].matchAll(RE_SIZE_LITERAL)) {
-        if (Number(v[1]) > 0 && !(v[2] === "px" && Number(v[1]) <= 1)) { add(line, "size", d[1].toLowerCase() + ": " + d[2].trim().slice(0, 40)); break; }
-      }
+  // a stylesheet's line: each declaration's colours, and its size when the property takes one
+  const styleLine = (l, line) => declarations(l, (prop, value) => {
+    colours(value, line, false);
+    if (!RE_SIZE_PROP.test(prop) || RE_SIZE_BUILT.test(value)) return;
+    for (const v of value.matchAll(RE_SIZE_LITERAL)) {
+      if (Number(v[1]) > 0 && !(v[2] === "px" && Number(v[1]) <= 1)) { add(line, "size", prop.toLowerCase() + ": " + value.trim().slice(0, 40)); break; }
     }
-  };
-  for (const { n, l, css } of viewLines(text, rel)) {
+  });
+  for (const { n, l, css } of lines) {
     if (out.length >= DS_RAW_PER_FILE) break; // (the early exit: the generator reads no further line)
     if (!l.trim()) continue;
     if (css || RE_DECL_LINE.test(l)) { styleLine(l, n); continue; }
@@ -3246,12 +3256,13 @@ function featureReport(projectDir, root, f, reg, scan) {
     if (text == null) continue;
     viewFiles++;
     if (RE_EXPORTS_EXT.test(rel) && componentOf(rel)) exportsOf.push([rel, exportedComponents(text).names]);
-    for (const v of rawValuesOf(text, rel)) {
+    const lines = [...viewLines(text, rel)]; // (ONE walk of the file: its readers share the list — the UI checks read every line)
+    for (const v of rawValuesIn(lines)) {
       counts[v.kind]++;
       const token = v.kind === "color" ? tokenOf.get(colorKey(v.value)) : undefined;
       if (raw.length < DS_LIST) raw.push(Object.assign({ file: rel, line: v.line, kind: v.kind, value: v.value }, token ? { token } : {}));
     }
-    checked.push(Object.assign({ rel, over }, uiChecksOf(viewLines(text, rel), rel)));
+    checked.push(Object.assign({ rel, over }, uiChecksOf(lines, rel)));
   }
   // (1.37) its token files — a globals.css the feature edits may add `*:focus { outline: none }` — are read for the UI checks
   // alone: never for raw values (a token file declares the values), never counted in viewFiles, within DS_VIEW_FILES files read
