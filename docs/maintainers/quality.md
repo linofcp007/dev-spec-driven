@@ -1244,7 +1244,9 @@ wrong finding sends a team to fix code that is right.
   or a key handler ALONE reaches nothing (review 1 of 1.37: `<div role="button" onClick>` was excused, the legend said "a
   role, a tabindex and a key handler" and any one silenced it). Never a listener off the element (`RE_OFF_ELEMENT`: `.self` /
   `|self`, Alpine's `.outside` / `.away` / `.window` / `.document`), a bare `@click.stop`, an inline handler holding
-  `.focus(`, `stopPropagation` or `target` (CRIT_1 must-fix 6), a self-closing element (a modal's backdrop). Such a CANDIDATE
+  `.focus(`, `stopPropagation` or `target` (CRIT_1 must-fix 6), a self-closing element (a modal's backdrop) or an HTML
+  VOID one (`VOID`, the spec's list less the focusable `embed` / `input`: `<img onclick>` has no body — judged at once as a
+  self-closing one, never left waiting for a close tag and counted as a read past the bound). Such a CANDIDATE
   is judged by its BODY (`clickBodies`, inside the tag reader — review 1 of 1.37, Laravel's starter kits: a wrapper whose
   slot holds the `<button>`, a backdrop holding its empty overlay layer, 8 of Jetstream's 8 findings): read to its matching
   close tag within the tag reader's bound (30 lines / 4,000 characters from its `>`: past it not judged, counted as
@@ -1296,13 +1298,15 @@ wrong finding sends a team to fix code that is right.
 - **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
   (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
   the walk's view files; never the name-ranked token candidates: a `focus.css`, an `_a11y.scss`, a .less file count) through
-  `uiFocusPass`: the shorter path first, each read WHOLE within the bound (never cut at a line nor at a per-file read: a
-  sheet past what is left of `DS_FOCUS_CHARS` ends the search), `DS_FOCUS_SHEETS` (32) and `DS_FOCUS_CHARS` (128K) at most,
-  stopping at the first that holds one; only a sheet whose text names `focus` (any case) is parsed — every focus style does;
+  `uiFocusPass`: the shorter path first, each read WHOLE (never cut at a line nor at a head), `DS_FOCUS_SHEETS` (48) READ
+  and `DS_FOCUS_CHARS` (384K) PARSED at most — only a sheet whose text names `focus` (any case) is parsed, every focus style
+  does, so a focus-free sheet costs an open and a read, never the parse budget; a sheet longer than `DS_FOCUS_CHARS` (not
+  read whole) or one to parse past what is left of it ends the search; stopping at the first that holds one;
   asked ONLY when an UNSILENCED candidate exists (no candidate, no read — a silenced one is counted silenced whatever the
   pass would say), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
-  says which (`focus-sheets` / `focus-chars`). The bounds are measured, not chosen: the report with the pass at either
-  bound within 2× the same report with no candidate (an open costs ~1 ms where an antivirus scans each file — History).
+  says which (`focus-sheets` / `focus-chars`). The bounds are measured, not chosen (History): the highest that kept, in
+  every series where an antivirus scans each open (~1 ms), the report with the pass at its sheets bound ≤ 2.5× the same
+  report with no candidate, finish's part ≤ 2×, and modules that all name `:focus` at the chars bound ≤ 3×.
   Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
   focus.
 - **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` (ids `,`-separated; what follows them, a
@@ -1338,8 +1342,8 @@ wrong finding sends a team to fix code that is right.
   nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes — each ≤ 3×
   plain JSX of the same size (measured 0.07–2.5×); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real
   ones); a finish without a registry ≤ 1.5× the feature report it runs (~0.9×); the feature report with the focus pass AT
-  its bound ≤ 2× the same report with no candidate (one project, two features reading the same views, 1,000 sheets none
-  naming focus: 1.1–1.3×). The sheet of braces is the walker's every block: three allocation-free
+  its bound ≤ 2.5× the same report with no candidate (the owner's bar after review 1's follow-up; one project, two features
+  reading the same views, 1,000 sheets none naming focus: 1.2–1.3× at 48). The sheet of braces is the walker's every block: three allocation-free
   fast paths in styleTokens (`unmaskInterpolation` of a text with no mask, `pageWide` of an empty prelude, `RE_MIXIN` only
   after an `@` — the last a cost guard alone: +45 % on that sheet without it, under the bound) took it from ~5× to ~1.5× —
   tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus.
@@ -2140,3 +2144,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   clickBodies opens no self-closing tag), one is the cost guard above, timed with and without; the whole pass again after
   the fixtures: 105 of 106 (the cost guard the one survivor; the logic mutants run the file without its three timed
   blocks, the cost mutants the whole file).
+- **1.37.0 review 1, the follow-up** (the owner) — 32 sheets / 128K judged outline-removed on almost no project of more than
+  32 stylesheets (gen-angular's correct warning was lost): the cost bar relaxed to keep coverage — the report with the pass
+  at its sheets bound ≤ 2.5× the same report with no candidate (proj-d), finish's part ≤ 2×, modules that all name `:focus`
+  at the chars bound ≤ 3× — and `DS_FOCUS_CHARS` now counts the characters PARSED (a sheet naming `focus`), not read: on
+  3,000 focus-free 20K modules it reads 48 sheets instead of 18 at the cost the sheets bound already allows (1.7–1.9× vs
+  1.3–1.5×), so it was taken. Candidates, interleaved fresh processes, the median of 7 warm calls, in series under an
+  antivirus that scans each open (~1 ms) and one quieter series (~0.15 ms an open): 64 / 256K finish 2.09–2.16× (over);
+  56 / 384K finish up to 2.04×, 56 / 448K 2.11–2.3× (over); 48 / 384K feature 1.1–1.85×, finish 1.0–1.81×, the chars
+  bound 2.0–2.75× on 13K and 20K modules naming `:focus`; 48 / 448K the chars bound up to 3.89× on 20K modules (over);
+  95–100 / 512K finish 2.51× (over); in the quiet series 128 sheets measured 1.45× / 1.32× — the bound is the slow-open
+  series' (a reviewer's machine). Chosen: 48 / 384K. gen-angular's 900 components still end at `focus-sheets` (they would
+  need ~900 sheets read, ~8×); a 40-component app is judged again (its correct warning stands, excused with a deep focus
+  style). A click on an HTML void element is judged at once as a self-closing one (`VOID`): `<img onclick>` no longer waits
+  for a close tag and is counted as `tag-length`. Mutation pass of the new lines: MUTF.

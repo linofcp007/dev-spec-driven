@@ -30,11 +30,12 @@ const DS_TAG_ATTRS = 100; // a tag's attributes read: one that holds more is not
 const DS_CHECK_PER_FILE = 200; // findings kept per file (silenced ones too) — past it a file's further findings are counted, never kept
 const DS_VALUE = 80; // a finding's value, cut
 const DS_BLOCK_DEPTH = 64; // a sheet's blocks judged nested that deep — a deeper one is not, nor what it holds
-// the project's stylesheets read for a focus style, and their characters (each sheet whole): past either `limits` says so and
-// outline-removed is not judged — measured (review 1 of 1.37): the report with the pass at either bound within 2× the same
-// report with no candidate on 3,000 CSS modules (an open costs ~1 ms where an antivirus scans it; the parse ~0.15 ms a K)
-const DS_FOCUS_SHEETS = 32;
-const DS_FOCUS_CHARS = 128 * 1024;
+// the project's stylesheets READ for a focus style, and the characters PARSED of them (a sheet naming `focus`, read whole):
+// past either `limits` says so and outline-removed is not judged — measured (review 1 of 1.37 and its follow-up), on 3,000
+// CSS modules where an antivirus scans each open (~1 ms): the report with the pass at its sheets bound ≤ 2.5× the same report
+// with no candidate (1.1–1.9×), finish's part ≤ 2× (1.0–1.95×), modules that all name `:focus` at the chars bound ≤ 3× (2.0–2.75×)
+const DS_FOCUS_SHEETS = 48;
+const DS_FOCUS_CHARS = 384 * 1024;
 const DS_MARK_IDS = 200; // characters after a `ui-check-off:` read for its ids
 const BS = String.fromCharCode(92);
 
@@ -288,6 +289,10 @@ const ROLE_REACHED = new Set(["option", "menuitem", "menuitemcheckbox", "menuite
 // a listener modifier that takes the click off the element itself: `.self` / `|self`, Alpine's `.outside` / `.away` (a click
 // elsewhere), `.window` / `.document` (the page's)
 const RE_OFF_ELEMENT = /^(?:self|outside|away|window|document)$/;
+// HTML's void elements (the spec's list; `embed` and `input` are focusable, never candidates): no content, no close tag — a
+// click on one is judged at once as a self-closing element's (no body: a doubt), never left waiting for a close that never
+// comes (review 1 of 1.37: `<img onclick>` was dropped 30 lines later and counted as a read past its bound)
+const VOID = new Set(["area", "base", "br", "col", "hr", "img", "link", "meta", "source", "track", "wbr"]);
 const RE_DISPLAY_NONE = /display\s*:\s*["'`]?none(?![\w-])/i;
 const RE_DELEGATES = /\.focus\(|stopPropagation|target/i; // an inline click handler that forwards focus or reads the event's target
 const RE_CANCELS = /preventDefault|return\s+false/;
@@ -338,13 +343,13 @@ function judgeTag(tag, add) {
   // click-no-keyboard: a click handler on an element the keyboard cannot reach — not focusable by default, no tabindex, no role
   // whose focus its container manages (ROLE_REACHED), not inert / aria-hidden: a role or a key handler alone reaches nothing
   // (review 1 of 1.37); never a listener off the element itself (`.self`, Alpine's `.outside` / `.away` / `.window` /
-  // `.document`), a bare `@click.stop`, a delegating handler (a self-closing element — a modal's backdrop — has no body:
-  // clickBodies opens none)
+  // `.document`), a bare `@click.stop`, a delegating handler, a void element (a self-closing element — a modal's backdrop —
+  // has no body either: clickBodies opens none)
   const click = events.find((e) => e.event === "click");
   if (!click || !element) return kind;
   const role = literal(named.get("role")).split(/\s+/)[0];
   if (focusable || named.has("tabindex") || ROLE_REACHED.has(role) || named.has("inert") || shown("aria-hidden")) return kind;
-  if (click.mods.some((m) => RE_OFF_ELEMENT.test(m)) || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "")) return kind;
+  if (click.mods.some((m) => RE_OFF_ELEMENT.test(m)) || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "") || VOID.has(tag.name)) return kind;
   return { value: "<" + tag.name + " " + click.attr + ">" };
 }
 
@@ -591,24 +596,26 @@ function uiChecksOf(lines, rel) {
 // --- the feature's files ---------------------------------------------------------------------------------------------------------
 // Does any of the project's stylesheets hold a focus style (sheetChecks over the WHOLE file — never the name-ranked token
 // candidates: `focus.css`, `_a11y.scss`, a .less file count)? sheets: [{rel, full}], read the shorter path first, each WHOLE,
-// DS_FOCUS_SHEETS files / DS_FOCUS_CHARS characters at most — a sheet past what is left of them ends the search; it stops at
-// the first that holds one. Only a sheet whose text names `focus` (any case) is parsed: every focus style does — `:focus`,
-// `:focus-visible`, `:focus-within`, a focus variant in an `@apply` (review 1 of 1.37: the parse of ~800 sheets was 8× the report).
+// DS_FOCUS_SHEETS files read at most; it stops at the first that holds one. Only a sheet whose text names `focus` (any case)
+// is parsed — every focus style does: `:focus`, `:focus-visible`, `:focus-within`, a focus variant in an `@apply` (review 1
+// of 1.37: the parse of ~800 sheets was 8× the report) — and DS_FOCUS_CHARS bounds the characters PARSED: a sheet that names
+// no focus costs an open and a read, never the parse budget. A sheet longer than DS_FOCUS_CHARS (not read whole), or one to
+// parse past what is left of the budget, ends the search.
 // → { focus, limits: [{code: focus-sheets | focus-chars, read}] — a bound that cut the search }
 const RE_FOCUS_WORD = /focus/i;
 function uiFocusPass(sheets) {
   const list = sheets.slice().sort((a, b) => a.rel.length - b.rel.length || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
   const heads = readFileHeads(list.slice(0, DS_FOCUS_SHEETS).map((s) => s.full), DS_FOCUS_CHARS + 1);
-  let read = 0, chars = 0;
+  let read = 0, parsed = 0;
   try {
     for (const s of list) {
       if (read >= DS_FOCUS_SHEETS) return { focus: false, limits: [{ code: "focus-sheets", read }] };
-      const text = heads.next();
-      if (text != null && chars + text.length > DS_FOCUS_CHARS) return { focus: false, limits: [{ code: "focus-chars", read }] };
+      const text = heads.next(), names = text != null && RE_FOCUS_WORD.test(text);
+      if (text != null && (text.length > DS_FOCUS_CHARS || (names && parsed + text.length > DS_FOCUS_CHARS))) return { focus: false, limits: [{ code: "focus-chars", read }] };
       read++;
-      if (text == null) continue;
-      chars += text.length;
-      if (RE_FOCUS_WORD.test(text) && sheetChecks(text, s.rel, null)) return { focus: true, limits: [] };
+      if (!names) continue;
+      parsed += text.length;
+      if (sheetChecks(text, s.rel, null)) return { focus: true, limits: [] };
     }
   } finally {
     heads.stop();
