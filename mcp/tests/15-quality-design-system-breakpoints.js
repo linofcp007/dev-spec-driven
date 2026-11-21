@@ -327,7 +327,9 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     // `·`: the value's end is searched over the whole line, 1.38.0 review 1) — and one of 50,000 Breakpoints lines against an
     // ordinary ui.md of the same size (a 256K line of prose, 50,000 other list items) whose one Breakpoints line comes last. Each
     // pair timed interleaved, the median of 5 rounds, a round tens of milliseconds long (the ui.md line pair: 15 reports a round —
-    // review 1's BS-7: over 3 calls the denominator was ~5 ms, noise on a loaded machine); ≤ 3× + 50 ms (a GC pause)
+    // review 1's BS-7: over 3 calls the denominator was ~5 ms, noise on a loaded machine); ≤ 3× + 50 ms (a GC pause), the line
+    // pair ≤ 5× + 50 ms: the list line is captured, searched and cut where the prose line is refused at its first character —
+    // 1.5–3× at rest, 4.6× seen under four suites' load; a search that rescans per `·` is 18× (the mutation pass)
     const body = "--breakpoint-a: 1px;\n".repeat(12000);
     const theme = "@theme {\n" + body + "}\n", themx = "@themx {\n" + body + "}\n";
     const ui = (tag, text) => { const d = path.join(tmp, "bp-k2-" + tag); write(d, UI, text); return d; };
@@ -343,11 +345,11 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const walk = (text) => { const w = T.breakpointWatch(); T.styleTokens(text, "a.css", w.on("a.css", text)); return w.found; };
     const rep = (d) => () => T.breakpointsReport(d, null);
     walk(theme); walk(themx); rep(dLine)(); rep(dProse)(); rep(dMany)(); rep(dList)(); // warm
-    const within = (x, i) => x[i] <= 3 * x[i + 1] + 50;
+    const within = (x, i) => x[i] <= (i === 2 ? 5 : 3) * x[i + 1] + 50;
     const s = remeasure(() => [...pair(() => walk(theme), () => walk(themx), 1), ...pair(rep(dLine), rep(dProse), 15), ...pair(rep(dMany), rep(dList), 1)],
       (x) => within(x, 0) && within(x, 2) && within(x, 4), 3);
     const decls = walk(theme).files[0].decls;
-    all("1.38 breakpoints (cost): a 256K @theme of breakpoint statements walks ≤ 3× (+ 50 ms) the same sheet with no observer; ui.md's 256K Breakpoints line (a `1 · ` list) and 50,000 Breakpoints lines read ≤ 3× (+ 50 ms) an ordinary ui.md of the same size — medians of 5 interleaved rounds (got [theme, themx, line ×15, prose ×15, many, list] ms " +
+    all("1.38 breakpoints (cost): a 256K @theme of breakpoint statements walks ≤ 3× (+ 50 ms) the same sheet with no observer; ui.md's 256K Breakpoints line (a `1 · ` list) reads ≤ 5× (+ 50 ms) and 50,000 Breakpoints lines ≤ 3× (+ 50 ms) an ordinary ui.md of the same size — medians of 5 interleaved rounds (got [theme, themx, line ×15, prose ×15, many, list] ms " +
       js(s.map((x) => Math.round(x))) + ")", {
       theme: () => within(s, 0) && decls.size === 1,
       line: () => within(s, 2) && js(rep(dLine)().limits.map((l) => l.code)) === js(["breakpoint-line"]),

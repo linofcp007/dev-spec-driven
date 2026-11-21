@@ -2520,14 +2520,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   three clones capture [320, 390, 768, 1024, 1600, 2000], 1440 said; `cliOutput.bpLimit` lost "the narrowest 5 and the
   widest" (no longer the rule) rather than gain a second message. A filled value kept in brackets stays the stub's slot
   (prose: ui-responsive.md says to write the widths without them; listing it as unread would be a new mechanism for a LOW
-  — 1.39 backlog). K2 timed each pair interleaved, the median of 5 rounds — over 3 calls the ui.md denominator was ~5 ms
-  and the full suite failed it under load. The reviewer's replay (bp-shapes.js, bp-lines.js) against the parent differs in
+  — 1.39 backlog). K2 times each pair interleaved, the median of 5 rounds of tens of ms, ≤ 3× + 50 ms — over 3 calls the
+  ui.md denominator was ~5 ms and the full suite failed it under load; its line pair ≤ 5× + 50 ms (a list line is captured,
+  searched and cut, a prose line refused at its first character: 1.5–3× at rest, 4.6× seen under four suites' load). The reviewer's replay (bp-shapes.js, bp-lines.js) against the parent differs in
   the two dot lists and one partial shape (Tailwind's five overridden without a reset: [320, 480, 768, 1024, 1280, 1536],
   390 and 1440 said — was 1280 dropped for 390) and nothing else. Mutation pass (the list before the fixtures): 18 of 18,
   one a timing mutant (the end searched in a 2,000-character window per `·`: K2's line pair 609 ms against 34). Cost, both
   engines in one process, interleaved, medians of 7: the stub, the printed line, prose and 50,000 lines 0.6–1.2× the
   parent (noise); the hostile 256K `1 · 1 · …` line 1.5–2.2× (+2–2.7 ms a report: the parent stopped at its first `·`,
-  the fix reads the whole line, linear — K2 holds it within 3× of prose); a partial report of 3,000 declared widths
+  the fix reads the whole line, linear — K2's line pair holds it); a partial report of 3,000 declared widths
   1.3–1.4× (+0.5 ms).
 - **1.38.0** (item 2 of the 1.38 round, "tokens against the scale", as DECISIONS cut it — chain T) — first the D5 refactor,
   behaviour-preserving and alone in its commit (the base chain P rebased on): the feature report walks each view file ONCE
