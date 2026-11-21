@@ -118,26 +118,32 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
   // --- (a) what readFileHeads gives: readFileHead's text for each file, in order, in every mode ----------------------------------------
   {
     const list = fileSet("id", 300);
-    const ref = list.map((f) => E.readFileHead(f, CHARS));
+    // (1,000 paths: the 300 files, then 700 that do not exist — a list whose files left outlast the pool's start at 200 µs)
+    const long = list.concat(Array.from({ length: 700 }, (_, i) => path.join(tmp, "proj-ahead-nowhere", "n" + i + ".txt")));
+    const ref = long.map((f) => E.readFileHead(f, CHARS));
     const r = caught(() => ({
       on: readAll(list, CHARS, "on", { tick: 0 }),
       off: readAll(list, CHARS, "off", { tick: 1e6 }),
       fail: readAll(list, CHARS, "fail", { tick: 0 }),
-      slow: readAll(list, CHARS, null, { tick: 200000 }), // the probe's 32 reads at 200 µs each: the bound itself
-      fast: readAll(list, CHARS, null, { tick: 199999 }),
+      slow: readAll(long, CHARS, null, { tick: 200000 }), // the probe's 32 reads at 200 µs each: the bound itself
+      fast: readAll(long, CHARS, null, { tick: 199999 }),
+      // (review 1 of 1.38: the files left × the probe's average against the pool's start, AHEAD_START_US = 80 ms — 250 left
+      // at 320 µs is the bound itself; 1 ns a read under starts none, though 200 µs and 64 files left are passed)
+      start: readAll(list.slice(0, 282), CHARS, null, { tick: 320000 }),
+      brief: readAll(list.slice(0, 282), CHARS, null, { tick: 319999 }),
       short: readAll(list.slice(0, 95), CHARS, "on", { tick: 0 }), // 32 + 63: one under AHEAD_MIN past the probe
       edge: readAll(list.slice(0, 96), CHARS, "on", { tick: 0 }),
     }));
     const v = r.v || {};
     const view = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, { made: x.made.length, diff: firstDiff(x.out, ref.slice(0, x.out.length)) }]));
-    const kinds = { nulls: ref.filter((t) => t === null).length, empty: ref.filter((t) => t === "").length, cut: ref.filter((t) => t && t.length === CHARS).length };
+    const kinds = { nulls: ref.slice(0, 300).filter((t) => t === null).length, empty: ref.filter((t) => t === "").length, cut: ref.filter((t) => t && t.length === CHARS).length };
     const nth = (k) => list.filter((_, i) => i % KINDS.length === k).length;
-    all("1.35.4: readFileHeads gives, file by file and in order, exactly what readFileHead gives — UTF-8 with and without a BOM, UTF-16 LE / BE with a BOM (an odd length too), CR-only line ends, a read cut at maxChars (ASCII, three-byte characters, a surrogate pair cut by an odd maxChars), an empty file \"\", a missing path and a folder null — whether its workers read them (on; the probe at 200 µs a file, mode unset) or it reads them in sequence (off, fail — no worker starts —, a probe under 200 µs a file, a list too short); the pool starts when the probe's 32 reads average 200 µs or more (the bound itself starts it, 1 ns a read under does not) and 64 files remain — 96 files start 8 workers, 95 none, whatever the mode (got " + js({ view, kinds, error: r.error }) + ")", {
+    all("1.35.4: readFileHeads gives, file by file and in order, exactly what readFileHead gives — UTF-8 with and without a BOM, UTF-16 LE / BE with a BOM (an odd length too), CR-only line ends, a read cut at maxChars (ASCII, three-byte characters, a surrogate pair cut by an odd maxChars), an empty file \"\", a missing path and a folder null — whether its workers read them (on; the probe at 200 µs a file, mode unset) or it reads them in sequence (off, fail — no worker starts —, a probe under 200 µs a file, a list too short); the pool starts when the probe's 32 reads average 200 µs or more (the bound itself starts it, 1 ns a read under does not) and 64 files remain — 96 files start 8 workers, 95 none, whatever the mode — and (review 1 of 1.38) when the files left × the probe's average reach the pool's 80 ms start (250 left at 320 µs start it, at 1 ns a read under none) (got " + js({ view, kinds, error: r.error }) + ")", {
       ran: ran(r),
-      fixture: () => kinds.nulls === nth(12) + nth(13) && kinds.empty === nth(11) && kinds.cut >= 4 * nth(6),
+      fixture: () => kinds.nulls === nth(12) + nth(13) && kinds.empty === nth(11) && kinds.cut >= 4 * nth(6) && ref.slice(300).every((t) => t === null),
       same: () => Object.values(view).every((x) => x.diff === null),
-      on: () => view.on.made === 8 && view.slow.made === 8 && view.edge.made === 8,
-      none: () => view.off.made === 0 && view.fail.made === 0 && view.fast.made === 0 && view.short.made === 0,
+      on: () => view.on.made === 8 && view.slow.made === 8 && view.edge.made === 8 && view.start.made === 8,
+      none: () => view.off.made === 0 && view.fail.made === 0 && view.fast.made === 0 && view.short.made === 0 && view.brief.made === 0,
     });
   }
 

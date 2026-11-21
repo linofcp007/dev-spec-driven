@@ -1546,6 +1546,10 @@ exports.run = async ({
           && proj.includes("at most " + n(B.files) + " files and " + B.chars / 1048576 + " MB (`" + passCodes[0] + "`, naming the outline removals it left unjudged)")
           && proj.includes("each file's first " + B.read / 1024 + "K and a line's first " + n(B.line) + " characters (`view-size`, `line-length`; a tag past " + B.tag + " lines, `tag-length` — each with a count and the first file)")
           && proj.includes("its own limits, never the report's `limits` or `truncated`")],
+      // (review 1 of 1.38, UP-1: what the prose says of a long stylesheet is what uiProject feeds the pass)
+      ["a stylesheet past the read: named in view-size, never checked — uiProject feeds it no line", () =>
+        proj.includes("A stylesheet past " + B.read / 1024 + "K (a compiled bundle) is named in `view-size`, never checked.")
+          && /pass\.feed\(x\.rel, over && RE_STYLE_EXT\.test\(x\.rel\) \? \[\] : viewLines\(text, x\.rel\), over, text\)/.test(DS)],
       ["order: the stylesheets first, then the shorter path", () => /Stylesheets are read first, then the shorter path/.test(proj)],
       ["view files: no test, story, mock or fixture", () => /A test, a story, a mock or a fixture is no view file\./.test(proj)],
       ["outline-removed: the project-wide excuse, the removals past the focus search's sheets judged here, a cut pass judges none", () =>

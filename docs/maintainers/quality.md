@@ -943,8 +943,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     looked for once a line where it is known (`tagEnd`: a line of openers with no `>` after them was quadratic, review 1). In `.vue` alone a kebab tag with a dash is the component Vue resolves (`<my-button>` → MyButton; one word,
     `<card>`, needs Vue's own element list: never). Read after every script, one queue, the same counters (markups first
     or counted apart lost a script's reading).
-  - **Read ahead** (`readFileHeads`, files.js): the exports read and the usage queue take their files through it — the
-    first AHEAD_PROBE in sequence and timed; when they average AHEAD_SLOW_US or more and AHEAD_MIN remain, AHEAD_WORKERS
+  - **Read ahead** (`readFileHeads`, files.js): the exports read and the usage queue take their files through it (the UI
+    checks' focus search and the project inventory too) — the first AHEAD_PROBE in sequence and timed; when they average
+    AHEAD_SLOW_US or more, AHEAD_MIN remain AND the files left × the probe's average reach AHEAD_START_US (the pool's own
+    start, measured once — 32 + 64 missing paths, pool on vs off: 68–81 ms; review 1 of 1.38: a pool started for the 64–300
+    files of a small tree's UI pass cost more than reading them all), AHEAD_WORKERS
     worker threads (`worker_threads`, Node core) open the rest, worker j the files j, j + W, …, each at most AHEAD_WINDOW
     ahead of the one taken (a SharedArrayBuffer of counters and a stop flag; the main thread waits with `Atomics.wait`); a
     worker silent for AHEAD_STALL_MS, or none that starts, leaves the rest to readFileHead. The text is readFileHead's
@@ -1616,7 +1619,12 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   exports loop's reads saved the bare read alone — parsing is 70–85 % of the pass — and threaded the read through settle:
   cut, CRIT_X D4), the walk's view files that pass `uiViewFile`, the stylesheets first (a pass a bound cuts has read the focus
   styles it could), then the shorter path; each file's first `DS_READ_CHARS` (one more asked for: `over`), `DS_UI_FILES`
-  (5,000) files / `DS_UI_CHARS` (32 MB) characters at most. `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
+  (5,000) files / `DS_UI_CHARS` (32 MB) characters at most. A STYLESHEET past the read (`over` and `RE_STYLE_EXT` — a
+  compiled bundle) is fed with no line (review 1 of 1.38, UP-1: Bulma's 13 were most of its pass): counted in `read` and in
+  `view-size` (which names it — the CLI line says the project's checks skip such a sheet), never parsed — its rules, focus
+  styles and motion unseen: a removal elsewhere only its focus styles would have excused stands (none on the clones: Bulma's
+  and cal.com's other files hold focus styles; 1.39 backlog). A feature report and finish keep 1.37's read of its first
+  `DS_READ_CHARS` (a fixture). `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
   and keeps counts — its memory bounded by the rules, never the files: per rule its count (past a file's `DS_CHECK_PER_FILE`
   too — CRIT_1 must-fix 7), the FILES holding one (never the findings), its first place by file then line (a place past a
   file's cap has no line and is named only when no listed place exists — the feature report's unjudged rule); an
@@ -1687,7 +1695,10 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   of keyframes, a style object's endless animation list: 0.08–1.34× (`RE_TW_PICK`'s widenings, F0c's `text-[` and these,
   in ONE set — CRIT_X D4). G1′ (mcp/tests/15-quality-ui-project.js): the project pass — the report with it less the report
   without — ≤ 1.5 × (a bare read of its files + `uiChecksOf(viewLines)` of the same texts in memory), on 400 real-shaped files
-  ~70 % Bootstrap-like Sass by characters (parsing unminified CSS is a Sass tree's cost), interleaved: 0.96× measured.
+  ~70 % Bootstrap-like Sass by characters (parsing unminified CSS is a Sass tree's cost), interleaved: 0.96× measured. The
+  project report with the pass is NOT bounded against 1.37's: it opens and parses every view and style file the pass reads,
+  so its ratio is high where 1.37's report read almost nothing (a small CSS / Vue tree) — the measured spread per clone is
+  in History (1.38.0 review 1, the cost).
 - **Not in 1.37 nor 1.38** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion`
   raw kind (item 2's), the `addEventListener` paste form, a `hint` level; 1.38's cuts — deprecated uses (1.39), sharing
   settle's reads, the `:is` / `v-bind:is` narrowing (backlog), the reduced-motion script search, the 5,000 / 32 MB focus bound
@@ -2794,8 +2805,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   design's numbers), vben 60, shadcn-svelte 65, shadcn-ui 89 (transition-all alone), Bootstrap and Foundation 0. G1′ (the
   pass ÷ a bare read + the checks in memory): the test's 400 files 0.88–0.96; the clones 0.63–1.36 over two series
   (a throwaway probe over the designers' clones — shadcn-ui, cal.com, vben, Bootstrap, Breeze); the report with the pass ÷ the 1.37 report: shadcn-ui
-  1.64–1.72, cal.com 1.22–1.23, vben 1.42–1.58, Bootstrap 1.85–2.24, Breeze 2.84–2.88 (+38–255 ms on a 43–303 ms base:
-  small Sass / Blade trees pay the read). Oracle replay — `uiChecksOf` of the clones' 8,478 view / style files (findings,
+  1.64–1.72, cal.com 1.22–1.23, vben 1.42–1.58, Bootstrap 1.85–2.24, Breeze 2.84–2.88 (+38–255 ms on Bootstrap's and
+  Breeze's 43–303 ms base; on those five alone — review 1 of 1.38 measured every clone of the designers: below). Oracle replay — `uiChecksOf` of the clones' 8,478 view / style files (findings,
   focus, past, cut), their nine project reports at the engine's default, six feature reports and finish parts on copies of
   three trees: byte-identical against 1.37.0 and the chain's parent, before and after the `<style>` fix. Mutation pass, the
   list written before the code (MUTATIONS.md, 95) plus two for the fix: 91 killed at first; three wanted a fixture (a
@@ -2839,7 +2850,37 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   two-block SFCs) 0.74–1.04. Mutation pass, the list written before the fixtures (%TEMP%/dsd-138f1-ui/MUTATIONS.md, 34):
   32 killed at first; the first candidate a line (`size === null`) a cost guard — a line of 60 bare sizes 1.9× without
   it, kept; a `text-[` pre-test before the anchored `RE_TW_TEXT` output-equivalent and no effect beyond noise in three
-  series: deleted.
+  series: deleted. R1-DOC4 (LOW, prose): the levels' current rule still read 1.37's ("`warn` — the feature report AND
+  finish's warning", "`report` — the feature report alone"); since 1.38 the project inventory counts both levels (tagged
+  `report`), so `warn` is the reports (a feature's, the project inventory) and finish's warning, `report` the reports alone,
+  never finish; a 17-docs row pins both clauses and each `UI_RULES` id under its level.
+- **1.38.0 review 1, the cost** (UP-1 HIGH, UP-2 and DOC1 MEDIUM) — the report with the pass was 4–10× 1.37's on five of the
+  designers' own clones, against the "1.2–2.9×" the release note said of five others. UP-1: the owner kept the pass on the
+  operation and narrowed it by a property — a stylesheet past the read (a compiled bundle) is fed with no line, counted and
+  named in the existing `view-size` entry (it could carry it: count and first file; only its CLI line gained "the project's
+  UI checks skip a stylesheet that long"); a feature report and finish keep 1.37's read. On the clones only Bulma (13 such
+  sheets) and cal.com (one generated `globals.css`) hold one: Bulma's pass ~940 → ~440 ms, cal.com's inventory 59 → 57
+  (that sheet's two transition-all); line-length no longer counts the skipped sheets' lines. Not fixed, said above: a skipped
+  sheet's focus styles excuse nothing (no clone affected — 1.39 backlog). UP-2: on Windows the pass's probe often averaged
+  past 200 µs (each read followed by a parse), so 8 workers started for 64–300 files and cost more than reading them all;
+  readFileHeads now also asks the files left × the probe's average to reach AHEAD_START_US (80 ms, the pool's start
+  measured once). Taxonomy's pass started the pool in 2–5 of 7 runs before, none after (its report ×2.0–3.2 → ×1.3–1.4
+  1.37's); cal.com / shadcn-ui / shadcn-svelte / vben still start it. DOC1: re-measured on every clone the two reviewers used, both
+  engines and 1.37 in one process, interleaved, the order rotating, median of 7, a Windows machine shared with other runs
+  (opens 1–2.7 ms each), two series — the report with the pass ÷ 1.37's, the ms it adds, [the parent's ratio]: sakai-vue
+  (47 view files) ×9.2–14 +129–260 [×10–12]; open-props (85) ×6.3–7.8 +88–98 [×6.6–8.5]; Jetstream (110) ×2.8–3.5 +48–59
+  [×2.8–3.3]; Foundation (123) ×10–11 +369–410 [×8.4–10] — its 1.37 report reads almost nothing (43 ms) and each of its
+  opens cost ~2 ms then —; Breeze (168) ×3.8–4.0 +287–636 [×4.4–5.1]; taxonomy (97) ×1.3–1.4 +39–63 [×2.0–3.2];
+  Bootstrap (254) ×2.1–2.2 +524–597 [×1.6–3.3]; Bulma (544) ×4.2–5.6 +485–553 [×7.7–8.2]; vben (721) ×1.4–1.6 +426–536
+  [×1.6–1.8]; cal.com (1,108) ×1.25–1.33 +547–787 [×1.2–1.4]; shadcn-svelte (2,174) ×1.65–1.67 +682–1,106 [×1.6–1.8];
+  shadcn-ui (3,562) ×1.9–2.0 +1,341–1,471 [×1.9–2.2]. G1′ (paired, median of 7): 0.79–1.53 (Bootstrap's 1.53 one
+  series, 1.27 the other); 15 reps on the eight small and mid trees: medians 0.86–1.16, upper quartiles ≤ 1.23. The
+  read-ahead's 1.35.4 gain kept: shadcn-ui's report 1.71× slower with the pool off, 1.04× the parent's rule. The pass
+  scales with the view and style text it reads and the files it opens: the ratio is high where 1.37's report read almost
+  nothing; Foundation shows the bound's price on a quiet moment (start 32 ms: the pool would have saved ~30 ms there).
+  Fixtures: a sheet past the read, one of exactly 256K and an HTML page past it, the feature report and finish over the
+  sheet (15-quality-ui-project.js); both read-ahead bounds hit exactly, 1 ns a read either side (…-read-ahead.js); the
+  prose against uiProject's feed (17-docs.js). Mutation pass, the list first (MUTATIONS.md): 17 / 17 killed.
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table
