@@ -882,7 +882,9 @@ function uiChecksReport(files, projectFocus, cap, offs) {
 // → { feed(rel, lines, over, text) (lines: viewLines of the file's text as read; over: the file is longer than that read),
 //     done(cut, truncated) → { read, total, silenced, byRule, rules: { id: {level, files, file, line?} }, off?, offIgnored?, facts,
 //     limits } }
-const RE_REDUCED_ASK = /reduced?[-_ ]?motion|motion-(?:safe|reduce)(?![\w-])/i;
+// (a mention: `prefers-reduced-motion`, `useReducedMotion`, `isReduceMotionEnabled`, `reduce_motion`, Tailwind's `motion-safe:` /
+// `motion-reduce:` — a word that only looks like one makes the fact said less, never wrongly)
+const RE_REDUCED_ASK = /reduced?[-_ ]?motion|motion-(?:safe|reduce)/i;
 function uiProjectPass(bounds, offs) {
   const rules = new Map(); // id → { count, files, file, line } (line null: the first place is a file's past its cap)
   const off = offs ? offs.off : new Map(), hidden = new Map(); // (1.38: the rules and facts the project switched off — counted)

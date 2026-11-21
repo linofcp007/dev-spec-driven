@@ -87,11 +87,11 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
   { // past a file's 200 kept findings each is still COUNTED (CRIT_1 must-fix 7); a rule found only past a file's cap is placed
     // at its file, no line — and a listed place elsewhere wins over it whatever the paths
     const rows = Array.from({ length: 200 }, (_, i) => "    <li className=\"transition-all\">Row " + i + "</li>");
-    const LIST = lines("export const List = () => (", "  <ul>", ...rows, "    <li className=\"transition-all\">last</li>", "    <img src=\"/x.png\" />", "  </ul>", ");");
+    const LIST = lines("export const List = () => (", "  <ul>", ...rows, "    <li className=\"transition-all\">last</li>", "    <img src=\"/x.png\" />", "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/y.png\" />", "  </ul>", ");");
     const alone = inv(project("past", { "src/a/List.tsx": LIST }));
     const listed = inv(project("past-listed", { "src/a/List.tsx": LIST, "src/z/Hero.tsx": IMG }));
-    all("1.38 project UI checks: findings past a file's 200 are counted (201 transition-all, the <img> after them); a rule only past a file's cap is placed at its file with no line; a listed place elsewhere wins (got " + js({ alone, listed: listed.rules }) + ")", {
-      past: () => alone.byRule["transition-all"] === 201 && alone.byRule["img-no-alt"] === 1 && alone.total === 202,
+    all("1.38 project UI checks: findings past a file's 200 are counted (201 transition-all, the <img> after them; a silenced one there: silenced); a rule only past a file's cap is placed at its file with no line; a listed place elsewhere wins (got " + js({ alone, listed: listed.rules }) + ")", {
+      past: () => alone.byRule["transition-all"] === 201 && alone.byRule["img-no-alt"] === 1 && alone.total === 202 && alone.silenced === 1,
       noLine: () => js(alone.rules["img-no-alt"]) === js({ level: "warn", files: 1, file: "src/a/List.tsx" }),
       listed: () => js(listed.rules["img-no-alt"]) === js({ level: "warn", files: 2, file: "src/z/Hero.tsx", line: 1 }),
     });
@@ -154,13 +154,19 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     for (let i = 0; i < 129; i++) heavy["src/p/p" + String(i).padStart(3, "0") + ".html"] = body;
     const q = project("bound-chars", heavy);
     const c = inv(q);
-    // (a focus style read before the cut excuses the removal: no count on the limit — the same 5,001 sheets)
-    write(p, "a/f.css", ":focus-visible { outline: 2px solid; }\n");
+    // (the stylesheets are read first: a focus sheet whose path is longer than every page's is read before the cut — the same
+    // 129 pages)
+    write(q, "zzz/styles/focus-ring.css", ":focus-visible { outline: 2px solid; }\n");
+    const cf = inv(q);
+    // (a focus style read before the cut excuses the removal: no count on the limit — the same 5,001 sheets; the shorter path
+    // first — a short one that sorts last by name is read)
+    write(p, "z/f.css", ":focus-visible { outline: 2px solid; }\n");
     const f = inv(p);
-    all("1.38 project UI checks: the pass stops at 5,000 files read or 32 MB of their characters — `ui-files` names it, with the removals it left unjudged (count, the first file:line) when no focus style was read; a focus style read before the cut still excuses (got " +
-      js({ files: u.limits, chars: c.limits, focus: [f.total, f.limits] }) + ")", {
+    all("1.38 project UI checks: the pass stops at 5,000 files read or 32 MB of their characters — `ui-files` names it, with the removals it left unjudged (count, the first file:line) when no focus style was read; a focus style read before the cut still excuses — the stylesheets first, then the shorter path (got " +
+      js({ files: u.limits, chars: c.limits, sheetsFirst: [cf.total, cf.limits.filter((l) => l.code === "ui-files")], focus: [f.total, f.limits] }) + ")", {
       files: () => js(u.limits) === js([{ code: "ui-files", read: 5000, count: 1, file: "a/r.css", line: 3 }]) && u.total === 0,
       chars: () => js(c.limits.filter((l) => l.code === "ui-files")) === js([{ code: "ui-files", read: 129, count: 1, file: "a/r.css", line: 3 }]),
+      sheetsFirst: () => cf.total === 0 && js(cf.limits.filter((l) => l.code === "ui-files")) === js([{ code: "ui-files", read: 130 }]),
       focus: () => f.total === 0 && js(f.limits) === js([{ code: "ui-files", read: 5000 }]),
     });
   }
@@ -169,7 +175,8 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     // tested on each WHOLE text as read (never its cut lines), no script search; never in a feature report
     const DIALOG = "export const O = () => <div className=\"data-[state=open]:animate-in fixed inset-0\" />;\n";
     const POP = lines("<template>", "  <p class=\"pop\">hi</p>", "</template>", "<style scoped>", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>");
-    const base = { "src/components/ui/dialog.tsx": DIALOG, "src/b/Pop.vue": POP };
+    // (a stylesheet is read first: its keyframes never take the first place from a smaller path)
+    const base = { "src/components/ui/dialog.tsx": DIALOG, "src/b/Pop.vue": POP, "zz/anim.css": "@keyframes spin { to { transform: rotate(1turn) } }\n" };
     const fact = (tag, extra) => inv(project("fact-" + tag, Object.assign({}, base, extra))).facts;
     const said = fact("said", {});
     const mentions = {
@@ -177,6 +184,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       media: fact("media", { "src/styles/app.scss": "@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }\n" }),
       hook: fact("hook", { "src/Hero.tsx": "export const Hero = () => { const r = useReducedMotion(); return <h1>{r}</h1>; };\n" }),
       safe: fact("safe", { "src/Spin.tsx": "export const S = () => <i className=\"motion-safe:animate-spin\" />;\n" }),
+      native: fact("native", { "src/Spin.tsx": "export const S = () => { AccessibilityInfo.isReduceMotionEnabled().then(set); return <b>s</b>; };\n" }),
       // (a minified sheet: its media query past the 2,000 characters a line is read to — the WHOLE text is tested)
       minified: fact("minified", { "src/styles/vendor.min.css": ".a{color:red}".repeat(3900) + "@media (prefers-reduced-motion:reduce){*{animation:none}}\n" }),
     };
@@ -188,7 +196,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const fr = S.designSystemReport(p, { name: slug }).uiChecks;
     all("1.38 project UI checks: no-reduced-motion — motion declared (a shadcn dialog's animate-in, a Vue keyframes) and no text read mentioning reduced motion: the fact, its count of lines and its first place by file then line; a mention anywhere read (a motion-reduce: / motion-safe: variant, a media query, useReducedMotion, past a minified line's 2,000 characters) or no motion: none; a .ts hook is not read; never in a feature report (got " +
       js({ said, mentions, script, still, fr: Object.keys(fr) }) + ")", {
-      said: () => js(said) === js([{ code: "no-reduced-motion", count: 2, file: "src/b/Pop.vue", line: 5 }]),
+      said: () => js(said) === js([{ code: "no-reduced-motion", count: 3, file: "src/b/Pop.vue", line: 5 }]),
       mentions: () => Object.values(mentions).every((f) => js(f) === "[]"),
       script: () => script.length === 1,
       noMotion: () => js(still) === "[]",
@@ -248,10 +256,14 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       "src/A.tsx": "export const A = () => <div onClick={go}>open <img src=\"/a.png\" /></div>;\n" });
     const u = inv(p);
     const long = inv(project("marker-long", { ".specs/steering/design-system.md": "_UI checks off: img-no-alt (" + "x".repeat(300) + ")_\n", "src/A.tsx": IMG }));
-    all("1.38 project UI checks: the marker reads 50 entries — the 51st and every later one not applied, said once with the bound; a reason is cut at 200 characters (got " + js({ off: u.off, ignored: u.offIgnored, byRule: u.byRule, long: long.off.map((o) => o.reason.length) }) + ")", {
+    // (an off rule's findings past a file's cap are hidden too)
+    const rows = Array.from({ length: 201 }, (_, i) => "    <li className=\"transition-all\">Row " + i + "</li>");
+    const past = inv(project("marker-past", { ".specs/steering/design-system.md": "_UI checks off: transition-all (kit code)_\n", "src/L.tsx": lines("export const L = () => (", "  <ul>", ...rows, "  </ul>", ");") }));
+    all("1.38 project UI checks: the marker reads 50 entries — the 51st and every later one not applied, said once with the bound; a reason is cut at 200 characters; an off rule's findings past a file's cap are hidden too (got " + js({ off: u.off, ignored: u.offIgnored, byRule: u.byRule, long: long.off.map((o) => o.reason.length), past: [past.byRule, past.off] }) + ")", {
       bound: () => js(u.off) === js([{ rule: "img-no-alt", reason: "reason 0", count: 1 }]) && js(u.offIgnored) === js([{ entry: "click-no-keyboard (the 51st)", why: "past-bound", read: 50 }]),
       later: () => js(u.byRule) === js({ "click-no-keyboard": 1 }),
       cut: () => js(long.off.map((o) => o.reason.length)) === js([200]) && long.total === 0,
+      past: () => js(past.byRule) === "{}" && js(past.off) === js([{ rule: "transition-all", reason: "kit code", count: 201 }]),
     });
   }
 

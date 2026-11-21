@@ -429,6 +429,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       keyframes: mo(lines("@-webkit-keyframes spin { to { transform: rotate(1turn) } }", ".a { color: red; }"), "src/spin.css"),
       // (the first rule of a <style> block: its prelude carries the `<style scoped>` line before it)
       vueFirst: mo(lines("<template>", "  <p>hi</p>", "</template>", "<style scoped>", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>"), "src/P.vue"),
+      // (a <style> before the template: its keyframes, found after the template's utility, is still the first line)
+      vueStyleFirst: mo(lines("<style>", ".a { animation: pop 1s; }", "</style>", "<template>", "  <i class=\"animate-spin\" />", "</template>"), "src/Q.vue"),
+      // (an HTML inline style: smooth scrolling on a markup line)
+      inline: mo(lines("<main style=\"scroll-behavior: smooth\">x</main>"), "src/a.html"),
       svelte: mo(lines("<button class=\"transition-transform hover:scale-105\">a</button>", "<main class=\"md:scroll-smooth\">b</main>"), "src/Card.svelte"),
       sheet: mo(lines("html { scroll-behavior: smooth; }", ".a { transition: transform 150ms ease, opacity 1s; }", ".b { transition: translate .2s; }", ".c { animation-name: fade; }"), "src/a.css"),
       // (a style object and an inline style: a line each — two on one line count once)
@@ -445,7 +449,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       js({ M, anim }) + ")", {
       dialog: () => js(M.dialog) === js([1, 2]),
       vue: () => js(M.vue) === js([3, 2]),
-      keyframes: () => js(M.keyframes) === js([1, 1]) && js(M.vueFirst) === js([1, 5]),
+      keyframes: () => js(M.keyframes) === js([1, 1]) && js(M.vueFirst) === js([1, 5]) && js(M.vueStyleFirst) === js([2, 2]) && js(M.inline) === js([1, 1]),
       svelte: () => js(M.svelte) === js([2, 1]),
       sheet: () => js(M.sheet) === js([4, 1]),
       script: () => js(M.script) === js([2, 1]),
