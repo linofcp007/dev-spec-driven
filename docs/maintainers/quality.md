@@ -1057,17 +1057,21 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   the registry — the CLI prints each as a row to paste), `pending` (in the code and declared New by an unfinished feature's
   design — `pendingNew`: its finish adds it; a row pasted for it would read as already listed), `stale` (`stalePath` —
   below), `newTokens` (against `tokenNames` — every token the file lists),
-  `newSources` / `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`,
-  `counts`, `newComponents`, `uiChecks` (1.37 — UI checks, below). `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
-  total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `total`).
+  `newSources` / `newLibraries`, `drift` / `gone` / `unitsTable` (1.38 — Token values, The units table, below), `inSync`. A
+  feature: `usage`, `problems` (the findings, a localized `text` each), `raw`, `counts`, `groups` and `units` (1.38 — Raw values
+  against the scale, Groups, The units table, below), `newComponents`, `uiChecks` (1.37 — UI checks, below). `missing`,
+  `pending`, `stale`, `newTokens`, `drift`, `raw` and `groups` hold their first 50 (`DS_LIST`) with a total beside each
+  (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `driftTotal`, `total`, `groupsTotal`).
 - **`limits`** — the bounds that CUT what a report read, `[{code, read, file?}]`: files (the walk's cap) · token-files ·
   token-candidates · file-size (`file`) · tokens · registry-rows (rows past 500 are not checked for a gone path) ·
   component-files (a bound of the export read: `DS_EXPORT_FILES`, `DS_EXPORT_CHARS`, `DS_EXPORT_NAMES` — `read`: the
   files read) · workspace-manifests (a bound of the workspace patterns, or a declared pattern not followed —
   `read`: the manifests read, 0 too) — 1.35.1, the project report's alone ·
   view-files (a feature's 200; its report carries every code but tokens and registry-rows — a stylesheet left out of the
-  sources is read for raw values); `truncated` = one of them, and then the report is NEVER `inSync` (said of NAMES: a
-  token's value is not compared, nor a token the code no longer declares — `cliOutput.dsInSync` says so, review 7) — what it
+  sources is read for raw values) · font-values / motion-values (1.38, a feature's: a file's fonts / motion values past their
+  own `DS_RAW_PER_FILE` — `file`, the first it cut); `truncated` = one of them, and then the report is NEVER `inSync` (said
+  of NAMES: a token's value is not compared — 1.38's `drift` lists the values the code holds otherwise, beside it, never in
+  it —, nor a token the code no longer declares — `cliOutput.dsInSync` says so, review 7) — what it
   did not
   read it cannot vouch for (the CLI prints `cliOutput.dsLimit[code](read, file)`, never "the registry and the code agree"
   beside one). A new bound gets its OWN code and line in en / pt / es, and is said only when it cut something: a false
@@ -1110,17 +1114,98 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   only: a selection or tween target, `.find`, `d3.select`, `gsap.to`, `scrollTo` — with 6 digits those take colours,
   `picker.select("#1d4ed8")`), an entity, a
   comment (`withoutComments`: outside a stylesheet a `/*` opens one only at a line's start, after a blank or `{ ( ; ,` —
-  `accept="image/*"` holds none). A colour equal to a registry token's value carries `token` (`colorKey`). Not read: a size
+  `accept="image/*"` holds none). What a raw value IS against the project's tokens: Raw values against the scale, below
+  (1.37: a colour equal to a registry token's value TEXT carried `token`). Not read: a size
   in a JSX `style={{…}}` object. The line walk (1.37) is `viewLines(text, rel)` — rawValuesOf's loop head, the ONE walk of a
   view file's lines its readers share (the raw values, the UI checks): a GENERATOR of `{ n (1-based), src (cut at
   DS_LINE_MAX), l (without its comments), css (a stylesheet's line — a `<style>` block's opening and closing lines too) }`.
-  A generator, never a list: rawValuesOf stops at DS_RAW_PER_FILE values and reads no further line (over a list, a
-  20,000-line sheet cost every line — CRIT_1: 1.1 → 6.4 ms; mcp/tests/15-quality-design-system-walks.js times the stop as a
-  ratio against a sheet with no value). Behaviour-preserving when it came: the raw values of 5,256 real view files
-  byte-identical to 1.36's, every earlier assertion unchanged.
+  `rawValuesOf(text, rel)` reads it as a generator: it stops at DS_RAW_PER_FILE values and reads no further line (over a
+  list, a 20,000-line sheet cost every line — CRIT_1: 1.1 → 6.4 ms; mcp/tests/15-quality-design-system-walks.js times the
+  stop as a ratio against a sheet with no value). The FEATURE REPORT (1.38, CRIT_X D5c) walks each file once into a list
+  — `[...viewLines(text, rel)]` — that its readers share, `rawValuesIn(lines, kinds, cut)`, `uiChecksOf(lines, rel)` and
+  `unitsOf`: the UI checks read every line anyway, so the list costs no line the report did not walk (1.37 walked twice).
+  A stylesheet line's piece split is `declarations(l, cb)`, the ONE copy the raw values and the units table share.
+  Behaviour-preserving when it came: the raw values of 5,256 real view files byte-identical to 1.36's, every earlier
+  assertion unchanged (1.37); the list and `declarations` — rawValuesOf / uiChecksOf of 1,962 real view files, 15 feature
+  reports and their finish parts — byte-identical to the F0 tip of 1.38.
+- **Raw values against the scale** (1.38 — engine/design-values.js: the lazy tier's, before design-system.js; pure — no fs,
+  no require, nothing linked) — the feature report judges each raw value against the project's OWN scale, `tokenScale(the
+  registry's rows read with their values, the code's tokens the registry does not name)`, built once a report: the
+  registry's rows first (a value both hold names the registry's token; a name the registry holds keeps the registry's value
+  — the code's is not on the scale). COLOURS (`parseColor`: hex 3 / 4 / 6 / 8, rgb / rgba, hsl / hsla, oklab, oklch —
+  comma or space syntax, % channels, an alpha after `/` or as a 4th argument, a hue in deg / turn / rad / grad, `none` = 0
+  as CSS Color 4 says: Tailwind 4 writes `--color-neutral-900: oklch(20.5% 0 none)`) → OKLab. `token`: the SAME colour —
+  exact within one notation (ΔEOK ≤ 1e-4: float noise, a powerless hue), across two within the rounding of the PAIR as
+  written (0.011 with an HSL side: integer HSL's — `#05787d` = `hsl(183 92% 25%)` at 0.0106; 0.001 otherwise: a hex
+  written as 3-decimal oklch is within 0.0007) — CRIT_2 must-fix 2: one 0.011 for every pair made Tailwind's zinc
+  (`#18181b`, `#09090b`, `#e4e4e7`, `#f4f4f5`) shadcn v4's neutral tokens, 0.003–0.008 apart; alphas within 0.01. `near`
+  (a hint, `{token, delta}`): the NEAREST token within the JND (0.02 ΔEOK), never the first. hwb / lab / lch / `color()` / a
+  named colour are not parsed: the same TEXT names the token (1.37's rule, `colorKey`, moved here; a hex is always parsed
+  now, so its 3-digit spelling-out went). FONTS: a `font-family` STACK (`fontStackOf`: its LAST family a generic one — CSS
+  Fonts 4's closed list —, one that is not, nothing built: `var(`, a Sass / Less variable, an interpolation) by its primary
+  family, against the font tokens of the REGISTRY's rows only — `designValue` drops a code token's stack and the value
+  gate stays (CRIT_2 must-fix 3), so a code `--font-sans` alone reads no font; a stack ending in an emoji font (`…,
+  sans-serif, "Apple Color Emoji"`, Tailwind's own) is none, knowingly. MOTION: a transition / animation declaration
+  (`RE_MOTION_PROP` — the properties that HOLD times and easings; item 1's "motion declared" is another predicate, never one
+  for two rules) or a Tailwind `duration-[…]` / `delay-[…]` / `ease-[…]` (`RE_TW_MOTION`: variants counted, no bracket
+  inside — `ease-[` written 300 times on a line costs one short look each) holding a literal time above 1 ms (`timesOf`:
+  the reduced-motion reset `0.01ms` is never raw, the 1px hairline's precedent) or an easing function (`easingsOf`: a
+  cubic-bezier of four numbers, steps(), linear(); a keyword is none — never asked); `token` when EVERY literal is a
+  duration / easing token's (s → ms; the first time's name), never a nearest (CRIT_2: a loop's period on a 150 / 250 ms
+  scale read as a fixed-duration rule). Nothing built is read (`RE_SIZE_BUILT`: shadcn's `duration-[calc(var(--x)*400ms)]`).
+  A kind is READ only when the scale holds such a token (fonts: a registry row's stack; motion: a duration or easing token,
+  the registry's or the code's): `counts.font` / `counts.motion` exist only then — without them the report is 1.37's shape.
+  SIZES stay raw, never judged (DECISIONS cut size families: on every real shape checked — shadcn's calc() radii, Tailwind's
+  base `--spacing`, Bootstrap's named Sass, Breeze, Tailwind 3's JS config — they decided nothing). Each new kind has its OWN
+  per-file bound, `DS_RAW_PER_FILE` values (a transition-heavy sheet never hides its colours — CRIT_2 must-fix 5), said in
+  the report's `limits` (`font-values` / `motion-values`, the first file it cut); with kinds the early exit waits until
+  each kind is past its bound. Only the LISTED rows and groups are judged (≤ 100 × the scale: no window, no sort).
+  `rawValuesOf(text, rel)` (no kinds) is 1.37's reader, value for value.
+- **Groups** (1.38, the feature report's `groups` / `groupsTotal`) — every value read (past the 50 listed rows too), keyed by
+  what it IS (`groupKey`: a colour notation-free — `#1E40AF`, `#1e40af`, `rgb(30 64 175)` and a `text-[#1e40af]` are one;
+  a stack by its families; a Tailwind utility without its variants; the rest as written), those read twice or more, the
+  most frequent first (a tie in reading order), each `{kind, value (as first written), count, files, at}` judged like a row.
+  Sizes live here: Breeze's `#FF2D20` ×147 in 7 files, `rounded-[10px]` ×10 — the finding a size scale would have made.
+- **Token values — drift and gone** (1.38, the project report's `drift` / `driftTotal`, `gone`) — `registryValues`: a code
+  token whose registry row holds another value IN THE SAME NOTATION (`tokenDrift`: one parsed colour each in one notation,
+  `sameColor` there — `#3b82f6` and `hsl(217 91% 60%)` are not compared, nor zinc's hex and an oklch token: DECISIONS'
+  "differs within a notation", the narrower reading —; or one quantity each with one unit, s → ms — 16px and 1rem are not
+  compared); a reference, several parts, a stack: never. The code's value is its FIRST declaration, and a name the code
+  declares with two values or more is `multi` (scanCode's `firstValue` Map, `again`: a theme's `:root` / `.dark`, two
+  sources, a TWIN global sheet — CRIT_2 must-fix 1, review 7's `order`: a registry written from the second app's main.css)
+  — never compared. Every registry row's value is kept, past the reader's 1,000 (`tokenValues`, as `tokenNames` keeps
+  every name): no registry-tokens limit (CRIT_2's cut). `gone`: the `_Token sources:_` files that are gone, judged as a
+  row's path is (`stalePath`: every doubt not judged — a root-level file, a path whose first folder is gone, one out of the
+  project). NEITHER is part of `inSync` (DECISIONS: what "in sync" compares stays the names, and `dsInSync` says so); the
+  CLI prints a drifted token as the row the code has, then the registry's value and the file.
+- **The units table** (1.38 — the team's convention, a report, never a default) — in design-system.md, found by its header
+  wherever it stands: the first cell Property / Propriedade / Propiedad (`RE_DS_PROPERTY_HEAD`), a column headed Units /
+  Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place) holding at least one CSS unit (`CSS_UNITS`: the
+  CSS Values 4 lengths, `%`, `fr` — a closed list in quality.js, the eager reader's) — a component's props table (`| Property
+  | Type | Default |`) is none (CRIT_2). `dsUnitsTable` → the registry's `units` {rows: [{props (a property or `prefix-*`;
+  never `--x`), units}], unread (a row with no CSS unit or no property, by its first cell), past (rows past `DS_UNIT_ROWS`,
+  50: a count)}, several tables adding up; null without one. The feature report's `units` {findings (50), total,
+  byProperty} — null without a table; never finish, doctor or the brief: `unitsOf` over the file's ONE walk — a declaration
+  whose property has a row (`unitRows`: the exact row, else the LONGEST `prefix-*`; `margin-*` covers `margin`), its FIRST
+  top-level length the row does not allow (`offUnit`: never inside calc() / clamp() / var() — an unclosed one holds the
+  rest —, never 0, a unitless number, a hex colour's digits; one finding a declaration; a custom property or a Sass variable
+  has no row), and a Tailwind arbitrary size by the property it sets (`twProperty`); every finding counted, the first 50
+  made into rows. The third reader of the one walk measured 0.9–1.0× the report without a table on the real corpora,
+  1.0–1.4× on 60 component sheets and ≤ 1.5× when every declaration is a finding (mcp/tests/15-quality-design-system-cost.js:
+  ≤ 1.5× and ≤ 3×); a digit and a "names a property of the table" prefilter measured no gain (1.2× either way) and went.
+  The project report's `unitsTable` {rows, unread, past} | null —
+  never in `inSync`. On the real corpora with a rem / px table: shadcn's typeset.css `em` paddings, Bootstrap's
+  `border-radius: 50%`, Breeze's `rounded-[10px]` — each true to the convention it was given (why it is a report).
+- **DESIGN.md: deferred again** (1.38) — the spec is `version: alpha` and changed after 1.37's design (a `motion` group,
+  nested colour groups, dimensions px / em / rem only); a YAML subset reader is a review series of its own. Its own CLI
+  exports what is read today: `npx @google/design.md export --format css-tailwind DESIGN.md > theme.css` (a token file by
+  name) or DTCG JSON.
 - **spec_finish** (`designSystemFinish`; +ui and a registry, never on the `gateOnly` path) — the raw values as a WARNING, never
   a blocker, and only when the registry holds tokens or names token files (`tokens`: else there is nothing to replace them
-  with) — `finish.designSystemRaw`: the count, the first 3, the call that lists them. A READY written finish appends the
+  with) — `finish.designSystemRaw`: the count, the first 3, the call that lists them. Colours and sizes alone (1.38: the
+  report is called with `{finish: true}` — no font or motion kind, no group, no units walk —, so its total, counts and the
+  four prose files' "raw colours / sizes" stay true: CRIT_2 must-fix 4); its top rows carry the judgment (`token` / `near`).
+  A READY written finish appends the
   design's New components to the registry (`registerComponents`): under the roadmap lock, the registry read AGAIN past the
   call's read cache (`forgetCached` — doctor read it before the lock) and judged by `keys` (past the reader's cap too: no row
   twice); into the component table the file ENDS in when it has a column for the origin (neither the path's nor the
@@ -2231,6 +2316,34 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   rawValuesOf alone 1.03–1.28× the parent on a 20,000-line sheet (within the 1.5× bound); the walker without an observer
   0.94×. Mutation passes: 10 of 10 (one equivalent in output — the pre-existing blank-line skip, a cost guard: 6× on
   20,000 blank lines) and 14 of 14.
+- **1.38.0** (item 2 of the 1.38 round, "tokens against the scale", as DECISIONS cut it — chain T) — first the D5 refactor,
+  behaviour-preserving and alone in its commit (the base chain P rebased on): the feature report walks each view file ONCE
+  into a list its readers share (1.37 walked twice; a units reader would have made three), rawValuesOf keeps its generator,
+  `declarations(l, cb)` is the one copy of a stylesheet line's piece split; its oracle replay against the F0 tip —
+  rawValuesOf and uiChecksOf of 1,962 real view files, 15 feature reports and their finish parts on copies of shadcn v4,
+  Bootstrap 6, Breeze and Tailwind 4 — byte-identical. Then engine/design-values.js, raw values against the scale, groups,
+  drift and gone, the units table (the bullets above). What the critics changed (CRIT_2, CRIT_X): ONE 0.011 tolerance for
+  every notation pair made Tailwind's zinc shadcn's neutrals — the tolerance follows the pair as written; size families on /
+  off / nearest cut (they decided nothing on every real shape checked — ~5 % on the best, cal.com's rem radii — and touched
+  three settled readers); motion `off` / `nearest` cut; the brief's units line cut (it spent the components' budget); fonts
+  from the registry's rows only; finish counts colours and sizes alone; twins feed `multi`; a props table is no units
+  table; drift and gone kept OUT of `inSync` (DECISIONS: 56 assertions pin it, nobody changes it in 1.38); every row's value
+  kept past the reader's cap instead of a registry-tokens limit; DESIGN.md deferred again. tools/list −9 ("raw values").
+  The mutation pass listed its mutants before the fixtures: 121 on the first pass, 109 killed at first — four survivors
+  wanted a fixture (Tailwind's `gap-x` → column-gap and the other utility mappings, `1.005s` = `1005ms` — `1.1s` × 1000 IS
+  1100 in floats —, a motion-only scale for the early exit: a font kind with no value held the loop open, a slot row of a
+  units table), five lines went as equivalent (a hex is always parsed — `colorKey`'s 3-digit spelling-out; a lone family
+  can never be a stack; a motion value always holds a literal; tokenDrift's empty-side check; a units column not found
+  leaves no row), and so did the colour / quantity length bounds (the patterns are anchored, the inputs bounded before
+  them), a utility's bracket slice and the units reader's digit / "names a property of the table" prefilters (timed: 1.2×
+  with or without — no gain). Kept and timed as cost guards: `RE_TW_MOTION`'s bracket-free value (4.4× without, on
+  `ease-[` × 330 a line), finish's `{finish: true}` skipping the units walk and the groups (1.04× / 1.07×). Equivalent and
+  kept: `RE_MOTION_PROP` widened to `transition-property` (no other property holds a time — the closed list DECISIONS
+  names; its anchor IS tested: a custom property `--transition-duration` is never motion). The final replay on the last
+  tree: 125 mutants, 121 killed, the two finish cost guards and that equivalent left. And the 1.37 readers the split moved
+  (declarations' piece rules, rawValuesIn's 1.37 lines, take()) mutated again — 14, 12 killed by the area's older files at
+  first; two wanted a fixture no file had (a value written twice on one line is one value; a colour in a selector's
+  attribute — what a `{` follows — is none): 14 of 14.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
