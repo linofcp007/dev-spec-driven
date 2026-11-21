@@ -71,7 +71,9 @@ the whole library.
   rate limits, contract tests)
 - +ui: `references/ui-design-patterns.md` (design system first and its registry `.specs/steering/design-system.md`,
   component contracts, UI states and the worst case, forms and interaction details, motion, WCAG 2.2 AA and how to
-  test it, i18n, performance budgets)
+  test it, i18n, performance budgets) · `references/ui-code-scan.md` (what `spec_scan {designSystem}` reads in the
+  code and what it doesn't, the UI checks it runs on a feature's files) · `references/ui-responsive.md` (breakpoints,
+  reflow at 320 px, zoom and text size, touch targets, hover, orientation)
 - +obs: `references/observability-patterns.md` (SLOs and burn-rate alerts, telemetry, runbooks, feature flags,
   progressive delivery, operability tests)
 - +data: `references/data-pipeline-patterns.md` (data contracts and schema evolution, quality checks and quarantine,

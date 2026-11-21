@@ -1038,41 +1038,45 @@ exports.run = async ({
     const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
     const ws = (t) => t.replace(/\s+/g, " ");
     const refRaw = (f) => raw("skills", "dev-spec-driven", "references", f);
+    // (1.38.0: the UI checks section moved WHOLE to ui-code-scan.md — read there; the registry slice of ui-design-patterns.md
+    // ends at the next h2)
     const P = refRaw("ui-design-patterns.md"), S = ws(refRaw("steering-templates.md")), T = ws(refRaw("track-checklists.md"));
-    const lines = P.split("\n"), at = lines.findIndex((l) => l.startsWith("### UI checks"));
-    const end = lines.findIndex((l, i) => i > at && /^#+ /.test(l));
-    const checks = at < 0 ? "" : ws(lines.slice(at, end < 0 ? lines.length : end).join("\n"));
+    const scanLines = refRaw("ui-code-scan.md").split("\n"), at = scanLines.findIndex((l) => l.startsWith("### UI checks"));
+    const end = scanLines.findIndex((l, i) => i > at && /^#+ /.test(l));
+    const checks = at < 0 ? "" : ws(scanLines.slice(at, end < 0 ? scanLines.length : end).join("\n"));
+    const lines = P.split("\n"), regAt = lines.findIndex((l) => l.startsWith("### The registry"));
+    const regEnd = lines.findIndex((l, i) => i > regAt && /^## /.test(l));
     const src = raw("mcp", "lib", "engine", "ui-checks.js");
     const rulesSrc = (src.match(/const UI_RULES = \{([^}]*)\}/) || ["", ""])[1];
     const rules = [...rulesSrc.matchAll(/"([a-z-]+)": "([a-z]+)"/g)].map((m) => ({ id: m[1], level: m[2] }));
     const num = (name) => Number(((src.match(new RegExp("const " + name + " = (\\d+)")) || [])[1]));
     const [warnPart, reportPart] = checks.split("In the report alone");
-    const registry = at < 0 ? "" : ws(lines.slice(lines.findIndex((l) => l.startsWith("### The registry")), at).join("\n"));
+    const registry = regAt < 0 || regEnd < 0 ? "" : ws(lines.slice(regAt, regEnd).join("\n"));
     const rows = [
-      ["ui-design-patterns: the UI checks section — every warn rule before 'In the report alone', every report rule after it",
+      ["ui-code-scan: the UI checks section — every warn rule before 'In the report alone', every report rule after it",
         () => rules.length >= 6 && reportPart !== undefined
           && rules.every((r) => (r.level === "warn" ? warnPart : reportPart).includes("`" + r.id + "`"))
           && rules.every((r) => !(r.level === "warn" ? reportPart : warnPart).includes("`" + r.id + "`"))],
-      ["ui-design-patterns: the UI checks — each warn rule's WCAG criterion", () => /`zoom-disabled` \([^)]*WCAG 1\.4\.4\)/.test(checks)
+      ["ui-code-scan: the UI checks — each warn rule's WCAG criterion", () => /`zoom-disabled` \([^)]*WCAG 1\.4\.4\)/.test(checks)
         && /`img-no-alt` \([^)]*1\.1\.1\)/.test(checks) && /`outline-removed` \(.*?2\.4\.7\)/.test(checks)
         && /`click-no-keyboard` \(.*?2\.1\.1\)/.test(checks) && /`paste-blocked` \([^)]*3\.3\.8 at a sign-in or code step, a usability defect elsewhere\)/.test(checks)],
       // (review 1 of 1.37: a role or a key handler alone reaches nothing — D1; a named handler is followed by no rule, but only
       // paste's is never judged — D3; a linter's suppression is not read, a CSS finding sits on its declaration — S11, D8)
-      ["ui-design-patterns: the UI checks — click-no-keyboard asks a tabindex (a role or a key handler alone is not enough)", () =>
+      ["ui-code-scan: the UI checks — click-no-keyboard asks a tabindex (a role or a key handler alone is not enough)", () =>
         /`click-no-keyboard` \(a click handler on an element the keyboard cannot reach: no `tabindex` — a role or a key handler alone is not enough — 2\.1\.1\)/.test(checks)],
-      ["ui-design-patterns: the UI checks — a +ui feature's finish warning, never a blocker; one more warning registry or not",
+      ["ui-code-scan: the UI checks — a +ui feature's finish warning, never a blocker; one more warning registry or not",
         () => /For a \+ui feature, a warning of `spec_finish` too, never a blocker/.test(checks)
           && /The UI checks' findings are one more warning, registry or not\./.test(registry)],
       // (review 2 of 1.37: on its line or the line above whatever that line holds — S5's narrowing out —, the comment forms
       // that silence and a class's own line — R2-D1, R2-F4, R2-D5; what is not judged — R2-S6; the focus search's bound, the
       // engine's, and what a bound cut in the report alone — R2-E1, R2-E2)
-      ["ui-design-patterns: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
+      ["ui-code-scan: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
         () => /a comment `ui-check-off: <rule-id> <why>` on its line \(a declaration's, a class's\) or the line above — `\/\/`, `\/\* \*\/`, `<!-- -->`, not Blade's or Twig's: counted, never listed; only this comment silences \(a linter's is not read\) — an `<a>` a parent gives its href \(Next's `legacyBehavior`\) is one to silence/.test(checks)],
-      ["ui-design-patterns: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
+      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
         && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")
         && checks.includes("the project's first " + num("DS_FOCUS_SHEETS") + " stylesheets — past them, named unjudged — 2.4.7")
         && /In the report alone: `transition-all` \(kits ship it\), what a bound cut\./.test(checks)],
-      ["ui-design-patterns: the Review row points to the UI checks", () => /— and the \*\*UI checks\*\* of the same files \(below\)/.test(registry)],
+      ["ui-design-patterns: the Review row points to the UI checks (ui-code-scan.md since 1.38.0)", () => /— and the \*\*UI checks\*\* of the same files \(\[ui-code-scan\.md\]\(ui-code-scan\.md\)\)/.test(registry)],
       // (1.37.0 review 1: the whole component — never a variant or a prop —, a replacement not retired itself, the notes' name in
       // the registry's letter case; review 2: punctuation after the word, never a word; the replacement named on its own)
       ["ui-design-patterns: `_Deprecated:_` — the marker, its replacement rule, credited to Impeccable", () =>
@@ -1109,6 +1113,44 @@ exports.run = async ({
       rows.push([f + ": the +ui paragraph — the UI checks (run, warn never block, ui-check-off), `_Deprecated:_`, the floor", () => res.every((re) => re.test(t))]);
     }
     for (const [label, check] of rows) all("1.37 docs pass — " + label, { holds: check });
+  }
+
+  { // 1.38.0 F0a — the UI references split (CRIT_X D1 / D2): ui-design-patterns.md's code-scan table and its UI checks section
+    // moved WHOLE to references/ui-code-scan.md, its Responsiveness section to references/ui-responsive.md; pointers left
+    // behind. The table's whitespace-folded text is 1.37.0's to the byte (its sha1 below): an edit of the table is deliberate
+    // and re-pins it, saying why. (The UI checks section is pinned clause by clause by the 1.37 docs pass above.)
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ").trim();
+    const refRaw = (f) => raw("skills", "dev-spec-driven", "references", f);
+    const bytes = (f) => Buffer.byteLength(refRaw(f), "utf8");
+    const P = refRaw("ui-design-patterns.md"), C = refRaw("ui-code-scan.md"), R = refRaw("ui-responsive.md");
+    const cl = C.split("\n"), tAt = cl.findIndex((l) => l === "**What the code scan reads — and what it doesn't.**");
+    let tEnd = tAt + 2;
+    while (tEnd < cl.length && cl[tEnd].startsWith("|")) tEnd++;
+    const table = tAt < 0 ? "" : ws(cl.slice(tAt, tEnd).join("\n"));
+    const sha = require("crypto").createHash("sha1").update(table).digest("hex");
+    const pl = P.split("\n"), rAt = pl.findIndex((l) => l === "## Responsiveness");
+    const rEnd = pl.findIndex((l, i) => i > rAt && /^## /.test(l));
+    const resp = rAt < 0 ? "" : pl.slice(rAt + 1, rEnd).join("\n").trim();
+    const regAt = pl.findIndex((l) => l.startsWith("### The registry")), regEnd = pl.findIndex((l, i) => i > regAt && /^## /.test(l));
+    const registry = ws(pl.slice(regAt, regEnd).join("\n"));
+    const I = ws(refRaw("index.md")), uiLine = (I.match(/- \+ui: .*?(?= - \+obs:)/) || [""])[0];
+    const tool = (refRaw("tooling-reference.md").split("\n").find((l) => l.startsWith("| `spec_scan {designSystem: true}`")) || "");
+    all("1.38.0 F0a: the code-scan table and the UI checks moved whole to ui-code-scan.md, Responsiveness to ui-responsive.md — pointers left behind, the two caps (got " +
+      JSON.stringify({ sha, table: table.length, scan: bytes("ui-code-scan.md"), responsive: bytes("ui-responsive.md") }) + ")", {
+      tableIdentical: () => sha === "77ce56108eac96e5204db8426e73e44bad3aa276" && table.length === 18970,
+      checksMoved: () => /^### UI checks — defects whatever the taste$/m.test(C) && !/^### UI checks/m.test(P),
+      tableGone: () => !P.includes("What the code scan reads — and what it doesn't.") && !/^\| Components \|/m.test(P),
+      onePointer: () => /^What the code scan reads and what it doesn't, and the UI checks it runs: \[ui-code-scan\.md\]\(ui-code-scan\.md\)\.$/m.test(P),
+      registryPointers: () => /\(what it reads, and what it doesn't: \[ui-code-scan\.md\]\(ui-code-scan\.md\)\)/.test(registry)
+        && /\(what is never "gone": \[ui-code-scan\.md\]\(ui-code-scan\.md\)\)/.test(registry) && !/\(below\)|: below\)|the table below\)/.test(registry),
+      responsivePointer: () => resp.split("\n").length === 2 && /\[ui-responsive\.md\]\(ui-responsive\.md\)\.$/.test(resp) && /^## Responsiveness$/m.test(R),
+      backLinks: () => /\[ui-design-patterns\.md\]\(ui-design-patterns\.md\)/.test(C) && /\[ui-design-patterns\.md\]\(ui-design-patterns\.md\)/.test(R),
+      caps: () => bytes("ui-code-scan.md") <= 30000 && bytes("ui-responsive.md") <= 12000,
+      index: () => /`references\/ui-code-scan\.md`/.test(uiLine) && /`references\/ui-responsive\.md`/.test(uiLine)
+        && /component contracts, UI states and the worst case, forms and interaction details, motion/.test(uiLine),
+      tooling: () => /What the scan reads and what it doesn't: `references\/ui-code-scan\.md`/.test(tool),
+    });
   }
 
   // Release hygiene: the three version fields agree.

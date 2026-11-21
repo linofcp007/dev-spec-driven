@@ -1083,7 +1083,7 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   that is right: a root-level file, a path whose first folder is gone as a whole, `_shared/` (`dsCell` drops the
   underscore), a row naming a gone file AND one that is there ("was src/old/Card.jsx, now src/components/Card.tsx" —
   review 3's "the first word decides" called it stale; so `Gone.tsx — replaced by Card.tsx` is not stale either). The
-  user docs list them (ui-design-patterns.md → the scan table).
+  user docs list them (ui-code-scan.md → the scan table).
 - **The seed** — `steering_scaffold design-system.md` (`scaffoldSteeringFile`) writes the stub with the code's rows in place of
   its slot rows (`designSystemSeed` → `seeded` {components, tokens}); a table the code has no row for keeps its slot; nothing
   found: the plain stub; a project template for the file wins; never over an existing file.
@@ -1226,7 +1226,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
 A +ui feature's view / style files read for anti-patterns that are wrong whatever the taste — engine/ui-checks.js (LAZY,
 after design-system.js), the feature report's `uiChecks` and ONE finish warning. FEATURE level only in 1.37: the project report
 reads no view file for them (CRIT_X decision 3 — one shared project pass is 1.38's). Every doubt reads as "not judged": a
-wrong finding sends a team to fix code that is right.
+wrong finding sends a team to fix code that is right. The user docs: `references/ui-code-scan.md` (the scan table — what the
+code scan reads and what it doesn't — and the UI checks section; ui-design-patterns.md keeps one pointer line to it, its
+registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`.
 - **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the feature report AND finish's warning, never a blocker:
   `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1), `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked`
   (3.3.8 at a sign-in or code step — W3C scopes it to authentication; elsewhere a usability defect, Vercel's "never block
@@ -2329,3 +2331,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   plain JSX and the checks add nothing over a walk with a do-nothing observer (46–53 ms vs 47–52 ms). A stylesheet's ratio is
   now to the larger of plain JSX and that shared walk (≤ 3×), with a coarse ≤ 10× plain JSX for a walk that stopped being
   linear; a mutant that pays O(text) on every block past the depth bound still fails it. The CHANGELOG says so.
+- **1.38.0** (F0a, the UI references split — CRIT_X D1 / D2) — ui-design-patterns.md (59,965 B against its 60,000 cap) could
+  not take 1.38's prose: its code-scan table (19,201 B) and its UI checks section moved WHOLE to the new
+  `references/ui-code-scan.md` (cap 30,000), its Responsiveness section to the new `references/ui-responsive.md` (cap
+  12,000), each byte-identical (17-docs pins the table's whitespace-folded sha1; the 1.37 docs pass reads the checks there,
+  its registry slice ending at the next h2); the pointers that said "below" name the new file, and so do
+  tooling-reference's spec_scan row and index.md's +ui line.
