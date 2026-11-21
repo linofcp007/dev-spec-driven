@@ -113,9 +113,10 @@ name, `ui` or `components` (`antd Table` for `antd 5`; `flowbite-react`, `evergr
 where no manifest it reads holds the package (a CDN, an undeclared sub-folder two levels down) — or say the short
 name yourself, `Bootstrap 5 (Bootstrap)`. The name of a framework taken from a bare number or a note (`React 19`,
 `Headless UI (react)`) cites only there too) and, in a component's row, `_From: checkout_` (the feature that built it)
-and `_Deprecated: use DataGrid_` (retires the whole component — never write it for a variant or a prop: in any cell after
-its name, `_Deprecated_` alone too, any punctuation after the word; the replacement is the first other listed component,
-not retired itself, its first 20 words name — after Impeccable, Apache-2.0).
+and `_Deprecated: use DataGrid_` (retires the whole component, never a variant or a prop: in any cell after its name,
+`_Deprecated_` alone too, punctuation after the word, never a word; the replacement is the first other listed
+component, not retired itself, its first 20 words name on its own (`use Dialog`, not `Dialog.Root`) — after Impeccable,
+Apache-2.0).
 
 | Moment | What happens |
 |---|---|

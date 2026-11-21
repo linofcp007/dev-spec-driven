@@ -1068,17 +1068,17 @@ exports.run = async ({
       ["ui-design-patterns: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose body holds a control or a slot, a spread/.test(checks)
         && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")],
       ["ui-design-patterns: the Review row points to the UI checks", () => /— and the \*\*UI checks\*\* of the same files \(below\)/.test(registry)],
-      // (1.37.0 review 1: the whole component — never a variant or a prop —, any punctuation after the word, a replacement not
-      // retired itself, the notes' name in the registry's letter case)
+      // (1.37.0 review 1: the whole component — never a variant or a prop —, a replacement not retired itself, the notes' name in
+      // the registry's letter case; review 2: punctuation after the word, never a word; the replacement named on its own)
       ["ui-design-patterns: `_Deprecated:_` — the marker, its replacement rule, credited to Impeccable", () =>
-        /`_Deprecated: use DataGrid_` \(retires the whole component — never write it for a variant or a prop: in any cell after its name, `_Deprecated_` alone too, any punctuation after the word; the replacement is the first other listed component, not retired itself, its first 20 words name — after Impeccable, Apache-2\.0\)/.test(registry)],
+        /`_Deprecated: use DataGrid_` \(retires the whole component, never a variant or a prop: in any cell after its name, `_Deprecated_` alone too, punctuation after the word, never a word; the replacement is the first other listed component, not retired itself, its first 20 words name on its own \(`use Dialog`, not `Dialog\.Root`\) — after Impeccable, Apache-2\.0\)/.test(registry)],
       ["ui-design-patterns: doctor's ui-deprecated — warns, never refuses, silent once the notes name the replacement", () =>
         /`ui-deprecated` warns — never refuses — when a Reuse \/ Extend row names a component the registry marks `_Deprecated:_`, naming its replacement; silent once the row's notes name it in the registry's letter case/.test(registry)],
       ["ui-design-patterns: one Vercel credit line, naming the UI checks too", () => (P.match(/Vercel's Web Interface Guidelines \(MIT\)/g) || []).length === 1
         && /After Vercel's Web Interface Guidelines \(MIT\) — the UI checks' rules too\./.test(P)],
       ["steering-templates: `_Deprecated:_` among the English markers, and its bullet", () =>
         /\(`_Token sources:_`, `_Libraries:_`, `_From:_`, `_Deprecated:_`\): they are what the engine reads/.test(S)
-          && /`_Deprecated: use DataGrid_` in any cell after a component's name retires it \(`_Deprecated_` alone too, any punctuation after the word\): doctor's `ui-deprecated` warns when a design still reuses or extends it, naming the first other listed component, not retired itself, the text names — silent when the row's notes name that one as this file writes it \(`DataGrid`, not "the data grid"\)\. It retires the WHOLE component: write a retired variant or prop without the marker\./.test(S)],
+          && /`_Deprecated: use DataGrid_` in any cell after a component's name retires it \(`_Deprecated_` alone too, or a punctuation mark after the word — a word makes it a note: `_Deprecated in favour of DataGrid_` retires nothing\): doctor's `ui-deprecated` warns when a design still reuses or extends it, naming the first other listed component, not retired itself, the text names — by its name alone \(`use Dialog`, not `Dialog\/Sheet`, `Dialog\.Root` or a path\) — silent when the row's notes name that one, alone too, as this file writes it \(`DataGrid`, not "the data grid"\): a capitalised word reads as the name — to keep a component on purpose, write the name in a code span or a tag\. It retires the WHOLE component: write a retired variant or prop without the marker\./.test(S)],
       ["track-checklists: finish — the UI checks' warnings fixed or silenced with a reason", () =>
         /the UI checks' warnings \(`spec_scan \{designSystem: true, name\}`\) fixed or silenced with a reason/.test(T)],
     ];

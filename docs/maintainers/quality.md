@@ -359,13 +359,19 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   (`stripEnds`, never a trailing-run replace). And in a
   component's row `_From: <feature>_` (`RE_DS_FROM` → the entry's `from`, left out of its `notes`).
 - **`_Deprecated: use X_`** (1.37, `dsDeprecated`) — the team retires a component in its row: English-stable, any case, in
-  any cell after the name — an `_…_` emphasis whose first word is Deprecated, whatever follows the word that is no letter or
-  digit (`_Deprecated — use X_`, `_Deprecated. Use X._`, `_Deprecated (v3): use X_`): `_Deprecated_` alone,
-  `_Deprecated<text>_`, the label alone italic (`_Deprecated:_ <text>`, `_Deprecated._ <text>` — the emphasis holds no letter
-  or digit after the word: the text runs to the cell's end, as `_Libraries:_ a` does) or never closed (to the cell's end).
-  ONE case-insensitive regex over the cell as written (`RE_DS_DEPRECATED`): it starts the cell or follows a blank, `(` or `*`
-  (never `snake_deprecated_flag`, `config_deprecated: true`), and a letter or a digit after the word (`_deprecatedness`,
-  `_deprecated2`) or a `_` that does not close it (`_deprecated_flag`) makes another word; its closing `_` is one the
+  any cell after the name — an `_…_` emphasis whose first word is Deprecated and whose first NON-BLANK character after the
+  word is no letter or digit, a punctuation mark (`_Deprecated — use X_`, `_Deprecated—use X_`, `_Deprecated - use X_`,
+  `_Deprecated. Use X._`, `_Deprecated (v3): use X_`): `_Deprecated_` alone, `_Deprecated<text>_`, the label alone italic
+  (`_Deprecated:_ <text>`, `_Deprecated._ <text>` — the emphasis holds no letter or digit after the word: the text runs to
+  the cell's end, as `_Libraries:_ a` does) or never closed (to the cell's end). A WORD after it, past any blanks, makes a
+  note: an italic phrase about something else (`_deprecated props removed in v3_`, `` `dense` prop (_deprecated in v2_) ``,
+  a successor's `replaces the _deprecated Table_` — read as a marker, it retired the successor and voided every `use
+  DataGrid`), and so `_Deprecated in favour of X_` and `_Deprecated since 2.0: use X_` too (the cost; the user docs say a
+  word makes a note). ONE case-insensitive regex over the cell as written (`RE_DS_DEPRECATED`): it starts the cell or
+  follows a blank, `(` or `*` (never `snake_deprecated_flag`, `config_deprecated: true`), and a letter or a digit right
+  after the word (`_deprecatedness`, `_deprecated2`), a `_` that does not close it (`_deprecated_flag`) or a `-` / `/` /
+  `.` before a letter or digit — the name reader's joiners: `_deprecated-flag_`, a path cell `_deprecated/Table.tsx` or
+  `_deprecated.tsx`, whose path stays a path — makes another word; its closing `_` is one the
   cell's end, a blank or one of `.,;:)*` follows (`use Data_Grid now` keeps its `_`); the row's first marker counts, a later
   occurrence after one that is none is still looked at. Deprecated is a property of the NAME: a name listed twice is marked
   by its first row that carries the marker (the replacement from that row, the marker put first in the entry's notes —
@@ -375,12 +381,15 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   first `DS_DEPRECATED_WORDS` (20) words, a word or two adjacent ones (`dsNameIn`) — the pair first, and only when blanks
   alone part them: `use Data Grid` is DataGrid even beside a `Data` row, `use Card. Header` is Card; a word is a hyphenated
   / slashed / dotted / snake name WHOLE (`RE_DS_NAME_WORD`: `data-grid` is DataGrid, `@mui/x-data-grid-pro` and
-  `@/components/ui/dialog` name none) —, as written there; "" when it names none (no word list says which word is the
-  replacement: a listed name is). The marker is cut out of whichever cell holds it — a path stays a path, a variants cell
-  stays the variants — and the notes show it FIRST as one text, `_Deprecated<the first DS_DEPRECATED_SHOWN (120)
-  characters after the word, as written>_` (`dsDeprecatedShown`): `dsCell` drops a closing `_` after a letter and the
-  notes' 200-character bound cuts what comes last, so the brief quotes the marker whole. Linear: each `_` looked at once (a
-  hostile-vs-plain ratio check: 1,000 cells of `_Deprecated: ` and 190 `_a`). A token row's marker is not read; nor
+  `@/components/ui/dialog` name none — and so neither do `Dialog/Sheet`, `Dialog.Root`, `src/DataGrid.tsx` or
+  `DataGrid-based`: the user docs say to name the replacement by its name alone, `use Dialog`, and the notes' silence the
+  same), read in NFC (an accent written as a combining mark split the word) —, as written there; "" when it names none (no
+  word list says which word is the replacement: a listed name is). The marker is cut out of whichever cell holds it — a
+  path stays a path, a variants cell stays the variants — and the notes show it FIRST as one text, `_Deprecated<the first
+  DS_DEPRECATED_SHOWN (120) characters after the word, as written>_` (`dsDeprecatedShown`): `dsCell` drops a closing `_`
+  after a letter and the notes' 200-character bound cuts what comes last, so the brief quotes the marker whole. Linear:
+  each `_` looked at once, each blank run after the word once (a hostile-vs-plain ratio check: 1,000 cells of
+  `_Deprecated: ` and 190 `_a`). A token row's marker is not read; nor
   `__Deprecated__` (bold), `*Deprecated*` or a marker in the NAME cell (`Table _Deprecated_` is a name); `_Deprecated_: x`
   is the bare marker (the colon outside the italics, as the other markers never read it). The marker retires the WHOLE
   component, wherever it stands: a deprecated variant or prop is written without it (the user docs say so — a
@@ -437,14 +446,18 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `designSystem` (the state) — a note, never unclean, and never for a missing registry (doctor says that once, not every save).
 - **Doctor `ui-deprecated`** (1.37, `designSystemDeprecatedCheck`; the `DOCTOR_CHECKS` entry right after `ui-design-system`,
   phase 2, the same `uiDesigned` feature) — each component a Reuse / Extend row names that the registry's `deprecated` holds
-  is a WARN naming its replacement (`quality.dsDeprecatedItem`: `'Table' (use DataGrid)`, the name alone when the marker
-  names none); silent when the row's notes name that replacement AS A COMPONENT — `dsNameIn` over the WHOLE notes, a word or
-  two adjacent ones, in the letters the registry writes its name with (`dsLetters`: letters and digits as written, case and
-  accents kept — the replacement's row name, the marker's spelling for one past the rows read in full): `Dialog lacks a
-  sheet`, `` `Dialog` ``, `<Dialog />`, `the Data Grid lacks grouping` silence — the team keeps this one on purpose and says
-  why —, `the delete-confirmation dialog` does not (component names are common nouns); never with no replacement. A code
-  span or a tag is no exception to the case (`<data-grid>` does not silence DataGrid): the letters are kept wherever they
-  stand; once
+  is a WARN naming its replacement as the registry writes it — the replacement's row name, the marker's spelling for one past
+  the rows read in full (`quality.dsDeprecatedItem`: `'Table' (use DataGrid)` for `_Deprecated: use data-grid_`, the name
+  alone when the marker names none): the name the warn prints is the one that silences it, ONE expression for both. Silent
+  when the row's notes name that replacement AS A COMPONENT — `dsNameIn` over the WHOLE notes, a word or two adjacent ones,
+  in those letters (`dsLetters`: letters and digits as written, case and accents kept, in NFC — an NFD `á` is the
+  registry's `á`): `Dialog lacks a sheet`, `` `Dialog` ``, `<Dialog />`, `the Data Grid lacks grouping` silence — the team
+  keeps this one on purpose and says why —, `the delete-confirmation dialog` does not (component names are common nouns);
+  never with no replacement. A code span or a tag is no exception to the case (`<data-grid>` does not silence DataGrid): the
+  letters are kept wherever they stand — and a capitalised word reads as the name wherever it stands too, a sentence's or a
+  cell's first one (`Dialog to confirm the delete`, `Select a country` silence: no sentence-start rule — the user docs say
+  to write a component kept on purpose in a code span or a tag); the notes name it by its name alone, as the marker does
+  (`kept: Dialog.Root lacks a sheet` does not silence: the word is `Dialog.Root`); once
   per component, a silenced row hiding no later one; a New row is not asked (`listed` is ui-design-system's); six named,
   the rest counted. It runs only while the registry holds a deprecated row (no registry: never — the applies asks it
   first) and never on a feature with a finish recorded (`state.finished`: what it built is history; an archived feature
@@ -2120,6 +2133,30 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   identical). The mutation list came before the fixtures: 34 mutants (19 reader, 7 replacement, 4 silence, 4 brief), 33
   killed (the brief's reuse-section guard by 15-quality's R review 2 fixture); the survivor — `dsLetters`' NFD
   normalization (no case asked accents to fold) — deleted as dead.
+- **1.37.0 review 2** (the registry: 4 LOW, two of them review 1's own regressions) — R2-1: RB-3's "whatever follows the
+  word that is no letter" let a BLANK open the marker, wider than the docs' "punctuation after the word": `_deprecated props
+  removed_`, `` `dense` prop (_deprecated in v2_) `` and a successor's `replaces the _deprecated Table_` retired their rows
+  (the successor's voided every `use DataGrid`, and a 1.36 project's doctor and spec_upgrade gained an unsilenceable
+  warn), `_deprecated-flag_` and a path cell `_deprecated/Table.tsx` too (the path emptied). Narrowed to the docs: the first
+  non-blank character after the word is no letter or digit, and the name reader's joiners (`-`, `/`, `.`) before a letter
+  or digit make a longer name — the owner's decision named `-`; `/` and `.` were taken with it, the narrower reading,
+  because 457d3da read the path cell and `_deprecated.tsx` right and the joiners are one property (RE_DS_NAME_WORD's), not
+  a list. The cost, documented: `_Deprecated in favour of X_` and `_Deprecated since 2.0: use X_` are notes again (the
+  `favour` fixture moved to "not a marker"). R2-3: the warn printed the marker's spelling (`use data-grid`) while only the
+  registry's (`DataGrid`) silenced it; it prints the one expression the silence compares. And review 1's survivor came back
+  as a regression: with `dsLetters`' NFD step deleted, notes writing `á` as `a` + a combining mark warned (457d3da's folded
+  key silenced them) — and the mark is no letter, so `dsNameIn` split the word in two: the fix is NFC in `dsNameIn` (one
+  form for the words, which also gives a marker written so its NFC row back) and in `dsLetters` (a registry name written
+  so); accents and case are still kept. R2-2 (prose): RB-5's whole-name word drops `Dialog/Sheet`, `Dialog.Root`, a path
+  and `DataGrid-based` as replacements and as silencing notes — the user docs say to name the replacement by its name alone.
+  R2-4 (prose): a capitalised sentence start silences (`Dialog to confirm the delete`) — documented with the advice to
+  write a component kept on purpose in a code span or a tag; no sentence-start rule. The reviewer's scripts replayed on
+  0753c76, 457d3da and the fix: every difference from 0753c76 is R2-1's (the notes and paths 457d3da read, `favour` /
+  `since` / `_Deprecated in favour of Card_` notes) or R2-3's (the warn's spelling, the NFD notes); a 1.36 project passes
+  doctor and spec_upgrade as on 457d3da. The mutation list came before the fixtures: 16 mutants (9 on the regex — the blank
+  run, each joiner, a joiner across blanks or before no letter, an em dash joined —, 3 on the printed name, 4 on the NFC
+  steps), 16 killed, each by its own fixture. Lesson: a mutant that survives is a shape no fixture asks for — before
+  deleting its line as dead, ask the parent tree whether that shape was right there.
 - **1.37** (the base the UI checks read through, before them) — `viewLines`, rawValuesOf's loop head as a GENERATOR (CRIT_1
   must-fix 3: over a list, the 200-value early exit still read every line), and styleTokens' walker handing its structure
   to an observer (block / statement / close events — CRIT_1 must-fix 2: no second prelude tracker). Both proved
