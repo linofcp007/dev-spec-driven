@@ -135,7 +135,13 @@ afastaram. O `dev-spec design-system <feature>` (`spec_scan {designSystem: true,
 verificações de interface sobre os ficheiros de vista e de estilos da feature — defeitos que nenhum gosto desculpa, como o
 zoom bloqueado, uma imagem sem texto alternativo ou um clique a que o teclado não chega: numa feature +ui são mais um
 aviso do `finish`, com ou sem registo, nunca um bloqueio, e um comentário `ui-check-off: <rule-id>` com o motivo, na
-linha do problema ou na de cima, silencia-o. Uma linha do registo marcada `_Deprecated: use DataGrid_` retira o seu componente: o `doctor`
+linha do problema ou na de cima, silencia-o. Sem uma feature, o `dev-spec design-system` faz também o inventário das
+verificações de interface do projeto, contadas por regra em todos os ficheiros de vista e de estilos (uma linha
+`_UI checks off: <rule-id> (motivo)_` no design-system.md desliga uma em todo o lado), o relatório de uma feature
+indica, para cada cor, fonte ou temporização fixa, o token da escala do projeto que ela já é, e os dois acabam nos
+breakpoints do projeto, as larguras que a revisão visual captura. O `ui-states` do `doctor` avisa (uma nota no
+tamanho s) quando a matriz de estados do design deixa um estado sem linha ou a célula de uma vista por preencher.
+Uma linha do registo marcada `_Deprecated: use DataGrid_` retira o seu componente: o `doctor`
 avisa quando um design ainda o reutiliza ou estende, e indica o que o substitui. Uma tarefa +ui que muda o que se vê tem
 uma revisão visual (exceto nos tamanhos xs / s) — capturas de ecrã do que foi construído comparadas com a referência do
 design por um revisor que só vê as imagens —, e uma vista sem referência é avaliada no mínimo de acessibilidade

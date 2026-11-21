@@ -1366,10 +1366,11 @@ project's switch (the `_UI checks off:_` marker). Every doubt reads as "not judg
 wrong finding sends a team to fix code that is right. The user docs: `references/ui-code-scan.md` (the scan table — what the
 code scan reads and what it doesn't — and the UI checks section; ui-design-patterns.md keeps one pointer line to it, its
 registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`.
-- **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the feature report AND finish's warning, never a blocker:
+- **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the reports (a feature's, the project inventory) and
+  finish's warning, never a blocker:
   `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1), `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked`
   (3.3.8 at a sign-in or code step — W3C scopes it to authentication; elsewhere a usability defect, Vercel's "never block
-  paste": review 1 of 1.37), `font-size-viewport` (1.4.4, failure F94 — 1.38); `report` — the feature report alone:
+  paste": review 1 of 1.37), `font-size-viewport` (1.4.4, failure F94 — 1.38); `report` — the reports alone, never finish:
   `transition-all` (certain as syntax, a guideline as a finding: shadcn's own
   Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
 - **font-size-viewport** (1.38) — text sized in viewport units ALONE, which zooming does not enlarge. `viewportOnly(value)`:

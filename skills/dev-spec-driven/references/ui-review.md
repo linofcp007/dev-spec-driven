@@ -53,7 +53,7 @@ answers `n/a` is never captured:
 | What | Width | Captured as |
 |---|---|---|
 | Each designed state | one: the reference's; no reference, 320 | a pair where the reference shows it, else a build capture judged on the floor |
-| The worst case | each of the project's breakpoints | `<view>--worst--w<width>--build.png` and its `.json`; at 320, `floor-320` |
+| The worst case | each of the project's breakpoints | `<view>--worst--w<width>--build.png` and its `.json`; at 320, `floor-320` for a view with no reference |
 | `floor-zoom`, `floor-focus` | the table below | a view with no reference |
 
 - **Widths:** the project's breakpoints, at most 6, 320 first — ui.md's `- Breakpoints:` line, else the code's, else
