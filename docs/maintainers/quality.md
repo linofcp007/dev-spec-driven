@@ -2323,3 +2323,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   quote-cut token above); R3-RD1 / RD2 26 of 26 — 25 at first, the survivor (`alone`'s `>` as `>=`, the comparison the
   search's end shares) a shape no fixture asked for: a sheet of exactly 384K characters is read and parsed whole (its focus
   style counts), now pinned — it also catches the budget comparison's `>=`.
+- **1.37.0, the release's Docker run** — the hostile-cost check failed on node:18-alpine alone (`nested`, a sheet of nothing
+  but `{`: 6–7× plain JSX under the suite's load, 3.2–3.9× quiet), and 457d3da measured the same there (3.6–3.9× quiet: the
+  first Docker run had passed on its one re-measure). Not the checks: on Node 18 `styleTokens` alone walks that sheet at ~3×
+  plain JSX and the checks add nothing over a walk with a do-nothing observer (46–53 ms vs 47–52 ms). A stylesheet's ratio is
+  now to the larger of plain JSX and that shared walk (≤ 3×), with a coarse ≤ 10× plain JSX for a walk that stopped being
+  linear; a mutant that pays O(text) on every block past the depth bound still fails it. The CHANGELOG says so.

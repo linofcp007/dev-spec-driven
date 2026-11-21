@@ -17,8 +17,8 @@ reference, the worst case of each view, and the prose a view task reads. No new 
   count and the checks' own `limits`. Five rules warn: `zoom-disabled` (a viewport `<meta>` or Next's viewport export that
   blocks zoom — WCAG 1.4.4), `img-no-alt` (a rendered `<img>` with no text alternative — 1.1.1), `outline-removed` (an
   outline removed on an element, `*`, `:focus` or under the element's own focus variant — a `focus-within:` or a `group-`
-  / `peer-` / `has-` / `in-` one is a doubt, its bracket spelling too (`has-[:focus-visible]:`) — while neither the feature's files nor the project's first 48 stylesheets hold
-  a focus style — one that draws: `box-shadow: none`, `focus:ring-0`, an `outline-offset` or an `@apply outline-none` is
+  / `peer-` / `has-` / `in-` one is a doubt, its bracket spelling too (`has-[:focus-visible]:`) — while neither the
+  feature's files nor the project's first 48 stylesheets hold a focus style — one that draws: `box-shadow: none`, `focus:ring-0`, an `outline-offset` or an `@apply outline-none` is
   none; past that bound the removals are named, unjudged, in the report and in finish's warning — 2.4.7),
   `click-no-keyboard` (a click handler on an element the keyboard cannot reach — no `tabindex`; a role or a key handler
   alone is not enough — whose content holds text and no control or component — 2.1.1), `paste-blocked` (an inline paste
@@ -33,9 +33,12 @@ reference, the worst case of each view, and the prose a view task reads. No new 
   file reaches says what it cut in `uiChecks.limits`, with a count (a line past 2,000 characters, an element's tag — or one
   naming a click or paste handler — or a click's content read past 30 lines, a file's 200 findings — still counted —, a
   file's 256K, the project's first 48 stylesheets read and 384K characters parsed for a focus style: that bound names the
-  outline removals it left unjudged — and whether one sheet alone was longer —, and finish says so); hostile input runs within 3× plain JSX of the same size — a file
-  whose every line is a finding up to ~4× (a 256K HTML file of an `<img>` a line: 4.0–4.3×). On the 2,591 view files of ten public UI repositories: 17 img-no-alt, 3 zoom-disabled and 11 click-no-keyboard findings,
-  all real; no outline-removed finding (each repository with a candidate also holds focus styles).
+  outline removals it left unjudged — and whether one sheet alone was longer —, and finish says so); hostile input runs
+  within 3× plain JSX of the same size — a file whose every line is a finding up to ~4× (a 256K HTML file of an `<img>` a
+  line: 4.0–4.3×), and a stylesheet within 3× of the CSS walk the registry already makes over it (on Node 18 that walk alone
+  of a sheet of nothing but `{` is ~3× plain JSX). On the 2,591 view files of ten public UI repositories: 17 img-no-alt, 3
+  zoom-disabled and 11 click-no-keyboard findings, all real; no outline-removed finding (each repository with a candidate
+  also holds focus styles).
 - **A registry component marked deprecated (`_Deprecated: use X_`).** A component row of `.specs/steering/design-system.md`
   may carry `_Deprecated_` or `_Deprecated` and its text after a punctuation mark (`_Deprecated: use X_`, `_Deprecated —
   use X_`; a word after it makes a note — `_Deprecated in favour of X_` retires nothing; English-stable, any case) in any
