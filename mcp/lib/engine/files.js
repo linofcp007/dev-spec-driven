@@ -951,13 +951,18 @@ function readFileHead(file, maxChars) {
 // caller is done (always call it: a caller may stop early) }. Where an open is slow — Windows with on-access antivirus
 // scanning each file it opens, ~0.65 ms a file, and the design-system scan opens up to 5,000 a report: 3.2 s of opens on
 // mantine, 0.9 s four at a time — the first AHEAD_PROBE files are read in sequence and timed; when they average
-// AHEAD_SLOW_US or more and AHEAD_MIN files remain, AHEAD_WORKERS worker threads open the rest in parallel, worker j the
+// AHEAD_SLOW_US or more, AHEAD_MIN files remain AND those left would take longer to open in sequence than the pool takes to
+// start (their count × the probe's average ≥ AHEAD_START_US — review 1 of 1.38: 8 workers started for the 64–300 files of a
+// small tree's UI pass cost more than reading them all), AHEAD_WORKERS worker threads open the rest in parallel, worker j the
 // files j, j + W, …, each at most AHEAD_WINDOW files ahead of the one taken (what it holds in memory). A worker that gives
 // nothing for AHEAD_STALL_MS — or none that starts — leaves the rest to readFileHead, in sequence. What the caller gets
 // never depends on it: the same bytes (one bounded read of the file's first maxChars × 4), decoded the same way
 // (decodeText), cut the same way, in the same order. DEV_SPEC_TEST_AHEAD (tests only): "on" — the pool for any list past
 // the probe —, "off", "fail" — no worker starts.
-const AHEAD_PROBE = 32, AHEAD_MIN = 64, AHEAD_SLOW_US = 200, AHEAD_WORKERS = 8, AHEAD_WINDOW = 4, AHEAD_STALL_MS = 2000;
+// AHEAD_START_US, measured once (2026-11-21, Windows 11, 24 cores, ~70 other node processes running): 32 + 64 paths that do
+// not exist (an open fails at once: nothing for the pool to save) read with the pool forced on vs off, interleaved, median of
+// 21, three runs — the pool's start 68–81 ms (single runs 44–153 ms).
+const AHEAD_PROBE = 32, AHEAD_MIN = 64, AHEAD_SLOW_US = 200, AHEAD_START_US = 80000, AHEAD_WORKERS = 8, AHEAD_WINDOW = 4, AHEAD_STALL_MS = 2000;
 // (the worker: st[0] says stop; st[1 + 2j] counts the files worker j gave, st[2 + 2j] the ones taken of them)
 const AHEAD_SRC = [
   "const { workerData: d } = require('worker_threads');",
@@ -987,7 +992,8 @@ function readFileHeads(files, maxChars) {
     const t0 = process.hrtime.bigint();
     const text = readFileHead(files[k++], chars);
     spent += process.hrtime.bigint() - t0;
-    if (k === AHEAD_PROBE && files.length - k >= AHEAD_MIN && mode !== "off" && (mode === "on" || mode === "fail" || spent >= BigInt(AHEAD_PROBE * AHEAD_SLOW_US * 1000))) pool = aheadPool(files.slice(k), chars, mode === "fail");
+    if (k === AHEAD_PROBE && files.length - k >= AHEAD_MIN && mode !== "off" && (mode === "on" || mode === "fail"
+      || (spent >= BigInt(AHEAD_PROBE * AHEAD_SLOW_US * 1000) && BigInt(files.length - k) * spent >= BigInt(AHEAD_PROBE * AHEAD_START_US * 1000)))) pool = aheadPool(files.slice(k), chars, mode === "fail");
     return text;
   };
   return { next, stop: () => { if (pool) pool.stop(); } };
