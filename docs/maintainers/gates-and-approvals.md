@@ -536,8 +536,8 @@ here. "r5 review" is 1.23's fifth review.
 - **1.37** — `ui-deprecated`, the first warn on an approved artifact with no stamp: it reports a team edit to the registry
   after the approval, not a release's new rule, so there is nothing an older approval could have been held to (quality.md →
   History, Design-system registry); `ui-design-system` and it share one `applies` (`uiDesigned`).
-- **1.38.0** — `ui-states`, the second warn with no stamp: the design (ITEM_4) stamped every design approval `uiStates` and
-  passed a design approved without it as legacy; once the critique anchored the matrix to the scaffold's 1.38 a11y header
+- **1.38.0** — `ui-states`, the second warn with no stamp: the design (ITEM_4) stamped every design approval (a uiStates
+  key, never built) and passed a design approved without it as legacy; once the critique anchored the matrix to the scaffold's 1.38 a11y header
   cell, no design approved before could be flagged, and the stamp, its history record and the legacy branch were cut
   (CRIT_4). Its `applies` is ui-deprecated's without the registry: `uiDesigned`, no finish recorded.
 

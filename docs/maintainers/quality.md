@@ -1232,8 +1232,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
 - **The units table** (1.38 — the team's convention, a report, never a default) — in design-system.md, found by its header
   wherever it stands: the first cell Property / Propriedade / Propiedad (`RE_DS_PROPERTY_HEAD`), a column headed Units /
   Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place) holding at least one CSS unit (`CSS_UNITS`: the
-  CSS Values 4 lengths, `%`, `fr` — a closed list in quality.js, the eager reader's) — a component's props table (`| Property
-  | Type | Default |`) is none (CRIT_2). `dsUnitsTable` → the registry's `units` {rows: [{props (a property or `prefix-*`;
+  CSS Values 4 lengths, `%`, `fr` — a closed list in quality.js, the eager reader's) — a component's props table
+  (`| Property | Type | Default |`) is none (CRIT_2). `dsUnitsTable` → the registry's `units` {rows: [{props (a property or `prefix-*`;
   never `--x`), units}], unread (a row with no CSS unit or no property, by its first cell), past (rows past `DS_UNIT_ROWS`,
   50: a count)}, several tables adding up; null without one. The feature report's `units` {findings (50), total,
   byProperty} — null without a table; never finish, doctor or the brief: `unitsOf` over the file's ONE walk — a declaration
@@ -1598,8 +1598,8 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   is exported for one fixture (a truncated walk takes 20,001 view files: a scan of the same files marked truncated).
 - **Motion and the fact `no-reduced-motion`** (1.38, `UI_FACTS`) — `uiChecksOf`'s `motion` {count: the LINES declaring
   motion, line: the first}, never a finding, from its OWN predicate (CRIT_X D5b: never transitionAll's, never item 2's
-  `RE_MOTION_PROP` — the properties that hold times): `@keyframes` (a vendor prefix; `RE_KEYFRAMES` anywhere in a block's
-  prelude after a blank or `>` — a `<style>` block's first rule carries its tag line in its prelude), `motionOf`: `animation`
+  `RE_MOTION_PROP` — the properties that hold times): `@keyframes` (a vendor prefix; `RE_KEYFRAMES`, anchored, on the
+  prelude `sheetChecks` reads — a `<style>` block's first rule without its tag line, `RE_STYLE_TAG`), `motionOf`: `animation`
   / `animation-name` naming one (never `none`, a global keyword, a lone `var()`), a `transition` item naming `transform` /
   `translate` / `rotate` / `scale` for a LITERAL time over 0 (the first time is the duration: `transform 0s 1s` is none;
   never `transition-property` — it holds no time —, opacity, a colour, `all`), `scroll-behavior: smooth`; `twMotion`:
@@ -2694,9 +2694,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   no read was cut (CRIT_1 must-fix 6). The marker's unreadable entry has a `why` of its own (CRIT_1 must-fix 10); `past-bound`
   says the 50-entry bound. Cut too: the `:is` narrowing (backlog), the MB rendering and the `DS_FOCUS_SHEETS` rename.
   Found while building: a `<style>` block's first rule carries its `<style scoped>` line in its prelude, so `@keyframes` there
-  was missed — `RE_KEYFRAMES` reads the at-rule after a blank or `>` (the 1.37 rules that test `prelude[0] === "@"` — the
-  conditional / print / reduced-motion blocks of font-size-viewport and transition-all — have the same blind spot on a
-  `<style>`'s FIRST block; left as it is: a 1.37 / F0c shape, not this chain's).
+  was missed — and so, since 1.37, was every at-rule the rules test with `prelude[0] === "@"`: an SFC whose FIRST block is
+  `@media print`, a `prefers-reduced-motion` one or a conditional block (`@media`, `@supports`) gave outline-removed,
+  transition-all and font-size-viewport false positives. Fixed in this chain, a droppable commit the owner kept (c9b4e322,
+  then 128054e9 took out its pre-test — no output, no measurable cost): `sheetChecks` reads every block's prelude without a
+  leading `<style…>` tag (`RE_STYLE_TAG`) — the at-rule, the selector and the keyframes alike, `RE_KEYFRAMES` back to its
+  anchored form (A stylesheet's structure, above).
   Measured: on the nine clones no fact (six declare motion — 21–449 lines —, each mentions reduced motion in a view file);
   cal.com's inventory 59 in 1,117 files (zoom-disabled 3, img-no-alt 2, click-no-keyboard 11, transition-all 43 — the
   design's numbers), vben 60, shadcn-svelte 65, shadcn-ui 89 (transition-all alone), Bootstrap and Foundation 0. G1′ (the
@@ -2710,10 +2713,22 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   limit's first file by path, the one character past the read, the fact under the pass's bound alone — view-size had masked
   it), now killed; one line deleted (the `<style>` strip's pre-test: no output, no measurable cost); one equivalent — the
   bound's `>=` as `>` (the read-ahead's slice holds the same 5,000: the 5,001st reads as nothing and cuts one step later).
+- **1.38.0** (the docs pass, after the five chains merged) — ui-code-scan.md took the release's user prose (the project's UI
+  checks and the fact, the marker, raw values against the scale, token values, the units table, DESIGN.md's export route,
+  the breakpoints' and ui-states' pointers), steering-templates.md the units table's example and the marker's line,
+  tooling-reference.md one rewrite of the spec_scan {designSystem} row. mcp/tests/17-docs.js's "1.38.0 Z docs" block reads
+  every rule / fact id, limit code, bound and `why` code from the engine's SOURCE and runs each prose example through the
+  engine (the steering example IS a units table and an applied marker to the registry's reader; the tooling row names every
+  key both report shapes return on a project built to fill each 1.38 part). Where chain D's prose and the merged engine
+  disagreed, the prose was corrected: ui-design-patterns.md's matrix paragraph (a row's n/a alone among its VIEW cells, the
+  label in any language and never after a word, a dash / TBD open, every anchored table, the columns from the a11y one on
+  unjudged) and its registry table (a colour that IS a token's in any notation; "in sync" of names, drift and gone beside
+  it), ui-responsive.md's breakpoints (the first source with a width ≥ 320, ui.md's first line outside code and comments,
+  its slot, a top-level `@theme`, the two resets, past six, who prints them, the values not read).
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table
-  holding two listed rows, judged the a11y column, and a `uiStates` approval stamp with a `legacy` branch. The critique
+  holding two listed rows, judged the a11y column, and an approval stamp (a uiStates key, never built) with a `legacy` branch. The critique
   (CRIT_4) ran that reader on real shapes: a data-fetching state machine (`State | Event | Next state`) read 13 no-row, a
   trailing Notes column 15 gaps, the Worst case's empty a11y cell one — so the matrix is the scaffold's own table, anchored by
   its localized a11y header cell, the views between, the a11y column unjudged; the stamp went (no 1.37 design can hold that

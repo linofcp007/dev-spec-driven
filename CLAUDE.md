@@ -53,9 +53,11 @@ file states the CURRENT rules first; its `## History` at the end keeps how they 
 - **`docs/maintainers/quality.md`** — before changing steering amendments, cross-feature criteria, the glossary, the
   design's trade-offs / risks / reuse checks (the m / l Reuse gate), the constraint nudge, the critical flows (their nudge,
   doctor warns and everyday-sense cues), the brief's Reuse section, the duplicate-code detector or the design-system registry
-  (`.specs/steering/design-system.md`, doctor's `ui-design-system` / `ui-deprecated`, spec_scan {designSystem}) or the UI
-  checks (engine/ui-checks.js): Spec quality · Design trade-offs and risks · Reuse & Integration and clean code ·
-  Duplicate-code detector · Design-system registry · UI checks.
+  (`.specs/steering/design-system.md`, doctor's `ui-design-system` / `ui-deprecated`, spec_scan {designSystem}; raw values
+  against the scale, token drift and the units table — engine/design-values.js —, the breakpoints — engine/breakpoints.js),
+  the UI checks (engine/ui-checks.js — the project UI inventory, the `_UI checks off:_` marker) or the UI state matrix
+  (doctor's `ui-states`): Spec quality · Design trade-offs and risks · Reuse & Integration and clean code · Duplicate-code
+  detector · Design-system registry · UI checks · UI state matrix.
 - **`docs/maintainers/claude-code-integration.md`** — before changing a hook, a command name, guard mode, the approval
   guard, the status line, user defaults, the dev-spec project probe or the plan-mode bridge: Hooks and commands · Guard
   mode · Human approval guard · Claude Code integration.
@@ -104,7 +106,7 @@ codes (`step`, `code`, `unverifiedReason`, check ids) never change, while messag
 **The module rule (1.18), in short:** a name an engine module needs at LOAD time comes from a destructured `require()`
 marked `// load time` (an acyclic graph); every other one is a bare `let` bound by `__link(E)`; shared mutable state is
 `CTX` (`engine/ctx.js`). A new module goes into `engine/index.js` `MODULES` (`LAZY`: the tier loaded on first use —
-dupes.js, design-system.js, ui-checks.js, import/) — details: architecture.md → The module rule.
+dupes.js, design-values.js, design-system.js, ui-checks.js, breakpoints.js, import/) — details: architecture.md → The module rule.
 
 **i18n:** every user-facing string lives in `mcp/lib/i18n/*` — `en.js` · `pt.js` · `es.js` hold the same keys (EN is the
 reference), assembled by the `mcp/lib/i18n.js` facade; pt-BR is DERIVED from pt (`i18n/pt-br.js`, `toPtBr`), never
