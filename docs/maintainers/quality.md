@@ -2435,5 +2435,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   6) keeps every language's labels out of an English doctor. The oracle replay (the same 32 +ui features on 1.37.0, the F0
   tip and this chain): the only differences are the new check — a pass with `usNone` on every 1.37 shape (prose, the guide's
   own table, a state machine), `usOk` on a full matrix at 1–3 views, the gap a warn at m / l / no size and a note at s — and
-  spec_upgrade listing it (attention unchanged). Mutation pass: see the release notes of the chain (the list written before
-  the fixtures, in 15-quality-ui-states.js's order).
+  spec_upgrade listing it (attention unchanged). Mutation pass (the list written before the fixtures): 50 of 50 killed, each
+  by the fixture of its rule — one only after a fix (the no-size fixture passed `undefined` to a helper whose default size
+  was m: "no size warns" was never asked); one cost guard timed apart, not a mutant: the cell cut (`US_CELL`) — without it
+  the matrix reader is 2–4× slower on 1 MB cells and the check ~1.8× (269–307 ms vs 143–165 ms, a 3 MB section), linear
+  either way, so the 2× ratio fixture holds both. Two fixtures in 16-conventions-build own the corpus key: a corpus without
+  it renders; `localeLoaded` drops the cached labels with the corpus.

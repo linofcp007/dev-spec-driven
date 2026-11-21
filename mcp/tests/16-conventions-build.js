@@ -285,10 +285,13 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
         Object.assign(out, { source: E.builtinCorpusSource(), probe: slots(text), state: S.artifactState({ text }) });
       } else if (mode === "locale") { // the corpus trusted first; then pt.js reworded + rebuilt; then Portuguese loads
         out.first = slots(design("en")).length > 0 && E.builtinCorpusSource();
+        const undo = () => E.uiStateNames().labels.filter(([id]) => id === "undo").map(([, l]) => l); // 1.38: +ui's state labels, from the corpus
+        out.undoBefore = undo();
         edit("mcp/lib/i18n/pt.js", "[o que já faz por esta feature]", "[o que faz hoje por esta feature]");
+        edit("mcp/lib/i18n/pt.js", "undo: \"Desfazer\"", "undo: \"Anular a ação\"");
         out.build = rebuild();
         const pt = design("pt"); // the NEW pt.js — the code this process runs from now on
-        Object.assign(out, { source: E.builtinCorpusSource(), fresh: pt.includes("[o que faz hoje por esta feature]"), probe: slots(pt) });
+        Object.assign(out, { source: E.builtinCorpusSource(), fresh: pt.includes("[o que faz hoje por esta feature]"), probe: slots(pt), undoAfter: undo() });
       } else if (mode === "version") { // nothing asked yet — package.json gets another version, then the build runs again
         const p = path.join(clone, "package.json");
         const gen = [path.join(lib, "engine", "corpus.generated.json"), path.join(clone, "hooks", "stop-claims.generated.json")];
@@ -331,6 +334,10 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
       later.pt.source === "file" && Array.isArray(later.pt.probe) && js(later.pt.probe) === js(rLoc.probe),
       "1.20 review: a language file loaded on demand AFTER the corpus was trusted and changed since the engine loaded (pt.js reworded + rebuilt) drops the corpus — rendered from the code the process now runs: the new slot of its fresh Portuguese scaffold is a placeholder, as a process started after the update says from the new corpus (got " +
       js({ rLoc, later: later.pt }) + ")");
+    ok(Array.isArray(rLoc.undoBefore) && rLoc.undoBefore.includes("Desfazer") && !rLoc.undoBefore.includes("Anular a ação") &&
+      Array.isArray(rLoc.undoAfter) && rLoc.undoAfter.includes("Anular a ação") && !rLoc.undoAfter.includes("Desfazer") && rLoc.undoAfter.includes("Undo"),
+      "1.38: the state labels doctor's ui-states reads (uiStateNames, from the trusted corpus) are dropped with it — after pt.js changed under the process, its new Portuguese label is read (got " +
+      js([rLoc.undoBefore, rLoc.undoAfter]) + ")");
 
     // The bundle (built on demand — here into tmp, for this clone's mcp/lib): the same modules in one file — the modules'
     // namespace, the corpus it embeds (source 'bundle'), their own paths (engineVersion's package.json, the approval guard's

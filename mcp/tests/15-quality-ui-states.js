@@ -192,7 +192,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const scaffold = (lang) => I.design({ name: "Orders", tracks: ["core", "ui"], label: "core +ui", slug: "orders", summary: "", size: "m" }, lang);
     const noTodo = scaffold("en").replace(/^> \*\*TODO\*\*.*\n/gm, "");
     const written = noTodo.replace("## [UI] UI States\n", "## [UI] UI States\nThe orders list, state by state.\n");
-    const st = { s: check(gappy, "s"), m: check(gappy, "m"), l: check(gappy, "l"), none: check(gappy, undefined), fresh: check(scaffold("en")), noTodo: check(noTodo),
+    const st = { s: check(gappy, "s"), m: check(gappy, "m"), l: check(gappy, "l"), none: E.uiStatesCheck(gappy, "en", {}), fresh: check(scaffold("en")), noTodo: check(noTodo),
       written: check(written), na: check(states("").replace("Each view, state by state.\n\n", "n/a — this feature shows no screen at all\n")), missing: check("# Design\n\n## Overview\nx\n") };
     all("1.38 ui-states — a gap WARNS at size m / l and with no size, is a pass with a note at s; the scaffold's untouched matrix (its TODO kept or not) is the section unwritten — once a line is the author's, its 16 blank rows are gaps; an n/a section has no view; a missing one is ui-sections' (got " +
       js(Object.fromEntries(Object.entries(st).map(([k, v]) => [k, [v.status, v.state, v.detail.slice(0, 110)]]))) + ")", {
