@@ -204,4 +204,21 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       strings: () => said.every((x) => x.every(Boolean)),
     });
   }
+
+  { // 1.38: the `_UI checks off:_` marker on the CLI — the rules it switched off (each with the findings it hid and its reason) and
+    // each entry not applied (why), after the silenced count: in the project's inventory and in a feature's report; every language
+    const g = feature("off", "en", ["src/checkout/Checkout.tsx"]);
+    write(g.p, ".specs/steering/design-system.md", "# Design System\n\n_UI checks off: transition-all (kit code, reviewed), img-no-alt, outline-remove (typo)_\n");
+    write(g.p, "src/checkout/Checkout.tsx", CHECKOUT);
+    const rp = runIn(["design-system", "--project", g.p]), rf = runIn(["design-system", g.slug, "--project", g.p]);
+    const T = MSG("en").cliOutput;
+    const offLine = T.uiOff("transition-all 1 — kit code, reviewed");
+    const after = (out, a, b) => out.split("\n").indexOf(b) === out.split("\n").indexOf(a) + 1;
+    const why = ["en", "pt", "pt-BR", "es"].map((l) => { const W = MSG(l).cliOutput.uiOffIgnored; return ["no-reason", "unknown-rule", "unreadable", "past-bound"].every((k) => typeof W[k] === "function" && W[k]("img-no-alt", 50).includes("img-no-alt")) && W["past-bound"]("x", 50).includes("50") && MSG(l).cliOutput.uiOff("a 1 — b").includes("a 1 — b"); });
+    all("1.38 design-system (CLI): `_UI checks off:_` — the off line (rule, the findings it hid, its reason) after the silenced count, then each entry not applied, why — in the project's inventory and a feature's report; every language has the lines (got " + js([rp.out.slice(-600), rf.out.slice(-700), why]) + ")", {
+      project: () => rp.code === 0 && after(rp.out, T.uiSilenced(1), offLine) && after(rp.out, offLine, T.uiOffIgnored["no-reason"]("img-no-alt")) && after(rp.out, T.uiOffIgnored["no-reason"]("img-no-alt"), T.uiOffIgnored["unknown-rule"]("outline-remove")),
+      feature: () => rf.code === 0 && after(rf.out, T.uiSilenced(1), offLine) && rf.out.includes(T.uiOffIgnored["unknown-rule"]("outline-remove")) && !rf.out.includes("  transition-all  "),
+      strings: () => why.every(Boolean),
+    });
+  }
 };

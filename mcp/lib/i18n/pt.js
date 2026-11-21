@@ -1624,6 +1624,15 @@ const msg = {
       uiFact: {
         "no-reduced-motion": (n, at) => `  ▲ o código declara movimento — uma animação, uma transição de transform ou um scroll suave (${n} ${n === 1 ? "local" : "locais"}, o primeiro: ${at}) — e nenhum dos ficheiros de vista do projeto lidos menciona movimento reduzido: oferecer uma variante reduzida — @media (prefers-reduced-motion: reduce), o motion-reduce: / motion-safe: do Tailwind (WCAG 2.3.3, AAA)`,
       },
+      // (o marcador `_UI checks off:_` do projeto em design-system.md — list: `<regra> <quantas escondeu> — <motivo>`, unidas por `; `;
+      // e: uma entrada não aplicada, como o relatório a nomeia; n: as entradas lidas)
+      uiOff: (list) => `  (desligadas no projeto — _UI checks off:_ em design-system.md: ${list})`,
+      uiOffIgnored: {
+        "no-reason": (e) => `  ▲ _UI checks off:_ indica ${e} sem um motivo entre parênteses — não aplicada: escrever \`${e} (porquê)\``,
+        "unknown-rule": (e) => `  ▲ _UI checks off:_ indica ${e}, que não é uma verificação de interface nem um facto do projeto — não aplicada`,
+        unreadable: (e) => `  ▲ _UI checks off:_ contém "${e}", que não segue \`<id-da-regra> (motivo)\` — não aplicada`,
+        "past-bound": (e, n) => `  ▲ _UI checks off:_ é lido até às primeiras ${n} entradas — "${e}" e as seguintes não são aplicadas`,
+      },
       dsTokensNew: (n) => `  tokens no código, fora do registo (${n}) — uma linha por cada:`,
       dsPending: (list) => `  no código, construídos por uma feature ainda não concluída (entram no registo no finish dela): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,

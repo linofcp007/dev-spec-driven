@@ -28,12 +28,12 @@ let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, desi
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
   isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
   stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep,
-  uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass;
+  uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass, uiOff;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
   isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
   stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns,
-  fenceStep, uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass } = E); }
+  fenceStep, uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass, uiOff } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
@@ -3173,8 +3173,8 @@ function pendingNew(projectDir) {
 // {files}, limits, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} |
 // null: its design names no row), problems ([{code, name, near?, text}] — doctor's ui-design-system findings), viewFiles, raw
 // (the first DS_LIST: [{file, line, kind: color | size, value, token? (a registry token of that colour)}]), counts: {color,
-// size}, total, uiChecks (1.37 — {findings (the first DS_LIST: [{rule, level, file, line, value}]), total, byRule, silenced, limits}:
-// engine/ui-checks.js), newComponents ([{name, path, registered}]), scanned, limits, truncated }. Stable keys, English; the CLI
+// size}, total, uiChecks (1.37 — {findings (the first DS_LIST: [{rule, level, file, line, value}]), total, byRule, silenced, off?,
+// offIgnored? (1.38: the registry's `_UI checks off:_` — only when it holds an entry), limits}: engine/ui-checks.js), newComponents ([{name, path, registered}]), scanned, limits, truncated }. Stable keys, English; the CLI
 // renders it.
 // `limits`: the bounds that CUT what was read — [{code, read, file?}], code: files (the walk's file cap) · token-files (a
 // token file found the DS_TOKEN_FILES sources full) · token-candidates (files named like a token file left unread past
@@ -3196,11 +3196,12 @@ const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files
 // is 70–85 % of the pass, CRIT_X D4): the walk's view files that pass uiViewFile, the stylesheets first (a pass a bound cuts
 // has read the focus styles it could), then the shorter path; each file's first DS_READ_CHARS characters, as the feature
 // report reads them (one more asked for: `over`); DS_UI_FILES files / DS_UI_CHARS characters at most — `ui-files` then.
-// Never in a feature report, finish or the seed. Its limits never reach the report's `limits`, `truncated` or `inSync`.
-function uiProject(scan) {
+// Never in a feature report, finish or the seed. Its limits never reach the report's `limits`, `truncated` or `inSync`. reg: the
+// registry (its `_UI checks off:_` marker — uiOff).
+function uiProject(scan, reg) {
   const order = (a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
   const list = scan.views.filter((x) => uiViewFile(x.rel)).sort((a, b) => RE_STYLE_EXT.test(b.rel) - RE_STYLE_EXT.test(a.rel) || a.rel.length - b.rel.length || order(a, b));
-  const pass = uiProjectPass({ size: DS_READ_CHARS, line: DS_LINE_MAX });
+  const pass = uiProjectPass({ size: DS_READ_CHARS, line: DS_LINE_MAX }, uiOff(reg)); // (1.38: the marker's rules off)
   const heads = readFileHeads(list.slice(0, DS_UI_FILES).map((x) => x.full), DS_READ_CHARS + 1);
   let n = 0, chars = 0, cut = false;
   try {
@@ -3253,7 +3254,7 @@ function designSystemReport(projectDir, opts = {}) {
     stale: stale.slice(0, DS_LIST), staleTotal: stale.length,
     newTokens: newTokens.slice(0, DS_LIST), newTokensTotal: newTokens.length, newSources, newLibraries,
     inSync: !!reg && !limits.length && !missing.length && !stale.length && !newTokens.length && !newSources.length && !newLibraries.length,
-    ...(opts.uiPass ? { uiChecks: uiProject(scan) } : {}), // (1.38: the operation's opt-in — the engine's default reads no view file)
+    ...(opts.uiPass ? { uiChecks: uiProject(scan, reg) } : {}), // (1.38: the operation's opt-in — the engine's default reads no view file)
     scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
 }
 // The feature's part: its usage rows against the registry, the raw values in its view files (its _Implements:_ view / style
@@ -3308,7 +3309,7 @@ function featureReport(projectDir, root, f, reg, scan) {
   // (an outline removal stands only while no focus style exists: in the files read, else in the project's stylesheets — ALL of
   // them, never the name-ranked token candidates; read only when a candidate asks — CRIT_1 must-fix 4)
   const readRels = new Set(checked.map((c) => c.rel));
-  const uiChecks = uiChecksReport(checked, () => uiFocusPass(scan.views.filter((x) => RE_STYLE_EXT.test(x.rel) && !readRels.has(x.rel))), DS_LIST);
+  const uiChecks = uiChecksReport(checked, () => uiFocusPass(scan.views.filter((x) => RE_STYLE_EXT.test(x.rel) && !readRels.has(x.rel))), DS_LIST, uiOff(reg));
   // (the bounds of this read, before the checks' own — review 1 of 1.37: each says what it cut, with a count and the first
   // file: view-size, a file longer than DS_READ_CHARS; line-length, the lines viewLines cut at DS_LINE_MAX)
   const named = (code, read, list) => (list.length ? [{ code, read, count: list.reduce((a, x) => a + x[1], 0), file: list[0][0] }] : []);

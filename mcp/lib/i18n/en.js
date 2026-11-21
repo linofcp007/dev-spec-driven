@@ -1687,6 +1687,15 @@ const msg = {
       uiFact: {
         "no-reduced-motion": (n, at) => `  ▲ the code declares motion — an animation, a transform's transition or smooth scrolling (${n} ${n === 1 ? "place" : "places"}, the first: ${at}) — and none of the project's view files read mentions reduced motion: offer a reduced variant — @media (prefers-reduced-motion: reduce), Tailwind's motion-reduce: / motion-safe: (WCAG 2.3.3, AAA)`,
       },
+      // (the project's `_UI checks off:_` marker in design-system.md — list: `<rule> <count hidden> — <reason>`, `; `-joined; e: an entry
+      // not applied, as the report names it; n: the entries read)
+      uiOff: (list) => `  (off for the project — _UI checks off:_ in design-system.md: ${list})`,
+      uiOffIgnored: {
+        "no-reason": (e) => `  ▲ _UI checks off:_ names ${e} without a reason in parentheses — not applied: write \`${e} (why)\``,
+        "unknown-rule": (e) => `  ▲ _UI checks off:_ names ${e}, no UI check or project fact — not applied`,
+        unreadable: (e) => `  ▲ _UI checks off:_ holds "${e}", not \`<rule-id> (reason)\` — not applied`,
+        "past-bound": (e, n) => `  ▲ _UI checks off:_ is read up to its first ${n} entries — "${e}" and the ones after it are not applied`,
+      },
       dsTokensNew: (n) => `  tokens in the code, not in the registry (${n}) — a row each:`,
       dsPending: (list) => `  in the code, built by an unfinished feature (its finish adds them): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,

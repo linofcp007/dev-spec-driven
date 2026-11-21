@@ -216,6 +216,45 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // the marker `_UI checks off: <rule-id> (reason)_` in design-system.md: ids validated against UI_RULES ∪ UI_FACTS (F0c's
+    // font-size-viewport taken), any case; the reason what the outer parentheses hold, commas too; an entry with no reason, an
+    // unknown id or another shape is NOT applied and said (why); a marker in a comment or a fence applies nothing; an applied
+    // rule (or the fact) is hidden from the inventory — counted in `off`, never in total / byRule / facts
+    const MARKER = lines("# Design System", "", "_UI checks off: Outline-Removed (what-input: mouse, touch only), img-no-alt, img-no-alt (), click-no-keyboard ( ), outline-remove (typo), transition-all: kit code, no-reduced-motion (a motion setting of our own), font-size-viewport (the full-bleed hero), outline-removed (a second time)_",
+      "", "<!-- _UI checks off: zoom-disabled (commented)_ -->", "", "```", "_UI checks off: paste-blocked (fenced)_", "```");
+    // (what-input's demo: a modality scope over `*:focus` — no syntax tells it from a page scope, the marker switches it off)
+    const files = { ".specs/steering/design-system.md": MARKER, "src/demo.css": "[data-whatintent='mouse'], [data-whatintent='touch'] {\n  *:focus {\n    outline: none;\n  }\n}\n",
+      "src/Hero.tsx": lines("export const Hero = () => (", "  <main>", "    <meta name=\"viewport\" content=\"width=device-width, user-scalable=no\" />", "    <img src=\"/a.png\" />", "    <div onClick={go}>open</div>",
+        "    <p className=\"text-[5vw] animate-in\">404</p>", "    <input onPaste={(e) => e.preventDefault()} />", "  </main>", ");") };
+    const p = project("marker", files);
+    const reg = S.designSystemReport(p).registry, u = inv(p);
+    const control = inv(project("marker-control", Object.assign({}, files, { ".specs/steering/design-system.md": "# Design System\n" })));
+    all("1.38 project UI checks: `_UI checks off:_` — Outline-Removed (any case) and the fact applied with their reasons (a comma inside the parentheses kept), F0c's font-size-viewport taken; a bare id, `()`, `( )`, an unknown id, `id: text` not applied and said; the first of an id twice; a commented or fenced marker applies nothing; each off rule counted, never in total / byRule / facts (got " +
+      js({ u, control: [control.byRule, control.facts.length] }) + ")", {
+      off: () => js(u.off) === js([{ rule: "outline-removed", reason: "what-input: mouse, touch only", count: 1 }, { rule: "no-reduced-motion", reason: "a motion setting of our own", count: 1 },
+        { rule: "font-size-viewport", reason: "the full-bleed hero", count: 1 }]),
+      ignored: () => js(u.offIgnored) === js([{ entry: "img-no-alt", why: "no-reason" }, { entry: "img-no-alt", why: "no-reason" }, { entry: "click-no-keyboard", why: "no-reason" },
+        { entry: "outline-remove", why: "unknown-rule" }, { entry: "transition-all: kit code", why: "unreadable" }]),
+      hidden: () => js(u.byRule) === js({ "zoom-disabled": 1, "img-no-alt": 1, "click-no-keyboard": 1, "paste-blocked": 1 }) && u.total === 4 && js(u.facts) === "[]",
+      control: () => js(control.byRule) === js({ "zoom-disabled": 1, "img-no-alt": 1, "outline-removed": 1, "click-no-keyboard": 1, "paste-blocked": 1, "font-size-viewport": 1 }) && control.facts.length === 1,
+      noMarker: () => !("off" in control) && !("offIgnored" in control) && reg.exists === true,
+    });
+  }
+
+  { // the marker's bounds: DS_MARKER_ENTRIES (50) entries read — the 51st said `past-bound` (with the bound) and not applied —, a
+    // reason cut at DS_CELL_MAX (200); an entry the reason of which is only past the bound is never applied silently
+    const entries = Array.from({ length: 50 }, (_, i) => "img-no-alt (reason " + i + ")").concat(["click-no-keyboard (the 51st)"]);
+    const p = project("marker-bounds", { ".specs/steering/design-system.md": "# Design System\n\n_UI checks off: " + entries.join(", ") + "_\n\n_UI checks off: zoom-disabled (a later line)_\n",
+      "src/A.tsx": "export const A = () => <div onClick={go}>open <img src=\"/a.png\" /></div>;\n" });
+    const u = inv(p);
+    const long = inv(project("marker-long", { ".specs/steering/design-system.md": "_UI checks off: img-no-alt (" + "x".repeat(300) + ")_\n", "src/A.tsx": IMG }));
+    all("1.38 project UI checks: the marker reads 50 entries — the 51st and every later one not applied, said once with the bound; a reason is cut at 200 characters (got " + js({ off: u.off, ignored: u.offIgnored, byRule: u.byRule, long: long.off.map((o) => o.reason.length) }) + ")", {
+      bound: () => js(u.off) === js([{ rule: "img-no-alt", reason: "reason 0", count: 1 }]) && js(u.offIgnored) === js([{ entry: "click-no-keyboard (the 51st)", why: "past-bound", read: 50 }]),
+      later: () => js(u.byRule) === js({ "click-no-keyboard": 1 }),
+      cut: () => js(long.off.map((o) => o.reason.length)) === js([200]) && long.total === 0,
+    });
+  }
+
   { // G1′ (CRIT_X D4, the decisions): the pass costs at most 1.5× a bare read of its files plus uiChecksOf of the same texts in
     // memory — measured at the same moment, interleaved, on a real-shaped tree with a Sass-heavy share (Bootstrap-like partials:
     // parsing unminified CSS is most of a Sass tree's pass — CRIT_1, 5.5× a bare read there): what the pass adds is its own

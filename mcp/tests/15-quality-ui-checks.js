@@ -839,6 +839,37 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38: the project's `_UI checks off:_` marker hides a rule PROJECT-WIDE — the feature report's findings, total, byRule never
+    // hold it (counted in `off`, the rules alone: the fact is the inventory's), an inline-silenced one stays `silenced`, a finding
+    // past a file's cap is counted there too, the focus search never runs for an off outline-removed (49 sheets: no focus-sheets),
+    // and finish never warns of it; a registry without the marker keeps the 1.37 shape (no off keys)
+    const OFF = "# Design System\n\n_UI checks off: outline-removed (what-input: mouse and touch only), transition-all (kit code), no-reduced-motion (our own setting), img-no-alt_\n";
+    const QUIET = lines("*:focus {", "  /* ui-check-off: outline-removed */", "  outline: 0;", "}");
+    const LIST = lines("export const L = () => (", "  <ul>", ...Array.from({ length: 201 }, (_, i) => "    <li className=\"transition-all\">Row " + i + "</li>"), "  </ul>", ");");
+    const mk = (tag, registry) => {
+      const g = feature("off-" + tag, ["src/checkout/Checkout.tsx", "src/checkout/reset.css", "src/checkout/quiet.css", "src/checkout/List.tsx"], registry);
+      write(g.p, "src/checkout/Checkout.tsx", CHECKOUT);
+      write(g.p, "src/checkout/reset.css", RESET);
+      write(g.p, "src/checkout/quiet.css", QUIET);
+      write(g.p, "src/checkout/List.tsx", LIST);
+      for (let i = 0; i < 49; i++) write(g.p, "src/sheets/s" + String(i).padStart(3, "0") + ".css", ".s" + i + " { color: red; }\n");
+      return Object.assign(g, { r: S.designSystemReport(g.p, { name: g.slug }), fin: S.finishFeature(g.p, g.slug) });
+    };
+    const on = mk("on", OFF), plain = mk("plain", "# Design System\n");
+    const u = on.r.uiChecks, M = S.msg("en").finish;
+    const ui = (x) => (x.fin.warnings || []).filter((w) => /UI anti-pattern|outline removals? not judged/.test(w));
+    all("1.38: `_UI checks off:_` hides a rule project-wide — the feature report counts its findings in `off` (an inline-silenced one stays silenced, one past a file's cap counted too), never in findings / total / byRule; the focus search is not run for it; finish never warns of it; the fact and an entry without a reason are no rule off here; without the marker the 1.37 shape (got " +
+      js({ u, plainKeys: Object.keys(plain.r.uiChecks), fin: [on.fin.designSystem, ui(on)], plainFin: ui(plain) }) + ")", {
+      listed: () => js(u.findings.map((x) => x.rule)) === js(["click-no-keyboard", "img-no-alt"]) && u.total === 2 && js(u.byRule) === js({ "click-no-keyboard": 1, "img-no-alt": 1 }),
+      off: () => js(u.off) === js([{ rule: "outline-removed", reason: "what-input: mouse and touch only", count: 1 }, { rule: "transition-all", reason: "kit code", count: 202 }]),
+      ignored: () => js(u.offIgnored) === js([{ entry: "img-no-alt", why: "no-reason" }]),
+      silenced: () => u.silenced === 2,
+      noSearch: () => js(u.limits) === js([]) && plain.r.uiChecks.limits.some((l) => l.code === "focus-sheets"),
+      finish: () => js(on.fin.designSystem.uiChecks.byRule) === js({ "click-no-keyboard": 1, "img-no-alt": 1 }) && js(ui(on)) === js([M.uiChecks(2, "src/checkout/Checkout.tsx:2 click-no-keyboard; src/checkout/Checkout.tsx:5 img-no-alt", on.slug)]),
+      plain: () => js(Object.keys(plain.r.uiChecks)) === js(["findings", "total", "byRule", "silenced", "limits"]) && plain.r.uiChecks.byRule["transition-all"] === 202,
+    });
+  }
+
   { // every bound that cut what the checks read, or dropped a finding, is named in `uiChecks.limits` with a count and the first
     // file — in the report and in finish's designSystem.uiChecks (review 1 of 1.37: a long line, a file's 200 findings and its
     // 256K read dropped real findings with `limits` empty); a finding past a file's cap is still counted in total / byRule

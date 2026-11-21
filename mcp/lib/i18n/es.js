@@ -1624,6 +1624,15 @@ const msg = {
       uiFact: {
         "no-reduced-motion": (n, at) => `  ▲ el código declara movimiento — una animación, una transición de transform o un desplazamiento suave (${n} ${n === 1 ? "lugar" : "lugares"}, el primero: ${at}) — y ninguno de los ficheros de vista del proyecto leídos menciona el movimiento reducido: ofrecer una variante reducida — @media (prefers-reduced-motion: reduce), motion-reduce: / motion-safe: de Tailwind (WCAG 2.3.3, AAA)`,
       },
+      // (el marcador `_UI checks off:_` del proyecto en design-system.md — list: `<regla> <cuántos ocultó> — <motivo>`, unidas por `; `;
+      // e: una entrada no aplicada, como la nombra el informe; n: las entradas leídas)
+      uiOff: (list) => `  (desactivadas en el proyecto — _UI checks off:_ en design-system.md: ${list})`,
+      uiOffIgnored: {
+        "no-reason": (e) => `  ▲ _UI checks off:_ nombra ${e} sin un motivo entre paréntesis — no se aplica: escribir \`${e} (por qué)\``,
+        "unknown-rule": (e) => `  ▲ _UI checks off:_ nombra ${e}, que no es una comprobación de interfaz ni un hecho del proyecto — no se aplica`,
+        unreadable: (e) => `  ▲ _UI checks off:_ contiene "${e}", que no sigue \`<id-de-regla> (motivo)\` — no se aplica`,
+        "past-bound": (e, n) => `  ▲ _UI checks off:_ se lee hasta sus primeras ${n} entradas — "${e}" y las siguientes no se aplican`,
+      },
       dsTokensNew: (n) => `  tokens en el código, fuera del registro (${n}) — una fila por cada uno:`,
       dsPending: (list) => `  en el código, construidos por una funcionalidad sin terminar (entran en el registro con su finish): ${list}`,
       clarify: (f, tracks, verdict, n) => `Aclarar: ${f}  [${tracks}]  → ${verdict} (${n} pregunta(s))`,

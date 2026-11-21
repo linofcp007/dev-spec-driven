@@ -1152,10 +1152,25 @@ const RE_DS_COL = {
   use: /^(?:use|usage|uso|utiliza|para)/i,
 };
 // `_Token sources: a, b_` / `_Libraries: a, b_` — a line of its own, English-stable like the glossary's _Avoid:_; the value runs
-// to the line's end (a path may hold an underscore or a blank), its closing "_" dropped.
-const RE_DS_MARKER = /^[ \t]*_(Token sources|Libraries):[ \t]*(.*)$/gim;
+// to the line's end (a path may hold an underscore or a blank), its closing "_" dropped. (1.38) `_UI checks off: <rule-id>
+// (<reason>), …_` — the UI checks the project switches off (dsChecksOff).
+const RE_DS_MARKER = /^[ \t]*_(Token sources|Libraries|UI checks off):[ \t]*(.*)$/gim;
 const DS_MARKER_LINES = 100; // marker lines read (a registry has two)…
 const DS_MARKER_ENTRIES = 50; // …and the entries kept of each kind
+// (1.38) A `_UI checks off:_` line's entries (dsEntries: cut at `,` / `;` outside parentheses) into `out`: `<id> (<reason>)` →
+// { id (folded to lower case), reason (what the outer parentheses hold, commas too, trimmed, cut at DS_CELL_MAX — "" when
+// none or empty) }; an entry of another shape → { entry (as written, cut) }; past DS_MARKER_ENTRIES entries ONE more →
+// { entry, past: true, read } and no further one. This file names no rule id: engine/ui-checks.js uiOff validates them.
+const RE_DS_OFF_ENTRY = /^([a-z]+(?:-[a-z]+)*)\s*(?:\((.*)\))?$/i;
+function dsChecksOff(value, out) {
+  for (const w0 of dsEntries(value)) {
+    const w = w0.trim();
+    if (!w || out.some((e) => e.past)) continue;
+    if (out.length >= DS_MARKER_ENTRIES) { out.push({ entry: w.slice(0, DS_CELL_MAX), past: true, read: DS_MARKER_ENTRIES }); continue; }
+    const e = RE_DS_OFF_ENTRY.exec(w);
+    out.push(e ? { id: e[1].toLowerCase(), reason: (e[2] || "").trim().slice(0, DS_CELL_MAX) } : { entry: w.slice(0, DS_CELL_MAX) });
+  }
+}
 // A LIBRARY entry that names nothing, by its FIRST word (EN / PT / ES): "none", "none yet", "nenhuma ainda", "sin
 // bibliotecas", "n/a (custom only)", "TBD" — a nicety for what the brief and the report show, never what the check stands on
 // (no word list is complete: "por definir", "custom only" — designSystemCheck stands on `packaged`: a declared library that
@@ -1253,7 +1268,8 @@ function mdTables(text) {
 // libraries, packaged (it lists no component and declares a library that IS one — dsPackaged), total: { components, tokens }
 // (the rows the file holds), truncated, deprecated (1.37, a Map: the key of each name marked `_Deprecated:_` → its replacement as
 // the marker writes it, "" when it names no other listed component that is not deprecated itself — the names read in full only:
-// 1.37.0 review 1, doctor and the brief read the same rows) }. A row whose name is a slot ("[Button]"), blank or generic is none;
+// 1.37.0 review 1, doctor and the brief read the same rows), checksOff (1.38, `_UI checks off:_`'s entries — dsChecksOff) }. A
+// row whose name is a slot ("[Button]"), blank or generic is none;
 // a name listed twice counts once (the first row) — but deprecated is a property of the NAME: a later row of it carrying the
 // marker marks it (review 1), its text read from that row. Every component / token table of the file is read (finish appends a
 // table when the file doesn't end in one that can take its rows). `from`: the row's `_From: <feature>_` (left out of `notes`);
@@ -1314,7 +1330,7 @@ function designSystemRegistry(root) {
   // (a deprecated row's replacement: the first component the file lists that its marker's text names and that is not deprecated
   // itself — review 1: `use Popup` when Popup is retired too names none, the next one named is — once every name is known)
   for (const [key, text] of deprecated) deprecated.set(key, (dsNameIn(text, DS_DEPRECATED_WORDS, (k) => keys.has(k) && !deprecated.has(k)) || { text: "" }).text);
-  const lists = { "token sources": [], libraries: [] };
+  const lists = { "token sources": [], libraries: [] }, checksOff = [];
   const weak = new Set(); // the libraries' WEAK aliases, lower-cased (dsAlias): cited only in a row's parenthesis
   let deps = null; // the project's package.json dependencies — read once, and only when a marker asks
   const dependencies = () => deps || (deps = projectDependencies(path.dirname(root)));
@@ -1326,6 +1342,7 @@ function designSystemRegistry(root) {
     // a BLANK follows that `_`, where `_sass/_variables.scss` is a path — review 5, the seed's own line was misread)
     const value = m[2].slice(0, 4000).trim().replace(/^_[ \t]+/, "").replace(/_$/, "").trim();
     if (/^\[.*\]$/.test(value)) continue; // the stub's slot, never filled in
+    if (!into) { dsChecksOff(value, checksOff); continue; } // (1.38: `_UI checks off:_`)
     const add = (w) => { if (w && w.length <= DS_CELL_MAX && !into.includes(w) && into.length < DS_MARKER_ENTRIES) into.push(w); };
     for (const w0 of dsEntries(value)) {
       if (into.length >= DS_MARKER_ENTRIES) break;
@@ -1379,7 +1396,8 @@ function designSystemRegistry(root) {
   // review 9: `Design System (acme-ui)` with no row refused `Reuse | acme-ui Button`)
   const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(lists.libraries.filter((l) => !weak.has(l.toLowerCase())), dependencies);
   return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, weakLibraries: weak,
-    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length, deprecated };
+    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length, deprecated,
+    checksOff }; // (1.38: `_UI checks off:_` — dsChecksOff's entries)
 }
 // A text outside its parentheses, nested ones too (an unclosed one hides what follows it; a `)` nothing opened stays) —
 // and what its CLOSED parentheses and square brackets hold, nested ones with them (an unclosed one holds nothing:
