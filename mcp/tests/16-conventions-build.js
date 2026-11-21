@@ -243,6 +243,12 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
     const corpusPath = path.join(cloneLib, "engine", E.CORPUS_FILE);
     fs.writeFileSync(corpusPath, "{");
     const broken = decide(cloneLib, "source");
+    // 1.38: a corpus of these very sources (its stamp right) whose `uiStateNames` — +ui's state labels, read as a list — is gone
+    const keyless = JSON.parse(fs.readFileSync(path.join(libDir, "engine", E.CORPUS_FILE), "utf8"));
+    delete keyless.uiStateNames;
+    fs.writeFileSync(corpusPath, JSON.stringify(keyless));
+    const noStates = decide(cloneLib, "source");
+    ok(noStates.source === "render", "1.38 build: a corpus without its uiStateNames list (+ui's state labels) is no corpus — rendered (got " + js(noStates) + ")");
     fs.rmSync(corpusPath);
     const missing = decide(cloneLib, "decide");
     ok(here.source === "file" && faithful.source === "file" && otherVersion.source === "file" && broken.source === "render",

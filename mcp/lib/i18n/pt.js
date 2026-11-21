@@ -3463,6 +3463,17 @@ const quality = {
     // 1.38 a matriz de estados do +ui: o rótulo de cada estado pelo seu id (estável, em inglês) e as células do cabeçalho
     // (UI_STATES — a tabela do modelo é construída com os mesmos valores)
     uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,
+    // …e a verificação ui-states do spec_doctor sobre ela (um aviso no tamanho m / l e sem tamanho, uma nota no s — nunca uma falha)
+    usUnfilled: "a secção [UI] Estados da Interface ainda não está escrita — a sua matriz de estados é verificada quando estiver",
+    usNa: "a secção [UI] Estados da Interface diz n/a — nenhuma vista a verificar",
+    usNone: "nenhuma matriz de estados em [UI] Estados da Interface (a tabela do modelo: Estado, uma coluna por vista, depois Anunciado · foco) — uma matriz em prosa não é verificada",
+    usOk: (views, n) => `a matriz de [UI] Estados da Interface responde aos ${n} estados ${views === 1 ? "na sua vista" : `nas suas ${views} vistas`}`,
+    usOpen: (n, list) => `a matriz de [UI] Estados da Interface deixa ${n} ${n === 1 ? "lacuna" : "lacunas"}, um estado da lista nem descrito nem n/a — ${list}. Uma linha por estado; em cada vista, o que o utilizador vê e pode fazer, ou n/a — porquê (4+ palavras); uma célula n/a responde à linha inteira (references/ui-design-patterns.md → The states every view needs)`,
+    usNoRow: (labels) => `sem linha: ${labels}`,
+    usView: (view, labels) => `${view}: ${labels}`,
+    usTable: (n, item) => `tabela ${n} › ${item}`,
+    usSmall: (d) => `no tamanho s, a matriz fica ao critério do autor — ${d}`,
+    usTruncated: (t, r, v) => `só foram lidas as primeiras ${t} tabelas, ${r} linhas de cada uma e ${v} colunas de vista`,
     dsUnfilled: "a secção Uso do Design System ainda não está escrita — é verificada contra o registo quando estiver",
     dsNoRegistry: `ainda não há registo do design system (.specs/steering/design-system.md) — o inventário único de componentes e tokens a partir do qual todas as features +ui constroem. Cria-o a partir do código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `o registo do design system (.specs/steering/design-system.md) ainda não lista nenhum componente — falta acrescentar os que já existem (spec_scan {designSystem: true} · ${DEV_SPEC} design-system mostra o que o código tem)`,

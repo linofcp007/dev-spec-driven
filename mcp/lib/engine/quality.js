@@ -23,7 +23,8 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
-  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf;
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf,
+  naAnswer, uiStateNames; // markdown.js — 1.38 doctor's ui-states (an n/a cell; the state labels of every language, from the corpus)
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -35,7 +36,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
-  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf } = E); }
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf, naAnswer, uiStateNames } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -2056,6 +2057,130 @@ function designSystemDeprecatedCheck(design, lang, opts = {}) {
   const shown = items.slice(0, 6).concat(items.length > 6 ? [Q.xacMore(items.length - 6)] : []);
   return { id, status: "warn", detail: Q.dsDeprecated(items.length, shown.join("; ")) };
 }
+
+// --- 1.38 doctor's ui-states: [UI] UI States' state matrix -------------------------------------------------------------------------
+// The matrix is the scaffold's own table, recognised by its a11y header cell — a header cell whose words ARE quality.uiStateA11y's in
+// any language ("Announced · focus", "Anunciado · foco"; from the corpus, markdown.js uiStateNames: an English doctor loads no other
+// language) —, never by its rows: a state machine (State | Event | Next state) or a contract table carries no such header. The
+// views are the columns strictly between the first (the state) and that cell — one whose header holds no letter or digit, or is
+// a slot or a generic word, is none —; the a11y column and every column after it are never judged (the critic and the reviewer
+// judge what they say). Only the section ui-sections reads (extractSection), its tables outside comments and fences (mdTables).
+// Bounded: US_TABLES tables, US_ROWS rows each, US_VIEWS view columns, every cell cut to US_CELL before any regex — a bound that
+// drops input says so (usTruncated).
+const UI_STATES_CHECK = "ui-states";
+const US_TABLES = 10;
+const US_ROWS = 60;
+const US_VIEWS = 12;
+const US_CELL = 400;
+const US_SHOWN = 5; // states named per view (or per no-row item), the rest counted
+// a text's words as the matrix compares them: accents folded, lower case, letters and digits
+const usWords = (s) => String(s).slice(0, US_CELL).normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+let US_VOCAB = null, US_VOCAB_OF = null;
+function usVocab() {
+  const names = uiStateNames();
+  if (US_VOCAB_OF !== names) {
+    US_VOCAB = { labels: names.labels.map(([id, l]) => [id, usWords(l)]).filter(([, w]) => w.length), a11y: new Set(names.a11y.map((l) => usWords(l).join(" "))) };
+    US_VOCAB_OF = names;
+  }
+  return US_VOCAB;
+}
+// The state a row's first cell names → its id | null: the cell's words begin with a label's (any language), the label's last word
+// perhaps the start of a longer one — `Errors`, `Error — recoverable`, `Loading (skeleton)`, `Exito`. No synonym: a renamed row
+// ("Spinner") names none, and the warn names the label to use.
+function uiStateOf(cell, vocab) {
+  const w = usWords(cell);
+  for (const [id, l] of vocab.labels) {
+    if (w.length < l.length) continue;
+    let k = 0;
+    while (k < l.length - 1 && w[k] === l[k]) k++;
+    if (k === l.length - 1 && w[k].startsWith(l[k])) return id;
+  }
+  return null;
+}
+// A view cell → "open" (nothing in it, a slot, a generic word — TBD, "—" —, an n/a with a reason under four words) · "na" (n/a —
+// a reason of four words or more: markdown.js naAnswer) · "designed" (anything else — what it says is the critic's to judge).
+function uiStateCell(c0) {
+  const c = String(c0 == null ? "" : c0).slice(0, US_CELL).trim();
+  if (dsSlot(c)) return "open";
+  const na = naAnswer([c]);
+  return na === "na" ? "na" : na ? "open" : "designed";
+}
+// [UI] UI States' matrices → null (no such section) | { tables: [{ index (the table's place in the section, from 1), views (their
+// header cells), gaps: [{ code: "no-row", id } | { code: "open", id, view (its place in views) }] }], truncated: { tables, rows,
+// views } }. `ids`: the states asked, in order (the feature language's uiStateLabels keys). Several rows naming one state are
+// joined: a view is answered when one of them answers it. A row whose ONLY view cell holding a letter or digit is an n/a answers
+// every view (one n/a says why the state does not exist here).
+function uiStateMatrix(design, ids) {
+  const sec = (trackSectionTable("ui") || []).find((s) => s.name === "UI States");
+  const body = sec ? extractSection(design || "", sec.syn, trackMarker("ui"), sec.loose) : null;
+  if (body == null) return null;
+  const vocab = usVocab();
+  const found = mdTables(body);
+  const truncated = { tables: found.length > US_TABLES, rows: false, views: false };
+  const tables = [];
+  found.slice(0, US_TABLES).forEach((t, i) => {
+    const a = t.header.findIndex((h) => vocab.a11y.has(usWords(h).join(" ")));
+    let cols = [];
+    for (let k = 1; k < a; k++) if (!dsSlot(t.header[k])) cols.push(k);
+    if (!cols.length) return;
+    if (cols.length > US_VIEWS) { truncated.views = true; cols = cols.slice(0, US_VIEWS); }
+    if (t.rows.length > US_ROWS) truncated.rows = true;
+    const answered = new Map(); // state id → the view columns answered
+    for (const r of t.rows.slice(0, US_ROWS)) {
+      const id = uiStateOf(r[0] || "", vocab);
+      if (!id) continue;
+      const set = answered.get(id) || answered.set(id, new Set()).get(id);
+      const kinds = cols.map((k) => uiStateCell(r[k]));
+      const worded = cols.map((k) => RE_DS_WORD.test(String(r[k] == null ? "" : r[k]).slice(0, US_CELL)));
+      const rowNa = worded.filter(Boolean).length === 1 && kinds[worded.indexOf(true)] === "na";
+      cols.forEach((k, j) => { if (rowNa || kinds[j] !== "open") set.add(k); });
+    }
+    const gaps = [];
+    for (const id of ids) {
+      const set = answered.get(id);
+      if (!set) { gaps.push({ code: "no-row", id }); continue; }
+      cols.forEach((k, j) => { if (!set.has(k)) gaps.push({ code: "open", id, view: j }); });
+    }
+    tables.push({ index: i + 1, views: cols.map((k) => dsCell(t.header[k])), gaps });
+  });
+  return { tables, truncated };
+}
+// doctor's ui-states (1.38) over an (active) design of a +ui feature → { id, status, detail, state }. States: unfilled (the section
+// missing, still the scaffold — its untouched matrix included — or holding nothing: ui-sections and the placeholder gate own it) ·
+// na (the section's ONE line "n/a — <reason>") · no-matrix (no anchored table: a prose matrix is not checked) · ok · open (a gap: a
+// listed state with no row, or a view whose cell is neither designed nor n/a — a WARN at size m / l and with no size) · small (the
+// same at size s: a pass whose note names the gaps). Never a fail, never an approval check, no stamp: no design before 1.38 holds the
+// anchored header. opts: { size }.
+function uiStatesCheck(design, lang, opts = {}) {
+  const Q = i18n.msg(lang).quality, id = UI_STATES_CHECK;
+  const out = (status, detail, state) => ({ id, status, detail, state });
+  const sec = (trackSectionTable("ui") || []).find((s) => s.name === "UI States");
+  const st = sec ? sectionState(design || "", [sec], trackMarker("ui"), { size: "m", lang })[0].status : "missing";
+  if (st === "missing" || st === "unfilled" || st === "template") return out("pass", Q.usUnfilled, "unfilled");
+  if (st === "na") return out("pass", Q.usNa, "na");
+  const ids = Object.keys(Q.uiStateLabels);
+  const m = uiStateMatrix(design, ids);
+  const cut = m && (m.truncated.tables || m.truncated.rows || m.truncated.views) ? "; " + Q.usTruncated(US_TABLES, US_ROWS, US_VIEWS) : "";
+  if (!m || !m.tables.length) return out("pass", Q.usNone + cut, "no-matrix");
+  const named = (labels) => labels.slice(0, US_SHOWN).concat(labels.length > US_SHOWN ? [Q.xacMore(labels.length - US_SHOWN)] : []).join(", ");
+  const items = [];
+  let n = 0, views = 0;
+  for (const t of m.tables) {
+    const parts = [];
+    const noRow = t.gaps.filter((g) => g.code === "no-row").map((g) => Q.uiStateLabels[g.id]);
+    if (noRow.length) parts.push(Q.usNoRow(named(noRow)));
+    t.views.forEach((v, j) => {
+      const open = t.gaps.filter((g) => g.code === "open" && g.view === j).map((g) => Q.uiStateLabels[g.id]);
+      if (open.length) parts.push(Q.usView(v, named(open)));
+    });
+    items.push(...(m.tables.length > 1 ? parts.map((p) => Q.usTable(t.index, p)) : parts));
+    n += t.gaps.length;
+    views += t.views.length;
+  }
+  if (!n) return out("pass", Q.usOk(views, ids.length) + cut, "ok");
+  const d = Q.usOpen(n, items.slice(0, 6).concat(items.length > 6 ? [Q.xacMore(items.length - 6)] : []).join("; ")) + cut;
+  return opts.size === "s" ? out("pass", Q.usSmall(d), "small") : out("warn", d, "open");
+}
 // The task brief's "Design system" part, for a task that builds what the user sees (tasks.js uiTask) → null (no registry, or it
 // lists nothing) | { file (the registry, as given), components: [{ kind, name, path, variants, notes, why }] (the design's rows
 // with their registry entry, bounded), omitted, unknown (names the registry doesn't list), sources, libraries, tokens (how
@@ -2946,4 +3071,5 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  designSystemDeprecatedCheck, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain, __link };
+  designSystemDeprecatedCheck, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,
+  UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, __link };

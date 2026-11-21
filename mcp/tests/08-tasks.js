@@ -1082,7 +1082,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
     const fb = S.createFeature(pb, "Brief", ["core"], "", undefined, "en");
     fs.writeFileSync(path.join(fb.dir, "requirements.md"), "# Req\n\n### US-1 Login\n\n- US-1.AC-1: WHEN the user logs in THE SYSTEM SHALL greet them.\n- US-1.AC-10: WHEN the user exports THE SYSTEM SHALL write a CSV.\n");
     fs.writeFileSync(path.join(fb.dir, "design.md"), "# Design\n\n## Export (US-1.AC-10, T-10)\n\n" + "Export pipeline details. ".repeat(140) +
-      "\n\n## Big file (src/greet.ts)\n\n" + "Notes. ".repeat(500) + "\n\n## Login greeting (US-1.AC-1)\n\n" + "Greeting rules. ".repeat(60) + "\n\n## Greeting test (T-01)\n\nAsserts the greeting.\n");
+      "\n\n## Big file (src/greet.ts)\n\n" + "Notes. ".repeat(800) + "\n\n## Login greeting (US-1.AC-1)\n\n" + "Greeting rules. ".repeat(60) + "\n\n## Greeting test (T-01)\n\nAsserts the greeting.\n"); // (1.38: sized past the 6,000 budget)
     fs.writeFileSync(path.join(fb.dir, "tasks.md"), "- [ ] 1. Greet the user (T-1)\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/greet.ts_\n- [ ] 2. Export (T-10)\n  - _Requirements: US-1.AC-10_\n");
     const b1 = S.taskBrief(pb, "brief", 1), b2 = S.taskBrief(pb, "brief", 2);
     ok(js(b1.designSections) === js(["Login greeting (US-1.AC-1)", "Greeting test (T-01)"]) && /Relevant but not included \(size\)[^\n]*Big file/.test(b1.brief) &&
@@ -1102,7 +1102,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
     fs.writeFileSync(path.join(fu.dir, "requirements.md"), "# Req\n\n### US-1 Orders\n\n- US-1.AC-1: WHEN the buyer opens the orders page THE SYSTEM SHALL list the orders.\n" +
       "- US-1.AC-2: WHEN an order is placed THE SYSTEM SHALL store it.\n");
     fs.writeFileSync(path.join(fu.dir, "design.md"), "# Design\n\n## Overview\n\nOne page.\n\n## [UI] Design System Usage\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| New | OrderRow | no listed row shows a status |\n\n" +
-      "## [UI] Component Contracts\n\n### OrderRow — contract\n- _States:_ default · selected\n\n## [UI] UI States\n\nLoading: a skeleton.\n\n## [UI] Accessibility\n\n" + "Every control has a name. ".repeat(180) + "\n");
+      "## [UI] Component Contracts\n\n### OrderRow — contract\n- _States:_ default · selected\n\n## [UI] UI States\n\nLoading: a skeleton.\n\n## [UI] Accessibility\n\n" + "Every control has a name. ".repeat(240) + "\n"); // (1.38: past the 6,000 budget)
     fs.writeFileSync(path.join(fu.dir, "tasks.md"), "- [ ] 1. Build the orders page\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/OrdersPage.tsx_\n" +
       "- [ ] 2. Store an order\n  - _Requirements: US-1.AC-2_\n  - _Implements: src/orders/store.ts_\n");
     const view = S.taskBrief(pu, fu.slug, 1), store = S.taskBrief(pu, fu.slug, 2);
@@ -1121,7 +1121,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
     const js = JSON.stringify;
     const pr = path.join(tmp, "proj-137r1-ui-order");
     S.initProject(pr, ["ui", "obs"], "en");
-    const uiBlock = "## [UI] Design System Usage\n\n" + "Reuse the table. ".repeat(111) + "\n\n## [UI] UI States\n\n" + "Loading: a skeleton. ".repeat(90) + "\n\n";
+    // (1.38: sized for the 6,000 budget — the two fit it alone, with no room left for the section after them)
+    const uiBlock = "## [UI] Design System Usage\n\n" + "Reuse the table. ".repeat(170) + "\n\n## [UI] UI States\n\n" + "Loading: a skeleton. ".repeat(145) + "\n\n";
     const req = (what) => "# Req\n\n### US-1 " + what + "\n\n- US-1.AC-1: WHEN the buyer opens the " + what + " page THE SYSTEM SHALL list them.\n";
     const feature = (name, tracks, tail, task) => {
       const f = S.createFeature(pr, name, tracks, "", undefined, "en");
@@ -1139,6 +1140,39 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
       js({ obs: [obs.designSections, relevant(obs)], file: [file.designSections, relevant(file)] }) + ")", {
       obsAfterUi: () => js(obs.designSections) === js(["[UI] Design System Usage", "[OBS] Telemetry"]) && obs.brief.includes("emits `orders_page_view`") && /\[UI\] UI States/.test(relevant(obs)),
       fileAfterUi: () => js(file.designSections) === js(["[UI] Design System Usage", "File Structure"]) && /\[UI\] UI States/.test(relevant(file)),
+    });
+  }
+  // 1.38 (CRIT_4 must-fix 1) — BRIEF_DESIGN_BUDGET 4,000 → 6,000: +ui's filled state matrix (the scaffold's design, a cell of ~50
+  // characters per view: [UI] UI States ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views) stays in the brief of a task building a view (a core
+  // criterion and a view file — uiWork) and of one proving a [UI] criterion; at 1 and 2 views beside the four other [UI] sections;
+  // what still does not fit (3 views) is named in "Relevant but not included", never dropped silently (RB-2's order unchanged).
+  {
+    const js = JSON.stringify;
+    const LABELS = Object.values(require("./lib/i18n.js").msg("en").quality.uiStateLabels);
+    const UI = ["[UI] Design System Usage", "[UI] UI States", "[UI] Accessibility", "[UI] Responsiveness & i18n", "[UI] UI Performance Budget"];
+    const cell = (s, v) => s.toLowerCase() + " for " + v + ": banner + Retry, the list kept";
+    const matrix = (views) => ["| State | " + views.join(" | ") + " | Announced · focus |", "|" + "---|".repeat(views.length + 2),
+      ...LABELS.map((l) => "| " + l + " | " + views.map((v) => cell(l, v)).join(" | ") + " | status · focus stays on the trigger |")].join("\n") + "\n";
+    const got = {};
+    for (const views of [["Orders list"], ["Orders list", "Order detail"], ["Orders list", "Order detail", "Edit dialog"]]) {
+      const pm = path.join(tmp, "proj-138-brief-" + views.length);
+      S.initProject(pm, ["ui"], "en");
+      const fm = S.createFeature(pm, "Orders", ["core", "ui"], "", "m", "en");
+      const dp = path.join(fm.dir, "design.md");
+      const scaffold = fs.readFileSync(dp, "utf8").replace(/^> \*\*TODO\*\*.*\n/gm, "");
+      const filled = scaffold.replace(/\| State \| View \| Announced · focus \|\n(?:\|[^\n]*\n)+/, matrix(views));
+      fs.writeFileSync(dp, filled);
+      fs.writeFileSync(path.join(fm.dir, "tasks.md"), "- [ ] 1. [US1] Build the orders page\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/OrdersPage.tsx_\n" +
+        "- [ ] 2. [US1] UI states — per the state matrix in design.md\n  - _Requirements: US-1.AC-26, US-1.AC-27_\n");
+      got[views.length] = { replaced: filled !== scaffold, briefs: [1, 2].map((n) => {
+        const b = S.taskBrief(pm, fm.slug, n);
+        return { n, ui: UI.filter((t) => (b.designSections || []).includes(t)), relevant: ((b.brief || "").match(/^Relevant[^\n]*$/m) || [""])[0] };
+      }) };
+    }
+    all("1.38 brief: a task building a view (or proving a [UI] criterion) keeps the filled state matrix at 1, 2 and 3 views — at 1 and 2 beside the four other [UI] sections; at 3 the sections past the 6,000 budget are named (got " + js(got) + ")", {
+      matrix: () => [1, 2, 3].every((v) => got[v].replaced && got[v].briefs.every((b) => b.ui.includes("[UI] UI States"))),
+      five: () => [1, 2].every((v) => got[v].briefs.every((b) => js(b.ui) === js(UI) && !b.relevant)),
+      named: () => got[3].briefs.every((b) => b.ui.length < UI.length && UI.filter((t) => !b.ui.includes(t)).every((t) => b.relevant.includes(t))),
     });
   }
 

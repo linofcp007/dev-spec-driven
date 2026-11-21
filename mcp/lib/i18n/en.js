@@ -3707,6 +3707,17 @@ const quality = {
     // 1.38 +ui's state matrix: each state's label by its English-stable id and the header's cells (UI_STATES — the template's
     // table is built from the same values)
     uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,
+    // …and doctor's ui-states over it (a warn at size m / l and with no size, a note at s — never a fail)
+    usUnfilled: "[UI] UI States is not written yet — its state matrix is checked once it is",
+    usNa: "[UI] UI States says n/a — no view to check",
+    usNone: "no state matrix in [UI] UI States (the scaffold's table: State, a column per view, then Announced · focus) — a matrix in prose is not checked",
+    usOk: (views, n) => `[UI] UI States' matrix answers all ${n} states in ${views === 1 ? "its view" : `its ${views} views`}`,
+    usOpen: (n, list) => `[UI] UI States' matrix leaves ${n} ${n === 1 ? "gap" : "gaps"}, a listed state neither designed nor n/a — ${list}. A row per state; in each view what the user sees and can do, or n/a — why (4+ words); one n/a cell answers the whole row (references/ui-design-patterns.md → The states every view needs)`,
+    usNoRow: (labels) => `no row: ${labels}`,
+    usView: (view, labels) => `${view}: ${labels}`,
+    usTable: (n, item) => `table ${n} › ${item}`,
+    usSmall: (d) => `at size s the matrix is the author's call — ${d}`,
+    usTruncated: (t, r, v) => `only the first ${t} tables, ${r} rows each and ${v} view columns were read`,
     dsUnfilled: "Design System Usage is not written yet — checked against the registry once it is",
     dsNoRegistry: `no design-system registry yet (.specs/steering/design-system.md) — the one inventory of components and tokens every +ui feature builds from. Create it from the code: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `the design-system registry (.specs/steering/design-system.md) lists no component yet — add the existing ones (spec_scan {designSystem: true} · ${DEV_SPEC} design-system lists what the code holds)`,
