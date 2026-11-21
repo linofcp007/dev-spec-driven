@@ -320,8 +320,8 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     // by three narrowings (CRIT_3 must-fix 1–3): outside a stylesheet only an element's OWN `style` attribute is read (never a
     // free `fontSize:` line: CSS-in-JS, `sx`, `css()` nest their media queries where no line reader sees them); a stylesheet's
     // viewport-only size is judged only when the FILE declares no font size inside a conditional block (`@media`, `@container`,
-    // `@supports`, a Sass `@include`, a nested `@media`); a bare Tailwind `text-[…vw]` only when its class list (its line, an
-    // `@apply`) holds no variant `text-` utility. The real shapes are CRIT_3's (its probe's shapes/ folder).
+    // `@supports`, a Sass `@include`, a nested `@media`); a bare Tailwind `text-[…vw]` only when its file's class lists (review 1
+    // of 1.38: its line's, before) hold no variant `text-` utility. The real shapes are CRIT_3's (its probe's shapes/ folder).
     const PLAIN = lines(".hero h1 { font-size: 6vw; }", "@media (min-width: 900px) { .hero h1 { font-size: 4rem; } }");
     const NESTING = lines(".hero h1 {", "  font-size: 6vw;", "  @media (width >= 48rem) {", "    font-size: 3rem;", "  }", "}");
     const SASS = lines(".hero-title {", "  font-size: 6vw;", "  @include media-breakpoint-up(md) {", "    font-size: 3rem;", "  }", "}");
@@ -352,6 +352,13 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       "export const O = () => <p style={{ fontSize: \"5vmin\" }} />;", // 19: FINDING (vmin)
       "const Box = styled.h1`", "  font-size: 5vw;", "`;", // 20-22: a CSS-in-JS template line — silent
       "export const Q = () => <i className=\"text-[5vw] md:text-6xl\" />;"); // 23: silent
+    // (review 1 of 1.38: the bare sizes are decided per FILE — TW's variant lines drop every one of its bare sizes, its inline
+    // styles stand; the same bare sizes in a file of no variant text- utility warn, the first viewport one a line)
+    const TW_LONE = lines("export const C = () => <p className=\"text-[5vw]\">404</p>;", // 1: FINDING
+      "export const F1 = () => <i className=\"text-[length:5vw]\" />;", "export const F2 = () => <i className=\"text-[4dvw]/7\" />;", // 2, 3: FINDINGS
+      "export const F3 = () => <i className=\"!text-[3vmax]\" />;", "export const F4 = () => <i className=\"text-[2vw]!\" />;", // 4, 5: FINDINGS
+      "export const H = () => <i className=\"text-[0] text-[5px] text-[var(--h)] text-[calc(1vw_+_1rem)] text-[vw]\" />;", // 6: nothing viewport
+      "export const G = () => <i className=\"text-[2rem] text-[5vw] text-red-500\" />;"); // 7: FINDING (a colour with no variant is none)
     const VUE = lines("<template>", "  <h1 style=\"font-size: 5vw\">a</h1>", "  <h2 :style=\"{ 'font-size': '5vw' }\">b</h2>", "  <h3 :style=\"{ fontSize: size }\">c</h3>",
       "  <p style=\"color: red; font-size:4vw !important\">d</p>", "  <p style=\"font-size: clamp(1rem, 0.5rem + 2vw, 2.5rem)\">e</p>", "</template>");
     const SVELTE = lines("<h1 style=\"font-size: 8vw\">Hello</h1>", "<style>", "  .lead { font-size: 3vw; }", "</style>");
@@ -391,7 +398,8 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const at = (...ns) => ns.map((n) => "font-size-viewport@" + n);
     const R = {
       plain: g(PLAIN, "src/plain.css"), nesting: g(NESTING, "src/nesting.css"), sass: g(SASS, "src/_hero.scss"), vanilla: g(VANILLA, "src/vanilla-hero.css.ts"),
-      emotion: g(EMOTION, "src/EmotionHero.tsx"), mui: g(MUI, "src/MuiHero.tsx"), tw: g(TW, "src/TwHero.tsx"), vue: g(VUE, "src/Hero.vue"), svelte: g(SVELTE, "src/Hero.svelte"),
+      emotion: g(EMOTION, "src/EmotionHero.tsx"), mui: g(MUI, "src/MuiHero.tsx"), tw: g(TW, "src/TwHero.tsx"), twLone: run(TW_LONE, "src/TwLone.tsx").findings.map((f) => f.rule + "@" + f.line + " " + f.value),
+      vue: g(VUE, "src/Hero.vue"), svelte: g(SVELTE, "src/Hero.svelte"),
       blade: g(BLADE, "resources/views/hero.blade.php"), values: g(VALUES, "src/values.css"),
       cond: Object.fromEntries(Object.entries(COND).map(([k, t]) => [k, g(t, "src/" + k + ".css")])),
       nocond: Object.fromEntries(Object.entries(NOCOND).map(([k, t]) => [k, g(t, "src/" + k + ".css")])),
@@ -400,11 +408,13 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     // a warn rule: listed before the report-level ones and counted in finish's warning
     const files = [["src/Hero.svelte", SVELTE], ["src/Box.tsx", lines("export const B = () => <div className=\"transition-all\" />;")]].map(([rel, t]) => Object.assign({ rel }, run(t, rel)));
     const rep = T.uiChecksReport(files, () => ({ focus: false, limits: [] }), 50), fin = T.uiFinishChecks(rep);
-    all("1.38.0 F0c: font-size-viewport (warn) — a stylesheet's viewport-only font size when the file declares no font size in a conditional block (CRIT_3's plain, nesting and Sass shapes silent; a layer is no condition), an element's own `style` attribute (JSX, HTML, Vue, Svelte, Blade — never a component's, never past a spread, never a free `fontSize:` line: vanilla-extract, emotion, MUI's sx), a bare `text-[…vw]` whose line holds no variant `text-` utility (R16 silent); values of numbers, viewport lengths and calc / clamp / min / max only (got " +
+    all("1.38.0 F0c: font-size-viewport (warn) — a stylesheet's viewport-only font size when the file declares no font size in a conditional block (CRIT_3's plain, nesting and Sass shapes silent; a layer is no condition), an element's own `style` attribute (JSX, HTML, Vue, Svelte, Blade — never a component's, never past a spread, never a free `fontSize:` line: vanilla-extract, emotion, MUI's sx), a bare `text-[…vw]` whose FILE holds no variant `text-` utility (R16 silent; review 1 of 1.38); values of numbers, viewport lengths and calc / clamp / min / max only (got " +
       js({ R, report: rep.findings.map((f) => f.rule + ":" + f.level), finish: fin.byRule }) + ")", {
       plain: () => js(R.plain) === "[]" && js(R.nesting) === "[]" && js(R.sass) === "[]",
       cssInJs: () => js(R.vanilla) === "[]" && js(R.emotion) === "[]" && js(R.mui) === "[]",
-      tw: () => js(R.tw) === js(at(4, 5, 7, 8, 9, 10, 15, 19)),
+      tw: () => js(R.tw) === js(at(5, 15, 19)),
+      twLone: () => js(R.twLone) === js(["font-size-viewport@1 text-[5vw]", "font-size-viewport@2 text-[length:5vw]", "font-size-viewport@3 text-[4dvw]/7",
+        "font-size-viewport@4 !text-[3vmax]", "font-size-viewport@5 text-[2vw]!", "font-size-viewport@7 text-[5vw]"]),
       markup: () => js(R.vue) === js(at(2, 3, 5)) && js(R.svelte) === js(at(1, 3)) && js(R.blade) === js(at(1)),
       values: () => js(R.values) === js(at(1, 10, 11, 13, 16, 17)),
       cond: () => Object.values(R.cond).every((x) => js(x) === "[]"),
@@ -472,6 +482,79 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       atRule: () => Object.values(R1).every((x) => x.every((y) => js(y) === "[]")),
       value: () => js(first) === js(["button:focus { outline: none }"]),
       later: () => js(later) === js(["outline-removed@4"]),
+    });
+  }
+
+  { // 1.38.0 review 1 (UP-5): a SECOND <style> block (Vue's global + scoped pair) — its first rule's prelude carried the first
+    // block's `</style>` line and its own tag: an at-rule there read as none (print, a condition, keyframes) — read as the first
+    // block's is; a first SELECTOR rule's value names no tag. (Astro's `define:vars` braces are not: the 1.39 backlog.)
+    const two = (first, second, close = "</style>") => lines("<template><h1 class=\"t\"><button>x</button></h1></template>", "<style>", first, close, "<style scoped>", ...second, "</style>");
+    const T2 = {
+      print: got(two(".b { color: red; }", ["@media print {", "  button { outline: none; }", "}"]), "src/TwoPrint.vue"),
+      size: got(two("h1 { font-size: 5vw; }", ["@media (min-width: 900px) {", "  .t { font-size: 4rem; }", "}"]), "src/TwoSize.vue"),
+      spaced: got(two(".b { color: red; }", ["@media print {", "  button { outline: none; }", "}"], "</style >"), "src/TwoSpaced.vue"),
+      svelte: got(two(".b { color: red; }", ["@media print {", "  button { outline: none; }", "}"]), "src/Two.svelte"),
+    };
+    const kf = run(two(".p { color: red; }", ["@keyframes pop { to { opacity: 1 } }"]), "src/TwoKf.vue").motion;
+    const sel = run(two(".b { color: red; }", ["button { outline: none; }"]), "src/TwoSel.vue").findings.map((f) => f.rule + "@" + f.line + " " + f.value);
+    all("1.38.0 review 1: a second <style> block's first rule is read without the first block's `</style>` and its own tag — an at-rule there is one (print, a condition: silent; keyframes: motion), `</style >` too; a selector rule's value names no tag (got " + js({ T2, kf, sel }) + ")", {
+      atRule: () => Object.values(T2).every((x) => js(x) === "[]"),
+      keyframes: () => js(kf) === js({ count: 1, line: 6 }),
+      selector: () => js(sel) === js(["outline-removed@6 button { outline: none }"]),
+    });
+  }
+
+  { // 1.38.0 review 1 (UP-3): the bare `text-[…vw]` is decided per FILE, as a stylesheet's size is — its candidates kept and
+    // dropped when ANY class list of the file held a `text-` utility under a variant. Per line, a class list split over lines
+    // warned: the reviewer's cn() / cva / clsx() / a wrapped class attribute (JSX, Vue). Still warning: a lone bare size in a
+    // file of no variant `text-` (JSX, an HTML class), an element's own style beside a variant one (decided on its tag), a
+    // sheet's declaration beside an `@apply` of a colour variant (the @apply's variant drops the @apply sizes alone).
+    const S3 = {
+      cn: ["src/Hero.tsx", lines("export function Hero() {", "  return (", "    <h1", "      className={cn(", "        \"text-[8vw] font-bold leading-none\",", "        \"md:text-7xl\"", "      )}", "    >", "      Ship", "    </h1>", "  );", "}")],
+      cva: ["src/heading.tsx", lines("const heading = cva(\"text-[6vw] font-bold\", {", "  variants: { size: { lg: \"md:text-7xl\" } },", "});")],
+      clsx: ["src/T.tsx", lines("export const T = ({ big }) => (", "  <h1", "    className={clsx(", "      'text-[9vw]',", "      'lg:text-8xl',", "      big && 'font-black'", "    )}", "  >", "    x", "  </h1>", ");")],
+      attr: ["src/A.tsx", lines("export const T = () => (", "  <h1", "    className=\"text-[9vw] font-black", "      lg:text-8xl\"", "  >x</h1>", ");")],
+      vue: ["src/H.vue", lines("<template>", "  <h1", "    class=\"text-[9vw] font-black", "           lg:text-8xl\">x</h1>", "</template>")],
+      // (the variant anywhere in the file: above, another element's; Tailwind 3's important `lg:!text-7xl`; a colour's)
+      above: ["src/B.tsx", lines("export const A = () => <p className=\"md:text-6xl\">a</p>;", "export const B = () => <p className=\"text-[5vw]\">b</p>;")],
+      important: ["src/I.tsx", lines("export const B = () => <p className=\"text-[5vw]\">b</p>;", "export const A = () => <p className=\"lg:!text-7xl\">a</p>;")],
+      dark: ["src/D.tsx", lines("export const B = () => <p className=\"text-[5vw]\">b</p>;", "export const A = () => <p className=\"dark:text-white\">a</p>;")],
+      // (a sheet: an @apply's variant drops the @apply sizes of the file, in another rule too)
+      applyTwo: ["src/apply.css", lines("h1 { @apply text-[5vw]; }", ".lead { @apply md:text-6xl; }")],
+    };
+    const W3 = {
+      html: ["public/404.html", lines("<p class=\"text-[5vw] font-bold\">404</p>", "<p class=\"text-red-500\">x</p>")],
+      styleBeside: ["src/S.tsx", lines("export const A = () => <h1 className=\"md:text-6xl\" style={{ fontSize: \"5vw\" }}>a</h1>;")],
+      declColour: ["src/decl.css", lines("h1 { font-size: 5vw; }", ".btn { @apply hover:text-white; }")],
+    };
+    const g3 = (o) => Object.fromEntries(Object.entries(o).map(([k, [rel, t]]) => [k, got(t, rel).filter((f) => /font-size-viewport/.test(f))]));
+    const silent = g3(S3), warns = g3(W3);
+    all("1.38.0 review 1: a bare `text-[…vw]` is decided per FILE — silent when any class list of the file holds a variant `text-` utility (cn() / cva / clsx() / a wrapped class attribute in JSX and Vue, the variant above or below, `lg:!text-7xl`, `dark:text-white`; a sheet's @apply in another rule); a lone one, an element's own style beside a variant, a sheet's declaration beside a colour-variant @apply still warn (got " + js({ silent, warns }) + ")", {
+      silent: () => Object.values(silent).every((x) => js(x) === "[]"),
+      warns: () => js(warns) === js({ html: ["font-size-viewport@1"], styleBeside: ["font-size-viewport@1"], declColour: ["font-size-viewport@1"] }),
+    });
+  }
+
+  { // 1.38.0 review 1 (UP-4): a file read only in part — past the read (`over`: the caller read DS_READ_CHARS of a longer file)
+    // or a line cut at DS_LINE_MAX — judges none of the sizes the REST of the file decides: a sheet's (its override may sit past
+    // the cut — the reviewer's min.css, a theme's 270K style.css) and the bare `text-[…vw]` of its class lines; an element's own
+    // style is decided on its tag and still warns, as do the other rules; a file read whole as before
+    const one = (text, rel, over) => T.uiChecksOf(T.viewLines(text, rel), rel, over).findings.map((f) => f.rule + "@" + f.line);
+    const LONG = "const svg = \"" + "x".repeat(2100) + "\";"; // (a line viewLines cuts)
+    const P4 = {
+      overSheet: one("h1 { font-size: 5vw; }\n", "src/a.css", true), wholeSheet: one("h1 { font-size: 5vw; }\n", "src/a.css", false),
+      min: one(".hero{font-size:5vw}" + ".x{color:red}".repeat(170) + "@media (min-width:768px){.hero{font-size:3rem}}\n", "src/min.css"),
+      cutTsx: one(lines("export const C = () => <p className=\"text-[5vw]\">404</p>;", LONG), "src/C.tsx"),
+      overTsx: one(lines("export const C = () => <p className=\"text-[5vw]\">404</p>;"), "src/C.tsx", true),
+      wholeTsx: one(lines("export const C = () => <p className=\"text-[5vw]\">404</p>;"), "src/C.tsx"),
+      // (a markup file: its cut template line leaves its <style> block's sizes unjudged too — the file is read in part)
+      cutVue: one(lines("<template><p>" + "x".repeat(2100) + "</p></template>", "<style>", "h1 { font-size: 5vw; }", "</style>"), "src/C.vue"),
+      inline: one(lines("export const D = () => <h1 style={{ fontSize: \"5vw\" }}>x</h1>;", "export const I = () => <img src=\"/a.png\" />;", LONG), "src/D.tsx", true),
+    };
+    all("1.38.0 review 1: a file read only in part (past the read, a line cut) judges none of the font sizes the rest of the file decides — a sheet's, a bare text-[…vw]; an element's own style and the other rules still warn; read whole, as before (got " + js(P4) + ")", {
+      part: () => [P4.overSheet, P4.min, P4.cutTsx, P4.overTsx, P4.cutVue].every((x) => js(x) === "[]"),
+      whole: () => js(P4.wholeSheet) === js(["font-size-viewport@1"]) && js(P4.wholeTsx) === js(["font-size-viewport@1"]),
+      inline: () => js(P4.inline) === js(["font-size-viewport@1", "img-no-alt@2"]),
     });
   }
 
@@ -675,6 +758,27 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       counts: () => r.uiChecks.total === 5 && js(r.uiChecks.byRule) === js({ "click-no-keyboard": 1, "img-no-alt": 1, "outline-removed": 1, "transition-all": 2 }) && r.uiChecks.silenced === 1,
       tokenFile: () => r.viewFiles === 2 && !r.raw.some((x) => x.file === "src/app/globals.css") && js(r.uiChecks.limits) === js([]) && js(r.limits) === js([]),
       mcp: () => js(viaMcp.uiChecks) === js(r.uiChecks),
+    });
+  }
+
+  { // 1.38.0 review 1 (UP-4): a sheet the feature report reads only in part — the reviewer's theme style.css of 270K (its
+    // responsive section past the read), a token file the feature edits (globals.css) the same — judges none of its font sizes:
+    // `view-size` says the bound, finish warns of none; the same sheet read whole warns
+    const past = (head) => { let s = head; for (let i = 0; s.length < 270 * 1024; i++) s += ".block-" + i + " { margin: 0 0 1.5rem; padding: 1rem 2rem; }\n"; return s + "@media (max-width: 768px) {\n  .hero-title { font-size: 2rem; }\n}\n"; };
+    const HERO = ".hero-title { font-size: 4.5vw; line-height: 1.1; }\n";
+    const g = feature("part", ["src/styles/style.css", "src/app/globals.css"]);
+    write(g.p, "src/styles/style.css", past("/* Theme */\n" + HERO));
+    write(g.p, "src/app/globals.css", past(GLOBALS + HERO));
+    const r = S.designSystemReport(g.p, { name: g.slug }), fin = T.designSystemFinish(g.p, g.slug);
+    const w = feature("part-whole", ["src/styles/style.css"]);
+    write(w.p, "src/styles/style.css", "/* Theme */\n" + HERO);
+    const rw = S.designSystemReport(w.p, { name: w.slug }).uiChecks;
+    all("1.38.0 review 1: a sheet the feature report reads in part (270K: a view file, a token file) judges no font size — view-size names both, finish warns of none; read whole it warns (got " +
+      js({ ui: r.uiChecks, fin: fin && fin.uiChecks, whole: rw.byRule }) + ")", {
+      part: () => !("font-size-viewport" in r.uiChecks.byRule) && r.uiChecks.byRule["transition-all"] === 1
+        && js(r.uiChecks.limits.map((l) => [l.code, l.count])) === js([["view-size", 2]]) && r.viewFiles === 1,
+      finish: () => !(fin && fin.uiChecks && fin.uiChecks.byRule["font-size-viewport"]),
+      whole: () => js(rw.byRule) === js({ "font-size-viewport": 1 }),
     });
   }
 

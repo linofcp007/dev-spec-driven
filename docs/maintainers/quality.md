@@ -395,11 +395,12 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   component, wherever it stands: a deprecated variant or prop is written without it (the user docs say so — a
   `ghost (_deprecated_)` variants cell retires the component).
 - **`_UI checks off: <rule-id> (reason)[, …]_`** (1.38, `dsChecksOff`) — a line of its own like `_Libraries:_` (`RE_DS_MARKER`,
-  the same `DS_MARKER_LINES` count, never inside a comment or a fence), the project's switch for a UI check (UI checks →
+  the same `DS_MARKER_LINES` count, never inside a comment or a fence; a list item or a bold line is none — the user docs say
+  so, review 1 of 1.38), the project's switch for a UI check (UI checks →
   The marker). Its entries cut by `dsEntries` (at `,` / `;` outside parentheses): `<id> (<reason>)` (`RE_DS_OFF_ENTRY`, any
   case — the id folded) → `{id, reason}`, the reason what the outer parentheses hold, commas and nested parentheses kept,
   trimmed, cut at `DS_CELL_MAX` ("" for none, `()` or `( )`); any other shape (`transition-all: kit code`, `outline-removed —
-  modality`) → `{entry}`, as written, cut; past `DS_MARKER_ENTRIES` (50) ONE more `{entry, past, read}` and no further one (a
+  modality`, an id in a code span — the user docs say "bare") → `{entry}`, as written, cut; past `DS_MARKER_ENTRIES` (50) ONE more `{entry, past, read}` and no further one (a
   later marker line too). The registry's `checksOff`. quality.js names NO rule id: engine/ui-checks.js `uiOff` validates them.
 - **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
@@ -1405,17 +1406,27 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `<style>` block, styled-jsx — `sheetChecks`) is a CANDIDATE outside any conditional block (an at-rule block but `@layer`'s,
   inherited: `@media`, `@container`, `@supports`, a Sass `@include` / `@if`, a nested `@media`) and the candidates are added
   when the walk ENDS, only if the file declared no font size inside one (`font-size`, the `font` shorthand, an `@apply` holding
-  a `text-` utility) and no block past `DS_BLOCK_DEPTH` went unread — a cross-file override (`style.css` + `responsive.css`)
+  a `text-` utility), no block past `DS_BLOCK_DEPTH` went unread and the file was read WHOLE (review 1 of 1.38: `uiChecksOf`'s
+  `over` — its caller read `DS_READ_CHARS` of a longer file — or a line cut at `DS_LINE_MAX` makes it `partial`, and
+  `sheetChecks` starts with `condSize` set: a theme's 270K style.css, a minified sheet, held their override past the cut) — a
+  cross-file override (`style.css` + `responsive.css`)
   is not seen (the user docs say so: silence it); the declaration is read inside a reduced-motion block too, transition-all
   alone skipped there (behaviour-preserving); (3) Tailwind (`utilities` — `RE_TW_PICK` widened by `text-\[`): a BARE
-  `text-[<v>]` (`length:` hint, a `/<line-height>`, `!`; a value holding `(` — any arithmetic — is cut by the split) whose value is
-  viewport-only, only when the class list — the line read, or an `@apply` statement — holds no `text-` utility under a variant
-  (variants cut outside brackets, `variantsOf`); one finding a line. Never: the `font` shorthand, a custom property
+  `text-[<v>]` (`RE_TW_TEXT`, anchored — a variant's token is none; `length:` hint, a `/<line-height>`, `!`; a value holding
+  `(` — any arithmetic — is cut by the split) whose value is viewport-only is a CANDIDATE (the first of a line, pushed on the
+  caller's list) decided when the FILE ends, as (2) — review 1 of 1.38: decided by the line, a class list split over lines
+  (`cn("text-[8vw]", "md:text-7xl")`, a cva base with its responsive variant below, a wrapped JSX `className` / Vue `class`)
+  warned: none stands once a line of the file held a `text-` utility under a variant (`RE_TW_TEXT_VARIANT`, `:text-` /
+  `:!text-` anywhere on a non-CSS line — a colour's `dark:text-white` too, as the per-line test had it), nor in a `partial`
+  file; a sheet's `@apply` sizes are decided over its `@apply` statements (their variant drops the `@apply` sizes, never the
+  sheet's declarations), a markup file's class lines and its `<style>` block apart (as before). An element's own `style` is
+  decided on its tag, never deferred. Never: the `font` shorthand, a custom property
   (`--font-size-fluid-3`), a CSS-in-JS template line of a script. The walker keeps a statement's last 2,000 characters, so a
   longer declaration's property is not seen (a hostile shape only). `width-viewport` (`100vw` / `w-screen`) was cut to prose
   (ui-responsive.md): 1 real defect in 16 corpus hits — fixed overlays, compiled utilities, clipped decorations.
-- **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
-  `DS_LINE_MAX`, its comments out, `cut` when it was longer) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
+- **One file** — `uiChecksOf(lines, rel, over)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
+  `DS_LINE_MAX`, its comments out, `cut` when it was longer; `over`, review 1 of 1.38: the file is longer than the text read —
+  featureReport's two calls and the inventory's `feed` pass it) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
   one finding per rule and line, at a tag's or a declaration's FIRST line (a Tailwind utility's: its class's line),
   silenced or not decided when it is found;
   `DS_CHECK_PER_FILE` (200) kept a file — past it each is still COUNTED (`past`: {byRule, silenced}), never kept (review 1 of
@@ -1525,7 +1536,11 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   A markup file's `<style>` block: its opening tag's line is a CSS line (viewLines), so the block's FIRST rule carries it in
   its prelude — read without it (`RE_STYLE_TAG`, 1.38: an at-rule there read as none since 1.37, a print / reduced-motion /
   conditional block — outline-removed, transition-all, font-size-viewport false positives on an SFC; a first rule's value
-  named the tag).
+  named the tag); a SECOND block's first prelude carries the first's `</style>` line before its own tag — stripped with it
+  (review 1 of 1.38: Vue's documented global + scoped pair, `@media print` / a condition / keyframes there). Not Astro's
+  `<style define:vars={{…}}>`: the walker opens blocks on its braces and the next prelude reads `> @media …` (the user docs
+  say to silence it; 1.39 backlog — viewLines yielding a `<style>` line's text after its tag's end only would let
+  `RE_STYLE_TAG` go).
   The statement events' `from` (the line a statement's text starts on) places a finding at a declaration's first line.
 - **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
   (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
@@ -1609,7 +1624,10 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   excuse rule at PROJECT scope (CRIT_1 must-fix 2): any focus style in any file read — a class-list focus utility in another
   view file too — excuses every candidate, the feature report's rule over every view file, so the removals its focus search
   leaves unjudged past `DS_FOCUS_SHEETS` are judged here (a parity fixture: the inventory and the feature report agree on the
-  same files); a pass a bound cut with no focus style read judges none. `limits`, its own — never the report's `limits`,
+  same files); a pass a bound cut with no focus style read judges none. On the same files only: a feature report looks in its
+  own files and the project's stylesheets alone, so a focus style only in a view file outside the feature (a Button's
+  `focus-visible:ring-2`) excuses a removal in the inventory, never in that feature report or its finish (review 1 of 1.38,
+  UP-6 — kept: a class-list search project-wide reads every view file; ui-code-scan.md says it). `limits`, its own — never the report's `limits`,
   `truncated` or `inSync`: `ui-files` {read, count?, file?, line?: the removals it left unjudged}, `view-size`, `line-length`,
   `tag-length` {read, count, file: the smallest path} (the pass builds them; featureReport builds the feature's). The CLI
   prints it after the registry part (`uiProjectHead`, `uiProjectRule` a rule — `uiReportTag` for a report-level one —,
@@ -1642,7 +1660,9 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   rule, in either report), every feature report's `off` (`offKeys`: the RULES alone; an inline-silenced finding stays
   `silenced`, the comment first; a finding past a file's cap counted there; the focus search never runs for an off
   outline-removed) and so finish, which reads that report. `off` / `offIgnored` appear only when the marker holds an entry (a
-  project without one keeps the 1.37 shape). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
+  project without one keeps the 1.37 shape). Its spellings, in the user docs (review 1 of 1.38, UP-7 — prose alone): a line
+  of its own, as `_Token sources:_` (`RE_DS_MARKER`, anchored: a list item or a bold `**UI checks off:**` is no marker — read
+  as nothing, said nowhere), each id bare (one in a code span — the docs write ids so — reads `unreadable`). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
   and each entry not applied (`uiOffIgnored[why]`) after the silenced count. A design-system.md written only for the marker
   enrols the project in the registry (`ui-design-system`, finish's New-component append — the user docs say so, CRIT_X D3);
   what-input's modality removals (`[data-whatintent='mouse'] { *:focus { outline: none } }`: no syntax tells a modality
@@ -2794,6 +2814,32 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   unjudged) and its registry table (a colour that IS a token's in any notation; "in sync" of names, drift and gone beside
   it), ui-responsive.md's breakpoints (the first source with a width ≥ 320, ui.md's first line outside code and comments,
   its slot, a top-level `@theme`, the two resets, past six, who prints them, the values not read).
+- **1.38.0 review 1** (area ui — the UI-project reviewer's UP-3 … UP-7; the cost findings UP-1 / UP-2 are another fix
+  agent's) — UP-3 (MEDIUM): the bare `text-[…vw]` narrowing was decided by the LINE, and shadcn / Next class lists are
+  routinely split over lines (`cn("text-[8vw] font-bold", "md:text-7xl")`, a cva base with its responsive variant below, a
+  wrapped JSX / Vue class attribute): each warned, finish too, while the same classes on one line were silent. It is decided
+  per FILE now, as a stylesheet's size is: `utilities` pushes the candidates on its caller's list (its own variant test
+  gone — `RE_TW_TEXT`, anchored, takes no variant's token, so `variantsOf` left that branch), and the caller drops them all
+  once any non-CSS line held `:text-` / `:!text-` (`RE_TW_TEXT_VARIANT`, Tailwind 3's important too); a sheet's `@apply`
+  sizes the same over its `@apply` statements — never its declarations: a colour-variant `@apply` beside `font-size: 5vw`
+  keeps the finding. UP-4 (LOW, a subtraction): a sheet read in part (its override past the 256K read — a theme's 270K
+  style.css — or past a 2,000-character line cut — a minified sheet) was judged as if whole; `uiChecksOf` takes `over`
+  (featureReport's two calls, the inventory's `feed`) and a `partial` file — past the read or a line cut — judges none of
+  the sizes the rest of the file decides (the sheet's `condSize` starts set; the bare `text-[…vw]` too, as UP-3 made them
+  per file — the same property; in a markup file a cut template line counts, a doubt read as not judged); an element's own
+  `style` is decided on its tag and stands. UP-5 (LOW, the minimal form): `RE_STYLE_TAG` also strips a leading `</style>`
+  (a second block's first rule); Astro's `define:vars` documented for the user (silence it) and left to 1.39. UP-6 / UP-7
+  (LOW, prose): ui-code-scan.md says a feature report's focus search is narrower than the inventory's, and the marker's
+  spellings (ui-code-scan.md, steering-templates.md: a line of its own as `_Token sources:_` — a list item or bold is not
+  read —, each id bare); a 17-docs row runs the four spellings through the registry's reader and `uiOff`. Oracle: the
+  parent against the fix, `uiChecksOf` of the 20 clones' 17,590 view / style files read as the reports read them (22 past
+  the read, 75 with a cut line): byte-identical (no vw text size in the corpus). Cost: the fix's `uiChecksOf` ÷ the
+  parent's, one process, interleaved with the order alternated, median of 10 — five clones 0.87–1.08, hostile 256K inputs
+  aimed at the changed lines (runs of `text-[`, bare sizes a variant ends, lines of `:text-`, a sheet of `@apply` sizes,
+  two-block SFCs) 0.74–1.04. Mutation pass, the list written before the fixtures (%TEMP%/dsd-138f1-ui/MUTATIONS.md, 34):
+  32 killed at first; the first candidate a line (`size === null`) a cost guard — a line of 60 bare sizes 1.9× without
+  it, kept; a `text-[` pre-test before the anchored `RE_TW_TEXT` output-equivalent and no effect beyond noise in three
+  series: deleted.
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table

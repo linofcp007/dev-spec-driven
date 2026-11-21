@@ -149,6 +149,20 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38.0 review 1 (UP-4): a view file longer than the read is read only in part — its bare `text-[…vw]` in the part read, a
+    // variant `text-` utility past it: a doubt, as in the feature report (view-size names the file); the same file's head alone,
+    // read whole, warns
+    const HEAD = "export const C = () => <p className=\"text-[5vw]\">404</p>;\n";
+    let big = HEAD;
+    for (let i = 0; big.length < 260 * 1024; i++) big += "export const R" + i + " = () => <p className=\"p-4\">row " + i + "</p>;\n";
+    big += "export const D = () => <p className=\"md:text-6xl\">x</p>;\n";
+    const u = inv(project("part-tsx", { "src/Big.tsx": big })), w = inv(project("part-tsx-whole", { "src/Big.tsx": HEAD }));
+    all("1.38.0 review 1: the inventory judges no bare text-[…vw] of a file read in part (view-size names it); read whole it warns (got " + js({ u, w: w.byRule }) + ")", {
+      part: () => u.total === 0 && js(u.limits) === js([{ code: "view-size", read: 262144, count: 1, file: "src/Big.tsx" }]),
+      whole: () => js(w.byRule) === js({ "font-size-viewport": 1 }),
+    });
+  }
+
   { // the pass's own bound: DS_UI_FILES (5,000) files read — the stylesheets first, then the shorter path — and DS_UI_CHARS (32 MB)
     // characters; past either `ui-files` says it, and a cut pass that read no focus style judges no removal: the limit names them
     const tiny = {};
