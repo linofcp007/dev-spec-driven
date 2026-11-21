@@ -1319,7 +1319,12 @@ wrong finding sends a team to fix code that is right.
   `data-focus`, `data-[focus]`, `ui-focus-visible`; a bare one is not: shadcn puts it on focus-managed containers and
   activedescendant options; a RELATIONAL one — a `group` / `peer` / `has` / `in` part, `focus-within` — is a doubt, as
   `:focus-within` in a sheet: review 2 of 1.37, a popover panel's `focus-within:outline-none` around its buttons, 7 of the
-  corpus's candidates). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` / `:focus-within` (or inside one)
+  corpus's candidates; the token's variants cut at `:` OUTSIDE brackets, `variantsOf` — a named variant's arbitrary value
+  read whole, so `has-[:focus-visible]`, `group-[:focus]`, `peer-[:focus]` are relational too (review 3 of 1.37: cut at its
+  `:`, the value's `focus-visible]` read as the element's own), an arbitrary variant (`[&:focus]`, `[&_*:focus]`: `&` is the
+  element) by its `:`-cut pieces as before; a token the class split cut inside its brackets — at a quote or a `=`,
+  `has-[[data-slot=x]:focus-visible]` — reads as before). The file's FOCUS STYLE: a rule naming `:focus` /
+  `:focus-visible` / `:focus-within` (or inside one)
   that declares something that DRAWS; a Tailwind utility under a FOCUS VARIANT that is no removal and draws, in a class list
   or an `@apply`. A focus variant (`isFocusVariant` — review 1 of 1.37: Headless UI's documented Button warned): a variant
   holding `focus` as a part delimited by `-`, `[`, `]` or its ends — `focus`, `focus-visible`, `group-focus/name`,
@@ -1348,8 +1353,11 @@ wrong finding sends a team to fix code that is right.
   pass would say), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
   says which (`focus-sheets` / `focus-chars`) NAMING the removals it left unjudged — a bound never hides a KNOWN candidate
   silently (review 2 of 1.37: an Angular app of 60 components, a Next app of 140 CSS modules lost their true warning, the
-  report read "nothing"): `count` (the unsilenced candidates, past a file's cap too), `file` / `line` (the first, by file
-  then line; no `line` when every one sits past a file's cap), `sheet` (focus-chars: the sheet that ended the search). The
+  report read "nothing"): `count` (the unsilenced candidates, past a file's cap too), `file` / `line` (the first LISTED
+  one, by file then line — one past a file's cap has no line and is named only when none is listed: the first file, in the
+  report's order, holding one, no `line`), and for focus-chars `sheet` (the sheet that ended the search), `chars` (the
+  bound, `DS_FOCUS_CHARS`) and `alone` (that sheet alone is longer than it, else the characters parsed before it would
+  have taken the search past it — review 3 of 1.37: the clause named no bound, nor that one compiled sheet was the cause). The
   CLI prints that line in place of `uiNone`; spec_finish says it (below). The bounds are measured, not chosen (History): the highest that kept, in
   every series where an antivirus scans each open (~1 ms), the report with the pass at its sheets bound ≤ 2.5× the same
   report with no candidate, finish's part ≤ 2×, and modules that all name `:focus` at the chars bound ≤ 3×.
@@ -1375,7 +1383,7 @@ wrong finding sends a team to fix code that is right.
   findings with `limits` empty): `view-files` (the feature's file cap cut what the checks read), then with {read, count, file
   (the first)} `view-size` (a file longer than `DS_READ_CHARS`: read DS_READ_CHARS + 1 to know), `line-length` (lines cut at
   `DS_LINE_MAX`), `tag-length` (reads past the tag reader's bound), `file-findings` (findings past a file's 200: counted in
-  total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` (with {count, file, line?, sheet?}: the
+  total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` (with {count, file, line?}, focus-chars {sheet, chars, alone}: the
   removals they left unjudged, above) — never reach the report's own `limits` / `truncated`. `view-size`, `line-length`,
   `tag-length` and `file-findings` stay in the report alone: they hide no KNOWN candidate (a file-findings finding is
   counted in `total`, and so in finish's warning). Not named (hostile-input guards, no real file reaches them): a tag of more than `DS_TAG_ATTRS` attributes, a
@@ -1388,7 +1396,8 @@ wrong finding sends a team to fix code that is right.
   a file's cap is counted, not listed, so `top` may be empty — the warning then reads `— …:`, one ellipsis: review 2 of
   1.37); without a registry `registered` / `unregistered` are `[]` and there is no `raw` / `tokens`, and every reader of
   `raw` guards it (finish.js, the CLI). ONE warning (`finish.uiChecks`), after the raw values', never a blocker — the
-  removals a focus search left unjudged its last clause (`finish.uiUnjudged`: the count, the first file:line, why), or,
+  removals a focus search left unjudged its last clause (`finish.uiUnjudged`: the count, the first file:line, why — at the
+  characters bound, the bound and whether one sheet alone passes it), or,
   with no finding, that clause the warning alone (review 2 of 1.37); `res.designSystem.uiChecks` only when it has findings
   or that limit (the 1.35 shape otherwise). The report's other bounds never reach finish's text.
 - **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
@@ -2294,3 +2303,23 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   final tree, 51 of 51; review 1's lists run whole on it: 83 of its 106 as written, 16 ported to the lines this round
   rewrote (all caught), 4 superseded by the follow-up's list, 2 gone with S5's rule, 1 moved into the i18n strings with
   its line (the empty top's ellipsis — this round's D3 mutants); the follow-up's 22 of 22 (one ported).
+- **1.37.0 review 3** (two reviewers, a verdict pass; its three LOWs fixed without another round, each the narrowest that
+  closes it) — R3-U1 (R2-S1's remainder, a regression against 457d3da): `utilities()` cut a token at every `:`, inside
+  brackets too, so `has-[:focus-visible]:outline-none` gave the variant `focus-visible]`, read as the element's own focus — a
+  candidate and finish's warning, where the dash spelling is a doubt (`group-[:focus]:`, `peer-[:focus]:`, `in-[:focus]:`,
+  `not-[:focus]:` the same). The removal side alone: `variantsOf` cuts at `:` outside brackets, a named variant's arbitrary
+  value read whole, an arbitrary `[&…]` by its pieces as before; the focus-style side untouched (`has-[:focus-visible]:ring-2`
+  a focus style, as its dash twin). A subtraction: against 2f901c0 only those shapes (and a malformed unclosed bracket) lose
+  their candidate — the corpus sweep (2,591 view files, 293 candidates), the real fixtures and review 1–2's replays
+  byte-identical. Not done: the sheet twin (`.panel:has(:focus)`, `button:not(:focus)` — the same on all three trees): testing
+  `:focus` outside parentheses would also drop `button:is(:focus, :hover) { outline: none }`, an own-focus removal, and
+  telling `:is` / `:where` from `:not` / `:has` is a name list; a token the class split cuts inside its brackets (a quote, a
+  `=`: `has-[[data-slot=x]:focus-visible]`) reads as before. R3-RD1: pt's tag-length line said European "para lá de" (pt-BR
+  derives from it): "além de". R3-RD2: the focus-chars clause said "past the characters parsed at most" — the limit now
+  carries `chars` (the bound) and `alone` (that sheet alone is longer than it), and finish and the CLI name the 384K and say
+  when one sheet alone was the cause; ES "hasta que … hubiera llevado". This file said the unjudged removals' first was "by
+  file then line": it is the first LISTED one, a past-cap file only when none is listed. Mutation pass, the list written
+  before the fixtures: R3-U1 10 of 10 (the guard that keeps a stray `]` from taking the depth negative caught by the
+  quote-cut token above); R3-RD1 / RD2 26 of 26 — 25 at first, the survivor (`alone`'s `>` as `>=`, the comparison the
+  search's end shares) a shape no fixture asked for: a sheet of exactly 384K characters is read and parsed whole (its focus
+  style counts), now pinned — it also catches the budget comparison's `>=`.

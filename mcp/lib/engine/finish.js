@@ -331,7 +331,7 @@ function finishFeature(projectDir, name, opts = {}) {
   // a focus search ended at its bound left unjudged are said, the warning's last clause or the warning alone — review 2 of 1.37:
   // a bound never hides a known candidate silently. The report's other bounds hide none: they stay in the report.)
   const pass = ds ? ds.uiChecks.limits.find((l) => l.code === "focus-sheets" || l.code === "focus-chars") : null;
-  const unjudged = pass ? F.uiUnjudged(pass.count, pass.line ? pass.file + ":" + pass.line : pass.file, pass.read, pass.sheet) : "";
+  const unjudged = pass ? F.uiUnjudged(pass.count, pass.line ? pass.file + ":" + pass.line : pass.file, pass.read, pass.sheet, pass.chars, pass.alone) : "";
   if (ds && ds.uiChecks.total) warnings.push(F.uiChecks(ds.uiChecks.total, ds.uiChecks.top.map((x) => `${x.file}:${x.line} ${x.rule}`).join("; "), slug, unjudged));
   else if (unjudged) warnings.push(unjudged);
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).

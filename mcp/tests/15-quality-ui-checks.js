@@ -261,7 +261,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       // that draws nothing, one that draws; a utility with a variant draws, as before)
       ["W.css", ".focus\\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }\n", false], ["X.css", ":focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }\n", true],
       ["Y.css", "*:focus {\n  @apply outline-none;\n}\n", false], ["Z.css", "button:focus { @apply outline-none ring-2 ring-blue-500; }\n", true],
-      ["aa.css", "button:focus { @apply ring-0 shadow-none !important; }\n", false], ["ab.css", "button:focus { @apply hover:ring-0; }\n", true]];
+      ["aa.css", "button:focus { @apply ring-0 shadow-none !important; }\n", false], ["ab.css", "button:focus { @apply hover:ring-0; }\n", true],
+      // (review 3 of 1.37: a relational variant's bracket spelling is a focus variant, as its dash spelling — the focus-style
+      // side kept as it was)
+      ["AC.tsx", "<div className=\"has-[:focus-visible]:ring-2\" />\n", true], ["AD.tsx", "<span className=\"group-[:focus]:ring-2\" />\n", true]];
     const facts = cases.map(([rel, text]) => run(text, "src/" + rel).focus);
     const removed = { bs: got(".form-control:focus,\n.btn:focus {\n  outline: none;\n  box-shadow: none;\n}\n", "src/styles/overrides.css"),
       important: got("*:focus {\n  outline: none !important;\n  box-shadow: none !important;\n}\n", "src/styles/overrides.scss"), transparent: got(".close:focus { outline: 2px solid transparent; }\n", "src/close.css"),
@@ -272,15 +275,20 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
         "@media print { textarea:focus { @apply outline-none; } }", ".btn { @apply focus:outline-none; }"), "src/styles/globals.css"),
       // (S4: a removal under a variant of the element's own focus is a candidate, under a negated one it is not; review 2 of 1.37:
       // under a RELATIONAL one — group / peer / has / in, focus-within — it is a doubt, as `:focus-within` in a sheet; 9–15 the
-      // shapes both earlier rules judged and keep)
+      // shapes both earlier rules judged and keep; review 3 of 1.37: the variants cut at `:` outside brackets — 15–17 a named
+      // variant's arbitrary value read whole, relational: a doubt; 18–21 kept — an arbitrary `[&…]` by its pieces, a token the
+      // split cut inside its brackets at a quote read as before)
       variants: got(lines("<i className=\"data-[focus]:outline-none\" />", "<i className=\"focus-within:outline-hidden\" />", "<i className=\"not-focus:outline-none\" />", "<i className=\"hover:outline-none\" />",
         "<i className=\"group-focus:outline-none peer-focus-visible:outline-none\" />", "<i className=\"has-focus:outline-none in-focus:outline-0\" />", "<i className=\"group-focus-within:outline-none group-data-[focus]:outline-none\" />",
         "<i className=\"data-focus:outline-hidden\" />", "<i className=\"ui-focus-visible:outline-none\" />", "<i className=\"data-focus-visible:outline-none\" />", "<i className=\"focus:outline-none\" />",
-        "<i className=\"focus-visible:outline-0\" />", "<i className=\"md:group-hover:focus:outline-none\" />", "<i className=\"[&:focus]:outline-none\" />"), "src/V.tsx") };
+        "<i className=\"focus-visible:outline-0\" />", "<i className=\"md:group-hover:focus:outline-none\" />", "<i className=\"[&:focus]:outline-none\" />",
+        "<i className=\"has-[:focus-visible]:outline-none\" />", "<i className=\"group-[:focus]:outline-none peer-[:focus]:outline-none\" />", "<i className=\"has-[:focus]:outline-none in-[:focus]:outline-0\" />",
+        "<i className=\"[&_*:focus]:outline-none\" />", "<i className=\"dark:focus:outline-none\" />", "<i className=\"md:focus-visible:outline-none\" />",
+        "<i className=\"[&[data-state='open']:focus]:outline-none\" />"), "src/V.tsx") };
     all("1.37 UI checks: a file's focus style — a :focus / :focus-visible / :focus-within rule that styles something (a list, nested, an inner rule), a Tailwind focus-variant utility (group-focus too, in an @apply too); never a removal alone, a hover style, a declaration or utility that draws nothing (`box-shadow: none`, a transparent outline, `focus:ring-0`, `focus:shadow-none`); Bootstrap's `outline: none; box-shadow: none` override is a candidate (got " + js({ facts, removed }) + ")", {
       exact: () => js(facts) === js(cases.map((c) => c[2])),
       candidates: () => js(removed.bs) === js(["outline-removed@3"]) && js(removed.important) === js(["outline-removed@2"]) && js(removed.transparent) === js([]),
-      variants: () => js(removed.variants) === js(["outline-removed@1", ...[8, 9, 10, 11, 12, 13, 14].map((n) => "outline-removed@" + n)]),
+      variants: () => js(removed.variants) === js(["outline-removed@1", ...[8, 9, 10, 11, 12, 13, 14, 18, 19, 20, 21].map((n) => "outline-removed@" + n)]),
       apply: () => js(removed.apply) === js(["outline-removed@2", "outline-removed@5", "outline-removed@6", "outline-removed@8", "outline-removed@11"]),
     });
   }
@@ -577,21 +585,29 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const alone = proj("alone", [["src/styles/app.css", FOCUS + fill(470)]]);
     // a sheet longer than the bound that names no focus in its head is not read whole: the search ends there too
     const long = proj("long", [["src/styles/app.css", fill(470)], ["src/styles/zz-focus.css", FOCUS]]);
+    // (review 3 of 1.37: `alone` is the sheet's own length past the bound — after a sheet parsed too)
+    const after = proj("after", [["src/big/b0.css", NAMES + fill(100)], ["src/big/b1.css", FOCUS + fill(470)]]);
+    // (a sheet of exactly 384K characters is read and parsed whole: its focus style counts)
+    const exact = proj("exact", [["src/styles/app.css", FOCUS + "/*" + "x".repeat(384 * 1024 - FOCUS.length - 5) + "*/\n"]]);
     const L = (r) => [r.uiChecks.findings.length, r.uiChecks.limits];
     // (review 2 of 1.37: a bound never hides a KNOWN candidate silently — the pass's limit names the removals it left unjudged:
-    // their count, the first file:line; focus-chars, the sheet that ended the search)
+    // their count, the first file:line; focus-chars, the sheet that ended the search; review 3: the bound, `chars`, and whether
+    // that sheet ALONE is longer, `alone`)
     const at = { count: 1, file: "src/checkout/reset.css", line: 3 };
+    const ended = (sheet, alone) => ({ sheet, chars: 393216, alone });
     all("1.37 UI checks: the focus pass stops at a bound — 48 stylesheets read (focus-sheets) or 384K characters parsed (focus-chars: a focus-free sheet costs none), each sheet WHOLE (a 300K one's last rule counts; one longer than the bound, or one to parse past what is left, ends the search, whatever its head holds): the removal is then not judged and `uiChecks.limits` says which, naming the removals left unjudged (their count, the first file:line; focus-chars: the sheet that ended it — never the report's `limits` / `truncated`); 48 sheets with the focus style last read it; the shorter path first — a root sheet beside 48 deeper ones is read (got " +
-      js({ root: L(rr), many: [...L(rm), rm.limits, rm.truncated], big: L(rb), free: L(free), under: L(ru), whole: L(whole), past: L(past), alone: L(alone), long: L(long) }) + ")", {
+      js({ root: L(rr), many: [...L(rm), rm.limits, rm.truncated], big: L(rb), free: L(free), under: L(ru), whole: L(whole), past: L(past), alone: L(alone), long: L(long), after: L(after), exact: L(exact) }) + ")", {
       sheets: () => rm.uiChecks.findings.length === 0 && js(rm.uiChecks.limits) === js([Object.assign({ code: "focus-sheets", read: 48 }, at)]) && js(rm.limits) === js([]) && rm.truncated === false,
-      chars: () => rb.uiChecks.findings.length === 0 && js(rb.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 2 }, at, { sheet: "src/big/b2.css" })]),
+      chars: () => rb.uiChecks.findings.length === 0 && js(rb.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 2 }, at, ended("src/big/b2.css", false))]),
       parsedOnly: () => js(L(free)) === js([0, []]),
       under: () => ru.uiChecks.findings.length === 0 && js(ru.uiChecks.limits) === js([]),
       shorterFirst: () => rr.uiChecks.findings.length === 0 && js(rr.uiChecks.limits) === js([]),
       whole: () => whole.uiChecks.findings.length === 0 && js(whole.uiChecks.limits) === js([]),
-      past: () => past.uiChecks.findings.length === 0 && js(past.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 1 }, at, { sheet: "src/big/b1.css" })]),
-      alone: () => alone.uiChecks.findings.length === 0 && js(alone.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, { sheet: "src/styles/app.css" })]),
-      long: () => long.uiChecks.findings.length === 0 && js(long.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, { sheet: "src/styles/app.css" })]),
+      past: () => past.uiChecks.findings.length === 0 && js(past.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 1 }, at, ended("src/big/b1.css", false))]),
+      alone: () => alone.uiChecks.findings.length === 0 && js(alone.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, ended("src/styles/app.css", true))]),
+      long: () => long.uiChecks.findings.length === 0 && js(long.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, ended("src/styles/app.css", true))]),
+      after: () => after.uiChecks.findings.length === 0 && js(after.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 1 }, at, ended("src/big/b1.css", true))]),
+      exact: () => js(L(exact)) === js([0, []]),
     });
   }
 
@@ -756,11 +772,11 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       alone: () => js(ui(alone)) === js([M.uiUnjudged(3, "src/checkout/Panel.vue:2", 48)]) &&
         js(alone.fin.designSystem.uiChecks) === js({ total: 0, byRule: {}, top: [], limits: alone.r.uiChecks.limits }),
       clause: () => js(ui(withF)) === js([M.uiChecks(1, "src/checkout/Gallery.tsx:1 img-no-alt", withF.slug, M.uiUnjudged(1, "src/checkout/reset.css:3", 48))]),
-      chars: () => js(pass(chars)) === js({ code: "focus-chars", read: 0, count: 1, file: "src/checkout/reset.css", line: 3, sheet: "src/big/app.css" }) &&
-        js(ui(chars)) === js([M.uiUnjudged(1, "src/checkout/reset.css:3", 0, "src/big/app.css")]),
+      chars: () => js(pass(chars)) === js({ code: "focus-chars", read: 0, count: 1, file: "src/checkout/reset.css", line: 3, sheet: "src/big/app.css", chars: 393216, alone: true }) &&
+        js(ui(chars)) === js([M.uiUnjudged(1, "src/checkout/reset.css:3", 0, "src/big/app.css", 393216, true)]) && js(chars.fin.designSystem.uiChecks.limits) === js(chars.r.uiChecks.limits),
       pastCap: () => js(pass(past)) === js({ code: "focus-sheets", read: 48, count: 1, file: "src/landing/big.css" }) && js(ui(past)) === js([M.uiUnjudged(1, "src/landing/big.css", 48)]),
       reportOnly: () => js(size.r.uiChecks.limits.map((l) => l.code)) === js(["view-size"]) && js(ui(size)) === js([]) && size.fin.designSystem === undefined,
-      noUndefined: () => ![alone, withF, chars, past].some((x) => ui(x).some((w) => /undefined|null/.test(w))),
+      noUndefined: () => ![alone, withF, chars, past].some((x) => ui(x).some((w) => /undefined|null|NaN/.test(w))),
       ellipsis: () => js(ui(capped)) === js([M.uiChecks(5, "", capped.slug)]) && ellipsis.every((w) => w.includes(" — …:") && !w.includes("…; …")),
     });
   }

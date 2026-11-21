@@ -93,13 +93,32 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     write(g.p, "src/checkout/reset.css", "*:focus {\n  outline: 0;\n}\n");
     for (let i = 0; i < 49; i++) write(g.p, "src/sheets/s" + String(i).padStart(3, "0") + ".css", ".s" + i + " { color: red; }\n");
     const r = runIn(["design-system", g.slug, "--project", g.p]), f = runIn(["finish", g.slug, "--project", g.p]);
+    // (review 3 of 1.37: the characters bound — one sheet alone longer than 384K: the report's line and finish say the bound and that)
+    const h = feature("unjudged-chars", "en", ["src/checkout/reset.css"]);
+    write(h.p, "src/checkout/reset.css", "*:focus {\n  outline: 0;\n}\n");
+    write(h.p, "styles/app.css", ".b { color: red; }\n".repeat(21000));
+    const rh = runIn(["design-system", h.slug, "--project", h.p]), fh = runIn(["finish", h.slug, "--project", h.p]);
     const T = MSG("en").cliOutput;
-    const said = ["en", "pt", "pt-BR", "es"].map((l) => { const D = MSG(l).cliOutput.dsLimit, s = D["focus-sheets"](48, "a/b.css:3", 7), c = D["focus-chars"](2, "a/b.css:3", 7, "big/c.css"), w = MSG(l).finish.uiUnjudged(7, "a/b.css:3", 48);
-      return [s, c, w].every((x) => /7/.test(x) && x.includes("a/b.css:3")) && c.includes("big/c.css") && MSG(l).finish.uiUnjudged(7, "a/b.css:3", 0, "big/c.css").includes("big/c.css"); });
-    all("1.37 design-system / finish (CLI): an outline removal the focus search left unjudged at its bound is named — the report's limit line (the count, the first file:line) and no \"nothing\" line; finish prints its warning; every language says the count, the place and focus-chars' sheet (got " + js([r.out, f.out.slice(0, 600), said]) + ")", {
+    // (each language: the bound named; "alone" — the word each language says it with — in the alone lines only, the report's
+    // and finish's)
+    const ALONE = { en: "alone", pt: "sozinha", "pt-BR": "sozinha", es: "por sí sola" };
+    const said = ["en", "pt", "pt-BR", "es"].map((l) => { const D = MSG(l).cliOutput.dsLimit, s = D["focus-sheets"](48, "a/b.css:3", 7), c = D["focus-chars"](2, "a/b.css:3", 7, "big/c.css", 393216, false), w = MSG(l).finish.uiUnjudged(7, "a/b.css:3", 48);
+      const ca = D["focus-chars"](2, "a/b.css:3", 7, "big/c.css", 393216, true), wc = MSG(l).finish.uiUnjudged(7, "a/b.css:3", 0, "big/c.css", 393216, false), wa = MSG(l).finish.uiUnjudged(7, "a/b.css:3", 0, "big/c.css", 393216, true);
+      return [s, c, w, ca, wc, wa].every((x) => /7/.test(x) && x.includes("a/b.css:3")) && [c, ca, wc, wa].every((x) => x.includes("big/c.css") && x.includes("384K")) &&
+        [ca, wa].every((x) => x.includes(ALONE[l])) && ![c, wc].some((x) => x.includes(ALONE[l])); });
+    // (review 3 of 1.37: European "para lá de" is never a pt line of the UI checks — pt-BR derives from it; Spanish "hasta que" takes
+    // the subjunctive)
+    const ptLines = ["pt", "pt-BR"].flatMap((l) => { const D = MSG(l).cliOutput.dsLimit; return [...["view-size", "line-length", "tag-length", "file-findings"].map((c) => D[c](30, "a/b.tsx", 2)),
+      D["focus-sheets"](48, "a/b.css:3", 2), D["focus-chars"](2, "a/b.css:3", 2, "big/c.css", 393216, false), D["focus-chars"](0, "a/b.css:3", 2, "big/c.css", 393216, true),
+      MSG(l).finish.uiUnjudged(2, "a/b.css:3", 48), MSG(l).finish.uiUnjudged(2, "a/b.css:3", 0, "big/c.css", 393216, false), MSG(l).finish.uiUnjudged(2, "a/b.css:3", 0, "big/c.css", 393216, true)]; });
+    const esChars = MSG("es").cliOutput.dsLimit["focus-chars"](2, "a/b.css:3", 2, "big/c.css", 393216, false);
+    all("1.37 design-system / finish (CLI): an outline removal the focus search left unjudged at its bound is named — the report's limit line (the count, the first file:line) and no \"nothing\" line; finish prints its warning; every language says the count, the place and focus-chars' sheet, its bound and whether that sheet alone passes it (got " + js([r.out, f.out.slice(0, 600), rh.out, fh.out.slice(0, 600), said, ptLines.filter((x) => /para lá/.test(x)), esChars]) + ")", {
       report: () => r.code === 0 && r.out.includes(T.dsLimit["focus-sheets"](48, "src/checkout/reset.css:2", 1)) && !r.out.includes(T.uiNone(1)),
       finish: () => f.out.includes("  ▲ " + MSG("en").finish.uiUnjudged(1, "src/checkout/reset.css:2", 48)),
+      chars: () => rh.code === 0 && rh.out.includes(T.dsLimit["focus-chars"](0, "src/checkout/reset.css:2", 1, "styles/app.css", 393216, true)) && !rh.out.includes(T.uiNone(1)) &&
+        fh.out.includes("  ▲ " + MSG("en").finish.uiUnjudged(1, "src/checkout/reset.css:2", 0, "styles/app.css", 393216, true)),
       strings: () => said.every(Boolean),
+      prose: () => !ptLines.some((x) => /para lá/.test(x)) && /hasta que big\/c\.css hubiera llevado/.test(esChars),
     });
   }
 
