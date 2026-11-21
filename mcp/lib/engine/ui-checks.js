@@ -532,8 +532,9 @@ function utilities(s, line, add, move, sizes) {
   let focus = false, size = null;
   for (const tok of s.split(RE_TW_SPLIT)) {
     if (!tok) continue;
-    // (a bare one only: RE_TW_TEXT is anchored — a variant's token starts with its variant)
-    if (size === null && tok.includes("text-[")) { const m = RE_TW_TEXT.exec(tok.replace(/^!|!$/g, "")); if (m && viewportOnly(m[1])) size = tok; }
+    // (a bare one only: RE_TW_TEXT is anchored — a variant's token starts with its variant; the first a line — a cost guard:
+    // a line of 60 bare sizes 1.9× without it)
+    if (size === null) { const m = RE_TW_TEXT.exec(tok.replace(/^!|!$/g, "")); if (m && viewportOnly(m[1])) size = tok; }
     const parts = tok.split(":");
     const util = parts.pop().replace(/^!|!$/g, "");
     if (util === "transition-all") { add("transition-all", line, tok); continue; }
