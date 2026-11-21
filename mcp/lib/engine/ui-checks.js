@@ -636,7 +636,7 @@ function sheetChecks(text, rel, add, move) {
   styleTokens(text, rel, {
     block: (e) => {
       if (deep || open.length >= DS_BLOCK_DEPTH) { if (deep++ === 0) { open[open.length - 1].other = true; condSize = true; } return; }
-      const pre = e.prelude[0] === "<" ? e.prelude.replace(RE_STYLE_TAG, "") : e.prelude;
+      const pre = e.prelude.replace(RE_STYLE_TAG, "");
       const p = open.length ? open[open.length - 1] : null, at = pre[0] === "@";
       if (move && at && RE_KEYFRAMES.test(pre)) move(e.line);
       open.push({ selector: pre, shape: at ? null : outlineShape(pre), print: (p != null && p.print) || (at && RE_PRINT.test(pre)),
