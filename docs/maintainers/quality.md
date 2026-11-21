@@ -1334,9 +1334,12 @@ wrong finding sends a team to fix code that is right.
   findings (the 1.35 shape otherwise).
 - **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
   tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
-  of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{` — each ≤ 3× plain JSX of the same size
-  (measured 0.07–1.5×); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real ones); a finish without a
-  registry ≤ 1.5× the feature report it runs (~0.9×). The sheet of braces is the walker's every block: three allocation-free
+  of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —
+  nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes — each ≤ 3×
+  plain JSX of the same size (measured 0.07–2.5×); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real
+  ones); a finish without a registry ≤ 1.5× the feature report it runs (~0.9×); the feature report with the focus pass AT
+  its bound ≤ 2× the same report with no candidate (one project, two features reading the same views, 1,000 sheets none
+  naming focus: 1.1–1.3×). The sheet of braces is the walker's every block: three allocation-free
   fast paths in styleTokens (`unmaskInterpolation` of a text with no mask, `pageWide` of an empty prelude, `RE_MIXIN` only
   after an `@` — the last a cost guard alone: +45 % on that sheet without it, under the bound) took it from ~5× to ~1.5× —
   tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus.
@@ -2102,3 +2105,38 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   only when it has findings: the 1.35 key shape an assertion pins. Mutation passes: 126 of 126 on `uiChecksOf` (three dead
   branches deleted, eleven fixtures added that only one rule answers), 41 of 41 on the report / finish / CLI; one survivor
   kept by design, the `RE_MIXIN` fast path — a cost guard alone (+45 % on the sheet of braces, under the bound).
+- **1.37.0 review 1** (four reviewers — the shapes on ten public UI repositories, the engine's cost and bounds, the registry
+  and the brief, the docs; this area's fix round) — E1 (HIGH): the focus pass at its bound (1,000 sheets / 4 MB) made the
+  feature report 8.2× slower on 3,000 CSS modules — and at the bound it judges nothing. Now asked for an UNSILENCED
+  candidate alone (a silenced one is counted silenced whatever the pass says), a sheet parsed only when its text names
+  `focus` (a cost guard alone: the pass 18–30 ms with it, 35–98 ms without), each sheet read whole within the budget, and
+  the bounds MEASURED down until the report with the pass at either bound is within 2× the same report with no candidate
+  (interleaved fresh processes, the median of 3 warm calls): 32 sheets → 1.5–1.6× (finish's part 1.5×), 128K characters →
+  1.44× on modules that all name `:focus` (256K measured 1.8–2.15× there), Angular's 900 components 2.1× → 1.16×; a ratio
+  test owns it (1.1–1.3×; 4.4× on the parent). The open is the cost (~1 ms a file where an antivirus scans each one), not
+  the parse. E2 + D2: "every read is bounded and says what it dropped" was false — a line cut at 2,000 carried its open
+  quote 30 lines down (an inline data-URI logo hid the `<img>` below it; minified HTML judged an `<img>` on the attributes
+  before its cut alt), 200 report-level findings hid a file's real ones (`total` 200), a view file's 256K read and a
+  project sheet's 256K head cut silently (the last a false outline warning): one limit code a bound, with its count and
+  first file, finish carrying them; the hostile-input guards (100 attributes, 64 nested blocks) left unnamed. S1 + D1:
+  click-no-keyboard warned on Laravel's starter kits — Alpine's `.outside`, a wrapper whose slot holds the button, a
+  backdrop's empty overlay layer — and a role or a key handler alone silenced it (the legend said "a role, a tabindex
+  and a key handler"): the target modifiers read like `.self`, a candidate judged by its BODY (clickBodies, inside the tag
+  reader: each character once, four hostile click inputs within 3×), reachability by focusability (ARIA's composite items
+  reach the keyboard through their container). S2 `v-bind="$attrs"` / `x-bind="obj"` spreads (the design's dropped
+  fixture). S3 what draws nothing decided BY VALUE (Bootstrap's `outline: none; box-shadow: none` override, `focus:ring-0`
+  were focus styles excusing the project's every removal); S4 ONE focus-variant predicate (Headless UI's `data-[focus]`,
+  Tailwind 4's `has-focus-visible`). LOWs by subtraction or one line: S5 a trailing marker silences its line alone, S6 a
+  paste handler that hands its event on is not followed, S7 a titled `<img>` is named, S9 `main:focus` / `[tabindex="-1"]`
+  is no candidate, E3 the plain head off +ui. Prose: D3 ("a named handler" is never judged only for paste), D5 (3.3.8's
+  scope), D8, S10, S11. The review's corpus again (2,591 view files of ten repositories): click-no-keyboard 35 → 11, all
+  eleven real (clickable spans, list items and cards with text) — three real ones lost to the body rule (an icon COMPONENT
+  in a clickable card may render a control: a doubt); img-no-alt 217 → 17, all real (cal.com's 200 titled flags gone);
+  zoom-disabled 3, real; no outline-removed finding (each root holding a candidate holds focus styles); paste-blocked 0.
+  A project sheet's `button:focus { -webkit-tap-highlight-color: transparent }` no longer excuses a reset (it draws
+  nothing). Not fixed: `outline-offset` beside a transparent outline still draws (no value says it), an HTML void element's
+  click (`<img onclick>`) waits for a body it never has (not judged). Mutation pass: 107 mutants, the list written before
+  the fixtures — 99 killed at first; six wanted a click-body fixture, one line was dead and went (judgeTag's `/>` check:
+  clickBodies opens no self-closing tag), one is the cost guard above, timed with and without; the whole pass again after
+  the fixtures: 105 of 106 (the cost guard the one survivor; the logic mutants run the file without its three timed
+  blocks, the cost mutants the whole file).
