@@ -1185,11 +1185,19 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   registry's rows first (a value both hold names the registry's token; a name the registry holds keeps the registry's value
   — the code's is not on the scale). COLOURS (`parseColor`: hex 3 / 4 / 6 / 8, rgb / rgba, hsl / hsla, oklab, oklch —
   comma or space syntax, % channels, an alpha after `/` or as a 4th argument, a hue in deg / turn / rad / grad, `none` = 0
-  as CSS Color 4 says: Tailwind 4 writes `--color-neutral-900: oklch(20.5% 0 none)`) → OKLab. `token`: the SAME colour —
-  exact within one notation (ΔEOK ≤ 1e-4: float noise, a powerless hue), across two within the rounding of the PAIR as
-  written (0.011 with an HSL side: integer HSL's — `#05787d` = `hsl(183 92% 25%)` at 0.0106; 0.001 otherwise: a hex
-  written as 3-decimal oklch is within 0.0007) — CRIT_2 must-fix 2: one 0.011 for every pair made Tailwind's zinc
-  (`#18181b`, `#09090b`, `#e4e4e7`, `#f4f4f5`) shadcn v4's neutral tokens, 0.003–0.008 apart; alphas within 0.01. `near`
+  as CSS Color 4 says: Tailwind 4 writes `--color-neutral-900: oklch(20.5% 0 none)`) → OKLab. `token`: the NEAREST token
+  of the SAME colour (of equals the first: the registry's) — exact within one notation (ΔEOK ≤ 1e-4: float noise, a
+  powerless hue), across two within the rounding of the PAIR as written (0.011 with an HSL side: integer HSL's as CRIT_2
+  measured it — `#05787d` = `hsl(183 92% 25%)` at 0.0106; 0.001 otherwise: a hex written as 3-decimal oklch is within 0.0007) — CRIT_2 must-fix 2:
+  one 0.011 for every pair made Tailwind's zinc (`#18181b`, `#09090b`, `#e4e4e7`, `#f4f4f5`) shadcn v4's neutral tokens,
+  0.003–0.008 apart; alphas within 0.01. An HSL side against a hex / rgb one (1.38.0 review 1) is ALSO judged by its
+  written precision (`roundsTo`, `sameAt`): the sRGB triple, written in HSL as precisely as the HSL side is, gives its
+  numbers — each channel within half a unit of its last written digit (`halfDigit`: `96.1%` 0.05, an exponent counted;
+  the hue's in its own unit, `.5turn` 18°), the hue moot at s 0, s at l 0 / 100, a hue's turns and sign never matter;
+  CSS's clamps first (`rgb(300 0 0)` = `#f00`, `hsl(0 150% 50%)` too). The 0.011 stays the CEILING — the round trip only
+  narrows 1.38's rule, never widens it: integer HSL is NOT within 0.011 of every hex (479 of the 16.7M hexes are farther
+  from their own integer HSL: `#020200` = `hsl(60 100% 0%)`, black, at 0.084 — OKLab's L is steep near black —, saturated
+  yellows to 0.013), and those stay what 1.38 said. HSL against oklab / oklch keeps the 0.011 alone. `near`
   (a hint, `{token, delta}`): the NEAREST token within the JND (0.02 ΔEOK), never the first. hwb / lab / lch / `color()` / a
   named colour are not parsed: the same TEXT names the token (1.37's rule, `colorKey`, moved here; a hex is always parsed
   now, so its 3-digit spelling-out went). FONTS: a `font-family` STACK (`fontStackOf`: its LAST family a generic one — CSS
@@ -1230,8 +1238,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   project). NEITHER is part of `inSync` (DECISIONS: what "in sync" compares stays the names, and `dsInSync` says so); the
   CLI prints a drifted token as the row the code has, then the registry's value and the file.
 - **The units table** (1.38 — the team's convention, a report, never a default) — in design-system.md, found by its header
-  wherever it stands: the first cell Property / Propriedade / Propiedad (`RE_DS_PROPERTY_HEAD`), a column headed Units /
-  Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place) holding at least one CSS unit (`CSS_UNITS`: the
+  wherever it stands: the first cell Property / Propriedade / Propiedad (`RE_DS_PROPERTY_HEAD`), a column whose header
+  STARTS with Units / Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place; a table headed
+  `| Property | Allowed units |` is none and nothing says so: 1.38.0 review 1's T3, said in ui-code-scan.md, the reader for
+  1.39's backlog) holding at least one CSS unit (`CSS_UNITS`: the
   CSS Values 4 lengths, `%`, `fr` — a closed list in quality.js, the eager reader's) — a component's props table
   (`| Property | Type | Default |`) is none (CRIT_2). `dsUnitsTable` → the registry's `units` {rows: [{props (a property or `prefix-*`;
   never `--x`), units}], unread (a row with no CSS unit or no property, by its first cell), past (rows past `DS_UNIT_ROWS`,
@@ -1239,8 +1249,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   byProperty} — null without a table; never finish, doctor or the brief: `unitsOf` over the file's ONE walk — a declaration
   whose property has a row (`unitRows`: the exact row, else the LONGEST `prefix-*`; `margin-*` covers `margin`), its FIRST
   top-level length the row does not allow (`offUnit`: never inside calc() / clamp() / var() — an unclosed one holds the
-  rest —, never 0, a unitless number, a hex colour's digits; one finding a declaration; a custom property or a Sass variable
-  has no row), and a Tailwind arbitrary size by the property it sets (`twProperty`); every finding counted, the first 50
+  rest —, never 0, a unitless number, a hex colour's digits, a negative length — `RE_UNIT_LITERAL`'s lookbehind: a digit
+  after `-` is no literal, so `margin: 0 -8px` is not judged (1.38.0 review 1's T2: said in ui-code-scan.md, 1.39's
+  backlog) —; one finding a declaration; a custom property or a Sass variable has no row), and a Tailwind arbitrary size in
+  px / rem / em (1.37's `RE_TW_SIZE`: `text-[2vw]` and a negative `-mt-[12px]` are not read — T2 again, said) by the
+  property it sets (`twProperty`); every finding counted, the first 50
   made into rows. The third reader of the one walk measured 0.9–1.0× the report without a table on the real corpora,
   1.0–1.4× on 60 component sheets and ≤ 1.5× when every declaration is a finding (mcp/tests/15-quality-design-system-cost.js:
   ≤ 1.5× and ≤ 3×); a digit and a "names a property of the table" prefilter measured no gain (1.2× either way) and went.

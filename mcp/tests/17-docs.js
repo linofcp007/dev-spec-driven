@@ -1524,7 +1524,17 @@ exports.run = async ({
       ["colours: every notation the engine parses, the tolerances (design-values.js), alphas", () =>
         ((DV.match(/const RE_COLOR_CALL = \/\^\(([^)]*)\)/) || [])[1] || "").split("|").map((f) => f.replace(/a\?$/, "")).every((f) => scale.includes("`" + f + "()`"))
           && scale.includes("(`none` reads as 0)")
-          && scale.includes("across two within the rounding of the pair as written (" + B.hsl + " ΔEOK with an HSL side, " + B.cross + " otherwise), alphas within " + B.alpha)],
+          && scale.includes("across two within the rounding of the pair as written (" + B.hsl + " ΔEOK with an HSL side, " + B.cross + " otherwise; an HSL side")
+          && scale.includes("), alphas within " + B.alpha)],
+      // (1.38.0 review 1, T1) the HSL side's written precision against a hex / rgb, its examples as the engine judges them; the
+      // nearest token of several
+      ["colours: an HSL side against a hex / rgb by its written precision — the examples (judgeRaw); the nearest of several", () => {
+        const j = (value, ...tok) => T.judgeRaw({ kind: "color", value }, T.tokenScale(tok.map(([name, v]) => ({ name, value: v })), []));
+        return scale.includes("`token` names the token the value IS (the nearest of several), in any notation")
+          && scale.includes("an HSL side against a hex or `rgb()` also as precisely as it is written: the other, in HSL, rounds to its numbers — `#05787d` is `hsl(183 92% 25%)`, `#18181b` is not `hsl(0 0% 9%)`)")
+          && j("#05787d", ["--a", "hsl(183 92% 25%)"]).token === "--a" && !j("#18181b", ["--a", "hsl(0 0% 9%)"]).token
+          && j("#18181b", ["--a", "hsl(240 5.9% 10%)"], ["--b", "#18181b"]).token === "--b";
+      }],
       ["colours: `near` — the nearest within the JND, a hint; what is not parsed matches by text", () =>
         scale.includes("`near` {`token`, `delta`} the nearest within " + B.jnd + " ΔEOK — a hint, never the token's colour (Tailwind's zinc is not shadcn's neutral)")
           && /`hwb\(\)`, `lab\(\)`, `lch\(\)`, `color\(\)` and a named colour match by text alone\./.test(scale)],
@@ -1547,14 +1557,20 @@ exports.run = async ({
           && T.tokenDrift("#3b82f6", "hsl(217 91% 60%)") === null && T.tokenDrift("16px", "1rem") === null && T.tokenDrift("150ms", "0.2s") === "quantity"],
       ["gone, and neither changes inSync", () => /`gone` lists the `_Token sources:_` files that no longer exist\. Neither changes `inSync`: it compares names\./.test(scale)],
       ["units table: the headers the registry reads (RE_DS_PROPERTY_HEAD, RE_DS_COL.units) in EN / PT / ES; a props table is none", () => {
-        const heads = (scale.match(/first header cell is `Property` \(`([^`]+)`, `([^`]+)`\) and with a column headed `Units` \(`([^`]+)`, `([^`]+)`\)/) || []).slice(1);
+        // (1.38.0 review 1, T3: the header STARTS with the word — `Allowed units` is none)
+        const heads = (scale.match(/first header cell is `Property` \(`([^`]+)`, `([^`]+)`\) and with a column whose header starts with `Units` \(`([^`]+)`, `([^`]+)`; `([^`]+)` is none\)/) || []).slice(1);
         const prop = regexOf(QY, "RE_DS_PROPERTY_HEAD"), unit = new RegExp(((QY.match(/units: \/(.*)\/i,/) || [])[1] || "(?!)"), "i");
-        return heads.length === 4 && [ "Property", heads[0], heads[1]].every((h) => prop.test(h)) && ["Units", heads[2], heads[3]].every((h) => unit.test(h))
-          && /a props table, `\| Property \| Type \| Default \|`, is none/.test(scale);
+        return heads.length === 5 && [ "Property", heads[0], heads[1]].every((h) => prop.test(h)) && ["Units", heads[2], heads[3]].every((h) => unit.test(h))
+          && !unit.test(heads[4]) && unit.test(heads[4].split(" ").pop()) && /a props table, `\| Property \| Type \| Default \|`, is none/.test(scale);
       }],
-      ["units: the feature report's findings and their keys, the first 50", () =>
-        scale.includes("{`findings` — the first " + B.list + ": `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}")
-          && /lists each declaration whose value takes, outside parentheses, a unit its row does not give \(never `0` or a unitless number\), and a Tailwind arbitrary size by the property it sets/.test(scale)],
+      ["units: the feature report's findings and their keys, the first 50; never a negative length, a Tailwind size in px / rem / em alone (offUnit, RE_TW_SIZE)", () => {
+        // (1.38.0 review 1, T2: what the units table does not judge, as the engine reads it)
+        const tw = new RegExp(regexOf(DS, "RE_TW_SIZE").source);
+        return scale.includes("{`findings` — the first " + B.list + ": `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}")
+          && /lists each declaration whose value takes, outside parentheses, a unit its row does not give \(never `0`, a unitless number or a negative length: `-8px`\), and a Tailwind arbitrary size in px, rem or em \(`p-\[10px\]`; never `-mt-\[12px\]`, `text-\[2vw\]`\) by the property it sets/.test(scale)
+          && T.offUnit("0 -8px", ["rem"]) === null && T.offUnit("0 8px", ["rem"]) === "px"
+          && tw.test("p-[10px]") && !tw.test("-mt-[12px]") && !tw.test("text-[2vw]");
+      }],
       ["units: the project's unitsTable and its rows bound; a report only, no default", () =>
         scale.includes("The project report's `unitsTable` {`rows`, `unread`, `past` — rows past the first " + B.unitRows + "}.")
           && /A report only — never finish, doctor or the brief — and no default: without the table both are null\./.test(scale)],

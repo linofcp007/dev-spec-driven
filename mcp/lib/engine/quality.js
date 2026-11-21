@@ -1144,8 +1144,9 @@ const DS_BRIEF_CHARS = 1500; // …and their size
 const DS_NAME_MAX = 40; // a longer name is compared with none (no component is called that)
 const DS_NEAR_ROWS = 30; // usage rows that pay a name comparison against the registry (past them: the exact name only)
 // (1.38) The units table — the team's convention of the units each property takes (a report, never a default): its first
-// header cell names properties (RE_DS_PROPERTY_HEAD), a column headed Units holds CSS units (RE_DS_COL.units — by its header
-// ONLY, never by place). A table so headed whose cells hold no CSS unit is not one (a component's props table: `| Property |
+// header cell names properties (RE_DS_PROPERTY_HEAD), a column whose header STARTS with Units holds CSS units (RE_DS_COL.units
+// — by its header ONLY, never by place; `Allowed units` is none). A table so headed whose cells hold no CSS unit is not one (a
+// component's props table: `| Property |
 // Type | Default |`). CSS_UNITS: the CSS Values 4 lengths, `%` and `fr` — a closed list; another word of a units cell is dropped
 // (`rems`), and a row left with none is not read (`unread`, by its first cell).
 const RE_DS_PROPERTY_HEAD = /^(?:propert(?:y|ies)|propriedades?|propiedad(?:es)?)$/i;

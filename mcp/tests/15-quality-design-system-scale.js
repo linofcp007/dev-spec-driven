@@ -93,6 +93,45 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
     });
   }
 
+  { // (1.38.0 review 1, T1) an HSL side against a hex / rgb one is the same colour only when the other, written in HSL as
+    // precisely as the HSL side is, gives its numbers (each channel within half a unit of its last written digit; the hue moot
+    // at s 0, s at l 0 / 100) — under the pair's 0.011, which stays the ceiling; the NEAREST same colour is the token, of equals
+    // the first. (%TEMP%/dsd-138f1-tokens/MUTATIONS.md: each key below kills the mutants it names.)
+    const kind = (j) => (j.token ? "token" : j.near ? "near" : "none");
+    const pair = (raw, tok) => kind(judge(raw, [["--t", tok]]));
+    const got = {
+      // shadcn's neutral as its Tailwind 4 upgrade writes it (hsl()) against Tailwind's zinc hexes; cal.com's integer hsla()
+      zinc: [["#18181b", "hsl(0 0% 9%)"], ["#f4f4f5", "hsl(0 0% 96.1%)"], ["#e4e4e7", "hsl(0 0% 89.8%)"], ["#09090b", "hsl(0 0% 3.9%)"]].map(([r, t]) => judge(r, [["--n", t]])),
+      cal: judge("#efefef", [["--cal-bg-subtle", "hsla(220, 14%, 94%, 1)"]]), rawHsl: pair("hsl(0 0% 3.9%)", "#09090b"), rgbSide: pair("rgb(9 9 11)", "hsl(0 0% 3.9%)"),
+      // what must STILL be the token: the true pairs, integer and 1-decimal, hex and rgb()
+      keep: [pair("#05787d", "hsl(183 92% 25%)"), pair("rgb(5, 120, 125)", "hsl(183 92% 25%)"), pair("#111827", "hsla(221, 39%, 11%, 1)"), pair("#fff", "hsl(0 0% 100%)"),
+        pair("#18181b", "hsl(240 5.9% 10%)"), pair("#05787d", "hsl(182.5 92.3% 25.5%)")],
+      // the precision written: one decimal off in s / l / h is another colour
+      prec: { s: pair("#18181b", "hsl(240 5.8% 10%)"), l: pair("#18181b", "hsl(240 5.9% 10.1%)"), h: pair("#05787d", "hsl(182.7 92.3% 25.5%)") },
+      exp: pair("#05787d", "hsl(1.83e2 92% 25%)"), turns: pair("#05787d", "hsl(902.5 92.3% 25.5%)"),
+      moot: { grey: pair("#808080", "hsl(217 0% 50%)"), white: pair("#fff", "hsl(210 40% 100%)"), black: pair("#000", "hsl(0 100% 0%)") },
+      hue: { r: pair("#ff8000", "hsl(30 100% 50%)"), g: [pair("#80ff00", "hsl(90 100% 50%)"), pair("#008000", "hsl(120 100% 25%)")] },
+      // (#002748's hue is 207.5 exactly, 207.49999999999997 in floats: 207 and 208 both its rounding)
+      wrap: pair("#ff0100", "hsl(360 100% 50%)"), eps: pair("#002748", "hsl(208 100% 14%)"),
+      clamp: { rgb: pair("rgb(300 0 0)", "hsl(0 100% 50%)"), sat: pair("#f00", "hsl(0 150% 50%)"), light: pair("#fff", "hsl(0 0% 120%)") },
+      // the ceiling: #020200's own integer HSL is black, 0.084 away — never its token (as 1.38)
+      ceiling: pair("#020200", "hsl(60 100% 0%)"),
+      nearest: { after: judge("#18181b", [["--hsl", "hsl(240 5.9% 10%)"], ["--hex", "#18181b"]]).token, before: judge("#18181b", [["--hex", "#18181b"], ["--hsl", "hsl(240 5.9% 10%)"]]).token },
+    };
+    all("1.38.0 review 1 (T1): an HSL side against a hex / rgb one by its written precision — Tailwind's zinc hexes against shadcn's hsl() neutrals and cal.com's #efefef against hsla(220, 14%, 94%, 1) are `near`, from either side and for rgb(); #05787d = hsl(183 92% 25%), a 1-decimal pair, gray-900 = cal.com's hsla and #fff stay the token; one decimal off in s / l / h is near; the exponent and the turns of a hue; the hue moot at s 0, s at l 0 / 100; CSS's clamps; #020200 is not black's token (the 0.011 ceiling); an exact token listed after an HSL one wins (got " + js(got) + ")", {
+      zinc: () => js(got.zinc.map((x) => [kind(x), x.near && x.near.delta])) === js([["near", 0.0083], ["near", 0.0032], ["near", 0.0046], ["near", 0.0058]]),
+      cal: () => kind(got.cal) === "near" && got.cal.near.token === "--cal-bg-subtle" && got.rawHsl === "near" && got.rgbSide === "near",
+      keep: () => got.keep.every((k) => k === "token"),
+      prec: () => js(got.prec) === js({ s: "near", l: "near", h: "near" }),
+      exp: () => got.exp === "token" && got.turns === "token",
+      moot: () => js(got.moot) === js({ grey: "token", white: "token", black: "token" }),
+      hue: () => got.hue.r === "token" && got.hue.g.every((k) => k === "token") && got.wrap === "token" && got.eps === "token",
+      clamp: () => js(got.clamp) === js({ rgb: "token", sat: "token", light: "token" }),
+      ceiling: () => got.ceiling === "none",
+      nearest: () => got.nearest.after === "--hex" && got.nearest.before === "--hex",
+    });
+  }
+
   { // fonts: a STACK (its last family generic, one that is not, nothing built) against the registry's font tokens by its primary
     // family; a code token's stack never makes a font token (designValue drops it: CRIT_2 must-fix 3)
     const F = (v) => T.fontStackOf(v);

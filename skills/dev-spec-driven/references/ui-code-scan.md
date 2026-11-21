@@ -74,10 +74,12 @@ every removal of the project.
 
 A feature report judges each raw value against the project's own scale — the registry's token rows with their values, then
 the code's tokens the registry does not list:
-- **Colours** — hex, `rgb()`, `hsl()`, `oklab()`, `oklch()` (`none` reads as 0): `token` names the token the value IS, in any
-  notation — exact within one notation, across two within the rounding of the pair as written (0.011 ΔEOK with an HSL side,
-  0.001 otherwise), alphas within 0.01; `near` {`token`, `delta`} the nearest within 0.02 ΔEOK — a hint, never the token's
-  colour (Tailwind's zinc is not shadcn's neutral). `hwb()`, `lab()`, `lch()`, `color()` and a named colour match by text alone.
+- **Colours** — hex, `rgb()`, `hsl()`, `oklab()`, `oklch()` (`none` reads as 0): `token` names the token the value IS (the
+  nearest of several), in any notation — exact within one notation, across two within the rounding of the pair as written
+  (0.011 ΔEOK with an HSL side, 0.001 otherwise; an HSL side against a hex or `rgb()` also as precisely as it is written: the
+  other, in HSL, rounds to its numbers — `#05787d` is `hsl(183 92% 25%)`, `#18181b` is not `hsl(0 0% 9%)`), alphas within
+  0.01; `near` {`token`, `delta`} the nearest within 0.02 ΔEOK — a hint, never the token's colour (Tailwind's zinc is not
+  shadcn's neutral). `hwb()`, `lab()`, `lch()`, `color()` and a named colour match by text alone.
 - **Fonts** — a `font-family` stack ending in a generic family, by its first family, against the registry rows' font tokens
   only (a code token's stack is never read; one ending in a named emoji font is no stack). Read when the registry holds one.
 - **Motion** — a `transition` / `animation` declaration's literal times above 1 ms and easing functions (`cubic-bezier()`,
@@ -96,13 +98,14 @@ another value IN THE SAME NOTATION — one colour each, or one number each with 
 a twin sheet). `gone` lists the `_Token sources:_` files that no longer exist. Neither changes `inSync`: it compares names.
 
 **The units table.** In design-system.md, a table whose first header cell is `Property` (`Propriedade`, `Propiedad`) and with
-a column headed `Units` (`Unidades`, `Unidad`) holding CSS units is the team's convention — which units each property takes
-(`margin-*` covers `margin` and `margin-top`; a props table, `| Property | Type | Default |`, is none). A feature report's
-`units` lists each declaration whose value takes, outside parentheses, a unit its row does not give (never `0` or a unitless
-number), and a Tailwind arbitrary size by the property it sets: {`findings` — the first 50: `file`, `line`, `property`,
-`value`, `unit`, `allowed` —, `total`, `byProperty`}. The project report's `unitsTable` {`rows`, `unread`, `past` — rows past
-the first 50}. A report only — never finish, doctor or the brief — and no default: without the table both are null. An
-example: [steering-templates.md](steering-templates.md) → design-system.md.
+a column whose header starts with `Units` (`Unidades`, `Unidad`; `Allowed units` is none) holding CSS units is the team's
+convention — which units each property takes (`margin-*` covers `margin` and `margin-top`; a props table,
+`| Property | Type | Default |`, is none). A feature report's `units` lists each declaration whose value takes, outside
+parentheses, a unit its row does not give (never `0`, a unitless number or a negative length: `-8px`), and a Tailwind
+arbitrary size in px, rem or em (`p-[10px]`; never `-mt-[12px]`, `text-[2vw]`) by the property it sets: {`findings` — the
+first 50: `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}. The project report's
+`unitsTable` {`rows`, `unread`, `past` — rows past the first 50}. A report only — never finish, doctor or the brief — and no
+default: without the table both are null. An example: [steering-templates.md](steering-templates.md) → design-system.md.
 
 **DESIGN.md** is not read; its own CLI writes a file that is:
 `npx @google/design.md export --format css-tailwind DESIGN.md > theme.css` (a token file by its name). **Breakpoints:** both
