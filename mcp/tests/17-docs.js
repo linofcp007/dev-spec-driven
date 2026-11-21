@@ -1600,6 +1600,12 @@ exports.run = async ({
         return sane && keys.length >= 60 && !missed.length && codes.length >= 13 && codes.every((c) => toolRow.includes(c))
           && /the tool and the CLI ask for it, the engine's default runs none/.test(toolRow) && /never in it, and `gone` and the units table never change it either/.test(toolRow);
       }],
+      // (item 5's reach: chain S's doctor entry, corrected to uiStateMatrix as ui-design-patterns.md is — the D block runs the examples)
+      ["tooling-reference: doctor's ui-states — the anchor in any language, every anchored table, an n/a alone among a row's view cells, the a11y column and after unjudged", () => {
+        const doc = ws(raw("skills", "dev-spec-driven", "references", "tooling-reference.md"));
+        return /recognised by its `Announced · focus` header cell in any language, every such table of the section:/.test(doc)
+          && /\(an n\/a alone among a row's view cells answers its row\); the a11y column and the ones after it are not judged, a matrix in prose is not checked\./.test(doc);
+      }],
       // item 2's one-liners (DECISIONS "T"): the checklist, the reviewer, the implementer
       ["track-checklists: Phase 2 — a team's units convention declared once, as the registry's units table", () =>
         /A team with a convention for units declares it once, as `design-system\.md`'s units table \(`references\/ui-code-scan\.md`\)\./.test(ws(raw("skills", "dev-spec-driven", "references", "track-checklists.md")))],
