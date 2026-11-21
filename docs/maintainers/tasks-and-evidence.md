@@ -649,7 +649,8 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
 - **The snapshot** — at a feature's FIRST complete tasks approval at level tests (`approvePhase`: `p === "tasks"`, the approval
   complete — a role's waiting sign-off takes none; a fast-forward through tasks passes it on): `protectWalk(projectDir, first)` —
   each live feature's `.specs/<f>/tests/` FIRST (the approving feature's, `first`, before the others), then the project's test
-  files (`walkProject` — hidden / `SCAN_IGNORE` folders skipped, links never followed; `isCodeFile && isTestFile`), at most
+  files (`walkProject` — hidden / `SCAN_IGNORE` folders skipped, links never followed; `isCodeFile && isTestFile` — 1.38: a
+  Jest `__mocks__/` / `__fixtures__/` file and a Cypress `*.cy.<script>` among them, markdown-and-trace.md → Test code), at most
   `PROTECT_MAX_FILES` (2,000 — `truncated` past them; so a project past the cap still lists the feature's own failing tests).
   **The walk runs OUTSIDE the feature lock:** the facade wraps the locked approvePhase in `protectWalkFirst`, which walks only when
   this call may be that first approval (phase or `through` tasks, no revoke, no dry run, level tests, the list not `snapshotted`)
@@ -1204,6 +1205,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   accept and `protect <file>` read the typed path: through a junction a second key, the real file's lift left in force —
   `realRel`. **D4-1** (prose) /spec-finish step 1, the accept's note and verification.md: finish again after the accept, or the
   summary written before it names the test as changed.
+- **1.38.0** (chain P) — `isTestFile` gained Cypress's `*.cy.<script>`, `__mocks__/` and `__fixtures__/` (markdown-and-trace.md →
+  Test code and file reads): at level tests a manual mock or a fixture module is now a protected test — snapshotted at the
+  tasks approval, its edits asked about, finish's check — as a test file under `tests/` always was.
 
 ### Harness-observed evidence
 - **1.14 F1** — the observe hook, the `observed` stamp, `meta.evidence` and reason `unobserved`. Its feature review: **R1** — an

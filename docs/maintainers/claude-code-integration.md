@@ -184,7 +184,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `git rm src/a.ts` and `git checkout -- src/a.ts` don't.
 - **"Code" is `isCodeFile(rel)`** (engine/scan.js), ONE notion the guard, the brownfield scan, `spec_scan {coverage: true}` and
   the test-code scan share: `CODE_EXT` (a broad list) plus `TEST_EXTRA_EXT` (`.bats`, Perl's `.t`) on a file that IS a test
-  (`isTestFile`: `t/basic.t` yes, `notes.t` no); `GUARD_CODE_EXT` = both (trace's `plannedOutsideCode`, the reuse check). The
+  (`isTestFile`: `t/basic.t` yes, `notes.t` no; 1.38: `__mocks__/`, `__fixtures__/`, Cypress's `*.cy.ts` — test files at the
+  scope level and in Phase 4); `GUARD_CODE_EXT` = both (trace's `plannedOutsideCode`, the reuse check). The
   scans set test fixtures apart (`isTestFixture`: a `.sql` / `.ipynb` in a test folder not named like a test, all of
   `testdata/`; the test-code scan still reads one a test plan's File column names); the guard doesn't. It is an allow-list —
   docs say "a broad list of languages", never "any source file"; add a language to `CODE_EXT` (+ the guard test in
@@ -681,6 +682,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   order (tasks-and-evidence.md → Protected tests, History).
 - **1.36.0 review 4** — the lift line's last fallback (no open task anywhere) is the holder listing the file with the latest tick,
   no longer the first by folder name (an old all-ticked feature, whose lift then stood unseen).
+- **1.38.0** (chain P) — `isTestFile`'s three test-harness conventions reach the guard: a `__mocks__/` / `__fixtures__/` file and a
+  Cypress `*.cy.<script>` are test files — allowed at the scope level (`test-file`) and in Phase 4 (`tests-phase`), protected at
+  level tests (markdown-and-trace.md → Test code and file reads, the blast radius).
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer

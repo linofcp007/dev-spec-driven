@@ -1261,6 +1261,17 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require, handRo
     const wrongL = LOCAL_T.filter(([f, want]) => S.isTestFile(f) !== want).map(([f]) => f);
     ok(!wrongL.length, "1.34.1 languages: isTestFile knows the Portuguese teste/ / testes/ and the Spanish prueba/ / pruebas/ test " +
       "folders (any case), never a file or a folder that merely starts with them — testemunho.js, testes.js, contestes/, pruebasDeCarga/ (wrong: " + js(wrongL) + ")");
+    // (1.38) a test harness's files: Cypress's `*.cy.<script>` (a script only — a Welsh locale's strings.cy.json is data; a Welsh
+    // locale MODULE, messages.cy.ts, reads as a test: the documented caveat), Jest's `__mocks__/` and `__fixtures__/` (any case)
+    const HARNESS = [
+      ["cypress/e2e/login.cy.ts", true], ["src/components/Button.cy.tsx", true], ["src/a.cy.js", true], ["src/a.cy.jsx", true], ["src/a.cy.mjs", true], ["src/a.cy.cts", true],
+      ["apps/web/modules/bookings/components/__mocks__/DatePicker.tsx", true], ["__mocks__/fs.js", true], ["test-utils/__fixtures__/user.ts", true], ["src/__MOCKS__/a.ts", true],
+      ["src/i18n/messages.cy.ts", true],
+      ["src/i18n/strings.cy.json", false], ["src/cy.ts", false], ["src/a.cy.tsx.bak", false], ["src/a.cy.css", false], ["src/mocks/a.ts", false], ["src/fixtures/a.ts", false],
+      ["src/__mocks__x/a.ts", false], ["src/my__mocks__/a.ts", false],
+    ];
+    const wrongH = HARNESS.filter(([f, want]) => S.isTestFile(f) !== want).map(([f]) => f);
+    ok(!wrongH.length, "1.38 isTestFile: a test harness's files — Cypress's *.cy.<script> (.ts / .tsx / .js / .jsx / .mjs / .cts), __mocks__/ and __fixtures__/ (any case) — never a .cy.json, a bare cy.ts, a .cy.tsx.bak, a .cy.css, mocks/ or fixtures/ alone (wrong: " + js(wrongH) + ")");
 
     // 2. A PowerShell project over MCP: spec_scan — stack powershell (a .psd1 module manifest / .ps1 / .psm1 files), test framework
     // pester, entrypoints (a top-level script, the manifest's RootModule), env names ($env:NAME, [Environment]::GetEnvironmentVariable);

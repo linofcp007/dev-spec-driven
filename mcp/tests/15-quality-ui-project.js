@@ -50,6 +50,8 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
   { // what the pass reads: the view files that pass uiViewFile (the feature report's predicate) — never a test, a story, a mock
     // or fixture by name, a type declaration; each file once (`read`)
     const p = project("views", { "src/App.tsx": IMG, "src/__tests__/Img.tsx": IMG, "src/Button.stories.tsx": IMG, "src/Img.test.tsx": IMG, "src/Img.mock.tsx": IMG,
+      // (1.38, isTestFile: a manual mock, a fixture, a Cypress component spec — cal.com's components/__mocks__/, a cy.mount(<div onClick>))
+      "src/components/__mocks__/DatePicker.tsx": IMG, "src/__fixtures__/Card.tsx": IMG, "src/Button.cy.tsx": "it(\"mounts\", () => cy.mount(<div onClick={go}>x</div>));\n",
       "src/styles/app.css": ".a { color: red; }\n", "src/types.d.ts": "export type A = 1;\n", "src/util.ts": "export const u = '<img src=x>';\n" });
     const u = inv(p);
     all("1.38 project UI checks: the pass reads the view files the feature report would — a test folder's, a story's, a test's, a mock's are not read (their <img> uncounted); a .d.ts and a plain .ts are no view file; each file is read once (got " + js(u) + ")", {

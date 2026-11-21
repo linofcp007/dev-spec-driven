@@ -1418,7 +1418,8 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   for a whole rule is the `_UI checks off:_` marker (1.38, below); a finding both silences counts as silenced (the comment
   first).
 - **The feature report** (`featureReport`) — its view files are those `uiViewFile` takes (1.38: THE view-reader predicate, the
-  project inventory's too — a view or style file that is no test, story, mock / fixture by name, type declaration); the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
+  project inventory's too — a view or style file that is no test (`isTestFile`: 1.38 adds `__mocks__/`, `__fixtures__/`,
+  Cypress's `*.cy.<script>`), story, mock / fixture by name, type declaration); the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
   its token files (a globals.css it edits) are read for the checks ALONE — never for raw values, never in `viewFiles`, within
   `DS_VIEW_FILES` files read in all. `uiChecks` (`uiChecksReport`) = {findings (the first `DS_LIST`: rule, level, file, line,
   value — warn first, then by file and line), total, byRule, silenced, off?, offIgnored? (1.38 — the marker, below), limits}; its limits — EVERY bound that cut a read or

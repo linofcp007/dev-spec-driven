@@ -1382,5 +1382,9 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
       js(scope) === js(["allow:in-scope", "ask:out-of-scope", "allow:test-file", "allow:not-code"]) && asks(scopeHook) && /scripts\/deploy\.ps1 is not in the plan/.test(JSON.parse(scopeHook.stdout || "{}").hookSpecificOutput.permissionDecisionReason || ""),
       "1.21.1 languages: guard mode — a .ps1 / .psm1 edit asks (the hook too), the .psd1 manifest is not code, a .bats suite and t/basic.t are code, notes.t is not; in Phase 4 the Pester files (tests/ and beside the module), the .bats and t/*.t are test files; at the scope level the planned .psm1 is in scope, another .ps1 asks naming it, a *.Tests.ps1 is a test file (got " +
       js([before, phase4, scope, hookPs1.stdout.slice(0, 120)]) + ")");
+    // (1.38) a test harness's files are test files at the scope level: a Jest manual mock, a fixture, a Cypress spec — allowed as the
+    // Pester file is; a component the plan doesn't name still asks
+    const harness = ["src/Greeter/__mocks__/Greeter.ts", "src/__fixtures__/user.ts", "src/Greeter/greet.cy.ts", "src/Greeter/Greeter.ts"].map((f) => g(pg, f));
+    ok(js(harness) === js(["allow:test-file", "allow:test-file", "allow:test-file", "ask:out-of-scope"]), "1.38 guard mode (scope): a __mocks__ / __fixtures__ file and a Cypress *.cy.ts are test files — allowed; a component outside the plan asks (got " + js(harness) + ")");
   }
 };
