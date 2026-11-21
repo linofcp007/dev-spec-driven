@@ -1063,10 +1063,15 @@ exports.run = async ({
       ["ui-design-patterns: the UI checks — a +ui feature's finish warning, never a blocker; one more warning registry or not",
         () => /For a \+ui feature, a warning of `spec_finish` too, never a blocker/.test(checks)
           && /The UI checks' findings are one more warning, registry or not\./.test(registry)],
+      // (review 2 of 1.37: on its line or the line above whatever that line holds — S5's narrowing out —, the comment forms
+      // that silence and a class's own line — R2-D1, R2-F4, R2-D5; what is not judged — R2-S6; the focus search's bound, the
+      // engine's, and what a bound cut in the report alone — R2-E1, R2-E2)
       ["ui-design-patterns: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
-        () => /a comment `ui-check-off: <rule-id> <why>` on its line or alone on the line above \(a stylesheet's: its declaration's\): counted, never listed; only this comment silences \(a linter's is not read\) — an `<a>` a parent gives its href \(Next's `legacyBehavior`\) is one to silence/.test(checks)],
-      ["ui-design-patterns: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose body holds a control or a slot, a spread/.test(checks)
-        && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")],
+        () => /a comment `ui-check-off: <rule-id> <why>` on its line \(a declaration's, a class's\) or the line above — `\/\/`, `\/\* \*\/`, `<!-- -->`, not Blade's or Twig's: counted, never listed; only this comment silences \(a linter's is not read\) — an `<a>` a parent gives its href \(Next's `legacyBehavior`\) is one to silence/.test(checks)],
+      ["ui-design-patterns: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
+        && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")
+        && checks.includes("the project's first " + num("DS_FOCUS_SHEETS") + " stylesheets — past them, named unjudged — 2.4.7")
+        && /In the report alone: `transition-all` \(kits ship it\), what a bound cut\./.test(checks)],
       ["ui-design-patterns: the Review row points to the UI checks", () => /— and the \*\*UI checks\*\* of the same files \(below\)/.test(registry)],
       // (1.37.0 review 1: the whole component — never a variant or a prop —, any punctuation after the word, a replacement not
       // retired itself, the notes' name in the registry's letter case)

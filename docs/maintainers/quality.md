@@ -1382,7 +1382,9 @@ wrong finding sends a team to fix code that is right.
   tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
   of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —
   nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes — each ≤ 3×
-  plain JSX of the same size (measured 0.07–2.5×); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real
+  plain JSX of the same size (measured 0.07–2.5×) — a file whose every line is a finding is not one of them and is not
+  bounded: ~4× (review 2 of 1.37, hostile3: a 256K HTML file of an `<img>` a line 4.0–4.3×, a TSX one 3.3–3.6×, a sheet
+  of removals 2.7×, the same on the parent); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real
   ones); a finish without a registry ≤ 1.5× the feature report it runs (~0.9×); the feature report with the focus pass AT
   its bound ≤ 2.5× the same report with no candidate (the owner's bar after review 1's follow-up; one project, two features
   reading the same views, 1,000 sheets none naming focus: 1.2–1.3× at 48). The sheet of braces is the walker's every block: three allocation-free
@@ -2226,3 +2228,32 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   style). A click on an HTML void element is judged at once as a self-closing one (`VOID`): `<img onclick>` no longer waits
   for a close tag and is counted as `tag-length`. Mutation pass of the new lines: 22 of 22, the list written first — the
   focus pre-test among them, killed now: with the budget counting parsed characters it changes a result, no cost guard alone.
+- **1.37.0 review 2** (four reviewers again; this area's fix round) — three of the four MEDIUMs were review 1's own fixes,
+  each wider than its finding. R2-S1 (regression): S4's ONE predicate also widened the removal side — a `focus-within:` /
+  `group-focus:` / `peer-focus:` / `has-focus:` removal on an element nobody focuses was a candidate (7 of the corpus's
+  candidates, cal.com's popover panels and inputs' wrappers, Headless UI's comboboxes); a removal is judged now only under
+  the element's OWN focus (`isOwnFocus`), as the sheet reader judges `:focus` and never `:focus-within`, the focus-style
+  side keeping `isFocusVariant`. R2-S2 (S3's remainder): `outline-offset` draws nothing — Tailwind v3's compiled
+  `outline-none` (`outline: 2px solid transparent; outline-offset: 2px`, in the CLI's `-o src/output.css`) excused every
+  `focus:outline-none` of its own project — and an `@apply` in a focus rule reads by its bare utilities (`*:focus { @apply
+  outline-none }` was a focus style, its own excuse). R2-E1 (regression) + R2-E2: past 48 project sheets (an Angular app
+  of ~47 components, a CSS-modules app) the rule could never fire, and the report said "nothing" — a bound never hides a
+  KNOWN candidate silently now: the pass's limit names the removals it left (count, first file:line, focus-chars' sheet —
+  R2-D2), the CLI prints it in place of "nothing", finish says it (the warning's last clause, or alone — `uiUnjudged`);
+  the reviewer's 60-component Angular and 140-module Next apps: a finish note now. The other bounds stay in the report:
+  none hides a known candidate. R2-D1 (regression of S5): S5's "alone on the line above" taken out — a stylesheet's team
+  writes the marker after the rule's `{`, and finish's own text said "the line above"; 457d3da's rule is back (two
+  branches had each pinned its own wording: the user-facing sentence is the rule's test too). LOWs by subtraction: R2-S3
+  the clipboard API, not the word (a blocking handler's message excused it); R2-S4 `[tabindex="-1"]` only where the
+  compound requires it (`:not(…)` skipped every reachable one); R2-S5 `<label>` no control in a body, a candidate whose
+  end tag HTML omits counted at the file's end (it was dropped silently); R2-S7 render-prop `{children(…)}` and Blade's
+  `{!! $slot !!}` are outlets; R2-D3 one ellipsis; R2-D4 `tag-length` only for a tag that could have held a finding (shadcn's
+  `<DayPicker>` props were a limit line nobody could act on). Prose: R2-S6 (a component or an icon alone in a click's
+  content is a doubt — the docs said "a control"), R2-D5, R2-F4 (the comment forms that silence), R2-F5 (a finding on
+  every line ~4×, unbounded). The corpus again (2,591 view files): the 7 focus-within candidates gone, nothing else moved —
+  img-no-alt 17, zoom-disabled 3, click-no-keyboard 11, no outline-removed finding. Mutation pass: this round's 51, the list
+  written before the fixtures — 49 caught at first, two wanted a fixture (a `)` before the tabindex the compound requires;
+  an outer candidate counted past the bound while an inner one waits at the file's end) — and the whole list again on the
+  final tree, 51 of 51; review 1's lists run whole on it: 83 of its 106 as written, 16 ported to the lines this round
+  rewrote (all caught), 4 superseded by the follow-up's list, 2 gone with S5's rule, 1 moved into the i18n strings with
+  its line (the empty top's ellipsis — this round's D3 mutants); the follow-up's 22 of 22 (one ported).

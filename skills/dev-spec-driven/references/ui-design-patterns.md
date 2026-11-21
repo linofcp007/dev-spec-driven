@@ -148,17 +148,18 @@ design itself is edited and approved again.
 
 ### UI checks — defects whatever the taste
 
-The feature report also reads the feature's view and style files for defects no taste excuses — `uiChecks`: the first
-50 findings (rule, file, line), the total, a count per rule. For a +ui feature, a warning of `spec_finish` too, never a blocker:
-`zoom-disabled` (a viewport that blocks zoom — WCAG 1.4.4), `img-no-alt` (a rendered `<img>` with no alt — 1.1.1),
-`outline-removed` (`outline: none` on an element, `*` or `:focus` while neither the feature's files nor any stylesheet of the project holds a focus
-style — 2.4.7), `click-no-keyboard` (a click handler on an element the keyboard cannot reach: no `tabindex` — a role or a
-key handler alone is not enough — 2.1.1), `paste-blocked` (an inline paste handler that cancels — 3.3.8 at a sign-in or
-code step, a usability defect elsewhere). In the report alone: `transition-all` (kits ship it). Silence one finding with a
-comment `ui-check-off: <rule-id> <why>` on its line or alone on the line above (a stylesheet's: its declaration's): counted,
-never listed; only this comment silences (a linter's is not read) — an `<a>` a parent gives its href (Next's
-`legacyBehavior`) is one to silence. A doubt is never judged: a named paste handler, a click whose body holds a control or a
-slot, a spread (`{...props}`), a tag inside an attribute or a one-line template literal, Pug, a tag past 100 attributes or 30 lines.
+The feature report also reads its view and style files for defects no taste excuses (`uiChecks`). For a +ui feature, a
+warning of `spec_finish` too, never a blocker: `zoom-disabled` (zoom blocked — WCAG 1.4.4), `img-no-alt` (an `<img>`
+with no alt — 1.1.1), `outline-removed` (`outline: none` on an element, `*` or `:focus` with no focus style in the
+feature's files or the project's first 48 stylesheets — past them, named unjudged — 2.4.7), `click-no-keyboard` (a click
+handler on an element the keyboard cannot reach: no `tabindex` — a role or a key handler alone is not enough — 2.1.1),
+`paste-blocked` (an inline paste handler that cancels — 3.3.8 at a sign-in or code step, a usability defect elsewhere).
+In the report alone: `transition-all` (kits ship it), what a bound cut. Silence one with a comment
+`ui-check-off: <rule-id> <why>` on its line (a declaration's, a class's) or the line above — `//`, `/* */`, `<!-- -->`,
+not Blade's or Twig's: counted, never listed; only this comment silences (a linter's is not read) — an `<a>` a parent gives its
+href (Next's `legacyBehavior`) is one to silence. A doubt is never judged: a named paste handler, a click whose content
+holds a control, a component (an icon or a text component too) or a slot, or no text (an icon or an image alone), a
+spread (`{...props}`), a tag in an attribute or a one-line template literal, Pug, a tag past 100 attributes or 30 lines.
 
 ---
 
