@@ -5,7 +5,7 @@
  * true}'s `breakpoints` (the project's report and a feature's alike — never spec_finish's part, never the seed). The first source
  * that gives a width wins:
  *   ui.md   — .specs/steering/ui.md's `- Breakpoints:` line (every +ui stub holds it, under that label in EN / PT / ES): its value
- *             up to the first `·`, a `[…]` slot left unread — the team's standard, fingerprinted into the approvals;
+ *             up to the first `·` no length follows, a `[…]` slot left unread — the team's standard, fingerprinted into the approvals;
  *   code    — Tailwind 4's `--breakpoint-<name>` in a top-level `@theme` block of a stylesheet the token scan reads, through the
  *             observer that walk carries (never a second walk); `partial` when no `--breakpoint-*: initial` / `--*: initial`
  *             reset them — Tailwind keeps its own then, which the engine never assumes (stale data): the default set joins;
@@ -25,8 +25,8 @@ function __link(E) { ({ codeBlockLines, commentLines, readIfExists, specsRoot, s
 const BP_DEFAULT = [320, 390, 768, 1024, 1440]; // the review's default set
 const BP_FLOOR = 320; // a width below it is the floor's (captured anyway) — the floor is always the first width
 const BP_CEIL = 3840; // a width above it is not read (`unread`)
-const BP_WIDTHS = 6; // widths the review captures (ui-review.md: one dispatch of images per view) — past them the narrowest
-// BP_WIDTHS - 1 and the widest, said
+const BP_WIDTHS = 6; // widths the review captures (ui-review.md: one dispatch of images per view) — past them the default set's
+// that joined the code's give way first, then the narrowest BP_WIDTHS - 1 and the widest, said
 const BP_UNREAD = 5; // unread breakpoints listed (`unreadTotal` counts them all)
 const BP_LINE = 200; // characters of ui.md's Breakpoints value read — past them, said
 const BP_EM = 16; // px per rem / em in a media query (the initial font size, whatever the page sets)
@@ -35,6 +35,9 @@ const UI_FILE = "ui.md"; // (the +ui steering file — TRACK_STEERING.ui)
 // --- ui.md's line ----------------------------------------------------------------------------------------------------------------
 // `- Breakpoints: …` — a list item (`-`, `*`, `+`), the label in any case, emphasis marks around it (`- **Breakpoints:** …`)
 const RE_UI_LINE = /^[ \t]*[-*+][ \t]+[*_]{0,2}breakpoints[*_]{0,2}[ \t]*:(.*)$/i;
+// the value's end: the first `·` no length follows (blanks skipped) — `320 · 390 · 768 px`, as the CLI prints the widths, is a
+// list; the stub's ` · text expansion …` (RTL · locale formats) ends it
+const RE_UI_END = /·(?![ \t]*\.?\d)/;
 const RE_UI_SLOT = /\[[^\]]*(?:\]|$)/g; // the stub's `[360 / 768 / 1280 px]` — what a `[` opens, closed or not
 // a length: a thousands group (`1.280`, `1,440`, `2 560` with a no-break space — one digit before it, a width being ≤ 3840, three
 // after; never a plain blank: `360 768 1280` is a list) or a number — then px / rem / em, or none
@@ -70,7 +73,7 @@ function uiBreakpoints(root) {
     const m = code[i] ? null : RE_UI_LINE.exec(vis[i]);
     if (!m) continue;
     const at = toPosix(path.relative(root, file)) + ":" + (skip + i + 1);
-    const dot = m[1].indexOf("·"); // (the stub goes on past one: text expansion · RTL · locale formats)
+    const dot = m[1].search(RE_UI_END);
     let value = (dot === -1 ? m[1] : m[1].slice(0, dot)).trimEnd();
     const cut = value.length > BP_LINE;
     if (cut) { const on = /[\w.,]/.test(value[BP_LINE]); value = value.slice(0, BP_LINE); if (on) value = value.replace(RE_CUT_TOKEN, ""); }
@@ -132,22 +135,27 @@ function codeBreakpoints(found) {
 // "ui.md" | "code" | "default", partial (the code's widths and the default set: Tailwind keeps its own five too), at (the source's
 // first place, file:line — null for the default set), unread (the first BP_UNREAD — [{ name, value, at }]: a value that is no
 // length, or wider than BP_CEIL — of the sources read: never the code's when ui.md decides), unreadTotal, limits ([{ code, read,
-// … }]: breakpoint-widths {count, first} — widths past BP_WIDTHS, the first one left out; breakpoint-line {at} — ui.md's value
+// … }]: breakpoint-widths {count, first} — widths past BP_WIDTHS, the narrowest one left out; breakpoint-line {at} — ui.md's value
 // longer than BP_LINE) }. `found`: what the scan's walk saw (breakpointWatch's). Its limits never join the report's (`limits`,
 // `truncated`, `inSync`): they bound the widths, not the registry's comparison.
+const sorted = (xs) => [...new Set([BP_FLOOR, ...xs])].sort((a, b) => a - b); // 320 first, ascending, once each
+const cap = (xs) => (xs.length > BP_WIDTHS ? [...xs.slice(0, BP_WIDTHS - 1), xs[xs.length - 1]] : xs); // the narrowest 5 and the widest
 function breakpointsReport(projectDir, found) {
   const ui = uiBreakpoints(path.resolve(projectDir));
   const unread = [], limits = [];
-  let from = "default", partial = false, at = null, widths = BP_DEFAULT;
+  let from = "default", partial = false, at = null, widths = BP_DEFAULT, fill = [];
   if (ui) { unread.push(...ui.unread); if (ui.cut) limits.push({ code: "breakpoint-line", read: BP_LINE, at: ui.at }); }
   if (ui && ui.widths.length) { from = "ui.md"; at = ui.at; widths = ui.widths; } else {
     const code = codeBreakpoints(found);
     unread.push(...code.unread);
-    if (code.widths.length) { from = "code"; at = code.at; partial = code.partial; widths = partial ? [...code.widths, ...BP_DEFAULT] : code.widths; }
+    if (code.widths.length) { from = "code"; at = code.at; partial = code.partial; widths = code.widths; if (partial) fill = BP_DEFAULT; }
   }
-  const all = [...new Set([BP_FLOOR, ...widths])].sort((a, b) => a - b);
-  const kept = all.length > BP_WIDTHS ? [...all.slice(0, BP_WIDTHS - 1), all[all.length - 1]] : all;
-  if (kept.length < all.length) limits.push({ code: "breakpoint-widths", read: BP_WIDTHS, count: all.length - kept.length, first: all[BP_WIDTHS - 1] });
+  // partial: the default set stands in for the framework's own widths (never read) — a declared width is a fact, so the
+  // default set's give way first, its narrowest kept in the places the project's widths leave
+  const own = cap(sorted(widths));
+  const kept = sorted([...own, ...fill.filter((w) => !own.includes(w)).slice(0, BP_WIDTHS - own.length)]);
+  const left = sorted([...widths, ...fill]).filter((w) => !kept.includes(w));
+  if (left.length) limits.push({ code: "breakpoint-widths", read: BP_WIDTHS, count: left.length, first: left[0] });
   return { widths: kept, from, partial, at, unread: unread.slice(0, BP_UNREAD), unreadTotal: unread.length, limits };
 }
 

@@ -1634,7 +1634,7 @@ const msg = {
       },
       bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint" : "breakpoints"} whose width was not read — ${list}: write the project's widths (320–3840 px) in .specs/steering/ui.md's Breakpoints line`,
       bpLimit: {
-        "breakpoint-widths": (read, count, first) => `  (${count} more ${count === 1 ? "width" : "widths"} not captured, the first ${first} px — the review takes ${read}: the narrowest ${read - 1} and the widest)`,
+        "breakpoint-widths": (read, count, first) => `  (${count} more ${count === 1 ? "width" : "widths"} not captured, the first ${first} px — the review takes ${read})`,
         "breakpoint-line": (read, count, first, at) => `  (${at}: only the first ${read} characters of the Breakpoints line are read)`,
       },
       dsMissingHead: (n) => `  in the code, not in the registry (${n}) — a row each:`,

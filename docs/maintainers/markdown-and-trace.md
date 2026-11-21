@@ -36,7 +36,9 @@ matrix. The rules come first; how they came to be — the releases and review fi
     `sectionLines` too) is whitespace-folded and lower-cased, a list bullet or quote marker dropped; a line holding `|` (a
     table row, a pipe-less GFM one too — no template line holds a `|` but a table row) is keyed by its non-empty cells,
     trimmed (`tableCells`), on both sides (1.38): a blank column added, a column deleted, compact pipes or the outer pipes
-    dropped leave a scaffold row a scaffold row — a cell written makes it the author's.
+    dropped leave a scaffold row a scaffold row — a cell written makes it the author's, a `TBD` or a dash too (so a state
+    matrix of `TBD` / dashes passes ui-sections and the m / l gate; doctor's `ui-states` warns about each such cell —
+    quality.md → UI state matrix).
 - **Doctor's `mermaid`:** `mermaidState(design)` → present · template · missing, over the ```` ``` ```` / `~~~` blocks
   whose info string starts with `mermaid`, outside comments. `template` — each holds a scaffold diagram
   (`templateDiagramSet()`, every language and design size, from the corpus; `renderTemplateDiagrams()` when it is stale) —
@@ -318,6 +320,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   as written: keyed now on any line holding `|` (no template line holds one outside a table row, so the corpus kept its keys).
 - **1.38.0** (chain S) — `naAnswer` exported: doctor's `ui-states` reads each view cell of the state matrix with the sized
   sections' n/a rule (`na` answers, `na-short` is open) instead of a second n/a reader.
+- **1.38.0 review 1** (BS-3) — a matrix whose cells are all `TBD` or a dash read as filled, so the m / l gate passed it while
+  the CHANGELOG said it "never passes an empty matrix". A key of the cells that ANSWER (`genericAnswer` out — the reviewer's
+  prototype, checked on 1,320 section states) was set aside: the owner chose prose — the untouched matrix (a column added or
+  deleted, reformatted) is template, a `TBD` / dash one is written and doctor's `ui-states` warns about each such cell, as
+  the Template bullet above and ui-design-patterns.md now say (a 17-docs row runs both through `sectionState`). 1.39 backlog.
 
 ### Requirements traceability matrix
 - **1.14 F5** — the matrix: `trace_check {matrix: true}`, `trace --matrix` / `--csv`, the export's section and `.rtm.csv`.

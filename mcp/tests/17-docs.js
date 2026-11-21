@@ -1088,13 +1088,20 @@ exports.run = async ({
       // code and comments, its slot unread, a bare number's unit, thousands, 200 characters; a top-level @theme, `partial` as
       // the resets say; past six; who prints them; the values not read — each example below run through breakpointsReport)
       ["responsive: where the widths come from — the first source with a width ≥ 320: ui.md's first line, a top-level Tailwind 4 @theme, else the default set; ≤ 6, 320 first; who prints them, what is not read — as breakpoints.js reads them", RS,
-        /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` \(px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; the stub's `\[…\]` slot is not read, so an untouched stub falls through;/,
+        /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` that no length follows \(`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text expansion` ends it; px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; a `\[…\]` is the stub's slot and never read — write the widths without the brackets —, so an untouched stub falls through;/,
         /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set joins the theme's — list them all in ui\.md to choose\); 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
-        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said\./,
+        /At most six widths, 320 first \(the reflow width\) — past six, the default set's give way first where they joined a theme's, then the narrowest five and the widest; the rest said\./,
         /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px\) with its place — write the widths in ui\.md's line then\./,
         () => {
           const got = (line) => { const r = bpOf(line); return [r.from, r.widths.join(" "), r.unread.map((u) => u.value).join("|"), r.limits.map((l) => l.code).join(",")].join(" / "); };
+          // (1.38.0 review 1: the printed list read whole, a filled bracket unread, a theme's 1600 kept over the default set's 1440)
+          const lazy = Eng.loadLazyTier(), css = "@theme inline {\n  --breakpoint-3xl: 1600px;\n  --breakpoint-4xl: 2000px;\n}\n", w = lazy.breakpointWatch();
+          lazy.styleTokens(css, "a.css", w.on("a.css", css));
+          const theme = lazy.breakpointsReport(path.join(tmp, "z138-bp-none"), w.found);
           return got("- Breakpoints: 360 / 768 / 1,440 px · text expansion") === "ui.md / 320 360 768 1440 /  / "
+            && got("- Breakpoints: 320 · 390 · 768 px · text expansion") === "ui.md / 320 390 768 /  / "
+            && got("- Breakpoints: [576 / 768 / 992 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
+            && theme.widths.join(" ") === "320 390 768 1024 1600 2000" && theme.limits[0].first === 1440
             && got("- Breakpoints: [360 / 768 / 1280 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
             && got("- Breakpoints: 240 / 300 px") === "default / 320 390 768 1024 1440 /  / "
             && got("- Breakpoints: 30 / 48 / 80 rem") === "ui.md / 320 480 768 1280 /  / "
@@ -1198,9 +1205,11 @@ exports.run = async ({
         /a column per view between `State` and `Announced · focus` — name the `View` column after the first view and add one per other view \(a screen, a route, a dialog; a component's own states belong to its contract\)\./,
         /or `n\/a — why` in four words or more; an `n\/a — why` alone among a row's view cells answers every view\./],
       ["ui-design-patterns: what doctor's ui-states reads — labels in any language, open cells, every anchored table, the a11y column on unjudged; a warn at m / l / no size, a note at s, never a gate — as uiStateMatrix reads them", states,
-        /Doctor's `ui-states` finds each state by its label, in any of the plugin's languages — a qualifier after it is fine \(`Error — payment`, `Errors`\), a word before it is not \(`Network error`\), and a state's rows count together — and warns about a state with no row and each cell left open \(blank, a dash, a `\[slot\]`, `TBD`, an `n\/a` without its four words\)/,
+        /Doctor's `ui-states` finds each state by its label, in any of the plugin's languages — a qualifier after it is fine \(`Error — payment`, `Errors`\), a word before it is not \(`Network error`\), and a state's rows in one table count together — and warns about a state with no row and each cell left open \(blank, a dash, a `\[slot\]`, `TBD`, an `n\/a` without its four words\)/,
         /at size m \/ l or with no size; a note at size s; never a refusal, never part of a gate, never on a finished feature\./,
-        /It reads every table of the section whose header holds `Announced · focus` \(in any of those languages\) and never judges that column or one after it — the critic does; a prose matrix is not checked, and an untouched scaffold or an `n\/a` section passes\./,
+        /It reads every table of the section whose header holds `Announced · focus` \(in any of those languages\) — each a matrix of its own, a row per state in each: two tables never share their rows — and never judges that column or one after it — the critic does; a prose matrix is not checked, and an untouched scaffold or an `n\/a` section passes\./,
+        // (1.38.0 review 1, BS-3: the gate refuses the untouched matrix, never a TBD one — sectionState below)
+        /The design gate at size m \/ l refuses the untouched matrix \(a view column added or deleted, the table reformatted, it is still the template's\); a matrix of `TBD` or dashes passes the gate — `ui-states` is what warns about each such cell\./,
         () => {
           const ids = ["loading", "error", "empty-first-use", "offline", "success", "stale", "partial"];
           const m = Eng.uiStateMatrix("# Design\n\n## [UI] UI States\n\n| " + Q.uiStateHead + " | Checkout | " + Q.uiStateA11y + " | Notes |\n|---|---|---|---|\n"
@@ -1210,9 +1219,19 @@ exports.run = async ({
             + "| Estado | Checkout | Anunciado · foco |\n|---|---|---|\n| A carregar | o esqueleto | |\n", ids);
           const gaps = (t) => t.gaps.map((g) => g.code + ":" + g.id).join(" ");
           const scaffold = (() => { const p = path.join(tmp, "z138-states"); S.initProject(p, ["ui"], "en"); return fs.readFileSync(path.join(S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" }).dir, "design.md"), "utf8"); })();
+          // the scaffold's matrix, a view column added (untouched: the template's) or every view cell TBD (written: the gate passes it,
+          // ui-states warns)
+          const sec = Eng.trackSectionTable("ui").find((s) => s.name === "UI States"), bare = scaffold.replace(/^> \*\*TODO\*\*[^\n]*\n/gm, "");
+          const gate = (design) => Eng.sectionState(design, [sec], Eng.trackMarker("ui"), { size: "m", lang: "en" })[0].status;
+          const head = "| " + Q.uiStateHead + " | " + Q.uiStateView + " | " + Q.uiStateA11y + " |\n|---|---|---|";
+          const added = bare.replace(head, "| " + Q.uiStateHead + " | Orders | " + Q.uiStateView + " | " + Q.uiStateA11y + " |\n|---|---|---|---|").replace(/^(\| [^|\n]+ )\| \| \|$/gm, "$1| | | |");
+          const tbd = bare.replace(/^(\| [^|\n]+ )\| \| \|$/gm, "$1| TBD | |");
           return m.tables.length === 3 && gaps(m.tables[0]) === "open:empty-first-use open:success open:stale open:partial"
             && m.tables[1].gaps.some((g) => g.code === "no-row" && g.id === "error") && !m.tables[2].gaps.some((g) => g.id === "loading")
-            && Eng.uiStatesCheck(scaffold, "en", { size: "m" }).status === "pass" && Eng.uiStatesCheck("# Design\n\n## [UI] UI States\n\nn/a — this feature has no screens at all\n", "en", { size: "m" }).status === "pass";
+            && m.tables[1].gaps.some((g) => g.code === "no-row" && g.id === "loading")
+            && Eng.uiStatesCheck(scaffold, "en", { size: "m" }).status === "pass" && Eng.uiStatesCheck("# Design\n\n## [UI] UI States\n\nn/a — this feature has no screens at all\n", "en", { size: "m" }).status === "pass"
+            && gate(bare) === "template" && bare.includes(head) && added.includes("| Orders |") && gate(added) === "template"
+            && tbd !== bare && gate(tbd) === "filled" && Eng.uiStatesCheck(tbd, "en", { size: "m" }).status === "warn";
         }],
       ["ui-design-patterns: 4.1.3 — a live region before its text, no focus move; W3C's 5-errors example after an unsuccessful fill", states,
         /through a live region that exists before its text changes, without moving focus \(4\.1\.3\)/,
