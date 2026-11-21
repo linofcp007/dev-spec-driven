@@ -110,7 +110,7 @@ const colorKey = (v) => String(v).trim().toLowerCase().replace(/\s+/g, "");
 
 // --- quantities, fonts, motion ----------------------------------------------------------------------------------------------------
 // One number with one unit or none → { n, unit } | null; a time in seconds is milliseconds (the one certain conversion), its
-// float noise rounded away (1.1s = 1100ms).
+// float noise rounded away (1.005s = 1005ms, never 1004.9999999999999).
 const RE_QUANTITY = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))([a-z]+|%)?$/i;
 function quantity(s0) {
   const m = RE_QUANTITY.exec(String(s0 == null ? "" : s0).trim());
@@ -219,7 +219,6 @@ function groupKey(e) {
 // quantity each with one unit (s → ms; 16px and 1rem are not compared). A reference, several parts, a font stack: not compared.
 function tokenDrift(reg0, code0) {
   const a = String(reg0 == null ? "" : reg0).trim(), b = String(code0 == null ? "" : code0).trim();
-  if (!a || !b) return null;
   const p = parseColor(a), q = parseColor(b);
   if (p || q) return p && q && p.n === q.n && !sameColor(p, q) ? "color" : null;
   const x = quantity(a), y = quantity(b);
@@ -268,11 +267,9 @@ function twProperty(u) {
 }
 // The units table's row of a property → a lookup (memoized): the row naming it exactly, else the one with the LONGEST
 // `prefix-*` it falls under (`margin-*` covers `margin` and `margin-top`; `border-radius` exact wins over `border-*`).
-// `lookup.mention`: does a line name any of the table's properties at all (a word of them, any case — a line naming none holds
-// no declaration to judge: its split is skipped)? The words are the table's own (`[a-z-]` alone, the reader's rule).
 function unitRows(table) {
   const memo = new Map();
-  const lookup = (prop) => {
+  return (prop) => {
     if (memo.has(prop)) return memo.get(prop);
     let hit = null, best = -1;
     for (const r of table.rows) {
@@ -286,8 +283,6 @@ function unitRows(table) {
     memo.set(prop, hit);
     return hit;
   };
-  lookup.mention = new RegExp([...new Set(table.rows.flatMap((r) => r.props.map((p) => p.replace(/-\*$/, ""))))].join("|"), "i");
-  return lookup;
 }
 
 module.exports = { parseColor, fontStackOf, timesOf, easingsOf, easingOf, tokenScale, judgeRaw, groupKey, tokenDrift, offUnit, twProperty, unitRows,

@@ -28,14 +28,14 @@ exports.run = async ({ all, S, tmp, require, __dirname }) => {
     const D = T.tokenDrift;
     const got = { notations: D("#3b82f6", "hsl(217 91% 60%)"), cross: D("#18181b", "oklch(0.205 0 0)"), alpha: D("#1d4ed8", "#1d4ed880"),
       same: D("oklch(0.556 0 0)", "oklch(0.552 0.016 285.938)"), spelling: [D("#FFF", "#ffffff"), D("0.5rem", ".5rem"), D("rgb(0 0 255)", "rgb(0, 0, 255)")],
-      units: D("16px", "1rem"), ms: [D("150ms", ".2s"), D("200ms", ".2s"), D("1.1s", "1100ms")], refs: [D("#00f", "var(--blue)"), D("{color.blue}", "#00f"), D("$blue", "#00f")],
+      units: D("16px", "1rem"), ms: [D("150ms", ".2s"), D("200ms", ".2s"), D("1.1s", "1100ms"), D("1.005s", "1005ms")], refs: [D("#00f", "var(--blue)"), D("{color.blue}", "#00f"), D("$blue", "#00f")],
       parts: D("0 1px 2px #000", "0 1px 3px #000"), unitless: D("700", "600"), empty: [D("", "#fff"), D("#fff", "")] };
-    all("1.38 drift: tokenDrift — #3b82f6 vs hsl(217 91% 60%) and zinc's #18181b vs oklch(0.205 0 0) not compared (two notations); oklch(0.556 0 0) vs oklch(0.552 0.016 285.938) a colour drift, and so is an alpha; #FFF = #ffffff, 0.5rem = .5rem, rgb() commas = blanks; 16px vs 1rem not compared; 150ms vs .2s a quantity drift, 200ms = .2s, 1.1s = 1100ms; a reference, several parts, an empty side not compared; 700 vs 600 a drift (got " + js(got) + ")", {
+    all("1.38 drift: tokenDrift — #3b82f6 vs hsl(217 91% 60%) and zinc's #18181b vs oklch(0.205 0 0) not compared (two notations); oklch(0.556 0 0) vs oklch(0.552 0.016 285.938) a colour drift, and so is an alpha; #FFF = #ffffff, 0.5rem = .5rem, rgb() commas = blanks; 16px vs 1rem not compared; 150ms vs .2s a quantity drift, 200ms = .2s, 1.1s = 1100ms, 1.005s = 1005ms (never 1004.9999999999999); a reference, several parts, an empty side not compared; 700 vs 600 a drift (got " + js(got) + ")", {
       notations: () => got.notations === null && got.cross === null,
       same: () => got.same === "color" && got.alpha === "color",
       spelling: () => got.spelling.every((x) => x === null),
       units: () => got.units === null,
-      ms: () => js(got.ms) === js(["quantity", null, null]),
+      ms: () => js(got.ms) === js(["quantity", null, null, null]),
       refs: () => got.refs.every((x) => x === null) && got.parts === null && got.empty.every((x) => x === null),
       unitless: () => got.unitless === "quantity",
     });

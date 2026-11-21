@@ -2,13 +2,14 @@
 // Raw values against the project's own scale (1.38 — engine/design-values.js): the colour parser and the judge (`token` — the
 // same colour, exact within a notation, the notation pair's rounding across two; `near` — a hint within the JND), fonts against
 // the registry's font tokens, motion against the duration / easing tokens, `groups`, the feature report's kinds and their own
-// bounds, spec_finish (colours and sizes alone), the costs as ratios. Expected colour distances are the critics' (CRIT_2,
-// computed outside the engine: Tailwind's zinc vs shadcn's neutrals 0.003–0.008 apart; #05787d vs hsl(183 92% 25%) 0.0106).
+// bounds, spec_finish (colours and sizes alone); the costs, as ratios: 15-quality-design-system-cost.js. Expected colour
+// distances are the critics' (CRIT_2, computed outside the engine: Tailwind's zinc vs shadcn's neutrals 0.003–0.008 apart;
+// #05787d vs hsl(183 92% 25%) 0.0106).
 
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ all, remeasure, S, tmp, list, require, __dirname }) => {
+exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const T = require(path.join(__dirname, "lib", "engine", "index.js")).loadLazyTier();
   const rows = (list) => (list || []).map(([name, value]) => ({ name, value }));
@@ -219,10 +220,12 @@ exports.run = async ({ all, remeasure, S, tmp, list, require, __dirname }) => {
     const motion = (n, from) => Array.from({ length: n }, (_, i) => ".m" + i + " { transition: opacity " + (from + i) + "ms; }");
     const fonts = (n) => Array.from({ length: n }, (_, i) => ".f" + i + " { font-family: F" + i + ", sans-serif; }");
     const colours = (n) => Array.from({ length: n }, (_, i) => ".c" + i + " { color: #" + (0x100000 + i).toString(16) + "; }");
-    const run = (text, more) => report(feature(REG, Object.assign({ "src/checkout/s.css": text }, more)));
+    const run = (text, more, reg) => report(feature(reg || REG, Object.assign({ "src/checkout/s.css": text }, more)));
     const heavy = run(lines(...motion(250, 2), ...colours(5)), { "src/checkout/t.css": lines(...motion(250, 2)) });
     const exact = run(lines(...motion(200, 2), ...colours(5))), fontHeavy = run(lines(...fonts(250), ...colours(5)));
-    const after = run(lines(...colours(200), ...motion(3, 2))), past = run(lines(...colours(200), ...motion(201, 2)));
+    // (motion the only new kind read: the early exit may come once it is PAST its bound — never at it, the 201st unseen)
+    const MOTION = registry([["--blue", "#1d4ed8"], ["--duration-normal", "200ms"]]);
+    const after = run(lines(...colours(200), ...motion(3, 2)), {}, MOTION), past = run(lines(...colours(200), ...motion(201, 2)), {}, MOTION);
     const got = { heavy: [heavy.counts, heavy.limits], exact: [exact.counts, exact.limits], fontHeavy: [fontHeavy.counts, fontHeavy.limits], after: after.counts, past: past.limits };
     all("1.38 feature report: 250 motion values then 5 colours → the colours counted (200 motion a file, `motion-values` {read: 200, file: the FIRST file it cut}); exactly 200 → no limit; 250 font stacks → `font-values`; 200 colours then 3 motion values → the motion read; then 201 → `motion-values` (got " + js(got) + ")", {
       heavy: () => js(heavy.counts) === js({ color: 5, size: 0, font: 0, motion: 400 }) && js(heavy.limits) === js([{ code: "motion-values", read: 200, file: "src/checkout/s.css" }]) && heavy.truncated === true,
@@ -233,49 +236,14 @@ exports.run = async ({ all, remeasure, S, tmp, list, require, __dirname }) => {
     });
   }
 
-  { // rawValuesOf (no kinds) is 1.37's reader: a stack, a transition and a Tailwind duration are never its values
-    const text = lines(".a { font-family: Inter, sans-serif; transition: opacity 250ms; color: #123456; padding: 13px; }", "<div className=\"duration-[250ms]\" />");
+  { // rawValuesOf (no kinds) is 1.37's reader: a stack, a transition and a Tailwind duration are never its values; a value
+    // written twice on one line is ONE value of that line; what a `{` follows is a selector — a colour in its attribute is none
+    // (the 1.37 rules declarations() carries, replayed after the split)
+    const text = lines(".a { font-family: Inter, sans-serif; transition: opacity 250ms; color: #123456; padding: 13px; }", "<div className=\"duration-[250ms]\" />",
+      ".b { color: #654321; } .c { color: #654321; }", "a:not([data-color=\"#ff0000\"]) { display: none; }");
     const got = T.rawValuesOf(text, "src/a.css");
-    all("1.38 rawValuesOf without kinds: colours and sizes alone, as 1.37 (got " + js(got) + ")", {
-      exact: () => js(got) === js([{ line: 1, kind: "color", value: "#123456" }, { line: 1, kind: "size", value: "padding: 13px" }]),
-    });
-  }
-
-  { // cost, as ratios measured at the same moment: (K3) kinds on over a 20,000-line sheet with no value ≤ 1.5× kinds off; (K4) the
-    // hostile lines — a font-family of 1,000 families, a transition of 500 times, `ease-[` never closed — ≤ 3× plain lines of the
-    // same length, kinds on; (K1) 100 files × 200 distinct colours against 2,000 tokens ≤ 1.5× the same report with none
-    const time = (f) => { const ts = []; for (let i = 0; i < 5; i++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
-    const KINDS = { font: true, motion: true };
-    const walk = (text, rel) => [...T.viewLines(text, rel)];
-    const empty = walk(Array.from({ length: 20000 }, (_, i) => ".c" + i + " { display: block; position: relative; }").join("\n"), "x.css");
-    const plainLine = ".x { color: red; margin: 0; padding: 0 } ".repeat(48);
-    const hostile = { fonts: ".a { font-family: " + "a,".repeat(990) + " }", times: ".a { transition: " + "1s,".repeat(495) + " }", ease: "<div className=\"" + "ease-[".repeat(330) + "\" />" };
-    const sheet = (l) => walk(Array(400).fill(l).join("\n"), "x.css"), markup = (l) => walk(Array(400).fill(l).join("\n"), "X.tsx");
-    const plain = sheet(plainLine), plainMarkup = markup("<div className=\"" + "p-2 m-4 ".repeat(250) + "\" />");
-    const H = { fonts: sheet(hostile.fonts), times: sheet(hostile.times), ease: markup(hostile.ease) };
-    T.rawValuesIn(empty, KINDS); T.rawValuesIn(empty);
-    const n = 100, many = (c) => Array.from({ length: 200 }, (_, i) => ".c" + i + " { color: #" + (0x100000 + c * 200 + i).toString(16) + "; }").join("\n");
-    const files = {};
-    for (let f = 0; f < n; f++) files["src/checkout/v" + f + ".css"] = many(f);
-    // (the same registry and token file, read alike, of colours or of sizes: the difference is the judging alone)
-    const tokens = (value) => [registry(Array.from({ length: 1000 }, (_, i) => ["--r" + i, value(i, 0x800000)])),
-      { "src/styles/tokens.css": ":root {\n" + Array.from({ length: 1000 }, (_, i) => "  --t" + i + ": " + value(i, 0xa00000) + ";").join("\n") + "\n}\n" }];
-    const [cReg, cFile] = tokens((i, b) => "#" + (b + i * 7).toString(16)), [sReg, sFile] = tokens((i) => i + 1 + "px");
-    const withTokens = feature(cReg, Object.assign(cFile, files)), none = feature(sReg, Object.assign(sFile, files));
-    report(withTokens); report(none);
-    const s = remeasure(() => {
-      const on = time(() => T.rawValuesIn(empty, KINDS)), off = time(() => T.rawValuesIn(empty));
-      const base = time(() => T.rawValuesIn(plain, KINDS)), baseM = time(() => T.rawValuesIn(plainMarkup, KINDS));
-      const h = { fonts: time(() => T.rawValuesIn(H.fonts, KINDS)) / base, times: time(() => T.rawValuesIn(H.times, KINDS)) / base, ease: time(() => T.rawValuesIn(H.ease, KINDS)) / baseM };
-      const t1 = time(() => report(withTokens)), t0 = time(() => report(none));
-      const r2 = (x) => Math.round(x * 100) / 100;
-      return { kinds: r2(on / off), hostile: Object.fromEntries(Object.entries(h).map(([k, v]) => [k, r2(v)])), tokens: r2(t1 / t0) };
-    }, (x) => x.kinds <= 1.5 && Object.values(x.hostile).every((v) => v <= 3) && x.tokens <= 1.5);
-    const tok = report(withTokens);
-    all("1.38 cost: kinds on ≤ 1.5× off over a 20,000-line sheet with no value; each hostile line ≤ 3× plain; 100 files × 200 distinct colours judged against 2,000 tokens ≤ 1.5× the same report with none (got " + js(s) + ")", {
-      kinds: () => s.kinds <= 1.5,
-      hostile: () => Object.values(s.hostile).every((v) => v <= 3),
-      tokens: () => s.tokens <= 1.5 && tok.counts.color === 20000,
+    all("1.38 rawValuesOf without kinds: colours and sizes alone, as 1.37; a line's repeated value once; a selector's colour none (got " + js(got) + ")", {
+      exact: () => js(got) === js([{ line: 1, kind: "color", value: "#123456" }, { line: 1, kind: "size", value: "padding: 13px" }, { line: 3, kind: "color", value: "#654321" }]),
     });
   }
 

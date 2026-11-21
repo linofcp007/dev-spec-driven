@@ -3115,15 +3115,12 @@ function rawValuesIn(lines, kinds, cut) {
 // whose unit the row does not allow (offUnit: never inside calc() / clamp() / var(), never 0 — one finding a declaration; a
 // custom property or a Sass variable has no row: the table's names start with a letter); a Tailwind arbitrary size elsewhere
 // (RE_TW_SIZE) by the property it sets.
-const RE_DIGIT = /\d/;
 function unitsOf(lines, rowOf, room) {
   const list = [], byProperty = {};
   // (every finding counted by its property; its text made only for one listed)
   const count = (property) => { byProperty[property] = (byProperty[property] || 0) + 1; return list.length < room; };
   for (const { n, l, css } of lines) {
-    if (!RE_DIGIT.test(l)) continue; // (no number, no length)
     if (css || RE_DECL_LINE.test(l)) {
-      if (!rowOf.mention.test(l)) continue; // (no property of the table named: nothing to judge)
       declarations(l, (p, value) => {
         const prop = p.toLowerCase(), row = rowOf(prop), unit = row && offUnit(value, row.units);
         if (unit && count(prop)) list.push({ line: n, property: prop, value: prop + ": " + value.trim().slice(0, 40), unit, allowed: row.units });

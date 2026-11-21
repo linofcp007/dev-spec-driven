@@ -9,7 +9,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
+exports.run = async ({ all, S, tmp, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const E = require(path.join(__dirname, "lib", "engine", "index.js"));
   const write = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
@@ -35,7 +35,7 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
   { // the reader: by its header, wherever it stands (under any heading), in EN / PT / ES; a props table, a table whose units
     // column is not headed, a table of no CSS unit are none; a word that is no CSS unit is dropped, a row left with none unread
     const got = {
-      en: units(REG("## Anything\n\n" + table(["Property", "Units"], [["`font-size`, line-height", "rem, em, rems"], ["margin-*", "rem"], ["spacing", "small"], ["--gap", "px"]]))),
+      en: units(REG("## Anything\n\n" + table(["Property", "Units"], [["`font-size`, line-height", "rem, em, rems"], ["margin-*", "rem"], ["spacing", "small"], ["--gap", "px"], ["[property]", "[units]"]]))),
       pt: units(REG(table(["Propriedade", "Unidades"], [["font-size", "rem"]]))), es: units(REG(table(["Propiedad", "Unidad"], [["border-width", "px"]]))),
       props: units(REG(table(["Property", "Type", "Default"], [["variant", "string", "primary"], ["size", "px", "md"]]))),
       third: units(REG(table(["Property", "Notes", "Units"], [["gap", "px is fine", "rem"]]))),
@@ -43,7 +43,7 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
       two: units(REG(table(["Property", "Units"], [["gap", "rem"]]) + "\n## More\n\n" + table(["Property", "Units"], [["border-width", "px"]]))),
       past: (() => { const u = units(REG(table(["Property", "Units"], Array.from({ length: 60 }, (_, i) => ["p" + String.fromCharCode(97 + (i % 26)) + i.toString(36).replace(/\d/g, "x"), "px"])))); return u && [u.rows.length, u.unread.length, u.past]; })(),
     };
-    all("1.38 units table: read by its header — `| Property | Units |` under any heading (rem, em kept, `rems` dropped; `margin-*` a prefix; `spacing | small` and a `--gap` row unread), PT `| Propriedade | Unidades |`, ES `| Propiedad | Unidad |`, a units column in third place; a props table (`| Property | Type | Default |`, even with `px` in a cell), a table of no CSS unit and no table → null; 60 rows → 50 read, 10 past (got " + js(got) + ")", {
+    all("1.38 units table: read by its header — `| Property | Units |` under any heading (rem, em kept, `rems` dropped; `margin-*` a prefix; `spacing | small` and a `--gap` row unread, a `[property]` slot row none), PT `| Propriedade | Unidades |`, ES `| Propiedad | Unidad |`, a units column in third place; a props table (`| Property | Type | Default |`, even with `px` in a cell), a table of no CSS unit and no table → null; 60 rows → 50 read, 10 past (got " + js(got) + ")", {
       en: () => js(got.en) === js({ rows: [{ props: ["font-size", "line-height"], units: ["rem", "em"] }, { props: ["margin-*"], units: ["rem"] }], unread: ["spacing", "--gap"], past: 0 }),
       pt: () => js(got.pt.rows) === js([{ props: ["font-size"], units: ["rem"] }]) && js(got.es.rows) === js([{ props: ["border-width"], units: ["px"] }]),
       third: () => js(got.third.rows) === js([{ props: ["gap"], units: ["rem"] }]),
@@ -76,46 +76,32 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
     });
   }
 
-  { // the bounds and the shapes: no table → `units: null`; 250 findings in a file → 200 kept a file, all counted (total 250), 50
-    // listed; the project report's `unitsTable` (rows, unread, past) — never part of inSync
+  { // Tailwind's arbitrary sizes, each by the property it sets (twProperty): p / m and their sides, gap and its axes, space-x /
+    // space-y, text, leading, tracking, rounded and a corner
+    const T = table(["Property", "Units"], [["padding-*, margin-*, gap, column-gap, row-gap, font-size, line-height, letter-spacing, border-radius", "rem"]]);
+    const r = feature(REG(T), { "src/checkout/C.tsx": lines("export const C = () => <div className=\"p-[1px] pt-[1px] pr-[1px] pb-[1px] pl-[1px] px-[1px] py-[1px] ps-[1px] pe-[1px] m-[1px] mx-[1px] gap-[1px] gap-x-[1px] gap-y-[1px] space-x-[1px] space-y-[1px] text-[1px] leading-[1px] tracking-[1px] rounded-[1px] rounded-tl-[1px]\" />;") });
+    const got = r.units.findings.map((x) => x.value + "=" + x.property);
+    all("1.38 units: each Tailwind arbitrary size by the property it sets — padding / margin and their sides (x / y the inline / block axes, s / e their start / end), gap and column-gap / row-gap, space-x / space-y the inline / block start margin, text the font size, leading the line height, tracking the letter spacing, rounded and a corner the border radius (got " + js(got) + ")", {
+      exact: () => js(got) === js(["p-[1px]=padding", "pt-[1px]=padding-top", "pr-[1px]=padding-right", "pb-[1px]=padding-bottom", "pl-[1px]=padding-left", "px-[1px]=padding-inline",
+        "py-[1px]=padding-block", "ps-[1px]=padding-inline-start", "pe-[1px]=padding-inline-end", "m-[1px]=margin", "mx-[1px]=margin-inline", "gap-[1px]=gap", "gap-x-[1px]=column-gap",
+        "gap-y-[1px]=row-gap", "space-x-[1px]=margin-inline-start", "space-y-[1px]=margin-block-start", "text-[1px]=font-size", "leading-[1px]=line-height", "tracking-[1px]=letter-spacing",
+        "rounded-[1px]=border-radius", "rounded-tl-[1px]=border-radius"]),
+    });
+  }
+
+  { // the bounds and the shapes: no table → `units: null`; 250 findings in a file → all counted (total 250), 50 listed; the
+    // project report's `unitsTable` (rows, unread, past) — never part of inSync
     const none = feature(REG(""), { "src/checkout/c.css": ".a { margin: 4px; }\n" });
     const many = feature(REG(table(["Property", "Units"], [["margin", "rem"], ["spacing", "small"]])), { "src/checkout/c.css": Array.from({ length: 250 }, (_, i) => ".a" + i + " { margin: " + (i + 1) + "px; }").join("\n") + "\n" });
     const p = project("# Design System\n\n_Token sources: src/styles/tokens.css_\n\n| Token | Value | Use |\n|---|---|---|\n| --a | 1px | x |\n\n" + table(["Property", "Units"], [["margin", "rem"], ["spacing", "small"]]),
       { "src/styles/tokens.css": ":root { --a: 1px; }\n" });
     const pr = S.designSystemReport(p), bare = S.designSystemReport(project(REG(""), {}));
     const got = { none: none.units, many: many.units && [many.units.findings.length, many.units.total, many.units.byProperty], project: [pr.unitsTable, pr.inSync], bare: bare.unitsTable };
-    all("1.38 units: no table → null; 250 findings in one file → 50 listed, total 250 (200 kept, the rest counted); the project report says the table's rows / unread / past and stays in sync; without a table, unitsTable null (got " + js(got) + ")", {
+    all("1.38 units: no table → null; 250 findings in one file → 50 listed, total 250 (every one counted); the project report says the table's rows / unread / past and stays in sync; without a table, unitsTable null (got " + js(got) + ")", {
       none: () => none.units === null,
       many: () => js(got.many) === js([50, 250, { margin: 250 }]),
       project: () => js(pr.unitsTable) === js({ rows: 1, unread: ["spacing"], past: 0 }) && pr.inSync === true,
       bare: () => bare.unitsTable === null,
-    });
-  }
-
-  { // cost (K2), as ratios measured at the same moment: a units table costs at most 1.5× no table on 60 component stylesheets
-    // as written (a row for a third of the declarations, a finding now and then — on the real corpora, shadcn v4, Bootstrap,
-    // Breeze, Tailwind, it measured 0.9–1.0×); and at most 3× on the worst case — EVERY declaration of 60 files × 300 lines has a
-    // row and is a finding (the raw values stop at 200 a file, the units reader counts them all)
-    const TABLE = REG(table(["Property", "Units"], [["margin-*", "rem"], ["padding", "rem"], ["font-size", "rem"], ["width", "%"]]));
-    const sheet = (j) => [".c" + j + " {", "  display: flex;", "  align-items: center;", "  margin: 0 auto;", "  padding: 1rem;", "  color: #333;", "  border: 1px solid #ccc;",
-      "  font-weight: 600;", "  line-height: 1.5;", "  font-size: " + (j % 10 ? "1rem" : "14px") + ";", "}"].join("\n");
-    const worst = (j) => ".c" + j + " { margin: " + (j + 1) + "px; padding: 1rem 2px; font-size: 14px; width: calc(100% - 4px); }";
-    const mk = (reg, line) => {
-      const files = {};
-      for (let i = 0; i < 60; i++) files["src/checkout/v" + i + ".css"] = Array.from({ length: 300 }, (_, j) => line(j)).join("\n");
-      const p = project(reg, files), f = S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" });
-      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] B\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/checkout/_\n  - _Verify: npm test_\n");
-      return () => S.designSystemReport(p, { name: f.slug });
-    };
-    const R = { real: mk(TABLE, sheet), realNo: mk(REG(""), sheet), worst: mk(TABLE, worst), worstNo: mk(REG(""), worst) };
-    Object.values(R).forEach((f) => f());
-    const time = (f) => { const ts = []; for (let i = 0; i < 5; i++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
-    const r2 = (x) => Math.round(x * 100) / 100;
-    const s = remeasure(() => ({ real: r2(time(R.real) / time(R.realNo)), worst: r2(time(R.worst) / time(R.worstNo)) }), (x) => x.real <= 1.5 && x.worst <= 3);
-    const counts = [R.real().units.total, R.worst().units.total];
-    all("1.38 units: the units table's reader costs at most 1.5× the same report without a table on component stylesheets as written, and 3× when every declaration is a finding (got " + js(s) + ", findings " + js(counts) + ")", {
-      real: () => s.real <= 1.5 && counts[0] === 60 * 30,
-      worst: () => s.worst <= 3 && counts[1] === 60 * 300 * 3,
     });
   }
 };

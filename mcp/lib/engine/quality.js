@@ -1407,8 +1407,7 @@ function designSystemRegistry(root) {
 // cell of each row read with no CSS unit or no property), past (rows past DS_UNIT_ROWS: counted, not read) }. Several tables
 // add up.
 function dsUnitsTable(t, into) {
-  const at = t.header.findIndex((h, k) => k > 0 && RE_DS_COL.units.test(dsCell(h)));
-  if (at < 1) return into;
+  const at = t.header.findIndex((h, k) => k > 0 && RE_DS_COL.units.test(dsCell(h))); // (none: -1 — no row reads a unit, no table)
   const rows = [], unread = [];
   for (const r of t.rows) {
     if (dsSlot(r[0] || "")) continue;
