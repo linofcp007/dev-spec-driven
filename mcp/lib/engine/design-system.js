@@ -3399,7 +3399,7 @@ function featureReport(projectDir, root, f, reg, scan, opts = {}) {
       for (const x of u.list) units.findings.push(Object.assign({ file: rel }, x));
       for (const [p, n] of Object.entries(u.byProperty)) { units.byProperty[p] = (units.byProperty[p] || 0) + n; units.total += n; }
     }
-    checked.push(Object.assign({ rel, over }, uiChecksOf(lines, rel)));
+    checked.push(Object.assign({ rel, over }, uiChecksOf(lines, rel, over)));
   }
   // (1.37) its token files — a globals.css the feature edits may add `*:focus { outline: none }` — are read for the UI checks
   // alone: never for raw values (a token file declares the values), never counted in viewFiles, within DS_VIEW_FILES files read
@@ -3407,7 +3407,7 @@ function featureReport(projectDir, root, f, reg, scan, opts = {}) {
   for (const rel of tokenRels) {
     if (checked.length >= DS_VIEW_FILES) { checkCut = true; break; }
     const { text, over } = readView(rel);
-    if (text != null) checked.push(Object.assign({ rel, over }, uiChecksOf(viewLines(text, rel), rel)));
+    if (text != null) checked.push(Object.assign({ rel, over }, uiChecksOf(viewLines(text, rel), rel, over)));
   }
   // (an outline removal stands only while no focus style exists: in the files read, else in the project's stylesheets — ALL of
   // them, never the name-ranked token candidates; read only when a candidate asks — CRIT_1 must-fix 4)

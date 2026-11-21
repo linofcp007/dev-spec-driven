@@ -497,15 +497,19 @@ function styleFontSize(v) {
 // `focus-visible]` read as the element's own) —, an arbitrary variant (`[&:focus]`, `[&_*:focus]`: `&` is the element) by
 // its `:`-cut pieces, as before.
 // font-size-viewport (1.38): a BARE arbitrary text size, `text-[<value>]` (a `length:` hint, a `/<line-height>` modifier, `!`),
-// whose value is viewport-only — judged only when the class list (the line read, an `@apply`) holds no `text-` utility under a
-// variant: `sm:text-[1.2vw]`, `md:text-6xl` may adjust it (F94's note — CRIT_3 must-fix 3). A value holding `(` is cut by the
-// split: never judged (so is any arithmetic — its `_` blanks: `text-[calc(1vw_+_1vh)]`).
+// whose value is viewport-only — a CANDIDATE pushed on `sizes` (the first a call), decided when the FILE ends by its caller:
+// none stands once a class list of the file (a line read; a sheet's `@apply`s apart) held a `text-` utility under a variant
+// (RE_TW_TEXT_VARIANT: `sm:text-[1.2vw]`, `md:text-6xl`, `dark:text-white` — F94's note, CRIT_3 must-fix 3; review 1 of 1.38:
+// decided by the LINE, a class list split over lines — `cn("text-[8vw]", "md:text-7xl")`, a cva base, a wrapped class
+// attribute — warned). A value holding `(` is cut by the split: never judged (so is any arithmetic — its `_` blanks:
+// `text-[calc(1vw_+_1vh)]`).
 // MOTION (1.38, the project fact no-reduced-motion — move(line)): `animate-*` but `animate-none` (tailwindcss-animate's
 // `animate-in` too), `transition-transform`, `scroll-smooth`, under any variant.
 // → whether the text holds a focus style.
 const RE_TW_PICK = /transition-all|outline-|focus|text-\[|animate-|transition-transform|scroll-smooth/;
 const twMotion = (u) => (u.startsWith("animate-") ? u !== "animate-none" : u === "transition-transform" || u === "scroll-smooth");
 const RE_TW_TEXT = /^text-\[(?:length:)?([^\]]*)\](?:\/.*)?$/;
+const RE_TW_TEXT_VARIANT = /:!?text-/; // a `text-` utility after a variant's `:` (`md:!text-6xl`, Tailwind 3's important)
 const RE_TW_SPLIT = /[\s"'`{}(),;=<>]+/;
 const RE_TW_REMOVAL = /^outline-(?:none|hidden|0)$/;
 const RE_TW_NOTHING = /(?:^|-)(?:0|none|hidden|transparent)$/;
@@ -523,15 +527,13 @@ function variantsOf(tok) {
   }
   return out;
 }
-function utilities(s, line, add, move) {
+function utilities(s, line, add, move, sizes) {
   if (!RE_TW_PICK.test(s)) return false;
-  let focus = false, variantText = false, size = null;
+  let focus = false, size = null;
   for (const tok of s.split(RE_TW_SPLIT)) {
     if (!tok) continue;
-    if (tok.includes("text-")) { // (its variants cut outside brackets: `text-[length:5vw]` is one utility)
-      const vs = variantsOf(tok), u = tok.slice(vs.reduce((n, v) => n + v.length + 1, 0)).replace(/^!|!$/g, "");
-      if (u.startsWith("text-")) { if (vs.length) variantText = true; else if (size === null) { const m = RE_TW_TEXT.exec(u); if (m && viewportOnly(m[1])) size = tok; } }
-    }
+    // (a bare one only: RE_TW_TEXT is anchored — a variant's token starts with its variant)
+    if (size === null && tok.includes("text-[")) { const m = RE_TW_TEXT.exec(tok.replace(/^!|!$/g, "")); if (m && viewportOnly(m[1])) size = tok; }
     const parts = tok.split(":");
     const util = parts.pop().replace(/^!|!$/g, "");
     if (util === "transition-all") { add("transition-all", line, tok); continue; }
@@ -539,7 +541,7 @@ function utilities(s, line, add, move) {
     if (!util || !parts.some(isFocusVariant)) continue;
     if (RE_TW_REMOVAL.test(util)) { if (variantsOf(tok).some((v) => (v[0] === "[" ? v.split(":") : [v]).some(isOwnFocus))) add("outline-removed", line, tok); } else if (!RE_TW_NOTHING.test(util)) focus = true;
   }
-  if (size !== null && !variantText) add("font-size-viewport", line, size);
+  if (size !== null) sizes.push({ line, value: size });
   return focus;
 }
 
@@ -562,14 +564,17 @@ function utilities(s, line, add, move) {
 // `text-[…vw]` in an `@apply` (utilities) — outside any CONDITIONAL block (an at-rule's but `@layer`'s: `@media`, `@container`,
 // `@supports`, a Sass `@include` or `@if`, a nested `@media` —, inherited by what it holds), and decided when the walk ends:
 // none is judged once the FILE declares a font size inside a conditional block (`font-size`, the `font` shorthand, an `@apply`
-// holding a `text-` utility) or a block past DS_BLOCK_DEPTH went unread — F94's note, a size media queries adjust may not fail
-// (CRIT_3 must-fix 2). An override in another file is not seen.
+// holding a `text-` utility), a block past DS_BLOCK_DEPTH went unread or the sheet was read only in part (`partial`: past the
+// read, a line cut at DS_LINE_MAX — review 1 of 1.38: the override sat past the cut) — F94's note, a size media queries adjust
+// may not fail (CRIT_3 must-fix 2); the `@apply` ones also once an `@apply` of the file held a variant `text-` utility (as a
+// class list's: utilities). An override in another file is not seen.
 const RE_LAYER = /^@layer\b/i;
 const RE_KEYFRAMES = /^@(?:-[a-z]+-)?keyframes\b/i;
 // A markup file's <style> block: its opening tag's line is a CSS line too (viewLines), so the block's FIRST rule reads it in its
 // prelude — `<style scoped> @media print` — read without it (1.38: an at-rule there read as none — a print / reduced-motion /
-// conditional block, keyframes — since 1.37)
-const RE_STYLE_TAG = /^<style\b[^>]*>\s*/i;
+// conditional block, keyframes — since 1.37); a second block's, after the first's `</style>` line, too (review 1 of 1.38: Vue's
+// global + scoped pair). Astro's `<style define:vars={{…}}>` is not: the walker opens blocks on its braces (1.39).
+const RE_STYLE_TAG = /^(?:<\/style\s*>\s*)?<style\b[^>]*>\s*/i;
 const RE_TW_TEXT_ANY = /(?:^|[\s:!])text-/;
 const RE_REMOVAL = /^(?:outline\s*:\s*(?:none|0(?:px)?)|outline-style\s*:\s*none|outline-width\s*:\s*0(?:px)?)(?:\s*!\s*important)?$/i;
 const RE_FOCUS_PSEUDO = /:focus(?:-visible|-within)?(?![\w-])/i;
@@ -627,12 +632,13 @@ function outlineShape(prelude) {
 }
 // MOTION (1.38): a `@keyframes` block (any vendor prefix), a declaration motionOf takes, an `@apply`'s motion utility → move(line).
 // → whether the sheet holds a focus style; add (null: the focus fact alone — the project's sheets) takes the findings
-function sheetChecks(text, rel, add, move) {
+function sheetChecks(text, rel, add, move, partial) {
   let focus = false;
   const open = []; // the open blocks, innermost last: { selector, shape, print, reduced, cond, focus, removals, other }
   let deep = 0; // the blocks open past DS_BLOCK_DEPTH (their rule's extent is then unknown: never a "focus" candidate)
   const sizes = []; // font-size-viewport's candidates, judged when the walk ends — unless the file sizes text conditionally
-  let condSize = false;
+  const tw = { sizes: [], variant: false }; // (…and the `@apply`s' bare text-[…vw] — unless one held a variant text- utility)
+  let condSize = !!partial;
   styleTokens(text, rel, {
     block: (e) => {
       if (deep || open.length >= DS_BLOCK_DEPTH) { if (deep++ === 0) { open[open.length - 1].other = true; condSize = true; } return; }
@@ -655,12 +661,9 @@ function sheetChecks(text, rel, add, move) {
       const draws = own ? own.some((u) => u.includes(":") || !(RE_TW_REMOVAL.test(u) || RE_TW_NOTHING.test(u))) : !drawsNothing(e.text);
       if (b != null && b.focus && draws) focus = true;
       // (a Tailwind `@apply`: its utilities, as a class list's — no motion rule inside a reduced-motion block; a viewport-only
-      // text size a candidate outside a conditional block)
-      if (apply && utilities(e.text, e.from, (rule, line, value) => {
-        if (!add) return;
-        // (one in a conditional block is dropped with the file's others: its @apply holds a text- utility, below)
-        if (rule === "font-size-viewport") sizes.push({ line, value }); else if (!(reduced && rule === "transition-all")) add(rule, line, value);
-      }, move)) focus = true;
+      // text size a candidate — one in a conditional block is dropped with the file's others: its @apply holds a text- utility)
+      if (apply && utilities(e.text, e.from, (rule, line, value) => { if (add && !(reduced && rule === "transition-all")) add(rule, line, value); }, move, tw.sizes)) focus = true;
+      if (apply && RE_TW_TEXT_VARIANT.test(e.text)) tw.variant = true;
       if (!add) return;
       if (b != null) { if (removal && !b.print) b.removals.push({ line: e.from, text: e.text }); if (draws) b.other = true; }
       // (the declaration read inside a reduced-motion block too: transition-all alone is skipped there)
@@ -678,7 +681,7 @@ function sheetChecks(text, rel, add, move) {
       if (add && b.removals.length && (b.shape === "element" || (b.shape === "focus" && !b.other))) for (const r of b.removals) add("outline-removed", r.line, b.selector + " { " + r.text + " }");
     },
   });
-  if (add && !condSize) for (const s of sizes) add("font-size-viewport", s.line, s.value);
+  if (add && !condSize) for (const s of tw.variant ? sizes : sizes.concat(tw.sizes)) add("font-size-viewport", s.line, s.value);
   return focus;
 }
 
@@ -727,10 +730,13 @@ function markIds(src) {
 // findings hid its real ones, `total` read 200). cut: { lines (cut at DS_LINE_MAX), tags (tagReader's failed reads) }.
 // outline-removed findings are CANDIDATES (focus: does the file hold a focus style — uiChecksReport decides). motion (1.38):
 // { count (the lines declaring motion — motionOf, `@keyframes`, twMotion), line (the first) } — the project fact's, never a
-// finding (the project inventory alone reads it).
-function uiChecksOf(lines, rel) {
+// finding (the project inventory alone reads it). over: the file is longer than the text read (review 1 of 1.38: with a line
+// cut at DS_LINE_MAX, the file read only in part — what the rest of the file decides is a doubt: font-size-viewport's
+// candidates in a sheet and the bare text-[…vw] of its class lines, never an element's own `style`, decided on its tag).
+function uiChecksOf(lines, rel, over) {
   const sheet = RE_STYLE_EXT.test(rel);
   const findings = [], seen = new Set(), marks = new Map(), css = [], past = { byRule: {}, silenced: 0 };
+  const tw = { sizes: [], variant: false }; // the class lines' bare text-[…vw] (utilities) · a variant text- utility read
   let focus = false, anyCss = false, cutLines = 0;
   const motion = { count: 0, line: 0 }, moved = new Set();
   const move = (line) => { if (moved.has(line)) return; moved.add(line); motion.count++; if (!motion.line || line < motion.line) motion.line = line; };
@@ -757,10 +763,13 @@ function uiChecksOf(lines, rel) {
       RE_MAX_SCALE.lastIndex = 0;
       for (let m = RE_MAX_SCALE.exec(l); m; m = RE_MAX_SCALE.exec(l)) if (parseFloat(m[1]) < 2) add("zoom-disabled", n, m[0]);
     }
-    if (utilities(l, n, add, move)) focus = true;
+    if (utilities(l, n, add, move, tw.sizes)) focus = true;
+    if (!tw.variant && RE_TW_TEXT_VARIANT.test(l)) tw.variant = true;
     if (l.includes("transition") || l.includes("animation") || l.includes("scroll-behavior")) scriptTransitions(l, n, add, move);
   }
-  if (anyCss && sheetChecks(css.join("\n"), rel, add, move)) focus = true;
+  const partial = !!over || cutLines > 0;
+  if (anyCss && sheetChecks(css.join("\n"), rel, add, move, partial)) focus = true;
+  if (!tw.variant && !partial) for (const s of tw.sizes) add("font-size-viewport", s.line, s.value);
   return { findings, focus, past, cut: { lines: cutLines, tags: tags ? tags.failed() : 0 }, motion };
 }
 
@@ -904,7 +913,7 @@ function uiProjectPass(bounds, offs) {
   };
   return {
     feed(rel, lines, over, text) {
-      const r = uiChecksOf(lines, rel);
+      const r = uiChecksOf(lines, rel, over);
       read++;
       if (r.focus) focus = true;
       if (!asked && RE_REDUCED_ASK.test(text)) asked = true;
