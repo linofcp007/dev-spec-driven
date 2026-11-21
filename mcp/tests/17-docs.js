@@ -1364,6 +1364,138 @@ exports.run = async ({
     });
   }
 
+  { // 1.38.0 Z — the docs pass: ui-code-scan.md's 1.38 prose (the project's UI checks and the fact no-reduced-motion, the
+    // `_UI checks off:_` marker, raw values against the scale, token values, the units table, DESIGN.md, the breakpoints and
+    // doctor's ui-states pointers), test-patterns' test files and index.md's line — read against the engine's SOURCE: every
+    // rule / fact id, limit code, bound and `why` code below comes from mcp/lib/engine/*.js, so one added, removed or changed
+    // without the prose fails here (never a hand list). ONE assertion per prose clause: the docs pass's mutation pass drops each
+    // clause in a copy and its row fails (%TEMP%/dsd-138-z/MUTATIONS.md).
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const eng = (f) => raw("mcp", "lib", "engine", f);
+    const UC = eng("ui-checks.js"), DS = eng("design-system.js"), DV = eng("design-values.js"), BP = eng("breakpoints.js"), QY = eng("quality.js");
+    // a constant's value as the source writes it — `5000`, `32 * 1024 * 1024`, `0.011` — and its prose spelling
+    const num = (src, name) => { const m = src.match(new RegExp("const " + name + " = ([0-9.e* -]+);")); return m ? m[1].split("*").reduce((a, x) => a * Number(x.trim()), 1) : NaN; };
+    const n = (v) => v.toLocaleString("en-US"); // 5000 → "5,000"
+    const fnBody = (src, name) => { const at = src.indexOf("function " + name + "("); return at < 0 ? "" : src.slice(at, src.indexOf("\n}\n", at)); };
+    const idsOf = (src, name) => [...(((src.match(new RegExp("const " + name + " = \\{([^}]*)\\}")) || [])[1] || "").matchAll(/"([a-z-]+)":/g))].map((m) => m[1]);
+    const regexOf = (src, name) => { const m = src.match(new RegExp("const " + name + " = /(.*)/([a-z]*);")); return m ? new RegExp(m[1], m[2]) : /(?!)/; };
+    const rules = idsOf(UC, "UI_RULES"), facts = idsOf(UC, "UI_FACTS");
+    const pass = fnBody(UC, "uiProjectPass");
+    // (the limit codes the inventory builds — a fact's `code` is a fact's, below)
+    const passCodes = [...pass.matchAll(/code: "([a-z-]+)"/g)].map((m) => m[1]).concat(((pass.match(/for \(const code of \[([^\]]*)\]\)/) || [])[1] || "").match(/[a-z-]+/g) || [])
+      .filter((c) => !facts.includes(c));
+    const whys = [...((UC.match(/const why = [^\n]*/) || [""])[0]).matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
+    const kinds = DS.match(/for \(const kind of \[([^\]]*)\]\) if \(kindCut\[kind\]\) limits\.push\(\{ code: kind \+ "(-[a-z]+)"/) || [];
+    const kindCodes = ((kinds[1] || "").match(/[a-z]+/g) || []).map((k) => k + kinds[2]);
+    const bpCodes = [...BP.matchAll(/code: "([a-z-]+)"/g)].map((m) => m[1]);
+    const B = { files: num(DS, "DS_UI_FILES"), chars: num(DS, "DS_UI_CHARS"), read: num(DS, "DS_READ_CHARS"), line: num(DS, "DS_LINE_MAX"), tag: num(UC, "DS_TAG_LINES"),
+      sheets: num(UC, "DS_FOCUS_SHEETS"), entries: num(QY, "DS_MARKER_ENTRIES"), unitRows: num(QY, "DS_UNIT_ROWS"), perFile: num(DS, "DS_RAW_PER_FILE"), list: num(DS, "DS_LIST"),
+      jnd: num(DV, "DS_JND"), hsl: num(DV, "DS_SAME_HSL"), cross: num(DV, "DS_SAME_CROSS"), alpha: num(DV, "DS_ALPHA") };
+    const scanRaw = raw("skills", "dev-spec-driven", "references", "ui-code-scan.md"), scanLines = scanRaw.split("\n");
+    const section = (head) => { const at = scanLines.findIndex((l) => l === head), end = scanLines.findIndex((l, i) => i > at && /^#+ /.test(l)); return at < 0 ? "" : ws(scanLines.slice(at, end < 0 ? scanLines.length : end).join("\n")); };
+    const proj = section("### The project's UI checks"), scale = section("### Raw values against the project's scale");
+    const offPara = (proj.match(/\*\*Off for the project\.\*\*.*$/) || [""])[0];
+    const tick = (id) => "`" + id + "`";
+    const TP = ws(raw("skills", "dev-spec-driven", "references", "test-patterns.md")), SC = eng("scan.js");
+    const testDirs = (((SC.match(/const TEST_DIRS = new Set\(\[([^\]]*)\]\)/) || [])[1] || "").match(/"[a-z0-9_]+"/g) || []).map((d) => d.slice(1, -1));
+    const uiLine = (ws(raw("skills", "dev-spec-driven", "references", "index.md")).match(/`references\/ui-code-scan\.md` \([^)]*\)/) || [""])[0];
+    const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
+    const rows = [
+      ["intro: what the file says — the scale, the units table, the project's checks, switching one off; the file ≤ 30,000 bytes", () =>
+        /what a raw value is against the project's own scale, the units table, and the UI checks it runs on a feature's view and style files and on the project's — and how a team switches one off\./.test(ws(scanRaw))
+          && Buffer.byteLength(scanRaw, "utf8") <= 30000],
+      ["inventory: both surfaces, the keys; counts, never a list, never finish", () =>
+        /`spec_scan \{designSystem: true\}` \/ `dev-spec design-system` \(no feature\) also run the UI checks over the project's view and style files — an inventory, `uiChecks`: `read`, `total`, `silenced`, `byRule` and `rules` \(per rule its level, the files holding one, the first place\), `facts`, `limits`\./.test(proj)
+          && /Counts, never a list, never a finish warning: each feature's report lists its own\./.test(proj)],
+      ["opt-in: the tool and the CLI ask for it, the engine's default runs none — as operations.js and designSystemReport do", () =>
+        /The tool and the CLI ask for it; the engine's own default runs none\./.test(proj) && /S\.designSystemReport\(dir, \{ name: o\.name, uiPass: true \}\)/.test(raw("mcp", "lib", "operations.js"))
+          && /\.\.\.\(opts\.uiPass \? \{ uiChecks: uiProject\(scan, reg\) \} : \{\}\)/.test(DS)],
+      ["bounds: the inventory's files / characters, a file's and a line's read, a tag's — every code uiProjectPass emits, its own limits", () =>
+        passCodes.length === 4 && passCodes.every((c) => proj.includes(tick(c)))
+          && proj.includes("at most " + n(B.files) + " files and " + B.chars / 1048576 + " MB (`" + passCodes[0] + "`, naming the outline removals it left unjudged)")
+          && proj.includes("each file's first " + B.read / 1024 + "K and a line's first " + n(B.line) + " characters (`view-size`, `line-length`; a tag past " + B.tag + " lines, `tag-length` — each with a count and the first file)")
+          && proj.includes("its own limits, never the report's `limits` or `truncated`")],
+      ["order: the stylesheets first, then the shorter path", () => /Stylesheets are read first, then the shorter path/.test(proj)],
+      ["view files: no test, story, mock or fixture", () => /A test, a story, a mock or a fixture is no view file\./.test(proj)],
+      ["outline-removed: the project-wide excuse, the removals past the focus search's sheets judged here, a cut pass judges none", () =>
+        proj.includes("any focus style in any file read excuses every removal —, so the removals a feature report leaves unjudged past the project's first " + B.sheets + " stylesheets are judged here")
+          && /a cut pass that read no focus style judges none\./.test(proj)],
+      ["fact: every project fact id (UI_FACTS), WCAG 2.3.3 AAA, what declares motion", () =>
+        facts.length >= 1 && facts.every((id) => proj.includes("The fact " + tick(id) + " (WCAG 2.3.3, AAA)"))
+          && /the view files declare motion — an animation, a transform's transition, smooth scrolling — and none of the files read mentions reduced motion/.test(proj)],
+      ["fact: each mention the prose names is one the engine reads (RE_REDUCED_ASK)", () => {
+        const said = (proj.match(/mentions reduced motion \(([^)]*)\)/) || ["", ""])[1].match(/`[^`]+`/g) || [];
+        const re = regexOf(UC, "RE_REDUCED_ASK");
+        return said.length >= 4 && said.every((w) => re.test(w.slice(1, -1)));
+      }],
+      ["fact: said only when no read was cut — the inventory's bound by its code; a script's mention not seen", () =>
+        proj.includes("Said only when no read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); a mention only in a script (a `.ts` hook) is not seen.")],
+      ["marker: `_UI checks off: <rule-id> (reason)_` — the label the registry reads (RE_DS_MARKER), an example entry a rule; off everywhere, counted never listed", () =>
+        /\|UI checks off\)/.test((QY.match(/const RE_DS_MARKER = [^\n]*/) || [""])[0]) && offPara.includes("`_UI checks off: <rule-id> (reason)_`")
+          && rules.includes(((offPara.match(/`_UI checks off: ([a-z-]+) \(/) || [])[1]))
+          && /switches a UI check or a project fact off everywhere: the inventory, every feature report \(`off`: the rule, its reason, the findings it hid\) and so finish — counted, never listed \(an inline-silenced finding stays `silenced`\)\./.test(offPara)],
+      ["marker: every `why` code uiOff gives (from its source), the entries bound", () =>
+        whys.length === 4 && whys.every((w) => offPara.includes(tick(w))) && offPara.includes("one past the first " + B.entries + " entries is not applied")],
+      ["marker: creating design-system.md for it enrols the project in the registry", () =>
+        /Creating design-system\.md for the marker alone enrols the project in the registry: a written finish adds the feature's New components to it, and from its first component doctor's `ui-design-system` checks every design's rows against it \(a refusal at size m \/ l\) — without a registry, use the inline comment\./.test(offPara)],
+      ["marker: what-input's modality rule — the inline comment, never the marker", () =>
+        /A what-input modality rule \(`\[data-whatintent='mouse'\] \*:focus \{ outline: none \}`\) is judged as written: silence it with an inline `ui-check-off: outline-removed` on that rule — the marker would switch off every removal of the project\./.test(offPara)],
+      ["colours: every notation the engine parses, the tolerances (design-values.js), alphas", () =>
+        ((DV.match(/const RE_COLOR_CALL = \/\^\(([^)]*)\)/) || [])[1] || "").split("|").map((f) => f.replace(/a\?$/, "")).every((f) => scale.includes("`" + f + "()`"))
+          && scale.includes("(`none` reads as 0)")
+          && scale.includes("across two within the rounding of the pair as written (" + B.hsl + " ΔEOK with an HSL side, " + B.cross + " otherwise), alphas within " + B.alpha)],
+      ["colours: `near` — the nearest within the JND, a hint; what is not parsed matches by text", () =>
+        scale.includes("`near` {`token`, `delta`} the nearest within " + B.jnd + " ΔEOK — a hint, never the token's colour (Tailwind's zinc is not shadcn's neutral)")
+          && /`hwb\(\)`, `lab\(\)`, `lch\(\)`, `color\(\)` and a named colour match by text alone\./.test(scale)],
+      ["fonts: a stack by its first family, against the registry rows' font tokens only", () =>
+        /\*\*Fonts\*\* — a `font-family` stack ending in a generic family, by its first family, against the registry rows' font tokens only \(a code token's stack is never read; one ending in a named emoji font is no stack\)\. Read when the registry holds one\./.test(scale)],
+      ["motion: literal times and the easing functions the engine reads (RE_EASING), Tailwind's arbitrary utilities, never a nearest", () =>
+        ((DV.match(/const RE_EASING = [^\n]*?\(((?:[a-z-]+\|)+[a-z-]+)\)/) || [])[1] || "x").split("|").every((f) => scale.includes("`" + f + "()`"))
+          && /a `transition` \/ `animation` declaration's literal times above 1 ms and easing functions/.test(scale)
+          && /Tailwind's `duration-\[…\]` \/ `delay-\[…\]` \/ `ease-\[…\]`: `token` when each literal is a duration or easing token's, never a nearest\. Read when the scale holds such a token\./.test(scale)],
+      ["sizes: raw, no size scale", () => /\*\*Sizes\*\* stay raw: no size scale is guessed\./.test(scale)],
+      ["kinds: counts only when read, their own per-file bound and codes (design-system.js)", () =>
+        kindCodes.length === 2 && scale.includes("`counts` gains `font` / `motion` only when read; each has its own bound, a file's first " + B.perFile + " (" + kindCodes.map(tick).join(" / ") + ", with the first file)")],
+      ["groups: by what each value is — the example one group (groupKey) — the most frequent first, the first 50 and the total", () =>
+        scale.includes("`groups`: the values read twice or more, by what each is (`#1E40AF`, `rgb(30 64 175)` and `text-[#1e40af]` are one; a utility without its variants), the most frequent first — the first " + B.list + ", `groupsTotal`.")
+          && new Set(["#1E40AF", "rgb(30 64 175)", "#1e40af"].map((value) => T.groupKey({ kind: "color", value }))).size === 1],
+      ["finish: colours and sizes alone", () => /Finish still counts colours and sizes alone\./.test(scale)],
+      ["drift: the same notation — the examples never compared (tokenDrift), a name with two values skipped; the first 50", () =>
+        scale.includes("The project report's `drift` (the first " + B.list + ", `driftTotal`) lists a registry token the code declares with another value IN THE SAME NOTATION")
+          && /`#3b82f6` against `hsl\(217 91% 60%\)`, `16px` against `1rem` are not compared, nor a name the code declares with two values or more \(a theme, a twin sheet\)\./.test(scale)
+          && T.tokenDrift("#3b82f6", "hsl(217 91% 60%)") === null && T.tokenDrift("16px", "1rem") === null && T.tokenDrift("150ms", "0.2s") === "quantity"],
+      ["gone, and neither changes inSync", () => /`gone` lists the `_Token sources:_` files that no longer exist\. Neither changes `inSync`: it compares names\./.test(scale)],
+      ["units table: the headers the registry reads (RE_DS_PROPERTY_HEAD, RE_DS_COL.units) in EN / PT / ES; a props table is none", () => {
+        const heads = (scale.match(/first header cell is `Property` \(`([^`]+)`, `([^`]+)`\) and with a column headed `Units` \(`([^`]+)`, `([^`]+)`\)/) || []).slice(1);
+        const prop = regexOf(QY, "RE_DS_PROPERTY_HEAD"), unit = new RegExp(((QY.match(/units: \/(.*)\/i,/) || [])[1] || "(?!)"), "i");
+        return heads.length === 4 && [ "Property", heads[0], heads[1]].every((h) => prop.test(h)) && ["Units", heads[2], heads[3]].every((h) => unit.test(h))
+          && /a props table, `\| Property \| Type \| Default \|`, is none/.test(scale);
+      }],
+      ["units: the feature report's findings and their keys, the first 50", () =>
+        scale.includes("{`findings` — the first " + B.list + ": `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}")
+          && /lists each declaration whose value takes, outside parentheses, a unit its row does not give \(never `0` or a unitless number\), and a Tailwind arbitrary size by the property it sets/.test(scale)],
+      ["units: the project's unitsTable and its rows bound; a report only, no default", () =>
+        scale.includes("The project report's `unitsTable` {`rows`, `unread`, `past` — rows past the first " + B.unitRows + "}.")
+          && /A report only — never finish, doctor or the brief — and no default: without the table both are null\./.test(scale)],
+      ["DESIGN.md: not read; its own CLI's export to a token file", () =>
+        /\*\*DESIGN\.md\*\* is not read; its own CLI writes a file that is: `npx @google\/design\.md export --format css-tailwind DESIGN\.md > theme\.css` \(a token file by its name\)\./.test(scale)],
+      ["breakpoints: both reports, where they come from, every limit code breakpoints.js gives, never truncated", () =>
+        bpCodes.length === 2 && bpCodes.every((c) => scale.includes(tick(c)))
+          && /both reports end in `breakpoints`, the widths the visual review captures \(\[ui-responsive\.md\]\(ui-responsive\.md\) → The project's breakpoints\) — its own limits .* never make a report truncated\./.test(scale)],
+      ["doctor's ui-states: the design's matrix, not the code — a pointer", () =>
+        /\*\*Doctor's `ui-states`\*\* reads the design's state matrix, not the code \(\[ui-design-patterns\.md\]\(ui-design-patterns\.md\) → The states every view needs\)/.test(scale)
+          && /const UI_STATES_CHECK = "ui-states";/.test(QY)],
+      ["test-patterns: every test folder isTestFile reads (TEST_DIRS — Jest's __mocks__ / __fixtures__ too) and Cypress's *.cy.ts with the Welsh-locale caveat", () =>
+        testDirs.length >= 12 && testDirs.every((d) => TP.includes("`" + d + "/`"))
+          && /Cypress's `\*\.cy\.ts` — a Welsh-locale module named so reads as a test too —/.test(TP)
+          && E.isTestFile("src/i18n/messages.cy.ts") && !E.isTestFile("src/i18n/strings.cy.json")],
+      ["index: ui-code-scan's line names the project's checks, switching one off, the scale, drift and the units table", () =>
+        /the UI checks it runs on a feature's files and the project's, switching one off, raw values against the scale, token drift, the units table\)/.test(uiLine)],
+    ];
+    for (const [label, check] of rows) all("1.38.0 Z: ui-code-scan.md — " + label, { holds: check });
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

@@ -74,7 +74,8 @@ the whole library.
   component contracts, UI states and the worst case, forms and interaction details, motion, how each state is
   announced and where focus goes, WCAG 2.2 AA and how to test it, i18n, performance budgets) ·
   `references/ui-code-scan.md` (what `spec_scan {designSystem}` reads in the code and what it doesn't, the UI checks it
-  runs on a feature's files) · `references/ui-responsive.md` (the project's breakpoints and the lines to paste, layouts
+  runs on a feature's files and the project's, switching one off, raw values against the scale, token drift, the units
+  table) · `references/ui-responsive.md` (the project's breakpoints and the lines to paste, layouts
   without breakpoints, fluid type, which unit for what, viewport units, reflow at 320 px, zoom and text size, touch
   targets and pointers, safe areas, images, tables, orientation, inputs)
 - +obs: `references/observability-patterns.md` (SLOs and burn-rate alerts, telemetry, runbooks, feature flags,

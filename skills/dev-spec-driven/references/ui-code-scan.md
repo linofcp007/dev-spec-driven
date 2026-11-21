@@ -3,7 +3,8 @@
 `spec_scan {designSystem: true}` / `dev-spec design-system` (the project) and `spec_scan {designSystem: true, name}` /
 `dev-spec design-system <feature>` (a feature) compare the code with the registry
 ([ui-design-patterns.md](ui-design-patterns.md) → The registry). This file says what that scan reads in the project's
-files and what it doesn't, and the UI checks it runs on a feature's view and style files.
+files and what it doesn't, what a raw value is against the project's own scale, the units table, and the UI checks it
+runs on a feature's view and style files and on the project's — and how a team switches one off.
 
 ---
 
@@ -38,3 +39,73 @@ not Blade's or Twig's: counted, never listed; only this comment silences (a lint
 href (Next's `legacyBehavior`) is one to silence. A doubt is never judged: a named paste handler, a click whose content
 holds a control, a component (an icon or a text component too) or a slot, or no text (an icon or an image alone), a
 spread (`{...props}`), a tag in an attribute or a one-line template literal, Pug, a tag past 100 attributes or 30 lines.
+
+### The project's UI checks
+
+`spec_scan {designSystem: true}` / `dev-spec design-system` (no feature) also run the UI checks over the project's view and
+style files — an inventory, `uiChecks`: `read`, `total`, `silenced`, `byRule` and `rules` (per rule its level, the files
+holding one, the first place), `facts`, `limits`. Counts, never a list, never a finish warning: each feature's report lists
+its own. The tool and the CLI ask for it; the engine's own default runs none. Stylesheets are read first, then the shorter
+path — at most 5,000 files and 32 MB (`ui-files`, naming the outline removals it left unjudged), each file's first 256K and
+a line's first 2,000 characters (`view-size`, `line-length`; a tag past 30 lines, `tag-length` — each with a count and the
+first file): its own limits, never the report's `limits` or `truncated`. A test, a story, a mock or a fixture is no view
+file. `outline-removed` keeps its rule — any focus style in any file read excuses every removal —, so the removals a feature
+report leaves unjudged past the project's first 48 stylesheets are judged here; a cut pass that read no focus style judges
+none.
+
+The fact `no-reduced-motion` (WCAG 2.3.3, AAA): the view files declare motion — an animation, a transform's transition,
+smooth scrolling — and none of the files read mentions reduced motion (`prefers-reduced-motion`, `motion-safe:` /
+`motion-reduce:`, `useReducedMotion`). Said only when no read was cut (the walk, `ui-files`, a file's 256K); a mention
+only in a script (a `.ts` hook) is not seen.
+
+**Off for the project.** `_UI checks off: <rule-id> (reason)_` — a line of its own in design-system.md, the marker in
+English, entries separated by commas (`_UI checks off: transition-all (the kit animates on purpose)_`) — switches a UI check
+or a project fact off everywhere: the inventory, every feature report (`off`: the rule, its reason, the findings it hid)
+and so finish — counted, never listed (an inline-silenced finding stays `silenced`). An entry with no reason in
+parentheses, an id that is no check or fact, another shape or one past the first 50 entries is not applied, and the report
+says why (`offIgnored`, `why`: `no-reason`, `unknown-rule`, `unreadable`, `past-bound`). Creating design-system.md for the
+marker alone enrols the project in the registry: a written finish adds the feature's New components to it, and from its first
+component doctor's `ui-design-system` checks every design's rows against it (a refusal at size m / l) — without a registry,
+use the inline comment. A what-input modality
+rule (`[data-whatintent='mouse'] *:focus { outline: none }`) is judged as written: silence it with an inline `ui-check-off:
+outline-removed` on that rule — the marker would switch off every removal of the project.
+
+### Raw values against the project's scale
+
+A feature report judges each raw value against the project's own scale — the registry's token rows with their values, then
+the code's tokens the registry does not list:
+- **Colours** — hex, `rgb()`, `hsl()`, `oklab()`, `oklch()` (`none` reads as 0): `token` names the token the value IS, in any
+  notation — exact within one notation, across two within the rounding of the pair as written (0.011 ΔEOK with an HSL side,
+  0.001 otherwise), alphas within 0.01; `near` {`token`, `delta`} the nearest within 0.02 ΔEOK — a hint, never the token's
+  colour (Tailwind's zinc is not shadcn's neutral). `hwb()`, `lab()`, `lch()`, `color()` and a named colour match by text alone.
+- **Fonts** — a `font-family` stack ending in a generic family, by its first family, against the registry rows' font tokens
+  only (a code token's stack is never read; one ending in a named emoji font is no stack). Read when the registry holds one.
+- **Motion** — a `transition` / `animation` declaration's literal times above 1 ms and easing functions (`cubic-bezier()`,
+  `steps()`, `linear()`; never a keyword), Tailwind's `duration-[…]` / `delay-[…]` / `ease-[…]`: `token` when each literal is
+  a duration or easing token's, never a nearest. Read when the scale holds such a token.
+- **Sizes** stay raw: no size scale is guessed.
+
+`counts` gains `font` / `motion` only when read; each has its own bound, a file's first 200 (`font-values` /
+`motion-values`, with the first file). `groups`: the values read twice or more, by what each is (`#1E40AF`, `rgb(30 64 175)`
+and `text-[#1e40af]` are one; a utility without its variants), the most frequent first — the first 50, `groupsTotal`. Finish
+still counts colours and sizes alone.
+
+**Token values.** The project report's `drift` (the first 50, `driftTotal`) lists a registry token the code declares with
+another value IN THE SAME NOTATION — one colour each, or one number each with one unit (`s` read as `ms`): `#3b82f6` against
+`hsl(217 91% 60%)`, `16px` against `1rem` are not compared, nor a name the code declares with two values or more (a theme,
+a twin sheet). `gone` lists the `_Token sources:_` files that no longer exist. Neither changes `inSync`: it compares names.
+
+**The units table.** In design-system.md, a table whose first header cell is `Property` (`Propriedade`, `Propiedad`) and with
+a column headed `Units` (`Unidades`, `Unidad`) holding CSS units is the team's convention — which units each property takes
+(`margin-*` covers `margin` and `margin-top`; a props table, `| Property | Type | Default |`, is none). A feature report's
+`units` lists each declaration whose value takes, outside parentheses, a unit its row does not give (never `0` or a unitless
+number), and a Tailwind arbitrary size by the property it sets: {`findings` — the first 50: `file`, `line`, `property`,
+`value`, `unit`, `allowed` —, `total`, `byProperty`}. The project report's `unitsTable` {`rows`, `unread`, `past` — rows past
+the first 50}. A report only — never finish, doctor or the brief — and no default: without the table both are null. An
+example: [steering-templates.md](steering-templates.md) → design-system.md.
+
+**DESIGN.md** is not read; its own CLI writes a file that is: `npx @google/design.md export --format css-tailwind DESIGN.md >
+theme.css` (a token file by its name). **Breakpoints:** both reports end in `breakpoints`, the widths the visual review
+captures ([ui-responsive.md](ui-responsive.md) → The project's breakpoints) — its own limits (`breakpoint-widths`,
+`breakpoint-line`) never make a report truncated. **Doctor's `ui-states`** reads the design's state matrix, not the code
+([ui-design-patterns.md](ui-design-patterns.md) → The states every view needs).
