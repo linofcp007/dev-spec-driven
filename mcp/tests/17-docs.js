@@ -1158,8 +1158,10 @@ exports.run = async ({
         /\*\*What to capture, per view\*\* — its states plus its widths, never every state at every width; a state the matrix answers `n\/a` is never captured:/],
       ["ui-review: each designed state at one width — the reference's, else 320 — a pair where the reference shows it", () =>
         JSON.stringify(capture.rows[0]) === JSON.stringify(["Each designed state", "one: the reference's; no reference, 320", "a pair where the reference shows it, else a build capture judged on the floor"])],
-      ["ui-review: the worst case at every breakpoint, named by width, its .json; at 320 floor-320", () =>
-        JSON.stringify(capture.rows[1]) === JSON.stringify(["The worst case", "each of the project's breakpoints", "`<view>--worst--w<width>--build.png` and its `.json`; at 320, `floor-320`"])
+      // (1.38.0 review 1, R1-DOC2: `floor-320` only for a view with no reference — the floor's own scope, §3's pair-or-floor rule;
+      // a view with a reference keeps `--w320--build.png`, a pair where a 320 reference exists)
+      ["ui-review: the worst case at every breakpoint, named by width, its .json; at 320 floor-320 for a view with no reference", () =>
+        JSON.stringify(capture.rows[1]) === JSON.stringify(["The worst case", "each of the project's breakpoints", "`<view>--worst--w<width>--build.png` and its `.json`; at 320, `floor-320` for a view with no reference"])
           && JSON.stringify(capture.head) === JSON.stringify(["What", "Width", "Captured as"])],
       ["ui-review: the widths — ≤ 6, 320 first, their sources, the CLI that prints them; scale 1 above 320; a pair by its ref; a sideways scroll a Blocker", R,
         /\*\*Widths:\*\* the project's breakpoints, at most 6, 320 first — ui\.md's `- Breakpoints:` line, else the code's, else 320 · 390 · 768 · 1024 · 1440; `dev-spec design-system <feature>` prints them \(\[ui-responsive\.md\]\(ui-responsive\.md\) → The project's breakpoints\)\./,
@@ -1256,6 +1258,34 @@ exports.run = async ({
       ["index: ui-responsive's line — its contents", I,
         /`references\/ui-responsive\.md` \(the project's breakpoints and the lines to paste, layouts without breakpoints, fluid type, which unit for what, viewport units, reflow at 320 px, zoom and text size, touch targets and pointers, safe areas, images, tables, orientation, inputs\)/],
       ["index: ui-design-patterns' line — how each state is announced and where focus goes", I, /motion, how each state is announced and where focus goes, WCAG 2\.2 AA/],
+      // (1.38.0 review 1, R1-DOC3: each README's +ui paragraph names what 1.38 added, in its language — the project's UI checks
+      // and their `_UI checks off:_` switch, the scale's token, the breakpoints, doctor's ui-states and its note at s; the marker,
+      // the check id and the note read from the engine. R1-DOC4: quality.md's level rule — the reports, the project inventory
+      // too; finish only for `warn` — each UI_RULES id under its own level's clause)
+      ...[["README.md", /Without a feature, `dev-spec design-system` also inventories the project's UI checks, counted per rule over every view and style file \(a line `_UI checks off: <rule-id> \(reason\)_` in design-system\.md switches one off everywhere\), a feature's report names the token of the project's scale that a raw colour, font or timing already is, and both end in the project's breakpoints, the widths the visual review captures\./,
+          /`doctor`'s `ui-states` warns \(a note at size s\) when the design's state matrix gives a state no row or leaves a view's cell open\./],
+        ["README.pt.md", /Sem uma feature, o `dev-spec design-system` faz também o inventário das verificações de interface do projeto, contadas por regra em todos os ficheiros de vista e de estilos \(uma linha `_UI checks off: <rule-id> \(motivo\)_` no design-system\.md desliga uma em todo o lado\), o relatório de uma feature indica, para cada cor, fonte ou temporização fixa, o token da escala do projeto que ela já é, e os dois acabam nos breakpoints do projeto, as larguras que a revisão visual captura\./,
+          /O `ui-states` do `doctor` avisa \(uma nota no tamanho s\) quando a matriz de estados do design deixa um estado sem linha ou a célula de uma vista por preencher\./],
+        ["README.es.md", /Sin una funcionalidad, `dev-spec design-system` hace también el inventario de las comprobaciones de interfaz del proyecto, contadas por regla en todos los ficheros de vista y de estilos \(una línea `_UI checks off: <rule-id> \(motivo\)_` en design-system\.md desactiva una en todas partes\), el informe de una funcionalidad nombra, para cada color, fuente o temporización fijos, el token de la escala del proyecto que ya es, y los dos terminan en los breakpoints del proyecto, los anchos que captura la revisión visual\./,
+          /El `ui-states` de `doctor` avisa \(una nota en el tamaño s\) cuando la matriz de estados del diseño deja un estado sin fila o la celda de una vista sin rellenar\./]]
+        .map(([f, ...res]) => [f + ": the +ui paragraph — the project's UI checks, `_UI checks off:_`, the scale's token, the breakpoints, doctor's ui-states (a note at s)", ws(raw(f)), ...res,
+          () => /const RE_DS_MARKER = .*\|UI checks off\)/.test(raw("mcp", "lib", "engine", "quality.js")) && /const UI_STATES_CHECK = "ui-states";/.test(raw("mcp", "lib", "engine", "quality.js")),
+          () => {
+            const open = "# Design\n\n## [UI] UI States\n\n| " + Q.uiStateHead + " | Checkout | " + Q.uiStateA11y + " |\n|---|---|---|\n| " + L.loading + " | TBD | |\n";
+            return Eng.uiStatesCheck(open, "en", { size: "s" }).state === "small" && Eng.uiStatesCheck(open, "en", { size: "s" }).status === "pass"
+              && Eng.uiStatesCheck(open, "en", { size: "m" }).status === "warn";
+          }]),
+      ["quality.md (maintainers): UI checks → Rules — warn: the reports and finish's warning; report: the reports alone, never finish; each UI_RULES id under its level", () => {
+        const lines = raw("docs", "maintainers", "quality.md").split("\n"), at = lines.findIndex((l) => l.startsWith("## UI checks"));
+        const r = at < 0 ? -1 : lines.findIndex((l, i) => i > at && l.startsWith("- **Rules**"));
+        const e = r < 0 ? -1 : lines.findIndex((l, i) => i > r && /^- \*\*/.test(l));
+        const rule = r < 0 ? "" : ws(lines.slice(r, e < 0 ? lines.length : e).join("\n"));
+        const [warnPart, reportPart] = rule.split("`report` — ");
+        const levels = [...((uiRules.match(/const UI_RULES = \{([^}]*)\}/) || ["", ""])[1]).matchAll(/"([a-z-]+)": "([a-z]+)"/g)].map((m) => [m[1], m[2]]);
+        return /`warn` — the reports \(a feature's, the project inventory\) and finish's warning, never a blocker:/.test(warnPart)
+          && /^the reports alone, never finish:/.test(reportPart || "") && levels.length >= 7
+          && levels.every(([id, level]) => (level === "warn" ? warnPart : reportPart).includes("`" + id + "`") && !(level === "warn" ? reportPart : warnPart).includes("`" + id + "`"));
+      }],
     ];
     const cond = (text, c) => c instanceof RegExp ? () => c.test(text) : typeof c === "function" ? c : () => !c.not.test(text);
     const condName = (c, i) => c instanceof RegExp ? "matches " + c.source.slice(0, 70) : typeof c === "function" ? "check " + i : "never " + c.not.source.slice(0, 60);
