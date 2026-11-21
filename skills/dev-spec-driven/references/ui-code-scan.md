@@ -64,11 +64,11 @@ or a project fact off everywhere: the inventory, every feature report (`off`: th
 and so finish — counted, never listed (an inline-silenced finding stays `silenced`). An entry with no reason in
 parentheses, an id that is no check or fact, another shape or one past the first 50 entries is not applied, and the report
 says why (`offIgnored`, `why`: `no-reason`, `unknown-rule`, `unreadable`, `past-bound`). Creating design-system.md for the
-marker alone enrols the project in the registry: a written finish adds the feature's New components to it, and from its first
-component doctor's `ui-design-system` checks every design's rows against it (a refusal at size m / l) — without a registry,
-use the inline comment. A what-input modality
-rule (`[data-whatintent='mouse'] *:focus { outline: none }`) is judged as written: silence it with an inline `ui-check-off:
-outline-removed` on that rule — the marker would switch off every removal of the project.
+marker alone enrols the project in the registry: a written finish adds the feature's New components to it, and from its
+first component doctor's `ui-design-system` checks every design's rows against it (a refusal at size m / l) — without a
+registry, use the inline comment. A what-input modality rule (`[data-whatintent='mouse'] *:focus { outline: none }`) is
+judged as written: silence it with an inline `ui-check-off: outline-removed` on that rule — the marker would switch off
+every removal of the project.
 
 ### Raw values against the project's scale
 
@@ -104,8 +104,9 @@ number), and a Tailwind arbitrary size by the property it sets: {`findings` — 
 the first 50}. A report only — never finish, doctor or the brief — and no default: without the table both are null. An
 example: [steering-templates.md](steering-templates.md) → design-system.md.
 
-**DESIGN.md** is not read; its own CLI writes a file that is: `npx @google/design.md export --format css-tailwind DESIGN.md >
-theme.css` (a token file by its name). **Breakpoints:** both reports end in `breakpoints`, the widths the visual review
-captures ([ui-responsive.md](ui-responsive.md) → The project's breakpoints) — its own limits (`breakpoint-widths`,
-`breakpoint-line`) never make a report truncated. **Doctor's `ui-states`** reads the design's state matrix, not the code
-([ui-design-patterns.md](ui-design-patterns.md) → The states every view needs).
+**DESIGN.md** is not read; its own CLI writes a file that is:
+`npx @google/design.md export --format css-tailwind DESIGN.md > theme.css` (a token file by its name). **Breakpoints:** both
+reports end in `breakpoints`, the widths the visual review captures ([ui-responsive.md](ui-responsive.md) → The project's
+breakpoints) — its own limits (`breakpoint-widths`, `breakpoint-line`) never make a report truncated. **Doctor's
+`ui-states`** reads the design's state matrix, not the code ([ui-design-patterns.md](ui-design-patterns.md) → The states
+every view needs).
