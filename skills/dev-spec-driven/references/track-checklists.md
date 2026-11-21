@@ -66,6 +66,7 @@ state matrix with its worst case and a reference per view) · Accessibility (WCA
 each view changes at the project's breakpoints — `references/ui-responsive.md`) · UI Performance Budget (Core Web Vitals)
 — and, optional, Component Contracts (one per New / Extend component). See `references/ui-design-patterns.md`. The
 matrix: a column per view, a row per state — each designed or `n/a — why`, with how it is announced and where focus goes.
+A team with a convention for units declares it once, as `design-system.md`'s units table (`references/ui-code-scan.md`).
 
 **+obs adds 5 mandatory `[OBS]` sections** — SLIs & SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health
 & Capacity. See `references/observability-patterns.md`.

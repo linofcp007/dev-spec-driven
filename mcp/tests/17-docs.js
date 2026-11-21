@@ -1558,6 +1558,13 @@ exports.run = async ({
         return sane && keys.length >= 60 && !missed.length && codes.length >= 13 && codes.every((c) => toolRow.includes(c))
           && /the tool and the CLI ask for it, the engine's default runs none/.test(toolRow) && /never in it, and `gone` and the units table never change it either/.test(toolRow);
       }],
+      // item 2's one-liners (DECISIONS "T"): the checklist, the reviewer, the implementer
+      ["track-checklists: Phase 2 — a team's units convention declared once, as the registry's units table", () =>
+        /A team with a convention for units declares it once, as `design-system\.md`'s units table \(`references\/ui-code-scan\.md`\)\./.test(ws(raw("skills", "dev-spec-driven", "references", "track-checklists.md")))],
+      ["spec-reviewer: a raw value's `token` is the scale's; `near` a hint, never the token's colour", () =>
+        /`token` names the scale's token the value is; `near` is a hint — a close colour, not the token's\) are \*\*candidates\*\*/.test(ws(raw("agents", "spec-reviewer.md")))],
+      ["spec-implementer: each property in the units the registry's units table gives", () =>
+        /When `design-system\.md` has a units table, write each property in the units it gives\./.test(ws(raw("agents", "spec-implementer.md")))],
     ];
     // (a label without a file's name is ui-code-scan.md's)
     for (const [label, check] of rows) all("1.38.0 Z docs — " + label, { holds: check });
