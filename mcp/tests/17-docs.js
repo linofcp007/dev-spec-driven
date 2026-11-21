@@ -1277,8 +1277,9 @@ exports.run = async ({
         /`ui-deprecated` warns — never refuses — when a Reuse \/ Extend row names a component the registry marks `_Deprecated:_`, naming its replacement; silent once the row's notes name it in the registry's letter case/.test(registry)],
       ["ui-design-patterns: one Vercel credit line, naming the UI checks too", () => (P.match(/Vercel's Web Interface Guidelines \(MIT\)/g) || []).length === 1
         && /After Vercel's Web Interface Guidelines \(MIT\) — the UI checks' rules too\./.test(P)],
+      // (1.38.0 Z: `_UI checks off:_` joins the English markers — the units table's `Property` the first header cells)
       ["steering-templates: `_Deprecated:_` among the English markers, and its bullet", () =>
-        /\(`_Token sources:_`, `_Libraries:_`, `_From:_`, `_Deprecated:_`\): they are what the engine reads/.test(S)
+        /\(`_Token sources:_`, `_Libraries:_`, `_From:_`, `_Deprecated:_`, `_UI checks off:_`\): they are what the engine reads/.test(S)
           && /`_Deprecated: use DataGrid_` in any cell after a component's name retires it \(`_Deprecated_` alone too, or a punctuation mark after the word — a word makes it a note: `_Deprecated in favour of DataGrid_` retires nothing\): doctor's `ui-deprecated` warns when a design still reuses or extends it, naming the first other listed component, not retired itself, the text names — by its name alone \(`use Dialog`, not `Dialog\/Sheet`, `Dialog\.Root` or a path\) — silent when the row's notes name that one, alone too, as this file writes it \(`DataGrid`, not "the data grid"\): a capitalised word reads as the name — to keep a component on purpose, write the name in a code span or a tag\. It retires the WHOLE component: write a retired variant or prop without the marker\./.test(S)],
       ["track-checklists: finish — the UI checks' warnings fixed or silenced with a reason", () =>
         /the UI checks' warnings \(`spec_scan \{designSystem: true, name\}`\) fixed or silenced with a reason/.test(T)],
@@ -1401,6 +1402,14 @@ exports.run = async ({
     const testDirs = (((SC.match(/const TEST_DIRS = new Set\(\[([^\]]*)\]\)/) || [])[1] || "").match(/"[a-z0-9_]+"/g) || []).map((d) => d.slice(1, -1));
     const uiLine = (ws(raw("skills", "dev-spec-driven", "references", "index.md")).match(/`references\/ui-code-scan\.md` \([^)]*\)/) || [""])[0];
     const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
+    const STraw = raw("skills", "dev-spec-driven", "references", "steering-templates.md"), ST = ws(STraw);
+    // a registry holding `text`, read by the engine (quality.js designSystemRegistry)
+    const regOf = (name, text) => {
+      const d = path.join(tmp, "z138-reg-" + name, ".specs");
+      fs.mkdirSync(path.join(d, "steering"), { recursive: true });
+      fs.writeFileSync(path.join(d, "steering", "design-system.md"), "# Design System\n\n" + text);
+      return E.designSystemRegistry(d);
+    };
     const rows = [
       ["intro: what the file says — the scale, the units table, the project's checks, switching one off; the file ≤ 30,000 bytes", () =>
         /what a raw value is against the project's own scale, the units table, and the UI checks it runs on a feature's view and style files and on the project's — and how a team switches one off\./.test(ws(scanRaw))
@@ -1492,8 +1501,29 @@ exports.run = async ({
           && E.isTestFile("src/i18n/messages.cy.ts") && !E.isTestFile("src/i18n/strings.cy.json")],
       ["index: ui-code-scan's line names the project's checks, switching one off, the scale, drift and the units table", () =>
         /the UI checks it runs on a feature's files and the project's, switching one off, raw values against the scale, token drift, the units table\)/.test(uiLine)],
+      // references/steering-templates.md (item 2): the units table's example and the marker's line — each READ by the engine
+      ["steering-templates: `Property` among the first header cells kept as written", () =>
+        /Keep the first header cell of each table \(`Token`, `Component`, `Property` — or their PT \/ ES forms\)/.test(ST)],
+      ["steering-templates: the units table's example IS one to the registry's reader, under its PT / ES headers too; a report, never a default", () => {
+        const block = (STraw.match(/The units table, under any heading \(PT `\| Propriedade \| Unidades \|`, ES `\| Propiedad \| Unidad \|`\):\n\n```markdown\n([\s\S]*?)```/) || [])[1] || "";
+        const read = (head) => regOf("units-" + head.length, block.replace("| Property | Units |", head)).units;
+        const all3 = ["| Property | Units |", "| Propriedade | Unidades |", "| Propiedad | Unidad |"].map(read);
+        return all3.every((u) => u && u.rows.length === 3 && !u.unread.length && u.rows.every((r) => r.props.length && r.units.length))
+          && /- A \*\*units table\*\* \(below\) is optional — the team's convention of which units each property takes: a report, never a default \(none is written for you\)\./.test(ST)
+          && /`spec_scan \{designSystem: true, name\}` lists a feature's declarations off it \(`units`\), `spec_scan \{designSystem: true\}` the rows it could not read \(`unitsTable`\); never finish, doctor or the brief\./.test(ST)
+          && /`margin-\*` covers `margin` and `margin-top`; a component's props table \(`\| Property \| Type \| Default \|`\) is none\./.test(ST);
+      }],
+      ["steering-templates: the marker's example line is applied (uiOff); counted never listed, finish silent; an entry not applied is said", () => {
+        const line = (ST.match(/- `(_UI checks off: [^`]*_)`/) || [])[1] || "";
+        const off = T.uiOff(regOf("marker", line + "\n"));
+        return off.off.size === 1 && rules.includes([...off.off.keys()][0]) && !off.ignored.length
+          && /switches a UI check off for the whole project: the project's report and every feature's count what it hides, never list it, and finish never warns about it\. An entry without its reason in parentheses, or naming no check, is not applied — the report says why\./.test(ST);
+      }],
+      ["steering-templates: the marker's cost — the registry it enrols; the inline comment without one", () =>
+        /A design-system\.md written only for this line enrols the project in the registry \(doctor's `ui-design-system`, finish's New components\); without one, silence a single finding with the inline `ui-check-off:` comment/.test(ST)],
     ];
-    for (const [label, check] of rows) all("1.38.0 Z: ui-code-scan.md — " + label, { holds: check });
+    // (a label without a file's name is ui-code-scan.md's)
+    for (const [label, check] of rows) all("1.38.0 Z docs — " + label, { holds: check });
   }
 
   // Release hygiene: the three version fields agree.
