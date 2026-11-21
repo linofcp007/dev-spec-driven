@@ -215,8 +215,9 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const big = { "src/z/big.html": "<!doctype html>\n<!--\n" + ("y".repeat(99) + "\n").repeat(2800) + "-->\n" };
     const control = inv(project("cut-control", Object.assign({}, MOTION, { "src/z/small.html": "<p>hi</p>\n" })));
     const size = inv(project("cut-size", Object.assign({}, MOTION, big)));
+    // (129 pages of exactly 256K — each read whole, no view-size —: the 32 MB bound alone cuts the pass)
     const heavy = Object.assign({}, MOTION);
-    for (let i = 0; i < 129; i++) heavy["src/p/p" + String(i).padStart(3, "0") + ".html"] = "<!--\n" + ("y".repeat(99) + "\n").repeat(2700) + "-->\n";
+    for (let i = 0; i < 129; i++) heavy["src/p/p" + String(i).padStart(3, "0") + ".html"] = "<!--\n" + ("y".repeat(99) + "\n").repeat(2621) + "y".repeat(35) + "-->\n";
     const files = inv(project("cut-files", heavy));
     const q = project("cut-walk", MOTION);
     const views = [{ rel: "src/a.css", full: path.join(q, "src/a.css") }];
@@ -224,7 +225,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     all("1.38 project UI checks: the fact is never said when a read was cut — a file past its 256K, the pass's bound, a truncated walk — a mention may sit in what was not read (got " + js({ control: control.facts, size: [size.facts, size.limits], files: files.limits, walk }) + ")", {
       control: () => control.facts.length === 1 && walk.open.length === 1,
       size: () => js(size.facts) === "[]" && size.limits.some((l) => l.code === "view-size"),
-      files: () => js(files.facts) === "[]" && files.limits.some((l) => l.code === "ui-files"),
+      files: () => js(files.facts) === "[]" && js(files.limits.map((l) => l.code)) === js(["ui-files"]),
       walk: () => js(walk.cut) === "[]",
     });
   }
