@@ -234,8 +234,9 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     const partial = bp("partial", "en", "@import \"tailwindcss\";\n@theme inline {\n  --breakpoint-3xl: 1600px;\n  --breakpoint-4xl: 2000px;\n}\n");
     const pOut = runIn(["design-system", "--project", partial]);
     const pJson = jsonOf(runIn(["design-system", "--project", partial, "--json"]));
-    // code alone (a reset), with an unread value
-    const code = bp("code", "en", "@theme {\n  --breakpoint-*: initial;\n  --breakpoint-x: calc(40rem + 1px);\n  --breakpoint-md: 50rem;\n}\n");
+    // code alone (a reset), with six unread values: five listed, the sixth counted
+    const code = bp("code", "en", "@theme {\n  --breakpoint-*: initial;\n  --breakpoint-x: calc(40rem + 1px);\n  --breakpoint-md: 50rem;\n" +
+      ["var(--w)", "auto", "40vw", "250rem", "1e3px"].map((v, i) => "  --breakpoint-u" + i + ": " + v + ";\n").join("") + "}\n");
     const cOut = runIn(["design-system", "--project", code]);
     // ui.md's line, too long: it decides, and its bound is said
     const line = bp("line", "en", null, "- Breakpoints: 600 / 1200 px " + "x".repeat(220));
@@ -255,12 +256,13 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 390 · 768 · 1024 · 1440 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
         pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1600)),
       json: () => js(pJson.breakpoints) === js(SR.designSystemReport(partial).breakpoints) && pJson.breakpoints.partial === true,
-      code: () => cOut.out.includes(T.bpHead("320 · 800", T.bpFrom.code("src/app.css:4"))) && cOut.out.includes(T.bpUnread(1, "--breakpoint-x calc(40rem + 1px) (src/app.css:3)")),
+      code: () => cOut.out.includes(T.bpHead("320 · 800", T.bpFrom.code("src/app.css:4"))) &&
+        cOut.out.includes(T.bpUnread(6, "--breakpoint-x calc(40rem + 1px) (src/app.css:3), --breakpoint-u0 var(--w) (src/app.css:5), --breakpoint-u1 auto (src/app.css:6), --breakpoint-u2 40vw (src/app.css:7), --breakpoint-u3 250rem (src/app.css:8) … +1")),
       line: () => lOut.out.includes(T.bpHead("320 · 600 · 1200", T.bpFrom["ui.md"](uiAt(line)))) && lOut.out.includes(T.bpLimit["breakpoint-line"](200, undefined, undefined, uiAt(line))),
-      none: () => nOut.out.includes(T.bpHead(DEF, T.bpFrom.default)) && !nOut.out.includes("⚠"),
-      feature: () => fOut.code === 0 && at(fOut.out, T.bpHead(DEF, T.bpFrom.default)) > at(fOut.out, T.uiNone(1)) && at(fOut.out, T.uiNone(1)) > 0 &&
+      none: () => nOut.out.includes(T.bpHead(DEF, T.bpFrom.default())) && !nOut.out.includes("⚠"),
+      feature: () => fOut.code === 0 && at(fOut.out, T.bpHead(DEF, T.bpFrom.default())) > at(fOut.out, T.uiNone(1)) && at(fOut.out, T.uiNone(1)) > 0 &&
         js(fJson.breakpoints) === js(SR.designSystemReport(none, { name: f.slug }).breakpoints),
-      pt: () => ptOut.out.includes(P.bpHead(DEF, P.bpFrom.default)),
+      pt: () => ptOut.out.includes(P.bpHead(DEF, P.bpFrom.default())),
     });
   }
 };

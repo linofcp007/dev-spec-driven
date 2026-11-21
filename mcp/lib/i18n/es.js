@@ -1569,7 +1569,7 @@ const msg = {
         "ui.md": (at) => `la línea Breakpoints de ${at}`,
         code: (at) => `declarados en ${at}`,
         partial: (at) => `el conjunto por defecto de la revisión, y lo que ${at} añade a los de su framework — para elegir, enuméralos todos en la línea Breakpoints de .specs/steering/ui.md`,
-        default: "ninguno declarado — el conjunto por defecto de la revisión: enumera los tuyos en la línea Breakpoints de .specs/steering/ui.md",
+        default: () => "ninguno declarado — el conjunto por defecto de la revisión: enumera los tuyos en la línea Breakpoints de .specs/steering/ui.md",
       },
       bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint cuyo ancho no se leyó" : "breakpoints cuyo ancho no se leyó"} — ${list}: escribe los anchos del proyecto (320–3840 px) en la línea Breakpoints de .specs/steering/ui.md`,
       bpLimit: {

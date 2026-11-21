@@ -1569,7 +1569,7 @@ const msg = {
         "ui.md": (at) => `a linha Breakpoints de ${at}`,
         code: (at) => `declaradas em ${at}`,
         partial: (at) => `o conjunto por omissão da revisão, e o que ${at} acrescenta às da sua framework — para escolher, lista-as todas na linha Breakpoints de .specs/steering/ui.md`,
-        default: "nenhuma declarada — o conjunto por omissão da revisão: lista as tuas na linha Breakpoints de .specs/steering/ui.md",
+        default: () => "nenhuma declarada — o conjunto por omissão da revisão: lista as tuas na linha Breakpoints de .specs/steering/ui.md",
       },
       bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint cuja largura não foi lida" : "breakpoints cuja largura não foi lida"} — ${list}: escreve as larguras do projeto (320–3840 px) na linha Breakpoints de .specs/steering/ui.md`,
       bpLimit: {

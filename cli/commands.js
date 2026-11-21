@@ -1901,7 +1901,7 @@ const COMMANDS = [
       // 1.38: the breakpoints (both shapes) — the widths and where they come from, the ones not read, their own bounds (never the
       // report's limits)
       const breakpoints = (b) => {
-        log(T.bpHead(b.widths.join(" · "), b.partial ? T.bpFrom.partial(b.at) : b.from === "default" ? T.bpFrom.default : T.bpFrom[b.from](b.at)));
+        log(T.bpHead(b.widths.join(" · "), T.bpFrom[b.partial ? "partial" : b.from](b.at)));
         if (b.unreadTotal) log(T.bpUnread(b.unreadTotal, b.unread.map((u) => `${u.name} ${u.value} (${u.at})`).join(", ") + (b.unreadTotal > b.unread.length ? " … +" + (b.unreadTotal - b.unread.length) : "")));
         b.limits.forEach((l) => log(T.bpLimit[l.code](l.read, l.count, l.first, l.at)));
       };

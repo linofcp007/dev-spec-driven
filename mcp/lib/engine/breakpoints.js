@@ -34,14 +34,13 @@ const UI_FILE = "ui.md"; // (the +ui steering file — TRACK_STEERING.ui)
 
 // --- ui.md's line ----------------------------------------------------------------------------------------------------------------
 // `- Breakpoints: …` — a list item (`-`, `*`, `+`), the label in any case, emphasis marks around it (`- **Breakpoints:** …`)
-const RE_UI_LINE = /^[ \t]*[-*+][ \t]+[*_]{0,2}breakpoints[*_]{0,2}[ \t]*:[*_]{0,2}[ \t]*(.*)$/i;
+const RE_UI_LINE = /^[ \t]*[-*+][ \t]+[*_]{0,2}breakpoints[*_]{0,2}[ \t]*:(.*)$/i;
 const RE_UI_SLOT = /\[[^\]]*(?:\]|$)/g; // the stub's `[360 / 768 / 1280 px]` — what a `[` opens, closed or not
-// a length: a thousands group (`1.280`, `1,440`, `2 560` with a no-break space — one digit before it: a width is ≤ 3840) or a
-// number — then px / rem / em, or none
-const RE_UI_LENGTH = /(?:(?<![\d.,])(\d)[.,\u00a0\u202f](\d{3})(?!\d)|(?<![\d.])(\d+(?:\.\d+)?|\.\d+)(?!\d|\.\d))(?:[ \t]*(px|rem|em)(?![a-z]))?/gi;
+// a length: a thousands group (`1.280`, `1,440`, `2 560` with a no-break space — one digit before it, a width being ≤ 3840, three
+// after; never a plain blank: `360 768 1280` is a list) or a number — then px / rem / em, or none
+const RE_UI_LENGTH = /(?:(\d)[.,\u00a0\u202f](\d{3})(?!\d)|(\d+(?:\.\d+)?|\.\d+))(?:[ \t]*(px|rem|em))?/gi;
 const RE_CUT_TOKEN = /[\w.,]+$/; // what the bound cut in two: a number's first digits are no number
-// a min edge in whole CSS px (767.5px → 768), its float noise rounded away first
-const edge = (px) => Math.ceil(Math.round(px * 1000) / 1000);
+const edge = Math.ceil; // a min edge in whole CSS px (767.5px → 768; a rem / em × 16 that is a whole number is exact)
 // The lengths a value writes → [{ px, text }]: a unit written after the number, else the next one written (`360 / 768 / 1280 px`,
 // `30 / 48 / 80 rem`), else px; a thousands group before px or no unit is an integer, before rem / em a decimal (`1.250rem`).
 function uiLengths(value) {
@@ -49,7 +48,7 @@ function uiLengths(value) {
   for (const m of value.matchAll(RE_UI_LENGTH)) {
     const unit = m[4] ? m[4].toLowerCase() : null;
     const n = m[1] == null ? parseFloat(m[3]) : unit === "rem" || unit === "em" ? parseFloat(m[1] + "." + m[2]) : Number(m[1] + m[2]);
-    found.push({ n, unit, text: m[0].trim() });
+    found.push({ n, unit, text: m[0] });
   }
   let next = "px";
   for (let i = found.length - 1; i >= 0; i--) { if (found[i].unit) next = found[i].unit; else found[i].unit = next; }
@@ -61,7 +60,7 @@ function uiLengths(value) {
 function uiBreakpoints(root) {
   const file = path.join(specsRoot(root), "steering", UI_FILE);
   const raw = readIfExists(file);
-  if (raw == null || !/breakpoints/i.test(raw)) return null;
+  if (raw == null) return null;
   const body = steeringFrontMatter(raw).body.split(/\r?\n/);
   const skip = raw.split(/\r?\n/).length - body.length; // the front matter's lines (and the blank ones after it)
   // (line for line: a comment over lines leaves its lines blank, so a line number is the file's)
@@ -94,12 +93,12 @@ const lengthPx = (v) => { if (v === "0") return 0; const m = RE_BP_LENGTH.exec(v
 // The observer the token walk carries (design-system.js scanCode — the report's scan alone) → { on(rel, text): one stylesheet's
 // observer — none when its text holds no `@theme` (the walk then builds no event) —, found: { files: [{ rel, decls: Map name →
 // { value, line } }], reset } }. Read: a top-level `@theme` block's OWN `--breakpoint-<name>` declarations (Tailwind 4 declares
-// its theme at the top level: a nested one is not read), the last of a name kept; `--breakpoint-<name>: initial` drops that name, `--breakpoint-*: initial` / `--*:
-// initial` every one the file declared above it (and `reset`: Tailwind's own five are gone).
+// its theme at the top level: a nested one is not read), the last of a name kept; `--breakpoint-<name>: initial` drops that
+// name, `--breakpoint-*: initial` / `--*: initial` every one the file declared above it (and `reset`: Tailwind's own five are gone).
 function breakpointWatch() {
   const found = { files: [], reset: false };
   const on = (rel, text) => {
-    if (text == null || !text.includes("@theme")) return null;
+    if (!text.includes("@theme")) return null; // (a pre-test: the walk builds an event per statement for an observer)
     const themes = new Set(), decls = new Map();
     found.files.push({ rel, decls });
     return {
@@ -126,7 +125,7 @@ function codeBreakpoints(found) {
     if (at == null) at = where;
     if (px >= BP_FLOOR) widths.push(px);
   }
-  return { widths, unread, at, partial: at != null && !found.reset };
+  return { widths, unread, at, partial: !!found && !found.reset }; // (asked only when a width was read)
 }
 
 // spec_scan {designSystem: true}'s `breakpoints` (both shapes) → { widths (ascending, BP_FLOOR first, BP_WIDTHS at most), from:

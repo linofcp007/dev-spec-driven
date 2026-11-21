@@ -79,26 +79,32 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
   }
 
   { // BP-ui-bound (U10): ui.md's value is read up to 200 characters, said; a number the bound cuts is no number
-    const past = report("- Breakpoints: 480 / 960 px — " + "a".repeat(190) + " 1600 px\n"); // (1600 starts at the 206th character)
-    const halved = report("- Breakpoints: " + "a".repeat(195) + " 12800px\n");
+    // (the value is what follows the colon, its blank too: 1600 starts at its 208th character; 12800 straddles the bound, 1280
+    // before it; 1280 ends right at it, a blank after it)
+    const past = report("- Breakpoints: 480 / 960 px — " + "a".repeat(190) + " 1600 px\n");
+    const halved = report("- Breakpoints: " + "a".repeat(194) + " 12800px\n");
     const short = report("- Breakpoints: 480 px " + " ".repeat(300) + "\n");
+    const whole = report("- Breakpoints: " + "a".repeat(194) + " 1280 " + "b".repeat(20) + "\n"); // (1280 ends at the bound, a blank after it)
     all("1.38 breakpoints (ui.md): the Breakpoints value is read up to 200 characters — a width past them is not, `breakpoint-line` {read 200, at} says so (in breakpoints.limits); `12800px` cut at the bound is not read as 1280; trailing blanks are no excess (got " +
-      js({ past, halved, short: short.limits }) + ")", {
+      js({ past, halved, short: short.limits, whole: whole.widths }) + ")", {
       past: () => widths(past) === js([320, 480, 960]) && js(past.limits) === js([{ code: "breakpoint-line", read: 200, at: UI + ":1" }]),
       halved: () => js(halved.widths) === js(DEFAULT) && halved.from === "default" && halved.unreadTotal === 0 && js(halved.limits) === js([{ code: "breakpoint-line", read: 200, at: UI + ":1" }]),
       short: () => js(short.limits) === js([]),
+      whole: () => widths(whole) === js([320, 1280]) && whole.limits.length === 1,
     });
   }
 
   { // BP-ui-units (U11–U16, R1): px, rem / em × 16, a bare number takes the unit written next (else px), thousands groups, the
     // ceiling of a fraction, the floor and the ceiling of the range, sorted and deduplicated
-    const units = report("- Breakpoints: 48rem / 64em / 1440px / 1600\n"), next = report("- Breakpoints: 30 / 48 / 80 rem\n");
+    const units = report("- Breakpoints: 48rem / 64em / 1440PX / 1600\n"), next = report("- Breakpoints: 30 / 48 / 80 rem\n");
     const groups = report("- Breakpoints: 1.250rem / 1.280 px / 1,440px / 2.560\n"), edges = report("- Breakpoints: 767.5px, 240px, 5120px, 320 px, 1024 / 480 / 1024 px\n");
-    all("1.38 breakpoints (ui.md): a width is a min edge in px — rem / em × 16, a bare number in the unit written next (`30 / 48 / 80 rem`) else px, `1.280 px` / `1,440px` / `2.560` thousands (`1.250rem` a decimal), 767.5px → 768; under 320 the floor's, over 3840 unread {name, value, at}; ascending, once each (got " +
-      js({ units: units.widths, next: next.widths, groups: groups.widths, edges }) + ")", {
+    const four = report("- Breakpoints: 1.2800px\n"); // (a group is three digits: 1.28 px, the floor's)
+    all("1.38 breakpoints (ui.md): a width is a min edge in px — rem / em × 16, a unit in any case, a bare number in the unit written next (`30 / 48 / 80 rem`) else px, `1.280 px` / `1,440px` / `2.560` thousands (`1.250rem` a decimal, `1.2800px` none), 767.5px → 768; under 320 the floor's, over 3840 unread {name, value, at}; ascending, once each (got " +
+      js({ units: units.widths, next: next.widths, groups: [groups.widths, groups.unreadTotal], four: four.widths, edges }) + ")", {
       units: () => widths(units) === js([320, 768, 1024, 1440, 1600]),
       next: () => widths(next) === js([320, 480, 768, 1280]),
-      groups: () => widths(groups) === js([320, 1280, 1440, 2560]),
+      groups: () => widths(groups) === js([320, 1280, 1440, 2560]) && groups.unreadTotal === 0,
+      four: () => four.from === "default",
       edges: () => widths(edges) === js([320, 480, 768, 1024]) && edges.unreadTotal === 1 && js(edges.unread) === js([{ name: "Breakpoints", value: "5120px", at: UI + ":1" }]),
     });
   }
@@ -137,22 +143,22 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const above = report(null, lines("@theme {", "  --breakpoint-old: 100rem;", "  --breakpoint-*: initial;", "  --breakpoint-md: 50rem;", "}"));
     const all1 = report(null, lines("@theme {", "  --*: initial;", "  --breakpoint-md: 50rem;", "}"));
     const drop = report(null, lines("@theme {", "  --breakpoint-*: initial;", "  --breakpoint-sm: 30rem;", "  --breakpoint-md: 50rem;", "  --breakpoint-sm: initial;", "}"));
-    const again = report(null, lines("@theme {", "  --breakpoint-*: initial;", "  --breakpoint-md: 48rem;", "  --breakpoint-md: 50rem;", "}"));
-    all("1.38 breakpoints (@theme): Tailwind docs' reset (`--breakpoint-*: initial`, then its own) is complete — not partial, at its first declaration; a declaration above a reset is gone; `--*: initial` resets too; `--breakpoint-sm: initial` drops sm (no unread); a name declared twice keeps the last (got " +
-      js({ twreset, above: above.widths, all1: [all1.widths, all1.partial], drop: [drop.widths, drop.unreadTotal], again: again.widths }) + ")", {
+    const again = report(null, lines("@theme {", "  --breakpoint-*: initial;", "  --breakpoint-md: 48rem;", "  --breakpoint-lg: 70rem;", "  --breakpoint-md: 50rem;", "}"));
+    all("1.38 breakpoints (@theme): Tailwind docs' reset (`--breakpoint-*: initial`, then its own) is complete — not partial, at its first declaration; a declaration above a reset is gone; `--*: initial` resets too; `--breakpoint-sm: initial` drops sm (no unread); a name declared twice keeps the last, so the first declaration kept is the one below (got " +
+      js({ twreset, above: above.widths, all1: [all1.widths, all1.partial], drop: [drop.widths, drop.unreadTotal], again: [again.widths, again.at] }) + ")", {
       twreset: () => widths(twreset) === js([320, 640, 1024]) && twreset.from === "code" && twreset.partial === false && twreset.at === "src/app.css:4",
       above: () => widths(above) === js([320, 800]) && above.partial === false,
       all1: () => widths(all1) === js([320, 800]) && all1.partial === false,
       drop: () => widths(drop) === js([320, 800]) && drop.unreadTotal === 0,
-      again: () => widths(again) === js([320, 800]),
+      again: () => widths(again) === js([320, 800, 1120]) && again.at === "src/app.css:4",
     });
   }
 
   { // BP-theme-unread (C8, C9, C10, R4): a value that is no length (calc(), var(), vw, a word, 1e3px) or wider than 3840 is unread —
     // the first five listed with name, value and file:line, all counted; `0` is the floor's
     const r = report(null, lines("@theme {", "  --breakpoint-*: initial;", "  --breakpoint-a: calc(40rem + 1px);", "  --breakpoint-b: var(--w);", "  --breakpoint-c: 0;",
-      "  --breakpoint-d: 250rem;", "  --breakpoint-e: 50rem;", "  --breakpoint-f: 40vw;", "  --breakpoint-g: auto;", "  --breakpoint-h: 1e3px;", "}"));
-    all("1.38 breakpoints (@theme): unread — a value other than 0 or a px / rem / em length, or wider than 3840 px: the first 5 [{name, value, at}], unreadTotal all; 0 is no unread (got " + js(r) + ")", {
+      "  --breakpoint-d: 250rem;", "  --breakpoint-e: 800PX;", "  --breakpoint-f: 40vw;", "  --breakpoint-g: auto;", "  --breakpoint-h: 1e3px;", "}"));
+    all("1.38 breakpoints (@theme): unread — a value other than 0 or a px / rem / em length (a unit in any case), or wider than 3840 px: the first 5 [{name, value, at}], unreadTotal all; 0 is no unread (got " + js(r) + ")", {
       widths: () => widths(r) === js([320, 800]) && r.from === "code",
       unread: () => r.unreadTotal === 6 && js(r.unread.map((u) => u.name)) === js(["--breakpoint-a", "--breakpoint-b", "--breakpoint-d", "--breakpoint-f", "--breakpoint-g"]),
       first: () => js(r.unread[0]) === js({ name: "--breakpoint-a", value: "calc(40rem + 1px)", at: "src/app.css:3" }) && r.unread[2].value === "250rem",
