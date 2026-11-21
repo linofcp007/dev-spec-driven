@@ -99,12 +99,14 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const units = report("- Breakpoints: 48rem / 64em / 1440PX / 1600\n"), next = report("- Breakpoints: 30 / 48 / 80 rem\n");
     const groups = report("- Breakpoints: 1.250rem / 1.280 px / 1,440px / 2.560\n"), edges = report("- Breakpoints: 767.5px, 240px, 5120px, 320 px, 1024 / 480 / 1024 px\n");
     const four = report("- Breakpoints: 1.2800px\n"); // (a group is three digits: 1.28 px, the floor's)
-    all("1.38 breakpoints (ui.md): a width is a min edge in px — rem / em × 16, a unit in any case, a bare number in the unit written next (`30 / 48 / 80 rem`) else px, `1.280 px` / `1,440px` / `2.560` thousands (`1.250rem` a decimal, `1.2800px` none), 767.5px → 768; under 320 the floor's, over 3840 unread {name, value, at}; ascending, once each (got " +
-      js({ units: units.widths, next: next.widths, groups: [groups.widths, groups.unreadTotal], four: four.widths, edges }) + ")", {
+    const spaced = report("- Breakpoints: 2" + String.fromCharCode(0xa0) + "560 px / 3" + String.fromCharCode(0x202f) + "840 px\n"); // (no-break spaces)
+    all("1.38 breakpoints (ui.md): a width is a min edge in px — rem / em × 16, a unit in any case, a bare number in the unit written next (`30 / 48 / 80 rem`) else px, `1.280 px` / `1,440px` / `2.560` / a no-break space thousands (`1.250rem` a decimal, `1.2800px` none), 767.5px → 768; under 320 the floor's, over 3840 unread {name, value, at}; ascending, once each (got " +
+      js({ units: units.widths, next: next.widths, groups: [groups.widths, groups.unreadTotal], four: four.widths, spaced: spaced.widths, edges }) + ")", {
       units: () => widths(units) === js([320, 768, 1024, 1440, 1600]),
       next: () => widths(next) === js([320, 480, 768, 1280]),
       groups: () => widths(groups) === js([320, 1280, 1440, 2560]) && groups.unreadTotal === 0,
       four: () => four.from === "default",
+      spaced: () => widths(spaced) === js([320, 2560, 3840]),
       edges: () => widths(edges) === js([320, 480, 768, 1024]) && edges.unreadTotal === 1 && js(edges.unread) === js([{ name: "Breakpoints", value: "5120px", at: UI + ":1" }]),
     });
   }

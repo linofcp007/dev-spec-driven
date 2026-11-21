@@ -2285,6 +2285,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   partial, the default set and 2000, 1600 left out and said), shadcn-svelte (the same), tailwindcss.com (two `@theme` blocks,
   no breakpoint — the default set; `@media (width <= theme(--breakpoint-sm))` declares nothing), Tailwind's own reset example
   (complete), Breeze / Jetstream / taxonomy / sakai-vue / Bootstrap / Bulma / Open Props (nothing read — the default set).
+  The project report and the seed on those clones are the parent's byte for byte but the new key. Writing the mutation list
+  first showed five shapes no fixture could tell (the length regex's lookarounds — greedy left-to-right matching never starts
+  inside a number —, rounding a rem × 16, the emphasis marks after the colon, a word pre-test on ui.md, a null text): taken
+  out before the pass. Mutation pass: 76 of 76 — one survivor at first (the no-break-space group had no fixture: added).
+  Cost, ratios at the same moment: the `@theme` pre-test is a cost guard (the report on 100 candidate sheets without one
+  1.14× with it); 100 sheets of 400-declaration `@theme` blocks 1.30× the same as `@themx` (≤ 1.5); the hostile inputs of the
+  suite's K2 ≤ 3×. On the clones the machine (three other chains' suites) swung parent against chain 0.74–2.26× either way
+  with the roles swapped: no difference to measure — without an `@theme` the added work is an `includes` per walked sheet and
+  one ui.md read.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
