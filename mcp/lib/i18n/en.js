@@ -1683,6 +1683,10 @@ const msg = {
       uiProjectHead: (n, files) => `  UI checks in the project's view files (${n} in the ${files} read) — each feature's report lists its own; spec_finish warns about a +ui feature's:`,
       uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} in ${files} ${files === 1 ? "file" : "files"}${tag ? " " + tag : ""} — the first: ${at}`,
       uiProjectNone: (files) => `  UI checks: nothing in the project's ${files} view ${files === 1 ? "file" : "files"}`,
+      // (the project's facts by code — at: the first place, file:line)
+      uiFact: {
+        "no-reduced-motion": (n, at) => `  ▲ the code declares motion — an animation, a transform's transition or smooth scrolling (${n} ${n === 1 ? "place" : "places"}, the first: ${at}) — and none of the project's view files read mentions reduced motion: offer a reduced variant — @media (prefers-reduced-motion: reduce), Tailwind's motion-reduce: / motion-safe: (WCAG 2.3.3, AAA)`,
+      },
       dsTokensNew: (n) => `  tokens in the code, not in the registry (${n}) — a row each:`,
       dsPending: (list) => `  in the code, built by an unfinished feature (its finish adds them): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,

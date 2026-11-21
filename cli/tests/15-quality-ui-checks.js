@@ -175,10 +175,14 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     const big = { "a/r.css": "*:focus {\n  outline: none;\n}\n" }, body = "<!--\n" + ("y".repeat(99) + "\n").repeat(2700) + "-->\n";
     for (let i = 0; i < 129; i++) big["src/p/p" + String(i).padStart(3, "0") + ".html"] = body;
     const cut = runIn(["design-system", "--project", proj("cut", "en", big)]);
+    // (the fact no-reduced-motion: keyframes declared, no mention — its line after the rules')
+    const moved = runIn(["design-system", "--project", proj("motion", "en", { "src/b/pop.css": "@keyframes pop { to { opacity: 1 } }\n", "src/B.tsx": IMG })]);
     const T = MSG("en").cliOutput, P = MSG("pt").cliOutput;
     const lineOf = (out, s) => out.split("\n").indexOf(s);
-    all("1.38 design-system (CLI): the project's UI checks — after the registry part the inventory's head, a line per rule (its count, its files, the first place; report-level tagged), the silenced count; nothing found: one line; a cut pass leaving a removal unjudged prints its limit, never \"nothing\"; Portuguese in Portuguese (got " +
-      js([r.code, r.out, clean.out, cut.out.slice(-700), pt.out.slice(-500)]) + ")", {
+    all("1.38 design-system (CLI): the project's UI checks — after the registry part the inventory's head, a line per rule (its count, its files, the first place; report-level tagged), the silenced count, the fact no-reduced-motion; nothing found: one line; a cut pass leaving a removal unjudged prints its limit, never \"nothing\"; Portuguese in Portuguese (got " +
+      js([r.code, r.out, clean.out, cut.out.slice(-700), pt.out.slice(-500), moved.out.slice(-600)]) + ")", {
+      fact: () => moved.code === 0 && lineOf(moved.out, T.uiFact["no-reduced-motion"](1, "src/b/pop.css:1")) === lineOf(moved.out, T.uiProjectRule("img-no-alt", 1, 1, "src/B.tsx:1", "")) + 1 &&
+        !r.out.includes("▲ the code declares motion"),
       head: () => r.code === 0 && lineOf(r.out, T.uiProjectHead(4, 2)) > lineOf(r.out, T.dsCreate) && lineOf(r.out, T.dsCreate) > 0,
       rules: () => lineOf(r.out, T.uiProjectRule("img-no-alt", 3, 2, "src/A.tsx:3", "")) === lineOf(r.out, T.uiProjectHead(4, 2)) + 1 &&
         lineOf(r.out, T.uiProjectRule("transition-all", 1, 1, "src/A.tsx:2", T.uiReportTag)) === lineOf(r.out, T.uiProjectHead(4, 2)) + 2,
@@ -193,7 +197,8 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       const C = MSG(l).cliOutput, D = C.dsLimit, u = D["ui-files"](5000, "a/r.css:3", 7), plain = D["ui-files"](5000);
       const point = [D["focus-sheets"](48, "a/b.css:3", 7), D["focus-chars"](2, "a/b.css:3", 7, "big/c.css", 393216, true), MSG(l).finish.uiUnjudged(7, "a/b.css:3", 48)];
       return [/7/.test(u) && u.includes("a/r.css:3") && u.includes("5000"), plain.includes("5000") && !/undefined|7/.test(plain), point.every((x) => x.includes("design-system")),
-        C.uiProjectRule("img-no-alt", 3, 2, "src/A.tsx:3", "").includes("src/A.tsx:3"), !/undefined/.test(C.uiProjectHead(4, 2) + C.uiProjectNone(1))];
+        C.uiProjectRule("img-no-alt", 3, 2, "src/A.tsx:3", "").includes("src/A.tsx:3"), !/undefined/.test(C.uiProjectHead(4, 2) + C.uiProjectNone(1)),
+        /37/.test(C.uiFact["no-reduced-motion"](37, "src/ui/dialog.tsx:41")) && C.uiFact["no-reduced-motion"](37, "src/ui/dialog.tsx:41").includes("src/ui/dialog.tsx:41") && /2\.3\.3/.test(C.uiFact["no-reduced-motion"](37, "x:1"))];
     });
     all("1.38 design-system (CLI): every language says the inventory's bound (its count and first place when it left removals unjudged, none of it else) and the rule line, and the unjudged clauses point to the project's UI checks (got " + js(said) + ")", {
       strings: () => said.every((x) => x.every(Boolean)),

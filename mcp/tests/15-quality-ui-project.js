@@ -165,6 +165,57 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // the FACT no-reduced-motion (UI_FACTS): the files read declare motion and none of the texts read mentions reduced motion —
+    // tested on each WHOLE text as read (never its cut lines), no script search; never in a feature report
+    const DIALOG = "export const O = () => <div className=\"data-[state=open]:animate-in fixed inset-0\" />;\n";
+    const POP = lines("<template>", "  <p class=\"pop\">hi</p>", "</template>", "<style scoped>", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>");
+    const base = { "src/components/ui/dialog.tsx": DIALOG, "src/b/Pop.vue": POP };
+    const fact = (tag, extra) => inv(project("fact-" + tag, Object.assign({}, base, extra))).facts;
+    const said = fact("said", {});
+    const mentions = {
+      variant: fact("variant", { "src/Toggle.tsx": "export const T = () => <i className=\"motion-reduce:transition-none\" />;\n" }),
+      media: fact("media", { "src/styles/app.scss": "@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }\n" }),
+      hook: fact("hook", { "src/Hero.tsx": "export const Hero = () => { const r = useReducedMotion(); return <h1>{r}</h1>; };\n" }),
+      safe: fact("safe", { "src/Spin.tsx": "export const S = () => <i className=\"motion-safe:animate-spin\" />;\n" }),
+      // (a minified sheet: its media query past the 2,000 characters a line is read to — the WHOLE text is tested)
+      minified: fact("minified", { "src/styles/vendor.min.css": ".a{color:red}".repeat(3900) + "@media (prefers-reduced-motion:reduce){*{animation:none}}\n" }),
+    };
+    // (no script search: a mention in a .ts hook alone is not read — the fact is worded "the view files read")
+    const script = fact("script", { "src/hooks/use-motion.ts": "export const useMotion = () => matchMedia(\"(prefers-reduced-motion: reduce)\");\n" });
+    const still = inv(project("fact-none", { "src/Ok.tsx": "export const Ok = () => <i className=\"transition-opacity\" />;\n" })).facts;
+    const p = project("fact-feature", base);
+    const slug = feature(p, ["src/components/ui/dialog.tsx", "src/b/Pop.vue"]);
+    const fr = S.designSystemReport(p, { name: slug }).uiChecks;
+    all("1.38 project UI checks: no-reduced-motion — motion declared (a shadcn dialog's animate-in, a Vue keyframes) and no text read mentioning reduced motion: the fact, its count of lines and its first place by file then line; a mention anywhere read (a motion-reduce: / motion-safe: variant, a media query, useReducedMotion, past a minified line's 2,000 characters) or no motion: none; a .ts hook is not read; never in a feature report (got " +
+      js({ said, mentions, script, still, fr: Object.keys(fr) }) + ")", {
+      said: () => js(said) === js([{ code: "no-reduced-motion", count: 2, file: "src/b/Pop.vue", line: 5 }]),
+      mentions: () => Object.values(mentions).every((f) => js(f) === "[]"),
+      script: () => script.length === 1,
+      noMotion: () => js(still) === "[]",
+      feature: () => !("facts" in fr),
+    });
+  }
+
+  { // the fact is said only when no read was cut (CRIT_1 must-fix 6): a file read to its 256K (view-size), the pass's bound
+    // (ui-files), a walk the file cap cut (scan.truncated — 20,001 view files: here a scan of the same files marked so)
+    const MOTION = { "src/a.css": "@keyframes pop { to { opacity: 1 } }\n" };
+    const big = { "src/z/big.html": "<!doctype html>\n<!--\n" + ("y".repeat(99) + "\n").repeat(2800) + "-->\n" };
+    const control = inv(project("cut-control", Object.assign({}, MOTION, { "src/z/small.html": "<p>hi</p>\n" })));
+    const size = inv(project("cut-size", Object.assign({}, MOTION, big)));
+    const heavy = Object.assign({}, MOTION);
+    for (let i = 0; i < 129; i++) heavy["src/p/p" + String(i).padStart(3, "0") + ".html"] = "<!--\n" + ("y".repeat(99) + "\n").repeat(2700) + "-->\n";
+    const files = inv(project("cut-files", heavy));
+    const q = project("cut-walk", MOTION);
+    const views = [{ rel: "src/a.css", full: path.join(q, "src/a.css") }];
+    const walk = { open: T.uiProject({ views, truncated: false }).facts, cut: T.uiProject({ views, truncated: true }).facts };
+    all("1.38 project UI checks: the fact is never said when a read was cut — a file past its 256K, the pass's bound, a truncated walk — a mention may sit in what was not read (got " + js({ control: control.facts, size: [size.facts, size.limits], files: files.limits, walk }) + ")", {
+      control: () => control.facts.length === 1 && walk.open.length === 1,
+      size: () => js(size.facts) === "[]" && size.limits.some((l) => l.code === "view-size"),
+      files: () => js(files.facts) === "[]" && files.limits.some((l) => l.code === "ui-files"),
+      walk: () => js(walk.cut) === "[]",
+    });
+  }
+
   { // G1′ (CRIT_X D4, the decisions): the pass costs at most 1.5× a bare read of its files plus uiChecksOf of the same texts in
     // memory — measured at the same moment, interleaved, on a real-shaped tree with a Sass-heavy share (Bootstrap-like partials:
     // parsing unminified CSS is most of a Sass tree's pass — CRIT_1, 5.5× a bare read there): what the pass adds is its own

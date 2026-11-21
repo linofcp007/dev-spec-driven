@@ -1959,6 +1959,7 @@ const COMMANDS = [
             // (never "nothing" beside the removals a cut pass left unjudged: its limit line names them)
             } else if (u.read && !u.limits.some((l) => l.code === "ui-files" && l.count)) log(T.uiProjectNone(u.read));
             if (u.silenced) log(T.uiSilenced(u.silenced));
+            u.facts.forEach((x) => log(T.uiFact[x.code](x.count, x.file + ":" + x.line)));
             u.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count)));
           }
         }

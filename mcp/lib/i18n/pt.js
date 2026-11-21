@@ -1620,6 +1620,10 @@ const msg = {
       uiProjectHead: (n, files) => `  Verificações de interface nos ficheiros de vista do projeto (${n} ${files === 1 ? "no ficheiro lido" : `nos ${files} lidos`}) — o relatório de cada feature lista as suas; o spec_finish avisa das de uma feature +ui:`,
       uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} em ${files} ${files === 1 ? "ficheiro" : "ficheiros"}${tag ? " " + tag : ""} — a primeira: ${at}`,
       uiProjectNone: (files) => `  Verificações de interface: nada ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`} do projeto`,
+      // (os factos do projeto por código — at: o primeiro local, ficheiro:linha)
+      uiFact: {
+        "no-reduced-motion": (n, at) => `  ▲ o código declara movimento — uma animação, uma transição de transform ou um scroll suave (${n} ${n === 1 ? "local" : "locais"}, o primeiro: ${at}) — e nenhum dos ficheiros de vista do projeto lidos menciona movimento reduzido: oferecer uma variante reduzida — @media (prefers-reduced-motion: reduce), o motion-reduce: / motion-safe: do Tailwind (WCAG 2.3.3, AAA)`,
+      },
       dsTokensNew: (n) => `  tokens no código, fora do registo (${n}) — uma linha por cada:`,
       dsPending: (list) => `  no código, construídos por uma feature ainda não concluída (entram no registo no finish dela): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,

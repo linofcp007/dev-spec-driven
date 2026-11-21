@@ -3211,12 +3211,12 @@ function uiProject(scan) {
       if (t == null) continue;
       const over = t.length > DS_READ_CHARS, text = over ? t.slice(0, DS_READ_CHARS) : t;
       chars += text.length;
-      pass.feed(x.rel, viewLines(text, x.rel), over);
+      pass.feed(x.rel, viewLines(text, x.rel), over, text);
     }
   } finally {
     heads.stop();
   }
-  return pass.done(cut);
+  return pass.done(cut, scan.truncated); // (a walk the file cap cut: the fact no-reduced-motion is not said)
 }
 function designSystemReport(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
@@ -3450,4 +3450,4 @@ function designSystemFinish(projectDir, slug, opts = {}) {
     unregistered: pending.map((c) => c.name).filter((n) => !registered.includes(n)) };
 }
 
-module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, styleTokens, opensString, quoteEnd, RE_STYLE_EXT, __link };
+module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, styleTokens, opensString, quoteEnd, RE_STYLE_EXT, uiProject, __link };

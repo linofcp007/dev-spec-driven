@@ -416,6 +416,45 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38: MOTION declared (the project fact no-reduced-motion's — uiChecksOf's `motion`, never a finding): `@keyframes`, an
+    // animation naming one, a transform's transition for a literal time, smooth scrolling, Tailwind's animate-* /
+    // transition-transform / scroll-smooth under any variant — never an opacity / colour / `all` transition, `animation: none`,
+    // a global keyword, a lone var(), `animate-none`, a time of 0, a transition-property; one count a line, its first line
+    const mo = (text, rel) => { const r = run(text, rel); return [r.motion.count, r.motion.line]; };
+    const M = {
+      // (a shadcn dialog: tailwindcss-animate's animate-in under a data variant)
+      dialog: mo(lines("export const O = () => (", "  <DialogPrimitive.Overlay className=\"data-[state=open]:animate-in data-[state=closed]:animate-out fixed inset-0\" />", ");"), "src/components/ui/dialog.tsx"),
+      // (a Vue SFC: its <style scoped> keyframes after a template animate-spin — the first line is the smallest)
+      vue: mo(lines("<template>", "  <i class=\"animate-spin\" />", "</template>", "<style scoped>", ".pop { animation: pop .2s ease-out; }", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>"), "src/Pop.vue"),
+      keyframes: mo(lines("@-webkit-keyframes spin { to { transform: rotate(1turn) } }", ".a { color: red; }"), "src/spin.css"),
+      // (the first rule of a <style> block: its prelude carries the `<style scoped>` line before it)
+      vueFirst: mo(lines("<template>", "  <p>hi</p>", "</template>", "<style scoped>", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>"), "src/P.vue"),
+      svelte: mo(lines("<button class=\"transition-transform hover:scale-105\">a</button>", "<main class=\"md:scroll-smooth\">b</main>"), "src/Card.svelte"),
+      sheet: mo(lines("html { scroll-behavior: smooth; }", ".a { transition: transform 150ms ease, opacity 1s; }", ".b { transition: translate .2s; }", ".c { animation-name: fade; }"), "src/a.css"),
+      // (a style object and an inline style: a line each — two on one line count once)
+      script: mo(lines("const s = { transition: \"transform .3s\", animation: \"spin 1s linear infinite\" };", "const t = <div style={{ animation: \"pulse 2s\" }} />;"), "src/S.tsx"),
+      none: mo(lines(".a { transition: opacity .2s; }", ".b { transition: color .2s, background-color .2s; }", ".c { transition: all .3s; }", ".d { animation: none; }", ".e { animation: inherit; }",
+        ".f { animation-name: var(--anim); }", ".g { transition: transform 0s 1s; }", ".h { transition: transform var(--d); }", ".i { transition-property: transform; transition-duration: .2s; }",
+        ".j { scroll-behavior: auto; }"), "src/none.css"),
+      noneTw: mo(lines("<div class=\"motion-reduce:animate-none transition-opacity transition-colors\">x</div>"), "src/N.vue"),
+      apply: mo(lines(".btn { @apply animate-bounce; }"), "src/apply.css"),
+    };
+    // (an `animation:` value is no transition: `animation: 1s` never reads as transition-all — and a transition-all stays one)
+    const anim = got(lines("const s = { animation: \"1s ease\" };", "const t = { transition: \"all .3s\" };"), "src/A.tsx");
+    all("1.38: motion declared — keyframes (a vendor prefix too), an animation naming one, a transform's transition for a literal time, smooth scrolling, Tailwind's animate-* / transition-transform / scroll-smooth under a variant (an @apply's too), a style object's; never opacity / colour / all transitions, animation none / inherit / a lone var(), animate-none, a 0s duration, a var() time, transition-property; one a line, the first line (got " +
+      js({ M, anim }) + ")", {
+      dialog: () => js(M.dialog) === js([1, 2]),
+      vue: () => js(M.vue) === js([3, 2]),
+      keyframes: () => js(M.keyframes) === js([1, 1]) && js(M.vueFirst) === js([1, 5]),
+      svelte: () => js(M.svelte) === js([2, 1]),
+      sheet: () => js(M.sheet) === js([4, 1]),
+      script: () => js(M.script) === js([2, 1]),
+      none: () => js(M.none) === js([0, 0]) && js(M.noneTw) === js([0, 0]),
+      apply: () => js(M.apply) === js([1, 1]),
+      anim: () => js(anim) === js(["transition-all@2"]),
+    });
+  }
+
   { // silencing: one inline comment, any syntax of the file, on the finding's line or the one above
     const jsx = lines("export const A = () => (", "  <>", "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/spacer.gif\" />", // 4: silenced (above)
       "    <img src=\"/b.png\" /> {/* ui-check-off: click-no-keyboard, img-no-alt */}", // 5: silenced (same line)
@@ -923,6 +962,11 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       // statement's last 2,000 characters —, styles of non-viewport font sizes read to their end)
       textRun: [fill("text-[".repeat(300) + "\n"), "x.tsx"], textList: [fill("<p className=\"" + "text-[5vw] ".repeat(150) + "md:text-[2vw]\">x</p>\n"), "x.tsx"],
       vwCalc: [fill("a { font-size: calc(" + "1vw + ".repeat(300) + "1vw); }\n"), "x.css"], styleRun: [fill("<h1 style=\"" + "font-size: 1rem; ".repeat(100) + "\">x</h1>\n"), "x.html"],
+      // (1.38, motion — CRIT_X D4's combined line: `animate-` widens the pick too; runs of it, class lists of motion utilities, a
+      // transition of endless transform items, a sheet of keyframes, a style object's endless animation list)
+      animRun: [fill("animate-".repeat(300) + "\n"), "x.tsx"], animList: [fill("<i className=\"" + "data-[state=open]:animate-in ".repeat(60) + "\">x</i>\n"), "x.tsx"],
+      motionSheet: ["a { transition:\n" + fill("  transform 1s,\n") + "}\n", "x.css"], keyframesRun: [fill("@keyframes k { }\n"), "x.css"],
+      animStyle: [fill("const s = { animation: \"" + "spin 1s, ".repeat(100) + "\" };\n"), "x.tsx"],
     };
     const time = (f) => { const ts = []; for (let k = 0; k < 5; k++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
     // (a stylesheet is read through the ONE CSS walk the registry's token reader already makes — styleTokens —: its ratio is to
