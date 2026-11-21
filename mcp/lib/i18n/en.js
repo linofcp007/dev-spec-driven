@@ -1624,6 +1624,19 @@ const msg = {
       dsHeadNone: (file) => `Design system — no registry yet (${file})`,
       dsCreate: `  create it from the code: ${DEV_SPEC} steering design-system.md`,
       dsFound: (comps, tokens, files) => `  in the code: ${comps} ${comps === 1 ? "component" : "components"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} in ${files} token ${files === 1 ? "file" : "files"}`,
+      // 1.38: the breakpoints — the widths the visual review captures (spec_scan {designSystem: true}'s `breakpoints`, both shapes)
+      bpHead: (widths, how) => `  breakpoints: ${widths} px — the widths the visual review captures (${how})`,
+      bpFrom: {
+        "ui.md": (at) => `the Breakpoints line of ${at}`,
+        code: (at) => `declared in ${at}`,
+        partial: (at) => `the review's default set, and what ${at} adds to its framework's own — to choose, list them all in .specs/steering/ui.md's Breakpoints line`,
+        default: () => "none declared — the review's default set: list yours in .specs/steering/ui.md's Breakpoints line",
+      },
+      bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint" : "breakpoints"} whose width was not read — ${list}: write the project's widths (320–3840 px) in .specs/steering/ui.md's Breakpoints line`,
+      bpLimit: {
+        "breakpoint-widths": (read, count, first) => `  (${count} more ${count === 1 ? "width" : "widths"} not captured, the first ${first} px — the review takes ${read}: the narrowest ${read - 1} and the widest)`,
+        "breakpoint-line": (read, count, first, at) => `  (${at}: only the first ${read} characters of the Breakpoints line are read)`,
+      },
       dsMissingHead: (n) => `  in the code, not in the registry (${n}) — a row each:`,
       dsStaleHead: (n) => `  in the registry, but their path names no file (${n}):`,
       dsSourcesNew: (list) => `  token files the registry doesn't name (_Token sources:_): ${list}`,

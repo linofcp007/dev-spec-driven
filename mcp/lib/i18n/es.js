@@ -1563,6 +1563,19 @@ const msg = {
       dsHeadNone: (file) => `Design system — todavía sin registro (${file})`,
       dsCreate: `  créalo a partir del código: ${DEV_SPEC} steering design-system.md`,
       dsFound: (comps, tokens, files) => `  en el código: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} en ${files} ${files === 1 ? "fichero de tokens" : "ficheros de tokens"}`,
+      // 1.38: los breakpoints — los anchos que captura la revisión visual (el `breakpoints` de spec_scan {designSystem: true})
+      bpHead: (widths, how) => `  breakpoints: ${widths} px — los anchos que captura la revisión visual (${how})`,
+      bpFrom: {
+        "ui.md": (at) => `la línea Breakpoints de ${at}`,
+        code: (at) => `declarados en ${at}`,
+        partial: (at) => `el conjunto por defecto de la revisión, y lo que ${at} añade a los de su framework — para elegir, enuméralos todos en la línea Breakpoints de .specs/steering/ui.md`,
+        default: () => "ninguno declarado — el conjunto por defecto de la revisión: enumera los tuyos en la línea Breakpoints de .specs/steering/ui.md",
+      },
+      bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint cuyo ancho no se leyó" : "breakpoints cuyo ancho no se leyó"} — ${list}: escribe los anchos del proyecto (320–3840 px) en la línea Breakpoints de .specs/steering/ui.md`,
+      bpLimit: {
+        "breakpoint-widths": (read, count, first) => `  (${count} ${count === 1 ? "ancho no capturado" : "anchos no capturados"}, el primero ${first} px — la revisión captura ${read}: los ${read - 1} más estrechos y el más ancho)`,
+        "breakpoint-line": (read, count, first, at) => `  (${at}: solo se leen los primeros ${read} caracteres de la línea Breakpoints)`,
+      },
       dsMissingHead: (n) => `  en el código, fuera del registro (${n}) — una fila por cada uno:`,
       dsStaleHead: (n) => `  en el registro, pero su ruta no indica ningún fichero (${n}):`,
       dsSourcesNew: (list) => `  ficheros de tokens que el registro no indica (_Token sources:_): ${list}`,

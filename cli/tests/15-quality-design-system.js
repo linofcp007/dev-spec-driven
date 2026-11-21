@@ -235,4 +235,52 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       pending: () => out.out.includes(T.dsPending("Chip (chips)")) && !out.out.includes(T.dsInSync) && asJson.inSync === true && asJson.pendingTotal === 1,
     });
   }
+
+  // --- 1.38 R: the breakpoints — the project's after its counts, a feature's after its UI checks; each source, the unread, the bounds -------
+  {
+    const UI = ".specs/steering/ui.md";
+    const bp = (tag, lang, css, uiLine) => {
+      const d = path.join(tmp, "p138-bp-" + tag);
+      SR.initProject(d, ["ui"], lang);
+      if (css != null) write(d, "src/app.css", css);
+      if (uiLine != null) fs.writeFileSync(path.join(d, UI), fs.readFileSync(path.join(d, UI), "utf8").replace(/^- Breakpoints: .*$/m, uiLine));
+      return d;
+    };
+    const uiAt = (d) => UI + ":" + (fs.readFileSync(path.join(d, UI), "utf8").split("\n").findIndex((l) => l.startsWith("- Breakpoints:")) + 1);
+    const at = (out, line) => out.split("\n").indexOf(line);
+    // partial: an @theme that only adds (shadcn v4's 3xl / 4xl) — the default set joins, the 7th width said
+    const partial = bp("partial", "en", "@import \"tailwindcss\";\n@theme inline {\n  --breakpoint-3xl: 1600px;\n  --breakpoint-4xl: 2000px;\n}\n");
+    const pOut = runIn(["design-system", "--project", partial]);
+    const pJson = jsonOf(runIn(["design-system", "--project", partial, "--json"]));
+    // code alone (a reset), with six unread values: five listed, the sixth counted
+    const code = bp("code", "en", "@theme {\n  --breakpoint-*: initial;\n  --breakpoint-x: calc(40rem + 1px);\n  --breakpoint-md: 50rem;\n" +
+      ["var(--w)", "auto", "40vw", "250rem", "1e3px"].map((v, i) => "  --breakpoint-u" + i + ": " + v + ";\n").join("") + "}\n");
+    const cOut = runIn(["design-system", "--project", code]);
+    // ui.md's line, too long: it decides, and its bound is said
+    const line = bp("line", "en", null, "- Breakpoints: 600 / 1200 px " + "x".repeat(220));
+    const lOut = runIn(["design-system", "--project", line]);
+    // nothing declared: the default set; a feature's report prints it after its UI checks
+    const none = bp("none", "en", null, null);
+    const f = SR.createFeature(none, { name: "Grid", tracks: ["ui"], summary: "x" });
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/grid/Grid.tsx_\n");
+    write(none, "src/grid/Grid.tsx", "export const Grid = () => <div className=\"grid\" />;\n");
+    const nOut = runIn(["design-system", "--project", none]), fOut = runIn(["design-system", f.slug, "--project", none]);
+    const fJson = jsonOf(runIn(["design-system", f.slug, "--project", none, "--json"]));
+    const pt = bp("pt", "pt", null, null), ptOut = runIn(["design-system", "--project", pt]);
+    const P = MSG("pt").cliOutput;
+    const DEF = "320 · 390 · 768 · 1024 · 1440";
+    all("1.38 design-system (CLI): the breakpoints line — the widths and where they come from (ui.md's line, the code's @theme, partial: the default set and what the code adds, none: the default set), the unread ones, its own bounds (the 7th width, ui.md's 200 characters); right after the project's counts, after a feature's UI checks; PT; --json is the engine's, both shapes (got " +
+      js([pOut.out, cOut.out, lOut.out, nOut.out, fOut.out, ptOut.out]) + ")", {
+      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 390 · 768 · 1024 · 1440 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
+        pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1600)),
+      json: () => js(pJson.breakpoints) === js(SR.designSystemReport(partial).breakpoints) && pJson.breakpoints.partial === true,
+      code: () => cOut.out.includes(T.bpHead("320 · 800", T.bpFrom.code("src/app.css:4"))) &&
+        cOut.out.includes(T.bpUnread(6, "--breakpoint-x calc(40rem + 1px) (src/app.css:3), --breakpoint-u0 var(--w) (src/app.css:5), --breakpoint-u1 auto (src/app.css:6), --breakpoint-u2 40vw (src/app.css:7), --breakpoint-u3 250rem (src/app.css:8) … +1")),
+      line: () => lOut.out.includes(T.bpHead("320 · 600 · 1200", T.bpFrom["ui.md"](uiAt(line)))) && lOut.out.includes(T.bpLimit["breakpoint-line"](200, undefined, undefined, uiAt(line))),
+      none: () => nOut.out.includes(T.bpHead(DEF, T.bpFrom.default())) && !nOut.out.includes("⚠"),
+      feature: () => fOut.code === 0 && at(fOut.out, T.bpHead(DEF, T.bpFrom.default())) > at(fOut.out, T.uiNone(1)) && at(fOut.out, T.uiNone(1)) > 0 &&
+        js(fJson.breakpoints) === js(SR.designSystemReport(none, { name: f.slug }).breakpoints),
+      pt: () => ptOut.out.includes(P.bpHead(DEF, P.bpFrom.default())),
+    });
+  }
 };

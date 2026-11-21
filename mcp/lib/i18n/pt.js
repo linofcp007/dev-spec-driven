@@ -1563,6 +1563,19 @@ const msg = {
       dsHeadNone: (file) => `Design system — ainda sem registo (${file})`,
       dsCreate: `  cria-o a partir do código: ${DEV_SPEC} steering design-system.md`,
       dsFound: (comps, tokens, files) => `  no código: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} em ${files} ${files === 1 ? "ficheiro de tokens" : "ficheiros de tokens"}`,
+      // 1.38: os breakpoints — as larguras que a revisão visual captura (o `breakpoints` de spec_scan {designSystem: true})
+      bpHead: (widths, how) => `  breakpoints: ${widths} px — as larguras que a revisão visual captura (${how})`,
+      bpFrom: {
+        "ui.md": (at) => `a linha Breakpoints de ${at}`,
+        code: (at) => `declaradas em ${at}`,
+        partial: (at) => `o conjunto por omissão da revisão, e o que ${at} acrescenta às da sua framework — para escolher, lista-as todas na linha Breakpoints de .specs/steering/ui.md`,
+        default: () => "nenhuma declarada — o conjunto por omissão da revisão: lista as tuas na linha Breakpoints de .specs/steering/ui.md",
+      },
+      bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint cuja largura não foi lida" : "breakpoints cuja largura não foi lida"} — ${list}: escreve as larguras do projeto (320–3840 px) na linha Breakpoints de .specs/steering/ui.md`,
+      bpLimit: {
+        "breakpoint-widths": (read, count, first) => `  (${count} ${count === 1 ? "largura não capturada" : "larguras não capturadas"}, a primeira ${first} px — a revisão captura ${read}: as ${read - 1} mais estreitas e a mais larga)`,
+        "breakpoint-line": (read, count, first, at) => `  (${at}: só os primeiros ${read} caracteres da linha Breakpoints são lidos)`,
+      },
       dsMissingHead: (n) => `  no código, fora do registo (${n}) — uma linha por cada:`,
       dsStaleHead: (n) => `  no registo, mas o caminho não indica nenhum ficheiro (${n}):`,
       dsSourcesNew: (list) => `  ficheiros de tokens que o registo não indica (_Token sources:_): ${list}`,
