@@ -107,7 +107,8 @@ function parseColor(s0) {
   return ok.every(Number.isFinite) ? { n, ok, alpha, rgb, hsl } : null;
 }
 const deltaE = (p, q) => Math.hypot(p.ok[0] - q.ok[0], p.ok[1] - q.ok[1], p.ok[2] - q.ok[2]);
-// Two parsed colours are the same colour: within the tolerance of their notations' pair, alphas alike.
+// Two parsed colours are the same colour: within the tolerance of their notations' pair, alphas alike. (sameColor is drift's,
+// in one notation; the judge's is sameAt, below.)
 const sameTolerance = (p, q) => (p.n === q.n ? DS_EXACT : p.n === "hsl" || q.n === "hsl" ? DS_SAME_HSL : DS_SAME_CROSS);
 const sameColor = (p, q) => Math.abs(p.alpha - q.alpha) <= DS_ALPHA && deltaE(p, q) <= sameTolerance(p, q);
 // (1.38.0 review 1) An HSL colour as written and an sRGB triple (a hex's, an rgb()'s): the triple, written in HSL as precisely

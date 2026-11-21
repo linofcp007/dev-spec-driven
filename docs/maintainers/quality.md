@@ -2542,6 +2542,32 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (declarations' piece rules, rawValuesIn's 1.37 lines, take()) mutated again — 14, 12 killed by the area's older files at
   first; two wanted a fixture no file had (a value written twice on one line is one value; a colour in a selector's
   attribute — what a `{` follows — is none): 14 of 14.
+- **1.38.0 review 1** (tokens: T1 MEDIUM; T2 / T3 LOW, prose) — T1: one 0.011 for every pair with an HSL side absorbed
+  any colour that close, however precisely the HSL side was written: once shadcn's Tailwind 4 upgrade wraps its neutrals in
+  `hsl()`, Tailwind's zinc hexes were its tokens again (`#18181b` → `--primary: hsl(0 0% 9%)`, 0.0083 — what CRIT_2's
+  must-fix 2 had taken out for oklch), cal.com's `#efefef` its bluish `--cal-bg-subtle: hsla(220, 14%, 94%, 1)`, 51
+  Tailwind v3 hexes ANOTHER palette colour's token against a 1-decimal hsl palette; and the judge returned the FIRST colour
+  within tolerance, so an exact token listed after an HSL one lost. Now an HSL side against a hex / rgb one also round-trips
+  at its written precision (`roundsTo`) and the judge keeps the nearest. The 0.011 stays the ceiling — the narrower reading
+  of the owner's decision, said: the round trip alone would have WIDENED 1.38 where the HSL is coarser than the 0.011
+  (CRIT_2's 0.0106 was one hex's distance, not integer HSL's worst: measured over all 16.7M hexes, 479 are farther from their
+  own integer HSL, `#020200` = `hsl(60 100% 0%)` at 0.084 — a token past the JND —, 0.013 at l 10–95), so every judgement
+  the fix changes goes token → near or none, never the other way. Trade-off: Tailwind v3's 286 hexes against their own hsl
+  as shadcn's _legacy-colors.ts writes it (1 decimal) — 240 stay `token`, 46 become `near`: those hsl values are not their
+  hex's rounding (mauve / olive / mist / taupe derived from oklch; slate-950's hue 222.2 against its hex's 228.6); each
+  hex against its own HSL rounded ONCE (0, 1 or 2 decimals): 286 of 286; another palette colour's token: 51 → 0. Replays
+  against the parent: the 12 real clones' reports identical but cal.com's `#efefef` and `#eee` (→ near); finish's part on
+  7 clones identical; the CLI's EN / PT / ES lines differ only on the `#18181b` row the fix meant, `--json` = the engine;
+  cal.com's tokens.css, hex by hex: 37 token → near, 0 differences with the reviewer's prototype. Cost, ratios at the same moment: the hostile judge — 100
+  hexes against 2,000 HSL tokens all within 0.011, where 1.38 returned at the first — 1.5× 1.38's own worst case (the
+  full scan with no token: 24 against 15 ms); a feature report of 100 files × 200 such hexes 1.03×. The mutation list came
+  before the fixtures and took three lines out as dead (the saturation's `d = 0` guard, the hue's sign and turn
+  normalisations — the circular distance covers both —, the judge's `else` between its two trackers): 45 of 45 killed (39
+  in design-values.js, 6 prose clauses), one equivalent left (`within`'s `<=` against `<`: the epsilon absorbs the
+  boundary). T2 / T3, said and the readers left to 1.39's backlog: a negative length (`margin: 0 -8px`, `-mt-[12px]`) and a
+  Tailwind size outside px / rem / em (`text-[2vw]`) are not judged; the units column's header STARTS with Units, so
+  `| Property | Allowed units |` is no table and nothing says so — ui-code-scan.md says both, 17-docs pins each clause
+  against the engine (offUnit, RE_TW_SIZE, RE_DS_COL.units).
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
