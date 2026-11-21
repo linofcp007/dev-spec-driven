@@ -1069,14 +1069,37 @@ exports.run = async ({
     const item = (n) => (checklist.match(new RegExp(" " + n + "\\. (.*?)(?= " + (n + 1) + "\\. \\*\\*|$)")) || ["", ""])[1];
     const C = ws(raw("agents", "spec-critic.md")), V = ws(raw("agents", "spec-reviewer.md")), T = ws(refRaw("track-checklists.md"));
     const I = ws(refRaw("index.md")), uiRules = raw("mcp", "lib", "engine", "ui-checks.js"), doctorSrc = raw("mcp", "lib", "engine", "doctor.js");
+    // (1.38.0 Z) the engine the corrected rows run their examples through: a project whose ui.md holds `text` → its breakpoints
+    const Eng = require(path.join(root, "mcp", "lib", "engine", "index.js"));
+    let bpN = 0;
+    const bpOf = (text) => {
+      const d = path.join(tmp, "z138-bp-" + ++bpN);
+      fs.mkdirSync(path.join(d, ".specs", "steering"), { recursive: true });
+      fs.writeFileSync(path.join(d, ".specs", "steering", "ui.md"), "# UI\n\n" + text + "\n");
+      return Eng.loadLazyTier().breakpointsReport(d, null);
+    };
     const rows = [
       // references/ui-responsive.md — item 3's prose (ITEM_3 §6 as CRIT_3 and the DECISIONS cut it)
       ["responsive: the design says per view what changes at each of the project's breakpoints", RS,
         /The design says, per view, what changes at each of the project's breakpoints — columns, navigation, what moves or hides\./],
-      ["responsive: where the widths come from — ui.md's line, a Tailwind 4 @theme, else the default set; ≤ 6, 320 first", RS,
-        /1\. `\.specs\/steering\/ui\.md`'s `- Breakpoints:` line — the lengths before its first ` · ` \(px, or rem \/ em at 16 px\); 2\. a Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads/,
-        /\(a theme that only adds to Tailwind's own five: the default set joins them — list them all in ui\.md to choose\); 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
-        /At most six widths, 320 first \(the reflow width\); `dev-spec design-system <feature>` prints them and where they came from\./],
+      // (1.38.0 Z: corrected to engine/breakpoints.js — the first source with a width ≥ 320 decides, ui.md's FIRST line outside
+      // code and comments, its slot unread, a bare number's unit, thousands, 200 characters; a top-level @theme, `partial` as
+      // the resets say; past six; who prints them; the values not read — each example below run through breakpointsReport)
+      ["responsive: where the widths come from — the first source with a width ≥ 320: ui.md's first line, a top-level Tailwind 4 @theme, else the default set; ≤ 6, 320 first; who prints them, what is not read — as breakpoints.js reads them", RS,
+        /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` \(px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; the stub's `\[…\]` slot is not read, so an untouched stub falls through;/,
+        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set joins the theme's — list them all in ui\.md to choose\); 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
+        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said\./,
+        /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px\) with its place — write the widths in ui\.md's line then\./,
+        () => {
+          const got = (line) => { const r = bpOf(line); return [r.from, r.widths.join(" "), r.unread.map((u) => u.value).join("|"), r.limits.map((l) => l.code).join(",")].join(" / "); };
+          return got("- Breakpoints: 360 / 768 / 1,440 px · text expansion") === "ui.md / 320 360 768 1440 /  / "
+            && got("- Breakpoints: [360 / 768 / 1280 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
+            && got("- Breakpoints: 240 / 300 px") === "default / 320 390 768 1024 1440 /  / "
+            && got("- Breakpoints: 30 / 48 / 80 rem") === "ui.md / 320 480 768 1280 /  / "
+            && got("- Breakpoints: 400 / 500 / 600 / 700 / 800 / 900 / 1000 px") === "ui.md / 320 400 500 600 700 1000 /  / breakpoint-widths"
+            && got("- Breakpoints: 360 / 768 / 5000 px") === "ui.md / 320 360 768 / 5000 px / "
+            && got("```\n- Breakpoints: 500 px\n```\n<!-- - Breakpoints: 550 px -->\n- Breakpoints: 600 px") === "ui.md / 320 600 /  / ";
+        }],
       ["responsive: what is never read, and the lines to paste into ui.md (Tailwind's defaults, Bootstrap 5)", RS,
         /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a Sass map are never read: paste the line into ui\.md instead/,
         /- Tailwind's defaults: `- Breakpoints: 640 \/ 768 \/ 1024 \/ 1280 \/ 1536 px`/, /- Bootstrap 5: `- Breakpoints: 576 \/ 768 \/ 992 \/ 1200 \/ 1400 px`/],
@@ -1164,13 +1187,29 @@ exports.run = async ({
         /the item gone, and \*\*Undo\*\* until dismissed — or a second home \(the trash\) \| a status; focus to the next item, never lost to `<body>`/.test(rowOf("undo"))],
       ["ui-design-patterns: Form validation — focus to the summary on submit; a field's message tied to it, focus kept", () =>
         /on submit, focus to the summary; on leaving a field, its message tied to it \(`aria-describedby`\), focus not moved/.test(rowOf("form-validation"))],
-      ["ui-design-patterns: the matrix in design.md — the views between State and Announced · focus, n/a — why, a row's n/a", states,
+      // (1.38.0 Z: the two rows below corrected to quality.js's reader — a row's n/a among its VIEW cells, the label in any
+      // language and never after a word, a state's rows together, a dash / TBD open, EVERY anchored table, the columns from the
+      // a11y one on unjudged, an untouched scaffold and an n/a section passing — each example run through the engine)
+      ["ui-design-patterns: the matrix in design.md — the views between State and Announced · focus, n/a — why, a row's n/a among its view cells", states,
         /a column per view between `State` and `Announced · focus` — name the `View` column after the first view and add one per other view \(a screen, a route, a dialog; a component's own states belong to its contract\)\./,
-        /or `n\/a — why` in four words or more; an `n\/a — why` alone in its row answers every view\./],
-      ["ui-design-patterns: what doctor's ui-states reads — a warn at m / l / no size, a note at s, never a gate; the a11y column unjudged", states,
-        /Doctor's `ui-states` finds each state by its label — a qualifier after it is fine \(`Error — payment`\) — and warns about a state with no row and each cell left open \(blank, a `\[slot\]`, an `n\/a` without its four words\)/,
+        /or `n\/a — why` in four words or more; an `n\/a — why` alone among a row's view cells answers every view\./],
+      ["ui-design-patterns: what doctor's ui-states reads — labels in any language, open cells, every anchored table, the a11y column on unjudged; a warn at m / l / no size, a note at s, never a gate — as uiStateMatrix reads them", states,
+        /Doctor's `ui-states` finds each state by its label, in any of the plugin's languages — a qualifier after it is fine \(`Error — payment`, `Errors`\), a word before it is not \(`Network error`\), and a state's rows count together — and warns about a state with no row and each cell left open \(blank, a dash, a `\[slot\]`, `TBD`, an `n\/a` without its four words\)/,
         /at size m \/ l or with no size; a note at size s; never a refusal, never part of a gate, never on a finished feature\./,
-        /It reads only the table whose header holds `Announced · focus` \(in the feature's language\) and never judges that column — the critic does; a prose matrix is not checked\./],
+        /It reads every table of the section whose header holds `Announced · focus` \(in any of those languages\) and never judges that column or one after it — the critic does; a prose matrix is not checked, and an untouched scaffold or an `n\/a` section passes\./,
+        () => {
+          const ids = ["loading", "error", "empty-first-use", "offline", "success", "stale", "partial"];
+          const m = Eng.uiStateMatrix("# Design\n\n## [UI] UI States\n\n| " + Q.uiStateHead + " | Checkout | " + Q.uiStateA11y + " | Notes |\n|---|---|---|---|\n"
+            + "| Errors | the error and Retry | an alert | |\n| Loading | — | | |\n| Loading (skeleton) | a skeleton | | |\n| Empty — first use | TBD | | |\n"
+            + "| Offline | n/a — no network use here at all | a status | |\n| Success | n/a — no | | |\n| Stale | — | | |\n| Partial | [what the user sees] | | |\n\n"
+            + "| State | Checkout | Announced · focus |\n|---|---|---|\n| Network error | the error | |\n\n"
+            + "| Estado | Checkout | Anunciado · foco |\n|---|---|---|\n| A carregar | o esqueleto | |\n", ids);
+          const gaps = (t) => t.gaps.map((g) => g.code + ":" + g.id).join(" ");
+          const scaffold = (() => { const p = path.join(tmp, "z138-states"); S.initProject(p, ["ui"], "en"); return fs.readFileSync(path.join(S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" }).dir, "design.md"), "utf8"); })();
+          return m.tables.length === 3 && gaps(m.tables[0]) === "open:empty-first-use open:success open:stale open:partial"
+            && m.tables[1].gaps.some((g) => g.code === "no-row" && g.id === "error") && !m.tables[2].gaps.some((g) => g.id === "loading")
+            && Eng.uiStatesCheck(scaffold, "en", { size: "m" }).status === "pass" && Eng.uiStatesCheck("# Design\n\n## [UI] UI States\n\nn/a — this feature has no screens at all\n", "en", { size: "m" }).status === "pass";
+        }],
       ["ui-design-patterns: 4.1.3 — a live region before its text, no focus move; W3C's 5-errors example after an unsuccessful fill", states,
         /through a live region that exists before its text changes, without moving focus \(4\.1\.3\)/,
         /W3C's own example is "5 errors on page", added after an unsuccessful fill of a form\./, { not: /5 errors on page"?,? (?:shown |added )?after a submit/ }],
@@ -1403,6 +1442,7 @@ exports.run = async ({
     const uiLine = (ws(raw("skills", "dev-spec-driven", "references", "index.md")).match(/`references\/ui-code-scan\.md` \([^)]*\)/) || [""])[0];
     const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
     const STraw = raw("skills", "dev-spec-driven", "references", "steering-templates.md"), ST = ws(STraw);
+    const DP = ws(raw("skills", "dev-spec-driven", "references", "ui-design-patterns.md"));
     // a registry holding `text`, read by the engine (quality.js designSystemRegistry)
     const regOf = (name, text) => {
       const d = path.join(tmp, "z138-reg-" + name, ".specs");
@@ -1565,6 +1605,12 @@ exports.run = async ({
         /`token` names the scale's token the value is; `near` is a hint — a close colour, not the token's\) are \*\*candidates\*\*/.test(ws(raw("agents", "spec-reviewer.md")))],
       ["spec-implementer: each property in the units the registry's units table gives", () =>
         /When `design-system\.md` has a units table, write each property in the units it gives\./.test(ws(raw("agents", "spec-implementer.md")))],
+      // ui-design-patterns.md's registry table, corrected to chain T's engine (item 5): a colour names the token it IS, in any
+      // notation, `near` a hint; "in sync" is said of names, drift and gone listed beside it — tokenDrift's same-notation rule
+      ["ui-design-patterns: the Review row — a colour that is a token's, in any notation, names it; one only close to it a hint", () =>
+        /a colour that is a token's, in any notation, names that token — one only close to it, `near`, is a hint\) — and the \*\*UI checks\*\*/.test(DP)],
+      ["ui-design-patterns: the Later row — in sync of names; drift (the same notation) and gone beside it, never in it; a token gone from the code not reported", () =>
+        /"In sync" is said of names: a token the code holds with another value in the same notation \(`drift`\) and a token file that is gone \(`gone`\) are listed beside it, never in it; a token the code no longer declares is not reported — review the token rows when the tokens change\./.test(DP)],
     ];
     // (a label without a file's name is ui-code-scan.md's)
     for (const [label, check] of rows) all("1.38.0 Z docs — " + label, { holds: check });

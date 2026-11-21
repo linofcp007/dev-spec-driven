@@ -25,16 +25,22 @@ states, forms, accessibility — is in [ui-design-patterns.md](ui-design-pattern
 
 The design says, per view, what changes at each of the project's breakpoints — columns, navigation, what moves or
 hides. The visual review captures each view's worst case at the same widths ([ui-review.md](ui-review.md) → 2). They come
-from the first of:
+from the first of these that gives a width of 320 px or more:
 
-1. `.specs/steering/ui.md`'s `- Breakpoints:` line — the lengths before its first ` · ` (px, or rem / em at 16 px);
-2. a Tailwind 4 `@theme` block's `--breakpoint-*` in a stylesheet the code scan reads (a theme that only adds to
-   Tailwind's own five: the default set joins them — list them all in ui.md to choose);
+1. `.specs/steering/ui.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · `
+   (px, or rem / em at 16 px; a bare number takes the unit written after it, `360 / 768 / 1280 px`; `1,440` is one
+   width), its first 200 characters; the stub's `[…]` slot is not read, so an untouched stub falls through;
+2. a top-level Tailwind 4 `@theme` block's `--breakpoint-*` in a stylesheet the code scan reads (unless the sheets reset
+   them — `--breakpoint-*: initial` or `--*: initial` —, Tailwind keeps its own five too, which are not read: the default
+   set joins the theme's — list them all in ui.md to choose);
 3. the default set: 320 · 390 · 768 · 1024 · 1440 px.
 
-At most six widths, 320 first (the reflow width); `dev-spec design-system <feature>` prints them and where they came
-from. A framework's own defaults (in its package), Tailwind 3's `screens` (a JS config) and a Sass map are never read:
-paste the line into ui.md instead, keeping the rest of it (`- Breakpoints: 640 / 768 / … px · text expansion …`):
+At most six widths, 320 first (the reflow width) — past six, the narrowest five and the widest, the rest said.
+`dev-spec design-system <feature>` prints them and where they came from (without a feature too, and
+`spec_scan {designSystem: true}` in both shapes), and lists a value it could not read (`calc()`, `var()`, wider than
+3840 px) with its place — write the widths in ui.md's line then. A framework's own defaults (in its package), Tailwind
+3's `screens` (a JS config) and a Sass map are never read: paste the line into ui.md instead, keeping the rest of it
+(`- Breakpoints: 640 / 768 / … px · text expansion …`):
 - Tailwind's defaults: `- Breakpoints: 640 / 768 / 1024 / 1280 / 1536 px`
 - Bootstrap 5: `- Breakpoints: 576 / 768 / 992 / 1200 / 1400 px`
 
