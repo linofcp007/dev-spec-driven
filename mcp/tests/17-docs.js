@@ -1410,6 +1410,35 @@ exports.run = async ({
       fs.writeFileSync(path.join(d, "steering", "design-system.md"), "# Design System\n\n" + text);
       return E.designSystemRegistry(d);
     };
+    const toolRow = raw("skills", "dev-spec-driven", "references", "tooling-reference.md").split("\n").find((l) => l.startsWith("| `spec_scan {designSystem: true}` |")) || "";
+    // both report shapes on a project that fills every 1.38 part (a drifted token, a gone source, a units table with an
+    // unread row, the marker with an applied and an unknown entry, raw colours exact and near, a font, a motion value, a
+    // repeated value, an img-no-alt, motion declared and no reduced-motion mention) → the keys they return (`ok` aside: every
+    // result's), each of which the row must name in a code span; `sane`: the fixture filled what it was built to fill
+    const scanKeys = () => {
+      const p = path.join(tmp, "z138-scan");
+      S.initProject(p, ["ui"], "en");
+      const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), text); };
+      put(".specs/steering/design-system.md", "# Design System\n\n## Tokens\n_Token sources: src/styles/tokens.css, src/old/gone.css_\n\n| Token | Value | Use |\n|---|---|---|\n"
+        + "| --brand | #1d4ed8 | primary |\n| --font-body | Inter, sans-serif | text |\n| --duration-fast | 150ms | hover |\n\n## Units\n| Property | Units |\n|---|---|\n| padding-* | rem |\n| spacing | small |\n\n"
+        + "_UI checks off: transition-all (the kit animates on purpose), nope (x)_\n");
+      put("src/styles/tokens.css", ":root {\n  --brand: #1e40af;\n}\n");
+      put("src/checkout/Pay.tsx", "export function Pay() {\n  return <div className=\"p-[13px] text-[#1d4ed9]\" style={{ color: \"#1d4ed8\" }}><img src=\"a.png\" />Pay</div>;\n}\n");
+      put("src/checkout/pay.css", ".pay {\n  font-family: Inter, sans-serif;\n  transition: transform 150ms ease;\n  color: #1d4ed8;\n}\n.all {\n  transition: all 200ms;\n}\n");
+      const f = S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" });
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the checkout\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/checkout/_\n  - _Verify: npm test_\n");
+      const pr = S.designSystemReport(p, { uiPass: true }), fr = S.designSystemReport(p, { name: f.slug });
+      const keys = new Set(), add = (o) => { for (const k of Object.keys(o || {})) if (k !== "ok") keys.add(k); };
+      const first = (list) => (list || [])[0];
+      [pr, fr, pr.breakpoints, pr.unitsTable, pr.uiChecks, first(pr.drift), first(Object.values(pr.uiChecks.rules)), first(pr.uiChecks.facts), first(pr.uiChecks.off),
+        first(pr.uiChecks.offIgnored), fr.counts, first(fr.groups), fr.units, first(fr.units && fr.units.findings), fr.uiChecks, first(fr.uiChecks.off)].forEach(add);
+      for (const r of fr.raw || []) { add(r); if (r.near) add(r.near); }
+      const sane = pr.drift.length === 1 && pr.gone.length === 1 && pr.unitsTable && pr.unitsTable.unread.length === 1 && pr.uiChecks.facts.length === 1
+        && pr.uiChecks.off.length === 1 && pr.uiChecks.offIgnored.length === 1 && Object.keys(pr.uiChecks.rules).length >= 1
+        && ["font", "motion"].every((k) => fr.raw.some((r) => r.kind === k && r.token)) && fr.raw.some((r) => r.near) && fr.groups.length >= 1
+        && fr.units && fr.units.findings.length >= 1 && fr.uiChecks.off.length === 1;
+      return { keys: [...keys], missed: [...keys].filter((k) => !toolRow.includes("`" + k + "`")), sane };
+    };
     const rows = [
       ["intro: what the file says — the scale, the units table, the project's checks, switching one off; the file ≤ 30,000 bytes", () =>
         /what a raw value is against the project's own scale, the units table, and the UI checks it runs on a feature's view and style files and on the project's — and how a team switches one off\./.test(ws(scanRaw))
@@ -1521,6 +1550,14 @@ exports.run = async ({
       }],
       ["steering-templates: the marker's cost — the registry it enrols; the inline comment without one", () =>
         /A design-system\.md written only for this line enrols the project in the registry \(doctor's `ui-design-system`, finish's New components\); without one, silence a single finding with the inline `ui-check-off:` comment/.test(ST)],
+      // references/tooling-reference.md's spec_scan {designSystem} row (item 3): every key the two report shapes RETURN — read
+      // from a report of each, on a project built to fill every 1.38 part — and every code above, named in the one row
+      ["tooling-reference: the spec_scan {designSystem} row names every key both shapes return and every 1.38 code", () => {
+        const { keys, missed, sane } = scanKeys();
+        const codes = [...passCodes, ...kindCodes, ...bpCodes, ...facts, ...whys];
+        return sane && keys.length >= 60 && !missed.length && codes.length >= 13 && codes.every((c) => toolRow.includes(c))
+          && /the tool and the CLI ask for it, the engine's default runs none/.test(toolRow) && /never in it, and `gone` and the units table never change it either/.test(toolRow);
+      }],
     ];
     // (a label without a file's name is ui-code-scan.md's)
     for (const [label, check] of rows) all("1.38.0 Z docs — " + label, { holds: check });
