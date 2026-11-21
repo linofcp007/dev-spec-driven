@@ -155,7 +155,7 @@ something is slow or wrong. Design each state and write the matrix in design.md:
 | **Empty — no results** | a filter or search matched nothing | what was searched + how to broaden it / clear filters | the count as a status ("0 results"); focus stays in the search | the same text as first use |
 | **Error** | a request failed; a retry may work | what happened in plain words + **Retry**; keep what was already shown | an alert when the user's own action failed, else a status; focus stays | a toast that disappears while the list stays empty |
 | **Partial** | one region failed, others loaded | the failed region shows its own error; the rest works | the region's error as a status; focus stays | the whole page failing for one widget |
-| **Offline** | no connection | an offline notice; queued or disabled actions; cached data marked as such | a status when the connection drops and when it returns | silent failures on submit |
+| **Offline** | no connection | an offline notice; queued or disabled actions; cached data marked as such | a status when the connection drops and when it returns; focus stays | silent failures on submit |
 | **Permission denied** | signed in, not allowed (403) | why and what to do (ask an admin) — not a 404 look-alike unless hiding existence is the point | as Not found | a broken page |
 | **Not found** | a route or a record that doesn't exist (404) | the title and h1 say so, with a way on (search, the list) | announced: the framework's route announcer, or focus to the h1 | a blank page, or the home page |
 | **Signed out** | the session expired (401) | a sign-in prompt that returns the user to where they were, input kept | a dialog takes focus and gives it back on close | losing the draft |
@@ -167,8 +167,8 @@ something is slow or wrong. Design each state and write the matrix in design.md:
 | **Worst case** | the view's data at its realistic extremes | below | as the state it shows | a layout tried only on short sample data |
 
 **The matrix in design.md.** `[UI] UI States` holds the template's table: a row per state, labelled as above, and a
-column per view between `State` and `Announced · focus` — rename `View` after the first view and add one for each other
-(a screen, a route, a dialog; a component's own states belong to its contract). Each cell says what the user sees and
+column per view between `State` and `Announced · focus` — name the `View` column after the first view and add one per
+other view (a screen, a route, a dialog; a component's own states belong to its contract). Each cell says what the user sees and
 can do there, or `n/a — why` in four words or more; an `n/a — why` alone in its row answers every view. Doctor's
 `ui-states` finds each state by its label — a qualifier after it is fine (`Error — payment`) — and warns about a state
 with no row and each cell left open (blank, a `[slot]`, an `n/a` without its four words): at size m / l or with no size;

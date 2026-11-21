@@ -1165,7 +1165,7 @@ exports.run = async ({
       ["ui-design-patterns: Form validation — focus to the summary on submit; a field's message tied to it, focus kept", () =>
         /on submit, focus to the summary; on leaving a field, its message tied to it \(`aria-describedby`\), focus not moved/.test(rowOf("form-validation"))],
       ["ui-design-patterns: the matrix in design.md — the views between State and Announced · focus, n/a — why, a row's n/a", states,
-        /a column per view between `State` and `Announced · focus` — rename `View` after the first view and add one for each other \(a screen, a route, a dialog; a component's own states belong to its contract\)\./,
+        /a column per view between `State` and `Announced · focus` — name the `View` column after the first view and add one per other view \(a screen, a route, a dialog; a component's own states belong to its contract\)\./,
         /or `n\/a — why` in four words or more; an `n\/a — why` alone in its row answers every view\./],
       ["ui-design-patterns: what doctor's ui-states reads — a warn at m / l / no size, a note at s, never a gate; the a11y column unjudged", states,
         /Doctor's `ui-states` finds each state by its label — a qualifier after it is fine \(`Error — payment`\) — and warns about a state with no row and each cell left open \(blank, a `\[slot\]`, an `n\/a` without its four words\)/,
