@@ -1927,7 +1927,7 @@ const COMMANDS = [
           } else if (r.viewFiles && !u.limits.some((l) => l.code === "focus-sheets" || l.code === "focus-chars")) log(T.uiNone(r.viewFiles));
           if (u.silenced) log(T.uiSilenced(u.silenced));
           // (a bound of the checks' own: the report's lines below say the ones they share)
-          u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count, l.sheet)));
+          u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count, l.sheet, l.chars, l.alone)));
         } else {
           log(T.dsFound(r.found.components, r.found.tokens, r.found.sources.length));
           if (r.registry.exists && r.missingTotal) {

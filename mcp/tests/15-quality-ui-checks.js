@@ -585,21 +585,29 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const alone = proj("alone", [["src/styles/app.css", FOCUS + fill(470)]]);
     // a sheet longer than the bound that names no focus in its head is not read whole: the search ends there too
     const long = proj("long", [["src/styles/app.css", fill(470)], ["src/styles/zz-focus.css", FOCUS]]);
+    // (review 3 of 1.37: `alone` is the sheet's own length past the bound — after a sheet parsed too)
+    const after = proj("after", [["src/big/b0.css", NAMES + fill(100)], ["src/big/b1.css", FOCUS + fill(470)]]);
+    // (a sheet of exactly 384K characters is read and parsed whole: its focus style counts)
+    const exact = proj("exact", [["src/styles/app.css", FOCUS + "/*" + "x".repeat(384 * 1024 - FOCUS.length - 5) + "*/\n"]]);
     const L = (r) => [r.uiChecks.findings.length, r.uiChecks.limits];
     // (review 2 of 1.37: a bound never hides a KNOWN candidate silently — the pass's limit names the removals it left unjudged:
-    // their count, the first file:line; focus-chars, the sheet that ended the search)
+    // their count, the first file:line; focus-chars, the sheet that ended the search; review 3: the bound, `chars`, and whether
+    // that sheet ALONE is longer, `alone`)
     const at = { count: 1, file: "src/checkout/reset.css", line: 3 };
+    const ended = (sheet, alone) => ({ sheet, chars: 393216, alone });
     all("1.37 UI checks: the focus pass stops at a bound — 48 stylesheets read (focus-sheets) or 384K characters parsed (focus-chars: a focus-free sheet costs none), each sheet WHOLE (a 300K one's last rule counts; one longer than the bound, or one to parse past what is left, ends the search, whatever its head holds): the removal is then not judged and `uiChecks.limits` says which, naming the removals left unjudged (their count, the first file:line; focus-chars: the sheet that ended it — never the report's `limits` / `truncated`); 48 sheets with the focus style last read it; the shorter path first — a root sheet beside 48 deeper ones is read (got " +
-      js({ root: L(rr), many: [...L(rm), rm.limits, rm.truncated], big: L(rb), free: L(free), under: L(ru), whole: L(whole), past: L(past), alone: L(alone), long: L(long) }) + ")", {
+      js({ root: L(rr), many: [...L(rm), rm.limits, rm.truncated], big: L(rb), free: L(free), under: L(ru), whole: L(whole), past: L(past), alone: L(alone), long: L(long), after: L(after), exact: L(exact) }) + ")", {
       sheets: () => rm.uiChecks.findings.length === 0 && js(rm.uiChecks.limits) === js([Object.assign({ code: "focus-sheets", read: 48 }, at)]) && js(rm.limits) === js([]) && rm.truncated === false,
-      chars: () => rb.uiChecks.findings.length === 0 && js(rb.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 2 }, at, { sheet: "src/big/b2.css" })]),
+      chars: () => rb.uiChecks.findings.length === 0 && js(rb.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 2 }, at, ended("src/big/b2.css", false))]),
       parsedOnly: () => js(L(free)) === js([0, []]),
       under: () => ru.uiChecks.findings.length === 0 && js(ru.uiChecks.limits) === js([]),
       shorterFirst: () => rr.uiChecks.findings.length === 0 && js(rr.uiChecks.limits) === js([]),
       whole: () => whole.uiChecks.findings.length === 0 && js(whole.uiChecks.limits) === js([]),
-      past: () => past.uiChecks.findings.length === 0 && js(past.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 1 }, at, { sheet: "src/big/b1.css" })]),
-      alone: () => alone.uiChecks.findings.length === 0 && js(alone.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, { sheet: "src/styles/app.css" })]),
-      long: () => long.uiChecks.findings.length === 0 && js(long.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, { sheet: "src/styles/app.css" })]),
+      past: () => past.uiChecks.findings.length === 0 && js(past.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 1 }, at, ended("src/big/b1.css", false))]),
+      alone: () => alone.uiChecks.findings.length === 0 && js(alone.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, ended("src/styles/app.css", true))]),
+      long: () => long.uiChecks.findings.length === 0 && js(long.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, ended("src/styles/app.css", true))]),
+      after: () => after.uiChecks.findings.length === 0 && js(after.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 1 }, at, ended("src/big/b1.css", true))]),
+      exact: () => js(L(exact)) === js([0, []]),
     });
   }
 
@@ -764,11 +772,11 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       alone: () => js(ui(alone)) === js([M.uiUnjudged(3, "src/checkout/Panel.vue:2", 48)]) &&
         js(alone.fin.designSystem.uiChecks) === js({ total: 0, byRule: {}, top: [], limits: alone.r.uiChecks.limits }),
       clause: () => js(ui(withF)) === js([M.uiChecks(1, "src/checkout/Gallery.tsx:1 img-no-alt", withF.slug, M.uiUnjudged(1, "src/checkout/reset.css:3", 48))]),
-      chars: () => js(pass(chars)) === js({ code: "focus-chars", read: 0, count: 1, file: "src/checkout/reset.css", line: 3, sheet: "src/big/app.css" }) &&
-        js(ui(chars)) === js([M.uiUnjudged(1, "src/checkout/reset.css:3", 0, "src/big/app.css")]),
+      chars: () => js(pass(chars)) === js({ code: "focus-chars", read: 0, count: 1, file: "src/checkout/reset.css", line: 3, sheet: "src/big/app.css", chars: 393216, alone: true }) &&
+        js(ui(chars)) === js([M.uiUnjudged(1, "src/checkout/reset.css:3", 0, "src/big/app.css", 393216, true)]) && js(chars.fin.designSystem.uiChecks.limits) === js(chars.r.uiChecks.limits),
       pastCap: () => js(pass(past)) === js({ code: "focus-sheets", read: 48, count: 1, file: "src/landing/big.css" }) && js(ui(past)) === js([M.uiUnjudged(1, "src/landing/big.css", 48)]),
       reportOnly: () => js(size.r.uiChecks.limits.map((l) => l.code)) === js(["view-size"]) && js(ui(size)) === js([]) && size.fin.designSystem === undefined,
-      noUndefined: () => ![alone, withF, chars, past].some((x) => ui(x).some((w) => /undefined|null/.test(w))),
+      noUndefined: () => ![alone, withF, chars, past].some((x) => ui(x).some((w) => /undefined|null|NaN/.test(w))),
       ellipsis: () => js(ui(capped)) === js([M.uiChecks(5, "", capped.slug)]) && ellipsis.every((w) => w.includes(" — …:") && !w.includes("…; …")),
     });
   }

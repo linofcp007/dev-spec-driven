@@ -647,7 +647,8 @@ function uiChecksOf(lines, rel) {
 // of 1.37: the parse of ~800 sheets was 8× the report) — and DS_FOCUS_CHARS bounds the characters PARSED: a sheet that names
 // no focus costs an open and a read, never the parse budget. A sheet longer than DS_FOCUS_CHARS (not read whole), or one to
 // parse past what is left of the budget, ends the search.
-// → { focus, limits: [{code: focus-sheets | focus-chars, read, sheet (focus-chars: the sheet that ended the search)}] — a
+// → { focus, limits: [{code: focus-sheets | focus-chars, read, sheet, chars, alone (focus-chars: the sheet that ended the
+// search, DS_FOCUS_CHARS, whether that sheet alone is longer — review 3 of 1.37: the user is told the bound and why)}] — a
 // bound that cut the search }
 const RE_FOCUS_WORD = /focus/i;
 function uiFocusPass(sheets) {
@@ -657,8 +658,8 @@ function uiFocusPass(sheets) {
   try {
     for (const s of list) {
       if (read >= DS_FOCUS_SHEETS) return { focus: false, limits: [{ code: "focus-sheets", read }] };
-      const text = heads.next(), names = text != null && RE_FOCUS_WORD.test(text);
-      if (text != null && (text.length > DS_FOCUS_CHARS || (names && parsed + text.length > DS_FOCUS_CHARS))) return { focus: false, limits: [{ code: "focus-chars", read, sheet: s.rel }] };
+      const text = heads.next(), names = text != null && RE_FOCUS_WORD.test(text), alone = text != null && text.length > DS_FOCUS_CHARS;
+      if (alone || (names && parsed + text.length > DS_FOCUS_CHARS)) return { focus: false, limits: [{ code: "focus-chars", read, sheet: s.rel, chars: DS_FOCUS_CHARS, alone }] };
       read++;
       if (!names) continue;
       parsed += text.length;
@@ -677,9 +678,9 @@ function uiFocusPass(sheets) {
 // never listed. limits — each bound that cut a read or dropped a finding, with a count (review 1 of 1.37): tag-length
 // ({read: DS_TAG_LINES, count: the tags read past the tag reader's bound, file: the first}), file-findings ({read:
 // DS_CHECK_PER_FILE, count: the findings past it, file: the first}), then the pass's focus-sheets / focus-chars ({read,
-// count: the unsilenced candidates it left unjudged, file and line: the first of them (no line: one past a file's cap),
-// sheet: focus-chars' — a bound never hides a KNOWN candidate silently: review 2 of 1.37, an Angular app of 60 components
-// lost its true finding).
+// count: the unsilenced candidates it left unjudged, file and line: the first listed of them by file then line, else the
+// first file holding one past its cap (no line), sheet / chars / alone: focus-chars' — a bound never hides a KNOWN candidate
+// silently: review 2 of 1.37, an Angular app of 60 components lost its true finding).
 function uiChecksReport(files, projectFocus, cap) {
   let focus = files.some((f) => f.focus), limits = [];
   if (!focus && files.some((f) => f.past.byRule["outline-removed"] || f.findings.some((x) => x.rule === "outline-removed" && !x.silenced))) ({ focus, limits } = projectFocus());
@@ -707,7 +708,7 @@ function uiChecksReport(files, projectFocus, cap) {
   let total = list.length;
   for (const x of list) byRule[x.rule] = (byRule[x.rule] || 0) + 1;
   for (const [rule, n] of unlisted) { byRule[rule] = (byRule[rule] || 0) + n; total += n; }
-  const pass = limits.map((l) => Object.assign({ code: l.code, read: l.read }, unjudged, l.sheet ? { sheet: l.sheet } : {}));
+  const pass = limits.map((l) => Object.assign({ code: l.code, read: l.read }, unjudged, l));
   return { findings: list.slice(0, cap), total, byRule, silenced, limits: [tagCut, fileCut].filter((c) => c.count).concat(pass) };
 }
 
