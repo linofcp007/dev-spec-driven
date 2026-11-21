@@ -31,8 +31,8 @@ tool, command, hook or dependency.
   (`prefers-reduced-motion`, Tailwind's `motion-safe:` / `motion-reduce:`, `useReducedMotion`); never when a read was cut,
   and a mention only in a script is not seen.
 - **`_UI checks off: <rule-id> (reason)_` in design-system.md.** A line of its own (not a list item nor bold; each id bare,
-  never in a code span) switches a UI check or the project fact off for the whole project — the inventory, every feature report (`off`: the rule, its reason, the findings it hid) and so
-  `finish`: counted, never listed. An entry with no reason in parentheses, an unknown id, another shape or one past the
+  never in a code span) switches a UI check or the project fact off for the whole project — the inventory, every feature
+  report (`off`: the rule, its reason, the findings it hid) and so `finish`: counted, never listed. An entry with no reason in parentheses, an unknown id, another shape or one past the
   first 50 is not applied, and the report says why (`offIgnored`: `no-reason`, `unknown-rule`, `unreadable`,
   `past-bound`). A design-system.md created for it alone enrols the project in the registry; without one, the inline
   `ui-check-off:` comment silences one finding.
