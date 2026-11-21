@@ -62,9 +62,10 @@ problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. 
 
 **+ui adds 5 mandatory `[UI]` sections** — Design System Usage (one row per component — Reuse · Extend · New — checked
 against the registry `.specs/steering/design-system.md`: doctor's `ui-design-system`, a gate at size m / l) · UI States (a
-state matrix with its worst case and a reference per view) · Accessibility (WCAG 2.2 AA) · Responsiveness & i18n · UI
-Performance Budget (Core Web Vitals) — and, optional, Component Contracts (one per New / Extend component). See
-`references/ui-design-patterns.md`.
+state matrix with its worst case and a reference per view) · Accessibility (WCAG 2.2 AA) · Responsiveness & i18n (what
+each view changes at the project's breakpoints — `references/ui-responsive.md`) · UI Performance Budget (Core Web Vitals)
+— and, optional, Component Contracts (one per New / Extend component). See `references/ui-design-patterns.md`. The
+matrix: a column per view, a row per state — each designed or `n/a — why`, with how it is announced and where focus goes.
 
 **+obs adds 5 mandatory `[OBS]` sections** — SLIs & SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health
 & Capacity. See `references/observability-patterns.md`.
@@ -114,9 +115,10 @@ own sections hold them. **Filled means your own text:** the template's guidance 
   "never / for every" rules like tenant isolation). The Coverage Check shows every AC in ≥ 1 test.
 - **+saas:** tenant-isolation, rate-limit, idempotency, authorization-matrix and audit-log tests. **+sec:** one
   abuse-case test per threat. **+privacy:** export / erasure / retention tests. **+dist:** failure injection. **+api:**
-  contract tests and the breaking-change diff. **+ui:** an accessibility check + visual regression of the states (a
-  contract's states as fixtures, its keys as component tests); at size m / l (or none) each UI task's visual review
-  against the view's reference — on the floor where it has none (`references/ui-review.md`).
+  contract tests and the breaking-change diff. **+ui:** an accessibility check + visual regression of the states (each
+  state a fixture asserting its announcement and focus; a contract's states as fixtures, its keys as component tests); at
+  size m / l (or none) each UI task's visual review against the view's reference — on the floor where it has none, the
+  worst case at each breakpoint (`references/ui-review.md`).
   **+obs:** an alert in a staged failure, a rollback drill, fault injection. **+data:** data-quality checks on fixture
   batches, an idempotent re-run / backfill of a partition, the freshness alert, the schema-change compatibility check.
   **+port:** the differential check over the whole corpus (a property: the same output, the same error, case by case).

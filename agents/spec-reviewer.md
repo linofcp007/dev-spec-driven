@@ -90,7 +90,7 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
   key; the version check / unique constraint the design names for concurrent updates.
 - **+api:** the handlers return exactly what the contract file documents (status codes, problem+json errors with stable
   codes, headers); nothing breaking inside a version; Idempotency-Key and If-Match honoured where the design says.
-- **+ui:** design-system components and tokens (no one-off styles); every state of the design's state matrix handled; keyboard
+- **+ui:** design-system components and tokens (no one-off styles); every state of the design's state matrix handled, with the announcement and focus its row names; keyboard
   operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean. When
   the brief has a **Design system** part: the components the diff uses are the ones it lists — a component built beside a
   listed one is **Important** (reuse or extend the listed one), and so is a hard-coded colour, spacing or font size the diff
