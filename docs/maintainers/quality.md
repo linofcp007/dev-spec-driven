@@ -1319,7 +1319,12 @@ wrong finding sends a team to fix code that is right.
   `data-focus`, `data-[focus]`, `ui-focus-visible`; a bare one is not: shadcn puts it on focus-managed containers and
   activedescendant options; a RELATIONAL one — a `group` / `peer` / `has` / `in` part, `focus-within` — is a doubt, as
   `:focus-within` in a sheet: review 2 of 1.37, a popover panel's `focus-within:outline-none` around its buttons, 7 of the
-  corpus's candidates). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` / `:focus-within` (or inside one)
+  corpus's candidates; the token's variants cut at `:` OUTSIDE brackets, `variantsOf` — a named variant's arbitrary value
+  read whole, so `has-[:focus-visible]`, `group-[:focus]`, `peer-[:focus]` are relational too (review 3 of 1.37: cut at its
+  `:`, the value's `focus-visible]` read as the element's own), an arbitrary variant (`[&:focus]`, `[&_*:focus]`: `&` is the
+  element) by its `:`-cut pieces as before; a token the class split cut inside its brackets — at a quote or a `=`,
+  `has-[[data-slot=x]:focus-visible]` — reads as before). The file's FOCUS STYLE: a rule naming `:focus` /
+  `:focus-visible` / `:focus-within` (or inside one)
   that declares something that DRAWS; a Tailwind utility under a FOCUS VARIANT that is no removal and draws, in a class list
   or an `@apply`. A focus variant (`isFocusVariant` — review 1 of 1.37: Headless UI's documented Button warned): a variant
   holding `focus` as a part delimited by `-`, `[`, `]` or its ends — `focus`, `focus-visible`, `group-focus/name`,

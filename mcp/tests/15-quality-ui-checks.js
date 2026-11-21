@@ -261,7 +261,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       // that draws nothing, one that draws; a utility with a variant draws, as before)
       ["W.css", ".focus\\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }\n", false], ["X.css", ":focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }\n", true],
       ["Y.css", "*:focus {\n  @apply outline-none;\n}\n", false], ["Z.css", "button:focus { @apply outline-none ring-2 ring-blue-500; }\n", true],
-      ["aa.css", "button:focus { @apply ring-0 shadow-none !important; }\n", false], ["ab.css", "button:focus { @apply hover:ring-0; }\n", true]];
+      ["aa.css", "button:focus { @apply ring-0 shadow-none !important; }\n", false], ["ab.css", "button:focus { @apply hover:ring-0; }\n", true],
+      // (review 3 of 1.37: a relational variant's bracket spelling is a focus variant, as its dash spelling — the focus-style
+      // side kept as it was)
+      ["AC.tsx", "<div className=\"has-[:focus-visible]:ring-2\" />\n", true], ["AD.tsx", "<span className=\"group-[:focus]:ring-2\" />\n", true]];
     const facts = cases.map(([rel, text]) => run(text, "src/" + rel).focus);
     const removed = { bs: got(".form-control:focus,\n.btn:focus {\n  outline: none;\n  box-shadow: none;\n}\n", "src/styles/overrides.css"),
       important: got("*:focus {\n  outline: none !important;\n  box-shadow: none !important;\n}\n", "src/styles/overrides.scss"), transparent: got(".close:focus { outline: 2px solid transparent; }\n", "src/close.css"),
@@ -272,15 +275,20 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
         "@media print { textarea:focus { @apply outline-none; } }", ".btn { @apply focus:outline-none; }"), "src/styles/globals.css"),
       // (S4: a removal under a variant of the element's own focus is a candidate, under a negated one it is not; review 2 of 1.37:
       // under a RELATIONAL one — group / peer / has / in, focus-within — it is a doubt, as `:focus-within` in a sheet; 9–15 the
-      // shapes both earlier rules judged and keep)
+      // shapes both earlier rules judged and keep; review 3 of 1.37: the variants cut at `:` outside brackets — 15–17 a named
+      // variant's arbitrary value read whole, relational: a doubt; 18–21 kept — an arbitrary `[&…]` by its pieces, a token the
+      // split cut inside its brackets at a quote read as before)
       variants: got(lines("<i className=\"data-[focus]:outline-none\" />", "<i className=\"focus-within:outline-hidden\" />", "<i className=\"not-focus:outline-none\" />", "<i className=\"hover:outline-none\" />",
         "<i className=\"group-focus:outline-none peer-focus-visible:outline-none\" />", "<i className=\"has-focus:outline-none in-focus:outline-0\" />", "<i className=\"group-focus-within:outline-none group-data-[focus]:outline-none\" />",
         "<i className=\"data-focus:outline-hidden\" />", "<i className=\"ui-focus-visible:outline-none\" />", "<i className=\"data-focus-visible:outline-none\" />", "<i className=\"focus:outline-none\" />",
-        "<i className=\"focus-visible:outline-0\" />", "<i className=\"md:group-hover:focus:outline-none\" />", "<i className=\"[&:focus]:outline-none\" />"), "src/V.tsx") };
+        "<i className=\"focus-visible:outline-0\" />", "<i className=\"md:group-hover:focus:outline-none\" />", "<i className=\"[&:focus]:outline-none\" />",
+        "<i className=\"has-[:focus-visible]:outline-none\" />", "<i className=\"group-[:focus]:outline-none peer-[:focus]:outline-none\" />", "<i className=\"has-[:focus]:outline-none in-[:focus]:outline-0\" />",
+        "<i className=\"[&_*:focus]:outline-none\" />", "<i className=\"dark:focus:outline-none\" />", "<i className=\"md:focus-visible:outline-none\" />",
+        "<i className=\"[&[data-state='open']:focus]:outline-none\" />"), "src/V.tsx") };
     all("1.37 UI checks: a file's focus style — a :focus / :focus-visible / :focus-within rule that styles something (a list, nested, an inner rule), a Tailwind focus-variant utility (group-focus too, in an @apply too); never a removal alone, a hover style, a declaration or utility that draws nothing (`box-shadow: none`, a transparent outline, `focus:ring-0`, `focus:shadow-none`); Bootstrap's `outline: none; box-shadow: none` override is a candidate (got " + js({ facts, removed }) + ")", {
       exact: () => js(facts) === js(cases.map((c) => c[2])),
       candidates: () => js(removed.bs) === js(["outline-removed@3"]) && js(removed.important) === js(["outline-removed@2"]) && js(removed.transparent) === js([]),
-      variants: () => js(removed.variants) === js(["outline-removed@1", ...[8, 9, 10, 11, 12, 13, 14].map((n) => "outline-removed@" + n)]),
+      variants: () => js(removed.variants) === js(["outline-removed@1", ...[8, 9, 10, 11, 12, 13, 14, 18, 19, 20, 21].map((n) => "outline-removed@" + n)]),
       apply: () => js(removed.apply) === js(["outline-removed@2", "outline-removed@5", "outline-removed@6", "outline-removed@8", "outline-removed@11"]),
     });
   }
