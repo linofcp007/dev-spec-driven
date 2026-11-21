@@ -992,9 +992,11 @@ exports.run = async ({
       ["ui-design-patterns: the accessibility finding line — criterion, element, impact, fix, found by; no [A11Y] tag", P,
         /Each finding, one line — criterion — element — impact — fix — found by/, /\*\*Blocker\*\* \(a user can't finish the task\), \*\*Major\*\* \(finishes with real difficulty\) or \*\*Minor\*\* \(a workaround exists\)/,
         { not: /\[A11Y\]/ }],
-      ["ui-design-patterns: the checklist — 13 References kept, 14 Motion appended, the worst case and the contract; the file ≤ 60,000 bytes", checklist,
+      // (1.38.0 Z: the cap re-pinned 60,000 → 48,000 — CRIT_X D1: the code scan and the UI checks moved to ui-code-scan.md,
+      // Responsiveness to ui-responsive.md; the state matrix grew in place — 43,814 bytes at the docs pass)
+      ["ui-design-patterns: the checklist — 13 References kept, 14 Motion appended, the worst case and the contract; the file ≤ 48,000 bytes", checklist,
         /13\. \*\*References\*\*/, /14\. \*\*Motion\*\*/, /and the worst case/, /a New \/ Extend component's contract/,
-        () => bytes("skills", "dev-spec-driven", "references", "ui-design-patterns.md") <= 60000],
+        () => bytes("skills", "dev-spec-driven", "references", "ui-design-patterns.md") <= 48000],
       // references/subagent-execution.md — the controller's protocol
       ["subagent-execution: the tree — the kept script, the floor captures, .prev.png", X, /ui\/capture\.<ext> written by you: the kept capture script/, /--floor-320\.png…; a retaken one's old file kept as \.prev\.png/],
       ["subagent-execution: the re-review ledger line", X, /Task 3: ui re-review \(round 1\) — U1 resolved, U2 partial; 0 regressions → fix round 2\/5/],
