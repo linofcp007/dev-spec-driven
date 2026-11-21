@@ -184,11 +184,14 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   (`steeringStubs` — hashes, `isSteeringStub()`; `diagrams` — `templateDiagramSet()`; `sectionLines` / `sectionLinesBr` —
   `sectionTemplateLines()`; `bugSlots` — `bugTemplateSlots()`; `templateReqs` — `builtinTemplateReqs()`, whose criteria
   quality.js `builtinTemplateAcs` reads live; `stopGate` — `builtinStopGate()`, the stop gate's lists of every language,
-  `i18n.stopGateLists()`, which guards.js `stopPatterns` reads). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
+  `i18n.stopGateLists()`, which guards.js `stopPatterns` reads; `uiStateNames` — `uiStateNames()`, 1.38: +ui's state labels
+  and the state matrix's a11y header cell of every language, `<id>\t<label>` lines, the header's id `a11y` — the one list read
+  whole, by doctor's ui-states). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
   an engine set built from EVERY language's texts belongs here — a process loads only the languages it speaks
   (mcp/tests/16-conventions-build.js "I-I2" asserts an English doctor / next_action / done / finish / catalog / stop gate loads no pt.js,
   es.js or pt-br.js). A new builder or artifact goes into `templateCorpus()`, then rebuild. The per-project part (the
-  project's templates and packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only `.has()` is asked of the sets.
+  project's templates and packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only `.has()` is asked of the sets
+  (`uiStateNames` aside).
 - **The corpus is trusted only for the engine the process LOADED.** markdown.js stats every source as it loads
   (`LOADED_STATS`: size, mtime, ctime); the first placeholder question hashes them and trusts the file only while every stat
   is unchanged; a language file loaded later that changed drops it (`onLocaleLoad` → `localeLoaded`). So the long-lived MCP
@@ -331,6 +334,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30.1** — the stop gate's lists (`stopGate`) joined the corpus: built from every language's table, they loaded pt.js, es.js
   and pt-br.js into every English Stop hook. Measured (median of 21 interleaved fresh processes, Windows 11, Node 26): the Stop
   hook on a claim 204.6 → 188.7 ms; the corpus grew from ~129 KB to ~152 KB.
+- **1.38.0** — `uiStateNames` joined the corpus (CRIT_4 must-fix 6): doctor's ui-states recognises a state-matrix row by a
+  label of ANY language, and rendered, those labels loaded pt.js, es.js and pt-br.js into every English doctor of a +ui
+  feature. The first list read whole rather than asked `.has()` (`<id>\t<label>` lines); `CORPUS_KEYS` holds it, so a corpus
+  without it renders, and `localeLoaded` drops it with the rest (two 16-conventions-build fixtures); the corpus grew by ~1.5 KB.
 
 ### Config paths
 - **v1.11** — `mcp/servers.json` replaced the root `.mcp.json` (CONNECTION_CLOSED in every maintainer session).

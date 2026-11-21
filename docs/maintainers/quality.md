@@ -1445,6 +1445,47 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `no-reduced-motion` (1.38, on one shared project pass), the `_UI checks off:_` marker (1.38), the `addEventListener` paste
   form, a `hint` level.
 
+## UI state matrix (1.38)
++ui's `[UI] UI States` scaffold ends in a state matrix (the template — markdown-and-trace.md → Readers, tracks.md): `State` ·
+a column per view · `Announced · focus`, a row per listed state (16 English-stable ids — languages.md). Doctor's `ui-states`
+reads it: quality.js `uiStatesCheck` over `uiStateMatrix`, the `DOCTOR_CHECKS` entry right after `ui-deprecated` (phase 2, the
+same `uiDesigned` feature, never once `state.finished` is recorded). The user docs: ui-design-patterns.md → The states every
+view needs (the detail points there), tooling-reference.md's id.
+- **The anchor** — a table of the section (`extractSection` with the UI States synonyms, the section ui-sections reads, then
+  `mdTables`: comments and fences out — a table under another h2, a contract's, is never read) is a matrix when one header
+  cell's words ARE a localized `quality.uiStateA11y` (`usWords`: accents folded, lower case, the whole cell — `Announced`,
+  `Announced · focus (WCAG)` are none). Never by its rows: a state machine (`State | Event | Next state`) or a component's
+  own states table carries no such cell. Lost: a hand-built matrix without the column — read as prose (`usNone`).
+- **The views** — the columns strictly between the first (the state) and the anchor; a header holding no letter or digit, a
+  `[slot]` or a generic word is none (`dsSlot`); no view → no matrix. The a11y column and every column after it (a `Notes`)
+  are never judged — what they say is the critic's and the reviewer's; judged, deleting the column silenced the warn.
+- **The rows** — `uiStateOf`: the first cell's words begin with a label's — the label's LAST word may be the start of a longer
+  one (`Errors`, `Error — recoverable`, `Loading (skeleton)`, `Exito`), every other word whole (`Nothing found` is not Not
+  found) — in EN / PT / ES / pt-BR (`uiStateNames`, below). No synonym list: a renamed row (`Spinner`) names nothing and the
+  warn names the label to use. A state's rows are joined: a view is answered when one of them answers it.
+- **The cells** — `uiStateCell`: open (`dsSlot` — nothing, a mark, a `[slot]`, TBD —, or an n/a whose reason is under four
+  words: `naAnswer` `na-short`), `na` (`naAnswer`, markdown.js, exported for it — the sized-section rule), designed (any other
+  words). A row whose ONLY view cell holding a letter or digit is an `na` answers every view (one "n/a — why" says the state
+  does not exist here); another worded view cell, TBD included, is judged on its own; the a11y cell never counts.
+- **The verdict** — the section's own state first (`sectionState` at size m, as ui-design-system reads its section):
+  missing / unfilled / template → a pass, `usUnfilled` (ui-sections and the placeholder gate own it — the untouched matrix is
+  template lines by F0b's row key); `na` → a pass, `usNa`; no anchored table → a pass, `usNone`. The gaps — `no-row` (once per
+  table) and `open` (per view and state), counted together — WARN at size m / l and with no size (`usOpen`: per table its
+  no-row item, then each view's open states — `US_SHOWN` (5) named per item, six items, the rest counted; `usTable` names the
+  table's place in the section when it holds several matrices); at size s the same detail is a pass (`usSmall`); none →
+  `usOk(views, states)`. The labels in the feature's language; detail only (`{id, status, detail}` — `state` for the tests).
+- **No gate, no stamp** — never a fail, not `warnsOnly`, not in `GATES`, not in the save hook, finish or the brief. No stamp:
+  no design approved before 1.38 can hold the anchored header (gates-and-approvals.md → Gates). spec_upgrade lists it as
+  ADVISORY — `UI_STATES_CHECK` beside `DESIGN_WEIGH_IDS` / `CRITICAL_FLOW_IDS` in upgrade.js: no `warnings` attention.
+- **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns; every cell cut to `US_CELL`
+  (400) before any regex; a bound that drops input appends `usTruncated` to the detail (`usNone` too). Linear: the section
+  reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the same text; 1 MB cells cost what a same-size
+  prose section does (15-quality-ui-states.js, a ratio).
+- **Every language, from the corpus** — the labels and the anchor cells of EN / PT / ES / pt-BR come from the corpus key
+  `uiStateNames` (markdown.js `uiStateNames()` / `renderUiStateNames()`: `<id>\t<label>` lines, `UI_STATE_A11Y` — `a11y` — as
+  the anchor's id; architecture.md → The build): an English doctor loads no pt.js / es.js (a child-process fixture). The
+  state ids order the gaps: the feature language's `uiStateLabels` keys.
+
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
 
@@ -2381,3 +2422,18 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   cuts), the `@apply` wrapper's own conditional test (an `@apply` in a conditional block holding a `text-` utility drops
   the file's candidates anyway). Two `else`s are equivalent by structure (a vw size in a conditional block, a variant
   `text-[…vw]`: each is dropped by the rule beside it).
+
+### UI state matrix
+- **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table
+  holding two listed rows, judged the a11y column, and a `uiStates` approval stamp with a `legacy` branch. The critique
+  (CRIT_4) ran that reader on real shapes: a data-fetching state machine (`State | Event | Next state`) read 13 no-row, a
+  trailing Notes column 15 gaps, the Worst case's empty a11y cell one — so the matrix is the scaffold's own table, anchored by
+  its localized a11y header cell, the views between, the a11y column unjudged; the stamp went (no 1.37 design can hold that
+  header: the legacy branch protected nothing). The ruling (DECISIONS) kept it a warn at m / l / no size, a note at s, outside
+  every gate, advisory in spec_upgrade (the critique: any warn outside the advisory ids added `warnings` attention), and moved
+  the brief's design budget to 6,000 with it (tasks-and-evidence.md → History). The corpus key (`uiStateNames`, CRIT_4 must-fix
+  6) keeps every language's labels out of an English doctor. The oracle replay (the same 32 +ui features on 1.37.0, the F0
+  tip and this chain): the only differences are the new check — a pass with `usNone` on every 1.37 shape (prose, the guide's
+  own table, a state machine), `usOk` on a full matrix at 1–3 views, the gap a warn at m / l / no size and a note at s — and
+  spec_upgrade listing it (attention unchanged). Mutation pass: see the release notes of the chain (the list written before
+  the fixtures, in 15-quality-ui-states.js's order).
