@@ -394,6 +394,13 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   is the bare marker (the colon outside the italics, as the other markers never read it). The marker retires the WHOLE
   component, wherever it stands: a deprecated variant or prop is written without it (the user docs say so — a
   `ghost (_deprecated_)` variants cell retires the component).
+- **`_UI checks off: <rule-id> (reason)[, …]_`** (1.38, `dsChecksOff`) — a line of its own like `_Libraries:_` (`RE_DS_MARKER`,
+  the same `DS_MARKER_LINES` count, never inside a comment or a fence), the project's switch for a UI check (UI checks →
+  The marker). Its entries cut by `dsEntries` (at `,` / `;` outside parentheses): `<id> (<reason>)` (`RE_DS_OFF_ENTRY`, any
+  case — the id folded) → `{id, reason}`, the reason what the outer parentheses hold, commas and nested parentheses kept,
+  trimmed, cut at `DS_CELL_MAX` ("" for none, `()` or `( )`); any other shape (`transition-all: kit code`, `outline-removed —
+  modality`) → `{entry}`, as written, cut; past `DS_MARKER_ENTRIES` (50) ONE more `{entry, past, read}` and no further one (a
+  later marker line too). The registry's `checksOff`. quality.js names NO rule id: engine/ui-checks.js `uiOff` validates them.
 - **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
   mcp/tests/06-gates-sizes.js changed on purpose). `designSystemUsage(design)` → the table rows whose first cell is a kind word
@@ -1057,7 +1064,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   the registry — the CLI prints each as a row to paste), `pending` (in the code and declared New by an unfinished feature's
   design — `pendingNew`: its finish adds it; a row pasted for it would read as already listed), `stale` (`stalePath` —
   below), `newTokens` (against `tokenNames` — every token the file lists),
-  `newSources` / `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`,
+  `newSources` / `newLibraries`, `inSync`, and (1.38) `uiChecks` — the project's UI checks, an inventory, when the OPERATION
+  asks (`{uiPass: true}`: the engine's default runs none — UI checks → The project inventory). A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`,
   `counts`, `newComponents`, `uiChecks` (1.37 — UI checks, below). `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
   total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `total`).
 - **`limits`** — the bounds that CUT what a report read, `[{code, read, file?}]`: files (the walk's cap) · token-files ·
@@ -1224,8 +1232,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
 
 ## UI checks (1.37)
 A +ui feature's view / style files read for anti-patterns that are wrong whatever the taste — engine/ui-checks.js (LAZY,
-after design-system.js), the feature report's `uiChecks` and ONE finish warning. FEATURE level only in 1.37: the project report
-reads no view file for them (CRIT_X decision 3 — one shared project pass is 1.38's). Every doubt reads as "not judged": a
+after design-system.js), the feature report's `uiChecks` and ONE finish warning; (1.38) the project's view files too, as an
+INVENTORY of counts in the project report when the operation asks (below), with one project fact (`no-reduced-motion`) and the
+project's switch (the `_UI checks off:_` marker). Every doubt reads as "not judged": a
 wrong finding sends a team to fix code that is right. The user docs: `references/ui-code-scan.md` (the scan table — what the
 code scan reads and what it doesn't — and the UI checks section; ui-design-patterns.md keeps one pointer line to it, its
 registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`.
@@ -1366,6 +1375,10 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `transition-property: all`, Tailwind's `transition-all` (variants, `!`, `@apply`), a style object / inline style /
   CSS-in-JS line — never inside `@media (prefers-reduced-motion: reduce)` nor a block nested in one (CRIT_1 must-fix 7).
   Blocks nested past `DS_BLOCK_DEPTH` (64) are not judged, nor what they hold, and their rule is never a "focus" candidate.
+  A markup file's `<style>` block: its opening tag's line is a CSS line (viewLines), so the block's FIRST rule carries it in
+  its prelude — read without it (`RE_STYLE_TAG`, 1.38: an at-rule there read as none since 1.37, a print / reduced-motion /
+  conditional block — outline-removed, transition-all, font-size-viewport false positives on an SFC; a first rule's value
+  named the tag).
   The statement events' `from` (the line a statement's text starts on) places a finding at a declaration's first line.
 - **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
   (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
@@ -1383,7 +1396,10 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   report's order, holding one, no `line`), and for focus-chars `sheet` (the sheet that ended the search), `chars` (the
   bound, `DS_FOCUS_CHARS`) and `alone` (that sheet alone is longer than it, else the characters parsed before it would
   have taken the search past it — review 3 of 1.37: the clause named no bound, nor that one compiled sheet was the cause). The
-  CLI prints that line in place of `uiNone`; spec_finish says it (below). The bounds are measured, not chosen (History): the highest that kept, in
+  CLI prints that line in place of `uiNone`; spec_finish says it (below); (1.38) each of the three clauses (`dsLimit`
+  focus-sheets / focus-chars, `finish.uiUnjudged`) points to the project inventory, which judges them over every view file
+  (The project inventory, below — the feature report and finish keep these bounds: CRIT_1 must-fix 1, the owner's ≤ 2×
+  finish bar). The bounds are measured, not chosen (History): the highest that kept, in
   every series where an antivirus scans each open (~1 ms), the report with the pass at its sheets bound ≤ 2.5× the same
   report with no candidate, finish's part ≤ 2×, and modules that all name `:focus` at the chars bound ≤ 3×.
   Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
@@ -1398,12 +1414,14 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   a multi-line markup tag no comment fits beside a later line's class (keep the class on the tag's first line, or a `//`
   line inside a JSX tag). Counted in `silenced`, never
   listed, never in finish. Two lines up, another id, a string's text, no id: nothing; a linter's own suppression
-  (`eslint-disable-next-line jsx-a11y/…`, `svelte-ignore a11y_…`) is not read (the user docs say so). No project switch in
-  1.37 (the `_UI checks off:_` marker is 1.38's).
-- **The feature report** (`featureReport`) — the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
+  (`eslint-disable-next-line jsx-a11y/…`, `svelte-ignore a11y_…`) is not read (the user docs say so). The project's switch
+  for a whole rule is the `_UI checks off:_` marker (1.38, below); a finding both silences counts as silenced (the comment
+  first).
+- **The feature report** (`featureReport`) — its view files are those `uiViewFile` takes (1.38: THE view-reader predicate, the
+  project inventory's too — a view or style file that is no test, story, mock / fixture by name, type declaration); the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
   its token files (a globals.css it edits) are read for the checks ALONE — never for raw values, never in `viewFiles`, within
   `DS_VIEW_FILES` files read in all. `uiChecks` (`uiChecksReport`) = {findings (the first `DS_LIST`: rule, level, file, line,
-  value — warn first, then by file and line), total, byRule, silenced, limits}; its limits — EVERY bound that cut a read or
+  value — warn first, then by file and line), total, byRule, silenced, off?, offIgnored? (1.38 — the marker, below), limits}; its limits — EVERY bound that cut a read or
   dropped a finding, one code a bound (review 1 of 1.37: a long line, a file's 200 findings and its 256K read dropped real
   findings with `limits` empty): `view-files` (the feature's file cap cut what the checks read), then with {read, count, file
   (the first)} `view-size` (a file longer than `DS_READ_CHARS`: read DS_READ_CHARS + 1 to know), `line-length` (lines cut at
@@ -1424,7 +1442,64 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   removals a focus search left unjudged its last clause (`finish.uiUnjudged`: the count, the first file:line, why — at the
   characters bound, the bound and whether one sheet alone passes it), or,
   with no finding, that clause the warning alone (review 2 of 1.37); `res.designSystem.uiChecks` only when it has findings
-  or that limit (the 1.35 shape otherwise). The report's other bounds never reach finish's text.
+  or that limit (the 1.35 shape otherwise). The report's other bounds never reach finish's text. A rule the project
+  switched off (1.38) never reaches it: finish reads a report that holds none — its code is unchanged.
+- **The project inventory** (1.38 — item 1 as the DECISIONS cut it) — spec_scan {designSystem: true} / `dev-spec
+  design-system` WITHOUT a feature, when the OPERATION asks: operations.js passes `{uiPass: true}`, the engine's default runs
+  no pass (the 204 direct `designSystemReport(` calls of the suites keep their result and their timings — CRIT_X D4; never an
+  MCP or CLI argument; a feature report ignores it). `uiChecks` = {read, total, silenced, byRule, rules: {id: {level, files,
+  file, line?}}, off?, offIgnored?, facts, limits} — COUNTS, never a list (no `findings` key: it never reads as a clean
+  list), never finish. `uiProject(scan, reg)` (design-system.js) reads AFTER scanCode, on its own (sharing settle's and the
+  exports loop's reads saved the bare read alone — parsing is 70–85 % of the pass — and threaded the read through settle:
+  cut, CRIT_X D4), the walk's view files that pass `uiViewFile`, the stylesheets first (a pass a bound cuts has read the focus
+  styles it could), then the shorter path; each file's first `DS_READ_CHARS` (one more asked for: `over`), `DS_UI_FILES`
+  (5,000) files / `DS_UI_CHARS` (32 MB) characters at most. `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
+  and keeps counts — its memory bounded by the rules, never the files: per rule its count (past a file's `DS_CHECK_PER_FILE`
+  too — CRIT_1 must-fix 7), the FILES holding one (never the findings), its first place by file then line (a place past a
+  file's cap has no line and is named only when no listed place exists — the feature report's unjudged rule); an
+  inline-silenced finding in `silenced`; `byRule` / `rules` in `UI_RULES`' order (warn first). outline-removed under the 1.37
+  excuse rule at PROJECT scope (CRIT_1 must-fix 2): any focus style in any file read — a class-list focus utility in another
+  view file too — excuses every candidate, the feature report's rule over every view file, so the removals its focus search
+  leaves unjudged past `DS_FOCUS_SHEETS` are judged here (a parity fixture: the inventory and the feature report agree on the
+  same files); a pass a bound cut with no focus style read judges none. `limits`, its own — never the report's `limits`,
+  `truncated` or `inSync`: `ui-files` {read, count?, file?, line?: the removals it left unjudged}, `view-size`, `line-length`,
+  `tag-length` {read, count, file: the smallest path} (the pass builds them; featureReport builds the feature's). The CLI
+  prints it after the registry part (`uiProjectHead`, `uiProjectRule` a rule — `uiReportTag` for a report-level one —,
+  `uiProjectNone`, `uiSilenced`, the off lines, the fact, its limits; never "nothing" beside a `ui-files` count). `uiProject`
+  is exported for one fixture (a truncated walk takes 20,001 view files: a scan of the same files marked truncated).
+- **Motion and the fact `no-reduced-motion`** (1.38, `UI_FACTS`) — `uiChecksOf`'s `motion` {count: the LINES declaring
+  motion, line: the first}, never a finding, from its OWN predicate (CRIT_X D5b: never transitionAll's, never item 2's
+  `RE_MOTION_PROP` — the properties that hold times): `@keyframes` (a vendor prefix; `RE_KEYFRAMES` anywhere in a block's
+  prelude after a blank or `>` — a `<style>` block's first rule carries its tag line in its prelude), `motionOf`: `animation`
+  / `animation-name` naming one (never `none`, a global keyword, a lone `var()`), a `transition` item naming `transform` /
+  `translate` / `rotate` / `scale` for a LITERAL time over 0 (the first time is the duration: `transform 0s 1s` is none;
+  never `transition-property` — it holds no time —, opacity, a colour, `all`), `scroll-behavior: smooth`; `twMotion`:
+  Tailwind's `animate-*` but `animate-none` (tailwindcss-animate's `animate-in`), `transition-transform`, `scroll-smooth`,
+  under any variant (`RE_TW_PICK` widened; a motion utility under a focus variant still DRAWS — `focus:animate-pulse` stays a
+  focus style); a script line's style object / inline style (`scriptTransitions` reads `animation` / `animation-name` /
+  `scroll-behavior` too — an `animation: 1s` value never reads as transition-all). The FACT, the inventory's alone (never a
+  feature report's or finish's; WCAG 2.3.3 is AAA): the files read declare motion and NONE of the texts read mentions
+  reduced motion — `RE_REDUCED_ASK` on each WHOLE text as read, never its lines cut at `DS_LINE_MAX` (a minified sheet's
+  media query sits past the cut) — and NO read was cut (CRIT_1 must-fix 6: the walk, `ui-files`, a file's `view-size` — a
+  mention may sit in what was not read). `facts: [{code, count, file, line}]`; the CLI's `uiFact[code]`. No script search
+  (cut — CRIT_1: it never changed the answer on 9 repos): a mention only in a `.ts` hook is not seen, so the line says "the
+  view files read"; framer-motion props (`animate={{x}}`) are not motion — the fact is said less, never wrongly.
+- **The marker `_UI checks off: <rule-id> (reason)_`** (1.38 — the registry's `checksOff`, Design-system registry above) —
+  `uiOff(reg)` → {off: Map(id → reason), ignored: [{entry, why, read?}]}: an entry is APPLIED only when its id is a rule's
+  or a project fact's (`UI_RULES` ∪ `UI_FACTS`, at call time — F0c's font-size-viewport is one: CRIT_X D7.4) and it gives a
+  reason in parentheses; else it is not applied and the reports say why — `no-reason`, `unknown-rule`, `unreadable` (not
+  `<id> (<reason>)`: CRIT_1 must-fix 10), `past-bound` (the entry past `DS_MARKER_ENTRIES`, with `read`); an id named twice:
+  the first. An applied rule is hidden PROJECT-WIDE — counted, never listed: the inventory's `off` (the fact too: its count
+  when it would have been said; an off outline-removed counts its unsilenced CANDIDATES — no focus excuse is asked of an off
+  rule, in either report), every feature report's `off` (`offKeys`: the RULES alone; an inline-silenced finding stays
+  `silenced`, the comment first; a finding past a file's cap counted there; the focus search never runs for an off
+  outline-removed) and so finish, which reads that report. `off` / `offIgnored` appear only when the marker holds an entry (a
+  project without one keeps the 1.37 shape). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
+  and each entry not applied (`uiOffIgnored[why]`) after the silenced count. A design-system.md written only for the marker
+  enrols the project in the registry (`ui-design-system`, finish's New-component append — the user docs say so, CRIT_X D3);
+  what-input's modality removals (`[data-whatintent='mouse'] { *:focus { outline: none } }`: no syntax tells a modality
+  scope from a page scope — a name list) are judged as written: the inline `ui-check-off: outline-removed` on that rule is
+  the narrow answer, the marker switches every removal of the project off.
 - **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
   tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
   of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —
@@ -1439,11 +1514,16 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   reading the same views, 1,000 sheets none naming focus: 1.2–1.3× at 48). The sheet of braces is the walker's every block: three allocation-free
   fast paths in styleTokens (`unmaskInterpolation` of a text with no mask, `pageWide` of an empty prelude, `RE_MIXIN` only
   after an `@` — the last a cost guard alone: +45 % on that sheet without it, under the bound) took it from ~5× to ~1.5× —
-  tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus.
-- **Not in 1.37** (cut — CRIT_1, the decisions; review 1's S12, deferred to 1.38: test-harness files — `*.cy.tsx`,
-  `__mocks__/`, `__fixtures__/`, `.storybook/`, `playwright/` — still read as view files): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion` raw kind and
-  `no-reduced-motion` (1.38, on one shared project pass), the `_UI checks off:_` marker (1.38), the `addEventListener` paste
-  form, a `hint` level.
+  tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus. (1.38) Five motion
+  inputs join them — runs of `animate-`, class lists of motion utilities, a transition of endless transform items, a sheet
+  of keyframes, a style object's endless animation list: 0.08–1.34× (`RE_TW_PICK`'s widenings, F0c's `text-[` and these,
+  in ONE set — CRIT_X D4). G1′ (mcp/tests/15-quality-ui-project.js): the project pass — the report with it less the report
+  without — ≤ 1.5 × (a bare read of its files + `uiChecksOf(viewLines)` of the same texts in memory), on 400 real-shaped files
+  ~70 % Bootstrap-like Sass by characters (parsing unminified CSS is a Sass tree's cost), interleaved: 0.96× measured.
+- **Not in 1.37 nor 1.38** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion`
+  raw kind (item 2's), the `addEventListener` paste form, a `hint` level; 1.38's cuts — deprecated uses (1.39), sharing
+  settle's reads, the `:is` / `v-bind:is` narrowing (backlog), the reduced-motion script search, the 5,000 / 32 MB focus bound
+  in the feature report and finish, `DS_FOCUS_*` printed in MB.
 
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
@@ -2381,3 +2461,34 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   cuts), the `@apply` wrapper's own conditional test (an `@apply` in a conditional block holding a `text-` utility drops
   the file's candidates anyway). Two `else`s are equivalent by structure (a vw size in a conditional block, a variant
   `text-[…vw]`: each is dropped by the rule beside it).
+- **1.38.0** (chain P, item 1 of the owner's 1.38 list as CRIT_1 and the DECISIONS cut it — the design was L, ~31 mechanisms
+  across the four items; CUT TO M+) — the project inventory, the fact `no-reduced-motion`, the `_UI checks off:_` marker.
+  The design shared settle's, the exports loop's and the token `head()`'s reads with the pass and threaded deprecated uses
+  through settle (`watch`); CRIT_X D4 measured that sharing saves the bare read alone (parsing is 70–85 % of the pass) and
+  CRIT_1 that the shared budgets let a watch move a verdict (`DS_PASS_STEPS`), so the pass reads on its OWN after scanCode and
+  settle is untouched; deprecated uses went to 1.39. The pass is OPT-IN (the operation's `{uiPass: true}`): the design's
+  `{uiPass: false}` seam would have touched 54 `remeasure(` calls, two child-process probes and the `pair()` helpers (CRIT_1
+  must-fix 9). The feature report and finish keep 48 / 384K (CRIT_1 must-fix 1 over CRIT_X D4 — 5,000 focus-free CSS modules
+  made the feature report 13.5× the no-candidate one, sheets naming `:focus` 12 s at 32 MB parsed), and their unjudged clauses
+  point to the inventory, which judges past 48 under the 1.37 excuse rule at project scope — the design's per-file excuse
+  narrowed the rule (CRIT_1: `reset.css` + a `focus-visible:ring-2` Button gave 1 where every feature report gives 0). The
+  separate reduced-motion script search was cut (it never changed the answer on the nine clones); the fact is said only when
+  no read was cut (CRIT_1 must-fix 6). The marker's unreadable entry has a `why` of its own (CRIT_1 must-fix 10); `past-bound`
+  says the 50-entry bound. Cut too: the `:is` narrowing (backlog), the MB rendering and the `DS_FOCUS_SHEETS` rename.
+  Found while building: a `<style>` block's first rule carries its `<style scoped>` line in its prelude, so `@keyframes` there
+  was missed — `RE_KEYFRAMES` reads the at-rule after a blank or `>` (the 1.37 rules that test `prelude[0] === "@"` — the
+  conditional / print / reduced-motion blocks of font-size-viewport and transition-all — have the same blind spot on a
+  `<style>`'s FIRST block; left as it is: a 1.37 / F0c shape, not this chain's).
+  Measured: on the nine clones no fact (six declare motion — 21–449 lines —, each mentions reduced motion in a view file);
+  cal.com's inventory 59 in 1,117 files (zoom-disabled 3, img-no-alt 2, click-no-keyboard 11, transition-all 43 — the
+  design's numbers), vben 60, shadcn-svelte 65, shadcn-ui 89 (transition-all alone), Bootstrap and Foundation 0. G1′ (the
+  pass ÷ a bare read + the checks in memory): the test's 400 files 0.88–0.96; the clones 0.63–1.36 over two series
+  (a throwaway probe over the designers' clones — shadcn-ui, cal.com, vben, Bootstrap, Breeze); the report with the pass ÷ the 1.37 report: shadcn-ui
+  1.64–1.72, cal.com 1.22–1.23, vben 1.42–1.58, Bootstrap 1.85–2.24, Breeze 2.84–2.88 (+38–255 ms on a 43–303 ms base:
+  small Sass / Blade trees pay the read). Oracle replay — `uiChecksOf` of the clones' 8,478 view / style files (findings,
+  focus, past, cut), their nine project reports at the engine's default, six feature reports and finish parts on copies of
+  three trees: byte-identical against 1.37.0 and the chain's parent, before and after the `<style>` fix. Mutation pass, the
+  list written before the code (MUTATIONS.md, 95) plus two for the fix: 91 killed at first; three wanted a fixture (a
+  limit's first file by path, the one character past the read, the fact under the pass's bound alone — view-size had masked
+  it), now killed; one line deleted (the `<style>` strip's pre-test: no output, no measurable cost); one equivalent — the
+  bound's `>=` as `>` (the read-ahead's slice holds the same 5,000: the 5,001st reads as nothing and cuts one step later).
