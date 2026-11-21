@@ -18,7 +18,11 @@ Phase 6, opt-in.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
   feature's `x/`; a T-ID is read by its number (T-01 = T-1); a file needs a boundary on both sides (US-1.AC-1 is not US-1.AC-10).
-  The task's own IDs fill the budget first, then the file / track ones, in design.md's order.
+  The task's own IDs fill the budget first, then the file / track ones, in design.md's order. A task proving a track's
+  criterion takes that track's marked sections (`trackMarks`); 1.37: a `uiTask()` task — one that builds what the user sees —
+  takes the `[UI]` sections whatever criterion it proves (the usage table, a contract under `## [UI] Component Contracts`,
+  the states), in the same budget, AFTER every section another rule wants (`want()` → 2, read last in design.md's order;
+  1.37.0 review 1): one that does not fit is named, never quoted. A task of the +ui feature that builds no view takes none.
 - **A RED task's brief** (`_Expect: fail_`): its tests heading `BRIEF.testsRed` and definition of done `redRules`; its project-checks
   item is `projectChecks.briefDodRed` (only its new red tests may fail).
 - **`write: true`** writes `.specs/<f>/.execution/` (self-ignoring: `.gitignore` = `*`): the brief regenerated, `ledger.md` created
@@ -38,7 +42,9 @@ Phase 6, opt-in.
   logic, nor a bare folder — a glob of view files, `src/components/*.tsx`, is one); never a red `_Expect: fail_` task
   (it renders nothing yet). On true the controller runs `references/ui-review.md` after the task's `_Verify:_` is green
   and before the code review; its Blockers, and the Majors a fresh reviewer confirms, are fix rounds, and a later round
-  that changes a reviewed view runs it again.
+  that changes a reviewed view runs it again, in verdict mode (1.37): a Blocker / Major that pass reports — a regression or
+  one missed earlier — enters the loop like any other (a Major confirmed first), a minor is deferred; so every finding a
+  tick waits on can be fixed or, past round 5, parked.
 - **The protocol is prose; the engine never dispatches anything** (it stays cross-tool): `references/subagent-execution.md` and the
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
@@ -831,6 +837,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and server templates / Android layouts were misread. **Review 16:** three surfaces still sent every Major straight to a
   fix round; the reference check had no diff range (a committed round passed it); the breaker judged visual findings it
   can't see; an autonomy summary could be logged as "approved".
+- **1.37.0 review 1 (D7, D4)** — the verdict pass (1.37) put a finding "missed earlier" on the ledger only, "never a round of
+  its own", while every tick rule (ui-review.md §5, subagent-execution.md §8) let nothing but a parked finding stay open: a
+  Blocker the pass noticed outside the changed regions could be neither fixed nor ticked past, and the agent's `Open: N` left
+  it out. It goes as a regression does now (ui-review.md §5 rule 5) and `Open: N` counts it; the tick rules were right
+  already. D4: the floor's WCAG 1.4.10 exception read "a box that scrolls inside the page is not the page scrolling" — any
+  box; it is W3C's again, content that needs a two-dimensional layout for its meaning or use.
 - **1.31** — the brief's `preflight` key and the pre-flight (from google/elephant-goldfish-model's zero-decision rule): a
   brief that left a design choice open was found only when the implementer came back NEEDS_CONTEXT — a dispatch spent — or
   not at all when it chose alone.
@@ -875,6 +887,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   in prose in the same places — "if you did one after the review, run it again". D3-2: the branch review reads
   `merge-base..HEAD`, so spec-review.md (branch) and spec-finish.md say to commit the feature's work before it (inline work
   is committed only when the user asks — executeTask.md). spec-review.md keeps round 2's ledger path.
+- **1.37** — the `[UI]` sections reached a brief only through a `[UI]` criterion (`trackMarks`): a task that builds a
+  component under a core criterion, its file named by no design section, read no contract and no states. `want()` takes
+  them on a `uiTask()` task too, within `BRIEF_DESIGN_BUDGET` — the cut form of item 4's design (its own contract quote in
+  the brief, through `briefDesignSystem`, would have repeated what Design context already carries and is null without a
+  registry).
+- **1.37.0 review 1** (RB-2, MEDIUM) — that line put the `[UI]` sections in the budget loop like any other wanted one, in
+  design.md's order: on a +ui +obs feature (the scaffold puts `[OBS]` after `[UI]`) or with a trailing `## File Structure`,
+  the [UI] block filled the 4,000 characters and the section the task's metrics or its own file asked for — the one a 1.36
+  brief quoted — was only named. `want()` now ranks (1: every earlier rule, 2: the uiWork line alone) and the budget reads
+  the task's IDs first, then the other rank-1 sections, then the rank-2 ones, each group in design.md's order. Fixtures: the
+  reviewer's two shapes (08-tasks); the mutations: quality.md → History → 1.37.0 review 1.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

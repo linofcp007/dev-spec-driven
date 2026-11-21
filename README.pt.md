@@ -131,7 +131,15 @@ registo (um componente que o registo não lista, ou um `ButtonV2` ao lado de um 
 ser construído e, nos tamanhos m / l, a aprovação do design recusa-o), o brief da tarefa entrega ao implementador os
 componentes a usar, e o `finish` avisa das cores e tamanhos fixos nos ecrãs da feature (onde o registo tem tokens) e
 acrescenta ao registo os componentes novos dela. O `dev-spec design-system` mostra onde o registo e o código se
-afastaram.
+afastaram. O `dev-spec design-system <feature>` (`spec_scan {designSystem: true, name}`) corre também as
+verificações de interface sobre os ficheiros de vista e de estilos da feature — defeitos que nenhum gosto desculpa, como o
+zoom bloqueado, uma imagem sem texto alternativo ou um clique a que o teclado não chega: numa feature +ui são mais um
+aviso do `finish`, com ou sem registo, nunca um bloqueio, e um comentário `ui-check-off: <rule-id>` com o motivo, na
+linha do problema ou na de cima, silencia-o. Uma linha do registo marcada `_Deprecated: use DataGrid_` retira o seu componente: o `doctor`
+avisa quando um design ainda o reutiliza ou estende, e indica o que o substitui. Uma tarefa +ui que muda o que se vê tem
+uma revisão visual (exceto nos tamanhos xs / s) — capturas de ecrã do que foi construído comparadas com a referência do
+design por um revisor que só vê as imagens —, e uma vista sem referência é avaliada no mínimo de acessibilidade
+(320 px de largura, texto a 200 %, foco visível), nunca dada como igual ao design.
 
 Um track pode ser acrescentado ou desligado mais tarde (`/spec-change <feature> track +sec`). Os tracks da tua equipa:
 `/spec-setup tracks` — um pack de exemplo para copiar é o `examples/track-packs/mobile`. Um bug segue pelo `/spec-bugfix`
@@ -316,7 +324,7 @@ dev-spec-driven/                      ← raiz do plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 ferramentas + prompts + recursos, sem dependências)
 │   ├── servers.json                  ← registo MCP do plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← a fachada do motor (o único objeto que o servidor, a CLI e os hooks carregam)
-│   ├── lib/engine/                   ← o motor: 27 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
+│   ├── lib/engine/                   ← o motor: 28 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← conteúdo localizado (en · pt · es) + a derivação pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (um por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (a tua chave de API; --dry-run offline)

@@ -39,7 +39,7 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
   branchView, evidenceMode, approvalGuardLevel; // branchView: 1.25 (create --branch); the last two: 1.25.1 (observed-unguarded)
 let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the tasks gate, the execution gate, its live views)
 let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
-let designSystemRegistry, designSystemCheck, designSystemGated; // quality.js — the design-system registry's check (1.35)
+let designSystemRegistry, designSystemCheck, designSystemGated, designSystemDeprecatedCheck; // quality.js — the design-system registry's checks (1.35; 1.37 ui-deprecated)
 let portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext, portCheckNumber; // port.js — +port's fence (1.36; portSchedule, portRecheckNext: review 1; portCheckNumber: review 2)
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.reviewModels)
@@ -71,7 +71,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
-  designSystemRegistry, designSystemCheck, designSystemGated, reviewModelsSetting, fastCheckOf, guardLevel, protectedTestsDoctor,
+  designSystemRegistry, designSystemCheck, designSystemGated, designSystemDeprecatedCheck, reviewModelsSetting, fastCheckOf, guardLevel, protectedTestsDoctor,
   portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext, portCheckNumber } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
@@ -875,6 +875,8 @@ const designSystemSettled = (c) => {
   const a = c.approvals && c.approvals.design;
   return isRecord(a) && a.designSystem === true && !(Array.isArray(a.failing) && a.failing.includes("ui-design-system")) && !c.changedArts.includes("design.md");
 };
+// a plain +ui feature's design, no later phase's template: what the registry's checks read (ui-design-system, ui-deprecated)
+const uiDesigned = (c) => designed(c) && c.kind === "feature" && c.tracks.includes("ui") && !c.laterFiles.includes("design.md");
 const reproFilled = (c) => bugSectionFilled(c.read("bug.md"), REPRO_SYN);
 const rootCauseFilled = (c) => bugSectionFilled(c.read("bug.md"), ROOT_CAUSE_SYN);
 const sectionLabel = (c, s) => `${c.fm.sectionNames[s.section] || s.section}:${c.fm.sectionStatus[s.status] || s.status}`;
@@ -1093,7 +1095,7 @@ const DOCTOR_CHECKS = [
   // an approval — a finish adds rows, a team renames a component —, so a design cleanly approved under the check and unchanged
   // since (designSystemSettled) only WARNS: a phase signed off is never failed by another feature's finish. The gate stays
   // strict: an edited design is re-approved against the registry of the day.
-  { id: "ui-design-system", phase: 2, applies: (c) => designed(c) && c.kind === "feature" && c.tracks.includes("ui") && !c.laterFiles.includes("design.md"),
+  { id: "ui-design-system", phase: 2, applies: uiDesigned,
     run: (c) => designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, approval: c.approvals && c.approvals.design, slug: c.slug,
       gate: designSystemGated(c.kind, c.size) && !designSystemSettled(c) ? c.size : null }),
     gate: { design: (c) => {
@@ -1101,6 +1103,12 @@ const DOCTOR_CHECKS = [
       const r = designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, gate: c.size, slug: c.slug }); // the approval being made: never legacy
       return [[r.status !== "fail", r.detail]];
     } } },
+  // 1.37 a Reuse / Extend row naming a component the registry marks `_Deprecated: use X_` (quality.js designSystemDeprecatedCheck):
+  // a WARN naming the replacement, silent when the row's notes name it. Only while the registry holds such a row, and never on a
+  // finished feature (what it signed off and built is history; an archived one never reaches doctor). Never a fail, never in
+  // GATES, no stamp — it is about the registry of today, not a rule an approval was held to: spec_upgrade lists it (warnings).
+  { id: "ui-deprecated", phase: 2, applies: (c) => uiDesigned(c) && !isRecord(c.state.finished) && !!c.designSystem && c.designSystem.deprecated.size > 0,
+    run: (c) => designSystemDeprecatedCheck(c.designActive, c.lang, { registry: c.designSystem }) },
   // 1.36 +port (engine/port.js): the fence the plan draws — the baseline and the differential check, each with a runnable _Verify:_ (a
   // FAIL at size m / l, where the tasks approval refuses it — designReuseGated —, unless the tasks are approved already; a warn at s / no
   // size); a task listed before the baseline, a _Depends:_ that never reaches it (warns). Not while tasks.md is a later phase's template.

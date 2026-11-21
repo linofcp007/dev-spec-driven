@@ -60,6 +60,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   dupes.js                     the duplicate-code detector (duplicationReport, duplicateRuns): spec_scan {duplicates}, finish — LAZY
   design-system.js             the design system against the code (designSystemReport, designSystemSeed, designSystemFinish):
                                spec_scan {designSystem}, the seeded registry, finish — LAZY (the registry's reader: quality.js)
+  ui-checks.js                 the UI checks (1.37: uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass): a +ui feature's
+                               anti-patterns — the feature report's `uiChecks`, finish's warning — LAZY (quality.md → UI checks)
   import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering —
                                LAZY (the tool lists IMPORT_TOOLS / STEERING_IMPORT_TOOLS: scaffold.js)
 mcp/lib/i18n.js · i18n/        the localized content: the facade (the tables, LAYOUTS — the structure every language shares)
@@ -124,7 +126,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   `approvalGuardDecision`'s CLI path, `engineVersion`'s package.json). Every `mcp/lib` source requires only Node core or a
   relative file.
 - **The lazy tier (1.30.1) — the second way to reach a name.** `LAZY` lists the modules no hook and no frequent call needs —
-  dupes.js, design-system.js (1.35) and import/ (~15 ms of every engine load until then) —, loaded on the first call of one
+  dupes.js, design-system.js (1.35), ui-checks.js (1.37) and import/ (~15 ms of every engine load until then) —, loaded on the first call of one
   of `LAZY_ENTRIES` (`duplicateRuns`, `duplicationReport`, `designSystemReport`, `designSystemSeed`, `designSystemFinish`,
   `importSpec`, `planPaths`): the tier's functions an eager module links or the facade
   takes. Until then `E` holds a STUB of each (a function of the same name that loads the tier, then calls the real one), so the
@@ -153,7 +155,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
   costs ~0.65 ms before any compile (the open is the expensive part): 25 modules loaded with the engine (+ dupes.js,
-  design-system.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
+  design-system.js, ui-checks.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
   the module of the concept; a new file must earn its load cost. The facade's first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
   loads SLOWER with it. Measure by interleaving the variants in fresh processes, p50 + spread — never one run. On a slow file
@@ -268,6 +270,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   with port.js, the other 1.36 module — The module rule, below).
 - **1.36.0 review 2** — the eager count (Few, cohesive files) and the entry above still said 24, protect.js alone: 25 with
   port.js; mcp/tests/17-docs-identifiers.js now holds the eager count to engine/index.js `MODULES`, as it holds README's tree.
+- **1.37** — engine/ui-checks.js, the UI checks (quality.md → UI checks): LAZY after design-system.js — only the feature
+  report and finish read it, never a hook — and a module of its own rather than ~500 more lines in design-system.js (3,400).
+  16-conventions' lazy-tier test now counts `LAZY`'s own files rather than a list of names.
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):

@@ -9,9 +9,10 @@
  *     Sass variables and JSON leaves) the code holds, against the registry — what it lacks, the rows naming a code file of the
  *     project that is gone;
  *   - the feature report: its [UI] Design System Usage rows against the registry, and the RAW values in its view files — a
- *     hard-coded colour, a pixel spacing or font size;
+ *     hard-coded colour, a pixel spacing or font size — and its UI checks (1.37, engine/ui-checks.js);
  *   - the seed: the registry stub with the code's components and tokens in place of its slot rows;
- *   - finish: the raw values as a warning, and a READY written finish adds the feature's New components to the registry.
+ *   - finish: the raw values and the UI checks as warnings, and a READY written finish adds the feature's New components to the
+ *     registry.
  * Heuristic, bounded (a file cap, a bounded read of each file, linear in what it reads), read-only except the registry rows finish
  * appends, deterministic. What it does NOT read: tokens kept in JS / TS / YAML files (listed as sources, their values unread),
  * a size in a JSX `style={{…}}` object, a component in a lower-case .js file — and, out of a token file, any value that has
@@ -26,12 +27,13 @@ const i18n = require("../i18n.js");
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
   isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
-  stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep;
+  stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep,
+  uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
   isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
   stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns,
-  fenceStep } = E); }
+  fenceStep, uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
@@ -1704,18 +1706,38 @@ const RE_SELF_RULE = /^&[^\s>+~]*$/; // `&.dark`, `&[data-theme=dark]` — never
 const RE_MIXIN = /^@mixin\s+([\w-]+)/, RE_INCLUDE = /^\s*@include\s+([\w-]+)/;
 const RE_LESS_MIXIN = /^\s*[.#]/; // a Less statement that is a mixin's definition or call: `.button-variant(`, `#ns > .mixin(`
 function pageWide(prelude, parent) {
+  if (prelude === "") return false; // (no selector: never the page's — a sheet of braces asks it of every `{`)
   if (prelude[0] === "@") return RE_THEME_RULE.test(prelude) || (parent != null && parent.global);
   if (prelude[0] === "&") return parent != null && parent.global && prelude.split(",").some((x) => RE_SELF_RULE.test(x.trim()));
   return prelude.split(",").some((s) => RE_ROOT_SELECTOR.test(s.trim()));
 }
-function styleTokens(text, rel) {
+// (a text holding no masked interpolation is returned as it is: an event per `{` of a sheet of braces splits nothing — 1.37)
+const unmaskInterpolation = (s) => (s.includes(INTERPOLATION[0]) || s.includes(INTERPOLATION[1]) ? s.split(INTERPOLATION[0]).join("{").split(INTERPOLATION[1]).join("}") : s);
+// on (1.37, optional): the walk's EVENTS — the ONE CSS block walker, for a reader of a sheet's structure (the UI checks: a rule's
+// selector, what it declares, the blocks around it), never a second walker. Each handler is optional and is given a fresh
+// object of plain values: nothing it does reaches the tokens. Text is as written (a Sass interpolation's braces restored),
+// comments out and a quoted string holding no delimiter, as for the tokens; line: 1-based, where the event happens.
+//   on.block({ id, parent, prelude, line, global }) — a `{` opened block `id` (1, 2… in the file's order) inside `parent`
+//     (0: the top level); prelude: what stands before the `{` since the last statement ended, over lines, its last DS_PRELUDE
+//     characters; global: pageWide's answer when it opened.
+//   on.statement({ text, block, line, from }) — a statement read to its end: a `;` outside parentheses, or a `}`; text: its
+//     lines joined by a blank (each one's own indentation kept), trimmed, its last DS_PRELUDE characters, never blank; block:
+//     the innermost open block (0: none); from: the line its text starts on (`transition:` then its items below: the first).
+//     A `;` inside parentheses (a Less mixin's parameters, an unquoted data: URL) ends none — and what stands before it is
+//     not kept (the walker keeps none); after a token declaration left open at its line's end, the next statement starts
+//     below it (the walker lists that declaration by its name).
+//   on.close({ id, line }) — a `}` closed block `id` (a stray `}` closes none).
+// An indented .sass file has no braces: no block, and a statement only at a `;`.
+function styleTokens(text, rel, on) {
   const plainCss = /\.css$/i.test(rel), indented = RE_INDENTED_EXT.test(rel), less = /\.less$/i.test(rel);
   const decl = less ? RE_TOKEN_DECL_LESS : RE_TOKEN_DECL;
   const out = [];
   const st = { block: false, html: false };
   const blocks = []; // the open blocks, innermost last: { id, global }
   let opened = 0; // (a block's id: its place among the blocks the file opens)
+  let ln = 0; // the line being read, 1-based (the events')
   let prelude = ""; // a block's prelude being read: it may start on the lines above its `{` (`:root,` then `.light {`)
+  let since = 0; // (the line the pending text above began on: a statement's `from`)
   // A declaration no `;` / `}` ends on its line goes on below (a multi-line shadow, a Sass map): listed by its NAME — its
   // first line alone is no value. Two things end one without a `;`: the line's end in an indented file, and the block's end —
   // a block's last declaration needs none (`--gap: 8px` then `}` — or a lone `;` — on the next line with text, or the file's
@@ -1742,7 +1764,7 @@ function styleTokens(text, rel) {
   const declare = (piece, closed) => {
     const m = decl.exec(piece);
     if (!m) return null;
-    let value = piece.slice(m[0].length).split(INTERPOLATION[0]).join("{").split(INTERPOLATION[1]).join("}").trim();
+    let value = unmaskInterpolation(piece.slice(m[0].length)).trim();
     for (const flag of SASS_FLAGS) if (value.endsWith(flag)) value = value.slice(0, -flag.length).trim();
     const whole = value !== "" && !value.endsWith(","); // (of an open declaration: what its line holds may be all of it)
     const block = blocks.length ? blocks[blocks.length - 1] : null;
@@ -1752,6 +1774,7 @@ function styleTokens(text, rel) {
     return entry;
   };
   for (const raw of text.split(/\r?\n/)) {
+    ln++;
     // (the WHOLE line: a minified token file is one line — its length is the file's read, and every step here is linear)
     const line = withoutComments(raw, st, { slashSlash: !plainCss, sheet: true });
     const trimmed = line.trim();
@@ -1781,18 +1804,26 @@ function styleTokens(text, rel) {
       if (ch === "{") {
         const text0 = (prelude + " " + piece).trim().slice(-DS_PRELUDE);
         blocks.push({ id: ++opened, global: pageWide(text0, top) });
-        const mixin = RE_MIXIN.exec(text0);
+        if (on && on.block) on.block({ id: opened, parent: top ? top.id : 0, prelude: unmaskInterpolation(text0), line: ln, global: blocks[blocks.length - 1].global });
+        const mixin = text0[0] === "@" ? RE_MIXIN.exec(text0) : null;
         if (mixin) mixins.set(mixin[1], opened);
         prelude = "";
         continue;
+      }
+      // (the events' statement: a `;` outside parentheses or a `}` ends one — what is pending from the lines above, and the piece)
+      if (on && on.statement && (ch === "}" || (ch === ";" && paren === 0))) {
+        const whole = (prelude + " " + piece).trim().slice(-DS_PRELUDE);
+        if (whole) on.statement({ text: unmaskInterpolation(whole), block: top ? top.id : 0, line: ln, from: prelude.trim() ? since : ln });
       }
       const entry = within ? null : declare(piece, ch !== "");
       // (a mixin a page-wide block includes declares for the page: `:root { @include light-theme; }`)
       const include = !entry && top != null && top.global ? RE_INCLUDE.exec(piece) : null;
       if (include && mixins.has(include[1])) themes.add(mixins.get(include[1]));
-      if (ch === "}") blocks.pop();
+      if (ch === "}") { const closed = blocks.pop(); if (closed && on && on.close) on.close({ id: closed.id, line: ln }); }
       // (a line that ends on neither is a selector going on — or a value's further line: a `;` / `}` drops it)
-      prelude = ch === "" && !entry ? (prelude + " " + piece).trim().slice(-DS_PRELUDE) : "";
+      const pending = ch === "" && !entry ? (prelude + " " + piece).trim().slice(-DS_PRELUDE) : "";
+      if (prelude === "" && pending !== "") since = ln;
+      prelude = pending;
     }
   }
   settle(true);
@@ -2950,12 +2981,44 @@ const RE_STYLE_CLOSE = /<\/style\s*>/i;
 // The `>` that ends a tag, from `from` on (never an arrow's: `onLoad={() => x}`) → its index, -1 when the line holds none.
 const styleTagEnd = (s, from) => { let g = s.indexOf(">", from); while (g > 0 && s[g - 1] === "=") g = s.indexOf(">", g + 1); return g; };
 const isQuote = (c) => c === "\"" || c === "'" || c === "`";
-function rawValuesOf(text, rel) {
-  const out = [], seen = new Set();
+// A view / style file's lines as its readers read them (1.37: the ONE walk — rawValuesOf's, and the UI checks') → yields, line
+// by line, { n (1-based), src (the line, cut at DS_LINE_MAX), l (src without its comments — withoutComments, its state carried
+// from line to line), css (a stylesheet's line: a .css / .scss… file's, or one inside a <style> block of a markup or JSX file,
+// its opening line and its closing one included), cut (the line was longer: src is its head — the UI checks say so) }. A
+// GENERATOR: a reader that stops early reads no further line — rawValuesOf stops at DS_RAW_PER_FILE values, and a
+// 20,000-line sheet costs it its first few hundred lines.
+function* viewLines(text, rel) {
   const sheet = RE_STYLE_EXT.test(rel), plainCss = /\.css$/i.test(rel);
   const open = sheet ? null : RE_STYLE_BLOCK_EXT.test(rel) ? RE_STYLE_OPEN : RE_STYLE_OPEN_JSX;
   const st = { block: false, html: false };
   let inStyle = false, inTag = false; // inside a <style> block of a markup or JSX file · inside its opening tag (no `>` yet)
+  const lines = text.split(/\r?\n/);
+  for (let n = 0; n < lines.length; n++) {
+    const cut = lines[n].length > DS_LINE_MAX, src = cut ? lines[n].slice(0, DS_LINE_MAX) : lines[n];
+    let block = inStyle, l;
+    // the opening tag from `from` on: its `>` ends it — `/>` (a self-closing <style … />) and there is no block
+    const tag = (s, from) => { const end = styleTagEnd(s, from); if (end !== -1) { inTag = false; if (s[end - 1] === "/") inStyle = block = false; } };
+    if (!open || inStyle) {
+      // a stylesheet's line, or one inside a <style> block: its opening tag may still be open, `</style>` ends the block
+      if (open && inTag) tag(src, 0);
+      if (open && inStyle && RE_STYLE_CLOSE.test(src)) inStyle = false;
+      l = withoutComments(src, st, { slashSlash: !plainCss, sheet: sheet || block });
+    } else {
+      // code or markup: its comments first — a <style> named in one (`// injects a <style> tag`, `{/* the <style> */}`,
+      // `<!-- the <style> below -->`) opens nothing (review 5: read on the raw line, it blinded the rest of the file)
+      l = withoutComments(src, st, { slashSlash: !plainCss, sheet: false });
+      const m = open.exec(l);
+      if (m) {
+        inStyle = inTag = block = true;
+        tag(l, m.index + 6);
+        if (inStyle && RE_STYLE_CLOSE.test(l)) inStyle = false;
+      }
+    }
+    yield { n: n + 1, src, l, css: sheet || block, cut };
+  }
+}
+function rawValuesOf(text, rel) {
+  const out = [], seen = new Set();
   const add = (line, kind, value) => {
     const k = line + ":" + value;
     if (seen.has(k) || out.length >= DS_RAW_PER_FILE) return;
@@ -2995,32 +3058,12 @@ function rawValuesOf(text, rel) {
       }
     }
   };
-  const lines = text.split(/\r?\n/);
-  for (let n = 0; n < lines.length && out.length < DS_RAW_PER_FILE; n++) {
-    const src = lines[n].length > DS_LINE_MAX ? lines[n].slice(0, DS_LINE_MAX) : lines[n];
-    let block = inStyle, l;
-    // the opening tag from `from` on: its `>` ends it — `/>` (a self-closing <style … />) and there is no block
-    const tag = (s, from) => { const end = styleTagEnd(s, from); if (end !== -1) { inTag = false; if (s[end - 1] === "/") inStyle = block = false; } };
-    if (!open || inStyle) {
-      // a stylesheet's line, or one inside a <style> block: its opening tag may still be open, `</style>` ends the block
-      if (open && inTag) tag(src, 0);
-      if (open && inStyle && RE_STYLE_CLOSE.test(src)) inStyle = false;
-      l = withoutComments(src, st, { slashSlash: !plainCss, sheet: sheet || block });
-    } else {
-      // code or markup: its comments first — a <style> named in one (`// injects a <style> tag`, `{/* the <style> */}`,
-      // `<!-- the <style> below -->`) opens nothing (review 5: read on the raw line, it blinded the rest of the file)
-      l = withoutComments(src, st, { slashSlash: !plainCss, sheet: false });
-      const m = open.exec(l);
-      if (m) {
-        inStyle = inTag = block = true;
-        tag(l, m.index + 6);
-        if (inStyle && RE_STYLE_CLOSE.test(l)) inStyle = false;
-      }
-    }
+  for (const { n, l, css } of viewLines(text, rel)) {
+    if (out.length >= DS_RAW_PER_FILE) break; // (the early exit: the generator reads no further line)
     if (!l.trim()) continue;
-    if (sheet || block || RE_DECL_LINE.test(l)) { styleLine(l, n + 1); continue; }
-    colours(l, n + 1, true);
-    for (const m of l.matchAll(RE_TW_SIZE)) add(n + 1, "size", m[0]);
+    if (css || RE_DECL_LINE.test(l)) { styleLine(l, n); continue; }
+    colours(l, n, true);
+    for (const m of l.matchAll(RE_TW_SIZE)) add(n, "size", m[0]);
   }
   return out;
 }
@@ -3114,7 +3157,8 @@ function pendingNew(projectDir) {
 // inSync, scanned: {files}, limits, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} |
 // null: its design names no row), problems ([{code, name, near?, text}] — doctor's ui-design-system findings), viewFiles, raw
 // (the first DS_LIST: [{file, line, kind: color | size, value, token? (a registry token of that colour)}]), counts: {color,
-// size}, total, newComponents ([{name, path, registered}]), scanned, limits, truncated }. Stable keys, English; the CLI
+// size}, total, uiChecks (1.37 — {findings (the first DS_LIST: [{rule, level, file, line, value}]), total, byRule, silenced, limits}:
+// engine/ui-checks.js), newComponents ([{name, path, registered}]), scanned, limits, truncated }. Stable keys, English; the CLI
 // renders it.
 // `limits`: the bounds that CUT what was read — [{code, read, file?}], code: files (the walk's file cap) · token-files (a
 // token file found the DS_TOKEN_FILES sources full) · token-candidates (files named like a token file left unread past
@@ -3169,7 +3213,8 @@ function designSystemReport(projectDir, opts = {}) {
     scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
 }
 // The feature's part: its usage rows against the registry, the raw values in its view files (its _Implements:_ view / style
-// files, token files and tests aside), its New components and where each lives.
+// files, token files and tests aside), its UI checks (the same text read once feeds both — and its token files, read for the
+// checks alone), its New components and where each lives.
 function featureReport(projectDir, root, f, reg, scan) {
   const lang = featureLang(projectDir, f.slug);
   const Q = i18n.msg(lang).quality;
@@ -3191,10 +3236,13 @@ function featureReport(projectDir, root, f, reg, scan) {
   // (…and never the bounds of what the PROJECT report lists: the tokens read, the component files read for their exports)
   const limits = scanLimits(scan).filter((l) => l.code !== "tokens" && l.code !== "component-files" && l.code !== "workspace-manifests");
   let viewFiles = 0;
+  const checked = [], tokenRels = []; // uiChecksOf of each file read: {rel, over, findings, focus, past, cut} · the feature's token files
+  // a file's first DS_READ_CHARS characters → { text, over (it holds more: one character further is asked for) }
+  const readView = (rel) => { const t = readFileHead(byRel.get(rel) || path.join(root, rel), DS_READ_CHARS + 1); const over = t != null && t.length > DS_READ_CHARS; return { text: over ? t.slice(0, DS_READ_CHARS) : t, over }; };
   for (const rel of mine) {
-    if (tokenFiles.has(fold(rel)) || isTokenFile(rel)) continue;
+    if (tokenFiles.has(fold(rel)) || isTokenFile(rel)) { tokenRels.push(rel); continue; }
     if (viewFiles >= DS_VIEW_FILES) { limits.push({ code: "view-files", read: DS_VIEW_FILES }); break; }
-    const text = readFileHead(byRel.get(rel) || path.join(root, rel), DS_READ_CHARS);
+    const { text, over } = readView(rel);
     if (text == null) continue;
     viewFiles++;
     if (RE_EXPORTS_EXT.test(rel) && componentOf(rel)) exportsOf.push([rel, exportedComponents(text).names]);
@@ -3203,7 +3251,25 @@ function featureReport(projectDir, root, f, reg, scan) {
       const token = v.kind === "color" ? tokenOf.get(colorKey(v.value)) : undefined;
       if (raw.length < DS_LIST) raw.push(Object.assign({ file: rel, line: v.line, kind: v.kind, value: v.value }, token ? { token } : {}));
     }
+    checked.push(Object.assign({ rel, over }, uiChecksOf(viewLines(text, rel), rel)));
   }
+  // (1.37) its token files — a globals.css the feature edits may add `*:focus { outline: none }` — are read for the UI checks
+  // alone: never for raw values (a token file declares the values), never counted in viewFiles, within DS_VIEW_FILES files read
+  let checkCut = limits.length > 0 && limits[limits.length - 1].code === "view-files";
+  for (const rel of tokenRels) {
+    if (checked.length >= DS_VIEW_FILES) { checkCut = true; break; }
+    const { text, over } = readView(rel);
+    if (text != null) checked.push(Object.assign({ rel, over }, uiChecksOf(viewLines(text, rel), rel)));
+  }
+  // (an outline removal stands only while no focus style exists: in the files read, else in the project's stylesheets — ALL of
+  // them, never the name-ranked token candidates; read only when a candidate asks — CRIT_1 must-fix 4)
+  const readRels = new Set(checked.map((c) => c.rel));
+  const uiChecks = uiChecksReport(checked, () => uiFocusPass(scan.views.filter((x) => RE_STYLE_EXT.test(x.rel) && !readRels.has(x.rel))), DS_LIST);
+  // (the bounds of this read, before the checks' own — review 1 of 1.37: each says what it cut, with a count and the first
+  // file: view-size, a file longer than DS_READ_CHARS; line-length, the lines viewLines cut at DS_LINE_MAX)
+  const named = (code, read, list) => (list.length ? [{ code, read, count: list.reduce((a, x) => a + x[1], 0), file: list[0][0] }] : []);
+  uiChecks.limits.unshift(...(checkCut ? [{ code: "view-files", read: DS_VIEW_FILES }] : []), ...named("view-size", DS_READ_CHARS, checked.filter((c) => c.over).map((c) => [c.rel, 1])),
+    ...named("line-length", DS_LINE_MAX, checked.filter((c) => c.cut.lines).map((c) => [c.rel, c.cut.lines])));
   const own = new Map();
   for (const rel of mine) { const c = componentOf(rel); if (c && !own.has(c.key)) own.set(c.key, rel); }
   for (const [rel, names] of exportsOf) for (const n of names) { const k = dsKey(n); if (k && !own.has(k)) own.set(k, rel); }
@@ -3217,7 +3283,7 @@ function featureReport(projectDir, root, f, reg, scan) {
   return { ok: true, feature: f.slug, registry: registryView(root, reg),
     usage: usage && usage.rows.length ? { reuse: usage.rows.filter((r) => r.kind === "reuse").length, extend: usage.rows.filter((r) => r.kind === "extend").length, new: newComponents.length } : null,
     problems: find ? find.problems.map((p) => Object.assign({}, p, { text: Q.dsProblem[p.code](p.name, p.near) })) : [],
-    viewFiles, raw, counts, total: counts.color + counts.size, newComponents, scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
+    viewFiles, raw, counts, total: counts.color + counts.size, uiChecks, newComponents, scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
 }
 
 // --- the seed: steering_scaffold design-system.md ------------------------------------------------------------------------------
@@ -3320,22 +3386,24 @@ function registerComponents(projectDir, list) {
   }, () => []);
   return Array.isArray(done) ? done : [];
 }
-// spec_finish's part for a +ui feature of a project that keeps a registry → null (not one) | { raw: {total, counts, top (the
-// first 3)}, tokens (does the registry hold tokens or name token files — only then is a raw value something to replace),
-// registered (the New components this call added to the registry — only a READY written finish adds them), unregistered (New
-// components not in the registry yet) }.
+// spec_finish's part for a +ui feature → null (not one) | { uiChecks (1.37, with or without a registry: the warn-level UI checks
+// of its files, unsilenced — {total, byRule, top (the first 3), limits (the report's)}), registered (the New components this call added to the
+// registry — only a READY written finish adds them), unregistered (New components not in the registry yet) — both [] without
+// a registry —, and with one: raw {total, counts, top (the first 3)}, tokens (does the registry hold tokens or name token files —
+// only then is a raw value something to replace) }.
 function designSystemFinish(projectDir, slug, opts = {}) {
   const f = existingFeature(projectDir, slug);
   if (!f.ok || !detectTracks(f.dir).includes("ui")) return null;
   const reg = designSystemRegistry(specsRoot(projectDir));
-  if (!reg) return null;
   const root = path.resolve(projectDir);
   const rep = featureReport(projectDir, root, f, reg, scanCode(root, false));
+  const uiChecks = uiFinishChecks(rep.uiChecks);
+  if (!reg) return { uiChecks, registered: [], unregistered: [] };
   const pending = rep.newComponents.filter((c) => !c.registered);
   let registered = [];
   if (opts.write && opts.ready && pending.length) registered = registerComponents(projectDir, pending.map((c) => ({ name: c.name, key: dsKey(c.name), path: c.path, feature: f.slug })));
-  return { raw: { total: rep.total, counts: rep.counts, top: rep.raw.slice(0, 3) }, tokens: reg.total.tokens > 0 || reg.sources.length > 0, registered,
+  return { raw: { total: rep.total, counts: rep.counts, top: rep.raw.slice(0, 3) }, tokens: reg.total.tokens > 0 || reg.sources.length > 0, uiChecks, registered,
     unregistered: pending.map((c) => c.name).filter((n) => !registered.includes(n)) };
 }
 
-module.exports = { designSystemReport, designSystemSeed, designSystemFinish, __link };
+module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, styleTokens, opensString, quoteEnd, RE_STYLE_EXT, __link };

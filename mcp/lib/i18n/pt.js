@@ -79,8 +79,8 @@ const text = {
       ["Limites de Taxa e Quotas", "- Limites por cliente / chave / inquilino e as suas janelas · 429 com Retry-After e os cabeçalhos RateLimit · quotas e como um cliente sabe quanto ainda lhe resta · o que fica isento."],
     ],
     ui: [
-      ["Uso do Design System", "- Os componentes do design system usados e os tokens (cor, espaçamento, tipografia) · cada componente novo: porque os existentes não servem e como entra no sistema (documentado, revisto, na biblioteca de componentes) · nenhum estilo avulso nem cor fixa no código.\n- Uma linha por componente, verificada contra o registo (.specs/steering/design-system.md — a verificação ui-design-system do spec_doctor): Reutilizar = um que o registo lista, usado tal como está · Estender = uma variante nova de um que ele lista · Novo = nenhum dos listados serve — com a razão; entra no registo quando a feature é concluída. Sem nenhum componente: uma só linha em vez da tabela, n/a — a razão.\n\n| Tipo | Componente | Porquê / notas |\n|---|---|---|\n| Reutilizar | [componente que o registo lista] | [o que faz nesta vista] |\n| Novo | [componente novo] | [a razão de nenhum dos listados servir] |"],
-      ["Estados da Interface", "- Por vista, uma matriz de estados: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso — o que o utilizador vê e pode fazer em cada um; validação de formulários (no campo + um resumo, os valores mantidos).\n- A referência com que cada vista é construída: uma exportação do design ou um protótipo HTML que o utilizador aprovou — um por estado quando diferem — e o seu caminho · a revisão visual compara o que foi construído com ela, estado a estado (references/ui-review.md)."],
+      ["Uso do Design System", "- Os componentes do design system usados e os tokens (cor, espaçamento, tipografia) · cada componente novo: porque os existentes não servem e como entra no sistema (documentado, revisto, na biblioteca de componentes) · nenhum estilo avulso nem cor fixa no código.\n- Uma linha por componente, verificada contra o registo (.specs/steering/design-system.md — a verificação ui-design-system do spec_doctor): Reutilizar = um que o registo lista, usado tal como está · Estender = uma variante nova de um que ele lista · Novo = nenhum dos listados serve — com a razão; entra no registo quando a feature é concluída. Sem nenhum componente: uma só linha em vez da tabela, n/a — a razão.\n\n| Tipo | Componente | Porquê / notas |\n|---|---|---|\n| Reutilizar | [componente que o registo lista] | [o que faz nesta vista] |\n| Novo | [componente novo] | [a razão de nenhum dos listados servir] |\n\n- Uma linha Novo / Estender tem contrato — estados, teclado, papel / nome, variantes numa só prop enumerada, slots — numa secção opcional `## [UI] Contratos de Componentes`."],
+      ["Estados da Interface", "- Por vista, uma matriz de estados: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso — o que o utilizador vê e pode fazer em cada um; validação de formulários (no campo + um resumo, os valores mantidos).\n- A referência com que cada vista é construída: uma exportação do design ou um protótipo HTML que o utilizador aprovou — um por estado quando diferem — e o seu caminho · a revisão visual compara o que foi construído com ela, estado a estado (references/ui-review.md).\n- Uma linha de pior caso: cada campo no seu extremo realista (valor mais longo, 0 / 1 / milhares, sem imagem, o idioma mais longo ou RTL) · o que quebra ou trunca · a sua captura."],
       ["Acessibilidade", "- WCAG 2.2 AA: operável com o teclado e ordem de foco visível · nome / etiqueta em cada controlo · contraste (4,5:1 no texto, 3:1 na interface) · tamanho dos alvos (24×24 px) · movimento reduzido · erros identificados em texto · como é testado (uma verificação automática + uma passagem manual com teclado e leitor de ecrã)."],
       ["Design Responsivo e i18n", "- Breakpoints e como o layout se adapta · expansão do texto (+30–40 %) · layouts da direita para a esquerda · formatos do locale (datas, números, moeda) · todas as strings no catálogo de traduções."],
       ["Orçamento de Desempenho da Interface", "- Core Web Vitals no percentil 75: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 · o orçamento de JS / imagens desta vista · como é medido (laboratório + utilizadores reais)."],
@@ -1035,6 +1035,13 @@ const msg = {
       // 1.30: nenhuma tarefa indica ficheiros em _Implements:_ — quem os lê não vê código da feature
       // 1.35: cores e tamanhos fixos nos ficheiros de vista da feature, onde o registo do design system tem tokens — um aviso, nunca um bloqueio
       designSystemRaw: (n, top, slug) => `os ficheiros de vista da feature têm ${n} ${n === 1 ? "valor fixo" : "valores fixos"} onde o design system tem tokens — ${top}${n > 3 ? "; …" : ""}: usar o token, ou explicar no relatório a razão de um literal ser deliberado (a lista: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
+      // 1.37: as verificações de interface dos ficheiros de vista da feature (as de aviso que ninguém silenciou) — um aviso, nunca um bloqueio
+      // (top: "" quando todos estão para lá do limite de um ficheiro — contados, não listados; unjudged: a frase de uiUnjudged, ou "")
+      uiChecks: (n, top, slug, unjudged) => `os ficheiros de vista da feature têm ${n} ${n === 1 ? "antipadrão de interface" : "antipadrões de interface"} — ${top || "…"}${top && n > 3 ? "; …" : ""}: corrigir cada um, ou marcar um deliberado com um comentário \`ui-check-off: <regra>\` na sua linha ou na linha acima (a lista: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})${unjudged ? "; " + unjudged : ""}`,
+      // (1.37 revisão 2: as remoções do contorno que uma procura de foco parada num limite deixou por avaliar — sheet: a folha
+      // que parou a procura no limite de caracteres, chars: esse limite, alone: essa folha sozinha excede-o (revisão 3); a
+      // última frase do aviso, ou o aviso sozinho)
+      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} ${n === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} (a primeira: ${at}): as folhas de estilo do projeto ${sheet ? `a partir de ${sheet}` : `além das primeiras ${read}`} não foram lidas à procura de um estilo de foco${sheet ? ` (essa folha ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa)` : ""} — confirmar que o projeto desenha um, ou ${n === 1 ? "silenciá-la" : "silenciá-las"}`,
       noImplements: (file) => `nenhuma tarefa indica os seus ficheiros em _Implements:_ — a baseline de deriva, a deteção de duplicados e a atribuição do dev-guardian não veem código desta feature. Acrescenta _Implements: <caminho>_ a cada tarefa que escreveu código (um ${file} editado volta a ser aprovado), ou ignora isto se nenhuma o fez.`,
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
@@ -1562,6 +1569,15 @@ const msg = {
         tokens: (n) => `  (só os primeiros ${n} tokens do código são lidos: o resto não é comparado)`,
         "registry-rows": (n) => `  (só os primeiros ${n} componentes do registo são verificados quanto a um caminho que já não existe)`,
         "view-files": (n) => `  (só os primeiros ${n} ficheiros de vista da feature são lidos à procura de valores fixos)`,
+        // (1.37 revisão 2: at — o ficheiro:linha da primeira remoção não avaliada, count — quantas, sheet — a folha que parou a procura;
+        // revisão 3: chars — o limite de caracteres, alone — essa folha sozinha excede-o)
+        "focus-sheets": (n, at, count) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados nas primeiras ${n} folhas de estilo do projeto, um limite)`,
+        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados em ${n} ${n === 1 ? "folha de estilo" : "folhas de estilo"}, até ${sheet}, que ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa)`,
+        // (1.37 revisão 1: os outros limites das verificações de interface — count: quantos cortou, file: o primeiro)
+        "view-size": (n, file, count) => `  (${count} ${count === 1 ? "ficheiro de vista é maior" : "ficheiros de vista são maiores"} do que os ${n} caracteres lidos de cada ficheiro — o primeiro: ${file}: as verificações de interface não leram o resto)`,
+        "line-length": (n, file, count) => `  (${count} ${count === 1 ? "linha tem" : "linhas têm"} mais de ${n} caracteres — a primeira em ${file}: cada uma é lida até aí, e uma tag que ela corta não é avaliada)`,
+        "tag-length": (n, file, count) => `  (${count} ${count === 1 ? "tag não é avaliada" : "tags não são avaliadas"} — a primeira em ${file}: lida além de ${n} linhas ou do limite de caracteres do leitor)`,
+        "file-findings": (n, file, count) => `  (mais ${count} ${count === 1 ? "achado de interface" : "achados de interface"} além dos ${n} de um ficheiro — o primeiro em ${file}: contados, não listados)`,
         "component-files": (n) => `  (foram lidos ${n} ficheiros de componentes à procura dos outros componentes que exportam, e foi atingido um limite — os ficheiros ou caracteres lidos, ou os nomes guardados de um ficheiro: o resto não é comparado)`,
         "workspace-manifests": (n) => `  (foi atingido um limite dos padrões de workspace — lidos ${n} dos ficheiros package.json dos pacotes do workspace: as bibliotecas dos restantes não são comparadas)`,
       },
@@ -1572,6 +1588,21 @@ const msg = {
       dsNoViewFiles: "  nenhum ficheiro de vista ou de estilo entre os ficheiros de _Implements:_ — nada a ler",
       dsRegistered: (list) => `  ✓ acrescentado ao registo do design system: ${list}`,
       dsUnregistered: (list) => `  ▲ não acrescentado ao registo do design system (não é um nome simples de componente, ou o ficheiro não pôde ser escrito): ${list}`,
+      // 1.37: as verificações de interface dos ficheiros da feature (o `uiChecks` de spec_scan {designSystem: true, name})
+      uiHead: (n) => `  Verificações de interface (${n}) — o spec_finish avisa de cada uma, exceto as só do relatório:`,
+      uiHeadPlain: (n) => `  Verificações de interface (${n}):`,
+      uiNone: (files) => `  Verificações de interface: nada ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`}`,
+      uiReportTag: "(só no relatório)",
+      uiLegend: "  o que cada uma significa:",
+      uiRule: {
+        "zoom-disabled": "o viewport impede o zoom com os dedos (user-scalable=no, maximum-scale abaixo de 2) — deixar as pessoas ampliar (WCAG 1.4.4)",
+        "img-no-alt": "uma <img> sem alt — dizer o que mostra, ou alt=\"\" quando é decoração (WCAG 1.1.1)",
+        "outline-removed": "o contorno de foco é removido e nenhum estilo de foco do projeto o substitui — manter um indicador visível (:focus-visible com um contorno, um anel ou uma borda; WCAG 2.4.7)",
+        "click-no-keyboard": "um handler de clique num elemento que o teclado não alcança — usar um <button> ou um <a href>, ou torná-lo focável: um tabindex, com um role e um handler de tecla (WCAG 2.1.1)",
+        "paste-blocked": "um handler de colar cancela a colagem sem ler a área de transferência — nunca bloquear o colar: gestores de palavras-passe, códigos longos (WCAG 3.3.8 num passo de autenticação ou de código; noutros sítios, um defeito de usabilidade)",
+        "transition-all": "transition: all (ou sem propriedade) anima todas as propriedades que mudam, também as de layout — listar as que se devem mover",
+      },
+      uiSilenced: (n) => `  (${n} ${n === 1 ? "silenciada" : "silenciadas"} por um comentário ui-check-off)`,
       dsTokensNew: (n) => `  tokens no código, fora do registo (${n}) — uma linha por cada:`,
       dsPending: (list) => `  no código, construídos por uma feature ainda não concluída (entram no registo no finish dela): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,
@@ -2351,7 +2382,7 @@ const msg = {
         api: ["+api: testes de contrato e a comparação de alterações incompatíveis com o contrato publicado a verde numa execução local nova.",
           "+api: o ficheiro do contrato corresponde ao comportamento entregue — cada código de estado, código de erro e cabeçalho documentado é o que os handlers devolvem; o que foi removido está descontinuado com a sua data de Sunset."],
         ui: ["+ui: a verificação automática de acessibilidade limpa e a passagem com teclado / leitor de ecrã feita na versão final; cada estado da matriz de estados alcançável e mostrado.",
-          "+ui: o orçamento de desempenho medido na versão final (LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1) e a regressão visual dos estados revista; cada estado construído passou na revisão visual face à sua referência, ou fica registado o motivo por que não correu."],
+          "+ui: o orçamento de desempenho medido na versão final (LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1) e a regressão visual dos estados revista; cada estado construído, o pior caso incluído, passou na revisão visual — face à sua referência, ou no mínimo de acessibilidade quando não a tem (320 px, zoom de 200 %, foco) —, ou fica registado o motivo por que não correu."],
         obs: ["+obs: um alerta disparou numa falha encenada e o ensaio de reversão foi feito na versão final; os dashboards e runbooks a que os alertas ligam existem.",
           "+obs: as métricas, os logs e os traces que o design indica vistos a ser emitidos pela versão final — nenhum dado pessoal nos logs nem nos traces."],
         data: ["+data: as verificações de qualidade de dados, uma reexecução de partição e um ensaio de backfill a verde numa execução nova com dados de tamanho real — as mesmas linhas que uma execução, as linhas erradas em quarentena.",
@@ -3414,6 +3445,11 @@ const quality = {
     // a nota da linha que o spec_finish acrescenta por cada componente Novo e a tabela que junta quando o ficheiro não termina numa.
     dsLegacy: (d, v) => `design aprovado antes da ${v} — só é exigido a partir da próxima aprovação (${d})`,
     dsNoSection: "o design não tem secção Uso do Design System — nada a verificar contra o registo",
+    // 1.37 a verificação ui-deprecated do spec_doctor: uma linha Reutilizar / Estender que nomeia um componente marcado no registo
+    // com `_Deprecated: use X_` (um aviso)
+    dsDeprecatedNone: "a secção Uso do Design System não reutiliza nenhum componente que o registo marca como obsoleto",
+    dsDeprecated: (n, list) => `a secção Uso do Design System reutiliza ou estende ${n} ${n === 1 ? "componente que o registo (.specs/steering/design-system.md) marca como obsoleto" : "componentes que o registo (.specs/steering/design-system.md) marca como obsoletos"} — ${list}: passar para o que o marcador indica, ou nomear esse componente nas notas da linha para dizer a razão de este ficar`,
+    dsDeprecatedItem: (name, use) => (use ? `'${name}' (usar ${use})` : `'${name}'`),
     dsUnfilled: "a secção Uso do Design System ainda não está escrita — é verificada contra o registo quando estiver",
     dsNoRegistry: `ainda não há registo do design system (.specs/steering/design-system.md) — o inventário único de componentes e tokens a partir do qual todas as features +ui constroem. Cria-o a partir do código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `o registo do design system (.specs/steering/design-system.md) ainda não lista nenhum componente — falta acrescentar os que já existem (spec_scan {designSystem: true} · ${DEV_SPEC} design-system mostra o que o código tem)`,

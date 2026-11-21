@@ -738,9 +738,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     fs.writeFileSync(child, [
       "\"use strict\";",
       "const fs = require(\"fs\"), path = require(\"path\");",
-      "const [lib, hooks, proj] = process.argv.slice(2);",
+      "const [lib, hooks, proj, lazy] = process.argv.slice(2);",
       "const S = require(path.join(lib, \"spec.js\"));",
-      "const tier = () => Object.keys(require.cache).filter((k) => /[\\\\/]engine[\\\\/](?:import[\\\\/]|(?:dupes|design-system)\\.js$)/.test(k)).length;",
+      "const own = new Set(JSON.parse(lazy).map((f) => path.join(lib, \"engine\", f)));",
+      "const tier = () => Object.keys(require.cache).filter((k) => own.has(k)).length;",
       "const out = { afterLoad: tier() };",
       "S.initProject(proj, [\"core\"], \"en\");",
       "const rmf = path.join(proj, \".specs\", \"roadmap.json\"), rm = JSON.parse(fs.readFileSync(rmf, \"utf8\"));",
@@ -769,7 +770,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       "out.dupes = S.duplicationReport(proj, {}).ok;",
       "process.stdout.write(JSON.stringify(out));",
     ].join("\n"));
-    const r = spawnSync(process.execPath, [child, path.join(__dirname, "lib"), path.join(root, "hooks"), proj], { encoding: "utf8", timeout: 120000, cwd: tmp });
+    // (the tier's files are LAZY's, handed to the child: a module joining the tier is counted without a name here — 1.37, ui-checks.js)
+    const r = spawnSync(process.execPath, [child, path.join(__dirname, "lib"), path.join(root, "hooks"), proj, JSON.stringify(lists.lazy)], { encoding: "utf8", timeout: 120000, cwd: tmp });
     let got;
     try { got = JSON.parse(r.stdout); } catch { got = { stdout: String(r.stdout).slice(0, 300), stderr: String(r.stderr).slice(0, 600) }; }
     all("1.30.1 lazy tier: a fresh process loads no tier module with the facade, every hook's engine path (each decide() said its piece) or the common calls; the first entry call (planPaths) loads the whole tier and answers as before (got " + JSON.stringify(got) + ")", {

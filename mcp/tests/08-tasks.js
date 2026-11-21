@@ -1091,6 +1091,57 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
       js([b1.designSections, (b1.brief.match(/^Relevant[^\n]*$/m) || [""])[0], b2.designSections]) + ")");
   }
 
+  // 1.37 — a task that builds what the user sees (uiTask: a view file in _Implements:_, the track's block) reads the design's [UI]
+  // sections whatever criterion it proves — a component contract, the states, the usage table — within the same design budget (an
+  // omitted one is named); a task of the same +ui feature that builds no view does not.
+  {
+    const js = JSON.stringify;
+    const pu = path.join(tmp, "proj-137-ui-brief");
+    S.initProject(pu, ["ui"], "en");
+    const fu = S.createFeature(pu, "Orders", ["core", "ui"], "", undefined, "en");
+    fs.writeFileSync(path.join(fu.dir, "requirements.md"), "# Req\n\n### US-1 Orders\n\n- US-1.AC-1: WHEN the buyer opens the orders page THE SYSTEM SHALL list the orders.\n" +
+      "- US-1.AC-2: WHEN an order is placed THE SYSTEM SHALL store it.\n");
+    fs.writeFileSync(path.join(fu.dir, "design.md"), "# Design\n\n## Overview\n\nOne page.\n\n## [UI] Design System Usage\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| New | OrderRow | no listed row shows a status |\n\n" +
+      "## [UI] Component Contracts\n\n### OrderRow — contract\n- _States:_ default · selected\n\n## [UI] UI States\n\nLoading: a skeleton.\n\n## [UI] Accessibility\n\n" + "Every control has a name. ".repeat(180) + "\n");
+    fs.writeFileSync(path.join(fu.dir, "tasks.md"), "- [ ] 1. Build the orders page\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/OrdersPage.tsx_\n" +
+      "- [ ] 2. Store an order\n  - _Requirements: US-1.AC-2_\n  - _Implements: src/orders/store.ts_\n");
+    const view = S.taskBrief(pu, fu.slug, 1), store = S.taskBrief(pu, fu.slug, 2);
+    const relevant = (b) => (b.brief.match(/^Relevant[^\n]*$/m) || [""])[0];
+    all("1.37: a view task's brief takes the [UI] design sections whatever criterion it proves (the usage table, a contract, the states — in design.md's order), within the design budget (the one past it named, not quoted); a non-view task of the same +ui feature takes none (got " +
+      js({ view: [view.designSections, relevant(view)], store: [store.designSections, relevant(store)] }) + ")", {
+      uiWork: () => js(view.designSections) === js(["[UI] Design System Usage", "[UI] Component Contracts", "[UI] UI States"]) && view.brief.includes("### OrderRow — contract"),
+      budget: () => /Relevant but not included \(size\)[^\n]*\[UI\] Accessibility/.test(relevant(view)) && !view.brief.includes("Every control has a name."),
+      notUi: () => !store.designSections.some((t) => /\[UI\]/.test(t)) && !/\[UI\]/.test(relevant(store)),
+    });
+  }
+  // 1.37.0 review 1 (RB-2) — the [UI] sections only that line wants come AFTER every section another rule wants: a view task on a
+  // core criterion keeps the section its metrics ask for ([OBS] Telemetry) or the one naming its own file (a trailing File
+  // Structure), placed after a [UI] block that alone would fill the budget — what a 1.36 brief quoted; the [UI] ones follow.
+  {
+    const js = JSON.stringify;
+    const pr = path.join(tmp, "proj-137r1-ui-order");
+    S.initProject(pr, ["ui", "obs"], "en");
+    const uiBlock = "## [UI] Design System Usage\n\n" + "Reuse the table. ".repeat(111) + "\n\n## [UI] UI States\n\n" + "Loading: a skeleton. ".repeat(90) + "\n\n";
+    const req = (what) => "# Req\n\n### US-1 " + what + "\n\n- US-1.AC-1: WHEN the buyer opens the " + what + " page THE SYSTEM SHALL list them.\n";
+    const feature = (name, tracks, tail, task) => {
+      const f = S.createFeature(pr, name, tracks, "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "requirements.md"), req(name.toLowerCase()));
+      fs.writeFileSync(path.join(f.dir, "design.md"), "# Design\n\n## Overview\n\nOne page.\n\n" + uiBlock + tail);
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [ ] 1. Build the page\n  - _Requirements: US-1.AC-1_\n" + task);
+      return S.taskBrief(pr, f.slug, 1);
+    };
+    const obs = feature("Orders", ["core", "ui", "obs"], "## [OBS] Telemetry\n\n" + "The page emits `orders_page_view` with its route. ".repeat(6) + "\n",
+      "  - _Implements: src/orders/OrdersPage.tsx_\n  - _Emits metrics: orders_page_view_\n");
+    const file = feature("Invoices", ["core", "ui"], "## File Structure\n\n" + "- src/invoices/InvoicesPage.tsx — the page and its query. ".repeat(6) + "\n",
+      "  - _Implements: src/invoices/InvoicesPage.tsx_\n");
+    const relevant = (b) => (b.brief.match(/^Relevant[^\n]*$/m) || [""])[0];
+    all("1.37.0 review 1: a view task's brief reads the sections its metrics or its file ask for BEFORE the [UI] sections only the view rule wants — [OBS] Telemetry / a trailing File Structure quoted, the [UI] one past the budget named (got " +
+      js({ obs: [obs.designSections, relevant(obs)], file: [file.designSections, relevant(file)] }) + ")", {
+      obsAfterUi: () => js(obs.designSections) === js(["[UI] Design System Usage", "[OBS] Telemetry"]) && obs.brief.includes("emits `orders_page_view`") && /\[UI\] UI States/.test(relevant(obs)),
+      fileAfterUi: () => js(file.designSections) === js(["[UI] Design System Usage", "File Structure"]) && /\[UI\] UI States/.test(relevant(file)),
+    });
+  }
+
   // Review 5 — CommonMark's indented code block holds no task: `    - [ ] 1. example` after a blank line, outside every list, is
   // code (complete_task ticked that example — the first open task 1 — instead of the real one); doctor's unread-tasks names it.
   // Inside a list (`- Phase A` then a 4-space task, a task's sub-lines) the indentation is the item's, as before.

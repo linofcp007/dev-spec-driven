@@ -114,6 +114,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.33** — the critical-flow words: `cupão` / `cupões` → cupom / cupons and `quota` / `quotas` → cota / cotas in
   `PTBR_WORDS` (same gender; +api's pt-BR heading reads "Limites de Taxa e Cotas", a synonym it already had). A PT sentence
   never puts an adjective after "base de dados" (pt-BR "banco de dados" is masculine): "uma instância de base de dados … separada".
+- **1.37.0 review 1** — the paste-blocked rule's pt-BR read "gestores de senhas"; software that manages is a "gerenciador" in
+  Brazil. `gestor` / `gestores` → gerenciador(es) in `PTBR_WORDS` (a word rule, not that string's override): the pt strings
+  say "gestor" of software only — a person in charge is "o responsável". The lint's `EU_ONLY` holds `gestor(es)`.
 
 ### Localization gotchas
 - **1.19** — the eval run showed agents relaying `dev-spec done <f> <n> --run` to users who had no `dev-spec` on PATH (only

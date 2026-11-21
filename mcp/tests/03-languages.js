@@ -15,7 +15,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require }
     // (1.30 review 8: + the European residue the guardian / dupes messages showed — "porque é que", a tu order mid-sentence
     // ("nunca forces", "corre tu" → "roda você"), a 3rd person with its pronoun after it ("roda-a", "registra-as"), "lugar(s)",
     // "sítio(s)" for a place — the dupes plurals print "sítios")
-    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|revist[oa]s?|contigo|tens|podes|queres|forces|porque é que|roda você|(?:roda|registra)-(?:o|a|os|as)|sítios?)(?![\p{L}])|(?<![\p{L}])(?:a correr|à espera)(?![\p{L}])|por defeito|por omissão|lugar\(s\)/iu;
+    // (1.37.0 review 1: + gestor(es) — software that manages is a "gerenciador" in Brazil; the pt strings say it of software only)
+    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|revist[oa]s?|gestor(?:es)?|contigo|tens|podes|queres|forces|porque é que|roda você|(?:roda|registra)-(?:o|a|os|as)|sítios?)(?![\p{L}])|(?<![\p{L}])(?:a correr|à espera)(?![\p{L}])|por defeito|por omissão|lugar\(s\)/iu;
     // 1. language codes: aliases fold to pt-BR; pt / pt-PT stay European; the strict reader refuses the unknown
     ok(["pt-BR", "pt_BR", "pt-br", "ptbr", "PT-BR", " pt_br "].every((l) => S.normalizeLang(l) === "pt-BR" && S.canonicalLang(l) === "pt-BR") &&
       ["pt", "pt-PT", "pt_pt", "PT"].every((l) => S.normalizeLang(l) === "pt" && S.canonicalLang(l) === "pt") &&
@@ -180,6 +181,18 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require }
       gap: () => /— ative os caminhos longos \(Windows\) ou encurte-o\.$/.test(I.msg("pt-BR").guardian.gap.pathTooLong),
       lint: () => !Object.values(br8).some((t) => EU_ONLY.test(t)),
       idempotent: () => Object.values(br8).every((t) => I.toPtBr(t) === t),
+    });
+    // 1.37.0 review 1: the paste-blocked rule's pt-BR said "gestores de senhas" — software that manages is a "gerenciador" in
+    // Brazil. A word rule (PTBR_WORDS), not the one string that showed it: any "gestor(es)", either case; "gestão" untouched
+    const brMgr = { paste: I.toPtBr("nunca bloquear o colar: gestores de palavras-passe, códigos longos"), pkg: I.toPtBr("O gestor de pacotes corre-o."),
+      caps: I.toPtBr("GESTORES"), keep: I.toPtBr("Gestão de Segredos e Chaves") };
+    all("1.37.0 review 1: pt-BR — a 'gestor' of software is a 'gerenciador' (a word rule), 'gestão' kept", {
+      paste: () => brMgr.paste === "nunca bloquear o colar: gerenciadores de senhas, códigos longos",
+      pkg: () => brMgr.pkg === "O gerenciador de pacotes o executa.",
+      caps: () => brMgr.caps === "GERENCIADORES",
+      keep: () => brMgr.keep === "Gestão de Segredos e Chaves",
+      lint: () => !Object.values(brMgr).some((t) => EU_ONLY.test(t)),
+      idempotent: () => Object.values(brMgr).every((t) => I.toPtBr(t) === t),
     });
     // … and in Spanish (ds-prose 7, 13): "función" (= feature) beside a file path and a rule read as a code function — the
     // code-level messages say "funcionalidad" (a file is a "fichero": the 1.25.1 sweep below reads the approval guard's sentences too)

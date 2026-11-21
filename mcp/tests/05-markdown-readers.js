@@ -598,4 +598,64 @@ exports.run = async ({ ok, all, S, tmp, require, __dirname }) => {
       written: () => st(written) === "filled",
     });
   }
+
+  { // 1.37: +ui's two blocks gained a line each, APPENDED in one change — UI States a third, the worst-case row; Design System
+    // Usage a last one, after its table: a New / Extend row's contract goes in an optional `## [UI] Component Contracts` h2 of its
+    // own (never under the table, where its states table's New row would be a usage row). A design scaffolded by 1.31…1.36 still
+    // reads as template, and so does the new scaffold in every language; finish's +ui check names the floor and the worst case.
+    const I = require("./lib/i18n.js");
+    const crypto = require("crypto");
+    const UI = E.trackSectionTable("ui");
+    const LANGS = ["en", "pt", "es", "pt-BR"];
+    const scaffold = (lang) => I.design({ name: "x", tracks: ["core", "ui"], label: "core +ui" }, lang).replace(/^> \*\*TODO\*\*.*\n/gm, "");
+    const st = (md, sec, lang) => E.sectionState(md, UI, "[UI]", { lang: lang || "en" }).find((s) => s.section === sec).status;
+    // the two blocks as the scaffold writes them, by place: [Design System Usage, UI States]
+    const blocks = (lang) => I.trackDesignBlock("ui", lang).split(/^## \[UI\] /m).slice(1, 3).map((s) => s.slice(s.indexOf("\n") + 1).replace(/^> \*\*TODO\*\*.*\n/, "").trimEnd());
+    const last = (s) => s.slice(s.lastIndexOf("\n") + 1);
+    const WORST = { en: /worst-case/, pt: /pior caso/, es: /peor caso/, "pt-BR": /pior caso/ };
+    // every line 1.31…1.36 wrote is still there, untouched: the blocks less their appended line hash as 1.36's did (EN / PT / ES)
+    const h = crypto.createHash("sha1");
+    for (const l of ["en", "pt", "es"]) { const [dsu, states] = blocks(l); h.update(dsu.replace(/\n\n- [^\n]*$/, "") + "\0" + states.replace(/\n- [^\n]*$/, "") + "\0"); }
+    const prefix = h.digest("hex");
+    const doc = (heading, lines) => "# Design: x\n\n## [UI] " + heading + "\n" + lines.join("\n") + "\n\n## Next\nx\n";
+    const ST1 = "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).";
+    const ST2 = "- The reference each view is built against: a design export or an HTML prototype the user approved — one per state where they differ — and its path · the visual review compares what is built with it, state by state (references/ui-review.md).";
+    const DS1 = "- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours.";
+    const DS2 = "- One row per component, checked against the registry (.specs/steering/design-system.md — spec_doctor's ui-design-system): Reuse = one it lists, used as is · Extend = a new variant of one it lists · New = none it lists fits — say why; it joins the registry when the feature is finished. No component at all: replace the table with one line, n/a — why.";
+    const TABLE = ["", "| Kind | Component | Why / notes |", "|---|---|---|", "| Reuse | [component the registry lists] | [what it does in this view] |", "| New | [new component] | [why no listed component fits] |"];
+    const old = { states31: doc("UI States", [ST1]), states36: doc("UI States", [ST1, ST2]), dsu34: doc("Design System Usage", [DS1]), dsu36: doc("Design System Usage", [DS1, DS2, ...TABLE]) };
+    const worstWritten = doc("UI States", [ST1, ST2, last(blocks("en")[1]), "- Orders, worst case: a 120-character customer name wraps to two lines; 0 orders shows the empty state, 4,812 the pager."]);
+    // the placement: a contract written under its own h2 is no usage row — the gate at m passes and ui-sections reads as without it;
+    // the SAME contract under the usage table (an h3) is read as rows (its states table's New, the key table's "New tab") and fails
+    const p = path.join(tmp, "proj-ui-contracts");
+    S.initProject(p, ["ui"], "en");
+    put(p, ".specs/steering/design-system.md", "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| Button | `src/components/Button.tsx` | primary | every action |\n");
+    const reg = E.designSystemRegistry(path.join(p, ".specs"));
+    const CONTRACT = "### DateRangePicker — contract\n- _Keyboard:_ Enter opens, Esc closes\n\n| State | Look |\n|---|---|\n| New | blue dot |\n| Created | grey dot |\n\n| Keys | Action |\n|---|---|\n| New tab | Ctrl+T |\n";
+    const usage = "## [UI] Design System Usage\n| Kind | Component | Why / notes |\n|---|---|---|\n| Reuse | Button | the form's actions |\n| New | DateRangePicker | no listed picker takes a range |\n";
+    const rest = "\n## [UI] UI States\n- Orders: loading, empty, error with a Retry.\n";
+    const plain = "# Design: x\n\n" + usage + rest;
+    const own = "# Design: x\n\n" + usage + "\n## [UI] Component Contracts\n" + CONTRACT + rest;
+    const under = "# Design: x\n\n" + usage + "\n" + CONTRACT + rest;
+    const gate = (md) => E.designSystemCheck(md, "en", { registry: reg, gate: "m", slug: "x" }).status;
+    const sections = (md) => js(E.trackSectionReport(md, ["core", "ui"], { size: "m", lang: "en" }));
+    const finish = (lang) => S.msg(lang).secPrivacy.finishChecks.ui[1];
+    all("1.37: +ui's UI States gains a third line (the worst-case row) and Design System Usage a last one (the contracts' optional `## [UI] Component Contracts` h2), both appended — every 1.31…1.36 block and the new scaffold (EN / PT / ES / pt-BR) read as template, a written worst-case row as filled; a contract under its own h2 is no usage row (the gate at m passes, ui-sections unchanged), under the table it is; finish's +ui check names the floor and the worst case (got " +
+      js({ scaffold: LANGS.map((l) => [st(scaffold(l), "UI States", l), st(scaffold(l), "Design System Usage", l)]), prefix, old: Object.keys(old).map((k) => st(old[k], /states/.test(k) ? "UI States" : "Design System Usage")),
+        worst: st(worstWritten, "UI States"), gate: [gate(plain), gate(own), gate(under)], lens: LANGS.map((l) => blocks(l).map((b) => last(b).length)) }) + ")", {
+      scaffold: () => LANGS.every((l) => st(scaffold(l), "UI States", l) === "template" && st(scaffold(l), "Design System Usage", l) === "template"),
+      prefix: () => prefix === "55697e2f276d0240103d75c2da849bb5aeba2db3", // the 1.36 blocks (EN / PT / ES), byte for byte
+      oldStates31: () => st(old.states31, "UI States") === "template",
+      oldStates36: () => st(old.states36, "UI States") === "template",
+      oldDsu34: () => st(old.dsu34, "Design System Usage") === "template",
+      oldDsu36: () => st(old.dsu36, "Design System Usage") === "template",
+      threeLines: () => LANGS.every((l) => { const b = blocks(l)[1].split("\n"); return b.length === 3 && b.every((x) => x.startsWith("- ")) && WORST[l].test(b[2]); }),
+      contractLine: () => LANGS.every((l) => /^- [^\n]*`## \[UI\] [^`\n]+`/.test(last(blocks(l)[0])) && /\|\n\n- [^\n]*$/.test(blocks(l)[0])),
+      short: () => LANGS.every((l) => blocks(l).every((b) => last(b).length <= 180)),
+      written: () => st(worstWritten, "UI States") === "filled",
+      placementGate: () => gate(plain) === "pass" && gate(own) === "pass" && gate(under) === "fail",
+      placementSections: () => sections(own) === sections(plain),
+      finishText: () => LANGS.every((l) => /\b320 px\b/.test(finish(l)) && /\b200 %/.test(finish(l)) && WORST[l].test(finish(l).replace("worst case", "worst-case"))),
+    });
+  }
 };

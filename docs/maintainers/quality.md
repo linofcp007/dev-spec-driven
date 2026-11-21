@@ -358,6 +358,42 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   Name/tokens.css` are files). ≤ `DS_MARKER_LINES` lines, `DS_MARKER_ENTRIES` entries, each cut before it is cleaned
   (`stripEnds`, never a trailing-run replace). And in a
   component's row `_From: <feature>_` (`RE_DS_FROM` → the entry's `from`, left out of its `notes`).
+- **`_Deprecated: use X_`** (1.37, `dsDeprecated`) — the team retires a component in its row: English-stable, any case, in
+  any cell after the name — an `_…_` emphasis whose first word is Deprecated and whose first NON-BLANK character after the
+  word is no letter or digit, a punctuation mark (`_Deprecated — use X_`, `_Deprecated—use X_`, `_Deprecated - use X_`,
+  `_Deprecated. Use X._`, `_Deprecated (v3): use X_`): `_Deprecated_` alone, `_Deprecated<text>_`, the label alone italic
+  (`_Deprecated:_ <text>`, `_Deprecated._ <text>` — the emphasis holds no letter or digit after the word: the text runs to
+  the cell's end, as `_Libraries:_ a` does) or never closed (to the cell's end). A WORD after it, past any blanks, makes a
+  note: an italic phrase about something else (`_deprecated props removed in v3_`, `` `dense` prop (_deprecated in v2_) ``,
+  a successor's `replaces the _deprecated Table_` — read as a marker, it retired the successor and voided every `use
+  DataGrid`), and so `_Deprecated in favour of X_` and `_Deprecated since 2.0: use X_` too (the cost; the user docs say a
+  word makes a note). ONE case-insensitive regex over the cell as written (`RE_DS_DEPRECATED`): it starts the cell or
+  follows a blank, `(` or `*` (never `snake_deprecated_flag`, `config_deprecated: true`), and a letter or a digit right
+  after the word (`_deprecatedness`, `_deprecated2`), a `_` that does not close it (`_deprecated_flag`) or a `-` / `/` /
+  `.` before a letter or digit — the name reader's joiners: `_deprecated-flag_`, a path cell `_deprecated/Table.tsx` or
+  `_deprecated.tsx`, whose path stays a path — makes another word; its closing `_` is one the
+  cell's end, a blank or one of `.,;:)*` follows (`use Data_Grid now` keeps its `_`); the row's first marker counts, a later
+  occurrence after one that is none is still looked at. Deprecated is a property of the NAME: a name listed twice is marked
+  by its first row that carries the marker (the replacement from that row, the marker put first in the entry's notes —
+  `entries`). Read on the rows read in full only (the 500-row cap — doctor and the brief read the same rows): `deprecated`,
+  a Map — the key → its REPLACEMENT, the first component the file lists (`keys`, past the cap too) that is not deprecated
+  itself (`use Popup` while Popup is retired names none — the next one named is) and that the marker's text names among its
+  first `DS_DEPRECATED_WORDS` (20) words, a word or two adjacent ones (`dsNameIn`) — the pair first, and only when blanks
+  alone part them: `use Data Grid` is DataGrid even beside a `Data` row, `use Card. Header` is Card; a word is a hyphenated
+  / slashed / dotted / snake name WHOLE (`RE_DS_NAME_WORD`: `data-grid` is DataGrid, `@mui/x-data-grid-pro` and
+  `@/components/ui/dialog` name none — and so neither do `Dialog/Sheet`, `Dialog.Root`, `src/DataGrid.tsx` or
+  `DataGrid-based`: the user docs say to name the replacement by its name alone, `use Dialog`, and the notes' silence the
+  same), read in NFC (an accent written as a combining mark split the word) —, as written there; "" when it names none (no
+  word list says which word is the replacement: a listed name is). The marker is cut out of whichever cell holds it — a
+  path stays a path, a variants cell stays the variants — and the notes show it FIRST as one text, `_Deprecated<the first
+  DS_DEPRECATED_SHOWN (120) characters after the word, as written>_` (`dsDeprecatedShown`): `dsCell` drops a closing `_`
+  after a letter and the notes' 200-character bound cuts what comes last, so the brief quotes the marker whole. Linear:
+  each `_` looked at once, each blank run after the word once (a hostile-vs-plain ratio check: 1,000 cells of
+  `_Deprecated: ` and 190 `_a`). A token row's marker is not read; nor
+  `__Deprecated__` (bold), `*Deprecated*` or a marker in the NAME cell (`Table _Deprecated_` is a name); `_Deprecated_: x`
+  is the bare marker (the colon outside the italics, as the other markers never read it). The marker retires the WHOLE
+  component, wherever it stands: a deprecated variant or prop is written without it (the user docs say so — a
+  `ghost (_deprecated_)` variants cell retires the component).
 - **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
   mcp/tests/06-gates-sizes.js changed on purpose). `designSystemUsage(design)` → the table rows whose first cell is a kind word
@@ -408,9 +444,32 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   (`quality.dsLegacy`, `DS_SINCE`) — never flagged, at any size. An approval's context has no `root`: the view reads
   `specsRoot(c.projectDir)`. `designSaveCheck` (the design.md save hook) adds a ▲ note for mismatch / no-rows and carries
   `designSystem` (the state) — a note, never unclean, and never for a missing registry (doctor says that once, not every save).
+- **Doctor `ui-deprecated`** (1.37, `designSystemDeprecatedCheck`; the `DOCTOR_CHECKS` entry right after `ui-design-system`,
+  phase 2, the same `uiDesigned` feature) — each component a Reuse / Extend row names that the registry's `deprecated` holds
+  is a WARN naming its replacement as the registry writes it — the replacement's row name, the marker's spelling for one past
+  the rows read in full (`quality.dsDeprecatedItem`: `'Table' (use DataGrid)` for `_Deprecated: use data-grid_`, the name
+  alone when the marker names none): the name the warn prints is the one that silences it, ONE expression for both. Silent
+  when the row's notes name that replacement AS A COMPONENT — `dsNameIn` over the WHOLE notes, a word or two adjacent ones,
+  in those letters (`dsLetters`: letters and digits as written, case and accents kept, in NFC — an NFD `á` is the
+  registry's `á`): `Dialog lacks a sheet`, `` `Dialog` ``, `<Dialog />`, `the Data Grid lacks grouping` silence — the team
+  keeps this one on purpose and says why —, `the delete-confirmation dialog` does not (component names are common nouns);
+  never with no replacement. A code span or a tag is no exception to the case (`<data-grid>` does not silence DataGrid): the
+  letters are kept wherever they stand — and a capitalised word reads as the name wherever it stands too, a sentence's or a
+  cell's first one (`Dialog to confirm the delete`, `Select a country` silence: no sentence-start rule — the user docs say
+  to write a component kept on purpose in a code span or a tag); the notes name it by its name alone, as the marker does
+  (`kept: Dialog.Root lacks a sheet` does not silence: the word is `Dialog.Root`); once
+  per component, a silenced row hiding no later one; a New row is not asked (`listed` is ui-design-system's); six named,
+  the rest counted. It runs only while the registry holds a deprecated row (no registry: never — the applies asks it
+  first) and never on a feature with a finish recorded (`state.finished`: what it built is history; an archived feature
+  never reaches doctor). Never a fail, not `warnsOnly`, not in `GATES`, NO stamp: it reports the registry of today — a
+  component deprecated after the design's approval —, not a rule an approval was held to, so a design is never failed for
+  it and the warn says what is still to migrate; `spec_upgrade` lists it (attention `warnings`, the default — no
+  design-writing warn). Detail only (`{id, status, detail}` — doctor keeps no other key).
 - **The brief** — `briefDesignSystem(root, design)` for a task `uiTask()` says builds a view (the visual review's rule): each
   component the design names with its registry entry (kind, path, variants, notes, the row's reason; ≤ 12 / 1,500 characters),
-  the names the registry doesn't list (`unknown`), the token count and sources, the libraries; null without a registry.
+  the names the registry doesn't list (`unknown`), the token count and sources, the libraries; null without a registry. A
+  deprecated component's entry carries its `_Deprecated: use X_` marker whole, first among its notes (1.37) — the rows
+  doctor's `ui-deprecated` reads, no more (past the 500-row cap neither marks a component).
   `renderBrief` writes it after Reuse; the result's `designSystem` holds identifiers (`write: true`: `refs.designSystem`, the
   names).
 - **The code** (engine/design-system.js, LAZY — entries `designSystemReport`, `designSystemSeed`, `designSystemFinish`) —
@@ -562,6 +621,20 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   values unread — the
   files whose values ARE read come first (21 `tailwind.config.ts` must not take tokens.css's place). Libraries =
   `UI_LIBRARIES` ∩ the project's dependencies (`projectDependencies`).
+  The walk's EVENTS (1.37): `styleTokens(text, rel, on)` — the ONE CSS block walker, for a reader of a sheet's STRUCTURE (the
+  UI checks: a rule's selector, what it declares, the blocks around it); never a second walker beside it (CRIT_1: this one
+  took reviews 7–11 to get right). `on.block({ id, parent, prelude, line, global })` when a `{` opens a block (the prelude
+  over lines, its last DS_PRELUDE characters, `#{…}` as written), `on.statement({ text, block, line, from })` (`from`, 1.37: the line its text
+  starts on) when a `;` OUTSIDE
+  parentheses or a `}` ends one (the walker's pending text and the piece — its lines joined by a blank; never blank, never
+  a prelude), `on.close({ id, line })` when a `}` closes a block (a stray one closes none). Each handler is optional and is
+  given a fresh object of plain values: nothing it does reaches the tokens. The events read the walker's state, they never
+  steer it — so they inherit its view: a `;` inside parentheses (a Less mixin's parameters, an unquoted `data:` URL) ends no
+  statement and what stands before it is not kept; after a token declaration left open at its line's end the next statement
+  starts below it; an indented .sass file has no block. Behaviour-preserving when it came: the tokens of 2,493 real
+  stylesheets byte-identical to 1.36's, with and without an observer; an observer costs ~1.3–1.6× the walk
+  (mcp/tests/15-quality-design-system-walks.js pins the events on one sheet and that a handler writing into what it is
+  given changes no token).
 - **The project's manifests** (`projectDependencies`, quality.js — 1.35.1) — the dependency names the registry's reader
   (`dsNamed`, `dsAlias`, `packaged`) and the seed's `_Libraries:_` stand on: the root package.json AND its workspace
   packages'. Until 1.35.1 the root one alone (left knowingly in review 6; 1.35 review 10's MEDIUM: `antd 5` + `antd
@@ -985,7 +1058,7 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   design — `pendingNew`: its finish adds it; a row pasted for it would read as already listed), `stale` (`stalePath` —
   below), `newTokens` (against `tokenNames` — every token the file lists),
   `newSources` / `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`,
-  `counts`, `newComponents`. `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
+  `counts`, `newComponents`, `uiChecks` (1.37 — UI checks, below). `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
   total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `total`).
 - **`limits`** — the bounds that CUT what a report read, `[{code, read, file?}]`: files (the walk's cap) · token-files ·
   token-candidates · file-size (`file`) · tokens · registry-rows (rows past 500 are not checked for a gone path) ·
@@ -1038,7 +1111,13 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `picker.select("#1d4ed8")`), an entity, a
   comment (`withoutComments`: outside a stylesheet a `/*` opens one only at a line's start, after a blank or `{ ( ; ,` —
   `accept="image/*"` holds none). A colour equal to a registry token's value carries `token` (`colorKey`). Not read: a size
-  in a JSX `style={{…}}` object.
+  in a JSX `style={{…}}` object. The line walk (1.37) is `viewLines(text, rel)` — rawValuesOf's loop head, the ONE walk of a
+  view file's lines its readers share (the raw values, the UI checks): a GENERATOR of `{ n (1-based), src (cut at
+  DS_LINE_MAX), l (without its comments), css (a stylesheet's line — a `<style>` block's opening and closing lines too) }`.
+  A generator, never a list: rawValuesOf stops at DS_RAW_PER_FILE values and reads no further line (over a list, a
+  20,000-line sheet cost every line — CRIT_1: 1.1 → 6.4 ms; mcp/tests/15-quality-design-system-walks.js times the stop as a
+  ratio against a sheet with no value). Behaviour-preserving when it came: the raw values of 5,256 real view files
+  byte-identical to 1.36's, every earlier assertion unchanged.
 - **spec_finish** (`designSystemFinish`; +ui and a registry, never on the `gateOnly` path) — the raw values as a WARNING, never
   a blocker, and only when the registry holds tokens or names token files (`tokens`: else there is nothing to replace them
   with) — `finish.designSystemRaw`: the count, the first 3, the call that lists them. A READY written finish appends the
@@ -1055,7 +1134,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   of that name, or the one that exports it beside its own (1.35.1), the
   origin `_From: <slug>_`; a name that is no plain component name is never written (`RE_SAFE_NAME`); best-effort — a registry
   the write gate refuses is left as it is and the finish stands. Result: `designSystem` {raw, registered, unregistered,
-  note?}. A rename follows: `renameRegistryOrigin` (finish.js) rewrites `_From: <old>_` (`designSystemUpdated`).
+  note?}. A rename follows: `renameRegistryOrigin` (finish.js) rewrites `_From: <old>_` (`designSystemUpdated`). Since 1.37 it
+  answers for every +ui feature, a registry or not — its UI checks (UI checks, below).
 - **Linear, bounded** (review 1): a cell is cut BEFORE its replaces (`dsCell`, `dsSlot`), a token file's name parts are
   letters and digits only (`(?:[-_.][\w-]+)*` backtracked exponentially on `tokens-a-a-a-…`), `raw.trimEnd()` never a
   `\s+$` replace, every line of a view file capped (`DS_LINE_MAX`; a token file's line is read WHOLE since review 6 —
@@ -1141,6 +1221,202 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
+
+## UI checks (1.37)
+A +ui feature's view / style files read for anti-patterns that are wrong whatever the taste — engine/ui-checks.js (LAZY,
+after design-system.js), the feature report's `uiChecks` and ONE finish warning. FEATURE level only in 1.37: the project report
+reads no view file for them (CRIT_X decision 3 — one shared project pass is 1.38's). Every doubt reads as "not judged": a
+wrong finding sends a team to fix code that is right.
+- **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the feature report AND finish's warning, never a blocker:
+  `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1), `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked`
+  (3.3.8 at a sign-in or code step — W3C scopes it to authentication; elsewhere a usability defect, Vercel's "never block
+  paste": review 1 of 1.37); `report` — the feature report alone: `transition-all` (certain as syntax, a guideline as a
+  finding: shadcn's own
+  Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
+- **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
+  `DS_LINE_MAX`, its comments out, `cut` when it was longer) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
+  one finding per rule and line, at a tag's or a declaration's FIRST line (a Tailwind utility's: its class's line),
+  silenced or not decided when it is found;
+  `DS_CHECK_PER_FILE` (200) kept a file — past it each is still COUNTED (`past`: {byRule, silenced}), never kept (review 1 of
+  1.37: 200 report-level findings hid a file's real ones, `total` read 200); `cut`: {lines (cut at `DS_LINE_MAX`), tags (the
+  tag reader's failed reads)}. A stylesheet's lines are all CSS; a .tsx / .jsx / .js / .ts file is SCRIPT (its tags read as
+  JSX); anything else is MARKUP (an SFC, HTML and its template engines), its `<style>` block's lines CSS (viewLines' `css`).
+- **The tag reader** (`tagReader`) — an opening tag, `<` and a name (a letter, then letters, digits, `.`, `:`, `-`) followed by
+  a blank, `/`, `>` or the line's end, read WHOLE to its first `>` outside quotes and `{…}`, over lines (a quote carries over
+  a line's end; `\` escapes inside braces). In script mode never right after an identifier, `)`, `]` or a quote
+  (`useState<div>`, `a<b`), nor inside a string that closes on its line (`blankStrings`); a markup file's `<script>` block
+  is not read for tags. The next tag is looked for PAST the previous one's end, and past a read that failed (no `>` within
+  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters — counted, `tag-length`, when the tag could have held a
+  finding (`mayFind`: an element, or one whose read part names a click or paste handler — review 2 of 1.37: a component's
+  30-line props, shadcn's `<DayPicker classNames={{…}}>`, were a limit line on 6 % of cal.com's view files); or none before the end of a line
+  viewLines CUT — the read ends there, no quote or brace carried into the lines below: review 1 of 1.37, an inline data-URI
+  logo hid every tag of the next 30 lines, and minified HTML judged an `<img>` on the attributes before its cut alt): each
+  character read once (CRIT_1 must-fix 1 — a reader
+  that looked again from the next `<` measured 1,230× plain JSX). What that leaves unjudged, and what else is (said in the
+  user docs): a tag nested in an attribute (`icon={<img />}`), a tag starting in the lines a failed read took, a tag of more
+  than `DS_TAG_ATTRS` (100) attributes, tags in a one-line template literal (lit, innerHTML), Pug, the JSX of a markup
+  file's `<script lang="tsx">`, a named handler's body (never followed: a named paste handler is not judged, a named click
+  handler is judged on its element and body alone — the user docs said "a named handler" of both: review 1 of 1.37).
+- **Attributes** (`attributesOf`) — a brace token where a name stands is a spread (`{...props}`, `{...getRootProps()}`,
+  `{{attrs}}`: it may hold any attribute — img-no-alt and click-no-keyboard excuse it) unless it holds one identifier
+  (Svelte's `{alt}`); so is a binding with no argument (`RE_OBJECT_BIND`: Vue's `v-bind="$attrs"`, Alpine's `x-bind="obj"` —
+  the object form; review 1 of 1.37, the design's M30–M37 fixture had been dropped); a bound name is its attribute's
+  (`boundName`: `:alt`, `v-bind:`, `x-bind:`, `bind:`, `[alt]`,
+  `[attr.alt]`); an event (`eventOf`): JSX `onClick`, HTML / Svelte 5 `onclick`, Vue `@click` / `v-on:click` and Alpine
+  `x-on:click` with `.modifiers`, Svelte 4 `on:click` with `|modifiers`, Angular `(click)` / `(keyup.enter)`.
+- **img-no-alt** — `<img` as written (`<Image>`, `<img-viewer>` are components) with no alt in any binding, no `aria-label` /
+  `aria-labelledby`, no non-empty `title` (it names the image, as axe-core's image-alt reads it — review 1 of 1.37: 200
+  of cal.com's 202 were titled flags), no `role` presentation / none, rendered (CRIT_1 must-fix 5: not `hidden`, not
+  `aria-hidden` — either not literally false —, no `display:none` in its own style: the Meta Pixel's `<noscript>` image),
+  no spread.
+- **click-no-keyboard** — a click handler on a lower-case element (no `-`, `.`, `:`) the keyboard cannot reach: not focusable
+  by default (`FOCUSABLE`: HTML's interactive content, `summary`, `option`; `a` / `area` only with `href` or `routerLink`),
+  no `tabindex`, no role whose focus its container manages (`ROLE_REACHED`: ARIA's composite items — option, menuitem*,
+  treeitem, gridcell, row, tab, column / row header — and presentation / none), not `aria-hidden` / `inert`, no spread: a role
+  or a key handler ALONE reaches nothing (review 1 of 1.37: `<div role="button" onClick>` was excused, the legend said "a
+  role, a tabindex and a key handler" and any one silenced it). Never a listener off the element (`RE_OFF_ELEMENT`: `.self` /
+  `|self`, Alpine's `.outside` / `.away` / `.window` / `.document`), a bare `@click.stop`, an inline handler holding
+  `.focus(`, `stopPropagation` or `target` (CRIT_1 must-fix 6), a self-closing element (a modal's backdrop) or an HTML
+  VOID one (`VOID`, the spec's list less the focusable `embed` / `input`: `<img onclick>` has no body — judged at once as a
+  self-closing one, never left waiting for a close tag and counted as a read past the bound). Such a CANDIDATE
+  is judged by its BODY (`clickBodies`, inside the tag reader — review 1 of 1.37, Laravel's starter kits: a wrapper whose
+  slot holds the `<button>`, a backdrop holding its empty overlay layer, 8 of Jetstream's 8 findings): read to its matching
+  close tag within the tag reader's bound (30 lines / 4,000 characters from its `>`: past it not judged, counted as
+  `tag-length`; one still waiting at the file's end — an end tag HTML lets one omit, `<li onclick>…</ul>` — counted too,
+  review 2 of 1.37), it is a finding only when the body holds content a user reads (literal text, an expression that is no slot
+  outlet) and nothing that is or may render a control — a tag focusable by default (its click bubbles; a `<label>` is none,
+  never focused itself: review 2 of 1.37), a component / custom element / member, `<slot>` (and `<ng-content>`), a slot
+  outlet (`{children}`, `{props.children}`, called too — `{children(state)}`, `{children?.()}` —, `{@render …}`, a Blade
+  `{{ $x }}` or `{!! $x !!}`: review 2 of 1.37), a line cut at `DS_LINE_MAX`: a doubt, clearing every candidate open (the control is in each body). An
+  empty body or one of elements alone (an overlay layer, an icon `<svg>`) is a doubt too. Nested candidates each get the
+  text seen while they are open (`textMark`); a close tag pops the elements opened since to its own name, an unmatched one
+  costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below).
+- **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)
+  and reads no clipboard (`RE_READS_CLIPBOARD`, the API — `clipboardData`, `navigator.clipboard`, `getData` —, never the
+  word: review 2 of 1.37, a handler's own "Pasting from the clipboard is disabled" excused it), or a bare `.prevent` /
+  `|preventDefault`; never a named handler, nor an inline one that hands its event on to a call (`forwardsEvent`: the
+  handler's parameter — an arrow's, a function's —, else `$event` / `event`, as an argument: `(e) => { e.preventDefault();
+  onPasteCode(e); }` is Vue's excused `@paste.prevent="onPasteCode"` spelled in JSX — review 1 of 1.37). The ONLY rule that
+  never follows a named handler: click-no-keyboard judges a named click handler on its element and body alone.
+- **zoom-disabled** — a non-CSS line's `user-scalable=no | 0` or `maximum-scale` under 2 (a `<meta>`'s content), Next's
+  `userScalable: false` or `maximumScale` under 2 (its viewport export).
+- **A stylesheet's structure** (`sheetChecks`) — through styleTokens' events (the ONE CSS walker, Token files above; CRIT_1
+  must-fix 2), over a file's CSS lines joined (the others blank: the line numbers hold) — a sheet, a Vue `<style scoped>`,
+  styled-jsx; a styled-components template has no block structure (its `outline` is not judged, its `transition:` line is).
+  outline-removed CANDIDATES: a removal (`outline: none | 0`, `outline-style: none`, `outline-width: 0`, `!important` too;
+  never `outline: 2px solid transparent`, which forced colours show) in a rule with a selector whose last compound is `*` or
+  an element focusable by default with no pseudo-class ("element"), or holds `:focus` itself — never -visible / -within —,
+  of no type or one focusable by default and never one REQUIRING `[tabindex="-1"]` (`RE_TABINDEX_OFF` outside a pseudo-class's
+  arguments, `outsideParens` — review 1 of 1.37: `main:focus`, `h1:focus`, `[tabindex="-1"]:focus` hold focus a script
+  moves out of the tab order, a skip link's target; review 2: `:not([tabindex="-1"]):focus` is every reachable one) —
+  while the rule's extent, nested blocks included, declares nothing else that draws ("focus": Bootstrap's `outline: 0;
+  box-shadow: …` replaces it; its `outline: none; box-shadow: none` override does not); never a selector naming
+  focus-visible, `@media print`, a class alone, a rule that never closes. An `@apply` in a rule naming a focus pseudo-class
+  reads as its bare utilities would as declarations (review 2 of 1.37: `*:focus { @apply outline-none }` was a focus
+  style): `outline-none` / `outline-hidden` / `outline-0` a removal of that rule, a `RE_TW_NOTHING` one nothing, any other
+  — and one with a variant, as before — draws. Tailwind's `outline-none` / `outline-hidden` / `outline-0` in a class list
+  under a variant of the element's OWN focus too (`isOwnFocus`: `focus`, `focus-visible` or an attribute form of them —
+  `data-focus`, `data-[focus]`, `ui-focus-visible`; a bare one is not: shadcn puts it on focus-managed containers and
+  activedescendant options; a RELATIONAL one — a `group` / `peer` / `has` / `in` part, `focus-within` — is a doubt, as
+  `:focus-within` in a sheet: review 2 of 1.37, a popover panel's `focus-within:outline-none` around its buttons, 7 of the
+  corpus's candidates; the token's variants cut at `:` OUTSIDE brackets, `variantsOf` — a named variant's arbitrary value
+  read whole, so `has-[:focus-visible]`, `group-[:focus]`, `peer-[:focus]` are relational too (review 3 of 1.37: cut at its
+  `:`, the value's `focus-visible]` read as the element's own), an arbitrary variant (`[&:focus]`, `[&_*:focus]`: `&` is the
+  element) by its `:`-cut pieces as before; a token the class split cut inside its brackets — at a quote or a `=`,
+  `has-[[data-slot=x]:focus-visible]` — reads as before). The file's FOCUS STYLE: a rule naming `:focus` /
+  `:focus-visible` / `:focus-within` (or inside one)
+  that declares something that DRAWS; a Tailwind utility under a FOCUS VARIANT that is no removal and draws, in a class list
+  or an `@apply`. A focus variant (`isFocusVariant` — review 1 of 1.37: Headless UI's documented Button warned): a variant
+  holding `focus` as a part delimited by `-`, `[`, `]` or its ends — `focus`, `focus-visible`, `group-focus/name`,
+  `peer-focus-within`, `data-[focus]`, `data-focus`, `ui-focus-visible`, `has-focus-visible`, an arbitrary `[&:focus]` —
+  never one a `not` part negates (`not-data-focus`); every own-focus variant is one. What draws nothing is decided BY VALUE,
+  once for both readers (review 1 of 1.37 — a ring-killing override was a focus style that excused every removal of the
+  project): `drawsNothing`, a declaration each of whose comma items has `transparent` as its colour or holds nothing but
+  `none` and zeros (`box-shadow: none`, `border: 0`, `outline: 2px solid transparent`), or an `outline-offset` (it moves an
+  outline; beside one that draws, that outline is the focus style — review 2 of 1.37: Tailwind v3's compiled `outline-none`,
+  `outline: 2px solid transparent; outline-offset: 2px`, in a CLI's `-o src/output.css` excused every removal), and
+  `RE_TW_NOTHING`, a utility valued `0` / `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`).
+  transition-all: an item that is `all` or names no property, for a
+  literal time over 0 (`transitionAll`; a variable or a global keyword is a property or no time, never `all`),
+  `transition-property: all`, Tailwind's `transition-all` (variants, `!`, `@apply`), a style object / inline style /
+  CSS-in-JS line — never inside `@media (prefers-reduced-motion: reduce)` nor a block nested in one (CRIT_1 must-fix 7).
+  Blocks nested past `DS_BLOCK_DEPTH` (64) are not judged, nor what they hold, and their rule is never a "focus" candidate.
+  The statement events' `from` (the line a statement's text starts on) places a finding at a declaration's first line.
+- **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
+  (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
+  the walk's view files; never the name-ranked token candidates: a `focus.css`, an `_a11y.scss`, a .less file count) through
+  `uiFocusPass`: the shorter path first, each read WHOLE (never cut at a line nor at a head), `DS_FOCUS_SHEETS` (48) READ
+  and `DS_FOCUS_CHARS` (384K) PARSED at most — only a sheet whose text names `focus` (any case) is parsed, every focus style
+  does, so a focus-free sheet costs an open and a read, never the parse budget; a sheet longer than `DS_FOCUS_CHARS` (not
+  read whole) or one to parse past what is left of it ends the search; stopping at the first that holds one;
+  asked ONLY when an UNSILENCED candidate exists (no candidate, no read — a silenced one is counted silenced whatever the
+  pass would say), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
+  says which (`focus-sheets` / `focus-chars`) NAMING the removals it left unjudged — a bound never hides a KNOWN candidate
+  silently (review 2 of 1.37: an Angular app of 60 components, a Next app of 140 CSS modules lost their true warning, the
+  report read "nothing"): `count` (the unsilenced candidates, past a file's cap too), `file` / `line` (the first LISTED
+  one, by file then line — one past a file's cap has no line and is named only when none is listed: the first file, in the
+  report's order, holding one, no `line`), and for focus-chars `sheet` (the sheet that ended the search), `chars` (the
+  bound, `DS_FOCUS_CHARS`) and `alone` (that sheet alone is longer than it, else the characters parsed before it would
+  have taken the search past it — review 3 of 1.37: the clause named no bound, nor that one compiled sheet was the cause). The
+  CLI prints that line in place of `uiNone`; spec_finish says it (below). The bounds are measured, not chosen (History): the highest that kept, in
+  every series where an antivirus scans each open (~1 ms), the report with the pass at its sheets bound ≤ 2.5× the same
+  report with no candidate, finish's part ≤ 2×, and modules that all name `:focus` at the chars bound ≤ 3×.
+  Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
+  focus.
+- **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` (ids `,`-separated; what follows them, a
+  reason, is not read) on the finding's line or the line above, whatever else that line holds (review 2 of 1.37 took
+  review 1's "alone on the line above" out: `button:focus { /* ui-check-off: … */` above its declaration, the line a
+  stylesheet's team writes it on, stopped silencing while finish and the READMEs said "the line above") — a comment
+  viewLines strips (in `src`, absent from `l`: `//`, `/* */`, `<!-- -->`, `{/* */}`), never a template engine's own (Blade's
+  `{{-- --}}`, Twig / Jinja's `{# #}`, ERB's `<%# %>`, Handlebars' `{{!-- --}}`: in a template, `<!-- -->`); a
+  stylesheet's finding sits on its declaration's line, a Tailwind utility's on its CLASS's line — not its tag's first: in
+  a multi-line markup tag no comment fits beside a later line's class (keep the class on the tag's first line, or a `//`
+  line inside a JSX tag). Counted in `silenced`, never
+  listed, never in finish. Two lines up, another id, a string's text, no id: nothing; a linter's own suppression
+  (`eslint-disable-next-line jsx-a11y/…`, `svelte-ignore a11y_…`) is not read (the user docs say so). No project switch in
+  1.37 (the `_UI checks off:_` marker is 1.38's).
+- **The feature report** (`featureReport`) — the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
+  its token files (a globals.css it edits) are read for the checks ALONE — never for raw values, never in `viewFiles`, within
+  `DS_VIEW_FILES` files read in all. `uiChecks` (`uiChecksReport`) = {findings (the first `DS_LIST`: rule, level, file, line,
+  value — warn first, then by file and line), total, byRule, silenced, limits}; its limits — EVERY bound that cut a read or
+  dropped a finding, one code a bound (review 1 of 1.37: a long line, a file's 200 findings and its 256K read dropped real
+  findings with `limits` empty): `view-files` (the feature's file cap cut what the checks read), then with {read, count, file
+  (the first)} `view-size` (a file longer than `DS_READ_CHARS`: read DS_READ_CHARS + 1 to know), `line-length` (lines cut at
+  `DS_LINE_MAX`), `tag-length` (reads past the tag reader's bound), `file-findings` (findings past a file's 200: counted in
+  total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` (with {count, file, line?}, focus-chars {sheet, chars, alone}: the
+  removals they left unjudged, above) — never reach the report's own `limits` / `truncated`. `view-size`, `line-length`,
+  `tag-length` and `file-findings` stay in the report alone: they hide no KNOWN candidate (a file-findings finding is
+  counted in `total`, and so in finish's warning). Not named (hostile-input guards, no real file reaches them): a tag of more than `DS_TAG_ATTRS` attributes, a
+  block nested past `DS_BLOCK_DEPTH` — not judged. The CLI prints it after the raw values (`uiHead` — naming finish's
+  warning — for a +ui feature, `uiHeadPlain` for any other: finish reads no other feature's checks, review 1 of 1.37 —,
+  what each rule that appears means — `uiRule` —, `uiSilenced`, a bound of the checks' own once: `dsLimit`, with its count
+  and file).
+- **spec_finish** — `designSystemFinish` answers for a +ui feature WITH OR WITHOUT a registry (CRIT_X decision 5): `uiChecks`
+  (`uiFinishChecks`: the warn-level findings — {total, byRule, top: the first 3, limits: the report's}; a warn finding past
+  a file's cap is counted, not listed, so `top` may be empty — the warning then reads `— …:`, one ellipsis: review 2 of
+  1.37); without a registry `registered` / `unregistered` are `[]` and there is no `raw` / `tokens`, and every reader of
+  `raw` guards it (finish.js, the CLI). ONE warning (`finish.uiChecks`), after the raw values', never a blocker — the
+  removals a focus search left unjudged its last clause (`finish.uiUnjudged`: the count, the first file:line, why — at the
+  characters bound, the bound and whether one sheet alone passes it), or,
+  with no finding, that clause the warning alone (review 2 of 1.37); `res.designSystem.uiChecks` only when it has findings
+  or that limit (the 1.35 shape otherwise). The report's other bounds never reach finish's text.
+- **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
+  tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
+  of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —
+  nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes — each ≤ 3×
+  plain JSX of the same size (measured 0.07–2.5×) — a file whose every line is a finding is not one of them and is not
+  bounded: ~4× (review 2 of 1.37, hostile3: a 256K HTML file of an `<img>` a line 4.0–4.3×, a TSX one 3.3–3.6×, a sheet
+  of removals 2.7×, the same on the parent); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real
+  ones); a finish without a registry ≤ 1.5× the feature report it runs (~0.9×); the feature report with the focus pass AT
+  its bound ≤ 2.5× the same report with no candidate (the owner's bar after review 1's follow-up; one project, two features
+  reading the same views, 1,000 sheets none naming focus: 1.2–1.3× at 48). The sheet of braces is the walker's every block: three allocation-free
+  fast paths in styleTokens (`unmaskInterpolation` of a text with no mask, `pageWide` of an empty prelude, `RE_MIXIN` only
+  after an `@` — the last a cost guard alone: +45 % on that sheet without it, under the bound) took it from ~5× to ~1.5× —
+  tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus.
+- **Not in 1.37** (cut — CRIT_1, the decisions; review 1's S12, deferred to 1.38: test-harness files — `*.cy.tsx`,
+  `__mocks__/`, `__fixtures__/`, `.storybook/`, `playwright/` — still read as view files): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion` raw kind and
+  `no-reduced-motion` (1.38, on one shared project pass), the `_UI checks off:_` marker (1.38), the `addEventListener` paste
+  form, a `hint` level.
 
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
@@ -1862,3 +2138,194 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (nine), the user reference's barrel rule; the barrel taken through another barrel is said. The corpus (32 repos and
   the synced shadcn-svelte) lists the same rows as review 3's fix. Lesson: a rule that asks "is this X?" must ask it
   of the case where X lost to another (a file shadowed by a namesake) — the corpus had one such source, with no row lost.
+- **1.37** (the owner's "doctor warns when a Reuse / Extend row names a deprecated component" — item 2(a) of the 1.37 "UI
+  checks" list, cut by its critique and the integration critique to the marker and the check) — `_Deprecated: use X_`
+  read beside `_From:_`, past the cap; doctor `ui-deprecated`, a warn with no stamp and no gate (folding it into
+  `ui-design-system` would have entered that check's gate / legacy / settled states and `designSaveCheck`). Kept for
+  1.38: the files that still render a deprecated component (the project scan — it needs one shared read pass; a second
+  read of every script cost 25–90× the report). The settled reader was touched in one place (the marker's read and cut,
+  and the path / variants cells read after the cut): every earlier `15-quality-design-system*` test passed unchanged.
+  The mutation list came before the fixtures: 41 of 41 on the reader, 20 of 20 on the check (one — the silence's word
+  bound — only after a fixture with the replacement past the notes' twentieth word).
+- **1.37.0 review 1** (the registry and the brief: 2 MEDIUM, 6 LOW) — RB-1 (MEDIUM): ui-deprecated was silenced by any word of
+  the notes whose KEY was the replacement's, and component names are common nouns: `| Reuse | Modal | the delete-confirmation
+  dialog |` hid a deprecated reuse. The notes name it now AS A COMPONENT, in the letters the registry writes it with
+  (`dsLetters`). The owner's rule read "in the registry's letter case, or inside a code span / as a JSX tag"; the narrower
+  reading was taken — the letters keep their case inside a code span or a tag too (every one of the owner's examples is in
+  the registry's case, and `why` is dsCell'd: a span's outer backtick and a tag's `<` are gone, so a code-only rule would
+  have needed the raw cell). RB-3: `_Deprecated — use X_`, `_Deprecated. Use X._`, `_Deprecated, use X_`, `_Deprecated in
+  favour of X_`, `_Deprecated (v3): use X_` were plain notes with no feedback; the marker is the emphasis whose first word
+  is Deprecated whatever follows it that is no letter (a digit continues the word — the narrower reading), one regex, and
+  the label-alone form is read by a property (no letter or digit in the emphasis after the word), not a `:_` case; the
+  notes show the text as written, so the shown bound counts from the word (`: ` included — the 1.37 fixture moved by two
+  characters). RB-6: the marker was found in the cell's `toLowerCase()` and read in the cell — every `İ` before it shifted
+  the index; the regex reads the cell itself. RB-7: a later row of a name listed twice was skipped before its marker was
+  read; deprecated is a property of the name, and the entry's notes carry the later row's marker so the brief agrees with
+  doctor. RB-8: doctor warned of a component past the 500-row cap that the brief quoted without its marker — a subtraction
+  from doctor: the marker is read on the rows read in full only. RB-5: the replacement was a pair across a sentence (`use
+  Card. Header…` named CardHeader), a fragment of a package (`@mui/x-data-grid-pro` named DataGrid) or a retired component
+  (`use Popup`); pairs only across blanks, a hyphenated / slashed / dotted / snake name whole (`data-grid` still names
+  DataGrid; a path no longer names its file's component), never a deprecated one. RB-4 (prose): the marker retires the
+  whole component — the user docs say to write a retired variant or prop without it. The reviewer's scripts replayed on
+  457d3da and on the fix: every difference is one of the findings (the scaffold, old-block and complete-feature scripts
+  identical). The mutation list came before the fixtures: 34 mutants (19 reader, 7 replacement, 4 silence, 4 brief), 33
+  killed (the brief's reuse-section guard by 15-quality's R review 2 fixture); the survivor — `dsLetters`' NFD
+  normalization (no case asked accents to fold) — deleted as dead.
+- **1.37.0 review 2** (the registry: 4 LOW, two of them review 1's own regressions) — R2-1: RB-3's "whatever follows the
+  word that is no letter" let a BLANK open the marker, wider than the docs' "punctuation after the word": `_deprecated props
+  removed_`, `` `dense` prop (_deprecated in v2_) `` and a successor's `replaces the _deprecated Table_` retired their rows
+  (the successor's voided every `use DataGrid`, and a 1.36 project's doctor and spec_upgrade gained an unsilenceable
+  warn), `_deprecated-flag_` and a path cell `_deprecated/Table.tsx` too (the path emptied). Narrowed to the docs: the first
+  non-blank character after the word is no letter or digit, and the name reader's joiners (`-`, `/`, `.`) before a letter
+  or digit make a longer name — the owner's decision named `-`; `/` and `.` were taken with it, the narrower reading,
+  because 457d3da read the path cell and `_deprecated.tsx` right and the joiners are one property (RE_DS_NAME_WORD's), not
+  a list. The cost, documented: `_Deprecated in favour of X_` and `_Deprecated since 2.0: use X_` are notes again (the
+  `favour` fixture moved to "not a marker"). R2-3: the warn printed the marker's spelling (`use data-grid`) while only the
+  registry's (`DataGrid`) silenced it; it prints the one expression the silence compares. And review 1's survivor came back
+  as a regression: with `dsLetters`' NFD step deleted, notes writing `á` as `a` + a combining mark warned (457d3da's folded
+  key silenced them) — and the mark is no letter, so `dsNameIn` split the word in two: the fix is NFC in `dsNameIn` (one
+  form for the words, which also gives a marker written so its NFC row back) and in `dsLetters` (a registry name written
+  so); accents and case are still kept. R2-2 (prose): RB-5's whole-name word drops `Dialog/Sheet`, `Dialog.Root`, a path
+  and `DataGrid-based` as replacements and as silencing notes — the user docs say to name the replacement by its name alone.
+  R2-4 (prose): a capitalised sentence start silences (`Dialog to confirm the delete`) — documented with the advice to
+  write a component kept on purpose in a code span or a tag; no sentence-start rule. The reviewer's scripts replayed on
+  0753c76, 457d3da and the fix: every difference from 0753c76 is R2-1's (the notes and paths 457d3da read, `favour` /
+  `since` / `_Deprecated in favour of Card_` notes) or R2-3's (the warn's spelling, the NFD notes); a 1.36 project passes
+  doctor and spec_upgrade as on 457d3da. The mutation list came before the fixtures: 16 mutants (9 on the regex — the blank
+  run, each joiner, a joiner across blanks or before no letter, an em dash joined —, 3 on the printed name, 4 on the NFC
+  steps), 16 killed, each by its own fixture. Lesson: a mutant that survives is a shape no fixture asks for — before
+  deleting its line as dead, ask the parent tree whether that shape was right there.
+- **1.37** (the base the UI checks read through, before them) — `viewLines`, rawValuesOf's loop head as a GENERATOR (CRIT_1
+  must-fix 3: over a list, the 200-value early exit still read every line), and styleTokens' walker handing its structure
+  to an observer (block / statement / close events — CRIT_1 must-fix 2: no second prelude tracker). Both proved
+  behaviour-preserving on a corpus of real files: the raw values of 5,256 view files (39,700 values) and the tokens of 2,493
+  stylesheets (27,663) byte-identical against 1.36, with and without an observer; the UI checks' chain added the
+  statements' `from` and three allocation-free fast paths with the walker's 206,379 events unchanged (one sha1). Cost:
+  rawValuesOf alone 1.03–1.28× the parent on a 20,000-line sheet (within the 1.5× bound); the walker without an observer
+  0.94×. Mutation passes: 10 of 10 (one equivalent in output — the pre-existing blank-line skip, a cost guard: 6× on
+  20,000 blank lines) and 14 of 14.
+
+### UI checks
+- **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
+  public design-skill collections — Vercel's Web Interface Guidelines for the rules) — designed with eleven rules; the
+  critique (CRIT_1) cut five on real shapes and the integration critique (CRIT_X) moved the project-level read to 1.38:
+  `autoplay-unmuted` (browsers refuse unmuted autoplay, so 1.4.2 cannot fail) and `img-no-size` (CSS-module and styled
+  sizing are invisible to a line reader; Lighthouse measures the layout shift), `motion-layout` and
+  the `motion` raw kind (they need item 2's raw-value redesign), `no-reduced-motion` and the `_UI checks off:_` marker (a
+  project fact — one shared project pass, 1.38), the `addEventListener` paste form. `transition-all` stays at `report`:
+  shadcn's own Button / Switch / Sidebar ship it. The tag reader resumes past the previous tag's end or a failed read's
+  horizon — the design's re-scan from the next `<` measured 1,230× plain JSX; ten hostile 256K inputs now run at
+  0.07–1.5× it (bound 3×), the sheet of braces from ~5–17× to ~1.5× with the walker's three fast paths. The focus facts
+  read ALL the project's stylesheets, and only when a candidate exists (CRIT_1 must-fix 4: the name-ranked token
+  candidates miss a `focus.css`). A real-file survey before release (4,612 view files, 13 roots, tests and stories out):
+  img-no-alt 11 and zoom-disabled 2, all real; outline-removed 0 of 99 candidates (each root holding one also holds focus
+  styles); paste-blocked 0; click-no-keyboard 50 unique, 45 real and 5 debatable (backdrops that wrap their dialog, a
+  trigger wrapper whose child is the control, a div wrapping its `<label>`) — left to the review. `res.designSystem.uiChecks`
+  only when it has findings: the 1.35 key shape an assertion pins. Mutation passes: 126 of 126 on `uiChecksOf` (three dead
+  branches deleted, eleven fixtures added that only one rule answers), 41 of 41 on the report / finish / CLI; one survivor
+  kept by design, the `RE_MIXIN` fast path — a cost guard alone (+45 % on the sheet of braces, under the bound).
+- **1.37.0 review 1** (four reviewers — the shapes on ten public UI repositories, the engine's cost and bounds, the registry
+  and the brief, the docs; this area's fix round) — E1 (HIGH): the focus pass at its bound (1,000 sheets / 4 MB) made the
+  feature report 8.2× slower on 3,000 CSS modules — and at the bound it judges nothing. Now asked for an UNSILENCED
+  candidate alone (a silenced one is counted silenced whatever the pass says), a sheet parsed only when its text names
+  `focus` (a cost guard alone: the pass 18–30 ms with it, 35–98 ms without), each sheet read whole within the budget, and
+  the bounds MEASURED down until the report with the pass at either bound is within 2× the same report with no candidate
+  (interleaved fresh processes, the median of 3 warm calls): 32 sheets → 1.5–1.6× (finish's part 1.5×), 128K characters →
+  1.44× on modules that all name `:focus` (256K measured 1.8–2.15× there), Angular's 900 components 2.1× → 1.16×; a ratio
+  test owns it (1.1–1.3×; 4.4× on the parent). The open is the cost (~1 ms a file where an antivirus scans each one), not
+  the parse. E2 + D2: "every read is bounded and says what it dropped" was false — a line cut at 2,000 carried its open
+  quote 30 lines down (an inline data-URI logo hid the `<img>` below it; minified HTML judged an `<img>` on the attributes
+  before its cut alt), 200 report-level findings hid a file's real ones (`total` 200), a view file's 256K read and a
+  project sheet's 256K head cut silently (the last a false outline warning): one limit code a bound, with its count and
+  first file, finish carrying them; the hostile-input guards (100 attributes, 64 nested blocks) left unnamed. S1 + D1:
+  click-no-keyboard warned on Laravel's starter kits — Alpine's `.outside`, a wrapper whose slot holds the button, a
+  backdrop's empty overlay layer — and a role or a key handler alone silenced it (the legend said "a role, a tabindex
+  and a key handler"): the target modifiers read like `.self`, a candidate judged by its BODY (clickBodies, inside the tag
+  reader: each character once, four hostile click inputs within 3×), reachability by focusability (ARIA's composite items
+  reach the keyboard through their container). S2 `v-bind="$attrs"` / `x-bind="obj"` spreads (the design's dropped
+  fixture). S3 what draws nothing decided BY VALUE (Bootstrap's `outline: none; box-shadow: none` override, `focus:ring-0`
+  were focus styles excusing the project's every removal); S4 ONE focus-variant predicate (Headless UI's `data-[focus]`,
+  Tailwind 4's `has-focus-visible`). LOWs by subtraction or one line: S5 a trailing marker silences its line alone, S6 a
+  paste handler that hands its event on is not followed, S7 a titled `<img>` is named, S9 `main:focus` / `[tabindex="-1"]`
+  is no candidate, E3 the plain head off +ui. Prose: D3 ("a named handler" is never judged only for paste), D5 (3.3.8's
+  scope), D8, S10, S11. The review's corpus again (2,591 view files of ten repositories): click-no-keyboard 35 → 11, all
+  eleven real (clickable spans, list items and cards with text) — three real ones lost to the body rule (an icon COMPONENT
+  in a clickable card may render a control: a doubt); img-no-alt 217 → 17, all real (cal.com's 200 titled flags gone);
+  zoom-disabled 3, real; no outline-removed finding (each root holding a candidate holds focus styles); paste-blocked 0.
+  A project sheet's `button:focus { -webkit-tap-highlight-color: transparent }` no longer excuses a reset (it draws
+  nothing). Not fixed: `outline-offset` beside a transparent outline still draws (no value says it), an HTML void element's
+  click (`<img onclick>`) waits for a body it never has (not judged). Mutation pass: 107 mutants, the list written before
+  the fixtures — 99 killed at first; six wanted a click-body fixture, one line was dead and went (judgeTag's `/>` check:
+  clickBodies opens no self-closing tag), one is the cost guard above, timed with and without; the whole pass again after
+  the fixtures: 105 of 106 (the cost guard the one survivor; the logic mutants run the file without its three timed
+  blocks, the cost mutants the whole file).
+- **1.37.0 review 1, the follow-up** (the owner) — 32 sheets / 128K judged outline-removed on almost no project of more than
+  32 stylesheets (gen-angular's correct warning was lost): the cost bar relaxed to keep coverage — the report with the pass
+  at its sheets bound ≤ 2.5× the same report with no candidate (proj-d), finish's part ≤ 2×, modules that all name `:focus`
+  at the chars bound ≤ 3× — and `DS_FOCUS_CHARS` now counts the characters PARSED (a sheet naming `focus`), not read: on
+  3,000 focus-free 20K modules it reads 48 sheets instead of 18 at the cost the sheets bound already allows (1.7–1.9× vs
+  1.3–1.5×), so it was taken. Candidates, interleaved fresh processes, the median of 7 warm calls, in series under an
+  antivirus that scans each open (~1 ms) and one quieter series (~0.15 ms an open): 64 / 256K finish 2.09–2.16× (over);
+  56 / 384K finish up to 2.04×, 56 / 448K 2.11–2.3× (over); 48 / 384K feature 1.1–1.85×, finish 1.0–1.81×, the chars
+  bound 2.0–2.75× on 13K and 20K modules naming `:focus`; 48 / 448K the chars bound up to 3.89× on 20K modules (over);
+  95–100 / 512K finish 2.51× (over); in the quiet series 128 sheets measured 1.45× / 1.32× — the bound is the slow-open
+  series' (a reviewer's machine). Chosen: 48 / 384K. gen-angular's 900 components still end at `focus-sheets` (they would
+  need ~900 sheets read, ~8×); a 40-component app is judged again (its correct warning stands, excused with a deep focus
+  style). A click on an HTML void element is judged at once as a self-closing one (`VOID`): `<img onclick>` no longer waits
+  for a close tag and is counted as `tag-length`. Mutation pass of the new lines: 22 of 22, the list written first — the
+  focus pre-test among them, killed now: with the budget counting parsed characters it changes a result, no cost guard alone.
+- **1.37.0 review 2** (four reviewers again; this area's fix round) — three of the four MEDIUMs were review 1's own fixes,
+  each wider than its finding. R2-S1 (regression): S4's ONE predicate also widened the removal side — a `focus-within:` /
+  `group-focus:` / `peer-focus:` / `has-focus:` removal on an element nobody focuses was a candidate (7 of the corpus's
+  candidates, cal.com's popover panels and inputs' wrappers, Headless UI's comboboxes); a removal is judged now only under
+  the element's OWN focus (`isOwnFocus`), as the sheet reader judges `:focus` and never `:focus-within`, the focus-style
+  side keeping `isFocusVariant`. R2-S2 (S3's remainder): `outline-offset` draws nothing — Tailwind v3's compiled
+  `outline-none` (`outline: 2px solid transparent; outline-offset: 2px`, in the CLI's `-o src/output.css`) excused every
+  `focus:outline-none` of its own project — and an `@apply` in a focus rule reads by its bare utilities (`*:focus { @apply
+  outline-none }` was a focus style, its own excuse). R2-E1 (regression) + R2-E2: past 48 project sheets (an Angular app
+  of ~47 components, a CSS-modules app) the rule could never fire, and the report said "nothing" — a bound never hides a
+  KNOWN candidate silently now: the pass's limit names the removals it left (count, first file:line, focus-chars' sheet —
+  R2-D2), the CLI prints it in place of "nothing", finish says it (the warning's last clause, or alone — `uiUnjudged`);
+  the reviewer's 60-component Angular and 140-module Next apps: a finish note now. The other bounds stay in the report:
+  none hides a known candidate. R2-D1 (regression of S5): S5's "alone on the line above" taken out — a stylesheet's team
+  writes the marker after the rule's `{`, and finish's own text said "the line above"; 457d3da's rule is back (two
+  branches had each pinned its own wording: the user-facing sentence is the rule's test too). LOWs by subtraction: R2-S3
+  the clipboard API, not the word (a blocking handler's message excused it); R2-S4 `[tabindex="-1"]` only where the
+  compound requires it (`:not(…)` skipped every reachable one); R2-S5 `<label>` no control in a body, a candidate whose
+  end tag HTML omits counted at the file's end (it was dropped silently); R2-S7 render-prop `{children(…)}` and Blade's
+  `{!! $slot !!}` are outlets; R2-D3 one ellipsis; R2-D4 `tag-length` only for a tag that could have held a finding (shadcn's
+  `<DayPicker>` props were a limit line nobody could act on). Prose: R2-S6 (a component or an icon alone in a click's
+  content is a doubt — the docs said "a control"), R2-D5, R2-F4 (the comment forms that silence), R2-F5 (a finding on
+  every line ~4×, unbounded). The corpus again (2,591 view files): the 7 focus-within candidates gone, nothing else moved —
+  img-no-alt 17, zoom-disabled 3, click-no-keyboard 11, no outline-removed finding. Mutation pass: this round's 51, the list
+  written before the fixtures — 49 caught at first, two wanted a fixture (a `)` before the tabindex the compound requires;
+  an outer candidate counted past the bound while an inner one waits at the file's end) — and the whole list again on the
+  final tree, 51 of 51; review 1's lists run whole on it: 83 of its 106 as written, 16 ported to the lines this round
+  rewrote (all caught), 4 superseded by the follow-up's list, 2 gone with S5's rule, 1 moved into the i18n strings with
+  its line (the empty top's ellipsis — this round's D3 mutants); the follow-up's 22 of 22 (one ported).
+- **1.37.0 review 3** (two reviewers, a verdict pass; its three LOWs fixed without another round, each the narrowest that
+  closes it) — R3-U1 (R2-S1's remainder, a regression against 457d3da): `utilities()` cut a token at every `:`, inside
+  brackets too, so `has-[:focus-visible]:outline-none` gave the variant `focus-visible]`, read as the element's own focus — a
+  candidate and finish's warning, where the dash spelling is a doubt (`group-[:focus]:`, `peer-[:focus]:`, `in-[:focus]:`,
+  `not-[:focus]:` the same). The removal side alone: `variantsOf` cuts at `:` outside brackets, a named variant's arbitrary
+  value read whole, an arbitrary `[&…]` by its pieces as before; the focus-style side untouched (`has-[:focus-visible]:ring-2`
+  a focus style, as its dash twin). A subtraction: against 2f901c0 only those shapes (and a malformed unclosed bracket) lose
+  their candidate — the corpus sweep (2,591 view files, 293 candidates), the real fixtures and review 1–2's replays
+  byte-identical. Not done: the sheet twin (`.panel:has(:focus)`, `button:not(:focus)` — the same on all three trees): testing
+  `:focus` outside parentheses would also drop `button:is(:focus, :hover) { outline: none }`, an own-focus removal, and
+  telling `:is` / `:where` from `:not` / `:has` is a name list; a token the class split cuts inside its brackets (a quote, a
+  `=`: `has-[[data-slot=x]:focus-visible]`) reads as before. R3-RD1: pt's tag-length line said European "para lá de" (pt-BR
+  derives from it): "além de". R3-RD2: the focus-chars clause said "past the characters parsed at most" — the limit now
+  carries `chars` (the bound) and `alone` (that sheet alone is longer than it), and finish and the CLI name the 384K and say
+  when one sheet alone was the cause; ES "hasta que … hubiera llevado". This file said the unjudged removals' first was "by
+  file then line": it is the first LISTED one, a past-cap file only when none is listed. Mutation pass, the list written
+  before the fixtures: R3-U1 10 of 10 (the guard that keeps a stray `]` from taking the depth negative caught by the
+  quote-cut token above); R3-RD1 / RD2 26 of 26 — 25 at first, the survivor (`alone`'s `>` as `>=`, the comparison the
+  search's end shares) a shape no fixture asked for: a sheet of exactly 384K characters is read and parsed whole (its focus
+  style counts), now pinned — it also catches the budget comparison's `>=`.
+- **1.37.0, the release's Docker run** — the hostile-cost check failed on node:18-alpine alone (`nested`, a sheet of nothing
+  but `{`: 6–7× plain JSX under the suite's load, 3.2–3.9× quiet), and 457d3da measured the same there (3.6–3.9× quiet: the
+  first Docker run had passed on its one re-measure). Not the checks: on Node 18 `styleTokens` alone walks that sheet at ~3×
+  plain JSX and the checks add nothing over a walk with a do-nothing observer (46–53 ms vs 47–52 ms). A stylesheet's ratio is
+  now to the larger of plain JSX and that shared walk (≤ 3×), with a coarse ≤ 10× plain JSX for a walk that stopped being
+  linear; a mutant that pays O(text) on every block past the depth bound still fails it. The CHANGELOG says so.

@@ -62,8 +62,9 @@ problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. 
 
 **+ui adds 5 mandatory `[UI]` sections** — Design System Usage (one row per component — Reuse · Extend · New — checked
 against the registry `.specs/steering/design-system.md`: doctor's `ui-design-system`, a gate at size m / l) · UI States (a
-state matrix and a reference per view) · Accessibility
-(WCAG 2.2 AA) · Responsiveness & i18n · UI Performance Budget (Core Web Vitals). See `references/ui-design-patterns.md`.
+state matrix with its worst case and a reference per view) · Accessibility (WCAG 2.2 AA) · Responsiveness & i18n · UI
+Performance Budget (Core Web Vitals) — and, optional, Component Contracts (one per New / Extend component). See
+`references/ui-design-patterns.md`.
 
 **+obs adds 5 mandatory `[OBS]` sections** — SLIs & SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health
 & Capacity. See `references/observability-patterns.md`.
@@ -113,8 +114,9 @@ own sections hold them. **Filled means your own text:** the template's guidance 
   "never / for every" rules like tenant isolation). The Coverage Check shows every AC in ≥ 1 test.
 - **+saas:** tenant-isolation, rate-limit, idempotency, authorization-matrix and audit-log tests. **+sec:** one
   abuse-case test per threat. **+privacy:** export / erasure / retention tests. **+dist:** failure injection. **+api:**
-  contract tests and the breaking-change diff. **+ui:** an accessibility check + visual regression of the states; at
-  size m / l (or none) each UI task's visual review against the view's reference (`references/ui-review.md`).
+  contract tests and the breaking-change diff. **+ui:** an accessibility check + visual regression of the states (a
+  contract's states as fixtures, its keys as component tests); at size m / l (or none) each UI task's visual review
+  against the view's reference — on the floor where it has none (`references/ui-review.md`).
   **+obs:** an alert in a staged failure, a rollback drill, fault injection. **+data:** data-quality checks on fixture
   batches, an idempotent re-run / backfill of a partition, the freshness alert, the schema-change compatibility check.
   **+port:** the differential check over the whole corpus (a property: the same output, the same error, case by case).
@@ -153,8 +155,9 @@ own sections hold them. **Filled means your own text:** the template's guidance 
 - **+privacy:** data subject rights verified end to end on the real stores, retention scheduled.
 - **+dist:** failure-injection tests green, no dual write left.
 - **+api:** contract tests and the breaking-change diff green.
-- **+ui:** the accessibility check, a keyboard / screen-reader pass, the performance budget, and each built state's
-  visual review against its reference — passed, or why it was not run.
+- **+ui:** the accessibility check, a keyboard / screen-reader pass, the performance budget, the UI checks' warnings
+  (`spec_scan {designSystem: true, name}`) fixed or silenced with a reason, and each built state's visual review —
+  against its reference, or on the floor where it has none — passed, or why it was not run.
 - **+obs:** an alert fired in a staged failure and a rollback drill.
 - **+data:** the data-quality checks, a partition re-run and a backfill rehearsal on real-sized data — the same rows as one run.
 - **+port:** behaviour first — the differential check green on the final build, run AGAIN after the last improvement (doctor

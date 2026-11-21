@@ -79,9 +79,11 @@ const text = {
     ],
     ui: [
       // (1.35: the second line and the table — the rows spec_doctor's ui-design-system checks against the registry; appended, so
-      // a 1.34 one-line block still reads as template text)
-      ["Design System Usage", "- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours.\n- One row per component, checked against the registry (.specs/steering/design-system.md — spec_doctor's ui-design-system): Reuse = one it lists, used as is · Extend = a new variant of one it lists · New = none it lists fits — say why; it joins the registry when the feature is finished. No component at all: replace the table with one line, n/a — why.\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| Reuse | [component the registry lists] | [what it does in this view] |\n| New | [new component] | [why no listed component fits] |"],
-      ["UI States", "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).\n- The reference each view is built against: a design export or an HTML prototype the user approved — one per state where they differ — and its path · the visual review compares what is built with it, state by state (references/ui-review.md)."],
+      // a 1.34 one-line block still reads as template text) (1.37: a last line, the contracts — in an optional h2 of their own,
+      // never under the table: a contract's states table with a New row would be read as a usage row; UI States: a third line,
+      // the worst case — both appended, so a 1.36 block still reads as template text)
+      ["Design System Usage", "- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours.\n- One row per component, checked against the registry (.specs/steering/design-system.md — spec_doctor's ui-design-system): Reuse = one it lists, used as is · Extend = a new variant of one it lists · New = none it lists fits — say why; it joins the registry when the feature is finished. No component at all: replace the table with one line, n/a — why.\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| Reuse | [component the registry lists] | [what it does in this view] |\n| New | [new component] | [why no listed component fits] |\n\n- A New / Extend row gets its contract — states, keyboard, role / name, variants as one enumerated prop, slots — under an optional `## [UI] Component Contracts` section."],
+      ["UI States", "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).\n- The reference each view is built against: a design export or an HTML prototype the user approved — one per state where they differ — and its path · the visual review compares what is built with it, state by state (references/ui-review.md).\n- A worst-case row: each field at its realistic extreme (longest value, 0 / 1 / thousands, no image, the longest or RTL locale) · what wraps or truncates · its own capture."],
       ["Accessibility", "- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass)."],
       ["Responsiveness & i18n", "- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue."],
       ["UI Performance Budget", "- Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users)."],
@@ -1042,6 +1044,13 @@ const msg = {
       duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "block of the feature's code repeats" : "blocks of the feature's code repeat"} another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       // 1.35: raw colours and sizes in the feature's view files, where the design-system registry has tokens — a warning, never a blocker
       designSystemRaw: (n, top, slug) => `the feature's view files hold ${n} raw ${n === 1 ? "value" : "values"} where the design system has tokens — ${top}${n > 3 ? "; …" : ""}: use the token, or note in the report why a literal is deliberate (the list: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
+      // 1.37: the UI checks of the feature's view files (the warn-level ones nobody silenced) — a warning, never a blocker
+      // (top: "" when every one sits past a file's cap — counted, not listed; unjudged: uiUnjudged's clause, or "")
+      uiChecks: (n, top, slug, unjudged) => `the feature's view files hold ${n} UI ${n === 1 ? "anti-pattern" : "anti-patterns"} — ${top || "…"}${top && n > 3 ? "; …" : ""}: fix each, or mark a deliberate one with a \`ui-check-off: <rule>\` comment on its line or the line above (the list: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})${unjudged ? "; " + unjudged : ""}`,
+      // (1.37 review 2: the outline removals a focus search ended at its bound left unjudged — sheet: the one that ended a
+      // search at the characters bound, chars: that bound, alone: that sheet alone is longer (review 3); the warning's last
+      // clause, or the warning alone)
+      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} outline ${n === 1 ? "removal" : "removals"} not judged (the first: ${at}): the project's stylesheets ${sheet ? `from ${sheet} on` : `past the first ${read}`} were not read for a focus style${sheet ? ` (that sheet ${alone ? "alone is longer than" : "would have taken the search past"} the ${chars / 1024}K characters a focus search parses)` : ""} — check the project draws one, or silence ${n === 1 ? "it" : "them"}`,
       // 1.30: no task names a file in _Implements:_ — what reads them sees no code of the feature. file: the one holding the tasks
       // (tasks.md; an xs change's change.md — review 9)
       noImplements: (file) => `no task names its files in _Implements:_ — the drift baseline, the duplicate check and dev-guardian's attribution see no code of this feature. Add _Implements: <path>_ to each task that wrote code (an edited ${file} is re-approved), or ignore this if none did.`,
@@ -1620,6 +1629,15 @@ const msg = {
         tokens: (n) => `  (only the first ${n} tokens of the code are read: the rest is not compared)`,
         "registry-rows": (n) => `  (only the registry's first ${n} components are checked for a path that is gone)`,
         "view-files": (n) => `  (only the feature's first ${n} view files are read for raw values)`,
+        // (1.37 review 2: at — the first unjudged removal's file:line, count — how many, sheet — the one that ended the search;
+        // review 3: chars — the characters bound, alone — that sheet alone is longer)
+        "focus-sheets": (n, at, count) => `  (${count} outline ${count === 1 ? "removal" : "removals"} not judged — the first: ${at}: focus styles were looked for in the project's first ${n} stylesheets, a bound)`,
+        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} outline ${count === 1 ? "removal" : "removals"} not judged — the first: ${at}: focus styles were looked for in ${n} ${n === 1 ? "stylesheet" : "stylesheets"}, until ${sheet}, ${alone ? "longer alone than" : "which would have taken the search past"} the ${chars / 1024}K characters a focus search parses)`,
+        // (1.37 review 1: the UI checks' other bounds — count: how many it cut, file: the first)
+        "view-size": (n, file, count) => `  (${count} view ${count === 1 ? "file is" : "files are"} longer than the ${n} characters read of a file — the first: ${file}: the UI checks did not read the rest)`,
+        "line-length": (n, file, count) => `  (${count} ${count === 1 ? "line is" : "lines are"} longer than ${n} characters — the first in ${file}: each is read up to there, and a tag it cuts is not judged)`,
+        "tag-length": (n, file, count) => `  (${count} ${count === 1 ? "tag is" : "tags are"} not judged — the first in ${file}: read past ${n} lines or the reader's character bound)`,
+        "file-findings": (n, file, count) => `  (${count} more UI ${count === 1 ? "finding" : "findings"} past a file's ${n} — the first in ${file}: counted, not listed)`,
         "component-files": (n) => `  (${n} component files were read for the further components they export, and a bound was reached — the files or characters read, or the names kept of one file: the rest is not compared)`,
         "workspace-manifests": (n) => `  (a bound of the workspace patterns was reached — ${n} of the workspace packages' package.json files read: the libraries of the rest are not compared)`,
       },
@@ -1630,6 +1648,21 @@ const msg = {
       dsNoViewFiles: "  no view or style file among its _Implements:_ files — nothing to read",
       dsRegistered: (list) => `  ✓ added to the design-system registry: ${list}`,
       dsUnregistered: (list) => `  ▲ not added to the design-system registry (no plain component name, or the file could not be written): ${list}`,
+      // 1.37: the UI checks of the feature's files (spec_scan {designSystem: true, name}'s `uiChecks`)
+      uiHead: (n) => `  UI checks (${n}) — spec_finish warns about each but the report-only ones:`,
+      uiHeadPlain: (n) => `  UI checks (${n}):`,
+      uiNone: (files) => `  UI checks: nothing in its ${files} view ${files === 1 ? "file" : "files"}`,
+      uiReportTag: "(report only)",
+      uiLegend: "  what each means:",
+      uiRule: {
+        "zoom-disabled": "the viewport stops pinch-zoom (user-scalable=no, maximum-scale under 2) — let people zoom (WCAG 1.4.4)",
+        "img-no-alt": "an <img> without alt — say what it shows, or alt=\"\" when it is decoration (WCAG 1.1.1)",
+        "outline-removed": "the focus outline is removed and no focus style of the project replaces it — keep a visible indicator (:focus-visible with an outline, a ring or a border; WCAG 2.4.7)",
+        "click-no-keyboard": "a click handler on an element the keyboard cannot reach — use a <button> or an <a href>, or make it focusable: a tabindex, with a role and a key handler (WCAG 2.1.1)",
+        "paste-blocked": "a paste handler cancels the paste without reading the clipboard — never block paste: password managers, long codes (WCAG 3.3.8 at a sign-in or code step; a usability defect elsewhere)",
+        "transition-all": "transition: all (or no property) animates every property that changes, layout ones too — list the ones that should move",
+      },
+      uiSilenced: (n) => `  (${n} silenced by a ui-check-off comment)`,
       dsTokensNew: (n) => `  tokens in the code, not in the registry (${n}) — a row each:`,
       dsPending: (list) => `  in the code, built by an unfinished feature (its finish adds them): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,
@@ -2481,7 +2514,7 @@ const msg = {
         api: ["+api: contract tests and the breaking-change diff against the published contract green on a fresh local run.",
           "+api: the contract file matches the shipped behaviour — every documented status code, error code and header is what the handlers return; anything removed is deprecated with its Sunset date."],
         ui: ["+ui: the automated accessibility check clean and the keyboard / screen-reader pass done on the final build; every state of the state matrix reachable and shown.",
-          "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed; each built state passed its visual review against its reference, or the reason it was not run is on record."],
+          "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed; each built state, the worst case included, passed its visual review — against its reference, or on the accessibility floor where it has none (320 px, 200 % zoom, focus) —, or the reason it was not run is on record."],
         obs: ["+obs: an alert fired in a staged failure and the rollback drill done on the final build; the dashboards and runbooks the alerts link exist.",
           "+obs: the metrics, logs and traces the design names seen emitting from the final build — no personal data in logs or traces."],
         data: ["+data: the data-quality checks, a partition re-run and a backfill rehearsal green on a fresh run against real-sized data — the same rows as one run, bad rows quarantined.",
@@ -3654,6 +3687,10 @@ const quality = {
     // row spec_finish adds for a New component and the table it appends when the file ends in none.
     dsLegacy: (d, v) => `design approved before ${v} — asked only from its next approval (${d})`,
     dsNoSection: "no Design System Usage section in the design — nothing to check against the registry",
+    // 1.37 doctor's ui-deprecated: a Reuse / Extend row naming a component the registry marks `_Deprecated: use X_` (a warn)
+    dsDeprecatedNone: "Design System Usage reuses no component the registry marks deprecated",
+    dsDeprecated: (n, list) => `Design System Usage reuses or extends ${n} ${n === 1 ? "component" : "components"} the registry (.specs/steering/design-system.md) marks deprecated — ${list}: move to what its marker names, or name that component in the row's notes to say why this one stays`,
+    dsDeprecatedItem: (name, use) => (use ? `'${name}' (use ${use})` : `'${name}'`),
     dsUnfilled: "Design System Usage is not written yet — checked against the registry once it is",
     dsNoRegistry: `no design-system registry yet (.specs/steering/design-system.md) — the one inventory of components and tokens every +ui feature builds from. Create it from the code: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `the design-system registry (.specs/steering/design-system.md) lists no component yet — add the existing ones (spec_scan {designSystem: true} · ${DEV_SPEC} design-system lists what the code holds)`,

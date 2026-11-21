@@ -176,6 +176,29 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     });
   }
 
+  // --- 1.37: doctor's ui-deprecated — a Reuse row naming a component the registry marks `_Deprecated: use X_` ----------------------------
+  {
+    const dep = {};
+    for (const lang of ["en", "pt"]) {
+      const dp = path.join(tmp, "p137-ds-deprecated-" + lang);
+      SR.initProject(dp, ["ui"], lang);
+      write(dp, REG, "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| Table | src/components/Table.tsx |  | _Deprecated: use DataGrid_ |\n| DataGrid | src/components/DataGrid.tsx |  |  |\n");
+      const f = SR.createFeature(dp, { name: "Orders", tracks: ["ui"], summary: "x", lang });
+      const usage = lang === "pt" ? "## [UI] Uso do Design System\nA página usa o sistema.\n\n| Tipo | Componente | Porquê / notas |\n|---|---|---|\n| Reutilizar | Table | a lista |\n"
+        : "## [UI] Design System Usage\nThe page uses the system.\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| Reuse | Table | the list |\n";
+      fs.writeFileSync(path.join(f.dir, "design.md"), "# Design: Orders\n\n" + usage);
+      const human = runIn(["doctor", f.slug, "--project", dp]);
+      const asJson = jsonOf(runIn(["doctor", f.slug, "--project", dp, "--json"]));
+      const Qd = MSG(lang).quality;
+      dep[lang] = { code: human.code, line: human.out.split("\n").find((l) => / ui-deprecated /.test(l)), want: () => "  ▲ ui-deprecated — " + Qd.dsDeprecated(1, Qd.dsDeprecatedItem("Table", "DataGrid")), // (lazy: the parent has no such key)
+        json: (asJson.checks || []).find((c) => c.id === "ui-deprecated") };
+    }
+    all("1.37 doctor (CLI): a +ui feature reusing a component the registry marks deprecated prints the ▲ ui-deprecated line naming its replacement, in the feature's language; --json carries {id, status, detail} (got " + js(dep) + ")", {
+      en: () => dep.en.line === dep.en.want() && js(dep.en.json) === js({ id: "ui-deprecated", status: "warn", detail: dep.en.want().slice("  ▲ ui-deprecated — ".length) }),
+      pt: () => dep.pt.line === dep.pt.want() && dep.pt.json.status === "warn",
+    });
+  }
+
   // --- review 8: "in sync" is never printed beside a component an unfinished feature is building --------------------------------------
   {
     const sp = path.join(tmp, "p135-ds-pending");
