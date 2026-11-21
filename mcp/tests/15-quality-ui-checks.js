@@ -536,17 +536,20 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     // a sheet longer than the bound that names no focus in its head is not read whole: the search ends there too
     const long = proj("long", [["src/styles/app.css", fill(470)], ["src/styles/zz-focus.css", FOCUS]]);
     const L = (r) => [r.uiChecks.findings.length, r.uiChecks.limits];
-    all("1.37 UI checks: the focus pass stops at a bound — 48 stylesheets read (focus-sheets) or 384K characters parsed (focus-chars: a focus-free sheet costs none), each sheet WHOLE (a 300K one's last rule counts; one longer than the bound, or one to parse past what is left, ends the search, whatever its head holds): the removal is then not judged and `uiChecks.limits` says which (never the report's `limits` / `truncated`); 48 sheets with the focus style last read it; the shorter path first — a root sheet beside 48 deeper ones is read (got " +
+    // (review 2 of 1.37: a bound never hides a KNOWN candidate silently — the pass's limit names the removals it left unjudged:
+    // their count, the first file:line; focus-chars, the sheet that ended the search)
+    const at = { count: 1, file: "src/checkout/reset.css", line: 3 };
+    all("1.37 UI checks: the focus pass stops at a bound — 48 stylesheets read (focus-sheets) or 384K characters parsed (focus-chars: a focus-free sheet costs none), each sheet WHOLE (a 300K one's last rule counts; one longer than the bound, or one to parse past what is left, ends the search, whatever its head holds): the removal is then not judged and `uiChecks.limits` says which, naming the removals left unjudged (their count, the first file:line; focus-chars: the sheet that ended it — never the report's `limits` / `truncated`); 48 sheets with the focus style last read it; the shorter path first — a root sheet beside 48 deeper ones is read (got " +
       js({ root: L(rr), many: [...L(rm), rm.limits, rm.truncated], big: L(rb), free: L(free), under: L(ru), whole: L(whole), past: L(past), alone: L(alone), long: L(long) }) + ")", {
-      sheets: () => rm.uiChecks.findings.length === 0 && js(rm.uiChecks.limits) === js([{ code: "focus-sheets", read: 48 }]) && js(rm.limits) === js([]) && rm.truncated === false,
-      chars: () => rb.uiChecks.findings.length === 0 && js(rb.uiChecks.limits) === js([{ code: "focus-chars", read: 2 }]),
+      sheets: () => rm.uiChecks.findings.length === 0 && js(rm.uiChecks.limits) === js([Object.assign({ code: "focus-sheets", read: 48 }, at)]) && js(rm.limits) === js([]) && rm.truncated === false,
+      chars: () => rb.uiChecks.findings.length === 0 && js(rb.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 2 }, at, { sheet: "src/big/b2.css" })]),
       parsedOnly: () => js(L(free)) === js([0, []]),
       under: () => ru.uiChecks.findings.length === 0 && js(ru.uiChecks.limits) === js([]),
       shorterFirst: () => rr.uiChecks.findings.length === 0 && js(rr.uiChecks.limits) === js([]),
       whole: () => whole.uiChecks.findings.length === 0 && js(whole.uiChecks.limits) === js([]),
-      past: () => past.uiChecks.findings.length === 0 && js(past.uiChecks.limits) === js([{ code: "focus-chars", read: 1 }]),
-      alone: () => alone.uiChecks.findings.length === 0 && js(alone.uiChecks.limits) === js([{ code: "focus-chars", read: 0 }]),
-      long: () => long.uiChecks.findings.length === 0 && js(long.uiChecks.limits) === js([{ code: "focus-chars", read: 0 }]),
+      past: () => past.uiChecks.findings.length === 0 && js(past.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 1 }, at, { sheet: "src/big/b1.css" })]),
+      alone: () => alone.uiChecks.findings.length === 0 && js(alone.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, { sheet: "src/styles/app.css" })]),
+      long: () => long.uiChecks.findings.length === 0 && js(long.uiChecks.limits) === js([Object.assign({ code: "focus-chars", read: 0 }, at, { sheet: "src/styles/app.css" })]),
     });
   }
 
@@ -675,8 +678,48 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       pastExcused: () => ownFocus.r.uiChecks.total === 200 && js(L(ownFocus)) === js([]) && passFocus.r.uiChecks.total === 200 && js(L(passFocus)) === js([]),
       tagLength: () => js(L(tagged)) === js([{ code: "tag-length", read: 30, count: 1, file: "src/landing/A.tsx" }]),
       tokenFile: () => tokens.length > 262144 && tokenBig.r.viewFiles === 1 && js(L(tokenBig).map((x) => x.code + ":" + x.file)) === js(["view-size:src/app/globals.css"]),
-      finish: () => js(fin.designSystem.uiChecks) === js({ total: 1, byRule: { "img-no-alt": 1 }, top: [], limits: L(capped) }) && (fin.warnings || []).includes(M.uiChecks(1, "…", capped.slug))
+      finish: () => js(fin.designSystem.uiChecks) === js({ total: 1, byRule: { "img-no-alt": 1 }, top: [], limits: L(capped) }) && (fin.warnings || []).includes(M.uiChecks(1, "", capped.slug))
         && js(finLine.designSystem.uiChecks.limits) === js(L(longline)),
+    });
+  }
+
+  { // review 2 of 1.37 (R2-E1 + R2-E2): a bound never hides a KNOWN candidate silently — when the focus search ends at a bound
+    // with unsilenced removals standing, its limit names them (their count — past a file's cap too, never a silenced one — and
+    // the first by file then line: a markup file's <style> removal is found after its class list's) and spec_finish says it,
+    // alone (no finding) or as the UI warning's last clause; the report's other bounds hide no known candidate: report only
+    const PANEL = lines("<style>", "button:focus { outline: none; }", "</style>", "<template>", "  <button class=\"px-2 focus:outline-none\">x</button>", "</template>");
+    const QUIET = lines("*:focus {", "  /* ui-check-off: outline-removed */", "  outline: 0;", "}");
+    const mk = (tag, files, project) => {
+      const g = feature("unjudged-" + tag, Object.keys(files));
+      for (const [rel, text] of Object.entries(files)) write(g.p, rel, text);
+      for (const [rel, text] of project) write(g.p, rel, text);
+      return Object.assign(g, { r: S.designSystemReport(g.p, { name: g.slug }), fin: S.finishFeature(g.p, g.slug) });
+    };
+    const sheets = Array.from({ length: 49 }, (_, i) => ["src/sheets/s" + String(i).padStart(3, "0") + ".css", ".s" + i + " { color: red; }\n"]);
+    const alone = mk("alone", { "src/checkout/Panel.vue": PANEL, "src/checkout/reset.css": RESET, "src/checkout/quiet.css": QUIET }, sheets);
+    const withF = mk("with", { "src/checkout/Gallery.tsx": "export const G = () => <img src=\"/a.png\" />;\n", "src/checkout/reset.css": RESET }, sheets);
+    const chars = mk("chars", { "src/checkout/reset.css": RESET }, [["src/big/app.css", ".b { color: red; }\n".repeat(21000)]]);
+    const past = mk("past", { "src/landing/big.css": lines(...Array.from({ length: 200 }, (_, i) => ".t" + i + " { transition: all .2s; }"), "button { outline: none; }") }, sheets);
+    const size = mk("size", { "src/landing/big.html": "<!doctype html>\n<!--\n" + ("y".repeat(99) + "\n").repeat(2800) + "-->\n<img src=\"/late.jpg\">\n" }, []);
+    // (R2-D3: every warn finding past a file's cap — the warning reads `— …:`, one ellipsis, in each language)
+    const capped = mk("cap5", { "src/landing/List.tsx": lines("export const L = () => (", "  <ul>", ...Array.from({ length: 200 }, (_, i) => "    <li className=\"transition-all\">Row " + i + "</li>"),
+      ...Array.from({ length: 5 }, () => "    <img src=\"/x.png\" />"), "  </ul>", ");") }, []);
+    const ellipsis = ["en", "pt", "es"].map((l) => S.msg(l).finish.uiChecks(5, "", "x"));
+    const M = S.msg("en").finish;
+    const ui = (x) => (x.fin.warnings || []).filter((w) => /UI anti-pattern|outline removals? not judged/.test(w));
+    const pass = (x) => x.r.uiChecks.limits.find((l) => /^focus-/.test(l.code));
+    all("1.37 UI checks: the removals a focus search left unjudged at its bound are named — the limit's count (a silenced one never), the first file:line by file then line (one past a file's cap: its file alone), focus-chars' sheet — and finish says it, alone or as the UI warning's last clause, its designSystem.uiChecks carrying the limit; a view-size cut alone says nothing at finish (got " +
+      js({ alone: [pass(alone), ui(alone)], withF: ui(withF), chars: [pass(chars), ui(chars)], past: [pass(past), ui(past)], size: [size.r.uiChecks.limits.map((l) => l.code), ui(size), size.fin.designSystem] }) + ")", {
+      limit: () => js(pass(alone)) === js({ code: "focus-sheets", read: 48, count: 3, file: "src/checkout/Panel.vue", line: 2 }) && alone.r.uiChecks.total === 0 && alone.r.uiChecks.silenced === 1,
+      alone: () => js(ui(alone)) === js([M.uiUnjudged(3, "src/checkout/Panel.vue:2", 48)]) &&
+        js(alone.fin.designSystem.uiChecks) === js({ total: 0, byRule: {}, top: [], limits: alone.r.uiChecks.limits }),
+      clause: () => js(ui(withF)) === js([M.uiChecks(1, "src/checkout/Gallery.tsx:1 img-no-alt", withF.slug, M.uiUnjudged(1, "src/checkout/reset.css:3", 48))]),
+      chars: () => js(pass(chars)) === js({ code: "focus-chars", read: 0, count: 1, file: "src/checkout/reset.css", line: 3, sheet: "src/big/app.css" }) &&
+        js(ui(chars)) === js([M.uiUnjudged(1, "src/checkout/reset.css:3", 0, "src/big/app.css")]),
+      pastCap: () => js(pass(past)) === js({ code: "focus-sheets", read: 48, count: 1, file: "src/landing/big.css" }) && js(ui(past)) === js([M.uiUnjudged(1, "src/landing/big.css", 48)]),
+      reportOnly: () => js(size.r.uiChecks.limits.map((l) => l.code)) === js(["view-size"]) && js(ui(size)) === js([]) && size.fin.designSystem === undefined,
+      noUndefined: () => ![alone, withF, chars, past].some((x) => ui(x).some((w) => /undefined|null/.test(w))),
+      ellipsis: () => js(ui(capped)) === js([M.uiChecks(5, "", capped.slug)]) && ellipsis.every((w) => w.includes(" — …:") && !w.includes("…; …")),
     });
   }
 
@@ -779,7 +822,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const pair = () => { const xa = [], xb = []; for (let k = 0; k < 7; k++) { for (const [xs, slug] of [[xa, A], [xb, B]]) { const t0 = process.hrtime.bigint(); S.designSystemReport(p, { name: slug }); xs.push(Number(process.hrtime.bigint() - t0) / 1e6); } } const med = (xs) => xs.sort((x, y) => x - y)[3]; return { a: Math.round(med(xa)), b: Math.round(med(xb)), ratio: Math.round(med(xa) / med(xb) * 100) / 100 }; };
     const s = remeasure(pair, (x) => x.ratio <= 2.5);
     all("1.37 UI checks: the feature report with the focus pass at its bound (48 of 1,000 project sheets, none naming focus) costs at most 2.5× the same report with no candidate, measured interleaved (got " + js({ s, limits: [ra.uiChecks.limits, rb.uiChecks.limits] }) + ")", {
-      atBound: () => js(ra.uiChecks.limits) === js([{ code: "focus-sheets", read: 48 }]) && js(rb.uiChecks.limits) === js([]),
+      atBound: () => js(ra.uiChecks.limits) === js([{ code: "focus-sheets", read: 48, count: 1, file: "src/a/reset.css", line: 3 }]) && js(rb.uiChecks.limits) === js([]),
       ratio: () => s.ratio <= 2.5,
     });
   }

@@ -1923,10 +1923,11 @@ const COMMANDS = [
             more(u.total, u.findings.length);
             log(T.uiLegend);
             Object.keys(u.byRule).forEach((id) => log("    " + id + " — " + T.uiRule[id]));
-          } else if (r.viewFiles) log(T.uiNone(r.viewFiles));
+          // (never "nothing" beside the removals a focus search left unjudged — review 2 of 1.37: its limit line names them)
+          } else if (r.viewFiles && !u.limits.some((l) => l.code === "focus-sheets" || l.code === "focus-chars")) log(T.uiNone(r.viewFiles));
           if (u.silenced) log(T.uiSilenced(u.silenced));
           // (a bound of the checks' own: the report's lines below say the ones they share)
-          u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.file, l.count)));
+          u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count, l.sheet)));
         } else {
           log(T.dsFound(r.found.components, r.found.tokens, r.found.sources.length));
           if (r.registry.exists && r.missingTotal) {

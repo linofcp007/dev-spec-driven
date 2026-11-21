@@ -612,7 +612,8 @@ function uiChecksOf(lines, rel) {
 // of 1.37: the parse of ~800 sheets was 8× the report) — and DS_FOCUS_CHARS bounds the characters PARSED: a sheet that names
 // no focus costs an open and a read, never the parse budget. A sheet longer than DS_FOCUS_CHARS (not read whole), or one to
 // parse past what is left of the budget, ends the search.
-// → { focus, limits: [{code: focus-sheets | focus-chars, read}] — a bound that cut the search }
+// → { focus, limits: [{code: focus-sheets | focus-chars, read, sheet (focus-chars: the sheet that ended the search)}] — a
+// bound that cut the search }
 const RE_FOCUS_WORD = /focus/i;
 function uiFocusPass(sheets) {
   const list = sheets.slice().sort((a, b) => a.rel.length - b.rel.length || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
@@ -622,7 +623,7 @@ function uiFocusPass(sheets) {
     for (const s of list) {
       if (read >= DS_FOCUS_SHEETS) return { focus: false, limits: [{ code: "focus-sheets", read }] };
       const text = heads.next(), names = text != null && RE_FOCUS_WORD.test(text);
-      if (text != null && (text.length > DS_FOCUS_CHARS || (names && parsed + text.length > DS_FOCUS_CHARS))) return { focus: false, limits: [{ code: "focus-chars", read }] };
+      if (text != null && (text.length > DS_FOCUS_CHARS || (names && parsed + text.length > DS_FOCUS_CHARS))) return { focus: false, limits: [{ code: "focus-chars", read, sheet: s.rel }] };
       read++;
       if (!names) continue;
       parsed += text.length;
@@ -640,7 +641,10 @@ function uiFocusPass(sheets) {
 // none. A silenced finding is counted silenced whatever the pass says; a finding past a file's DS_CHECK_PER_FILE is counted,
 // never listed. limits — each bound that cut a read or dropped a finding, with a count (review 1 of 1.37): tag-length
 // ({read: DS_TAG_LINES, count: the tags read past the tag reader's bound, file: the first}), file-findings ({read:
-// DS_CHECK_PER_FILE, count: the findings past it, file: the first}), then the pass's focus-sheets / focus-chars ({read}).
+// DS_CHECK_PER_FILE, count: the findings past it, file: the first}), then the pass's focus-sheets / focus-chars ({read,
+// count: the unsilenced candidates it left unjudged, file and line: the first of them (no line: one past a file's cap),
+// sheet: focus-chars' — a bound never hides a KNOWN candidate silently: review 2 of 1.37, an Angular app of 60 components
+// lost its true finding).
 function uiChecksReport(files, projectFocus, cap) {
   let focus = files.some((f) => f.focus), limits = [];
   if (!focus && files.some((f) => f.past.byRule["outline-removed"] || f.findings.some((x) => x.rule === "outline-removed" && !x.silenced))) ({ focus, limits } = projectFocus());
@@ -648,15 +652,17 @@ function uiChecksReport(files, projectFocus, cap) {
   const list = [], unlisted = [];
   const tagCut = { code: "tag-length", read: DS_TAG_LINES, count: 0, file: null }, fileCut = { code: "file-findings", read: DS_CHECK_PER_FILE, count: 0, file: null };
   const cut = (c, n, rel) => { if (n && !c.count) c.file = rel; c.count += n; };
+  const unjudged = { count: 0, file: null }; // (the candidates a cut pass left: limits non-empty means no focus style was found)
   let silenced = 0;
   for (const f of files) {
     for (const x of f.findings) {
       if (x.silenced) { silenced++; continue; }
       if (stands(x.rule)) list.push({ rule: x.rule, level: UI_RULES[x.rule], file: f.rel, line: x.line, value: x.value });
+      else if (limits.length) { unjudged.count++; if (unjudged.line == null || f.rel < unjudged.file || (f.rel === unjudged.file && x.line < unjudged.line)) Object.assign(unjudged, { file: f.rel, line: x.line }); }
     }
     let more = f.past.silenced;
     silenced += f.past.silenced;
-    for (const [rule, n] of Object.entries(f.past.byRule)) if (stands(rule)) { unlisted.push([rule, n]); more += n; }
+    for (const [rule, n] of Object.entries(f.past.byRule)) if (stands(rule)) { unlisted.push([rule, n]); more += n; } else if (limits.length) cut(unjudged, n, f.rel);
     cut(tagCut, f.cut.tags, f.rel);
     cut(fileCut, more, f.rel);
   }
@@ -666,7 +672,8 @@ function uiChecksReport(files, projectFocus, cap) {
   let total = list.length;
   for (const x of list) byRule[x.rule] = (byRule[x.rule] || 0) + 1;
   for (const [rule, n] of unlisted) { byRule[rule] = (byRule[rule] || 0) + n; total += n; }
-  return { findings: list.slice(0, cap), total, byRule, silenced, limits: [tagCut, fileCut].filter((c) => c.count).concat(limits) };
+  const pass = limits.map((l) => Object.assign({ code: l.code, read: l.read }, unjudged, l.sheet ? { sheet: l.sheet } : {}));
+  return { findings: list.slice(0, cap), total, byRule, silenced, limits: [tagCut, fileCut].filter((c) => c.count).concat(pass) };
 }
 
 // spec_finish's part of a feature report's uiChecks → { total, byRule, top (the first 3: rule, file, line, value), limits (the

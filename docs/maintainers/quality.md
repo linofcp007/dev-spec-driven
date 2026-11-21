@@ -1326,7 +1326,11 @@ wrong finding sends a team to fix code that is right.
   read whole) or one to parse past what is left of it ends the search; stopping at the first that holds one;
   asked ONLY when an UNSILENCED candidate exists (no candidate, no read — a silenced one is counted silenced whatever the
   pass would say), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
-  says which (`focus-sheets` / `focus-chars`). The bounds are measured, not chosen (History): the highest that kept, in
+  says which (`focus-sheets` / `focus-chars`) NAMING the removals it left unjudged — a bound never hides a KNOWN candidate
+  silently (review 2 of 1.37: an Angular app of 60 components, a Next app of 140 CSS modules lost their true warning, the
+  report read "nothing"): `count` (the unsilenced candidates, past a file's cap too), `file` / `line` (the first, by file
+  then line; no `line` when every one sits past a file's cap), `sheet` (focus-chars: the sheet that ended the search). The
+  CLI prints that line in place of `uiNone`; spec_finish says it (below). The bounds are measured, not chosen (History): the highest that kept, in
   every series where an antivirus scans each open (~1 ms), the report with the pass at its sheets bound ≤ 2.5× the same
   report with no candidate, finish's part ≤ 2×, and modules that all name `:focus` at the chars bound ≤ 3×.
   Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
@@ -1346,18 +1350,22 @@ wrong finding sends a team to fix code that is right.
   findings with `limits` empty): `view-files` (the feature's file cap cut what the checks read), then with {read, count, file
   (the first)} `view-size` (a file longer than `DS_READ_CHARS`: read DS_READ_CHARS + 1 to know), `line-length` (lines cut at
   `DS_LINE_MAX`), `tag-length` (reads past the tag reader's bound), `file-findings` (findings past a file's 200: counted in
-  total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` — never reach the report's own `limits` /
-  `truncated`. Not named (hostile-input guards, no real file reaches them): a tag of more than `DS_TAG_ATTRS` attributes, a
+  total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` (with {count, file, line?, sheet?}: the
+  removals they left unjudged, above) — never reach the report's own `limits` / `truncated`. `view-size`, `line-length`,
+  `tag-length` and `file-findings` stay in the report alone: they hide no KNOWN candidate (a file-findings finding is
+  counted in `total`, and so in finish's warning). Not named (hostile-input guards, no real file reaches them): a tag of more than `DS_TAG_ATTRS` attributes, a
   block nested past `DS_BLOCK_DEPTH` — not judged. The CLI prints it after the raw values (`uiHead` — naming finish's
   warning — for a +ui feature, `uiHeadPlain` for any other: finish reads no other feature's checks, review 1 of 1.37 —,
   what each rule that appears means — `uiRule` —, `uiSilenced`, a bound of the checks' own once: `dsLimit`, with its count
   and file).
 - **spec_finish** — `designSystemFinish` answers for a +ui feature WITH OR WITHOUT a registry (CRIT_X decision 5): `uiChecks`
   (`uiFinishChecks`: the warn-level findings — {total, byRule, top: the first 3, limits: the report's}; a warn finding past
-  a file's cap is counted, not listed, so `top` may be empty — the warning then reads `…`); without a registry `registered` /
-  `unregistered` are `[]` and there is no `raw` / `tokens`, and every reader of `raw` guards it (finish.js, the CLI). ONE
-  warning (`finish.uiChecks`), after the raw values', never a blocker; `res.designSystem.uiChecks` only when it has
-  findings (the 1.35 shape otherwise).
+  a file's cap is counted, not listed, so `top` may be empty — the warning then reads `— …:`, one ellipsis: review 2 of
+  1.37); without a registry `registered` / `unregistered` are `[]` and there is no `raw` / `tokens`, and every reader of
+  `raw` guards it (finish.js, the CLI). ONE warning (`finish.uiChecks`), after the raw values', never a blocker — the
+  removals a focus search left unjudged its last clause (`finish.uiUnjudged`: the count, the first file:line, why), or,
+  with no finding, that clause the warning alone (review 2 of 1.37); `res.designSystem.uiChecks` only when it has findings
+  or that limit (the 1.35 shape otherwise). The report's other bounds never reach finish's text.
 - **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
   tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
   of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —

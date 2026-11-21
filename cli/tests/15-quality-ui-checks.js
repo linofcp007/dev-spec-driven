@@ -87,6 +87,22 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     });
   }
 
+  { // review 2 of 1.37 (R2-E1): the removals a focus search left unjudged at its bound — the report names them (never "nothing"),
+    // finish prints its warning; each language says the count, the first file:line and focus-chars' sheet
+    const g = feature("unjudged", "en", ["src/checkout/reset.css"]);
+    write(g.p, "src/checkout/reset.css", "*:focus {\n  outline: 0;\n}\n");
+    for (let i = 0; i < 49; i++) write(g.p, "src/sheets/s" + String(i).padStart(3, "0") + ".css", ".s" + i + " { color: red; }\n");
+    const r = runIn(["design-system", g.slug, "--project", g.p]), f = runIn(["finish", g.slug, "--project", g.p]);
+    const T = MSG("en").cliOutput;
+    const said = ["en", "pt", "pt-BR", "es"].map((l) => { const D = MSG(l).cliOutput.dsLimit, s = D["focus-sheets"](48, "a/b.css:3", 7), c = D["focus-chars"](2, "a/b.css:3", 7, "big/c.css"), w = MSG(l).finish.uiUnjudged(7, "a/b.css:3", 48);
+      return [s, c, w].every((x) => /7/.test(x) && x.includes("a/b.css:3")) && c.includes("big/c.css") && MSG(l).finish.uiUnjudged(7, "a/b.css:3", 0, "big/c.css").includes("big/c.css"); });
+    all("1.37 design-system / finish (CLI): an outline removal the focus search left unjudged at its bound is named — the report's limit line (the count, the first file:line) and no \"nothing\" line; finish prints its warning; every language says the count, the place and focus-chars' sheet (got " + js([r.out, f.out.slice(0, 600), said]) + ")", {
+      report: () => r.code === 0 && r.out.includes(T.dsLimit["focus-sheets"](48, "src/checkout/reset.css:2", 1)) && !r.out.includes(T.uiNone(1)),
+      finish: () => f.out.includes("  ▲ " + MSG("en").finish.uiUnjudged(1, "src/checkout/reset.css:2", 48)),
+      strings: () => said.every(Boolean),
+    });
+  }
+
   { // past the first 50 findings: how many more (the list is spec_scan's first 50)
     const g = feature("more", "en", ["src/rows/"]);
     for (let i = 0; i < 30; i++) write(g.p, "src/rows/Row" + String(i).padStart(2, "0") + ".tsx", "export const R = () => (\n  <li onClick={go}>\n    <img src=\"x.png\" /> Row\n  </li>\n);\n");
