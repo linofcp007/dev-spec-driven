@@ -177,8 +177,9 @@ words): at size m / l or with no size; a note at size s; never a refusal, never 
 feature. It reads every table of the section whose header holds `Announced · focus` (in any of those languages) — each a
 matrix of its own, a row per state in each: two tables never share their rows — and never judges that column or one
 after it — the critic does; a prose matrix is not checked, and an untouched scaffold or an `n/a` section passes. The
-design gate at size m / l refuses the untouched matrix (a view column added or deleted, the table reformatted, it is
-still the template's); a matrix of `TBD` or dashes passes the gate — `ui-states` is what warns about each such cell.
+design gate at size m / l refuses a UI States section left as the template (its matrix untouched — a view column added
+or deleted, the table reformatted — and nothing else written); once a line of it is written (its TODO line gone), an
+untouched matrix passes the gate as a `TBD` / dash one does — `ui-states` is what warns about each open cell.
 
 **Announced, and where focus goes.** A status message — "Saved", "3 results", "Upload failed" — reaches a screen reader
 through a live region that exists before its text changes, without moving focus (4.1.3): `role="status"`, or

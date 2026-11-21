@@ -201,16 +201,17 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
-  { // BP-partial-cap (R2b — 1.38.0 review 1, BS-2): partial past six widths — the default set's give way first, its narrowest kept
-    // in the places the declared ones leave (a declared width is never dropped for a default one); past six declared, the narrowest
-    // five and the widest of them, no default; the limit counts every width left out and names the narrowest
+  { // BP-partial-cap (R2b — 1.38.0 review 1 gave the default set's widths way first; review 2, R2-BS-1, restored this cap: that
+    // order kept 390 — the floor's own layout under any Tailwind theme — over 768 / 1024 / 1440): under partial, BP-cap's rule over
+    // the union, whatever its source — the narrowest five and the widest; a declared width may be the one left out, the limit
+    // counts them and names the first (fix 1's order and a widest-first fill each fail here — 1.39 backlog)
     const add = (...ws) => "@theme inline {\n" + ws.map((w, i) => "  --breakpoint-w" + i + ": " + w + "px;\n").join("") + "}\n";
     const two = report(null, add(1600, 2000)), four = report(null, add(1600, 1800, 2000, 2400)), seven = report(null, add(400, 500, 600, 700, 800, 900, 1000));
-    all("1.38.0 review 1 breakpoints (@theme, partial): past six widths the default set's give way first, its narrowest kept; seven declared → the narrowest five and the widest of them; `breakpoint-widths` counts all left out, `first` the narrowest (got " +
+    all("1.38.0 review 2 breakpoints (@theme, partial): past six widths the narrowest five and the widest of the theme's and the default set's together, a declared width left out as a default one is; `breakpoint-widths` counts all left out, `first` the narrowest (got " +
       js({ two, four: [four.widths, four.limits], seven: [seven.widths, seven.limits] }) + ")", {
-      two: () => widths(two) === js([320, 390, 768, 1024, 1600, 2000]) && two.partial === true && two.from === "code" && js(two.limits) === js([{ code: "breakpoint-widths", read: 6, count: 1, first: 1440 }]),
-      four: () => widths(four) === js([320, 390, 1600, 1800, 2000, 2400]) && js(four.limits) === js([{ code: "breakpoint-widths", read: 6, count: 3, first: 768 }]),
-      seven: () => widths(seven) === js([320, 400, 500, 600, 700, 1000]) && seven.partial === true && js(seven.limits) === js([{ code: "breakpoint-widths", read: 6, count: 6, first: 390 }]),
+      two: () => widths(two) === js([320, 390, 768, 1024, 1440, 2000]) && two.partial === true && two.from === "code" && js(two.limits) === js([{ code: "breakpoint-widths", read: 6, count: 1, first: 1600 }]),
+      four: () => widths(four) === js([320, 390, 768, 1024, 1440, 2400]) && js(four.limits) === js([{ code: "breakpoint-widths", read: 6, count: 3, first: 1600 }]),
+      seven: () => widths(seven) === js([320, 390, 400, 500, 600, 1440]) && seven.partial === true && js(seven.limits) === js([{ code: "breakpoint-widths", read: 6, count: 6, first: 700 }]),
     });
   }
 
@@ -242,10 +243,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const ui = fs.readFileSync(path.join(p, UI), "utf8");
     fs.writeFileSync(path.join(p, UI), ui.replace(/^- Breakpoints: .*$/m, "- Breakpoints: 600 / 1200 px " + "x".repeat(220)));
     const cutRep = S.designSystemReport(p);
-    all("1.38 breakpoints (shadcn v4's globals.css, through the token walk): `@theme inline` adds 3xl / 4xl to Tailwind's own → partial: the default set joins, 6 widths (the default set's 1440 left out — the declared 1600 kept since 1.38.0 review 1 —, said), at app/globals.css:45; the project and the feature carry the same `breakpoints`, last; its limits never reach the report's `limits` / `truncated` / `inSync`; MCP = engine (got " +
+    all("1.38 breakpoints (shadcn v4's globals.css, through the token walk): `@theme inline` adds 3xl / 4xl to Tailwind's own → partial: the default set joins, 6 widths (1600 left out, said), at app/globals.css:45; the project and the feature carry the same `breakpoints`, last; its limits never reach the report's `limits` / `truncated` / `inSync`; MCP = engine (got " +
       js({ bp: proj.breakpoints, inSync: proj.inSync, limits: proj.limits, cut: [cutRep.breakpoints, cutRep.inSync, cutRep.limits] }) + ")", {
-      real: () => js(proj.breakpoints) === js({ widths: [320, 390, 768, 1024, 1600, 2000], from: "code", partial: true, at: "app/globals.css:45", unread: [], unreadTotal: 0,
-        limits: [{ code: "breakpoint-widths", read: 6, count: 1, first: 1440 }] }),
+      real: () => js(proj.breakpoints) === js({ widths: [320, 390, 768, 1024, 1440, 2000], from: "code", partial: true, at: "app/globals.css:45", unread: [], unreadTotal: 0,
+        limits: [{ code: "breakpoint-widths", read: 6, count: 1, first: 1600 }] }),
       inSync: () => proj.inSync === true && js(proj.limits) === js([]) && proj.truncated === false,
       shapes: () => js(feat.breakpoints) === js(proj.breakpoints) && Object.keys(proj).pop() === "breakpoints" && Object.keys(feat).pop() === "breakpoints",
       mcp: () => js(viaMcp.breakpoints) === js(proj.breakpoints) && js(featMcp.breakpoints) === js(feat.breakpoints),
