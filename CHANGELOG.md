@@ -3,6 +3,118 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.38.0] — 2026-11-21
+
+The +ui track's second round over the code: the project's own UI checks beside each feature's, a raw value read against the
+project's own scale, the widths the visual review captures, and a state matrix each design fills and doctor reads. No new
+tool, command, hook or dependency.
+
+### Added
+- **The project's UI checks.** `spec_scan {designSystem: true}` / `dev-spec design-system` (no feature) now also run the UI
+  checks over every view and style file of the project — an inventory, `uiChecks`: per rule the count, the files holding
+  one and the first place; counts, never a list, and never a `finish` warning (each feature's report still lists its own).
+  Bounds, in the inventory's own `limits`: 5,000 view files / 32 MB (`ui-files`), a file's first 256K (`view-size`), a
+  line's first 2,000 characters (`line-length`), a tag's 30 lines (`tag-length`). `outline-removed` keeps 1.37's rule at project scope — any focus style in any file read
+  excuses every removal —, so the removals a feature report leaves unjudged past the project's first 48 stylesheets are
+  judged here, and that "not judged" clause of the feature report and of `finish` now points to it. Cost: the pass is at
+  most 1.5× a bare read of the same files plus the checks in memory (0.63–1.36× on public repositories); the project report
+  with it is 1.2–2.9× 1.37's (+38–255 ms on a 43–303 ms base) — small Sass / Blade trees pay the read most.
+- **The project fact `no-reduced-motion` (WCAG 2.3.3, AAA).** The inventory says when the view files declare motion — an
+  animation, a transform's transition, smooth scrolling — and none of them mentions reduced motion
+  (`prefers-reduced-motion`, Tailwind's `motion-safe:` / `motion-reduce:`, `useReducedMotion`); never when a read was cut,
+  and a mention only in a script is not seen.
+- **`_UI checks off: <rule-id> (reason)_` in design-system.md.** A line of its own switches a UI check or the project fact
+  off for the whole project — the inventory, every feature report (`off`: the rule, its reason, the findings it hid) and so
+  `finish`: counted, never listed. An entry with no reason in parentheses, an unknown id, another shape or one past the
+  first 50 is not applied, and the report says why (`offIgnored`: `no-reason`, `unknown-rule`, `unreadable`,
+  `past-bound`). A design-system.md created for it alone enrols the project in the registry; without one, the inline
+  `ui-check-off:` comment silences one finding.
+- **A new UI check, `font-size-viewport` (warn, WCAG 1.4.4, failure F94).** Text sized in viewport units alone
+  (`font-size: 5vw`, `calc(1vw + 1vh)`, `text-[5vw]`) does not grow with zoom; a size with a rem / em term does. Judged only
+  when certain: a stylesheet's size when that file sizes no text inside `@media`, `@container`, `@supports` or a Sass
+  `@include`; an element's own `style` attribute, never a component's prop or a CSS-in-JS object (`sx`); a bare
+  `text-[…vw]` with no variant `text-` utility on its line. An override in another file is not seen:
+  `ui-check-off: font-size-viewport` silences that one.
+- **Raw values against your own scale.** A feature's report (`spec_scan {designSystem: true, name}` /
+  `dev-spec design-system <feature>`) reads each raw value against the project's scale — the registry's token rows, then
+  the code's tokens the registry lacks. A colour names the token it IS (`token`) in any notation — hex, rgb, hsl, oklab,
+  oklch, `none` as 0 —: exact within a notation, within the pair's rounding across two (0.011 ΔEOK with an HSL side,
+  0.001 otherwise: Tailwind's zinc is not shadcn's neutral); `near` names the nearest token within 0.02 ΔEOK, a hint. A
+  `font-family` stack is read against the registry rows' font tokens, a transition / animation time or easing (and
+  Tailwind's `duration-[…]` / `delay-[…]` / `ease-[…]`) against the duration and easing tokens — each only when the scale
+  holds one, each with its own per-file bound (`font-values` / `motion-values`); sizes stay raw. `groups` gathers the
+  values read twice or more by what they are (`#1E40AF`, `rgb(30 64 175)` and `text-[#1e40af]` are one), the most
+  frequent first. `finish` still counts colours and sizes alone.
+- **Token values: `drift` and `gone`.** The project report lists each registry token the code declares with another value
+  in the same notation (`drift` — a name the code declares with two values or more, a theme or a twin sheet, is never
+  compared; every row is, past the reader's first 1,000 too) and the `_Token sources:_` files that no longer exist
+  (`gone`). Neither changes "in sync", which still compares names.
+- **A units table in design-system.md.** `| Property | Units |` (PT `| Propriedade | Unidades |`, ES
+  `| Propiedad | Unidad |`; a row per property or `prefix-*`): the team's convention of which units each property takes.
+  The feature report lists the declarations off it (`units`: file, line, property, value, unit, allowed), the project
+  report the rows it could not read (`unitsTable`). A report only — never `finish`, doctor or the task brief — and no
+  default table; a component's props table (`| Property | Type | Default |`) is none.
+- **The project's breakpoints.** Both shapes of `spec_scan {designSystem: true}` / `dev-spec design-system [feature]` end
+  in `breakpoints`, the widths the visual review captures: from `.specs/steering/ui.md`'s `- Breakpoints:` line — its
+  first outside code and comments, when it gives a width of 320 px or more (the stub's slot is not read) —, else Tailwind 4's
+  `--breakpoint-*` in a top-level `@theme` (read during the token scan — no second walk; `partial` when the theme leaves
+  Tailwind's own five in place: the default set joins), else 320 · 390 · 768 · 1024 · 1440. At most 6, 320 first; a
+  value not read is listed with its place; its bounds in its own `limits`, never the report's. Never computed by `finish`
+  or the design-system seed.
+- **doctor `ui-states`.** `[UI] UI States`' state matrix — the scaffold's table, recognised by its `Announced · focus`
+  header cell in any language — warns when a listed state has no row or a view's cell says neither what the user sees nor
+  `n/a — <why, 4+ words>` (an n/a alone among a row's view cells answers it). A warn at size m / l and with no size, a
+  note at s; never a fail, never an approval check, never on a finished feature; the a11y column is not judged, a matrix in
+  prose is not checked. `spec_upgrade` lists it as an advisory warn. An English doctor reads every language's state labels
+  from the generated corpus (a new key, `uiStateNames`) without loading the other languages.
+- **Two references.** `references/ui-code-scan.md` — what the code scan reads and what it doesn't, and the UI checks
+  (both moved whole from ui-design-patterns.md), with this release's scan prose; `references/ui-responsive.md` — the
+  project's breakpoints and the lines to paste (Tailwind's defaults, Bootstrap 5's), container queries and intrinsic grids,
+  fluid type with a rem term (the largest at most 2.5× the smallest), which unit for what, `100vw` and the classic
+  scrollbar (and why nothing checks it), `100vh` on phones (`svh` / `dvh`), 2.5.8's exceptions, pointer and hover media,
+  safe areas, images, tables at small widths, orientation (F97, F100), 400 % zoom, inputs on touch screens.
+
+### Changed
+- **+ui's `[UI] UI States` ends in the state matrix.** The template gains a `State | View | Announced · focus` table, one
+  row per state — 16, the new ones Slow network, Not found, Conflict, Undo and Form validation —, appended so a 1.31–1.37
+  design still reads as template. A table row's template key is now its non-empty cells: an untouched matrix with a view
+  column added, the a11y column deleted, compact or no outer pipes still reads as template — the m / l design gate never
+  passes an empty matrix.
+- **The state matrix's guide.** ui-design-patterns.md → The states every view needs lists the 16 states with how each is
+  announced and where focus goes (4.1.3 status messages, one mechanism a row, 2.4.3, 2.4.11 not entirely hidden, 2.2.1 per
+  W3C's new-mail example, 3.3.4's three ways for Undo), how to fill the matrix in design.md and what doctor's `ui-states`
+  reads; each state's fixture asserts its announcement and focus. spec-critic, spec-reviewer, the track checklists and the
+  index name each state's announcement and focus, and what each view changes per breakpoint.
+- **The visual review captures states × widths** (`references/ui-review.md` §2): each designed state at one width (the
+  reference's, else 320) and the worst case at every breakpoint, measured — never every state at every width, never a state
+  answered n/a; each state reached through its data boundary; a view past 16 images split (its states, then its widths);
+  announcements and focus asserted by fixtures, never judged from an image.
+- **The task brief carries up to 6,000 characters of design** (was 4,000): a task that builds a view keeps the filled state
+  matrix at 1–3 views; a section that still does not fit is named.
+- **Test files: Cypress's `*.cy.<script>`, `__mocks__/` and `__fixtures__/`** are test files for every reader — the guard,
+  protected tests, the scan and coverage, trace, the duplicate detector, the design-system scan, the UI checks. A
+  Welsh-locale module named `*.cy.ts` reads as a test too.
+- **The units and the scale reach the agents.** spec-implementer writes each property in the units the registry's units
+  table gives; spec-reviewer reads a raw value's `near` as a hint, never the token's colour; track-checklists' +ui Phase 2
+  asks a team with a units convention to declare it there.
+- **Under the hood.** Two lazy engine modules, `engine/design-values.js` (the scale, groups, drift, the units table's
+  readers) and `engine/breakpoints.js`. A feature report walks each view file once for its raw values, its units and its
+  UI checks (1.37 walked twice) — byte-identical results on 1,962 real view files and 15 feature reports.
+
+### Fixed
+- **A markup file's first `<style>` rule** (Vue, Svelte, Astro, HTML). Its prelude carried the `<style …>` tag line, so an
+  at-rule there — `@media print`, a `prefers-reduced-motion` block, a conditional block — was read as none since 1.37:
+  outline-removed and transition-all false positives (and font-size-viewport's) on such a file. The tag is now read past.
+
+The MCP tool list is 9 characters shorter (spec_scan's "raw colours / sizes" is now "raw values"); SKILL.md is unchanged.
+
+### Tests
+- `node mcp/test.js` 2891 assertions, `node cli/test-cli.js` 697 (was 2716 / 690). Each mutation list was written before
+  its fixtures: the base 66 (64 at first, the two survivors given fixtures); the prose 101 of 101; doctor `ui-states` 50 of
+  50; the breakpoints 76 of 76; the scale's final replay 121 of 125 (the survivors timed cost guards and an equivalent);
+  the project pass 95 and two for the `<style>` fix (91 at first, three more once given fixtures, one dead line deleted,
+  one equivalent); the docs pass 86 of 86.
+
 ## [1.37.0] — 2026-11-21
 
 UI checks — what four public design-skill collections (designer-skills, Emil Kowalski's skills, Vercel's Web Interface
