@@ -7,9 +7,11 @@
  * reads it); this module is what READS THE CODE, so it loads on first use (the lazy tier):
  *   - the project report: the components (view files in a component folder) and the tokens (token files' custom properties,
  *     Sass variables and JSON leaves) the code holds, against the registry — what it lacks, the rows naming a code file of the
- *     project that is gone;
+ *     project that is gone; 1.38: the registry's token VALUES the code holds otherwise (drift), its token files gone;
  *   - the feature report: its [UI] Design System Usage rows against the registry, and the RAW values in its view files — a
- *     hard-coded colour, a pixel spacing or font size — and its UI checks (1.37, engine/ui-checks.js);
+ *     hard-coded colour, a pixel spacing or font size; 1.38: a font stack, a motion literal — against the project's own scale
+ *     (engine/design-values.js), the values repeated, the lengths off the registry's units table — and its UI checks (1.37,
+ *     engine/ui-checks.js);
  *   - the seed: the registry stub with the code's components and tokens in place of its slot rows;
  *   - finish: the raw values and the UI checks as warnings, and a READY written finish adds the feature's New components to the
  *     registry.
@@ -29,7 +31,10 @@ let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, desi
   isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
   stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep,
   uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass;
-function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
+// (1.38) engine/design-values.js's: a raw value against the scale, a registry token's value against the code's, the units table
+let easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP;
+function __link(E) { ({ easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP,
+  activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
   isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
   stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns,
@@ -44,7 +49,8 @@ const DS_TOKENS_MAX = 1000; // tokens kept from the code — what the registry's
 const DS_SEED_COMPONENTS = 500; // components the seed writes — what the registry's reader reads with their details
 const DS_LIST = 50; // rows a report lists (`missingTotal`, `staleTotal`, `newTokensTotal`, `total` count them all)
 const DS_VIEW_FILES = 200; // a feature's view files read
-const DS_RAW_PER_FILE = 200; // raw values kept per file
+const DS_RAW_PER_FILE = 200; // raw values kept per file (1.38: colours and sizes together, fonts and motion each on their own)
+const DS_KIND_VALUE = 300; // a font stack's or a motion declaration's characters kept as its raw value (its literals judged from them)
 const BS = String.fromCharCode(92); // a backslash, built: an escaped pipe in a table cell
 
 // --- what the code holds ------------------------------------------------------------------------------------------------------
@@ -2865,14 +2871,20 @@ function scanCode(root, withComponents = true) {
       add(r, name);
     }
   }
+  // (1.38) A name the code declares with two values or more — a theme's (`:root` / `.dark`), a second app's twin sheet, two
+  // sources — is `multi`: the registry's value is never compared with "the" code's (drift). firstValue: a name → its first value.
+  const firstValue = new Map(), multi = new Set();
+  const again = (t) => { const v = firstValue.get(t.name); if (v !== undefined && v !== t.value) multi.add(t.name); };
   const take = (file, list) => {
     sources.push(file.rel);
     for (const t of list) {
       // (a name the registry's reader would not give back — a slot word, nothing but punctuation — is no row: it would be
       // "not in the registry" for good)
-      if (seen.has(t.name) || !registryName(t.name)) continue;
+      if (seen.has(t.name)) { again(t); continue; }
+      if (!registryName(t.name)) continue;
       if (tokens.length >= DS_TOKENS_MAX) { capped.tokens = true; break; }
       seen.add(t.name);
+      firstValue.set(t.name, t.value);
       tokens.push({ name: t.name, value: t.value, source: file.rel });
     }
   };
@@ -2923,7 +2935,7 @@ function scanCode(root, withComponents = true) {
     if (list.length < GLOBAL_CSS_MIN) continue; // no token file: it takes no place and says no bound
     // (a twin takes no source's place — and is a token file all the same: a feature that edits it is never told to "use
     // the token" on the line that declares it; review 9: of three apps' identical globals.css only the first was one)
-    if (!list.some((t) => !seen.has(t.name))) { twins.push(f.rel); continue; }
+    if (!list.some((t) => !seen.has(t.name))) { twins.push(f.rel); list.forEach(again); continue; }
     cut(f, over);
     source(f, list);
   }
@@ -2931,7 +2943,7 @@ function scanCode(root, withComponents = true) {
   const packages = packageLibraries(root);
   capped.workspaces = packages.cut;
   capped.manifests = packages.read;
-  return { components, tokens, sources, twins, libraries: packages.libraries, views, files: walk.files, truncated: walk.truncated, capped, realRoot };
+  return { components, tokens, sources, twins, libraries: packages.libraries, views, files: walk.files, truncated: walk.truncated, capped, realRoot, multi };
 }
 
 // --- raw values: what a feature's view files hard-code ------------------------------------------------------------------------
@@ -3036,15 +3048,28 @@ function declarations(l, cb) {
 // A view / style file's raw values → [{ line, kind, value }], the first DS_RAW_PER_FILE. rawValuesOf reads the text through
 // its own viewLines generator (its early exit: a 20,000-line sheet costs its first few hundred lines); rawValuesIn reads lines
 // already walked — the feature report walks each file ONCE into a list its readers share (1.38).
+// kinds (1.38, the feature report's): { font, motion } — the kinds the scale holds a token of, read beside the colours and sizes:
+// a `font-family` stack (fontStackOf), a transition / animation declaration (RE_MOTION_PROP) holding a literal time above 1 ms
+// or an easing function, a Tailwind `duration-[…]` / `delay-[…]` / `ease-[…]` (RE_TW_MOTION) — nothing built (RE_SIZE_BUILT).
+// Each new kind has a bound of its own, DS_RAW_PER_FILE values a file (a transition-heavy sheet never hides its colours); the
+// caller's `cut` gets cut.font / cut.motion when a value past it was met. Without kinds: 1.37's reader, value for value.
 function rawValuesOf(text, rel) {
   return rawValuesIn(viewLines(text, rel));
 }
-function rawValuesIn(lines) {
+// (an arbitrary value holds no bracket: a `[` ends the scan — `ease-[` written 300 times on a line, never closed, costs one short
+// look each)
+const RE_TW_MOTION = /(?<![\w-])(?:[a-z0-9-]{1,24}:){0,4}(duration|delay|ease)-\[([^[\]\s]{1,80})\]/g;
+function rawValuesIn(lines, kinds, cut) {
   const out = [], seen = new Set();
+  const font = !!(kinds && kinds.font), motion = !!(kinds && kinds.motion);
+  const held = { color: 0, font: 0, motion: 0 }, past = cut || {}; // (colours and sizes share 1.37's bound: `color`)
   const add = (line, kind, value) => {
     const k = line + ":" + value;
-    if (seen.has(k) || out.length >= DS_RAW_PER_FILE) return;
+    const own = kind === "font" || kind === "motion" ? kind : "color";
+    if (seen.has(k)) return;
+    if (held[own] >= DS_RAW_PER_FILE) { if (own !== "color") past[own] = true; return; }
     seen.add(k);
+    held[own]++;
     out.push({ line, kind, value });
   };
   // (what stands before a match is read from a bounded tail: one slice per match, never the whole line again)
@@ -3063,25 +3088,55 @@ function rawValuesIn(lines) {
   // a stylesheet's line: each declaration's colours, and its size when the property takes one
   const styleLine = (l, line) => declarations(l, (prop, value) => {
     colours(value, line, false);
+    if (font || motion) {
+      const p = prop.toLowerCase();
+      if (font && p === "font-family" && fontStackOf(value)) add(line, "font", p + ": " + value.trim().slice(0, DS_KIND_VALUE));
+      else if (motion && RE_MOTION_PROP.test(p) && !RE_SIZE_BUILT.test(value) && (timesOf(value).length || easingsOf(value).length)) add(line, "motion", p + ": " + value.trim().slice(0, DS_KIND_VALUE));
+    }
     if (!RE_SIZE_PROP.test(prop) || RE_SIZE_BUILT.test(value)) return;
     for (const v of value.matchAll(RE_SIZE_LITERAL)) {
       if (Number(v[1]) > 0 && !(v[2] === "px" && Number(v[1]) <= 1)) { add(line, "size", prop.toLowerCase() + ": " + value.trim().slice(0, 40)); break; }
     }
   });
   for (const { n, l, css } of lines) {
-    if (out.length >= DS_RAW_PER_FILE) break; // (the early exit: the generator reads no further line)
+    // (the early exit: the generator reads no further line — with kinds, once each new kind is past its bound too)
+    if (held.color >= DS_RAW_PER_FILE && (!font || past.font) && (!motion || past.motion)) break;
     if (!l.trim()) continue;
     if (css || RE_DECL_LINE.test(l)) { styleLine(l, n); continue; }
     colours(l, n, true);
     for (const m of l.matchAll(RE_TW_SIZE)) add(n, "size", m[0]);
+    if (motion) for (const m of l.matchAll(RE_TW_MOTION)) if (m[1] === "ease" ? easingOf(m[2]) : !RE_SIZE_BUILT.test(m[2]) && timesOf(m[2]).length) add(n, "motion", m[0]);
   }
   return out;
 }
-// A colour as tokens are compared: lower-cased, a 3 / 4-digit hex written out (#fff = #ffffff).
-function colorKey(v) {
-  const s = String(v).trim().toLowerCase();
-  const m = /^#([0-9a-f]{3,4})$/.exec(s);
-  return m ? "#" + m[1].split("").map((c) => c + c).join("") : s.replace(/\s+/g, "");
+// A view / style file's lengths off the registry's units table (1.38 — the team's convention, a report) → { list ([{ line,
+// property, value, unit, allowed }], the first `room`), byProperty (EVERY finding counted) }. rowOf: unitRows(table). A
+// declaration (a stylesheet's line, a CSS-in-JS one — declarations()) whose property has a row: its FIRST top-level length
+// whose unit the row does not allow (offUnit: never inside calc() / clamp() / var(), never 0 — one finding a declaration; a
+// custom property or a Sass variable has no row: the table's names start with a letter); a Tailwind arbitrary size elsewhere
+// (RE_TW_SIZE) by the property it sets.
+const RE_DIGIT = /\d/;
+function unitsOf(lines, rowOf, room) {
+  const list = [], byProperty = {};
+  // (every finding counted by its property; its text made only for one listed)
+  const count = (property) => { byProperty[property] = (byProperty[property] || 0) + 1; return list.length < room; };
+  for (const { n, l, css } of lines) {
+    if (!RE_DIGIT.test(l)) continue; // (no number, no length)
+    if (css || RE_DECL_LINE.test(l)) {
+      if (!rowOf.mention.test(l)) continue; // (no property of the table named: nothing to judge)
+      declarations(l, (p, value) => {
+        const prop = p.toLowerCase(), row = rowOf(prop), unit = row && offUnit(value, row.units);
+        if (unit && count(prop)) list.push({ line: n, property: prop, value: prop + ": " + value.trim().slice(0, 40), unit, allowed: row.units });
+      });
+      continue;
+    }
+    for (const m of l.matchAll(RE_TW_SIZE)) {
+      const u = m[0].replace(/^(?:[a-z0-9-]{1,24}:)+/, ""), prop = twProperty(u.slice(0, u.indexOf("-["))), row = prop && rowOf(prop);
+      const unit = row && offUnit(u.slice(u.indexOf("-[") + 2, -1), row.units);
+      if (unit && count(prop)) list.push({ line: n, property: prop, value: m[0], unit, allowed: row.units });
+    }
+  }
+  return { list, byProperty };
 }
 
 // --- the registry against the code ---------------------------------------------------------------------------------------------
@@ -3141,6 +3196,22 @@ function stalePath(root, cell) {
   }
   return gone || there(text) === false;
 }
+// (1.38) The registry's token VALUES against the code → { drift ([{name, registry, code, source, kind: color | quantity}]: a
+// code token whose registry row — any row, past the reader's 1,000 too (`tokenValues`) — holds another value in the same
+// notation, tokenDrift; the code's value is its FIRST declaration, and a name it declares with two values or more — a theme, a
+// twin sheet, two sources: scan.multi — is not compared), gone (the `_Token sources:_` files that are gone: stalePath, every
+// doubt "not judged" — a root-level file, a path whose first folder is gone) }. Neither is part of `inSync` (DECISIONS: what
+// "in sync" compares stays the names).
+function registryValues(root, reg, scan) {
+  if (!reg) return { drift: [], gone: [] };
+  const drift = [];
+  for (const t of scan.tokens) {
+    const was = scan.multi.has(t.name) ? undefined : reg.tokenValues.get(registryName(t.name));
+    const kind = was === undefined ? null : tokenDrift(was, t.value);
+    if (kind) drift.push({ name: t.name, registry: was, code: t.value, source: t.source, kind });
+  }
+  return { drift, gone: reg.sources.filter((s) => stalePath(root, s)) };
+}
 // The registry as a report names it: its project path, whether it exists, the rows it holds.
 const registryView = (root, reg) => ({ file: toPosix(path.relative(root, reg ? reg.file : path.join(specsRoot(root), "steering", DESIGN_SYSTEM_FILE))),
   exists: !!reg, components: reg ? reg.total.components : 0, tokens: reg ? reg.total.tokens : 0 });
@@ -3164,19 +3235,24 @@ function pendingNew(projectDir) {
 // that an unfinished feature's design declares New — its finish adds them: [{name, path, feature}]), pendingTotal, stale (the
 // registry rows naming a file of the project that is gone: [{name, path}]), staleTotal, newTokens (the code's tokens the registry doesn't list, the first
 // DS_LIST: [{name, value}]), newTokensTotal, newSources / newLibraries (token files / UI libraries the registry doesn't name),
-// inSync, scanned: {files}, limits, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} |
+// drift (1.38 — the first DS_LIST: [{name, registry, code, source, kind: color | quantity}]: registryValues), driftTotal, gone
+// (the `_Token sources:_` files gone), unitsTable ({rows, unread, past} | null), inSync (never drift, gone or the units table),
+// scanned: {files}, limits, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} |
 // null: its design names no row), problems ([{code, name, near?, text}] — doctor's ui-design-system findings), viewFiles, raw
-// (the first DS_LIST: [{file, line, kind: color | size, value, token? (a registry token of that colour)}]), counts: {color,
-// size}, total, uiChecks (1.37 — {findings (the first DS_LIST: [{rule, level, file, line, value}]), total, byRule, silenced, limits}:
-// engine/ui-checks.js), newComponents ([{name, path, registered}]), scanned, limits, truncated }. Stable keys, English; the CLI
-// renders it.
+// (the first DS_LIST: [{file, line, kind: color | size | font | motion, value, token? (the scale's token it is), near? ({token,
+// delta}: a colour close to one)}]), counts: {color, size, font?, motion? (1.38: a kind the scale holds a token of)}, total,
+// groups (1.38 — the first DS_LIST: [{kind, value, count, files, at, token?, near?}]), groupsTotal, units (1.38 — {findings (the
+// first DS_LIST: [{file, line, property, value, unit, allowed}]), total, byProperty} | null), uiChecks (1.37 — {findings (the first
+// DS_LIST: [{rule, level, file, line, value}]), total, byRule, silenced, limits}: engine/ui-checks.js), newComponents ([{name, path,
+// registered}]), scanned, limits, truncated }. Stable keys, English; the CLI renders it.
 // `limits`: the bounds that CUT what was read — [{code, read, file?}], code: files (the walk's file cap) · token-files (a
 // token file found the DS_TOKEN_FILES sources full) · token-candidates (files named like a token file left unread past
 // DS_TOKEN_READS) · file-size (a token file longer than a file's read: `file`, the first) · tokens · component-files (a
 // bound of what else the component files export: the files or characters read, the names kept of one — `read`: the
 // files read) · workspace-manifests (a bound of the workspace patterns left a declared folder unread — `read`: the
 // workspace manifests read, 0 too) · registry-rows (rows
-// past the reader's cap are not checked for a gone path) · view-files (a feature's). `truncated`: one of them — and then the
+// past the reader's cap are not checked for a gone path) · view-files (a feature's) · font-values / motion-values (1.38, a
+// feature's: a file's raw fonts / motion values past DS_RAW_PER_FILE — `file`, the first). `truncated`: one of them — and then the
 // report is never `inSync`: what it did not read it cannot vouch for. A bound that cut nothing is not said (a report that
 // names one can never be in sync: said of a project that lost nothing, it would be a false alarm for good).
 const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files } : null, scan.capped.tokenFiles ? { code: "token-files", read: DS_TOKEN_FILES } : null,
@@ -3214,18 +3290,26 @@ function designSystemReport(projectDir, opts = {}) {
   const newTokens = scan.tokens.filter((t) => !tokenNames.has(registryName(t.name))).map((t) => ({ name: t.name, value: t.value }));
   const limits = scanLimits(scan);
   if (reg && reg.total.components > reg.components.length) limits.push({ code: "registry-rows", read: reg.components.length });
+  const { drift, gone } = registryValues(root, reg, scan);
   return { ok: true, registry: registryView(root, reg),
     found: { components: scan.components.length, tokens: scan.tokens.length, sources: scan.sources, libraries: scan.libraries },
     missing: missing.slice(0, DS_LIST), missingTotal: missing.length, pending: pending.slice(0, DS_LIST), pendingTotal: pending.length,
     stale: stale.slice(0, DS_LIST), staleTotal: stale.length,
     newTokens: newTokens.slice(0, DS_LIST), newTokensTotal: newTokens.length, newSources, newLibraries,
+    drift: drift.slice(0, DS_LIST), driftTotal: drift.length, gone, unitsTable: reg && reg.units ? { rows: reg.units.rows.length, unread: reg.units.unread, past: reg.units.past } : null,
     inSync: !!reg && !limits.length && !missing.length && !stale.length && !newTokens.length && !newSources.length && !newLibraries.length,
     scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
 }
 // The feature's part: its usage rows against the registry, the raw values in its view files (its _Implements:_ view / style
 // files, token files and tests aside), its UI checks (the same text read once feeds both — and its token files, read for the
 // checks alone), its New components and where each lives.
-function featureReport(projectDir, root, f, reg, scan) {
+// (1.38) Each raw value is read against the scale (design-values.js tokenScale: the registry's rows first, then the code's
+// tokens the registry lacks): a colour's `token` / `near`, a font's and a motion value's `token` — fonts and motion read only
+// when the scale holds such a token (a font token: a registry row's stack); the listed rows and groups alone are judged.
+// `groups`: every value read, by groupKey, those read twice or more, the most frequent first. `units`: the declarations off
+// the registry's units table (null without one). opts.finish (spec_finish's call): colours and sizes alone — 1.37's count,
+// what finish warns about —, no group, no units.
+function featureReport(projectDir, root, f, reg, scan, opts = {}) {
   const lang = featureLang(projectDir, f.slug);
   const Q = i18n.msg(lang).quality;
   const tracks = detectTracks(f.dir);
@@ -3238,9 +3322,13 @@ function featureReport(projectDir, root, f, reg, scan) {
   const found = scan.views.filter((x) => want(x.rel));
   const mine = [...featureFilesOf(root, scan.realRoot, f.dir, found, want)].sort();
   const byRel = new Map(found.map((x) => [x.rel, x.full]));
-  const tokenOf = new Map();
-  for (const t of reg ? reg.tokens : []) { const k = colorKey(t.value); if (k && !tokenOf.has(k)) tokenOf.set(k, t.name); }
-  const raw = [], counts = { color: 0, size: 0 };
+  const scale = tokenScale(reg ? reg.tokens : [], reg ? scan.tokens.filter((t) => !reg.tokenNames.has(registryName(t.name))) : scan.tokens);
+  const kinds = opts.finish ? null : { font: scale.fonts.size > 0, motion: scale.durations.size + scale.easings.size > 0 };
+  const table = !opts.finish && reg && reg.units ? unitRows(reg.units) : null;
+  const raw = [], counts = { color: 0, size: 0 }, groups = new Map(), kindCut = { font: null, motion: null };
+  if (kinds && kinds.font) counts.font = 0;
+  if (kinds && kinds.motion) counts.motion = 0;
+  const units = table ? { findings: [], total: 0, byProperty: {} } : null;
   const exportsOf = []; // [a component file of the feature, what else it exports] — a New component's path below
   // (the token-FILE bounds reach a feature's report too: a stylesheet left out of the sources is read for raw values)
   // (…and never the bounds of what the PROJECT report lists: the tokens read, the component files read for their exports)
@@ -3257,10 +3345,20 @@ function featureReport(projectDir, root, f, reg, scan) {
     viewFiles++;
     if (RE_EXPORTS_EXT.test(rel) && componentOf(rel)) exportsOf.push([rel, exportedComponents(text).names]);
     const lines = [...viewLines(text, rel)]; // (ONE walk of the file: its readers share the list — the UI checks read every line)
-    for (const v of rawValuesIn(lines)) {
+    const cut = {};
+    for (const v of rawValuesIn(lines, kinds, cut)) {
       counts[v.kind]++;
-      const token = v.kind === "color" ? tokenOf.get(colorKey(v.value)) : undefined;
-      if (raw.length < DS_LIST) raw.push(Object.assign({ file: rel, line: v.line, kind: v.kind, value: v.value }, token ? { token } : {}));
+      if (raw.length < DS_LIST) raw.push(Object.assign({ file: rel, line: v.line, kind: v.kind, value: v.value }, judgeRaw(v, scale)));
+      if (opts.finish) continue;
+      const k = groupKey(v), g = groups.get(k);
+      if (!g) groups.set(k, { kind: v.kind, value: v.value, count: 1, files: 1, at: { file: rel, line: v.line }, last: rel });
+      else { g.count++; if (g.last !== rel) { g.files++; g.last = rel; } }
+    }
+    for (const kind of ["font", "motion"]) if (cut[kind] && !kindCut[kind]) kindCut[kind] = rel;
+    if (table) {
+      const u = unitsOf(lines, table, DS_LIST - units.findings.length);
+      for (const x of u.list) units.findings.push(Object.assign({ file: rel }, x));
+      for (const [p, n] of Object.entries(u.byProperty)) { units.byProperty[p] = (units.byProperty[p] || 0) + n; units.total += n; }
     }
     checked.push(Object.assign({ rel, over }, uiChecksOf(lines, rel)));
   }
@@ -3291,10 +3389,15 @@ function featureReport(projectDir, root, f, reg, scan) {
     seenNew.add(r.key);
     newComponents.push({ name: r.name, path: own.get(r.key) || null, registered: !!reg && reg.keys.has(r.key) });
   }
+  // (1.38) a new kind's own bound, said with the first file it cut — font-values / motion-values (never when it cut nothing)
+  for (const kind of ["font", "motion"]) if (kindCut[kind]) limits.push({ code: kind + "-values", read: DS_RAW_PER_FILE, file: kindCut[kind] });
+  const repeated = [...groups.values()].filter((g) => g.count > 1).sort((a, b) => b.count - a.count); // (stable: a tie keeps the reading order)
   return { ok: true, feature: f.slug, registry: registryView(root, reg),
     usage: usage && usage.rows.length ? { reuse: usage.rows.filter((r) => r.kind === "reuse").length, extend: usage.rows.filter((r) => r.kind === "extend").length, new: newComponents.length } : null,
     problems: find ? find.problems.map((p) => Object.assign({}, p, { text: Q.dsProblem[p.code](p.name, p.near) })) : [],
-    viewFiles, raw, counts, total: counts.color + counts.size, uiChecks, newComponents, scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
+    viewFiles, raw, counts, total: Object.values(counts).reduce((a, n) => a + n, 0),
+    groups: repeated.slice(0, DS_LIST).map((g) => Object.assign({ kind: g.kind, value: g.value, count: g.count, files: g.files, at: g.at }, judgeRaw(g, scale))),
+    groupsTotal: repeated.length, units, uiChecks, newComponents, scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
 }
 
 // --- the seed: steering_scaffold design-system.md ------------------------------------------------------------------------------
@@ -3407,7 +3510,7 @@ function designSystemFinish(projectDir, slug, opts = {}) {
   if (!f.ok || !detectTracks(f.dir).includes("ui")) return null;
   const reg = designSystemRegistry(specsRoot(projectDir));
   const root = path.resolve(projectDir);
-  const rep = featureReport(projectDir, root, f, reg, scanCode(root, false));
+  const rep = featureReport(projectDir, root, f, reg, scanCode(root, false), { finish: true }); // (1.38: colours and sizes alone)
   const uiChecks = uiFinishChecks(rep.uiChecks);
   if (!reg) return { uiChecks, registered: [], unregistered: [] };
   const pending = rep.newComponents.filter((c) => !c.registered);
@@ -3417,4 +3520,4 @@ function designSystemFinish(projectDir, slug, opts = {}) {
     unregistered: pending.map((c) => c.name).filter((n) => !registered.includes(n)) };
 }
 
-module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, styleTokens, opensString, quoteEnd, RE_STYLE_EXT, __link };
+module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, rawValuesIn, styleTokens, opensString, quoteEnd, RE_STYLE_EXT, __link };
