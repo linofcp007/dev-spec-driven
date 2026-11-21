@@ -251,7 +251,12 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
   from each language file's `UI_STATES` (`uiStateTable`, i18n/common.js) — the same values quality's `uiStateLabels` /
   `uiStateHead` / `uiStateView` / `uiStateA11y` hold, the state ids English-stable: one source. A table row's template key is
   its NON-EMPTY cells (markdown-and-trace.md → Readers), so a view column added, the a11y column deleted or compact pipes
-  keep the untouched matrix template. Each new line is ≤ 180 characters in
+  keep the untouched matrix template. The guide the line points to (ui-design-patterns.md → The states every view needs)
+  writes the same 16 labels in the same order under the same `State` and `Announced · focus` cells — 17-docs' 1.38.0 D
+  block reads them from `uiStateLabels` / `uiStateHead` / `uiStateA11y`: a label renamed in `UI_STATES` is renamed in the
+  guide's row in the same commit. Its paragraph on the matrix says what doctor's `ui-states` reads, and
+  `references/ui-responsive.md` / ui-review.md §2 say where the visual review's widths come from (`spec_scan
+  {designSystem}`'s breakpoints): a change to either engine rule changes that prose too. Each new line is ≤ 180 characters in
   every language, appended (an edited line would turn a 1.36 design's guidance into its author's text: the 05 fixture's
   `prefix` pins the 1.36 lines byte for byte);
   reserved frontend / front-end / ux / gui / wcag — **never `a11y` / `accessibility`**: the
@@ -984,6 +989,17 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   1.37.0's. The no-size sha1 re-pinned once (743f91a0… → c44d3054…). Mutation pass: 9, 8 killed at first — the survivor
   (the key on a line STARTING with `|`) let a pipe-less copy of the untouched matrix read as written; any line holding `|` is
   keyed by its cells now, the pipe-less shape a fixture, the key's three mutants rerun on it: killed.
+- **1.38.0** (D — items 3 and 4's prose as CRIT_3 / CRIT_4 and the DECISIONS cut them) — the matrix's guide grows IN PLACE
+  in ui-design-patterns.md (no ui-states.md, CRIT_X D1): the states table took the template's labels — 1.37's own read
+  "Error — recoverable" and "Signed out / expired", a second vocabulary beside the scaffold's — and an `Announced · focus`
+  column; the five new rows follow CRIT_4 must-fixes 7–11, checked on w3.org: 4.1.3's "5 errors on page" follows an
+  unsuccessful fill, not a submit; 2.4.11 asks that focus be not ENTIRELY hidden (partly covered passes AA); W3C's 5-second
+  new-mail notice is no 2.2.1 time limit because the inbox shows the mail, so an Undo needs a second home or stays until
+  dismissed; Conflict picks one mechanism (a message that takes focus is a change of context); Not found is announced by
+  the route announcer or focus to the h1; Undo names 3.3.4's three ways. Item 3's template line stayed cut: "what each
+  view changes per breakpoint" lives in the critic, the checklists and `references/ui-responsive.md`. The 17-docs rows read
+  the labels from the template's source, so the guide cannot drift from the scaffold. Mutation pass 101 of 101 (the
+  prose rows, the budgets, and the four properties the rows read from the engine and the template).
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.

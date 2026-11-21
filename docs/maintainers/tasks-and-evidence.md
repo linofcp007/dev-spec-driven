@@ -44,7 +44,12 @@ Phase 6, opt-in.
   and before the code review; its Blockers, and the Majors a fresh reviewer confirms, are fix rounds, and a later round
   that changes a reviewed view runs it again, in verdict mode (1.37): a Blocker / Major that pass reports — a regression or
   one missed earlier — enters the loop like any other (a Major confirmed first), a minor is deferred; so every finding a
-  tick waits on can be fixed or, past round 5, parked.
+  tick waits on can be fixed or, past round 5, parked. What it captures (1.38, ui-review.md §2): per view, each designed
+  state at ONE width (the reference's, else 320) and the worst case at each of the project's breakpoints (at most 6,
+  `spec_scan {designSystem}`'s widths) — states plus widths, never states × widths, an `n/a` state never; a view past the
+  16-image dispatch splits, its states then its widths. A state's announcement and focus are its fixture test's to
+  assert, never judged from an image (the reviewer gets no new mode: a width capture is a pair or floor by its files, so
+  spec-ui-reviewer.md did not change).
 - **The protocol is prose; the engine never dispatches anything** (it stays cross-tool): `references/subagent-execution.md` and the
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
@@ -843,6 +848,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   it out. It goes as a regression does now (ui-review.md §5 rule 5) and `Open: N` counts it; the tick rules were right
   already. D4: the floor's WCAG 1.4.10 exception read "a box that scrolls inside the page is not the page scrolling" — any
   box; it is W3C's again, content that needs a two-dimensional layout for its meaning or use.
+- **1.38.0** (D — the capture matrix of items 3 and 4, CRIT_X D1) — the review captured "the views and states this task
+  built" at one viewport, the floor at 320 alone: no width a project designs for was ever looked at, and 15 states × 6
+  widths would blow every dispatch. One matrix for both items, kept in ui-review.md §2 (no ui-capture.md; its cap 10,000 →
+  12,000): the states at one width, the worst case — the state a width breaks — at every breakpoint, measured like the
+  floor (a `.json` each, a sideways scroll a Blocker), ≤ 6 widths — with their `.prev.png`, 12 images: one dispatch — and
+  the per-view split said in §3 for the rest (CRIT_3 must-fix 7). Each new state is reached through the worst case's data boundary;
+  a state the script can't reach is never shot as the default page. "On mobile" moved to ui-responsive.md → Checking it.
 - **1.31** — the brief's `preflight` key and the pre-flight (from google/elephant-goldfish-model's zero-decision rule): a
   brief that left a design choice open was found only when the implementer came back NEEDS_CONTEXT — a dispatch spent — or
   not at all when it chose alone.
