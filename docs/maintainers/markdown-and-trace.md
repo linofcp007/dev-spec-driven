@@ -21,7 +21,8 @@ matrix. The rules come first; how they came to be — the releases and review fi
   contexts come from ONE stack pass — a back-walk per heading is quadratic.
 - **Section states** (`sectionState`): `missing` · `unfilled` · `template` · `filled`; on a sized feature also `na` /
   `na-short` / `covered` (TRACK_OVERLAPS), read by every gate through `trackSectionReport()` + `sectionVerdict()`
-  (gates-and-approvals.md → Right-sized rigor); `spec_status` shows them.
+  (gates-and-approvals.md → Right-sized rigor); `spec_status` shows them. The n/a rule is ONE reader, `naAnswer()` (exported
+  since 1.38: doctor's ui-states reads a state-matrix cell with it — quality.md → UI state matrix).
   - **Unfilled:** the `> **TODO**` sentinel outside comments and code, or nothing WRITTEN — `writtenContent()` =
     `sectionContent()` (no structure: sub-headings, a thematic break, a table's header / separator rows) minus the lines that
     answer nothing: a generic slot word (`genericAnswer()`: `isGenericSlot`'s TODO / TBD / "…", "Pending" in any language,
@@ -301,6 +302,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   state labels (`| Error |`) now reads as template wherever it stands: it says nothing a label does not. The mutation pass
   found the key's first form — a line STARTING with `|` — let a pipe-less copy of the untouched matrix (`Loading | |`) read
   as written: keyed now on any line holding `|` (no template line holds one outside a table row, so the corpus kept its keys).
+- **1.38.0** (chain S) — `naAnswer` exported: doctor's `ui-states` reads each view cell of the state matrix with the sized
+  sections' n/a rule (`na` answers, `na-short` is open) instead of a second n/a reader.
 
 ### Requirements traceability matrix
 - **1.14 F5** — the matrix: `trace_check {matrix: true}`, `trace --matrix` / `--csv`, the export's section and `.rtm.csv`.

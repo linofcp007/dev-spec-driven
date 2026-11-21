@@ -16,7 +16,9 @@ Phase 6, opt-in.
   `portRole` (`port` · `after`) + `differential` on a +port task (its definition-of-done rule, `brief.portRules`); `dependsOn` (see
   Task dependencies); the loop's definition of done.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
-- **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
+- **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`, 6,000 characters since 1.38: a view task keeps +ui's filled state
+  matrix — `[UI] UI States`, ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views — beside the other `[UI]` sections, all five up to 2 views;
+  the brief ~≤ 10 KB) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
   feature's `x/`; a T-ID is read by its number (T-01 = T-1); a file needs a boundary on both sides (US-1.AC-1 is not US-1.AC-10).
   The task's own IDs fill the budget first, then the file / track ones, in design.md's order. A task proving a track's
   criterion takes that track's marked sections (`trackMarks`); 1.37: a `uiTask()` task — one that builds what the user sees —
@@ -910,6 +912,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   brief quoted — was only named. `want()` now ranks (1: every earlier rule, 2: the uiWork line alone) and the budget reads
   the task's IDs first, then the other rank-1 sections, then the rank-2 ones, each group in design.md's order. Fixtures: the
   reviewer's two shapes (08-tasks); the mutations: quality.md → History → 1.37.0 review 1.
+- **1.38.0** (DECISIONS shared point 5, CRIT_4 must-fix 1) — `BRIEF_DESIGN_BUDGET` 4,000 → 6,000. +ui's state matrix (the
+  1.38 template) filled with ~50 characters a view cell and a terse a11y cell measured 2,727 / 3,724 / 4,704 bytes at 1 / 2 /
+  3 views: at 4,000 a view task's brief lost Responsiveness & i18n and the Performance Budget at one view and `[UI] UI States`
+  itself — the section the task builds from — at two. At 6,000 the matrix is quoted at 1–3 views, all five `[UI]` sections at
+  1–2; at 3 views Responsiveness & i18n and the UI Performance Budget (the smallest, last in design.md's order) are named in
+  "Relevant but not included" (RB-2's order unchanged; neither a separate allowance nor a per-view quote — the ruling's
+  narrower choice). The brief grows to ~8.3 KB at 2 views, ~9 KB at 3. Fixture: 08-tasks (1, 2 and 3 views; it fails at
+  4,000); three 1.37 fixtures sized for 4,000 were re-sized past the new budget (M15's Big file, the 1.37 view brief's
+  Accessibility, RB-2's [UI] block).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

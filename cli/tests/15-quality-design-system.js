@@ -199,6 +199,24 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     });
   }
 
+  // --- 1.38: doctor's ui-states — [UI] UI States' matrix leaves a state neither designed nor n/a ---------------------------------------
+  {
+    const sp = path.join(tmp, "p138-ui-states");
+    SR.initProject(sp, ["ui"], "en");
+    const f = SR.createFeature(sp, { name: "Orders", tracks: ["ui"], summary: "x", size: "m" });
+    const Qs = MSG("en").quality;
+    const rows = Object.values(Qs.uiStateLabels || {}).map((l) => "| " + l + " | " + (l === "Stale" ? "" : "what the list shows") + " | |");
+    fs.writeFileSync(path.join(f.dir, "design.md"), "# Design: Orders\n\n## [UI] UI States\nThe orders list, state by state.\n\n| State | Orders list | Announced · focus |\n|---|---|---|\n" + rows.join("\n") + "\n");
+    const human = runIn(["doctor", f.slug, "--project", sp]);
+    const asJson = jsonOf(runIn(["doctor", f.slug, "--project", sp, "--json"]));
+    const want = () => Qs.usOpen(1, Qs.usView("Orders list", "Stale")); // (lazy: the parent has no such key)
+    const line = human.out.split("\n").find((l) => / ui-states /.test(l));
+    all("1.38 doctor (CLI): a +ui feature whose state matrix leaves a cell open prints the ▲ ui-states line; --json carries {id, status, detail} (got " + js({ line, json: (asJson.checks || []).find((c) => c.id === "ui-states") }) + ")", {
+      line: () => line === "  ▲ ui-states — " + want(),
+      json: () => js((asJson.checks || []).find((c) => c.id === "ui-states")) === js({ id: "ui-states", status: "warn", detail: want() }),
+    });
+  }
+
   // --- review 8: "in sync" is never printed beside a component an unfinished feature is building --------------------------------------
   {
     const sp = path.join(tmp, "p135-ds-pending");

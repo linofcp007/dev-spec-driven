@@ -122,6 +122,11 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   replacement; silent when the row's notes name that replacement in the registry's letter case; a New row is not asked. A
   warn only — never a fail, never an approval check —, run while the registry holds such a row and never on a finished
   feature; `spec_upgrade` lists it) ·
+  `ui-states` (1.38 — a +ui feature's `[UI] UI States` matrix, the scaffold's table recognised by its `Announced · focus`
+  header cell: a listed state with no row, or a view column — between `State` and that cell — whose cell says neither what the
+  user sees nor `n/a — <why, 4+ words>` (one n/a cell answers its row); the a11y column is not judged, a matrix in prose is
+  not checked. A warn at size m / l and with no size, a note at s — never a fail, never an approval check, never on a finished
+  feature; `spec_upgrade` lists it, an advisory warn) ·
   `critical-flows` (1.33 — a plain feature whose spec names a critical flow, stock / a coupon / a balance / a booking / a
   payment…, while neither the requirements nor the design state the database rule for two identical requests at once nor a
   `## Critical flows` section — a read-only flow answers it with one line there; not with +dist / +api unless size s leaves

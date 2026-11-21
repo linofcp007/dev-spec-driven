@@ -19,13 +19,15 @@ let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, cr
   withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot;
 let guardianOffer, guardianLauncherAudit; // guardian.js — 1.29 (1.30: the launcher's audit / rewrite): dev-guardian's gate offered (never set) when it is installed or the project has .guardian/
 let fastCheckOffer; // evidence.js — 1.36: the fast check the root manifests suggest (offered, never set)
+let UI_STATES_CHECK; // quality.js — 1.38: doctor's ui-states, an advisory warn
 function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, CRITICAL_FLOW_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir,
   isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,
   maybeRefreshRoadmap, missingPackTracks, nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile,
   positionPhase, projectLang, readIfExists, readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError,
   savedTracks, scanTestCode, shortIdList, specDoctor, specsRoot, staleFinish, stateFromFile, statePath, timeOf, trackLabel,
-  unverifiedLabel, verificationStatus, withFeatureLock, withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot, guardianOffer, guardianLauncherAudit, fastCheckOffer } = E); }
+  unverifiedLabel, verificationStatus, withFeatureLock, withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot, guardianOffer, guardianLauncherAudit, fastCheckOffer,
+  UI_STATES_CHECK } = E); }
 
 // ---------------------------------------------------------------------------
 // Upgrade — after the plugin is updated. roadmap.json meta.specVersion records the dev-spec version that last
@@ -246,9 +248,9 @@ function upgradeFeature(projectDir, s, ctx) {
   const designReuseDue = warns.some((c) => c.id === "design-reuse") && designReuseGated(kind, featureSize(s.dir)) && isRecord(approvals.design) &&
     approvals.design.reuseGate !== true;
   if (designReuseDue) attention.push("design-reuse");
-  // the design weigh warns (design-tradeoffs / design-risks) and the critical-flow ones (1.33) are listed, never an upgrade to-do on
-  // their own.
-  if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id) && !CRITICAL_FLOW_IDS.has(c.id))) attention.push("warnings");
+  // the design weigh warns (design-tradeoffs / design-risks), the critical-flow ones (1.33) and the state matrix's (ui-states, 1.38)
+  // are listed, never an upgrade to-do on their own.
+  if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id) && !CRITICAL_FLOW_IDS.has(c.id) && c.id !== UI_STATES_CHECK)) attention.push("warnings");
   const res = {
     name: s.slug, kind, tracks: trackLabel(tracks), tracksSource: savedTracks(st) ? "state" : "inferred", tracksPending: !!plan.tracks,
     lang: normalizeLang(st.lang || projectLang(projectDir)), phase, status, tasks: { done, total: tasks.length },

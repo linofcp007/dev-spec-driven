@@ -139,8 +139,9 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
     const sec = (rd("skills", "dev-spec-driven", "references", "tooling-reference.md").split("### `spec_doctor` checks (stable ids)")[1] || "").split("\n## ")[0];
     const listed = new Set([...sec.matchAll(/`([a-z][a-z-]*)`/g)].map((m) => m[1]));
     const missing = [...ids].filter((id) => !listed.has(id));
-    ok(ids.size >= 40 && ids.has("track-pack-missing") && ids.has("spike") && !missing.length && /`track-pack-missing` \(/.test(sec.split("- **Warn:**")[1] || ""),
-      "1.24 r6 H12: tooling-reference's spec_doctor checks list every id the engine emits (" + ids.size + "; missing: " + js(missing) + ") — track-pack-missing among the warns");
+    ok(ids.size >= 40 && ids.has("track-pack-missing") && ids.has("spike") && !missing.length && /`track-pack-missing` \(/.test(sec.split("- **Warn:**")[1] || "") &&
+      ids.has("ui-states") && /`ui-states` \(1\.38/.test(sec.split("- **Warn:**")[1] || ""),
+      "1.24 r6 H12: tooling-reference's spec_doctor checks list every id the engine emits (" + ids.size + "; missing: " + js(missing) + ") — track-pack-missing among the warns (1.38: ui-states too)");
   }
 
   { // 1.24 r6 H13: the docs say what the demo is — the root README's tree names no older shape than examples/README.md, and
