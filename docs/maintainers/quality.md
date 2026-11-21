@@ -1094,10 +1094,12 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   mcp/tests/15-quality-design-system-breakpoints.js). The first source that gives a width in [320, 3840] decides:
   - `ui.md` — `.specs/steering/ui.md`'s FIRST `- Breakpoints:` line: a list item (`-`, `*`, `+`), the label in any case, `**` /
     `_` around it; outside the front matter, fenced / indented code and HTML comments — read line for line (`commentLines`,
-    then `codeBlockLines` over what it leaves), so `at` is the file's own line. Its value runs to the first `·` (the stub goes
-    on: text expansion · RTL · locale) and is read up to `BP_LINE` (200) characters — past them `breakpoint-line` {read, at}, and
-    a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot, closed or not, is not read: the +ui stub's own
-    `[360 / 768 / 1280 px]` gives the default set. A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
+    then `codeBlockLines` over what it leaves), so `at` is the file's own line. Its value runs to the first `·` that no length
+    follows (`RE_UI_END`: blanks skipped, then a digit or `.` and a digit — `320 · 390 · 768 px`, the widths as the CLI prints
+    them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it) and is read up to `BP_LINE` (200) characters
+    — past them `breakpoint-line` {read, at}, and a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot,
+    closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — and so does a filled value
+    kept in brackets (`[576 / 768 px]`: ui-responsive.md says to write the widths without them). A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
     size), a bare number in the unit written NEXT (`360 / 768 / 1280 px`, `30 / 48 / 80 rem`) else px; a thousands group
     (`1.280`, `1,440`, a no-break space — one digit before it: a width is ≤ 3840) before px or none is an integer, before rem /
     em a decimal (`1.250rem`); a plain blank is never a group (`360 768 1280` is a list), so `1 280` reads as 1 and 280. A width
@@ -1120,8 +1122,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     which ranks first.
   - `default` — `[320, 390, 768, 1024, 1440]`.
   The widths: 320 first (WCAG 1.4.10's reflow width — 1280 at 400 %; a narrower edge is the floor's), ascending, once each,
-  `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —, past it the narrowest 5 and the widest,
-  `breakpoint-widths` {read, count, first}. `breakpoints.limits` never feed the report's `limits`, `truncated` or `inSync`
+  `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —; past it, under `partial`, the default set's
+  widths give way first (its narrowest kept in the places the code's leave: a declared width is a fact, the default set a
+  stand-in for the framework's own five, never read), then the narrowest 5 and the widest; `breakpoint-widths` {read, count —
+  every width left out —, first — the narrowest of them} (`cliOutput.bpLimit` names the count and that width, never the rule).
+  `breakpoints.limits` never feed the report's `limits`, `truncated` or `inSync`
   (they bound the widths, not the registry's comparison — CRIT_X D5d; a fixture: an in-sync project whose ui.md line is cut
   stays in sync). Not read (1.39, or never): a Sass map, `@custom-media`, a file named for breakpoints, a JS config
   (Tailwind 3's `screens` — and `container.screens`, a max width, the trap), `@container`. CLI: `cliOutput.bp*` (`bpHead`,
@@ -1678,8 +1683,11 @@ view needs (the detail points there), tooling-reference.md's id.
   does not exist here); another worded view cell, TBD included, is judged on its own; the a11y cell never counts.
 - **The verdict** — the section's own state first (`sectionState` at size m, as ui-design-system reads its section):
   missing / unfilled / template → a pass, `usUnfilled` (ui-sections and the placeholder gate own it — the untouched matrix is
-  template lines by F0b's row key); `na` → a pass, `usNa`; no anchored table → a pass, `usNone`. The gaps — `no-row` (once per
-  table) and `open` (per view and state), counted together — WARN at size m / l and with no size (`usOpen`: per table its
+  template lines by F0b's row key — a matrix of `TBD` / dashes is not: its cells are written for that key, so ui-sections and
+  the m / l gate pass it and only this check says each is open, the owner's ruling in 1.38.0 review 1, BS-3); `na` → a pass,
+  `usNa`; no anchored table → a pass, `usNone`. The gaps — `no-row` (once per table: each anchored table is a matrix of its
+  own, two never share their rows — ui-design-patterns.md says a row per state in each, BS-4) and `open` (per view and
+  state), counted together — WARN at size m / l and with no size (`usOpen`: per table its
   no-row item, then each view's open states — `US_SHOWN` (5) named per item, six items, the rest counted; `usTable` names the
   table's place in the section when it holds several matrices); at size s the same detail is a pass (`usSmall`); none →
   `usOk(views, states)`. The labels in the feature's language; detail only (`{id, status, detail}` — `state` for the tests).
@@ -1688,8 +1696,11 @@ view needs (the detail points there), tooling-reference.md's id.
   ADVISORY — `UI_STATES_CHECK` beside `DESIGN_WEIGH_IDS` / `CRITICAL_FLOW_IDS` in upgrade.js: no `warnings` attention.
 - **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns; every cell cut to `US_CELL`
   (400) before any regex; a bound that drops input appends `usTruncated` to the detail (`usNone` too). Linear: the section
-  reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the same text; 1 MB cells cost what a same-size
-  prose section does (15-quality-ui-states.js, a ratio).
+  reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the same text (a 5 MB cell, 200K rows, 20K tables,
+  a 1M-word label); 1 MB cells cost what a same-size prose section does (15-quality-ui-states.js, a ratio). The one shape
+  past it: a header row of 1,000,000 view cells (8 MB on one line) costs ~2.1× `sectionState` (2.1–2.6 s against 1.0–1.2 s)
+  — each header cell's words are read for the anchor before `US_VIEWS` applies; linear, and no gate waits on it (a 1.39
+  bound: compare a cell with the anchor only when its length could hold one).
 - **Every language, from the corpus** — the labels and the anchor cells of EN / PT / ES / pt-BR come from the corpus key
   `uiStateNames` (markdown.js `uiStateNames()` / `renderUiStateNames()`: `<id>\t<label>` lines, `UI_STATE_A11Y` — `a11y` — as
   the anchor's id; architecture.md → The build): an English doctor loads no pt.js / es.js (a child-process fixture). The
@@ -2501,6 +2512,23 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   suite's K2 ≤ 3×. On the clones the machine (three other chains' suites) swung parent against chain 0.74–2.26× either way
   with the roles swapped: no difference to measure — without an `@theme` the added work is an `includes` per walked sheet and
   one ui.md read.
+- **1.38.0 review 1** (Breakpoints — BS-1, BS-2, BS-6, BS-7) — the CLI prints the widths joined by ` · ` and its messages
+  say to list them in ui.md's line, but the value ended at the FIRST `·`: the printed list pasted read as [320], nothing
+  said (MEDIUM). It ends now at the first `·` that no length follows (`RE_UI_END`; the stub's ` · text expansion` still
+  ends it, `480 / 960 px · max content width 1200 px` too). Past six widths under `partial`, the default set's 390 / 1440
+  were kept over a project's own 1600 (shadcn v4, cal.com, shadcn-svelte): the default set's give way first now — those
+  three clones capture [320, 390, 768, 1024, 1600, 2000], 1440 said; `cliOutput.bpLimit` lost "the narrowest 5 and the
+  widest" (no longer the rule) rather than gain a second message. A filled value kept in brackets stays the stub's slot
+  (prose: ui-responsive.md says to write the widths without them; listing it as unread would be a new mechanism for a LOW
+  — 1.39 backlog). K2 timed each pair interleaved, the median of 5 rounds — over 3 calls the ui.md denominator was ~5 ms
+  and the full suite failed it under load. The reviewer's replay (bp-shapes.js, bp-lines.js) against the parent differs in
+  the two dot lists and one partial shape (Tailwind's five overridden without a reset: [320, 480, 768, 1024, 1280, 1536],
+  390 and 1440 said — was 1280 dropped for 390) and nothing else. Mutation pass (the list before the fixtures): 18 of 18,
+  one a timing mutant (the end searched in a 2,000-character window per `·`: K2's line pair 609 ms against 34). Cost, both
+  engines in one process, interleaved, medians of 7: the stub, the printed line, prose and 50,000 lines 0.6–1.2× the
+  parent (noise); the hostile 256K `1 · 1 · …` line 1.5–2.2× (+2–2.7 ms a report: the parent stopped at its first `·`,
+  the fix reads the whole line, linear — K2 holds it within 3× of prose); a partial report of 3,000 declared widths
+  1.3–1.4× (+0.5 ms).
 - **1.38.0** (item 2 of the 1.38 round, "tokens against the scale", as DECISIONS cut it — chain T) — first the D5 refactor,
   behaviour-preserving and alone in its commit (the base chain P rebased on): the feature report walks each view file ONCE
   into a list its readers share (1.37 walked twice; a units reader would have made three), rawValuesOf keeps its generator,
@@ -2744,3 +2772,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   the matrix reader is 2–4× slower on 1 MB cells and the check ~1.8× (269–307 ms vs 143–165 ms, a 3 MB section), linear
   either way, so the 2× ratio fixture holds both. Two fixtures in 16-conventions-build own the corpus key: a corpus without
   it renders; `localeLoaded` drops the cached labels with the corpus.
+- **1.38.0 review 1** (BS-3, BS-4, BS-5 — prose, the owner's ruling) — a matrix of `TBD` / dashes read as written, so the
+  m / l gate passed it though the CHANGELOG said it never passes an empty matrix: the docs now say the gate refuses the
+  untouched matrix and `ui-states` warns about each such cell (markdown-and-trace.md → History; a cell key of the answering
+  cells — the reviewer's prototype — set aside, a 1.39 candidate). Two anchored tables splitting the 16 states warned 16
+  `no-row` gaps while the user doc said "a state's rows count together … every table": the doc now says each table is a
+  matrix of its own, a row per state in each (the rule unchanged — counting across tables is 1.39's to weigh). The cost
+  note named 0.1–0.35× but a header of 1,000,000 view cells costs ~2.1× `sectionState` (measured again: 2.1 s against 1.0
+  s, 2.6 against 1.2; the other hostile shapes 0.07–0.32×): said above, with the bound that would close it (a length
+  pre-test before `usWords`) left for 1.39 — a LOW fixed by prose, not by a new test of the header.
