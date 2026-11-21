@@ -1216,38 +1216,69 @@ reads no view file for them (CRIT_X decision 3 — one shared project pass is 1.
 wrong finding sends a team to fix code that is right.
 - **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the feature report AND finish's warning, never a blocker:
   `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1), `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked`
-  (3.3.8); `report` — the feature report alone: `transition-all` (certain as syntax, a guideline as a finding: shadcn's own
+  (3.3.8 at a sign-in or code step — W3C scopes it to authentication; elsewhere a usability defect, Vercel's "never block
+  paste": review 1 of 1.37); `report` — the feature report alone: `transition-all` (certain as syntax, a guideline as a
+  finding: shadcn's own
   Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
 - **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
-  `DS_LINE_MAX`, its comments out) → `{findings: [{rule, line, value, silenced}], focus}`; one finding per rule and line, at a
-  tag's or a declaration's FIRST line, `DS_CHECK_PER_FILE` (200) a file — past it a file's further findings are not kept, as
-  a file's raw values past theirs. A stylesheet's lines are all CSS; a .tsx / .jsx / .js / .ts file is SCRIPT (its tags read as
+  `DS_LINE_MAX`, its comments out, `cut` when it was longer) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
+  one finding per rule and line, at a tag's or a declaration's FIRST line, silenced or not decided when it is found;
+  `DS_CHECK_PER_FILE` (200) kept a file — past it each is still COUNTED (`past`: {byRule, silenced}), never kept (review 1 of
+  1.37: 200 report-level findings hid a file's real ones, `total` read 200); `cut`: {lines (cut at `DS_LINE_MAX`), tags (the
+  tag reader's failed reads)}. A stylesheet's lines are all CSS; a .tsx / .jsx / .js / .ts file is SCRIPT (its tags read as
   JSX); anything else is MARKUP (an SFC, HTML and its template engines), its `<style>` block's lines CSS (viewLines' `css`).
 - **The tag reader** (`tagReader`) — an opening tag, `<` and a name (a letter, then letters, digits, `.`, `:`, `-`) followed by
   a blank, `/`, `>` or the line's end, read WHOLE to its first `>` outside quotes and `{…}`, over lines (a quote carries over
   a line's end; `\` escapes inside braces). In script mode never right after an identifier, `)`, `]` or a quote
   (`useState<div>`, `a<b`), nor inside a string that closes on its line (`blankStrings`); a markup file's `<script>` block
   is not read for tags. The next tag is looked for PAST the previous one's end, and past a read that failed (no `>` within
-  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters): each character read once (CRIT_1 must-fix 1 — a reader
+  `DS_TAG_LINES` — 30 lines — or `DS_TAG_CHARS` — 4,000 characters — counted: `tag-length`; or none before the end of a line
+  viewLines CUT — the read ends there, no quote or brace carried into the lines below: review 1 of 1.37, an inline data-URI
+  logo hid every tag of the next 30 lines, and minified HTML judged an `<img>` on the attributes before its cut alt): each
+  character read once (CRIT_1 must-fix 1 — a reader
   that looked again from the next `<` measured 1,230× plain JSX). What that leaves unjudged, and what else is (said in the
   user docs): a tag nested in an attribute (`icon={<img />}`), a tag starting in the lines a failed read took, a tag of more
   than `DS_TAG_ATTRS` (100) attributes, tags in a one-line template literal (lit, innerHTML), Pug, the JSX of a markup
-  file's `<script lang="tsx">`, a named handler (never followed).
+  file's `<script lang="tsx">`, a named handler's body (never followed: a named paste handler is not judged, a named click
+  handler is judged on its element and body alone — the user docs said "a named handler" of both: review 1 of 1.37).
 - **Attributes** (`attributesOf`) — a brace token where a name stands is a spread (`{...props}`, `{...getRootProps()}`,
   `{{attrs}}`: it may hold any attribute — img-no-alt and click-no-keyboard excuse it) unless it holds one identifier
-  (Svelte's `{alt}`); a bound name is its attribute's (`boundName`: `:alt`, `v-bind:`, `x-bind:`, `bind:`, `[alt]`,
+  (Svelte's `{alt}`); so is a binding with no argument (`RE_OBJECT_BIND`: Vue's `v-bind="$attrs"`, Alpine's `x-bind="obj"` —
+  the object form; review 1 of 1.37, the design's M30–M37 fixture had been dropped); a bound name is its attribute's
+  (`boundName`: `:alt`, `v-bind:`, `x-bind:`, `bind:`, `[alt]`,
   `[attr.alt]`); an event (`eventOf`): JSX `onClick`, HTML / Svelte 5 `onclick`, Vue `@click` / `v-on:click` and Alpine
   `x-on:click` with `.modifiers`, Svelte 4 `on:click` with `|modifiers`, Angular `(click)` / `(keyup.enter)`.
 - **img-no-alt** — `<img` as written (`<Image>`, `<img-viewer>` are components) with no alt in any binding, no `aria-label` /
-  `aria-labelledby`, no `role` presentation / none, rendered (CRIT_1 must-fix 5: not `hidden`, not `aria-hidden` — either
-  not literally false —, no `display:none` in its own style: the Meta Pixel's `<noscript>` image), no spread.
+  `aria-labelledby`, no non-empty `title` (it names the image, as axe-core's image-alt reads it — review 1 of 1.37: 200
+  of cal.com's 202 were titled flags), no `role` presentation / none, rendered (CRIT_1 must-fix 5: not `hidden`, not
+  `aria-hidden` — either not literally false —, no `display:none` in its own style: the Meta Pixel's `<noscript>` image),
+  no spread.
 - **click-no-keyboard** — a click handler on a lower-case element (no `-`, `.`, `:`) the keyboard cannot reach: not focusable
   by default (`FOCUSABLE`: HTML's interactive content, `summary`, `option`; `a` / `area` only with `href` or `routerLink`),
-  no `role`, `tabindex`, key handler (keydown / keyup / keypress, any syntax), `aria-hidden`, `inert` or spread; never an
-  empty element (its closing tag on the line) or a self-closing one (a modal's backdrop), `.self` / `|self`, a bare
-  `@click.stop`, an inline handler holding `.focus(`, `stopPropagation` or `target` (CRIT_1 must-fix 6).
+  no `tabindex`, no role whose focus its container manages (`ROLE_REACHED`: ARIA's composite items — option, menuitem*,
+  treeitem, gridcell, row, tab, column / row header — and presentation / none), not `aria-hidden` / `inert`, no spread: a role
+  or a key handler ALONE reaches nothing (review 1 of 1.37: `<div role="button" onClick>` was excused, the legend said "a
+  role, a tabindex and a key handler" and any one silenced it). Never a listener off the element (`RE_OFF_ELEMENT`: `.self` /
+  `|self`, Alpine's `.outside` / `.away` / `.window` / `.document`), a bare `@click.stop`, an inline handler holding
+  `.focus(`, `stopPropagation` or `target` (CRIT_1 must-fix 6), a self-closing element (a modal's backdrop) or an HTML
+  VOID one (`VOID`, the spec's list less the focusable `embed` / `input`: `<img onclick>` has no body — judged at once as a
+  self-closing one, never left waiting for a close tag and counted as a read past the bound). Such a CANDIDATE
+  is judged by its BODY (`clickBodies`, inside the tag reader — review 1 of 1.37, Laravel's starter kits: a wrapper whose
+  slot holds the `<button>`, a backdrop holding its empty overlay layer, 8 of Jetstream's 8 findings): read to its matching
+  close tag within the tag reader's bound (30 lines / 4,000 characters from its `>`: past it not judged, counted as
+  `tag-length`), it is a finding only when the body holds content a user reads (literal text, an expression that is no slot
+  outlet) and nothing that is or may render a control — a tag focusable by default (its click bubbles), a component /
+  custom element / member, `<slot>` (and `<ng-content>`), a slot outlet (`{children}`, `{props.children}`, `{@render …}`, a
+  Blade `{{ $x }}`), a line cut at `DS_LINE_MAX`: a doubt, clearing every candidate open (the control is in each body). An
+  empty body or one of elements alone (an overlay layer, an icon `<svg>`) is a doubt too. Nested candidates each get the
+  text seen while they are open (`textMark`); a close tag pops the elements opened since to its own name, an unmatched one
+  costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below).
 - **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)
-  and reads no `clipboardData` / `getData`, or a bare `.prevent` / `|preventDefault`; never a named handler.
+  and reads no clipboard (`clipboard` — `e.clipboardData`, `navigator.clipboard` — or `getData`), or a bare `.prevent` /
+  `|preventDefault`; never a named handler, nor an inline one that hands its event on to a call (`forwardsEvent`: the
+  handler's parameter — an arrow's, a function's —, else `$event` / `event`, as an argument: `(e) => { e.preventDefault();
+  onPasteCode(e); }` is Vue's excused `@paste.prevent="onPasteCode"` spelled in JSX — review 1 of 1.37). The ONLY rule that
+  never follows a named handler: click-no-keyboard judges a named click handler on its element and body alone.
 - **zoom-disabled** — a non-CSS line's `user-scalable=no | 0` or `maximum-scale` under 2 (a `<meta>`'s content), Next's
   `userScalable: false` or `maximumScale` under 2 (its viewport export).
 - **A stylesheet's structure** (`sheetChecks`) — through styleTokens' events (the ONE CSS walker, Token files above; CRIT_1
@@ -1255,13 +1286,26 @@ wrong finding sends a team to fix code that is right.
   styled-jsx; a styled-components template has no block structure (its `outline` is not judged, its `transition:` line is).
   outline-removed CANDIDATES: a removal (`outline: none | 0`, `outline-style: none`, `outline-width: 0`, `!important` too;
   never `outline: 2px solid transparent`, which forced colours show) in a rule with a selector whose last compound is `*` or
-  an element focusable by default with no pseudo-class ("element"), or holds `:focus` itself — never -visible / -within —
-  while the rule's extent, nested blocks included, declares nothing else ("focus": Bootstrap's `outline: 0; box-shadow: …`
-  replaces it); never a selector naming focus-visible, `@media print`, a class alone, a rule that never closes. Tailwind's
-  `focus:` / `focus-visible:` + `outline-none` / `outline-hidden` / `outline-0` too (a bare one is not: shadcn puts it on
-  focus-managed containers and activedescendant options). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` /
-  `:focus-within` (or inside one) that declares anything but a removal; a Tailwind focus-variant utility (`group-` / `peer-`
-  too) that is no removal, in a class list or an `@apply`. transition-all: an item that is `all` or names no property, for a
+  an element focusable by default with no pseudo-class ("element"), or holds `:focus` itself — never -visible / -within —,
+  of no type or one focusable by default and never `[tabindex="-1"]` (`RE_TABINDEX_OFF` — review 1 of 1.37: `main:focus`,
+  `h1:focus`, `[tabindex="-1"]:focus` hold focus a script moves out of the tab order, a skip link's target) —
+  while the rule's extent, nested blocks included, declares nothing else that draws ("focus": Bootstrap's `outline: 0;
+  box-shadow: …` replaces it; its `outline: none; box-shadow: none` override does not); never a selector naming
+  focus-visible, `@media print`, a class alone, a rule that never closes. Tailwind's `outline-none` / `outline-hidden` /
+  `outline-0` under a focus variant too (a bare one is not: shadcn puts it on focus-managed containers and activedescendant
+  options). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` / `:focus-within` (or inside one) that declares
+  something that DRAWS; a Tailwind utility under a focus variant that is no removal and draws, in a class list or an
+  `@apply`. A FOCUS VARIANT (`isFocusVariant`, ONE predicate for a removal under it and a focus style under it — review 1
+  of 1.37: Headless UI's documented Button warned): a variant holding `focus` as a part delimited by `-`, `[`, `]` or its
+  ends — `focus`, `focus-visible`, `group-focus/name`, `peer-focus-within`, `data-[focus]`, `data-focus`,
+  `ui-focus-visible`, `has-focus-visible`, an arbitrary `[&:focus]` — never one a `not` part negates (`not-data-focus`).
+  What draws nothing is decided BY VALUE, once for both
+  readers (review 1 of 1.37 — a ring-killing override was a focus style that excused every removal of the project):
+  `drawsNothing`, a declaration each of whose comma items has `transparent` as its colour or holds nothing but `none` and
+  zeros (`box-shadow: none`, `border: 0`, `outline: 2px solid transparent`), and `RE_TW_NOTHING`, a utility valued `0` /
+  `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`). Still read as drawing (no value says otherwise):
+  an `@apply` inside a `:focus` rule, and `outline-offset` beside a transparent outline (Tailwind v3's compiled
+  `outline-none` written by hand). transition-all: an item that is `all` or names no property, for a
   literal time over 0 (`transitionAll`; a variable or a global keyword is a property or no time, never `all`),
   `transition-property: all`, Tailwind's `transition-all` (variants, `!`, `@apply`), a style object / inline style /
   CSS-in-JS line — never inside `@media (prefers-reduced-motion: reduce)` nor a block nested in one (CRIT_1 must-fix 7).
@@ -1270,31 +1314,52 @@ wrong finding sends a team to fix code that is right.
 - **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
   (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
   the walk's view files; never the name-ranked token candidates: a `focus.css`, an `_a11y.scss`, a .less file count) through
-  `uiFocusPass`: the shorter path first, each read whole (`DS_FOCUS_FILE_CHARS`; never cut at a line), `DS_FOCUS_SHEETS`
-  (1,000) and `DS_FOCUS_CHARS` (4 MB) at most, stopping at the first that holds one; asked ONLY when a candidate exists (no
-  candidate, no read), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
-  says which (`focus-sheets` / `focus-chars`). Any focus style excuses any removal: the reader cannot compute the cascade,
-  and a team that wrote focus styles designed focus.
-- **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` on the finding's line or the line above (any
-  comment syntax of the file: in `src`, absent from `l`); counted in `silenced`, never listed, never in finish. Two lines up,
-  another id, a string's text, no id: nothing. No project switch in 1.37 (the `_UI checks off:_` marker is 1.38's).
+  `uiFocusPass`: the shorter path first, each read WHOLE (never cut at a line nor at a head), `DS_FOCUS_SHEETS` (48) READ
+  and `DS_FOCUS_CHARS` (384K) PARSED at most — only a sheet whose text names `focus` (any case) is parsed, every focus style
+  does, so a focus-free sheet costs an open and a read, never the parse budget; a sheet longer than `DS_FOCUS_CHARS` (not
+  read whole) or one to parse past what is left of it ends the search; stopping at the first that holds one;
+  asked ONLY when an UNSILENCED candidate exists (no candidate, no read — a silenced one is counted silenced whatever the
+  pass would say), a file the report read never read again. A pass a bound cut judges no removal, and `uiChecks.limits`
+  says which (`focus-sheets` / `focus-chars`). The bounds are measured, not chosen (History): the highest that kept, in
+  every series where an antivirus scans each open (~1 ms), the report with the pass at its sheets bound ≤ 2.5× the same
+  report with no candidate, finish's part ≤ 2×, and modules that all name `:focus` at the chars bound ≤ 3×.
+  Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
+  focus.
+- **Silencing** — ONE form: a comment `ui-check-off: <rule-id>[, <rule-id>]` (ids `,`-separated; what follows them, a
+  reason, is not read) on the finding's line, or ALONE on the line above (its `l` blank but for a JSX comment's braces — a
+  trailing marker silences its own line only, eslint's -line vs -next-line: review 1 of 1.37) — any comment syntax of the
+  file (in `src`, absent from `l`); a stylesheet's finding sits on its declaration's line. Counted in `silenced`, never
+  listed, never in finish. Two lines up, another id, a string's text, no id: nothing; a linter's own suppression
+  (`eslint-disable-next-line jsx-a11y/…`, `svelte-ignore a11y_…`) is not read (the user docs say so). No project switch in
+  1.37 (the `_UI checks off:_` marker is 1.38's).
 - **The feature report** (`featureReport`) — the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
   its token files (a globals.css it edits) are read for the checks ALONE — never for raw values, never in `viewFiles`, within
   `DS_VIEW_FILES` files read in all. `uiChecks` (`uiChecksReport`) = {findings (the first `DS_LIST`: rule, level, file, line,
-  value — warn first, then by file and line), total, byRule, silenced, limits}; its limits — `view-files` (the feature's file
-  cap cut what the checks read), `focus-sheets`, `focus-chars` — never reach the report's own `limits` / `truncated`. The CLI
-  prints it after the raw values (`uiHead`, what each rule that appears means — `uiRule` —, `uiSilenced`, a bound of the
-  checks' own once: `dsLimit`).
+  value — warn first, then by file and line), total, byRule, silenced, limits}; its limits — EVERY bound that cut a read or
+  dropped a finding, one code a bound (review 1 of 1.37: a long line, a file's 200 findings and its 256K read dropped real
+  findings with `limits` empty): `view-files` (the feature's file cap cut what the checks read), then with {read, count, file
+  (the first)} `view-size` (a file longer than `DS_READ_CHARS`: read DS_READ_CHARS + 1 to know), `line-length` (lines cut at
+  `DS_LINE_MAX`), `tag-length` (reads past the tag reader's bound), `file-findings` (findings past a file's 200: counted in
+  total / byRule / silenced, never listed), then `focus-sheets` / `focus-chars` — never reach the report's own `limits` /
+  `truncated`. Not named (hostile-input guards, no real file reaches them): a tag of more than `DS_TAG_ATTRS` attributes, a
+  block nested past `DS_BLOCK_DEPTH` — not judged. The CLI prints it after the raw values (`uiHead` — naming finish's
+  warning — for a +ui feature, `uiHeadPlain` for any other: finish reads no other feature's checks, review 1 of 1.37 —,
+  what each rule that appears means — `uiRule` —, `uiSilenced`, a bound of the checks' own once: `dsLimit`, with its count
+  and file).
 - **spec_finish** — `designSystemFinish` answers for a +ui feature WITH OR WITHOUT a registry (CRIT_X decision 5): `uiChecks`
-  (`uiFinishChecks`: the warn-level findings — {total, byRule, top: the first 3}); without a registry `registered` /
+  (`uiFinishChecks`: the warn-level findings — {total, byRule, top: the first 3, limits: the report's}; a warn finding past
+  a file's cap is counted, not listed, so `top` may be empty — the warning then reads `…`); without a registry `registered` /
   `unregistered` are `[]` and there is no `raw` / `tokens`, and every reader of `raw` guards it (finish.js, the CLI). ONE
   warning (`finish.uiChecks`), after the raw values', never a blocker; `res.designSystem.uiChecks` only when it has
   findings (the 1.35 shape otherwise).
 - **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
   tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
-  of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{` — each ≤ 3× plain JSX of the same size
-  (measured 0.07–1.5×); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real ones); a finish without a
-  registry ≤ 1.5× the feature report it runs (~0.9×). The sheet of braces is the walker's every block: three allocation-free
+  of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —
+  nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes — each ≤ 3×
+  plain JSX of the same size (measured 0.07–2.5×); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real
+  ones); a finish without a registry ≤ 1.5× the feature report it runs (~0.9×); the feature report with the focus pass AT
+  its bound ≤ 2.5× the same report with no candidate (the owner's bar after review 1's follow-up; one project, two features
+  reading the same views, 1,000 sheets none naming focus: 1.2–1.3× at 48). The sheet of braces is the walker's every block: three allocation-free
   fast paths in styleTokens (`unmaskInterpolation` of a text with no mask, `pageWide` of an empty prelude, `RE_MIXIN` only
   after an `@` — the last a cost guard alone: +45 % on that sheet without it, under the bound) took it from ~5× to ~1.5× —
   tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus.
@@ -2084,3 +2149,53 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   only when it has findings: the 1.35 key shape an assertion pins. Mutation passes: 126 of 126 on `uiChecksOf` (three dead
   branches deleted, eleven fixtures added that only one rule answers), 41 of 41 on the report / finish / CLI; one survivor
   kept by design, the `RE_MIXIN` fast path — a cost guard alone (+45 % on the sheet of braces, under the bound).
+- **1.37.0 review 1** (four reviewers — the shapes on ten public UI repositories, the engine's cost and bounds, the registry
+  and the brief, the docs; this area's fix round) — E1 (HIGH): the focus pass at its bound (1,000 sheets / 4 MB) made the
+  feature report 8.2× slower on 3,000 CSS modules — and at the bound it judges nothing. Now asked for an UNSILENCED
+  candidate alone (a silenced one is counted silenced whatever the pass says), a sheet parsed only when its text names
+  `focus` (a cost guard alone: the pass 18–30 ms with it, 35–98 ms without), each sheet read whole within the budget, and
+  the bounds MEASURED down until the report with the pass at either bound is within 2× the same report with no candidate
+  (interleaved fresh processes, the median of 3 warm calls): 32 sheets → 1.5–1.6× (finish's part 1.5×), 128K characters →
+  1.44× on modules that all name `:focus` (256K measured 1.8–2.15× there), Angular's 900 components 2.1× → 1.16×; a ratio
+  test owns it (1.1–1.3×; 4.4× on the parent). The open is the cost (~1 ms a file where an antivirus scans each one), not
+  the parse. E2 + D2: "every read is bounded and says what it dropped" was false — a line cut at 2,000 carried its open
+  quote 30 lines down (an inline data-URI logo hid the `<img>` below it; minified HTML judged an `<img>` on the attributes
+  before its cut alt), 200 report-level findings hid a file's real ones (`total` 200), a view file's 256K read and a
+  project sheet's 256K head cut silently (the last a false outline warning): one limit code a bound, with its count and
+  first file, finish carrying them; the hostile-input guards (100 attributes, 64 nested blocks) left unnamed. S1 + D1:
+  click-no-keyboard warned on Laravel's starter kits — Alpine's `.outside`, a wrapper whose slot holds the button, a
+  backdrop's empty overlay layer — and a role or a key handler alone silenced it (the legend said "a role, a tabindex
+  and a key handler"): the target modifiers read like `.self`, a candidate judged by its BODY (clickBodies, inside the tag
+  reader: each character once, four hostile click inputs within 3×), reachability by focusability (ARIA's composite items
+  reach the keyboard through their container). S2 `v-bind="$attrs"` / `x-bind="obj"` spreads (the design's dropped
+  fixture). S3 what draws nothing decided BY VALUE (Bootstrap's `outline: none; box-shadow: none` override, `focus:ring-0`
+  were focus styles excusing the project's every removal); S4 ONE focus-variant predicate (Headless UI's `data-[focus]`,
+  Tailwind 4's `has-focus-visible`). LOWs by subtraction or one line: S5 a trailing marker silences its line alone, S6 a
+  paste handler that hands its event on is not followed, S7 a titled `<img>` is named, S9 `main:focus` / `[tabindex="-1"]`
+  is no candidate, E3 the plain head off +ui. Prose: D3 ("a named handler" is never judged only for paste), D5 (3.3.8's
+  scope), D8, S10, S11. The review's corpus again (2,591 view files of ten repositories): click-no-keyboard 35 → 11, all
+  eleven real (clickable spans, list items and cards with text) — three real ones lost to the body rule (an icon COMPONENT
+  in a clickable card may render a control: a doubt); img-no-alt 217 → 17, all real (cal.com's 200 titled flags gone);
+  zoom-disabled 3, real; no outline-removed finding (each root holding a candidate holds focus styles); paste-blocked 0.
+  A project sheet's `button:focus { -webkit-tap-highlight-color: transparent }` no longer excuses a reset (it draws
+  nothing). Not fixed: `outline-offset` beside a transparent outline still draws (no value says it), an HTML void element's
+  click (`<img onclick>`) waits for a body it never has (not judged). Mutation pass: 107 mutants, the list written before
+  the fixtures — 99 killed at first; six wanted a click-body fixture, one line was dead and went (judgeTag's `/>` check:
+  clickBodies opens no self-closing tag), one is the cost guard above, timed with and without; the whole pass again after
+  the fixtures: 105 of 106 (the cost guard the one survivor; the logic mutants run the file without its three timed
+  blocks, the cost mutants the whole file).
+- **1.37.0 review 1, the follow-up** (the owner) — 32 sheets / 128K judged outline-removed on almost no project of more than
+  32 stylesheets (gen-angular's correct warning was lost): the cost bar relaxed to keep coverage — the report with the pass
+  at its sheets bound ≤ 2.5× the same report with no candidate (proj-d), finish's part ≤ 2×, modules that all name `:focus`
+  at the chars bound ≤ 3× — and `DS_FOCUS_CHARS` now counts the characters PARSED (a sheet naming `focus`), not read: on
+  3,000 focus-free 20K modules it reads 48 sheets instead of 18 at the cost the sheets bound already allows (1.7–1.9× vs
+  1.3–1.5×), so it was taken. Candidates, interleaved fresh processes, the median of 7 warm calls, in series under an
+  antivirus that scans each open (~1 ms) and one quieter series (~0.15 ms an open): 64 / 256K finish 2.09–2.16× (over);
+  56 / 384K finish up to 2.04×, 56 / 448K 2.11–2.3× (over); 48 / 384K feature 1.1–1.85×, finish 1.0–1.81×, the chars
+  bound 2.0–2.75× on 13K and 20K modules naming `:focus`; 48 / 448K the chars bound up to 3.89× on 20K modules (over);
+  95–100 / 512K finish 2.51× (over); in the quiet series 128 sheets measured 1.45× / 1.32× — the bound is the slow-open
+  series' (a reviewer's machine). Chosen: 48 / 384K. gen-angular's 900 components still end at `focus-sheets` (they would
+  need ~900 sheets read, ~8×); a 40-component app is judged again (its correct warning stands, excused with a deep focus
+  style). A click on an HTML void element is judged at once as a self-closing one (`VOID`): `<img onclick>` no longer waits
+  for a close tag and is counted as `tag-length`. Mutation pass of the new lines: 22 of 22, the list written first — the
+  focus pre-test among them, killed now: with the budget counting parsed characters it changes a result, no cost guard alone.

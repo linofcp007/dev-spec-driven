@@ -2984,8 +2984,9 @@ const isQuote = (c) => c === "\"" || c === "'" || c === "`";
 // A view / style file's lines as its readers read them (1.37: the ONE walk — rawValuesOf's, and the UI checks') → yields, line
 // by line, { n (1-based), src (the line, cut at DS_LINE_MAX), l (src without its comments — withoutComments, its state carried
 // from line to line), css (a stylesheet's line: a .css / .scss… file's, or one inside a <style> block of a markup or JSX file,
-// its opening line and its closing one included) }. A GENERATOR: a reader that stops early reads no further line —
-// rawValuesOf stops at DS_RAW_PER_FILE values, and a 20,000-line sheet costs it its first few hundred lines.
+// its opening line and its closing one included), cut (the line was longer: src is its head — the UI checks say so) }. A
+// GENERATOR: a reader that stops early reads no further line — rawValuesOf stops at DS_RAW_PER_FILE values, and a
+// 20,000-line sheet costs it its first few hundred lines.
 function* viewLines(text, rel) {
   const sheet = RE_STYLE_EXT.test(rel), plainCss = /\.css$/i.test(rel);
   const open = sheet ? null : RE_STYLE_BLOCK_EXT.test(rel) ? RE_STYLE_OPEN : RE_STYLE_OPEN_JSX;
@@ -2993,7 +2994,7 @@ function* viewLines(text, rel) {
   let inStyle = false, inTag = false; // inside a <style> block of a markup or JSX file · inside its opening tag (no `>` yet)
   const lines = text.split(/\r?\n/);
   for (let n = 0; n < lines.length; n++) {
-    const src = lines[n].length > DS_LINE_MAX ? lines[n].slice(0, DS_LINE_MAX) : lines[n];
+    const cut = lines[n].length > DS_LINE_MAX, src = cut ? lines[n].slice(0, DS_LINE_MAX) : lines[n];
     let block = inStyle, l;
     // the opening tag from `from` on: its `>` ends it — `/>` (a self-closing <style … />) and there is no block
     const tag = (s, from) => { const end = styleTagEnd(s, from); if (end !== -1) { inTag = false; if (s[end - 1] === "/") inStyle = block = false; } };
@@ -3013,7 +3014,7 @@ function* viewLines(text, rel) {
         if (inStyle && RE_STYLE_CLOSE.test(l)) inStyle = false;
       }
     }
-    yield { n: n + 1, src, l, css: sheet || block };
+    yield { n: n + 1, src, l, css: sheet || block, cut };
   }
 }
 function rawValuesOf(text, rel) {
@@ -3235,11 +3236,13 @@ function featureReport(projectDir, root, f, reg, scan) {
   // (…and never the bounds of what the PROJECT report lists: the tokens read, the component files read for their exports)
   const limits = scanLimits(scan).filter((l) => l.code !== "tokens" && l.code !== "component-files" && l.code !== "workspace-manifests");
   let viewFiles = 0;
-  const checked = [], tokenRels = []; // uiChecksOf of each file read: {rel, findings, focus} · the feature's token files
+  const checked = [], tokenRels = []; // uiChecksOf of each file read: {rel, over, findings, focus, past, cut} · the feature's token files
+  // a file's first DS_READ_CHARS characters → { text, over (it holds more: one character further is asked for) }
+  const readView = (rel) => { const t = readFileHead(byRel.get(rel) || path.join(root, rel), DS_READ_CHARS + 1); const over = t != null && t.length > DS_READ_CHARS; return { text: over ? t.slice(0, DS_READ_CHARS) : t, over }; };
   for (const rel of mine) {
     if (tokenFiles.has(fold(rel)) || isTokenFile(rel)) { tokenRels.push(rel); continue; }
     if (viewFiles >= DS_VIEW_FILES) { limits.push({ code: "view-files", read: DS_VIEW_FILES }); break; }
-    const text = readFileHead(byRel.get(rel) || path.join(root, rel), DS_READ_CHARS);
+    const { text, over } = readView(rel);
     if (text == null) continue;
     viewFiles++;
     if (RE_EXPORTS_EXT.test(rel) && componentOf(rel)) exportsOf.push([rel, exportedComponents(text).names]);
@@ -3248,21 +3251,25 @@ function featureReport(projectDir, root, f, reg, scan) {
       const token = v.kind === "color" ? tokenOf.get(colorKey(v.value)) : undefined;
       if (raw.length < DS_LIST) raw.push(Object.assign({ file: rel, line: v.line, kind: v.kind, value: v.value }, token ? { token } : {}));
     }
-    checked.push(Object.assign({ rel }, uiChecksOf(viewLines(text, rel), rel)));
+    checked.push(Object.assign({ rel, over }, uiChecksOf(viewLines(text, rel), rel)));
   }
   // (1.37) its token files — a globals.css the feature edits may add `*:focus { outline: none }` — are read for the UI checks
   // alone: never for raw values (a token file declares the values), never counted in viewFiles, within DS_VIEW_FILES files read
   let checkCut = limits.length > 0 && limits[limits.length - 1].code === "view-files";
   for (const rel of tokenRels) {
     if (checked.length >= DS_VIEW_FILES) { checkCut = true; break; }
-    const text = readFileHead(byRel.get(rel) || path.join(root, rel), DS_READ_CHARS);
-    if (text != null) checked.push(Object.assign({ rel }, uiChecksOf(viewLines(text, rel), rel)));
+    const { text, over } = readView(rel);
+    if (text != null) checked.push(Object.assign({ rel, over }, uiChecksOf(viewLines(text, rel), rel)));
   }
   // (an outline removal stands only while no focus style exists: in the files read, else in the project's stylesheets — ALL of
   // them, never the name-ranked token candidates; read only when a candidate asks — CRIT_1 must-fix 4)
   const readRels = new Set(checked.map((c) => c.rel));
   const uiChecks = uiChecksReport(checked, () => uiFocusPass(scan.views.filter((x) => RE_STYLE_EXT.test(x.rel) && !readRels.has(x.rel))), DS_LIST);
-  if (checkCut) uiChecks.limits.unshift({ code: "view-files", read: DS_VIEW_FILES });
+  // (the bounds of this read, before the checks' own — review 1 of 1.37: each says what it cut, with a count and the first
+  // file: view-size, a file longer than DS_READ_CHARS; line-length, the lines viewLines cut at DS_LINE_MAX)
+  const named = (code, read, list) => (list.length ? [{ code, read, count: list.reduce((a, x) => a + x[1], 0), file: list[0][0] }] : []);
+  uiChecks.limits.unshift(...(checkCut ? [{ code: "view-files", read: DS_VIEW_FILES }] : []), ...named("view-size", DS_READ_CHARS, checked.filter((c) => c.over).map((c) => [c.rel, 1])),
+    ...named("line-length", DS_LINE_MAX, checked.filter((c) => c.cut.lines).map((c) => [c.rel, c.cut.lines])));
   const own = new Map();
   for (const rel of mine) { const c = componentOf(rel); if (c && !own.has(c.key)) own.set(c.key, rel); }
   for (const [rel, names] of exportsOf) for (const n of names) { const k = dsKey(n); if (k && !own.has(k)) own.set(k, rel); }
@@ -3380,7 +3387,7 @@ function registerComponents(projectDir, list) {
   return Array.isArray(done) ? done : [];
 }
 // spec_finish's part for a +ui feature → null (not one) | { uiChecks (1.37, with or without a registry: the warn-level UI checks
-// of its files, unsilenced — {total, byRule, top (the first 3)}), registered (the New components this call added to the
+// of its files, unsilenced — {total, byRule, top (the first 3), limits (the report's)}), registered (the New components this call added to the
 // registry — only a READY written finish adds them), unregistered (New components not in the registry yet) — both [] without
 // a registry —, and with one: raw {total, counts, top (the first 3)}, tokens (does the registry hold tokens or name token files —
 // only then is a raw value something to replace) }.

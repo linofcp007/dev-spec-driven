@@ -1055,13 +1055,17 @@ exports.run = async ({
           && rules.every((r) => !(r.level === "warn" ? reportPart : warnPart).includes("`" + r.id + "`"))],
       ["ui-design-patterns: the UI checks — each warn rule's WCAG criterion", () => /`zoom-disabled` \([^)]*WCAG 1\.4\.4\)/.test(checks)
         && /`img-no-alt` \([^)]*1\.1\.1\)/.test(checks) && /`outline-removed` \(.*?2\.4\.7\)/.test(checks)
-        && /`click-no-keyboard` \(.*?2\.1\.1\)/.test(checks) && /`paste-blocked` \([^)]*3\.3\.8\)/.test(checks)],
+        && /`click-no-keyboard` \(.*?2\.1\.1\)/.test(checks) && /`paste-blocked` \([^)]*3\.3\.8 at a sign-in or code step, a usability defect elsewhere\)/.test(checks)],
+      // (review 1 of 1.37: a role or a key handler alone reaches nothing — D1; a named handler is followed by no rule, but only
+      // paste's is never judged — D3; a linter's suppression is not read, a CSS finding sits on its declaration — S11, D8)
+      ["ui-design-patterns: the UI checks — click-no-keyboard asks a tabindex (a role or a key handler alone is not enough)", () =>
+        /`click-no-keyboard` \(a click handler on an element the keyboard cannot reach: no `tabindex` — a role or a key handler alone is not enough — 2\.1\.1\)/.test(checks)],
       ["ui-design-patterns: the UI checks — a +ui feature's finish warning, never a blocker; one more warning registry or not",
         () => /For a \+ui feature, a warning of `spec_finish` too, never a blocker/.test(checks)
           && /The UI checks' findings are one more warning, registry or not\./.test(registry)],
       ["ui-design-patterns: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
-        () => /a comment `ui-check-off: <rule-id> <why>` on its line or the line above: counted, never listed/.test(checks)],
-      ["ui-design-patterns: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named handler, a spread/.test(checks)
+        () => /a comment `ui-check-off: <rule-id> <why>` on its line or alone on the line above \(a stylesheet's: its declaration's\): counted, never listed; only this comment silences \(a linter's is not read\) — an `<a>` a parent gives its href \(Next's `legacyBehavior`\) is one to silence/.test(checks)],
+      ["ui-design-patterns: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose body holds a control or a slot, a spread/.test(checks)
         && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")],
       ["ui-design-patterns: the Review row points to the UI checks", () => /— and the \*\*UI checks\*\* of the same files \(below\)/.test(registry)],
       // (1.37.0 review 1: the whole component — never a variant or a prop —, any punctuation after the word, a replacement not

@@ -1913,10 +1913,12 @@ const COMMANDS = [
             r.raw.forEach((x) => log(`    ${x.file}:${x.line}  ${x.value}` + (x.token ? `  → ${x.token}` : "")));
             more(r.total, r.raw.length);
           }
-          // 1.37: the UI checks — each finding, a line of what each rule means, how many a comment silenced
+          // 1.37: the UI checks — each finding, a line of what each rule means, how many a comment silenced; the head names
+          // finish's warning for a +ui feature alone (finish reads no other feature's — review 1 of 1.37)
           const u = r.uiChecks;
           if (u.total) {
-            log(T.uiHead(u.total));
+            const fx = spec.existingFeature(c.projectDir, r.feature);
+            log(fx.ok && spec.detectTracks(fx.dir).includes("ui") ? T.uiHead(u.total) : T.uiHeadPlain(u.total));
             u.findings.forEach((x) => log(`    ${x.file}:${x.line}  ${x.rule}  ${x.value}` + (x.level === "report" ? "  " + T.uiReportTag : "")));
             more(u.total, u.findings.length);
             log(T.uiLegend);
@@ -1924,7 +1926,7 @@ const COMMANDS = [
           } else if (r.viewFiles) log(T.uiNone(r.viewFiles));
           if (u.silenced) log(T.uiSilenced(u.silenced));
           // (a bound of the checks' own: the report's lines below say the ones they share)
-          u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.file)));
+          u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.file, l.count)));
         } else {
           log(T.dsFound(r.found.components, r.found.tokens, r.found.sources.length));
           if (r.registry.exists && r.missingTotal) {

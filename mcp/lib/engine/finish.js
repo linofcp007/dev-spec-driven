@@ -327,7 +327,8 @@ function finishFeature(projectDir, name, opts = {}) {
   // raw values' (no registry: no `raw`, empty registered / unregistered). null for any other feature (nothing read).
   const ds = tracks.includes("ui") ? designSystemFinish(projectDir, slug, { write, ready }) : null;
   if (ds && ds.raw && ds.tokens && ds.raw.total) warnings.push(F.designSystemRaw(ds.raw.total, ds.raw.top.map((x) => `${x.file}:${x.line} ${x.value}`).join("; "), slug));
-  if (ds && ds.uiChecks.total) warnings.push(F.uiChecks(ds.uiChecks.total, ds.uiChecks.top.map((x) => `${x.file}:${x.line} ${x.rule}`).join("; "), slug));
+  // (top may be empty: a warn-level finding past a file's cap is counted, never listed — review 1 of 1.37)
+  if (ds && ds.uiChecks.total) warnings.push(F.uiChecks(ds.uiChecks.total, ds.uiChecks.top.map((x) => `${x.file}:${x.line} ${x.rule}`).join("; ") || "…", slug));
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null;
   const res = {
@@ -354,7 +355,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
   if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats, partial? (1.30)} — spec_scan {duplicates: true} lists all
   if (protectedTests) res.protectedTests = protectedTests; // 1.36: {count, unexplained: [{file, status: changed | deleted}], lifted: [{file, by, at, reason}]}
-  // 1.35: {raw: {total, counts: {color, size}, top} (a registry's alone), uiChecks? (1.37: {total, byRule, top} — warn-level, when
+  // 1.35: {raw: {total, counts: {color, size}, top} (a registry's alone), uiChecks? (1.37: {total, byRule, top, limits} — warn-level, when
   // there is one), registered (New components this call added to the registry), unregistered (both [] without a registry), note? (the localized
   // line, when it added some)} — only when there is something to say; spec_scan {designSystem: true, name} lists them all
   if (ds && ((ds.raw && ds.raw.total) || ds.uiChecks.total || ds.registered.length || ds.unregistered.length)) {
