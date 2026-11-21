@@ -1889,7 +1889,7 @@ const COMMANDS = [
     args: ["@feature"],
     help: `  design-system [feature]         The design-system registry (.specs/steering/design-system.md) against the code: the components,
                                   tokens, token files and UI libraries it lacks, the rows whose path is gone; a feature: its Design System Usage rows
-                                  against the registry, the raw colours / sizes and the UI checks (anti-patterns) in its view files`,
+                                  against the registry, the raw values and the UI checks (anti-patterns) in its view files`,
     run(c) {
       // dev-spec design-system [feature] (= spec_scan {designSystem: true, name}) — read-only, exit 0
       const { out, fail, log } = c;
@@ -1905,6 +1905,8 @@ const COMMANDS = [
         if (b.unreadTotal) log(T.bpUnread(b.unreadTotal, b.unread.map((u) => `${u.name} ${u.value} (${u.at})`).join(", ") + (b.unreadTotal > b.unread.length ? " … +" + (b.unreadTotal - b.unread.length) : "")));
         b.limits.forEach((l) => log(T.bpLimit[l.code](l.read, l.count, l.first, l.at)));
       };
+      // (1.38) what a raw value is against the scale: the token it is, or the colour it is close to
+      const judged = (x) => (x.token ? `  → ${x.token}` : x.near ? "  " + T.dsRawNear(x.near.token) : "");
       return out(r, (r) => {
         if (!r.feature) log(r.registry.exists ? T.dsHead(r.registry.file, r.registry.components, r.registry.tokens) : T.dsHeadNone(r.registry.file));
         else log(T.dsFeatureHead(r.feature, r.usage ? r.usage.reuse : 0, r.usage ? r.usage.extend : 0, r.usage ? r.usage.new : 0));
@@ -1917,8 +1919,19 @@ const COMMANDS = [
           else if (!r.total) log(T.dsRawNone(r.viewFiles));
           else {
             log(T.dsRawHead(r.total, r.viewFiles));
-            r.raw.forEach((x) => log(`    ${x.file}:${x.line}  ${x.value}` + (x.token ? `  → ${x.token}` : "")));
+            r.raw.forEach((x) => log(`    ${x.file}:${x.line}  ${x.value}` + judged(x)));
             more(r.total, r.raw.length);
+            // 1.38: the values read twice or more (the first 10), and the lengths off the registry's units table
+            if (r.groups.length) {
+              log(T.dsRawGroupsHead);
+              r.groups.slice(0, 10).forEach((g) => log(T.dsRawGroup(g.value, g.count, g.files) + judged(g)));
+              more(r.groupsTotal, Math.min(10, r.groups.length));
+            }
+          }
+          if (r.units && r.units.total) {
+            log(T.dsUnitsHead(r.units.total));
+            r.units.findings.forEach((x) => log(`    ${x.file}:${x.line}  ${x.value}  ` + T.dsUnitsLine(x.unit, x.allowed.join(", "))));
+            more(r.units.total, r.units.findings.length);
           }
           // 1.37: the UI checks — each finding, a line of what each rule means, how many a comment silenced; the head names
           // finish's warning for a +ui feature alone (finish reads no other feature's — review 1 of 1.37)
@@ -1957,6 +1970,16 @@ const COMMANDS = [
           }
           if (r.registry.exists && r.newSources.length) log(T.dsSourcesNew(r.newSources.join(", ")));
           if (r.registry.exists && r.newLibraries.length) log(T.dsLibrariesNew(r.newLibraries.join(", ")));
+          // 1.38: the registry's token values the code holds otherwise (the row as the code has it), its token files gone, the
+          // units table's rows not read — none of them part of "in sync"
+          if (r.driftTotal) {
+            log(T.dsDriftHead(r.driftTotal));
+            r.drift.forEach((d) => log("    | " + cell(d.name) + " | " + cell(d.code) + " |  |   " + T.dsDriftWas(d.registry, d.source)));
+            more(r.driftTotal, r.drift.length);
+          }
+          if (r.gone.length) log(T.dsSourcesGone(r.gone.join(", ")));
+          if (r.unitsTable && r.unitsTable.unread.length) log(T.dsUnitsUnread(r.unitsTable.unread.join(", ")));
+          if (r.unitsTable && r.unitsTable.past) log(T.dsUnitsPast(r.unitsTable.past, r.unitsTable.rows + r.unitsTable.unread.length));
           // (never beside a component an unfinished feature is building: the registry does not list THAT one yet)
           if (r.inSync && !r.pendingTotal) log(T.dsInSync);
         }

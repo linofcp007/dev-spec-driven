@@ -1143,6 +1143,19 @@ const DS_BRIEF_MAX = 12; // components the brief quotes…
 const DS_BRIEF_CHARS = 1500; // …and their size
 const DS_NAME_MAX = 40; // a longer name is compared with none (no component is called that)
 const DS_NEAR_ROWS = 30; // usage rows that pay a name comparison against the registry (past them: the exact name only)
+// (1.38) The units table — the team's convention of the units each property takes (a report, never a default): its first
+// header cell names properties (RE_DS_PROPERTY_HEAD), a column headed Units holds CSS units (RE_DS_COL.units — by its header
+// ONLY, never by place). A table so headed whose cells hold no CSS unit is not one (a component's props table: `| Property |
+// Type | Default |`). CSS_UNITS: the CSS Values 4 lengths, `%` and `fr` — a closed list; another word of a units cell is dropped
+// (`rems`), and a row left with none is not read (`unread`, by its first cell).
+const RE_DS_PROPERTY_HEAD = /^(?:propert(?:y|ies)|propriedades?|propiedad(?:es)?)$/i;
+const CSS_UNITS = new Set(["px", "cm", "mm", "q", "in", "pt", "pc", "em", "rem", "ex", "rex", "cap", "rcap", "ch", "rch", "ic", "ric", "lh", "rlh",
+  "vw", "vh", "vi", "vb", "vmin", "vmax", "svw", "svh", "svi", "svb", "svmin", "svmax", "lvw", "lvh", "lvi", "lvb", "lvmin", "lvmax",
+  "dvw", "dvh", "dvi", "dvb", "dvmin", "dvmax", "cqw", "cqh", "cqi", "cqb", "cqmin", "cqmax", "%", "fr"]);
+const DS_UNIT_ROWS = 50; // units table rows read (past them: `past`, a count)
+const RE_DS_UNIT_PROP = /^[a-z](?:[a-z-]*[a-z])?(?:-\*)?$/; // a property, or `prefix-*` (never a custom property: `--gap`)
+// a units table cell's words, lower-cased: code spans and emphasis out (never the `*` of `margin-*`)
+const dsUnitWords = (c) => String(c == null ? "" : c).slice(0, DS_CELL_MAX * 2).replace(/[`_]|(?<!-)\*/g, " ").toLowerCase().split(/[\s,;·/|]+/).filter(Boolean);
 // A table's first header cell names what its rows are (EN / PT / ES); the other columns are found by their header, else by place.
 const RE_DS_COMPONENT_HEAD = /^component(?:e|es|s)?$/i;
 const RE_DS_TOKEN_HEAD = /^tokens?$/i;
@@ -1151,6 +1164,7 @@ const RE_DS_COL = {
   variants: /^varia/i,
   value: /^val/i,
   use: /^(?:use|usage|uso|utiliza|para)/i,
+  units: /^(?:units?|unidad(?:es?)?)\b/i, // (1.38: the units table's — EN / PT / ES)
 };
 // `_Token sources: a, b_` / `_Libraries: a, b_` — a line of its own, English-stable like the glossary's _Avoid:_; the value runs
 // to the line's end (a path may hold an underscore or a blank), its closing "_" dropped.
@@ -1258,7 +1272,8 @@ function mdTables(text) {
 // a name listed twice counts once (the first row) — but deprecated is a property of the NAME: a later row of it carrying the
 // marker marks it (review 1), its text read from that row. Every component / token table of the file is read (finish appends a
 // table when the file doesn't end in one that can take its rows). `from`: the row's `_From: <feature>_` (left out of `notes`);
-// the `_Deprecated:_` marker is cut out of whichever cell holds it and shown FIRST in `notes`, whole.
+// the `_Deprecated:_` marker is cut out of whichever cell holds it and shown FIRST in `notes`, whole. 1.38: `tokenValues` (a Map:
+// every token row's value by its lower-cased name, past the cap too) and `units` (the units table — dsUnitsTable — or null).
 function designSystemRegistry(root) {
   const file = path.join(root, "steering", DESIGN_SYSTEM_FILE);
   const raw = readIfExists(file);
@@ -1266,10 +1281,15 @@ function designSystemRegistry(root) {
   const body = steeringFrontMatter(raw).body;
   const components = [], tokens = [], keys = new Set(), origins = new Map(), seenT = new Set(), deprecated = new Map(), entries = new Map();
   const total = { components: 0, tokens: 0 };
+  const tokenValues = new Map(); // (1.38) every token row's value by its lower-cased name, past the cap too — drift compares them all
+  let units = null;
   for (const t of mdTables(body)) {
     const head = dsCell(t.header[0] || "");
     const isC = RE_DS_COMPONENT_HEAD.test(head), isT = !isC && RE_DS_TOKEN_HEAD.test(head);
-    if (!isC && !isT) continue;
+    if (!isC && !isT) {
+      if (RE_DS_PROPERTY_HEAD.test(head)) units = dsUnitsTable(t, units);
+      continue;
+    }
     const col = (re, fallback) => { const i = t.header.findIndex((h, k) => k > 0 && re.test(dsCell(h))); return i > 0 ? i : fallback; };
     const cols = isC ? { a: col(RE_DS_COL.path, 1), b: col(RE_DS_COL.variants, 2) } : { a: col(RE_DS_COL.value, 1), b: col(RE_DS_COL.use, 2) };
     for (const r of t.rows) {
@@ -1308,6 +1328,7 @@ function designSystemRegistry(root) {
         if (seenT.has(key)) continue;
         seenT.add(key);
         total.tokens++;
+        tokenValues.set(key, cell(cols.a));
         if (tokens.length < DS_MAX_TOKENS) tokens.push({ name: token, value: cell(cols.a), use: cell(cols.b) });
       }
     }
@@ -1380,7 +1401,26 @@ function designSystemRegistry(root) {
   // review 9: `Design System (acme-ui)` with no row refused `Reuse | acme-ui Button`)
   const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(lists.libraries.filter((l) => !weak.has(l.toLowerCase())), dependencies);
   return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, weakLibraries: weak,
-    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length, deprecated };
+    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length, deprecated, tokenValues, units };
+}
+// (1.38) A table whose first header cell names properties, into the registry's units table → `into` (or null: no units column,
+// or no cell of it holds a CSS unit — not a units table) { rows: [{ props (`margin-*`, `font-size`), units }], unread (the first
+// cell of each row read with no CSS unit or no property), past (rows past DS_UNIT_ROWS: counted, not read) }. Several tables
+// add up.
+function dsUnitsTable(t, into) {
+  const at = t.header.findIndex((h, k) => k > 0 && RE_DS_COL.units.test(dsCell(h))); // (none: -1 — no row reads a unit, no table)
+  const rows = [], unread = [];
+  for (const r of t.rows) {
+    if (dsSlot(r[0] || "")) continue;
+    const props = dsUnitWords(r[0]).filter((w) => RE_DS_UNIT_PROP.test(w));
+    const units = [...new Set(dsUnitWords(r[at]).filter((w) => CSS_UNITS.has(w)))];
+    if (props.length && units.length) rows.push({ props, units }); else unread.push(dsCell(r[0]));
+  }
+  if (!rows.length) return into;
+  const u = into || { rows: [], unread: [], past: 0 };
+  for (const r of rows) if (u.rows.length + u.unread.length < DS_UNIT_ROWS) u.rows.push(r); else u.past++;
+  for (const n of unread) if (u.rows.length + u.unread.length < DS_UNIT_ROWS) u.unread.push(n); else u.past++;
+  return u;
 }
 // A text outside its parentheses, nested ones too (an unclosed one hides what follows it; a `)` nothing opened stays) —
 // and what its CLOSED parentheses and square brackets hold, nested ones with them (an unclosed one holds nothing:

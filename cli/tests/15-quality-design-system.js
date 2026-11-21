@@ -283,4 +283,40 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       pt: () => ptOut.out.includes(P.bpHead(DEF, P.bpFrom.default())),
     });
   }
+
+  // --- 1.38: a raw value against the scale, the repeated values, the units table; the registry's values against the code ----------
+  {
+    // (the PT registry's units table holds 60 rows more: past the 50 read)
+    const more = (lang) => (lang === "pt" ? Array.from({ length: 60 }, (_, i) => "| p" + "abcdefghijklmnopqrstuvwxyz"[i % 26] + "abc"[Math.floor(i / 26)] + " | px |\n").join("") : "");
+    const mk = (lang) => {
+      const dir = path.join(tmp, "p138-ds-" + lang);
+      SR.initProject(dir, ["ui"], lang);
+      write(dir, REG, "# Design System\n\n_Token sources: src/styles/tokens.css, src/styles/gone.css_\n\n| Token | Value | Use |\n|---|---|---|\n| --primary | oklch(0.205 0 0) | x |\n| --duration-normal | 150ms | x |\n" +
+        "| --ease-out | cubic-bezier(0.22, 1, 0.36, 1) | x |\n\n| Property | Units |\n|---|---|\n| font-size | rem |\n| spacing | small |\n" + more(lang));
+      write(dir, "src/styles/tokens.css", ":root {\n  --primary: oklch(0.205 0 0);\n  --duration-normal: .2s;\n  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);\n}\n");
+      const f = SR.createFeature(dir, { name: "Checkout", tracks: ["ui"], summary: "x", lang });
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the page\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/checkout/_\n");
+      write(dir, "src/checkout/c.css", ".a { color: #171717; background: #18181b; font-size: 14px; transition: opacity 150ms; }\n.b { color: #171717; }\n");
+      return { dir, slug: f.slug };
+    };
+    const en = mk("en"), pt = mk("pt");
+    const fr = runIn(["design-system", en.slug, "--project", en.dir]), frJson = runIn(["design-system", en.slug, "--project", en.dir, "--json"]);
+    const pr = runIn(["design-system", "--project", en.dir]), prJson = runIn(["design-system", "--project", en.dir, "--json"]);
+    const ptOut = runIn(["design-system", pt.slug, "--project", pt.dir]), ptProject = runIn(["design-system", "--project", pt.dir]);
+    const help = runIn(["design-system", "--help"]);
+    const P = MSG("pt").cliOutput;
+    all("1.38 design-system (CLI): a raw colour of the scale names its token (→), one close to a token says so (≈ … not the same colour), a motion value of the scale its token; the repeated values (×n in n files); the lengths off the units table with what the table allows; the project report prints a drifted token as the row the code has, the registry's value and the file, the token files gone and the units rows not read; --json is the engine's; PT (got " +
+      js([fr.out, pr.out, ptOut.out]) + ")", {
+      raw: () => fr.code === 0 && fr.out.includes("    src/checkout/c.css:1  #171717  → --primary") && fr.out.includes("    src/checkout/c.css:1  #18181b  " + T.dsRawNear("--primary")) &&
+        fr.out.includes("    src/checkout/c.css:1  transition: opacity 150ms  → --duration-normal"),
+      groups: () => fr.out.includes(T.dsRawGroupsHead) && fr.out.includes(T.dsRawGroup("#171717", 2, 1) + "  → --primary"),
+      units: () => fr.out.includes(T.dsUnitsHead(1)) && fr.out.includes("    src/checkout/c.css:1  font-size: 14px  " + T.dsUnitsLine("px", "rem")),
+      drift: () => pr.code === 0 && pr.out.includes(T.dsDriftHead(1)) && pr.out.includes("    | --duration-normal | .2s |  |   " + T.dsDriftWas("150ms", "src/styles/tokens.css")),
+      gone: () => pr.out.includes(T.dsSourcesGone("src/styles/gone.css")) && pr.out.includes(T.dsUnitsUnread("spacing")),
+      json: () => js(jsonOf(frJson)) === js(SR.designSystemReport(en.dir, { name: en.slug })) && js(jsonOf(prJson)) === js(SR.designSystemReport(en.dir)),
+      pt: () => ptOut.code === 0 && ptOut.out.includes("    src/checkout/c.css:1  #18181b  " + P.dsRawNear("--primary")) && ptOut.out.includes(P.dsUnitsHead(1)) && ptOut.out.includes(P.dsRawGroupsHead),
+      past: () => ptProject.out.includes(P.dsUnitsPast(12, 50)) && !pr.out.includes(T.dsUnitsPast(0, 2).slice(0, 20)),
+      help: () => /the raw values and the UI checks/.test(help.out) && !/raw colours/.test(help.out),
+    });
+  }
 };
