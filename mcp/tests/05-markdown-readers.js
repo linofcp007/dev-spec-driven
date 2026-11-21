@@ -678,11 +678,13 @@ exports.run = async ({ ok, all, S, tmp, require, __dirname }) => {
     const doc = (ls) => "# Design: x\n\n## [UI] UI States\n" + ls.join("\n") + "\n\n## Next\nx\n";
     const q = (lang) => S.msg(lang).quality;
     const en = lines("en"), at = en.indexOf(""), head = en.slice(0, at), table = en.slice(at + 1);
-    // the shapes an author leaves the matrix untouched in: a blank view column added, the a11y column deleted, compact pipes
+    // the shapes an author leaves the matrix untouched in: a blank view column added, the a11y column deleted, compact pipes,
+    // the leading and trailing pipes dropped (a pipe-less GFM table — the mutation pass)
     const addCol = table.map((r, i) => (i === 1 ? "|---|---|---|---|" : r + " |"));
     const delCol = table.map((r, i) => (i === 1 ? "|---|---|" : r.replace(/ [^|]*\|$/, "")));
     const compact = table.map((r) => r.replace(/ *\| */g, "|"));
-    const untouched = { scaffold: table, addCol, delCol, compact };
+    const pipeless = table.map((r) => r.replace(/^\| | \|$/g, ""));
+    const untouched = { scaffold: table, addCol, delCol, compact, pipeless };
     const filledRow = table.map((r, i) => (i === 2 ? "| Loading | a skeleton of the order rows | status \"Loading orders\" · focus stays |" : r));
     const old = [en.slice(0, 1), en.slice(0, 2), en.slice(0, 3)]; // the 1.31, 1.36 and 1.37 blocks
     // the scaffold's section report at no size / s / m / l, as 1.37.0's (its own scaffold — the matrix changes no verdict)

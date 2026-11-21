@@ -981,7 +981,9 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   column) turned the 16 untouched rows into the author's lines and the m / l gate passed an empty matrix — a table row is now
   keyed by its non-empty cells. The 1.37 fixtures that read the block's LAST line (`short`, `worstWritten`, `prefix`,
   `threeLines`) read its first lines by place; the scaffold's section report at s / m / l and the corpus's 1,723 texts are
-  1.37.0's. The no-size sha1 re-pinned once (743f91a0… → c44d3054…).
+  1.37.0's. The no-size sha1 re-pinned once (743f91a0… → c44d3054…). Mutation pass: 9, 8 killed at first — the survivor
+  (the key on a line STARTING with `|`) let a pipe-less copy of the untouched matrix read as written; any line holding `|` is
+  keyed by its cells now, the pipe-less shape a fixture, the key's three mutants rerun on it: killed.
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.

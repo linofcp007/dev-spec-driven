@@ -348,8 +348,8 @@ function judgeTag(tag, add) {
   if (spread) return kind; // (a spread may hold any attribute)
   // font-size-viewport (1.38): an ELEMENT's own `style` attribute — never a component's prop, never a free `fontSize:` line
   // (CSS-in-JS, `sx`, `css()` nest their media queries where no line reader sees them: CRIT_3 must-fix 1)
-  if (element && named.has("style") && RE_FONT_WORD.test(named.get("style") || "")) {
-    const size = styleFontSize(named.get("style"));
+  if (element && named.has("style")) {
+    const size = styleFontSize(named.get("style") || "");
     if (size) add("font-size-viewport", tag.line, "<" + tag.name + " style> " + size);
   }
   // img-no-alt: `<img` (as written) with no alt in any binding, no accessible name (a non-empty `title` names it too, as axe-core's
@@ -441,7 +441,6 @@ function viewportOnly(value) {
 // a quoted literal read to its quote, else to `;`, a quote or `}` (`style="font-size: 5vw; color: red"`); a value that is no
 // literal (`fontSize: big ? "5vw" : "2rem"`, an object) is none. Each character once.
 const RE_STYLE_FONT = /(?<![\w-])(font-size|fontSize)["'`]?\s*:\s*/gi;
-const RE_FONT_WORD = /font/i;
 function styleFontSize(v) {
   RE_STYLE_FONT.lastIndex = 0;
   for (let m = RE_STYLE_FONT.exec(v); m; m = RE_STYLE_FONT.exec(v)) {
@@ -474,9 +473,9 @@ function styleFontSize(v) {
 // `focus-visible]` read as the element's own) —, an arbitrary variant (`[&:focus]`, `[&_*:focus]`: `&` is the element) by
 // its `:`-cut pieces, as before.
 // font-size-viewport (1.38): a BARE arbitrary text size, `text-[<value>]` (a `length:` hint, a `/<line-height>` modifier, `!`),
-// whose value is viewport-only (an arbitrary value's `_` is a blank) — judged only when the class list (the line read, an
-// `@apply`) holds no `text-` utility under a variant: `sm:text-[1.2vw]`, `md:text-6xl` may adjust it (F94's note — CRIT_3
-// must-fix 3). A value holding `(` is cut by the split: never judged.
+// whose value is viewport-only — judged only when the class list (the line read, an `@apply`) holds no `text-` utility under a
+// variant: `sm:text-[1.2vw]`, `md:text-6xl` may adjust it (F94's note — CRIT_3 must-fix 3). A value holding `(` is cut by the
+// split: never judged (so is any arithmetic — its `_` blanks: `text-[calc(1vw_+_1vh)]`).
 // → whether the text holds a focus style.
 const RE_TW_PICK = /transition-all|outline-|focus|text-\[/;
 const RE_TW_TEXT = /^text-\[(?:length:)?([^\]]*)\](?:\/.*)?$/;
@@ -504,7 +503,7 @@ function utilities(s, line, add) {
     if (!tok) continue;
     if (tok.includes("text-")) { // (its variants cut outside brackets: `text-[length:5vw]` is one utility)
       const vs = variantsOf(tok), u = tok.slice(vs.reduce((n, v) => n + v.length + 1, 0)).replace(/^!|!$/g, "");
-      if (u.startsWith("text-")) { if (vs.length) variantText = true; else if (size === null) { const m = RE_TW_TEXT.exec(u); if (m && viewportOnly(m[1].replace(/_/g, " "))) size = tok; } }
+      if (u.startsWith("text-")) { if (vs.length) variantText = true; else if (size === null) { const m = RE_TW_TEXT.exec(u); if (m && viewportOnly(m[1])) size = tok; } }
     }
     const parts = tok.split(":");
     const util = parts.pop().replace(/^!|!$/g, "");
@@ -623,7 +622,8 @@ function sheetChecks(text, rel, add) {
       // text size a candidate outside a conditional block)
       if (apply && utilities(e.text, e.from, (rule, line, value) => {
         if (!add) return;
-        if (rule === "font-size-viewport") { if (!cond) sizes.push({ line, value }); } else if (!(reduced && rule === "transition-all")) add(rule, line, value);
+        // (one in a conditional block is dropped with the file's others: its @apply holds a text- utility, below)
+        if (rule === "font-size-viewport") sizes.push({ line, value }); else if (!(reduced && rule === "transition-all")) add(rule, line, value);
       })) focus = true;
       if (!add) return;
       if (b != null) { if (removal && !b.print) b.removals.push({ line: e.from, text: e.text }); if (draws) b.other = true; }

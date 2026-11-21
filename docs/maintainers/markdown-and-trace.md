@@ -32,9 +32,10 @@ matrix. The rules come first; how they came to be — the releases and review fi
   - **Template:** every visible line is a scaffold line of a track design block (`sectionOwnLines()` — exact lines, every
     language, the packs' with `{{name}}` / `{{slug}}` as a linear wildcard); an edited guidance line is the user's, a TBD
     beside it is not. It fails a new approval and warns on an approved design. A line's key (`sectionLineKey`, the corpus's
-    `sectionLines` too) is whitespace-folded and lower-cased, a list bullet or quote marker dropped; a TABLE row's (a line
-    starting with `|`) is its non-empty cells, trimmed (`tableCells`), on both sides (1.38): a blank column added, a column
-    deleted or compact pipes leave a scaffold row a scaffold row — a cell written makes it the author's.
+    `sectionLines` too) is whitespace-folded and lower-cased, a list bullet or quote marker dropped; a line holding `|` (a
+    table row, a pipe-less GFM one too — no template line holds a `|` but a table row) is keyed by its non-empty cells,
+    trimmed (`tableCells`), on both sides (1.38): a blank column added, a column deleted, compact pipes or the outer pipes
+    dropped leave a scaffold row a scaffold row — a cell written makes it the author's.
 - **Doctor's `mermaid`:** `mermaidState(design)` → present · template · missing, over the ```` ``` ```` / `~~~` blocks
   whose info string starts with `mermaid`, outside comments. `template` — each holds a scaffold diagram
   (`templateDiagramSet()`, every language and design size, from the corpus; `renderTemplateDiagrams()` when it is stale) —
@@ -297,7 +298,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   column), deleting the a11y column or a compact `|Loading|||` turned every untouched row into the author's line —
   `ui-sections` and the m / l gate passed an empty matrix. The Design System Usage rows (no blank cell) keep their keys; a
   separator row's key changed and reaches no reader (separators are structure). A one-column user table whose cells are all
-  state labels (`| Error |`) now reads as template wherever it stands: it says nothing a label does not.
+  state labels (`| Error |`) now reads as template wherever it stands: it says nothing a label does not. The mutation pass
+  found the key's first form — a line STARTING with `|` — let a pipe-less copy of the untouched matrix (`Loading | |`) read
+  as written: keyed now on any line holding `|` (no template line holds one outside a table row, so the corpus kept its keys).
 
 ### Requirements traceability matrix
 - **1.14 F5** — the matrix: `trace_check {matrix: true}`, `trace --matrix` / `--csv`, the export's section and `.rtm.csv`.

@@ -1252,7 +1252,7 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   a `text-` utility) and no block past `DS_BLOCK_DEPTH` went unread — a cross-file override (`style.css` + `responsive.css`)
   is not seen (the user docs say so: silence it); the declaration is read inside a reduced-motion block too, transition-all
   alone skipped there (behaviour-preserving); (3) Tailwind (`utilities` — `RE_TW_PICK` widened by `text-\[`): a BARE
-  `text-[<v>]` (`length:` hint, a `/<line-height>`, `!`; `_` a blank; a value holding `(` is cut by the split) whose value is
+  `text-[<v>]` (`length:` hint, a `/<line-height>`, `!`; a value holding `(` — any arithmetic — is cut by the split) whose value is
   viewport-only, only when the class list — the line read, or an `@apply` statement — holds no `text-` utility under a variant
   (variants cut outside brackets, `variantsOf`); one finding a line. Never: the `font` shorthand, a custom property
   (`--font-size-fluid-3`), a CSS-in-JS template line of a script. The walker keeps a statement's last 2,000 characters, so a
@@ -2361,4 +2361,23 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `references/ui-code-scan.md` (cap 30,000), its Responsiveness section to the new `references/ui-responsive.md` (cap
   12,000), each byte-identical (17-docs pins the table's whitespace-folded sha1; the 1.37 docs pass reads the checks there,
   its registry slice ending at the next h2); the pointers that said "below" name the new file, and so do
-  tooling-reference's spec_scan row and index.md's +ui line.
+  tooling-reference's spec_scan row and index.md's +ui line. Mutation pass 10 of 10.
+- **1.38.0** (F0c, item 3 of the owner's 1.38 list as CRIT_3 and the DECISIONS cut it) — `font-size-viewport`, the seventh
+  rule. The design judged a vw-only size by its enclosing block alone and warned on six real shapes F94's note excuses (a
+  sibling `@media` override, CSS nesting, a Sass `@include`, vanilla-extract / emotion / MUI objects) and on R16's
+  `text-[5vw] sm:text-[1.2vw]`; the three narrowings (the element's own `style` only; the file's conditional font sizes; a
+  variant `text-` on the line) made all of them silent while the inline styles, `:root { font-size: calc(1vw + 1vh +
+  .5vmin) }`, a Svelte `<style>`'s `3vw` and a lone `text-[5vw]` still warn. `width-viewport` was cut (CRIT_3: 16 corpus
+  hits, ~12 unique, one plausible defect — Headless UI's documented Dialog, compiled `.w-screen`, clipped decorations), and
+  with it the `-screen` pick. Oracle replay (15,636 view / style files of the designers' clones, 1.37.0 against F0c): the
+  six 1.37 rules byte-identical, no font-size-viewport finding (no raw vw font size in the corpus at all). Hostile 256K
+  inputs (`text-[` runs, bare-size class lists, line-long vw `calc()` values, long inline styles): 0.1–1.3× plain JSX.
+  Mutation pass — 66 mutants, the list written before the code: F0a's 10, F0b's 9, F0c's 32 and a replay of 1.37's list on
+  the lines F0c touched or shares (15 — 1.37's own list was not kept on disk) — 64 killed at first; the two survivors
+  wanted a fixture: the row key on a line STARTING with `|` let a pipe-less copy of the untouched matrix read as written
+  (the key now reads any line holding `|`; tracks.md), and a PT key renamed fell back to EN's text unseen (each language's
+  text asserted). Three lines went before the pass as having no input of their own: a `font` pre-test before the style
+  reader (no effect, no cost), `_` read as a blank in a Tailwind value (any arithmetic needs `(`, which the class split
+  cuts), the `@apply` wrapper's own conditional test (an `@apply` in a conditional block holding a `text-` utility drops
+  the file's candidates anyway). Two `else`s are equivalent by structure (a vw size in a conditional block, a variant
+  `text-[…vw]`: each is dropped by the rule beside it).

@@ -363,7 +363,9 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       ".h { --font-size-fluid-3: clamp(2rem, 9vw, 3.5rem); }", // 2-9: silent
       ".i { font-size: 5vw !important; }", ".j { font-size: 4dvw; }", ".k {", "  font-size:", "    clamp(2vw, 3svw, 4lvh);", "}", // 10, 11, 13: FINDINGS
       ".l { font-size: 5VW; }", "@layer base { h1 { font-size: 5vw; } }", // 16, 17: FINDINGS (a layer is no condition)
-      ".m { font-size: 5vw !importantly; }", ".n { font-size: vw; }", ".o { font-size: 5 vw; }"); // 18-20: silent
+      ".m { font-size: 5vw !importantly; }", ".n { font-size: vw; }", ".o { font-size: 5 vw; }", // 18-20: silent
+      // (the mutation pass: a function outside calc / clamp / min / max is a doubt; a custom property is never a font size)
+      ".p { font-size: round(5vw, 1vw); }", ".q { --font-size-hero: 8vw; }"); // 21, 22: silent
     const COND = { // one conditional font size anywhere in the file: every viewport-only size of the file is a doubt
       below: lines("h1 { font-size: 5vw; }", "@media (min-width: 60rem) { h2 { font-size: 2rem; } }"),
       above: lines("@supports (font-size: 1cqi) { h2 { font-size: 2rem; } }", "h1 { font-size: 5vw; }"),

@@ -155,6 +155,8 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       js(runs.map(([, , r]) => [r.code, r.out.slice(-700)]).concat([f.out.slice(0, 600)])) + ")", {
       lines: () => re.code === 0 && re.out.includes("    src/errors/NotFound.tsx:3  font-size-viewport  text-[30vw]\n") && re.out.includes("    src/errors/NotFound.tsx:4  font-size-viewport  <h1 style> fontSize: 5vw\n"),
       legend: () => runs.every(([lang, , r]) => r.out.includes("    font-size-viewport — " + MSG(lang).cliOutput.uiRule["font-size-viewport"])),
+      // (the mutation pass: a PT / ES key renamed fell back to EN's text unseen — each language says it in its own words)
+      translated: () => ["pt", "pt-BR", "es"].every((l) => /\(WCAG 1\.4\.4, (?:falha|fallo) F94\)$/.test(MSG(l).cliOutput.uiRule["font-size-viewport"] || "")),
       finish: () => f.out.includes("  ▲ " + MSG("en").finish.uiChecks(2, "src/errors/NotFound.tsx:3 font-size-viewport; src/errors/NotFound.tsx:4 font-size-viewport", ge.slug)),
     });
   }
