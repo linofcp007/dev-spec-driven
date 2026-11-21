@@ -314,7 +314,7 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       units: () => fr.out.includes(T.dsUnitsHead(1)) && fr.out.includes("    src/checkout/c.css:1  font-size: 14px  " + T.dsUnitsLine("px", "rem")),
       drift: () => pr.code === 0 && pr.out.includes(T.dsDriftHead(1)) && pr.out.includes("    | --duration-normal | .2s |  |   " + T.dsDriftWas("150ms", "src/styles/tokens.css")),
       gone: () => pr.out.includes(T.dsSourcesGone("src/styles/gone.css")) && pr.out.includes(T.dsUnitsUnread("spacing")),
-      json: () => js(jsonOf(frJson)) === js(SR.designSystemReport(en.dir, { name: en.slug })) && js(jsonOf(prJson)) === js(SR.designSystemReport(en.dir)),
+      json: () => js(jsonOf(frJson)) === js(SR.designSystemReport(en.dir, { name: en.slug })) && js(jsonOf(prJson)) === js(SR.designSystemReport(en.dir, { uiPass: true })),
       pt: () => ptOut.code === 0 && ptOut.out.includes("    src/checkout/c.css:1  #18181b  " + P.dsRawNear("--primary")) && ptOut.out.includes(P.dsUnitsHead(1)) && ptOut.out.includes(P.dsRawGroupsHead),
       past: () => ptProject.out.includes(P.dsUnitsPast(12, 50)) && !pr.out.includes(T.dsUnitsPast(0, 2).slice(0, 20)),
       help: () => /the raw values and the UI checks/.test(help.out) && !/raw colours/.test(help.out),
