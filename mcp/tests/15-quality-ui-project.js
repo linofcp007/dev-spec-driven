@@ -132,12 +132,17 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const exact = (() => { const head = "<!doctype html>\n<!--\n", tail = "\n-->\n<img src=\"/x.jpg\">", pad = 256 * 1024 - head.length - tail.length; return head + ("y".repeat(99) + "\n").repeat(Math.floor(pad / 100)) + "y".repeat(pad % 100) + tail; })();
     const page = lines("<!doctype html>", "<header><img src=\"data:image/png;base64," + "A".repeat(2600) + "\" alt=\"Acme\"></header>", "<img src=\"/team.jpg\">");
     const tag = lines("export const A = () => (", "  <div onClick={() => go(", ...Array.from({ length: 40 }, (_, i) => "      a" + i + ","), "  <img src=\"after.png\" />", ");");
-    const p = project("limits", { "src/landing/big.html": big, "src/landing/exact.html": exact, "src/landing/index.html": page, "src/landing/A.tsx": tag });
+    // (one character past the read: the `>` that would close its <img> — the pass reads what the feature report reads, the
+    // first 256K, never the one more character asked for to know the file is longer)
+    const over1 = (() => { const head = "<!doctype html>\n<!--\n", img = "\n-->\n<img src=\"/y.jpg\">", pad = 256 * 1024 + 1 - head.length - img.length; return head + ("y".repeat(99) + "\n").repeat(Math.floor(pad / 100)) + "y".repeat(pad % 100) + img; })();
+    // (a sheet's long line, read first — the stylesheets are — and the smaller path: the first file by path, never the last read)
+    const p = project("limits", { "src/landing/big.html": big, "src/landing/exact.html": exact, "src/landing/index.html": page, "src/landing/A.tsx": tag, "src/landing/over1.html": over1,
+      "a/min.css": ".a{color:red}".repeat(200) + "\n" });
     const r = S.designSystemReport(p, { uiPass: true }), u = r.uiChecks;
-    all("1.38 project UI checks: the inventory names its read bounds — view-size (count, the first file; a file of exactly 256K is read whole: its <img> counted), line-length (the <img> below the cut line counted), tag-length — and none reaches the report's limits / truncated (got " + js({ u, limits: r.limits, truncated: r.truncated }) + ")", {
-      limits: () => js(u.limits) === js([{ code: "view-size", read: 262144, count: 1, file: "src/landing/big.html" }, { code: "line-length", read: 2000, count: 1, file: "src/landing/index.html" },
+    all("1.38 project UI checks: the inventory names its read bounds — view-size (count, the first file; a file of exactly 256K is read whole: its <img> counted; one 256K + 1 long is read to 256K: its last `>` unread), line-length (the <img> below the cut line counted; the first file by path), tag-length — and none reaches the report's limits / truncated (got " + js({ u, limits: r.limits, truncated: r.truncated }) + ")", {
+      limits: () => js(u.limits) === js([{ code: "view-size", read: 262144, count: 2, file: "src/landing/big.html" }, { code: "line-length", read: 2000, count: 2, file: "a/min.css" },
         { code: "tag-length", read: 30, count: 1, file: "src/landing/A.tsx" }]),
-      cut: () => u.byRule["img-no-alt"] === 3 && u.rules["img-no-alt"].files === 3 && u.read === 4, // (A.tsx's after the failed tag read, exact's, index's — never big's)
+      cut: () => u.byRule["img-no-alt"] === 3 && u.rules["img-no-alt"].files === 3 && u.read === 6, // (A.tsx's after the failed tag read, exact's, index's — never big's nor over1's)
       top: () => js(r.limits) === js([]) && r.truncated === false,
     });
   }
