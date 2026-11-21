@@ -48,8 +48,8 @@ holding one, the first place), `facts`, `limits`. Counts, never a list, never a 
 its own. The tool and the CLI ask for it; the engine's own default runs none. Stylesheets are read first, then the shorter
 path — at most 5,000 files and 32 MB (`ui-files`, naming the outline removals it left unjudged), each file's first 256K and
 a line's first 2,000 characters (`view-size`, `line-length`; a tag past 30 lines, `tag-length` — each with a count and the
-first file): its own limits, never the report's `limits` or `truncated`. A test, a story, a mock or a fixture is no view
-file. `outline-removed` keeps its rule — any focus style in any file read excuses every removal —, so the removals a feature
+first file): its own limits, never the report's `limits` or `truncated`. A stylesheet past 256K (a compiled bundle) is
+named in `view-size`, never checked. A test, a story, a mock or a fixture is no view file. `outline-removed` keeps its rule — any focus style in any file read excuses every removal —, so the removals a feature
 report leaves unjudged past the project's first 48 stylesheets are judged here; a cut pass that read no focus style judges
 none.
 

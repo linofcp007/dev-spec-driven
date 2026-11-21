@@ -3274,9 +3274,11 @@ const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files
 // engine/ui-checks.js uiProjectPass. Its OWN read, after scanCode (sharing settle's reads saves the bare read alone — parsing
 // is 70–85 % of the pass, CRIT_X D4): the walk's view files that pass uiViewFile, the stylesheets first (a pass a bound cuts
 // has read the focus styles it could), then the shorter path; each file's first DS_READ_CHARS characters, as the feature
-// report reads them (one more asked for: `over`); DS_UI_FILES files / DS_UI_CHARS characters at most — `ui-files` then.
-// Never in a feature report, finish or the seed. Its limits never reach the report's `limits`, `truncated` or `inSync`. reg: the
-// registry (its `_UI checks off:_` marker — uiOff).
+// report reads them (one more asked for: `over`); DS_UI_FILES files / DS_UI_CHARS characters at most — `ui-files` then. A
+// STYLESHEET longer than the read — a compiled bundle — is fed unparsed (review 1 of 1.38: Bulma's 13 were ~2/3 of its pass):
+// counted in `read` and in view-size, which names it; its rules, focus styles and motion unseen (a feature report and finish
+// keep 1.37's read of its first DS_READ_CHARS). Never in a feature report, finish or the seed. Its limits never reach the
+// report's `limits`, `truncated` or `inSync`. reg: the registry (its `_UI checks off:_` marker — uiOff).
 function uiProject(scan, reg) {
   const order = (a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
   const list = scan.views.filter((x) => uiViewFile(x.rel)).sort((a, b) => RE_STYLE_EXT.test(b.rel) - RE_STYLE_EXT.test(a.rel) || a.rel.length - b.rel.length || order(a, b));
@@ -3291,7 +3293,7 @@ function uiProject(scan, reg) {
       if (t == null) continue;
       const over = t.length > DS_READ_CHARS, text = over ? t.slice(0, DS_READ_CHARS) : t;
       chars += text.length;
-      pass.feed(x.rel, viewLines(text, x.rel), over, text);
+      pass.feed(x.rel, over && RE_STYLE_EXT.test(x.rel) ? [] : viewLines(text, x.rel), over, text);
     }
   } finally {
     heads.stop();

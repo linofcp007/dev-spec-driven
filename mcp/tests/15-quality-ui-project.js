@@ -149,6 +149,27 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // review 1 of 1.38 (UP-1): the inventory does not PARSE a stylesheet longer than the read — a compiled bundle (Bulma's 13
+    // were most of its pass) —: view-size counts and names it, `read` counts it; a sheet of exactly 256K is parsed, a view
+    // file past the read (an HTML page) is still parsed to 256K; a feature report and finish keep 1.37's read of its first 256K
+    const HEAD = lines(".a { transition: all .2s; }", "*:focus { outline: none; }");
+    const sized = (head, n, open, close) => { const pad = n - head.length - open.length - close.length; return head + open + ("y".repeat(99) + "\n").repeat(Math.floor(pad / 100)) + "y".repeat(pad % 100) + close; };
+    const p = project("sheet-size", { "assets/kit.css": sized(HEAD, 256 * 1024 + 1, "/*\n", "*/\n"), "styles/exact.css": sized(HEAD, 256 * 1024, "/*\n", "*/\n"),
+      "src/big.html": sized("<img src=\"/early.png\">\n", 256 * 1024 + 1, "<!--\n", "-->\n") });
+    const u = inv(p);
+    const slug = feature(p, ["assets/kit.css"]);
+    const fr = S.designSystemReport(p, { name: slug }).uiChecks, fin = T.designSystemFinish(p, slug).uiChecks;
+    const at = (x) => x.rule + "@" + x.file + ":" + x.line;
+    all("1.38 review 1 project UI checks: a stylesheet longer than the read is not parsed by the inventory — counted and named in view-size (the first file by path), counted in `read`, none of its findings counted —; a sheet of exactly 256K is parsed (its transition-all and outline removal counted), an HTML page past the read is parsed to 256K (its early <img> counted); the feature report and finish over that sheet still read its first 256K (got " +
+      js({ u, fr: { findings: fr.findings.map(at), limits: fr.limits }, fin: fin.top.map(at) }) + ")", {
+      skipped: () => js(u.limits) === js([{ code: "view-size", read: 262144, count: 2, file: "assets/kit.css" }]) && u.read === 3,
+      exact: () => js(u.byRule) === js({ "img-no-alt": 1, "outline-removed": 1, "transition-all": 1 }) && u.rules["outline-removed"].file === "styles/exact.css" && u.rules["transition-all"].files === 1,
+      page: () => u.rules["img-no-alt"].file === "src/big.html" && u.rules["img-no-alt"].line === 1,
+      feature: () => js(fr.findings.map(at)) === js(["outline-removed@assets/kit.css:2", "transition-all@assets/kit.css:1"]) && fr.limits.some((l) => l.code === "view-size" && l.file === "assets/kit.css"),
+      finish: () => js(fin.top.map(at)) === js(["outline-removed@assets/kit.css:2"]),
+    });
+  }
+
   { // the pass's own bound: DS_UI_FILES (5,000) files read — the stylesheets first, then the shorter path — and DS_UI_CHARS (32 MB)
     // characters; past either `ui-files` says it, and a cut pass that read no focus style judges no removal: the limit names them
     const tiny = {};
