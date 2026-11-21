@@ -16,29 +16,36 @@ reference, the worst case of each view, and the prose a view task reads. No new 
   a `uiChecks` part: the first 50 findings (rule, level, file, line, value), the total, a count per rule, the silenced
   count and the checks' own `limits`. Five rules warn: `zoom-disabled` (a viewport `<meta>` or Next's viewport export that
   blocks zoom — WCAG 1.4.4), `img-no-alt` (a rendered `<img>` with no text alternative — 1.1.1), `outline-removed` (an
-  outline removed on an element, `*` or `:focus` while neither the feature's files nor the project's stylesheets hold a
-  focus style — one that draws: `box-shadow: none` or `focus:ring-0` is none — 2.4.7), `click-no-keyboard` (a click
-  handler on an element the keyboard cannot reach — no `tabindex`; a role or a key handler alone is not enough — whose
-  content holds text and no control — 2.1.1), `paste-blocked` (an inline paste handler that cancels — 3.3.8 at a sign-in
-  or code step, a usability defect elsewhere); for a +ui feature they are one warning of `spec_finish` — never a blocker
-  —, with or without a registry. `transition-all` is reported only (UI kits ship it). A comment `ui-check-off: <rule-id>`
-  (a reason may follow) on the finding's line, or alone on the line above (a stylesheet's finding is on its declaration's
-  line), silences it: counted, never listed; a linter's own suppression is not read. What a line reader cannot be sure of
-  is never judged: a named paste handler (or one that hands its event on), a click whose content holds a control or a
-  slot, a spread of props (Vue's `v-bind="$attrs"` too), a tag inside an attribute or a one-line template literal, Pug.
-  Every bound a real file reaches says what it cut in `uiChecks.limits`, with a count (a line past 2,000 characters, a tag
-  or a click's content read past 30 lines, a file's 200 findings — still counted —, a file's 256K, the project's first 48
-  stylesheets read and 384K characters parsed for a focus style); hostile input runs within 3× plain JSX of the same size.
-  On the 2,591 view files of ten public UI repositories: 17 img-no-alt, 3 zoom-disabled and 11 click-no-keyboard findings,
+  outline removed on an element, `*`, `:focus` or under the element's own focus variant — a `focus-within:` or a `group-`
+  / `peer-` / `has-` / `in-` one is a doubt — while neither the feature's files nor the project's first 48 stylesheets hold
+  a focus style — one that draws: `box-shadow: none`, `focus:ring-0`, an `outline-offset` or an `@apply outline-none` is
+  none; past that bound the removals are named, unjudged, in the report and in finish's warning — 2.4.7),
+  `click-no-keyboard` (a click handler on an element the keyboard cannot reach — no `tabindex`; a role or a key handler
+  alone is not enough — whose content holds text and no control or component — 2.1.1), `paste-blocked` (an inline paste
+  handler that cancels — 3.3.8 at a sign-in or code step, a usability defect elsewhere); for a +ui feature they are one
+  warning of `spec_finish` — never a blocker —, with or without a registry. `transition-all` is reported only (UI kits ship
+  it). A comment `ui-check-off: <rule-id>` (a reason may follow) — `//`, `/* */` or `<!-- -->`, never a template engine's
+  own — on the finding's line or the line above (a stylesheet's finding is on its declaration's line, a Tailwind class's on
+  its class's line) silences it: counted, never listed; a linter's own suppression is not read. What a line reader cannot
+  be sure of is never judged: a named paste handler (or one that hands its event on), a click whose content holds a
+  control, a component (an icon or a text component too) or a slot, or no text (an icon or an image alone), a spread of
+  props (Vue's `v-bind="$attrs"` too), a tag inside an attribute or a one-line template literal, Pug. Every bound a real
+  file reaches says what it cut in `uiChecks.limits`, with a count (a line past 2,000 characters, an element's tag — or one
+  naming a click or paste handler — or a click's content read past 30 lines, a file's 200 findings — still counted —, a
+  file's 256K, the project's first 48 stylesheets read and 384K characters parsed for a focus style: that bound names the
+  outline removals it left unjudged, and finish says so); hostile input runs within 3× plain JSX of the same size — a file
+  whose every line is a finding up to ~4× (a 256K HTML file of an `<img>` a line: 4.0–4.3×). On the 2,591 view files of ten public UI repositories: 17 img-no-alt, 3 zoom-disabled and 11 click-no-keyboard findings,
   all real; no outline-removed finding (each repository with a candidate also holds focus styles).
 - **A registry component marked deprecated (`_Deprecated: use X_`).** A component row of `.specs/steering/design-system.md`
-  may carry `_Deprecated_` or `_Deprecated` and its text after any punctuation (`_Deprecated: use X_`, `_Deprecated — use
-  X_`; English-stable, any case) in any cell after its name — it retires the whole component (a retired variant or prop is
-  written without it); the replacement is the first other listed component, not deprecated itself, the text names among
-  its first 20 words. The marker is shown first in the row's notes, so a task brief quotes it whole — doctor reads the same
-  rows (the first 500). doctor warns `ui-deprecated` (never a fail, no stamp) when a Reuse / Extend row of a feature's [UI]
-  Design System Usage names a deprecated component — naming its replacement, silent when the row's notes already name it as
-  the registry writes it (`DataGrid`, not "the data grid"); a New row is not asked, nor a finished feature.
+  may carry `_Deprecated_` or `_Deprecated` and its text after a punctuation mark (`_Deprecated: use X_`, `_Deprecated —
+  use X_`; a word after it makes a note — `_Deprecated in favour of X_` retires nothing; English-stable, any case) in any
+  cell after its name — it retires the whole component (a retired variant or prop is written without it); the replacement
+  is the first other listed component, not deprecated itself, the text names by its name alone (`use Dialog`, not
+  `Dialog.Root`) among its first 20 words. The marker is shown first in the row's notes, so a task brief quotes it whole —
+  doctor reads the same rows (the first 500). doctor warns `ui-deprecated` (never a fail, no stamp) when a Reuse / Extend
+  row of a feature's [UI] Design System Usage names a deprecated component — naming its replacement as the registry writes
+  it, silent when the row's notes already name it so (`DataGrid`, not "the data grid"; a capitalised word reads as the name
+  — write a component kept on purpose in a code span or a tag); a New row is not asked, nor a finished feature.
 - **The visual review without a reference: the accessibility floor.** A view with no approved reference is no longer left
   unreviewed: spec-ui-reviewer judges it on the floor alone — three measured captures (320 px wide, text at 200 %, focus
   moved by keys only) through a tool that sets the viewport and records its width; four findings (reflow, lost content,
@@ -70,11 +77,12 @@ The MCP tool list and SKILL.md are unchanged (+0 characters, +0 bytes): the UI c
 doctor and finish.
 
 ### Tests
-- `node mcp/test.js` 2714 assertions, `node cli/test-cli.js` 689 (was 2554 / 683). Each chain's mutation list was
+- `node mcp/test.js` 2716 assertions, `node cli/test-cli.js` 690 (was 2554 / 683). Each chain's mutation list was
   written before its fixtures: the base 21, 10 and 14 of 14; the UI checks 126 of 126 and 41 of 41 (one survivor kept on
   purpose — a cost guard under its bound); the registry and the brief 41, 20 and 3 of 3; the prose 117 of 117 and 18 of 18.
   Review 1's fixes: the UI checks 105 of 106 (a cost guard, timed) and 22 of 22, the registry and the brief 33 of 34 (one
-  dead step deleted), the prose 30 of 30.
+  dead step deleted), the prose 30 of 30. Review 2's fixes: the UI checks 51 of 51 (review 1's lists run whole again: 99 of
+  99 applicable, the follow-up's 22 of 22), the registry 16 of 16.
 
 ## [1.36.0] — 2026-11-18
 
