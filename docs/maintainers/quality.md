@@ -1291,21 +1291,27 @@ wrong finding sends a team to fix code that is right.
   `h1:focus`, `[tabindex="-1"]:focus` hold focus a script moves out of the tab order, a skip link's target) —
   while the rule's extent, nested blocks included, declares nothing else that draws ("focus": Bootstrap's `outline: 0;
   box-shadow: …` replaces it; its `outline: none; box-shadow: none` override does not); never a selector naming
-  focus-visible, `@media print`, a class alone, a rule that never closes. Tailwind's `outline-none` / `outline-hidden` /
-  `outline-0` under a focus variant too (a bare one is not: shadcn puts it on focus-managed containers and activedescendant
-  options). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` / `:focus-within` (or inside one) that declares
-  something that DRAWS; a Tailwind utility under a focus variant that is no removal and draws, in a class list or an
-  `@apply`. A FOCUS VARIANT (`isFocusVariant`, ONE predicate for a removal under it and a focus style under it — review 1
-  of 1.37: Headless UI's documented Button warned): a variant holding `focus` as a part delimited by `-`, `[`, `]` or its
-  ends — `focus`, `focus-visible`, `group-focus/name`, `peer-focus-within`, `data-[focus]`, `data-focus`,
-  `ui-focus-visible`, `has-focus-visible`, an arbitrary `[&:focus]` — never one a `not` part negates (`not-data-focus`).
-  What draws nothing is decided BY VALUE, once for both
-  readers (review 1 of 1.37 — a ring-killing override was a focus style that excused every removal of the project):
-  `drawsNothing`, a declaration each of whose comma items has `transparent` as its colour or holds nothing but `none` and
-  zeros (`box-shadow: none`, `border: 0`, `outline: 2px solid transparent`), and `RE_TW_NOTHING`, a utility valued `0` /
-  `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`). Still read as drawing (no value says otherwise):
-  an `@apply` inside a `:focus` rule, and `outline-offset` beside a transparent outline (Tailwind v3's compiled
-  `outline-none` written by hand). transition-all: an item that is `all` or names no property, for a
+  focus-visible, `@media print`, a class alone, a rule that never closes. An `@apply` in a rule naming a focus pseudo-class
+  reads as its bare utilities would as declarations (review 2 of 1.37: `*:focus { @apply outline-none }` was a focus
+  style): `outline-none` / `outline-hidden` / `outline-0` a removal of that rule, a `RE_TW_NOTHING` one nothing, any other
+  — and one with a variant, as before — draws. Tailwind's `outline-none` / `outline-hidden` / `outline-0` in a class list
+  under a variant of the element's OWN focus too (`isOwnFocus`: `focus`, `focus-visible` or an attribute form of them —
+  `data-focus`, `data-[focus]`, `ui-focus-visible`; a bare one is not: shadcn puts it on focus-managed containers and
+  activedescendant options; a RELATIONAL one — a `group` / `peer` / `has` / `in` part, `focus-within` — is a doubt, as
+  `:focus-within` in a sheet: review 2 of 1.37, a popover panel's `focus-within:outline-none` around its buttons, 7 of the
+  corpus's candidates). The file's FOCUS STYLE: a rule naming `:focus` / `:focus-visible` / `:focus-within` (or inside one)
+  that declares something that DRAWS; a Tailwind utility under a FOCUS VARIANT that is no removal and draws, in a class list
+  or an `@apply`. A focus variant (`isFocusVariant` — review 1 of 1.37: Headless UI's documented Button warned): a variant
+  holding `focus` as a part delimited by `-`, `[`, `]` or its ends — `focus`, `focus-visible`, `group-focus/name`,
+  `peer-focus-within`, `data-[focus]`, `data-focus`, `ui-focus-visible`, `has-focus-visible`, an arbitrary `[&:focus]` —
+  never one a `not` part negates (`not-data-focus`); every own-focus variant is one. What draws nothing is decided BY VALUE,
+  once for both readers (review 1 of 1.37 — a ring-killing override was a focus style that excused every removal of the
+  project): `drawsNothing`, a declaration each of whose comma items has `transparent` as its colour or holds nothing but
+  `none` and zeros (`box-shadow: none`, `border: 0`, `outline: 2px solid transparent`), or an `outline-offset` (it moves an
+  outline; beside one that draws, that outline is the focus style — review 2 of 1.37: Tailwind v3's compiled `outline-none`,
+  `outline: 2px solid transparent; outline-offset: 2px`, in a CLI's `-o src/output.css` excused every removal), and
+  `RE_TW_NOTHING`, a utility valued `0` / `none` / `hidden` / `transparent` (`focus:ring-0`, `focus:shadow-none`).
+  transition-all: an item that is `all` or names no property, for a
   literal time over 0 (`transitionAll`; a variable or a global keyword is a property or no time, never `all`),
   `transition-property: all`, Tailwind's `transition-all` (variants, `!`, `@apply`), a style object / inline style /
   CSS-in-JS line — never inside `@media (prefers-reduced-motion: reduce)` nor a block nested in one (CRIT_1 must-fix 7).

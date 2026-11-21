@@ -255,16 +255,33 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       ["j.css", ".btn:focus { outline: none; box-shadow: none; }\n", false], ["k.css", ".y:focus { outline: 2px solid transparent; }\n", false],
       ["l.css", ".z:focus { box-shadow: 0 0 0 2px transparent, 0 0 0 4px #2563eb; }\n", true], ["m.css", ".w:focus { border: 0 none; box-shadow: none !important; }\n", false],
       ["N.tsx", "<input className=\"border-0 focus:ring-0 focus:outline-none\" />\n", false], ["O.tsx", "<input className=\"focus:shadow-none focus:ring-transparent\" />\n", false],
-      ["P.tsx", "<input className=\"focus:outline-none focus:ring-2\" />\n", true]];
+      ["P.tsx", "<input className=\"focus:outline-none focus:ring-2\" />\n", true],
+      // (review 2 of 1.37, S3's remainder: an `outline-offset` draws nothing — Tailwind v3's compiled `outline-none` is no focus
+      // style, a drawing outline beside an offset is; an `@apply` in a focus rule is read by its bare utilities — a removal, one
+      // that draws nothing, one that draws; a utility with a variant draws, as before)
+      ["W.css", ".focus\\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }\n", false], ["X.css", ":focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }\n", true],
+      ["Y.css", "*:focus {\n  @apply outline-none;\n}\n", false], ["Z.css", "button:focus { @apply outline-none ring-2 ring-blue-500; }\n", true],
+      ["aa.css", "button:focus { @apply ring-0 shadow-none !important; }\n", false], ["ab.css", "button:focus { @apply hover:ring-0; }\n", true]];
     const facts = cases.map(([rel, text]) => run(text, "src/" + rel).focus);
     const removed = { bs: got(".form-control:focus,\n.btn:focus {\n  outline: none;\n  box-shadow: none;\n}\n", "src/styles/overrides.css"),
       important: got("*:focus {\n  outline: none !important;\n  box-shadow: none !important;\n}\n", "src/styles/overrides.scss"), transparent: got(".close:focus { outline: 2px solid transparent; }\n", "src/close.css"),
-      // (S4: a removal under any focus variant is a candidate — the same predicate as a focus style's; under a negated one it is not)
-      variants: got(lines("<i className=\"data-[focus]:outline-none\" />", "<i className=\"focus-within:outline-hidden\" />", "<i className=\"not-focus:outline-none\" />", "<i className=\"hover:outline-none\" />"), "src/V.tsx") };
+      // (review 2 of 1.37: an @apply's removal in a focus rule is a candidate while nothing else there draws — `!important`, a
+      // leading `!` read; a removal beside an offset alone too; an @apply outside a focus rule, `@media print`: none, as before)
+      apply: got(lines("*:focus {", "  @apply outline-none;", "}", "button:focus { @apply outline-none ring-2; }", "a:focus { @apply outline-0 ring-0 !important; }",
+        "input:focus { @apply !outline-hidden; }", "select:focus { outline: none; @apply hover:outline-none; }", ".x:focus { outline: none; outline-offset: 2px; }", "button { @apply outline-none; }",
+        "@media print { textarea:focus { @apply outline-none; } }", ".btn { @apply focus:outline-none; }"), "src/styles/globals.css"),
+      // (S4: a removal under a variant of the element's own focus is a candidate, under a negated one it is not; review 2 of 1.37:
+      // under a RELATIONAL one — group / peer / has / in, focus-within — it is a doubt, as `:focus-within` in a sheet; 9–15 the
+      // shapes both earlier rules judged and keep)
+      variants: got(lines("<i className=\"data-[focus]:outline-none\" />", "<i className=\"focus-within:outline-hidden\" />", "<i className=\"not-focus:outline-none\" />", "<i className=\"hover:outline-none\" />",
+        "<i className=\"group-focus:outline-none peer-focus-visible:outline-none\" />", "<i className=\"has-focus:outline-none in-focus:outline-0\" />", "<i className=\"group-focus-within:outline-none group-data-[focus]:outline-none\" />",
+        "<i className=\"data-focus:outline-hidden\" />", "<i className=\"ui-focus-visible:outline-none\" />", "<i className=\"data-focus-visible:outline-none\" />", "<i className=\"focus:outline-none\" />",
+        "<i className=\"focus-visible:outline-0\" />", "<i className=\"md:group-hover:focus:outline-none\" />", "<i className=\"[&:focus]:outline-none\" />"), "src/V.tsx") };
     all("1.37 UI checks: a file's focus style — a :focus / :focus-visible / :focus-within rule that styles something (a list, nested, an inner rule), a Tailwind focus-variant utility (group-focus too, in an @apply too); never a removal alone, a hover style, a declaration or utility that draws nothing (`box-shadow: none`, a transparent outline, `focus:ring-0`, `focus:shadow-none`); Bootstrap's `outline: none; box-shadow: none` override is a candidate (got " + js({ facts, removed }) + ")", {
       exact: () => js(facts) === js(cases.map((c) => c[2])),
       candidates: () => js(removed.bs) === js(["outline-removed@3"]) && js(removed.important) === js(["outline-removed@2"]) && js(removed.transparent) === js([]),
-      variants: () => js(removed.variants) === js(["outline-removed@1", "outline-removed@2"]),
+      variants: () => js(removed.variants) === js(["outline-removed@1", ...[8, 9, 10, 11, 12, 13, 14].map((n) => "outline-removed@" + n)]),
+      apply: () => js(removed.apply) === js(["outline-removed@2", "outline-removed@5", "outline-removed@6", "outline-removed@8", "outline-removed@11"]),
     });
   }
 
@@ -470,6 +487,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       // (S3: Bootstrap's ring-killing override in a project sheet, and a feature SearchBox's `focus:ring-0`, excuse nothing)
       bsOverride: mk("bs", { files: [["src/styles/vendor-overrides.css", ".form-control:focus,\n.btn:focus {\n  outline: none;\n  box-shadow: none;\n}\n"]] }),
       ring0: mk("ring0", { mine: ["src/checkout/SearchBox.tsx"], files: [["src/checkout/SearchBox.tsx", "export const SearchBox = () => (\n  <input className=\"w-full border-0 focus:ring-0 focus:outline-none\" />\n);\n"]] }),
+      // (review 2 of 1.37: the Tailwind v3 CLI's compiled sheet in src/ — its `outline-none` — and a project `@apply outline-none`
+      // in a focus rule excuse nothing)
+      tw3: mk("tw3", { files: [["src/output.css", ".focus\\:outline-none:focus {\n  outline: 2px solid transparent;\n  outline-offset: 2px;\n}\n"]] }),
+      apply: mk("apply", { files: [["src/styles/base.css", "button:focus {\n  @apply outline-none;\n}\n"]] }),
     };
     const got1 = Object.fromEntries(Object.entries(cases).map(([k, g]) => [k, verdict(g)]));
     // no candidate → no stylesheet of the project is read for the facts (an open counted on the one that holds one)
@@ -486,6 +507,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const reads = { quiet: opens(quiet, "src/styles/focus.css"), asked: opens(cases.focusCss, "src/styles/focus.css"), own: opens(cases.none, "src/checkout/reset.css") };
     all("1.37 UI checks: an outline removal stands only while NO focus style exists — a focus.css elsewhere, an `_a11y.scss` (never a name-ranked sheet), a .less file, a .vue <style> among the feature's files each excuse it; a sheet that only removes does not; with no candidate no stylesheet is read for the facts, and a file the report read is never read again (got " + js({ got1, reads }) + ")", {
       stands: () => js(got1.none) === js(["outline-removed@src/checkout/reset.css"]) && js(got1.removalOnly) === js(got1.none) && js(got1.bsOverride) === js(got1.none) &&
+        js(got1.tw3) === js(got1.none) && js(got1.apply) === js(got1.none) &&
         js(got1.ring0) === js(["outline-removed@src/checkout/SearchBox.tsx", "outline-removed@src/checkout/reset.css"]),
       excused: () => ["focusCss", "a11y", "less", "vue"].every((k) => js(got1[k]) === js([])),
       lazy: () => reads.quiet === 0 && reads.asked === 1 && reads.own === 1,
