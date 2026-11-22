@@ -36,7 +36,9 @@ from the first of these that gives a width of 320 px or more:
    brackets are, and any other bracket is an aside, never a width (`480 / 960 px [1200 in print]` is 480 and 960);
 2. a top-level Tailwind 4 `@theme` block's `--breakpoint-*` in a stylesheet the code scan reads (unless the sheets reset
    them — `--breakpoint-*: initial` or `--*: initial` —, Tailwind keeps its own five too, which are not read: the default
-   set fills the places the theme's widths leave — list them all in ui.md to choose);
+   set fills the places the theme's widths leave — list them all in ui.md to choose), and a top-level Sass map whose
+   name ends in `breakpoints` (`$grid-breakpoints`, `$breakpoints`, an override in `@use … with (…)`) in a .scss sheet
+   the scan reads — a plain assignment over a `!default` one;
 3. the default set: 320 · 390 · 768 · 1024 · 1440 px.
 
 At most six widths, 320 first (the reflow width) — past six, the narrowest five and the widest, the rest said; where
@@ -44,8 +46,9 @@ the default set fills a theme's places, it comes in the order 768, 1024, 1440, 3
 the widths in ui.md's line to choose them.
 `dev-spec design-system <feature>` prints them and where they came from (without a feature too, and
 `spec_scan {designSystem: true}` in both shapes), and lists a value it could not read (`calc()`, `var()`, wider than
-3840 px) with its place — write the widths in ui.md's line then. A framework's own defaults (in its package), Tailwind
-3's `screens` (a JS config) and a Sass map are never read: paste the line into ui.md instead, keeping the rest of it
+3840 px, `map-merge(…)`) with its place — write the widths in ui.md's line then. A framework's own defaults (in its
+package), Tailwind 3's `screens` (a JS config) and a map in a file the scan does not open by name (`_config.scss`,
+`_settings.scss`) are never read: paste the line into ui.md instead, keeping the rest of it
 (`- Breakpoints: 640 / 768 / … px · text expansion …`):
 - Tailwind's defaults: `- Breakpoints: 640 / 768 / 1024 / 1280 / 1536 px`
 - Bootstrap 5: `- Breakpoints: 576 / 768 / 992 / 1200 / 1400 px`

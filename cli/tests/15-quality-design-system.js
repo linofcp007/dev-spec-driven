@@ -298,6 +298,20 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       printed: () => pasted.every((x) => x.printed === DEF),
       read: () => pasted.every((x) => x.ok),
     });
+
+    // 1.39: a Bootstrap 5 app's Sass map (scss/custom.scss, a sheet candidate) — the code's widths and where they are declared, and
+    // a map another override follows (unread, listed) — EN / PT / ES; --json is the engine's
+    const sass = ["en", "pt", "es"].map((lang) => {
+      const d = bp("sass-" + lang, lang, null, null), X = MSG(lang).cliOutput;
+      write(d, "scss/custom.scss", "$grid-breakpoints: (\n  xs: 0,\n  sm: 600px,\n  md: 900px\n);\n@use 'x' with (\n  $breakpoints: (\n    a: 1px\n  ),\n  $primary: red\n);\n");
+      const out = runIn(["design-system", "--project", d]), json = jsonOf(runIn(["design-system", "--project", d, "--json"]));
+      return { lang, out: out.out.split("\n").filter((l) => /breakpoint/i.test(l)), ok: out.code === 0 && out.out.includes(X.bpHead("320 · 600 · 900", X.bpFrom.code("scss/custom.scss:1"))) &&
+        out.out.includes(X.bpUnread(1, "$breakpoints ( … (scss/custom.scss:7)")), json: js(json.breakpoints) === js(SR.designSystemReport(d).breakpoints) };
+    });
+    all("1.39 design-system (CLI): a Sass `$grid-breakpoints` map's widths, declared in its file:line, and a `with` override the walk did not deliver whole listed unread — EN / PT / ES; --json = the engine (got " + js(sass) + ")", {
+      line: () => sass.every((x) => x.ok),
+      json: () => sass.every((x) => x.json),
+    });
   }
 
   // --- 1.38: a raw value against the scale, the repeated values, the units table; the registry's values against the code ----------
