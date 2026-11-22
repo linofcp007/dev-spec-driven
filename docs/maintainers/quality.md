@@ -1667,10 +1667,12 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `focus-visible:ring-2`) excuses a removal in the inventory, never in that feature report or its finish (review 1 of 1.38,
   UP-6 — kept: a class-list search project-wide reads every view file; ui-code-scan.md says it). `limits`, its own — never the report's `limits`,
   `truncated` or `inSync`: `ui-files` {read, count?, file?, line?: the removals it left unjudged}, `view-size`, `line-length`,
-  `tag-length` {read, count, file: the smallest path} (the pass builds them; featureReport builds the feature's). The CLI
+  `tag-length` {read, count, file: the smallest path}, (1.39) `motion-scripts` (the fact's script search, below) (the pass
+  builds them; featureReport builds the feature's). The CLI
   prints it after the registry part (`uiProjectHead`, `uiProjectRule` a rule — `uiReportTag` for a report-level one —,
   `uiProjectNone`, `uiSilenced`, the off lines, the fact, its limits; never "nothing" beside a `ui-files` count). `uiProject`
-  is exported for one fixture (a truncated walk takes 20,001 view files: a scan of the same files marked truncated).
+  is exported for its fixtures (a truncated walk takes 20,001 view files: a scan of the same files marked truncated; 1.39: the
+  script search's bounds and order over scans built in the test — `{views, scripts, truncated}`).
 - **Motion and the fact `no-reduced-motion`** (1.38, `UI_FACTS`) — `uiChecksOf`'s `motion` {count: the LINES declaring
   motion, line: the first}, never a finding, from its OWN predicate (CRIT_X D5b: never transitionAll's, never item 2's
   `RE_MOTION_PROP` — the properties that hold times): `@keyframes` (a vendor prefix; `RE_KEYFRAMES`, anchored, on the
@@ -1684,10 +1686,35 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `scroll-behavior` too — an `animation: 1s` value never reads as transition-all). The FACT, the inventory's alone (never a
   feature report's or finish's; WCAG 2.3.3 is AAA): the files read declare motion and NONE of the texts read mentions
   reduced motion — `RE_REDUCED_ASK` on each WHOLE text as read, never its lines cut at `DS_LINE_MAX` (a minified sheet's
-  media query sits past the cut) — and NO read was cut (CRIT_1 must-fix 6: the walk, `ui-files`, a file's `view-size` — a
-  mention may sit in what was not read). `facts: [{code, count, file, line}]`; the CLI's `uiFact[code]`. No script search
-  (cut — CRIT_1: it never changed the answer on 9 repos): a mention only in a `.ts` hook is not seen, so the line says "the
-  view files read"; framer-motion props (`animate={{x}}`) are not motion — the fact is said less, never wrongly.
+  media query sits past the cut) — and NO view read was cut (CRIT_1 must-fix 6: the walk, `ui-files`, a file's `view-size`
+  — a mention may sit in what was not read). `facts: [{code, count, file, line}]`; the CLI's `uiFact[code]` ("none of the
+  project's view files and scripts read mentions"). framer-motion props (`animate={{x}}`) are not motion — the fact is said
+  less, never wrongly. (1.39, D6 — CRIT_2 must-fixes 5–7) THE SCRIPT SEARCH: only where the fact is about to be said —
+  `uiProjectPass`'s `wouldSay(cut, truncated)` is THE `said` predicate, named and asked twice (by `uiProject` before `done`, by
+  `done`), so a view's mention, no motion, a cut view pass, a truncated walk or a view-size cut read no script (a spy
+  fixture on each entry's `full`) — `uiProject` reads `scan.scripts` (scanCode's every-script list, the one settle reads,
+  returned as a key since 1.39 — no read shared with settle: CRIT_X D4) that are no view file (each file read once), no test
+  (`isTestFile`: an `e2e/` helper), no story / mock / declaration (`RE_NOT_COMPONENT_FILE`), the shorter path first then by
+  path, each to `DS_READ_CHARS`, and hands each text to `pass.mention(text)` (`RE_REDUCED_ASK` again — the views' own
+  predicate, never a second one) until the first mention (the read ends there: a cost guard, timed — 400 scripts whose first
+  mentions ≤ 0.5× the same 400 with none) or `DS_MOTION_SCRIPTS` (2,000) files / `DS_MOTION_CHARS` (8 MB) characters, the
+  next past either unread. A mention takes the fact back; it can never add one. A search a bound ended, or that read a script
+  only in part (past 256K), keeps the fact, and the inventory's `limits` gain `motion-scripts` {read, bound? (files · chars:
+  WHICH bound ended it — CRIT_2 must-fix 5), count?, file? (the scripts read only in part, the first by path — not the first
+  read)} beside the fact or its off count (an off fact is searched too: its `off` count is the fact as it would have been
+  said); a search that read every candidate whole says nothing. Never the report's `limits`, `truncated` or `inSync` (1.38
+  D5d). The CLI line (`dsLimit["motion-scripts"](read, file, count, bound)` — the inventory's limit loop passes `l.bound` as
+  its 4th argument) says "the first N, the shorter path first" only when a bound ended it. The two reads — the views', the
+  scripts' — are ONE loop, `readHeads(list, files, chars, take)` (design-system.js: read ahead, each file's head and `over`,
+  the bounds, `cut: null | files | chars`; CRIT_2 must-fix 7: a second copy trips 16-conventions-duplication). Said less,
+  never wrongly: a test SETUP is no test by name (`jest.setup.js`, `vitest.setup.ts`, `playwright.config.ts`'s `use:
+  { reducedMotion }`, `setupTests.ts`), so its mention takes the fact back (ui-code-scan.md: "test setups included"); so does
+  a vendored script (Bulma's fontawesome `all.js`). Measured (CRIT_2 §5, warm, median of 3): the fact is said on 4 of the 18
+  clones in 1.38 (motion-primitives, sakai-vue, taxonomy — true; outline — false, its reset in a styled-components
+  `shared/styles/globals.ts`); the search adds +1 to +27 ms there (it stops at outline's 216th script), ≤ 1.12× those
+  inventories; at the bound, cal.com's first 2,000 scripts 171–405 ms (≤ 1.3×; cal.com itself never searches — its views
+  mention); the 8 MB bound is reached on no clone (cal.com's first 2,000: 4.9 MB). What the bound hides: a mention past the
+  2,000th script or 8 MB (cal.com's first sits at its 1,002nd).
 - **The marker `_UI checks off: <rule-id> (reason)_`** (1.38 — the registry's `checksOff`, Design-system registry above) —
   `uiOff(reg)` → {off: Map(id → reason), ignored: [{entry, why, read?}]}: an entry is APPLIED only when its id is a rule's
   or a project fact's (`UI_RULES` ∪ `UI_FACTS`, at call time — F0c's font-size-viewport is one: CRIT_X D7.4) and it gives a
@@ -1734,8 +1761,8 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   in History (1.38.0 review 1, the cost).
 - **Not in 1.37 nor 1.38** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion`
   raw kind (item 2's), the `addEventListener` paste form, a `hint` level; 1.38's cuts — deprecated uses (1.39), sharing
-  settle's reads, the reduced-motion script search, the 5,000 / 32 MB focus bound in the feature report and finish,
-  `DS_FOCUS_*` printed in MB (the `:is` / `v-bind:is` narrowing came in 1.39: D4).
+  settle's reads, the 5,000 / 32 MB focus bound in the feature report and finish, `DS_FOCUS_*` printed in MB (the `:is` /
+  `v-bind:is` narrowing and the reduced-motion script search came in 1.39: D4, D6).
 
 ## UI state matrix (1.38)
 +ui's `[UI] UI States` scaffold ends in a state matrix (the template — markdown-and-trace.md → Readers, tracks.md): `State` ·

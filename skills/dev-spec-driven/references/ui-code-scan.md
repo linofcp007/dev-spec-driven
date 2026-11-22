@@ -40,9 +40,8 @@ In the report alone: `transition-all` (kits ship it), what a bound cut. Silence 
 `ui-check-off: <rule-id> <why>` on its line (a declaration's, a class's) or the line above — `//`, `/* */`, `<!-- -->`,
 not Blade's or Twig's: counted, never listed; only this comment silences (a linter's is not read) — an `<a>` a parent gives its
 href (Next's `legacyBehavior`) is one to silence. A doubt is never judged: a named paste handler, a click whose content
-holds a control, a component (an icon, a text one, Vue's `<component :is>`) or a slot, or no text (an icon or an image
-alone), a spread (`{...props}`), a tag in an attribute or a one-line template literal, Pug, a tag past 100 attributes or 30
-lines.
+holds a control, a component (an icon or a text one, `<component :is>`) or a slot, or no text (an icon or an image alone),
+a spread (`{...props}`), a tag in an attribute or a one-line template literal, Pug, a tag past 100 attributes or 30 lines.
 
 ### The project's UI checks
 
@@ -62,15 +61,15 @@ get it, or silence it.
 
 The fact `no-reduced-motion` (WCAG 2.3.3, AAA): the view files declare motion — an animation, a transform's transition,
 smooth scrolling — and none of the files read mentions reduced motion (`prefers-reduced-motion`, `motion-safe:` /
-`motion-reduce:`, `useReducedMotion`). Said only when no read was cut (the walk, `ui-files`, a file's 256K); a mention
-only in a script (a `.ts` hook) is not seen.
+`motion-reduce:`, `useReducedMotion`). Said only when no view read was cut (the walk, `ui-files`, a file's 256K); scripts
+count too, test setups included (2,000 by shorter path, 8 MB: `motion-scripts`).
 
-**Off for the project.** `_UI checks off: <rule-id> (reason)_` — a line of its own in design-system.md (a list item or a
-bold line is not read), the marker in English, each id bare or in a code span, entries separated by commas
-(`_UI checks off: transition-all (the kit animates on purpose)_`) — switches a UI check or a project fact off everywhere: the inventory, every feature report (`off`: the rule, its reason, the findings it hid)
-and so finish — counted, never listed (an inline-silenced finding stays `silenced`). An entry with no reason in
-parentheses, an id that is no check or fact, another shape or one past the first 50 entries is not applied, and the report
-says why (`offIgnored`, `why`: `no-reason`, `unknown-rule`, `unreadable`, `past-bound`). Creating design-system.md for the
+**Off for the project.** `_UI checks off: <rule-id> (reason)_` — a line of its own in design-system.md (never a list item
+or bold), the marker in English, ids bare or in a code span, entries separated by commas
+(`_UI checks off: transition-all (kit code)_`) — switches a UI check or a project fact off everywhere: the inventory, every
+feature report (`off`: the rule, its reason, the findings it hid) and so finish — counted, never listed (an inline-silenced
+finding stays `silenced`). An entry with no reason in parentheses, an id that is no check or fact, another shape or one
+past the first 50 entries is not applied, and the report says why (`offIgnored`, `why`: `no-reason`, `unknown-rule`, `unreadable`, `past-bound`). Creating design-system.md for the
 marker alone enrols the project in the registry: a written finish adds the feature's New components to it, and from its
 first component doctor's `ui-design-system` checks every design's rows against it (a refusal at size m / l) — without a
 registry, use the inline comment. A what-input modality rule (`[data-whatintent='mouse'] *:focus { outline: none }`) is

@@ -203,6 +203,28 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     all("1.38 design-system (CLI): every language says the inventory's bound (its count and first place when it left removals unjudged, none of it else) and the rule line, and the unjudged clauses point to the project's UI checks (got " + js(said) + ")", {
       strings: () => said.every((x) => x.every(Boolean)),
     });
+    // (1.39, D6: the fact's script search — a search 8 MB ended (33 scripts of 256K: 32 read) and one that read a script only in
+    // part (300K) print `motion-scripts` after the fact, the bound named only when one ended it; the fact names the scripts)
+    const MOTION = { "src/b/pop.css": "@keyframes pop { to { opacity: 1 } }\n" }, heavy = Object.assign({}, MOTION);
+    for (let i = 0; i < 33; i++) heavy["lib/blobs/b" + String(i).padStart(2, "0") + ".js"] = "y".repeat(256 * 1024);
+    const chars = runIn(["design-system", "--project", proj("motion-chars", "en", heavy)]);
+    const part = runIn(["design-system", "--project", proj("motion-part", "en", Object.assign({ "lib/data.js": "export const d = [\n" + "  1,\n".repeat(80000) + "];\n" }, MOTION))]);
+    const pt2 = runIn(["design-system", "--project", proj("motion-part-pt", "pt", Object.assign({ "lib/data.js": "export const d = [\n" + "  1,\n".repeat(80000) + "];\n" }, MOTION))]);
+    const fact = T.uiFact["no-reduced-motion"](1, "src/b/pop.css:1");
+    all("1.39 design-system (CLI): the fact's script search — `motion-scripts` after the fact line: an 8 MB bound named (32 scripts read), a script read only in part named with no bound; Portuguese in Portuguese (got " + js([chars.out.slice(-500), part.out.slice(-500), pt2.out.slice(-500)]) + ")", {
+      chars: () => chars.code === 0 && lineOf(chars.out, T.dsLimit["motion-scripts"](32, undefined, undefined, "chars")) === lineOf(chars.out, fact) + 1,
+      part: () => part.code === 0 && lineOf(part.out, T.dsLimit["motion-scripts"](1, "lib/data.js", 1, undefined)) === lineOf(part.out, fact) + 1,
+      pt: () => pt2.code === 0 && pt2.out.includes(P.dsLimit["motion-scripts"](1, "lib/data.js", 1, undefined)) && pt2.out.includes(P.uiFact["no-reduced-motion"](1, "src/b/pop.css:1")),
+    });
+    const lines2 = ["en", "pt", "pt-BR", "es"].map((l) => {
+      const C = MSG(l).cliOutput, D = C.dsLimit["motion-scripts"];
+      const files = D(2000, undefined, undefined, "files"), bytes = D(32, undefined, undefined, "chars"), some = D(3, "lib/data.js", 1, undefined), one = D(1, undefined, undefined, undefined);
+      return [files.includes("2000") && bytes.includes("32") && files !== bytes.replace("32", "2000"), some.includes("lib/data.js") && some.includes("3"),
+        /(?:first|primeiros|primeros) 2000 /.test(files) && !/(?:first|primeiros|primeros) [13] /.test(some + one), !/undefined/.test(files + bytes + some + one), /scripts/.test(C.uiFact["no-reduced-motion"](2, "x:1"))];
+    });
+    all("1.39 design-system (CLI): every language says the script search's limit — which bound (files / characters) and the first N only when one ended it, the scripts read in part and the first — and the fact names the scripts (got " + js(lines2) + ")", {
+      strings: () => lines2.every((x) => x.every(Boolean)),
+    });
   }
 
   { // 1.38: the `_UI checks off:_` marker on the CLI — the rules it switched off (each with the findings it hid and its reason) and

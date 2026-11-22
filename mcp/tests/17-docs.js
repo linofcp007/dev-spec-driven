@@ -1364,7 +1364,7 @@ exports.run = async ({
         () => /a comment `ui-check-off: <rule-id> <why>` on its line \(a declaration's, a class's\) or the line above — `\/\/`, `\/\* \*\/`, `<!-- -->`, not Blade's or Twig's: counted, never listed; only this comment silences \(a linter's is not read\) — an `<a>` a parent gives its href \(Next's `legacyBehavior`\) is one to silence/.test(checks)],
       // (1.39 D4: Vue's `<component :is>` named among the components — the engine agrees: a control in a click body, never a
       // click candidate itself)
-      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon, a text one, Vue's `<component :is>`\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
+      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text one, `<component :is>`\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
         && (() => { const E = require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier(), f = (t) => E.uiChecksOf(E.viewLines(t, "a.vue"), "a.vue").findings.length;
           return f("<template><div @click=\"go\"><component :is=\"Btn\">Go</component></div></template>\n") === 0 && f("<template><component :is=\"Btn\" @click=\"go\">Go</component></template>\n") === 0
             && f("<template><div @click=\"go\">Go</div></template>\n") === 1; })()
@@ -1504,7 +1504,8 @@ exports.run = async ({
     const bpCodes = [...BP.matchAll(/code: "([a-z-]+)"/g)].map((m) => m[1]);
     const B = { files: num(DS, "DS_UI_FILES"), chars: num(DS, "DS_UI_CHARS"), read: num(DS, "DS_READ_CHARS"), line: num(DS, "DS_LINE_MAX"), tag: num(UC, "DS_TAG_LINES"),
       sheets: num(UC, "DS_FOCUS_SHEETS"), entries: num(QY, "DS_MARKER_ENTRIES"), unitRows: num(QY, "DS_UNIT_ROWS"), perFile: num(DS, "DS_RAW_PER_FILE"), list: num(DS, "DS_LIST"),
-      jnd: num(DV, "DS_JND"), hsl: num(DV, "DS_SAME_HSL"), cross: num(DV, "DS_SAME_CROSS"), alpha: num(DV, "DS_ALPHA") };
+      jnd: num(DV, "DS_JND"), hsl: num(DV, "DS_SAME_HSL"), cross: num(DV, "DS_SAME_CROSS"), alpha: num(DV, "DS_ALPHA"),
+      motionFiles: num(DS, "DS_MOTION_SCRIPTS"), motionChars: num(DS, "DS_MOTION_CHARS") };
     const scanRaw = raw("skills", "dev-spec-driven", "references", "ui-code-scan.md"), scanLines = scanRaw.split("\n");
     const section = (head) => { const at = scanLines.findIndex((l) => l === head), end = scanLines.findIndex((l, i) => i > at && /^#+ /.test(l)); return at < 0 ? "" : ws(scanLines.slice(at, end < 0 ? scanLines.length : end).join("\n")); };
     const proj = section("### The project's UI checks"), scale = section("### Raw values against the project's scale");
@@ -1563,7 +1564,7 @@ exports.run = async ({
         /The tool and the CLI ask for it; the engine's own default runs none\./.test(proj) && /S\.designSystemReport\(dir, \{ name: o\.name, uiPass: true \}\)/.test(raw("mcp", "lib", "operations.js"))
           && /\.\.\.\(opts\.uiPass \? \{ uiChecks: uiProject\(scan, reg\) \} : \{\}\)/.test(DS)],
       ["bounds: the inventory's files / characters, a file's and a line's read, a tag's — every code uiProjectPass emits, its own limits", () =>
-        passCodes.length === 4 && passCodes.every((c) => proj.includes(tick(c)))
+        passCodes.length === 5 && passCodes.every((c) => proj.includes(tick(c)))
           && proj.includes("at most " + n(B.files) + " files and " + B.chars / 1048576 + " MB (`" + passCodes[0] + "`, naming the outline removals it left unjudged)")
           && proj.includes("each file's first " + B.read / 1024 + "K and a line's first " + n(B.line) + " characters (`view-size`, `line-length`; a tag past " + B.tag + " lines, `tag-length` — each with a count and the first file)")
           && proj.includes("its own limits, never the report's `limits` or `truncated`")],
@@ -1586,8 +1587,12 @@ exports.run = async ({
         const re = regexOf(UC, "RE_REDUCED_ASK");
         return said.length >= 4 && said.every((w) => re.test(w.slice(1, -1)));
       }],
-      ["fact: said only when no read was cut — the inventory's bound by its code; a script's mention not seen", () =>
-        proj.includes("Said only when no read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); a mention only in a script (a `.ts` hook) is not seen.")],
+      // (1.39, D6: the scripts are searched — the bounds from the source, the order and the filter the engine's: a test setup is
+      // no test by name, so its mention counts)
+      ["fact: said only when no view read was cut — the inventory's bound by its code; the scripts searched, a test setup's too, their bounds and code", () =>
+        proj.includes("Said only when no view read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); scripts count too, test setups included (" + n(B.motionFiles) + " by shorter path, " + B.motionChars / 1048576 + " MB: `" + passCodes[1] + "`).")
+          && passCodes[1] === "motion-scripts" && /const more = scan\.scripts\.filter\(\(x\) => !isViewFile\(x\.rel\) && !isTestFile\(x\.rel\) && !RE_NOT_COMPONENT_FILE\.test\(x\.rel\)\)\.sort\(\(a, b\) => a\.rel\.length - b\.rel\.length \|\| order\(a, b\)\)/.test(DS)
+          && ["jest.setup.js", "vitest.setup.ts", "playwright.config.ts", "src/setupTests.ts"].every((f) => !require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier().isTestFile(f))],
       ["marker: `_UI checks off: <rule-id> (reason)_` — the label the registry reads (RE_DS_MARKER), an example entry a rule; off everywhere, counted never listed", () =>
         /\|UI checks off\)/.test((QY.match(/const RE_DS_MARKER = [^\n]*/) || [""])[0]) && offPara.includes("`_UI checks off: <rule-id> (reason)_`")
           && rules.includes(((offPara.match(/`_UI checks off: ([a-z-]+) \(/) || [])[1]))
@@ -1753,7 +1758,7 @@ exports.run = async ({
       ["ui-code-scan: a feature report's focus search is narrower than the inventory's — it may warn where the inventory does not", () =>
         /A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a removal the inventory excuses by one in another view file: check that the removal's elements get it, or silence it\./.test(C)],
       ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare or in a code span (the engine agrees)", () => spelled
-        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(a list item or a bold line is not read\), the marker in English, each id bare or in a code span, entries separated by commas/.test(C)],
+        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(never a list item or bold\), the marker in English, ids bare or in a code span, entries separated by commas/.test(C)],
       ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare or in a code span (the engine agrees)", () => spelled
         && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare or in a code span, entries separated by commas/.test(ST)],
     ];

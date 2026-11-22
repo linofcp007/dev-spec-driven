@@ -1670,6 +1670,9 @@ const msg = {
         "file-findings": (n, file, count) => `  (${count} more UI ${count === 1 ? "finding" : "findings"} past a file's ${n} — the first in ${file}: counted, not listed)`,
         // (1.38: the project's UI checks — n: the view files read; at / count: the outline removals the cut left unjudged, if any)
         "ui-files": (n, at, count) => `  (the UI checks read the project's first ${n} view ${n === 1 ? "file" : "files"}, a bound: the rest is not counted${count ? ` — ${count} outline ${count === 1 ? "removal" : "removals"} not judged, the first: ${at}` : ""})`,
+        // (1.39: the fact's script search — n: the scripts read; bound: files | chars, the bound that ended it (none: every
+        // script was read; one ends it past 32 scripts at least); count / file: the scripts read only in part, the first by path)
+        "motion-scripts": (n, file, count, bound) => `  (a mention of reduced motion was looked for in ${bound ? `the project's first ${n} scripts, the shorter path first — a bound of their ${bound === "chars" ? "characters" : "number"}` : `the project's ${n} ${n === 1 ? "script" : "scripts"}`}${count ? ` — ${count} read only in part, the first: ${file}` : ""}: one past what was read is not seen)`,
         "component-files": (n) => `  (${n} component files were read for the further components they export, and a bound was reached — the files or characters read, or the names kept of one file: the rest is not compared)`,
         "workspace-manifests": (n) => `  (a bound of the workspace patterns was reached — ${n} of the workspace packages' package.json files read: the libraries of the rest are not compared)`,
         // (1.38: the new kinds' own bound a file — file: the first it cut)
@@ -1713,7 +1716,7 @@ const msg = {
       uiProjectNone: (files) => `  UI checks: nothing in the project's ${files} view ${files === 1 ? "file" : "files"}`,
       // (the project's facts by code — at: the first place, file:line)
       uiFact: {
-        "no-reduced-motion": (n, at) => `  ▲ the code declares motion — an animation, a transform's transition or smooth scrolling (${n} ${n === 1 ? "place" : "places"}, the first: ${at}) — and none of the project's view files read mentions reduced motion: offer a reduced variant — @media (prefers-reduced-motion: reduce), Tailwind's motion-reduce: / motion-safe: (WCAG 2.3.3, AAA)`,
+        "no-reduced-motion": (n, at) => `  ▲ the code declares motion — an animation, a transform's transition or smooth scrolling (${n} ${n === 1 ? "place" : "places"}, the first: ${at}) — and none of the project's view files and scripts read mentions reduced motion: offer a reduced variant — @media (prefers-reduced-motion: reduce), Tailwind's motion-reduce: / motion-safe: (WCAG 2.3.3, AAA)`,
       },
       // (the project's `_UI checks off:_` marker in design-system.md — list: `<rule> <count hidden> — <reason>`, `; `-joined; e: an entry
       // not applied, as the report names it; n: the entries read)

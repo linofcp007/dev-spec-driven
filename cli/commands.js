@@ -2001,7 +2001,8 @@ const COMMANDS = [
             if (u.silenced) log(T.uiSilenced(u.silenced));
             offLines(u);
             u.facts.forEach((x) => log(T.uiFact[x.code](x.count, x.file + ":" + x.line)));
-            u.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count)));
+            // (1.39: motion-scripts' `bound` — which bound ended the script search — its 4th argument)
+            u.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count, l.bound)));
           }
         }
         r.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.file)));
