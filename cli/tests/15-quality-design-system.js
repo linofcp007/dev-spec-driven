@@ -334,4 +334,42 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       help: () => /the raw values and the UI checks/.test(help.out) && !/raw colours/.test(help.out),
     });
   }
+
+  // --- 1.39: the files that still import a deprecated component — the project report's `deprecatedUses` on the CLI ----------------
+  {
+    const L = (lines) => lines.join("\n") + "\n";
+    const mk = (lang) => {
+      const dir = path.join(tmp, "p139-ds-uses-" + lang);
+      SR.initProject(dir, ["ui"], lang);
+      write(dir, REG, "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| Table | src/components/ui/table.tsx |  | _Deprecated: use data-grid_ |\n" +
+        "| DataGrid | src/components/ui/data-grid.tsx |  |  |\n| Toast | src/components/ui/toast.tsx |  | _Deprecated_ |\n| Callout | src/components/callout.tsx |  | _Deprecated_ |\n| Modal |  |  | _Deprecated_ |\n");
+      for (const [rel, name] of [["src/components/ui/table.tsx", "Table"], ["src/components/ui/data-grid.tsx", "DataGrid"], ["src/components/ui/toast.tsx", "Toast"], ["src/components/callout.tsx", "Callout"]]) {
+        write(dir, rel, "export function " + name + "() { return <div />; }\n");
+      }
+      write(dir, "src/billing/components/table.tsx", "export function BillingTable() { return <table />; }\n"); // (a namesake: a Table file too)
+      for (let i = 1; i <= 5; i++) write(dir, "src/app/p" + i + "/page.tsx", L(["import { Table } from \"../../components/ui/table\";", "export const P = () => <Table />;"]));
+      write(dir, "docs/guide.mdx", L(["# Guide", "", "<Callout>hi</Callout>"]));
+      // (a barrel of 11 stars whose first ten pass on 10,000 names each: the follow's steps bound, said below the rows)
+      write(dir, "src/hub.ts", L(Array.from({ length: 11 }, (_, k) => "export * from \"./n/n" + String(k + 1).padStart(2, "0") + "\";")));
+      for (let k = 1; k <= 10; k++) write(dir, "src/n/n" + String(k).padStart(2, "0") + ".ts", L(Array.from({ length: 100 }, (_, j) => "export { " + Array.from({ length: 100 }, (_, i) => "a" + k + "_" + (j * 100 + i)).join(", ") + " } from \"./x\";")));
+      write(dir, "src/n/n11.ts", "export * from \"../components/ui/toast\";\n");
+      write(dir, "src/app/hub.tsx", L(["import { Toast } from \"../hub\";", "export const P = () => <Toast />;"]));
+      return dir;
+    };
+    const en = mk("en"), pt = mk("pt");
+    const out = runIn(["design-system", "--project", en]), asJson = runIn(["design-system", "--project", en, "--json"]);
+    const ptOut = runIn(["design-system", "--project", pt]);
+    const d = jsonOf(asJson).deprecatedUses || {};
+    const P = MSG("pt").cliOutput, Q = MSG("en").quality;
+    const lines = (M, q) => [M.dsDepUsesHead(1, 3), M.dsDepUsesRow("Table", "DataGrid", 5, "src/app/p1/page.tsx, src/app/p2/page.tsx, src/app/p3/page.tsx … +2", 2),
+      M.dsDepUsesNone("Toast", "", d.read), M.dsDepUsesNone("Callout", "", d.read), M.dsDepUsesUnbound(1, "Callout", "docs/guide.mdx"), M.dsDepUsesUnlocated("Modal"),
+      "  (" + q.dsDepUsesNote + ")", M.dsLimit["deprecated-follow"](2000, 8 * 1024 * 1024, 100000)];
+    const at = (text, list) => { let k = -1; return list.every((l) => { const n = text.indexOf(l + "\n", k + 1); if (n <= k) return false; k = n; return true; }); };
+    all("1.39 design-system (CLI): the deprecated components the code still imports — a head, a row each (its replacement, its importers' count and the first three, its namesakes), \"no import found\" said with what is not read, the .mdx tags no import binds, the rows with no component file, the note, the watch's own bounds — in that order, in the project's language; --json IS the report (got " +
+      js([out.out, ptOut.out]) + ")", {
+      en: () => out.code === 0 && at(out.out, lines(T, Q)) && d.read > 0,
+      json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.designSystemReport(en, { uiPass: true })),
+      pt: () => ptOut.code === 0 && at(ptOut.out, lines(P, MSG("pt").quality)),
+    });
+  }
 };
