@@ -1144,7 +1144,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     `$breakpoints`, `$mq-breakpoints`; never `$spacers`, a 0-led map of lengths a value property would take, nor
     `$grid-breakpoints-custom`): plain, `!default`, or an override of `@use … with (…)` / `@forward … with (…)` (on one
     statement: the `with` group's entries; over lines: each override is the walk's own `open`). Its value (`sassValue`): a
-    literal map, to its own `)` (`parenGroup`: one pass, depth-1 commas, quotes skipped) — each `0` / px / rem / em entry a min
+    literal map, to its own `)` (`parenGroup`: one pass, depth-1 commas, quotes skipped; one that never closes — a stray `}`
+    ended its statement — one unread) — each `0` / px / rem / em entry a min
     edge, any other entry (`md: $tablet`, a unitless `750`, `5000px`) `unread` as `$name.key` (a quoted key unquoted); an entry
     that opens a map (Bulma's `"mobile": ("until": $tablet)`) makes it no breakpoints at all (nothing, nothing unread); a list
     (`$show-breakpoints: (mobile, tablet)` — no key in its first entry; `"a" "b"`) nothing; anything else holding `$` or `(` (a

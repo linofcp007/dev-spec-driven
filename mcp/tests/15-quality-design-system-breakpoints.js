@@ -328,6 +328,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const block = report(null, lines("$grid-breakpoints: (", ".a {}", "sm: 600px);"), "src/main.scss");
     const nested = report(null, lines("$grid-breakpoints: (", ".x {", "  $y: (", "    a: 1px", "  );", "}", "sm: 600px);"), "src/main.scss");
     const eof = report(null, "$grid-breakpoints: (\n  sm: 600px\n)", "src/main.scss");
+    const stray = report(null, "$grid-breakpoints: (xs: 0, sm: 600px }\n", "src/main.scss"); // (a stray `}` ends the statement, its map unclosed)
     const ws = Array.from({ length: 300 }, (_, i) => "w" + i + ": " + (400 + i) + "px");
     const longMulti = report(null, lines("$grid-breakpoints: (", "  xs: 0,", ...ws.map((w) => "  " + w + ","), ") !default;"), "src/main.scss");
     const longOne = report(null, lines("$grid-breakpoints: (xs: 0, " + ws.join(", ") + ");"), "src/main.scss");
@@ -348,6 +349,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       block: () => block.from === "default" && names(block) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
       nested: () => nested.from === "default" && names(nested) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
       eof: () => eof.from === "default" && names(eof) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
+      unclosed: () => stray.from === "default" && names(stray) === js([["$grid-breakpoints", "(xs: 0, sm: 600px", "src/main.scss:1"]]),
       longMulti: () => longMulti.from === "default" && names(longMulti) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
       longOne: () => longOne.from === "default" && longOne.unreadTotal === 0,
     });
