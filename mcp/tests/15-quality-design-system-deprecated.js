@@ -433,6 +433,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     [KIT + "avatar.tsx"]: compFile("Avatar"), [KIT + "panel.tsx"]: L(["export default function Panel() { return <div />; }"]),
     [KIT + "field.tsx"]: compFile("Field", ["export type FieldProps = { name: string };"]), [KIT + "chip.tsx"]: compFile("Chip"), [KIT + "drawer.tsx"]: compFile("Drawer"),
     [KIT + "menu.tsx"]: compFile("Menu"), [KIT + "button.tsx"]: compFile("Button"),
+    // (a file importing its own deprecated part: never its own importer)
+    [KIT + "tree.tsx"]: L(["import { TreeNode } from \"./tree\";", "export function Tree() { return <TreeNode />; }", "export function TreeNode() { return <li />; }"]),
     "src/components/callout.tsx": compFile("Callout"),
     // (a component file — read for what it exports — is an importer too, whatever settle asks)
     "src/components/badge.tsx": compFile("Badge"),
@@ -459,6 +461,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     "src/billing/components/table.tsx": L(["export function BillingTable() { return <table />; }"]),
     "src/billing/page.tsx": L(["import { BillingTable } from \"./components/table\";", "export const P = () => <BillingTable />;"]),
     "docs/guide.mdx": L(["# Guide", "", "<Callout>hi</Callout>"]),
+    "docs/zz.mdx": L(["<Callout />"]), // (read before guide.mdx — the shorter path —, never named before it: the first by path)
     "docs/bound.mdx": L(["import { Callout } from \"../src/components/callout\";", "", "<Callout>hi</Callout>"]),
   };
   const KIT_ROWS = (mark) => ["| Table | src/components/ui/table.tsx |  | " + mark("use data-grid") + " |", "| DataGrid | src/components/ui/data-grid.tsx |  |  |",
@@ -466,7 +469,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     "| Toast | src/components/ui/toast.tsx |  | " + mark("use Sonner") + " |", "| Modal |  |  | " + mark() + " |", "| Chart | src/components/ui/chart.tsx |  | " + mark() + " |",
     "| Callout | src/components/callout.tsx |  | " + mark() + " |", "| Avatar | src/components/ui/avatar.tsx |  | " + mark() + " |", "| Panel | src/components/ui/panel.tsx |  | " + mark() + " |",
     "| Field | src/components/ui/field.tsx |  | " + mark() + " |", "| Chip | src/components/ui/chip.tsx |  | " + mark() + " |", "| Drawer | src/components/ui/drawer.tsx |  | " + mark() + " |",
-    "| Menu | src/components/ui/menu.tsx |  | " + mark() + " |", "| Badge | src/components/badge.tsx |  | " + mark() + " |", "| Button | src/components/ui/button.tsx |  |  |"];
+    "| Menu | src/components/ui/menu.tsx |  | " + mark() + " |", "| Badge | src/components/badge.tsx |  | " + mark() + " |", "| Button | src/components/ui/button.tsx |  |  |",
+    "| Tree | src/components/ui/tree.tsx |  |  |", "| TreeNode | src/components/ui/tree.tsx |  | " + mark() + " |"];
   const MARK = (use) => "_Deprecated" + (use ? ": " + use : "") + "_", NONE = () => "";
   // the report with the markers against the same report with none — every key but `deprecatedUses` byte-identical (settle's
   // verdicts are a scan's with no row: the watch is its own instance)
@@ -487,7 +491,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const doc = checkOf(g);
     all("1.39 deprecatedUses (a React kit, settle asking nothing): for each `_Deprecated:_` row the code holds a component file for, in the registry's order, the files that still import it — its replacement as doctor names it; a row named by its file is its MODULE: a named, renamed, default (its local name is no watched name: the module's base), type-only or `require` import of the file, a non-component export of it (`toast`), a namespace member, the components it exports through a folder's barrel (`{ Toaster }`), every namesake's importers (`billing/components/table.tsx`); a component a file exports beside its own counts by its NAME (`CardHeader`, never `{ Card }`); one count a file; a component file read for its exports is an importer too; never a dynamic import(), a test, a story, a mock, a folder import of another member, a file's own local `<Table />`; an .mdx tag no import binds counted apart; a located row with no importer listed with 0, an unlocated one named; never the report's limits or inSync; the same report with no marker holds every other key the same (got " +
       js({ rows: d.rows, unlocated: d.unlocated, read: d.read, limits: d.limits, same: diff.same, doc }) + ")", {
-      order: () => js(d.rows.map((x) => x.name)) === js(["Table", "CardHeader", "Sonner", "Toast", "Chart", "Callout", "Avatar", "Panel", "Field", "Chip", "Drawer", "Menu", "Badge"]) && d.rowsTotal === 13,
+      order: () => js(d.rows.map((x) => x.name)) === js(["Table", "CardHeader", "Sonner", "Toast", "Chart", "Callout", "Avatar", "Panel", "Field", "Chip", "Drawer", "Menu", "Badge", "TreeNode"]) && d.rowsTotal === 14,
+      ownFile: () => js(uses(r, "TreeNode")) === js([0, []]) && js(rowOf(r, "TreeNode").paths) === js(["src/components/ui/tree.tsx"]),
       use: () => rowOf(r, "Table").use === "DataGrid" && rowOf(r, "CardHeader").use === "Card" && rowOf(r, "Toast").use === "" && doc && doc.detail === Q().dsDeprecated(1, Q().dsDeprecatedItem("Table", "DataGrid")),
       namesakes: () => js(rowOf(r, "Table").paths) === js(["src/billing/components/table.tsx", "src/components/ui/table.tsx"]) && rowOf(r, "Table").pathsTotal === 2,
       module: () => js(uses(r, "Table")) === js([3, ["src/app/users/both.tsx", "src/app/users/named.tsx", "src/billing/page.tsx"]]),
@@ -501,11 +506,11 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       moduleExport: () => js(uses(r, "Sonner")) === js([2, ["src/app/users/folder.tsx", "src/app/users/toast-fn.tsx"]]),
       kitParts: () => js(uses(r, "Chart")) === js([1, ["src/app/users/chart.tsx"]]) && rowOf(r, "Chart").pathsTotal === 1,
       result: () => js(uses(r, "Badge")) === js([1, ["src/components/badge-list.tsx"]]),
-      unbound: () => js(uses(r, "Callout")) === js([1, ["docs/bound.mdx"]]) && rowOf(r, "Callout").unbound === 1 && rowOf(r, "Callout").unboundAt === "docs/guide.mdx" && rowOf(r, "Table").unbound === 0 && !("unboundAt" in rowOf(r, "Table")),
+      unbound: () => js(uses(r, "Callout")) === js([1, ["docs/bound.mdx"]]) && rowOf(r, "Callout").unbound === 2 && rowOf(r, "Callout").unboundAt === "docs/guide.mdx" && rowOf(r, "Table").unbound === 0 && !("unboundAt" in rowOf(r, "Table")),
       none: () => js(uses(r, "Toast")) === js([0, []]) && rowOf(r, "Toast").pathsTotal === 1,
       unlocated: () => js(d.unlocated) === js(["Modal"]) && d.unlocatedTotal === 1,
-      // (in scope: the 17 component files, the 16 pages and the 2 .mdx — never the test, the story, the mock)
-      read: () => d.read === 35 && js(d.limits) === js([]) && d.note === Q().dsDepUsesNote,
+      // (in scope: the 18 component files, the 16 pages and the 3 .mdx — never the test, the story, the mock)
+      read: () => d.read === 37 && js(d.limits) === js([]) && d.note === Q().dsDepUsesNote,
       report: () => js(r.limits) === js([]) && r.truncated === false,
       differential: () => diff.same === true && diff.off === false,
     });
@@ -554,6 +559,9 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       "src/views/list.vue": L(["<script>", "import Table from '@/components/Table'", "import Pagination from '@/components/Pagination'", "export default { components: { Table, Pagination } }", "</script>",
         "<template><Table /><pagination /></template>"]),
       "src/views/with-ext.vue": L(["<script setup>", "import Table from '@/components/Table.vue'", "</script>", "<template><Table /></template>"]),
+      // (a platform infix, as an import names the module: `@/components/Chart.client` is Chart.client.vue)
+      "src/components/Chart.client.vue": L(["<template><canvas /></template>"]),
+      "src/views/chart.vue": L(["<script setup>", "import Chart from '@/components/Chart.client'", "</script>", "<template><Chart /></template>"]),
       "src/views/kebab.vue": L(["<template><data-table /></template>"]),
       "src/views/bound.vue": L(["<script setup>", "import DataTable from '../components/DataTable.vue'", "</script>", "<template><data-table /></template>"]),
       "src/views/s.svelte": L(["<script>", "  import Badge from '../components/Badge.svelte';", "</script>", "<Badge />"]),
@@ -576,13 +584,13 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       "| Button | packages/ui/src/components/button/button.vue |  | " + mark() + " |", "| DataTable | src/components/DataTable.vue |  | " + mark() + " |",
       "| Tree | src/components/Tree.vue |  | " + mark() + " |", "| Grid | src/app/components/grid/grid.component.ts |  | " + mark() + " |",
       "| Badge | src/components/Badge.svelte |  | " + mark() + " |", "| Hero | src/components/Hero.astro |  | " + mark() + " |",
-      "| Sheet | src/lib/components/ui/sheet/sheet.svelte |  | " + mark() + " |"];
+      "| Sheet | src/lib/components/ui/sheet/sheet.svelte |  | " + mark() + " |", "| Chart | src/components/Chart.client.vue |  | " + mark() + " |"];
     const p = depProject("sfc", VUE_ROWS(MARK), vue);
     const r = S.designSystemReport(p), d = usesOf(r);
     const diff = differential(p, VUE_ROWS);
     all("1.39 deprecatedUses (SFCs): an SFC imported with its extension or without (Vue CLI's `@/components/Table`), a folder's `index.vue` by its folder, a .svelte / .astro default import; a workspace package's barrel naming an SFC's default (`{ VbenButton }`) and a second barrel renaming it (`{ VBtn }`); a namespace over a folder whose index is a .js file — by the namespace's base; a .vue kebab tag no import binds counted apart, never a bound one, never a .svelte tag; a recursive SFC's own import never counted; an Angular `*.component.ts` is no row's file (its importers are `.ts` files): unlocated; the `.ts` files settle reads for a weak name stay out of the watch (`app.component('Table', T)`); every other key the same with no marker (got " +
       js({ rows: d.rows.map((x) => [x.name, x.filesTotal, x.files, x.unbound, x.unboundAt]), unlocated: d.unlocated, same: diff.same }) + ")", {
-      extensionless: () => js(uses(r, "Table")) === js([2, ["src/views/list.vue", "src/views/with-ext.vue"]]),
+      extensionless: () => js(uses(r, "Table")) === js([2, ["src/views/list.vue", "src/views/with-ext.vue"]]) && js(uses(r, "Chart")) === js([1, ["src/views/chart.vue"]]),
       indexVue: () => js(uses(r, "Pagination")) === js([1, ["src/views/list.vue"]]),
       barrels: () => js(uses(r, "Button")) === js([2, ["src/views/vben.vue", "src/views/vbtn.vue"]]),
       kebab: () => js(uses(r, "DataTable")) === js([1, ["src/views/bound.vue"]]) && rowOf(r, "DataTable").unbound === 1 && rowOf(r, "DataTable").unboundAt === "src/views/kebab.vue",

@@ -2781,14 +2781,14 @@ const RE_PATH_SEGMENT = /\/([A-Za-z0-9_.$-]+)/g;
 const TWIN = "\n"; // (an SFC's twin entry in the follow's index — its key without the extension: no path holds a line break)
 function deprecatedWatch(reg, files, results, scripts, project) {
   const dep = reg.deprecated, rowName = new Map(reg.components.map((c) => [c.key, c.name]));
-  const byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map(), given = new Set();
+  const byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map();
   const moduleOf = new Map(); // a module row's file (and its twin) → [the row's key, the file's path]
   const nameRow = new Map(); // a name row: "path\nname" → the row's key
   const byKey = new Map(); // a module key that IS a row's file → [[the row's key, the file's path]] (indexed: no loop of the rows a binding)
   const located = new Map(); // a row's key → the paths of its files
   const names = new Set(), bases = new Set();
   const push = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
-  const give = (p, name) => { if (given.has(p + "\n" + name)) return; given.add(p + "\n" + name); push(byName, name, p); names.add(name); };
+  const give = (p, name) => { push(byName, name, p); names.add(name); }; // (a pair given twice is answered once: the follow's `once`)
   const locate = (k, p) => { if (!located.has(k)) located.set(k, new Set()); located.get(k).add(p); };
   const exportsOf = new Map(results.filter((r) => !r.barrel).map((r) => [r.path, r]));
   for (const c of files) {
@@ -2809,13 +2809,13 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       if (r) for (const n of r.found.names) give(p, n);
     }
   }
+  // (its file's own component too, when deprecated: that file is a module row as well — a result is a component file)
   for (const r of exportsOf.values()) {
-    const own = componentOf(r.path);
     for (const n of r.found.names.concat(r.found.candidates.map((x) => x.name))) {
       const k = dsKey(n);
-      if (!k || !dep.has(k) || (own && own.key === k)) continue;
+      if (!dep.has(k)) continue;
       nameRow.set(r.path + "\n" + n, k);
-      if (!keys.has(r.path)) keys.set(r.path, moduleKey(r.path));
+      keys.set(r.path, moduleKey(r.path));
       give(r.path, n);
       locate(k, r.path);
     }
@@ -2862,7 +2862,7 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     if (RE_UNBOUND_FILE.test(rel)) for (const t of u.rendered) {
       if (t.includes(".") || u.imports.has(t)) continue;
       const k = dsKey(t);
-      if (!k || !located.has(k)) continue;
+      if (!located.has(k)) continue;
       if (!unbound.has(k)) unbound.set(k, { total: 0, at: rel });
       const x = unbound.get(k);
       x.total++;
@@ -2898,7 +2898,7 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     report: (repeat) => {
       const rows = [], unlocated = [];
       for (const k of dep.keys()) {
-        const name = rowName.get(k) || k;
+        const name = rowName.get(k);
         if (!located.has(k)) { unlocated.push(name); continue; }
         const paths = [...located.get(k)].sort(), st = stats.get(k) || { files: [], total: 0 }, ub = unbound.get(k);
         rows.push(Object.assign({ name, use: dsReplacement(reg, k, rowName), paths: paths.slice(0, DS_DEP_SHOWN), pathsTotal: paths.length, files: st.files, filesTotal: st.total,
@@ -3498,7 +3498,7 @@ function designSystemReport(projectDir, opts = {}) {
   const reg = designSystemRegistry(specsRoot(projectDir));
   // (a feature's report reads no component's name: neither what files export nor what the others tell; 1.39: the project's
   // report watches the deprecated rows' uses while the registry marks one)
-  const scan = scanCode(root, !f, true, !f && reg && reg.deprecated.size ? reg : null);
+  const scan = scanCode(root, !f, true, reg);
   // (1.38: the breakpoints — both shapes, the same; here, never in featureReport: finish calls that too)
   if (f) return Object.assign(featureReport(projectDir, root, f, reg, scan), { breakpoints: breakpointsReport(projectDir, scan.breakpoints) });
   const listed = reg ? reg.keys : new Set();
