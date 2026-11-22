@@ -2505,37 +2505,14 @@ function projectPlaces(manifests, roots, configs, absRoot, realRoot) {
   };
   return { roots, packageOf, aliasKeys, exported };
 }
-function settle(results, scripts, markups, read, places) {
-  const dropped = new Set(), rendered = new Set();
-  const asked = new Map(), byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map(), exportsOf = new Map(), localsOf = new Map();
-  const ask = (path, name, local, kind) => {
-    if (!asked.has(path)) asked.set(path, new Map());
-    asked.get(path).set(name, { local, kind, rendered: false, called: false, context: false, member: false });
-    if (!byName.has(name)) byName.set(name, []);
-    byName.get(name).push(path);
-  };
-  for (const r of results) {
-    for (const name of r.found.weak) ask(r.path, name, r.found.locals.get(name), r.barrel ? "unproven" : "weak");
-    for (const c of r.found.candidates) ask(r.path, c.name, c.local, "candidate");
-    if (r.found.defaultName != null) defaults.set(r.path, r.found.defaultName);
-  }
-  if (!asked.size) return { dropped, rendered };
-  const project = places();
-  for (const r of results) {
-    // (every name the file gives, a component's or not, and the locals they stand for: a provider's tag may be a part of one)
-    exportsOf.set(r.path, new Set(r.found.names.concat(r.found.candidates.map((c) => c.name))));
-    localsOf.set(r.path, new Set([...r.found.locals.values()].concat(r.found.candidates.map((c) => c.local))));
-  }
-  for (const path of asked.keys()) {
-    const key = moduleKey(path), segs = key.split("/");
-    keys.set(path, key);
-    const base = segs[segs.length - 1] === "index" && segs.length > 1 ? segs[segs.length - 2] : segs[segs.length - 1];
-    if (!byBase.has(base)) byBase.set(base, []);
-    byBase.get(base).push(path);
-  }
-  const note = (path, name, what) => { const e = asked.has(path) ? asked.get(path).get(name) : null; if (e) e[what] = true; };
-  // a provider's tag: the part it names when the file gives one so (`Tooltip.Provider`), else its root used as a context
-  const provide = (path, name) => { if (exportsOf.has(path) && exportsOf.get(path).has(name)) note(path, name, "rendered"); else note(path, name.slice(0, name.lastIndexOf(".")), "context"); };
+// Settle's follow (1.39: lifted out of settle, a function of its own — the project report's deprecated uses run a SECOND
+// instance of it, with their own index, caches and budget, so that no verdict of settle's depends on what they ask). From a
+// written name to the files that declare it: where the module may be (placeOf over `project`), the files it is, and on through
+// what they pass on. index: { byName (a name → the paths that give it), byBase (a base name → the paths), keys (a path → its
+// moduleKey), defaults (a path → its default export's name) }, read at call time; prefill: the [path, what it passes on] of
+// the files read before the search (never read again). → { resolve(rel, imports, written), placed(spec, from), spent }
+function followOf(scripts, project, index, prefill) {
+  const { byName, byBase, keys, defaults } = index;
   const placesOf = new Map(), targets = new Map();
   // (where a module may be, once a folder and a spec: placeOf)
   const placed = (spec, from) => { const pk = from.slice(0, from.lastIndexOf("/") + 1) + "\n" + spec; if (!placesOf.has(pk)) placesOf.set(pk, placeOf(spec, from, project)); return placesOf.get(pk); };
@@ -2582,7 +2559,7 @@ function settle(results, scripts, markups, read, places) {
     return (at.files = out);
   };
   const passes = new Map(), closures = new Map(), passed = new Map(), spent = { files: 0, chars: 0, steps: 0 };
-  for (const r of results) passes.set(r.path, r.uses.reexports);
+  for (const [rel, reexports] of prefill) passes.set(rel, reexports);
   const passesOf = (s) => {
     if (passes.has(s.rel)) return passes.get(s.rel);
     let e = null;
@@ -2649,6 +2626,55 @@ function settle(results, scripts, markups, read, places) {
     passed.set(root, uniq);
     return uniq;
   };
+  // → the [path, name] a name written in `rel` stands for, through the file's import (`imports`: usesOf's) — once a folder, a
+  // module and a name
+  const resolve = (rel, imports, written) => {
+    const dot = written.indexOf(".");
+    const imp = imports.get(dot === -1 ? written : written.slice(0, dot));
+    if (!imp) return [];
+    const rest = dot === -1 ? "" : written.slice(dot);
+    const tk = rel.slice(0, rel.lastIndexOf("/") + 1) + "\n" + imp.spec + "\n" + imp.name + "\n" + rest;
+    if (targets.has(tk)) return targets.get(tk);
+    const at = placed(imp.spec, rel), out = [];
+    if (at) { lookup(at, imp.name, rest, out); for (const f of filesOf(at)) for (const x of through(f, imp.name, rest)) out.push(x); }
+    const uniq = once(out);
+    targets.set(tk, uniq);
+    return uniq;
+  };
+  return { resolve, placed, spent };
+}
+function settle(results, scripts, markups, read, places) {
+  const dropped = new Set(), rendered = new Set();
+  const asked = new Map(), byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map(), exportsOf = new Map(), localsOf = new Map();
+  const ask = (path, name, local, kind) => {
+    if (!asked.has(path)) asked.set(path, new Map());
+    asked.get(path).set(name, { local, kind, rendered: false, called: false, context: false, member: false });
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(path);
+  };
+  for (const r of results) {
+    for (const name of r.found.weak) ask(r.path, name, r.found.locals.get(name), r.barrel ? "unproven" : "weak");
+    for (const c of r.found.candidates) ask(r.path, c.name, c.local, "candidate");
+    if (r.found.defaultName != null) defaults.set(r.path, r.found.defaultName);
+  }
+  if (!asked.size) return { dropped, rendered };
+  const project = places();
+  for (const r of results) {
+    // (every name the file gives, a component's or not, and the locals they stand for: a provider's tag may be a part of one)
+    exportsOf.set(r.path, new Set(r.found.names.concat(r.found.candidates.map((c) => c.name))));
+    localsOf.set(r.path, new Set([...r.found.locals.values()].concat(r.found.candidates.map((c) => c.local))));
+  }
+  for (const path of asked.keys()) {
+    const key = moduleKey(path), segs = key.split("/");
+    keys.set(path, key);
+    const base = segs[segs.length - 1] === "index" && segs.length > 1 ? segs[segs.length - 2] : segs[segs.length - 1];
+    if (!byBase.has(base)) byBase.set(base, []);
+    byBase.get(base).push(path);
+  }
+  const note = (path, name, what) => { const e = asked.has(path) ? asked.get(path).get(name) : null; if (e) e[what] = true; };
+  // a provider's tag: the part it names when the file gives one so (`Tooltip.Provider`), else its root used as a context
+  const provide = (path, name) => { if (exportsOf.has(path) && exportsOf.get(path).has(name)) note(path, name, "rendered"); else note(path, name.slice(0, name.lastIndexOf(".")), "context"); };
+  const F = followOf(scripts, project, { byName, byBase, keys, defaults }, results.map((r) => [r.path, r.uses.reexports]));
   const tell = (rel, uses) => {
     const file = rel.slice(rel.lastIndexOf("/") + 1);
     const tests = isTestFile(rel) || RE_NOT_COMPONENT_FILE.test(file); // (a story or a test may CALL a component: never a helper's sign — review 1)
@@ -2666,21 +2692,7 @@ function settle(results, scripts, markups, read, places) {
       for (const [name, e] of mine) if (part ? e.local === p || name === p : e.local === root) e[part ? "rendered" : "context"] = true;
     }
     if (!uses.imports.size) return;
-    const dir = rel.slice(0, rel.lastIndexOf("/") + 1);
-    // → the [path, name] a written name stands for, through the file's import — once a folder, a module and a name
-    const resolve = (written) => {
-      const dot = written.indexOf(".");
-      const imp = uses.imports.get(dot === -1 ? written : written.slice(0, dot));
-      if (!imp) return [];
-      const rest = dot === -1 ? "" : written.slice(dot);
-      const tk = dir + "\n" + imp.spec + "\n" + imp.name + "\n" + rest;
-      if (targets.has(tk)) return targets.get(tk);
-      const at = placed(imp.spec, rel), out = [];
-      if (at) { lookup(at, imp.name, rest, out); for (const f of filesOf(at)) for (const x of through(f, imp.name, rest)) out.push(x); }
-      const uniq = once(out);
-      targets.set(tk, uniq);
-      return uniq;
-    };
+    const resolve = (written) => F.resolve(rel, uses.imports, written);
     for (const n of uses.rendered) for (const [path, name] of resolve(n)) note(path, name, "rendered");
     if (!tests) for (const n of uses.called) for (const [path, name] of resolve(n)) note(path, name, "called");
     for (const n of uses.contexts) for (const [path, name] of resolve(n)) note(path, name, "context");
