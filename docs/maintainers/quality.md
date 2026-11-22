@@ -1199,14 +1199,24 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   powerless hue), across two within the rounding of the PAIR as written (0.011 with an HSL side: integer HSL's as CRIT_2
   measured it — `#05787d` = `hsl(183 92% 25%)` at 0.0106; 0.001 otherwise: a hex written as 3-decimal oklch is within 0.0007) — CRIT_2 must-fix 2:
   one 0.011 for every pair made Tailwind's zinc (`#18181b`, `#09090b`, `#e4e4e7`, `#f4f4f5`) shadcn v4's neutral tokens,
-  0.003–0.008 apart; alphas within 0.01. An HSL side against a hex / rgb one (1.38.0 review 1) is ALSO judged by its
-  written precision (`roundsTo`, `sameAt`): the sRGB triple, written in HSL as precisely as the HSL side is, gives its
-  numbers — each channel within half a unit of its last written digit (`halfDigit`: `96.1%` 0.05, an exponent counted;
-  the hue's in its own unit, `.5turn` 18°), the hue moot at s 0, s at l 0 / 100, a hue's turns and sign never matter;
-  CSS's clamps first (`rgb(300 0 0)` = `#f00`, `hsl(0 150% 50%)` too). The 0.011 stays the CEILING — the round trip only
-  narrows 1.38's rule, never widens it: integer HSL is NOT within 0.011 of every hex (479 of the 16.7M hexes are farther
-  from their own integer HSL: `#020200` = `hsl(60 100% 0%)`, black, at 0.084 — OKLab's L is steep near black —, saturated
-  yellows to 0.013), and those stay what 1.38 said. HSL against oklab / oklch keeps the 0.011 alone. `near`
+  0.003–0.008 apart; alphas within 0.01. An HSL side against a hex / rgb one (1.38.0 reviews 1 and 2) is ALSO judged by
+  the pair's rounding BOTH ways (`roundTrip`, `sameAt`) — the same colour when EITHER holds: (1) the sRGB triple, written in
+  HSL as precisely as the HSL side is, gives its numbers (`roundsTo`) — each channel within half a unit of its last written
+  digit (`halfDigit`: `96.1%` 0.05, an exponent counted; the hue's in its own unit, `.5turn` 18°), the hue moot at s 0, s at
+  l 100 (at l 0 the HSL paints black, the one hex within 0.011 of it — (2) decides; review 2 took the dead `l === 0` out),
+  a hue's turns and sign never matter; CSS's clamps first (`rgb(300 0 0)` = `#f00`, `hsl(0 150% 50%)` too):
+  `#05787d` = `hsl(183 92% 25%)`, which paints `#05757a`; (2) the HSL as written, painted at the hex's 8 bits a channel
+  (`hsl.paint` — the clamped triple parseColor already computes for `ok`), IS the triple: each channel within half a unit
+  of 1/255, so a channel painted at exactly n.5 has both neighbours (`hsl(0 0% 10.0%)`, 25.5: `#191919` and `#1a1a1a`):
+  cal.com's `hsla(220, 14%, 94%, 1)` paints `#eeeff2`, whose own HSL (225 13.3% 94.1%) does not round to it — the colour a
+  picker, devtools' Computed pane (`rgb(238, 239, 242)`) or a palette's docs give. Neither holds for Tailwind's zinc hexes
+  against shadcn's `hsl()` neutrals, nor for cal.com's `#efefef` (its `--cal-bg-subtle` paints `#eeeff2`): `near`. The 0.011
+  stays the CEILING — the round trip only narrows 1.38's rule, never widens it: integer HSL is NOT within 0.011 of every
+  hex (479 of the 16.7M hexes are farther from their own integer HSL: `#020200` = `hsl(60 100% 0%)`, black, at 0.084 —
+  OKLab's L is steep near black —, saturated yellows to 0.013; and 76 of the 3.56M integer HSL tokens' painted hexes, all
+  at l 1–2 %: `hsl(236 93% 1%)` paints `#000005` at 0.0136), and those stay what 1.38 said. HSL against oklab / oklch keeps
+  the 0.011 alone — so Tailwind 4's `oklch()` zinc IS shadcn's `hsl()` neutral (0.0082 apart — as far as zinc's hex, which
+  the round trip keeps `near`): said, ui-code-scan.md. `near`
   (a hint, `{token, delta}`): the NEAREST token within the JND (0.02 ΔEOK), never the first. hwb / lab / lch / `color()` / a
   named colour are not parsed: the same TEXT names the token (1.37's rule, `colorKey`, moved here; a hex is always parsed
   now, so its 3-digit spelling-out went). FONTS: a `font-family` STACK (`fontStackOf`: its LAST family a generic one — CSS
@@ -2629,6 +2639,43 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   Tailwind size outside px / rem / em (`text-[2vw]`) are not judged; the units column's header STARTS with Units, so
   `| Property | Allowed units |` is no table and nothing says so — ui-code-scan.md says both, 17-docs pins each clause
   against the engine (offUnit, RE_TW_SIZE, RE_DS_COL.units).
+- **1.38.0 review 2** (tokens: R2-T1 MEDIUM, made by review 1's fix; R2-T2 LOW, prose) — R2-T1: review 1's round trip
+  asked ONE way (the hex written in HSL rounds to the HSL's numbers), never the other (the HSL as written, painted at the
+  hex's 8 bits, IS the hex), so an HSL token's own painted colour — what a picker, devtools' Computed pane or a palette's
+  docs give — was `near`, "close, not the same colour": cal.com's `#eeeff2` against its `hsla(220, 14%, 94%, 1)`, 49.6 %
+  of all integer HSL tokens' painted hexes, ~99–100 % of 1- and 2-decimal ones; cal.com's tokens.css 24 of 74 near, Radix
+  Colors 0.1.9 260 of 336; and fix 1's `prec` fixtures pinned three HSL values that PAINT their hex as near. Review 1's
+  trade-off line had measured one direction (hex → HSL); of its 46 shadcn pairs gone near, 39 paint their hex. Now both
+  ways (`roundTrip`: painted OR roundsTo, still under the 0.011 ceiling — parseColor keeps the painted triple it already
+  computed for `ok`). The reviewer's prototype, re-derived (+5 lines; on its 38 HSL spellings, identical). Both directions
+  measured against the parent (9c6185aa, the 0.011 alone): every integer HSL token's painted hex is its token, 3,563,924 of
+  3,564,000 — the parent's own count, the 76 left the ceiling's (l 1–2 %) —, 50,000 random 1- and 50,000 2-decimal ones
+  all; new `token` where the parent said none: 0 — the fix is never wider than 9c6185aa; cal.com 49 own + 25 another token
+  (24 the same value, one whose value paints the same hex: `hsla(33, …)` and `hsla(34, 100%, 92%)` are both `#ffedd6`),
+  0 near; Radix 334 + 2 (identical values), 0 near; shadcn's own 1-decimal pairs 279 of 286 (the 7 left neither round
+  from the hex nor paint it: slate-950, mauve-100 / 600 / 950, olive-200, mist-200, violet-950). What T1 fixed stays:
+  zinc's hexes against shadcn's hsl() neutrals near (0.0083 / 0.0032 / 0.0046 / 0.0058), `#efefef` near, cal.com's 292
+  Tailwind hexes 0 differences from the release, another palette colour's token 0, an exact token after an HSL one wins;
+  the 12 real clones' reports identical to the release's; the CLI's EN / PT / ES lines and `--json` too. The fixtures:
+  `prec`'s three replaced by values a decimal off that paint ANOTHER hex (`hsl(183.0 92.3% 25.5%)` paints `#05777d`, not
+  `#05787d`; `#3c82f5`, `#19191c`); `paint` — the painted hex and rgb() from either side, Radix's `#ffb224`, a channel
+  painted at exactly n.5 (both neighbours: `#191919` needs the epsilon), a clamped HSL, the next hex over (0.56 off) near,
+  a painted hex past the ceiling near. Mutation pass, listed before the fixtures: 20 of 21 (16 in design-values.js, 5 prose
+  clauses; `<` for `<=` equivalent — the epsilon absorbs the boundary); fix 1's 45 re-run on the fix: 38 at first — the
+  painted direction absorbed every fixture whose HSL paints its hex (the hue sectors' `#ff8000` / `#80ff00` / `#008000`,
+  `#808080`, `#fff`, a hue two turns round, `3.14159rad`, the reviewer's own `prec.s`, 1.02 off its hex's s where the
+  half is 0.05 or 0.5 alike): each replaced by a pair the HSL does NOT paint (`#ff8100`, `#81ff00`, `#008100`, `#818181`
+  against `hsl(217 0% 51%)`, `#fefefe`, `hsl(903 92% 25%)`, `.6turn` ± 18°, `#2563eb` against `hsl(221.2 83.5% 53.3%)`),
+  and roundsTo's `hsl.l === 0` taken out as dead (at l 0 the HSL paints black, the one hex within 0.011 of it — `#000001`
+  is 0.037 away): 44 of 44. Cost, both engines in one process, interleaved, medians: the hostile judge (100 hexes against
+  2,000 HSL tokens all within 0.011) 0.97–1.25× the release's, median 1.05× (12–13 ms); ÷ 1.38's own worst case (the full
+  scan with no token) 1.59–1.63×, the release's 1.51–1.84× in the same runs; a spread scale 1.01–1.03×. R2-T2:
+  "Tailwind's zinc is not shadcn's neutral, in oklch or in hsl()" — Tailwind 4's own `oklch()` zinc IS the `hsl()`
+  neutral (an HSL side against oklch / oklab keeps the 0.011, the owner's T1 scope): said — zinc's HEXES are not the
+  neutral, its oklch is (ui-code-scan.md, pinned by 17-docs against the engine); making the claim true (the oklch / oklab
+  side's sRGB triple against the HSL's written precision) is 1.39's backlog. Lesson: a round trip is checked BOTH ways —
+  the parent is the oracle in each direction (review 1's fix measured hex → HSL alone; review 2 ran every HSL token → its
+  painted hex) —, and a new direction re-runs the old mutants: it absorbs the fixtures that only the old one decided.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four

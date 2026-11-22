@@ -95,8 +95,9 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
 
   { // (1.38.0 review 1, T1) an HSL side against a hex / rgb one is the same colour only when the other, written in HSL as
     // precisely as the HSL side is, gives its numbers (each channel within half a unit of its last written digit; the hue moot
-    // at s 0, s at l 0 / 100) — under the pair's 0.011, which stays the ceiling; the NEAREST same colour is the token, of equals
-    // the first. (%TEMP%/dsd-138f1-tokens/MUTATIONS.md: each key below kills the mutants it names.)
+    // at s 0, s at l 100) — (review 2, R2-T1) or the HSL as written PAINTS it at 8 bits a channel (each within half a
+    // unit of 1/255) — under the pair's 0.011, which stays the ceiling; the NEAREST same colour is the token, of equals the
+    // first. (%TEMP%/dsd-138f1-tokens/MUTATIONS.md, %TEMP%/dsd-138f2-tokens/MUTATIONS.md: each key kills the mutants it names.)
     const kind = (j) => (j.token ? "token" : j.near ? "near" : "none");
     const pair = (raw, tok) => kind(judge(raw, [["--t", tok]]));
     const got = {
@@ -106,11 +107,19 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       // what must STILL be the token: the true pairs, integer and 1-decimal, hex and rgb()
       keep: [pair("#05787d", "hsl(183 92% 25%)"), pair("rgb(5, 120, 125)", "hsl(183 92% 25%)"), pair("#111827", "hsla(221, 39%, 11%, 1)"), pair("#fff", "hsl(0 0% 100%)"),
         pair("#18181b", "hsl(240 5.9% 10%)"), pair("#05787d", "hsl(182.5 92.3% 25.5%)")],
-      // the precision written: one decimal off in s / l / h is another colour
-      prec: { s: pair("#18181b", "hsl(240 5.8% 10%)"), l: pair("#18181b", "hsl(240 5.9% 10.1%)"), h: pair("#05787d", "hsl(182.7 92.3% 25.5%)") },
-      exp: pair("#05787d", "hsl(1.83e2 92% 25%)"), turns: pair("#05787d", "hsl(902.5 92.3% 25.5%)"),
-      moot: { grey: pair("#808080", "hsl(217 0% 50%)"), white: pair("#fff", "hsl(210 40% 100%)"), black: pair("#000", "hsl(0 100% 0%)") },
-      hue: { r: pair("#ff8000", "hsl(30 100% 50%)"), g: [pair("#80ff00", "hsl(90 100% 50%)"), pair("#008000", "hsl(120 100% 25%)")] },
+      // the precision written: one decimal off in s / l / h, painting ANOTHER hex (#3c82f5 and #2463eb — #2563eb's s is 83.19 —,
+      // #19191c, #05777d), is another colour
+      prec: { s: [pair("#3b82f6", "hsl(217.2 90.2% 59.8%)"), pair("#2563eb", "hsl(221.2 83.5% 53.3%)")], l: pair("#18181b", "hsl(240 5.9% 10.3%)"), h: pair("#05787d", "hsl(183.0 92.3% 25.5%)") },
+      // (review 2) the colour an HSL token paints — cal.com's and Radix's, as a picker or devtools give it — from either side; a
+      // channel painted at exactly half a unit (25.5) has both neighbours; CSS clamps before it paints; the next hex over (0.56
+      // off) is not; the ceiling holds
+      paint: { hex: pair("#eeeff2", "hsla(220, 14%, 94%, 1)"), rgb: pair("rgb(238, 239, 242)", "hsla(220, 14%, 94%, 1)"), radix: pair("#ffb224", "hsl(39, 100%, 57.0%)"),
+        raw: pair("hsla(220, 14%, 94%, 1)", "#eeeff2"), half: [pair("#191919", "hsl(0 0% 10.0%)"), pair("#1a1a1a", "hsl(0 0% 10.0%)")],
+        clamp: pair("#ff2b00", "hsl(10.2 150% 50%)"), next: pair("#edeff2", "hsla(220, 14%, 94%, 1)"), ceiling: pair("#000005", "hsl(236 93% 1%)") },
+      // (review 2: from here, pairs the HSL does NOT paint — the hex's rounding alone decides; `.6turn` is 216° ± 18°)
+      exp: pair("#05787d", "hsl(1.83e2 92% 25%)"), turns: pair("#05787d", "hsl(903 92% 25%)"), turnHalf: pair("#3b82f6", "hsl(.6turn 91.2% 59.8%)"),
+      moot: { grey: pair("#818181", "hsl(217 0% 51%)"), white: pair("#fefefe", "hsl(210 40% 100%)"), black: pair("#000", "hsl(0 100% 0%)") },
+      hue: { r: pair("#ff8100", "hsl(30 100% 50%)"), g: [pair("#81ff00", "hsl(90 100% 50%)"), pair("#008100", "hsl(120 100% 25%)")] },
       // (#002748's hue is 207.5 exactly, 207.49999999999997 in floats: 207 and 208 both its rounding)
       wrap: pair("#ff0100", "hsl(360 100% 50%)"), eps: pair("#002748", "hsl(208 100% 14%)"),
       clamp: { rgb: pair("rgb(300 0 0)", "hsl(0 100% 50%)"), sat: pair("#f00", "hsl(0 150% 50%)"), light: pair("#fff", "hsl(0 0% 120%)") },
@@ -118,12 +127,13 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       ceiling: pair("#020200", "hsl(60 100% 0%)"),
       nearest: { after: judge("#18181b", [["--hsl", "hsl(240 5.9% 10%)"], ["--hex", "#18181b"]]).token, before: judge("#18181b", [["--hex", "#18181b"], ["--hsl", "hsl(240 5.9% 10%)"]]).token },
     };
-    all("1.38.0 review 1 (T1): an HSL side against a hex / rgb one by its written precision — Tailwind's zinc hexes against shadcn's hsl() neutrals and cal.com's #efefef against hsla(220, 14%, 94%, 1) are `near`, from either side and for rgb(); #05787d = hsl(183 92% 25%), a 1-decimal pair, gray-900 = cal.com's hsla and #fff stay the token; one decimal off in s / l / h is near; the exponent and the turns of a hue; the hue moot at s 0, s at l 0 / 100; CSS's clamps; #020200 is not black's token (the 0.011 ceiling); an exact token listed after an HSL one wins (got " + js(got) + ")", {
+    all("1.38.0 review 1 (T1) / review 2 (R2-T1): an HSL side against a hex / rgb one by the pair's rounding both ways — Tailwind's zinc hexes against shadcn's hsl() neutrals and cal.com's #efefef against hsla(220, 14%, 94%, 1) are `near`, from either side and for rgb(); #05787d = hsl(183 92% 25%), a 1-decimal pair, gray-900 = cal.com's hsla and #fff stay the token; one decimal off in s / l / h, painting another hex, is near; the hex / rgb() an HSL token paints is its token (#eeeff2, rgb(238, 239, 242), Radix's #ffb224; from either side; a half-unit channel's two neighbours; clamped before it paints), the next hex over is not, nor a painted hex past the 0.011 ceiling; the exponent, the turns of a hue and its half in its own unit (.6turn); the hue moot at s 0, s at l 100 (pairs the HSL does not paint); CSS's clamps; #020200 is not black's token (the 0.011 ceiling); an exact token listed after an HSL one wins (got " + js(got) + ")", {
       zinc: () => js(got.zinc.map((x) => [kind(x), x.near && x.near.delta])) === js([["near", 0.0083], ["near", 0.0032], ["near", 0.0046], ["near", 0.0058]]),
       cal: () => kind(got.cal) === "near" && got.cal.near.token === "--cal-bg-subtle" && got.rawHsl === "near" && got.rgbSide === "near",
       keep: () => got.keep.every((k) => k === "token"),
-      prec: () => js(got.prec) === js({ s: "near", l: "near", h: "near" }),
-      exp: () => got.exp === "token" && got.turns === "token",
+      prec: () => js(got.prec) === js({ s: ["near", "near"], l: "near", h: "near" }),
+      paint: () => js(got.paint) === js({ hex: "token", rgb: "token", radix: "token", raw: "token", half: ["token", "token"], clamp: "token", next: "near", ceiling: "near" }),
+      exp: () => got.exp === "token" && got.turns === "token" && got.turnHalf === "token",
       moot: () => js(got.moot) === js({ grey: "token", white: "token", black: "token" }),
       hue: () => got.hue.r === "token" && got.hue.g.every((k) => k === "token") && got.wrap === "token" && got.eps === "token",
       clamp: () => js(got.clamp) === js({ rgb: "token", sat: "token", light: "token" }),

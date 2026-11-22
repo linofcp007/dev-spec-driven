@@ -9,7 +9,8 @@
  *     nearest token of the SAME colour — exact within one notation (float noise, a powerless hue), across two within the
  *     rounding of the pair as written (0.011 with an HSL side — integer HSL's rounding —, 0.001 otherwise — a hex written as
  *     3-decimal oklch is within 0.0007: Tailwind's zinc is NOT shadcn's neutral, 0.003–0.008 apart); an HSL side against a
- *     hex / rgb one also by its written precision (roundsTo: zinc's #18181b is not hsl(0 0% 9%), 0.0083 apart); `near`, a
+ *     hex / rgb one also by the pair's rounding both ways (roundTrip: the hex in HSL rounds to the HSL as written, or the HSL
+ *     paints the hex at 8 bits — zinc's #18181b is not hsl(0 0% 9%), 0.0083 apart; #eeeff2 is hsl(220 14% 94%)); `near`, a
  *     hint: the nearest token within the just-noticeable difference (0.02 ΔEOK). hwb / lab / lch / color() / a named colour
  *     are not parsed: the same TEXT names the token (1.37's rule, colorKey);
  *   - fonts: a `font-family` stack (its last family a generic one, one family that is not) by its primary family, against
@@ -25,7 +26,7 @@
 
 const DS_EXACT = 1e-4; // ΔEOK within one notation: float noise, a hue that is powerless at chroma 0
 const DS_SAME_HSL = 0.011; // …across two notations, one of them HSL (integer HSL's rounding: #05787d = hsl(183 92% 25%), 0.0106 —
-// against a hex / rgb, roundsTo narrows it to the precision written: sameAt)
+// against a hex / rgb, the pair's round trip narrows it: sameAt)
 const DS_SAME_CROSS = 0.001; // …across any other two (a hex as 3-decimal oklch: within 0.0007)
 const DS_JND = 0.02; // `near`: the just-noticeable difference
 const DS_ALPHA = 0.01; // alphas that differ by more are never the same colour, nor near
@@ -96,9 +97,11 @@ function parseColor(s0) {
     ok = okFromRgb(rgb[0], rgb[1], rgb[2]);
   } else if (n === "hsl") {
     const h = hueOf(a[0]), sat = clamp01(pct(a[1], 100) / 100), light = clamp01(pct(a[2], 100) / 100); // (a bare number is a percentage's: CSS Color 4)
-    ok = okFromRgb(...rgbFromHsl(h, sat, light));
-    // (its numbers as written, and half a unit of each one's last written digit — the hue's in degrees: `.5turn` 18)
-    hsl = { h, s: sat * 100, l: light * 100, half: [hueOf({ v: halfDigit(parts[0]), u: a[0].u }), halfDigit(parts[1]), halfDigit(parts[2])] };
+    const paint = rgbFromHsl(h, sat, light);
+    ok = okFromRgb(...paint);
+    // (its numbers as written, half a unit of each one's last written digit — the hue's in degrees: `.5turn` 18 —, and the
+    // sRGB triple it paints)
+    hsl = { h, s: sat * 100, l: light * 100, paint, half: [hueOf({ v: halfDigit(parts[0]), u: a[0].u }), halfDigit(parts[1]), halfDigit(parts[2])] };
   } else if (n === "oklab") ok = [pct(a[0], 1), pct(a[1], 0.4), pct(a[2], 0.4)];
   else {
     const L = pct(a[0], 1), C = pct(a[1], 0.4), h = (hueOf(a[2]) * Math.PI) / 180;
@@ -113,22 +116,27 @@ const sameTolerance = (p, q) => (p.n === q.n ? DS_EXACT : p.n === "hsl" || q.n =
 const sameColor = (p, q) => Math.abs(p.alpha - q.alpha) <= DS_ALPHA && deltaE(p, q) <= sameTolerance(p, q);
 // (1.38.0 review 1) An HSL colour as written and an sRGB triple (a hex's, an rgb()'s): the triple, written in HSL as precisely
 // as the HSL side is, gives its numbers — each channel within half a unit of its last written digit; the hue moot at s 0, the
-// saturation at l 0 / 100. `#05787d` rounds to hsl(183 92% 25%); zinc's #18181b (s 5.9%) never to hsl(0 0% 9%).
+// saturation at l 100 (at l 0 the HSL paints black, the one hex within 0.011 of it: roundTrip's painted check, review 2).
+// `#05787d` rounds to hsl(183 92% 25%); zinc's #18181b (s 5.9%) never to hsl(0 0% 9%).
 function roundsTo(hsl, [r, g, b]) {
   const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, within = (x, y, half) => Math.abs(x - y) <= half + 1e-9;
   if (!within((max + min) * 50, hsl.l, hsl.half[2])) return false;
-  if (hsl.l === 0 || hsl.l === 100) return true;
+  if (hsl.l === 100) return true;
   if (!within((d / (1 - Math.abs(max + min - 1))) * 100, hsl.s, hsl.half[1])) return false;
   if (hsl.s === 0) return true;
   // (the hue's distance round the circle: either side's turns and sign never matter)
   const dh = Math.abs((max === r ? (g - b) / d : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 - hsl.h) % 360;
   return within(Math.min(dh, 360 - dh), 0, hsl.half[0]);
 }
+// (1.38.0 review 2) The pair's rounding both ways: the triple rounds to the HSL as written (roundsTo), OR the HSL as written
+// paints the triple at 8 bits a channel (each within half a unit of 1/255) — cal.com's hsla(220, 14%, 94%, 1) paints #eeeff2,
+// whose own HSL (225 13.3% 94.1%) does not round to it.
+const roundTrip = (hsl, rgb) => hsl.paint.every((c, i) => Math.abs(c - rgb[i]) * 255 <= 0.5 + 1e-9) || roundsTo(hsl, rgb);
 // Two parsed colours (alphas alike) at ΔEOK d are the same colour: within their pair's tolerance — and an HSL one against a
-// hex / rgb one rounds to it as written. (The tolerance stays the ceiling, the round trip only narrows it: 479 of the 16.7M
-// hexes are farther than 0.011 from their own integer HSL — near black, #020200 = hsl(60 100% 0%) at 0.084; saturated yellows
-// to 0.013 — and are not its token, as in 1.38.)
-const sameAt = (p, q, d) => d <= sameTolerance(p, q) && (p.hsl && q.rgb ? roundsTo(p.hsl, q.rgb) : q.hsl && p.rgb ? roundsTo(q.hsl, p.rgb) : true);
+// hex / rgb one round-trips. (The tolerance stays the ceiling, the round trip only narrows it: 479 of the 16.7M hexes are
+// farther than 0.011 from their own integer HSL — near black, #020200 = hsl(60 100% 0%) at 0.084; saturated yellows to 0.013
+// — and are not its token, as in 1.38.)
+const sameAt = (p, q, d) => d <= sameTolerance(p, q) && (p.hsl && q.rgb ? roundTrip(p.hsl, q.rgb) : q.hsl && p.rgb ? roundTrip(q.hsl, p.rgb) : true);
 // A colour as text is compared (1.37's rule — for what is not parsed: hwb / lab / lch / color() / a name): lower-cased, blanks
 // out. (1.37 also wrote a 3 / 4-digit hex out: a hex is always parsed now.)
 const colorKey = (v) => String(v).trim().toLowerCase().replace(/\s+/g, "");
