@@ -3060,6 +3060,33 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   node:24-alpine (4.7) and passed alone 3×; 1.37.0 and 1.38.0 measured in one process inside that image: medians 1.75 and
   1.69 (node:22 1.60 and 1.79), both spiking to 3–4× — a ~1.3 ms denominator (120 files) a GC pause moves. The check now
   reads 1,200 files (a ~13 ms denominator), its bound unchanged.
+- **1.39.0** (chain C — item 2 of the owner's 1.39 list as CRIT_X and the DECISIONS cut it: ~29 mechanisms designed across
+  the release, D1 · D2 · D3 · D5 and the floor-zoom capture change cut, ITEM_2's other six kept) — D4: Vue's
+  `<component :is>` is a component (its click and style unjudged); the design also made it a CONTROL inside a click body,
+  and the oracle replay (`uiChecksOf` of the 27 clone checkouts' view / style files, this tree against 92c44e0a) showed the
+  design's count wrong — 4 findings left, not 2: alert.vue's two (false) and vben's preset tiles (`content.vue:40`,
+  `theme.vue:71`, true — a mouse-only tile around an icon's `<component :is>`); the narrower reading (CHAIN-BRIEF) keeps
+  1.38's body rule, so 2 leave, 2 stay. UP-7: `RE_DS_OFF_ENTRY`'s code-span branch (the 1.38 docs' own spelling read
+  `unreadable`). D6: the script search (Motion and the fact, above) with CRIT_2's must-fixes 5–7 — the limit says WHICH
+  bound (`bound`), the CLI says "the first N" only then, ONE read loop (`readHeads`, the views' and the scripts'), the
+  `.stories.ts` / `e2e/` / 8 MB fixtures, the prose that a test setup's mention counts. The `100vw` sentence of
+  ui-responsive.md made true (width-viewport, above). Oracle, both corpora (`%TEMP%/dsd-139d-2/clones`,
+  `%TEMP%/dsd-139d-1/repos`): the project report without the pass byte-identical on all 27 (scanCode's new `scripts` key
+  never reaches it); the inventory differs on three — outline's fact withdrawn (1.38's was false), sakai-vue's gains
+  `motion-scripts` {read: 10, count: 1, file: `src/service/CustomerService.js`} beside its true fact, vben's
+  click-no-keyboard 9 → 7 (alert.vue's two; the same in both corpora's copy of it); every other finding, fact and limit
+  identical. ui-code-scan.md −15 bytes net (CRIT_2 must-fix 8: the fact's sentence +39, its example and two spellings
+  shorter); ui-responsive.md +151. Mutation pass, the list written before the fixtures (%TEMP%/dsd-139-c/MUTATIONS.md):
+  56 / 56 killed, each by its rule's fixture — D4's twelve (the bound / static split, each predicate's `name` vs the written
+  tag, the quotes, the case), UP-7's five, D6's 29 (the gate's inputs by the spy, the three filters, the sort and its
+  tiebreak, each bound and its off-by-one, the limit's three conditions, the off fact, the shared loop's `over` and `cut`,
+  both constants through the prose; the stop at the first mention a cost guard, killed by its timed ratio), the CLI's four,
+  the prose's six (a test setup read as a test among them). Cost, this tree ÷ 92c44e0a, one process, the two engines side
+  by side, interleaved in alternating order, median of 7, on a machine three other chains loaded (%TEMP%/dsd-139-c/cost.js):
+  the project report with the pass — mantine (4,340 views) 1.00, outline (791, the fact said: the search runs) 1.03 (+56
+  ms), vben (729) 1.01; motion-primitives +15 ms, sakai-vue +3, taxonomy +71 (all 35 scripts read), breeze −21 (no search:
+  noise) — within DECISIONS 6's bar (≤ 1.25× at 700 views or more, ≤ +150 ms below); `uiChecksOf` over the same clones'
+  view files (the feature report's and finish's per-file part, D4) 0.89–1.03.
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table
