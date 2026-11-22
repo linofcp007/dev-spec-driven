@@ -469,7 +469,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     "src/billing/components/table.tsx": L(["export function BillingTable() { return <table />; }"]),
     "src/billing/page.tsx": L(["import { BillingTable } from \"./components/table\";", "export const P = () => <BillingTable />;"]),
     "docs/guide.mdx": L(["# Guide", "", "<Callout>hi</Callout>"]),
-    "docs/parts.mdx": L(["<Card.Header />"]), // (a part's tag is no unbound CardHeader: a tag with a dot is never one)
+    "docs/parts.mdx": L(["The CardHeader is retired: use the part.", "", "<Card.Header />"]), // (a part's tag is no unbound CardHeader: a tag with a dot is never one)
     "docs/zz.mdx": L(["<Callout />"]), // (read before guide.mdx — the shorter path —, never named before it: the first by path)
     "docs/bound.mdx": L(["import { Callout } from \"../src/components/callout\";", "", "<Callout>hi</Callout>"]),
   };
@@ -703,6 +703,27 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     all("1.39 deprecatedUses: the watch's places are its own — 100 configs it reads for its importers spend none of settle's DS_TS_CONFIGS: settle still settles MotionBox through the 101st app's config, every key the scan's with no marker (got " +
       js({ same: diff.same, motion, button: uses(diff.on, "Button") }) + ")", {
       own: () => diff.same === true && js(motion) === js(["packages/ui/components/kit.tsx"]) && uses(diff.on, "Button")[0] === 100,
+    });
+  }
+  {
+    // …and its follow's budget is its own (DS_PASS_STEPS 100,000): the first page's Table goes through a hub of 60,000 names the
+    // watch alone follows (no page names what settle asks there), the second page's Moving — the candidate settle asks — through
+    // another of 60,000: settle still settles it (a budget shared with the watch's ran out before it), every key the same
+    const hubFiles = (dir, to) => {
+      const out = { ["src/" + dir + "/index.ts"]: L(Array.from({ length: 7 }, (_, k) => "export * from \"./h" + (k + 1) + "\";")) };
+      for (let k = 1; k <= 6; k++) out["src/" + dir + "/h" + k + ".ts"] = L(Array.from({ length: 100 }, (_, j) => "export { " + Array.from({ length: 100 }, (_, i) => dir + k + "_" + (j * 100 + i)).join(", ") + " } from \"./x\";"));
+      out["src/" + dir + "/h7.ts"] = "export * from \"" + to + "\";\n";
+      return out;
+    };
+    const files = Object.assign({ "package.json": js({ name: "budget" }), "src/components/Table.tsx": compFile("Table"), "src/components/ui/kit.tsx": L(["export const Moving = motion(Box);"]),
+      "src/app/a.tsx": L(["import { Table } from \"../hubA\";", "export const P = () => <Table />;"]), "src/app/b.tsx": L(["import { Moving } from \"../hubB\";", "export const P = () => <Moving />;"]) },
+    hubFiles("hubA", "../components/Table"), hubFiles("hubB", "../components/ui/kit"));
+    const rows = (mark) => ["| Table | src/components/Table.tsx |  | " + mark() + " |"];
+    const diff = differential(depProject("own-budget", rows(MARK), files), rows);
+    const moving = diff.on.missing.filter((m) => m.name === "Moving").map((m) => m.path);
+    all("1.39 deprecatedUses: the watch's follow has a budget of its own — 60,000 steps it spends for its importer leave settle's 100,000 whole: settle still settles Moving through another 60,000, every key the scan's with no marker (got " +
+      js({ same: diff.same, moving, table: uses(diff.on, "Table") }) + ")", {
+      own: () => diff.same === true && js(moving) === js(["src/components/ui/kit.tsx"]) && uses(diff.on, "Table")[0] === 1,
     });
   }
 };
