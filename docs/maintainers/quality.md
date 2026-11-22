@@ -1448,7 +1448,13 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   decided on its tag, never deferred. Never: the `font` shorthand, a custom property
   (`--font-size-fluid-3`), a CSS-in-JS template line of a script. The walker keeps a statement's last 2,000 characters, so a
   longer declaration's property is not seen (a hostile shape only). `width-viewport` (`100vw` / `w-screen`) was cut to prose
-  (ui-responsive.md): 1 real defect in 16 corpus hits — fixed overlays, compiled utilities, clipped decorations.
+  (ui-responsive.md): 1 real defect in 16 corpus hits — fixed overlays, compiled utilities, clipped decorations. (1.39) That
+  prose said "the visual review measures the sideways scroll instead" — false: its captures hide scrollbars (ui-review.md's
+  `--hide-scrollbars`, Playwright's every headless launch — ITEM_2 measured Chrome's `scrollWidth 1258 / clientWidth 1243`
+  with them, 1258 / 1258 without), so a `100vw` box scrolls nothing there; it now says nothing measures it — check an
+  in-flow one by hand at a desktop size, scrollbars shown (a 17-docs row pins the capture line's flag, the reason). Keeping
+  the scrollbars in `floor-zoom` was cut (CRIT_2 cut 3: scrollbars shrink `clientWidth`, "the width got" undefined), and
+  `width-viewport` stays prose (ITEM_2: 22 boxes in 18 clones, 15 left after the best property, 1 likely defect).
 - **One file** — `uiChecksOf(lines, rel, over)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
   `DS_LINE_MAX`, its comments out, `cut` when it was longer; `over`, review 1 of 1.38: the file is longer than the text read —
   featureReport's two calls and the inventory's `feed` pass it) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;

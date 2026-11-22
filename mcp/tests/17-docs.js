@@ -1131,9 +1131,12 @@ exports.run = async ({
         /\| Text, and the space that grows with it \| `rem` \(`em` inside a component\) \| follows the user's font size and zoom \|/, /\| Borders, hairlines, shadows \| `px` \| stays crisp \|/,
         /A convention, not a WCAG rule: px-only text still zooms in every current browser — it only ignores the user's default font size\./,
         /Write the team's choice in `design-system\.md`'s units table, which the code scan compares the code with \(\[ui-code-scan\.md\]\(ui-code-scan\.md\)\)\./],
-      ["responsive: 100vw and the classic scrollbar — 100 % in flow, a fixed overlay fine, no check; Chrome 145's condition", RS,
+      // (1.39: "the visual review measures the sideways scroll instead" was false — its captures hide scrollbars, as
+      // ui-review.md's capture line still writes: nothing measures it, the reader checks one by hand)
+      ["responsive: 100vw and the classic scrollbar — 100 % in flow, a fixed overlay fine, no check and nothing measures it (the captures hide scrollbars); Chrome 145's condition", RS,
         /an in-flow box at `width: 100vw` is a scrollbar wider than the page — a sideways scroll\. Use `100%` there\./,
-        /A fixed overlay \(`position: fixed; inset: 0`\) or a decoration its parent clips is fine, so no check flags `100vw`: the visual review measures the sideways scroll instead\./,
+        /A fixed overlay \(`position: fixed; inset: 0`\) or a decoration its parent clips is fine, so no check flags `100vw` — and the visual review's captures hide scrollbars \(`--hide-scrollbars`, Playwright's headless default\), so nothing measures it: check an in-flow `100vw` box yourself at a desktop size, scrollbars shown\./,
+        { not: /measures the sideways scroll instead/ }, () => /`chrome --headless=new --hide-scrollbars/.test(R),
         /Chrome 145 subtracts the scrollbar from `vw` only where the root reserves its room \(`scrollbar-gutter: stable`, `overflow-y: scroll`\) — Bramus Van Damme, bram\.us, 2026\./],
       ["responsive: 100vh on a phone — svh / dvh / lvh, the 100vh; 100dvh pair, min-height harmless", RS,
         /`svh` is the smallest viewport, `dvh` follows the toolbars \(relaid out as they move\), `lvh` the largest\./,

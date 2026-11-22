@@ -88,9 +88,10 @@ font size. Write the team's choice in `design-system.md`'s units table, which th
 
 - **`100vw` counts the classic scrollbar** (Windows, most Linux desktops, macOS set to always show scrollbars): an
   in-flow box at `width: 100vw` is a scrollbar wider than the page — a sideways scroll. Use `100%` there. A fixed overlay
-  (`position: fixed; inset: 0`) or a decoration its parent clips is fine, so no check flags `100vw`: the visual review
-  measures the sideways scroll instead. Chrome 145 subtracts the scrollbar from `vw` only where the root reserves its
-  room (`scrollbar-gutter: stable`, `overflow-y: scroll`) — Bramus Van Damme, bram.us, 2026.
+  (`position: fixed; inset: 0`) or a decoration its parent clips is fine, so no check flags `100vw` — and the visual
+  review's captures hide scrollbars (`--hide-scrollbars`, Playwright's headless default), so nothing measures it: check an
+  in-flow `100vw` box yourself at a desktop size, scrollbars shown. Chrome 145 subtracts the scrollbar from `vw` only
+  where the root reserves its room (`scrollbar-gutter: stable`, `overflow-y: scroll`) — Bramus Van Damme, bram.us, 2026.
 - **`100vh` on a phone is the tallest viewport**, its toolbars hidden: a `height: 100vh` box's bottom sits under them
   while they show. `svh` is the smallest viewport, `dvh` follows the toolbars (relaid out as they move), `lvh` the
   largest. A full-height app shell: `height: 100vh; height: 100dvh;` (the second line where it is understood); a hero
