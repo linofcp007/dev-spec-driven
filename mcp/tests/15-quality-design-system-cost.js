@@ -93,4 +93,77 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
       worst: () => s.worst <= 3 && counts[1] === 60 * 300 * 3,
     });
   }
+
+  { // 1.39 deprecated uses (G1–G3), as ratios measured at the same moment — never an absolute slack (CRIT_1 must-fix 7): the watch
+    // reads and parses what settle would, no more. The yardstick: the same tree where settle itself reads and parses every page
+    // (a candidate each page names — a comment `// Moving`), with no row marked. Each a median of 3, the pairs interleaved.
+    const once = (f) => { const t0 = process.hrtime.bigint(); f(); return Number(process.hrtime.bigint() - t0) / 1e6; };
+    const ratio = (a, b) => { const ta = [], tb = []; for (let i = 0; i < 3; i++) { ta.push(once(a)); tb.push(once(b)); } const m = (x) => x.sort((p, q) => p - q)[1]; return m(ta) / m(tb); };
+    const r2 = (x) => Math.round(x * 100) / 100;
+    const L = (lines) => lines.join("\n") + "\n";
+    const HEAD = "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n";
+    const kitOf = (moving) => L(["export function Table() { return <table />; }", "export function Button() { return <button />; }"].concat(moving ? ["export const Moving = motion(Box);"] : []));
+    // G1: a real-shaped app — 600 TSX pages (300 render Table, 300 Button), 40 Vue SFCs, 20 MDX; `asks`: settle asks a candidate 50
+    // pages render; `nothing`: it asks none (the watch reads alone); `all`: every page names the candidate (settle parses them all)
+    const app = (shape, marked) => {
+      const files = { "package.json": js({ name: "g1" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
+        "src/components/ui/kit.tsx": kitOf(shape !== "nothing"), "src/components/ui/table.tsx": L(["export function Table() { return <table />; }"]) };
+      for (let i = 0; i < 600; i++) {
+        const t = i % 2 === 0, m = shape === "all" || (shape === "asks" && i < 50);
+        files["src/app/p" + i + "/page.tsx"] = L([t ? "import { Table } from \"@/components/ui/table\";" : "import { Button } from \"@/components/ui/kit\";"].concat(m ? ["import { Moving } from \"@/components/ui/kit\";", "// Moving"] : [],
+          ["export const P = () => <section>" + (t ? "<Table />" : "<Button />") + (m && shape === "asks" ? "<Moving />" : "") + "</section>;"], Array.from({ length: 40 }, (_, k) => "const v" + k + " = \"" + "x".repeat(60) + "\";")));
+      }
+      for (let i = 0; i < 40; i++) files["src/views/v" + i + ".vue"] = L(["<script setup>", "import Button from '@/components/ui/button.vue'", "</script>", "<template><Button />" + (shape === "all" ? "<!-- Moving -->" : "") + "</template>"]);
+      for (let i = 0; i < 20; i++) files["docs/d" + i + ".mdx"] = L(["# Doc " + i, "", "Some text." + (shape === "all" ? " Moving" : ""), "", "<Callout>x</Callout>"]);
+      files[".specs/steering/design-system.md"] = HEAD + "| Table | src/components/ui/table.tsx |  | " + (marked ? "_Deprecated_" : "") + " |\n| Button | src/components/ui/kit.tsx |  |  |\n";
+      return project(null, files);
+    };
+    const G1 = { asksOn: app("asks", true), asksOff: app("asks", false), nothingOn: app("nothing", true), all: app("all", false) };
+    // G2: 500 LOCATED rows (500 component files, every one marked) and 2,000 pages each importing one — the module check is
+    // indexed by key and the prefilter is two linear passes (never `includes` × the names, never a loop of rows a binding)
+    const many = (marked) => {
+      const files = { "package.json": js({ name: "g2" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }) };
+      const rows = [];
+      for (let c = 0; c < 500; c++) {
+        const n = "C" + String(c).padStart(3, "0");
+        files["src/components/ui/" + n.toLowerCase() + ".tsx"] = L(["export function " + n + "() { return <div />; }"].concat(c === 0 && !marked ? ["export const Moving = motion(Box);"] : []));
+        rows.push("| " + n + " | src/components/ui/" + n.toLowerCase() + ".tsx |  | " + (marked ? "_Deprecated_" : "") + " |");
+      }
+      for (let i = 0; i < 2000; i++) {
+        const n = "C" + String(i % 500).padStart(3, "0");
+        files["src/app/p" + i + ".tsx"] = L(["import { " + n + " } from \"@/components/ui/" + n.toLowerCase() + "\";"].concat(marked ? [] : ["// Moving"], ["export const P = () => <" + n + " />;"], Array.from({ length: 20 }, (_, k) => "const v" + k + " = \"" + "y".repeat(60) + "\";")));
+      }
+      files[".specs/steering/design-system.md"] = HEAD + rows.join("\n") + "\n";
+      return project(null, files);
+    };
+    const G2 = { on: many(true), all: many(false) };
+    // G3: the hostile `export *` web — 1,000 component folders' barrels passing on a hub that passes on all of them — the watch
+    // following its deprecated Moving through it against settle following its candidate Moving through it (each its own budget)
+    const web = (watch) => {
+      const files = { "package.json": js({ name: "g3" }), "src/components/ui/kit.tsx": L([watch ? "export function Moving() { return <div />; }" : "export const Moving = motion(Box);"]) };
+      for (let i = 0; i < 1000; i++) {
+        files["src/components/k" + i + "/index.ts"] = "export * from \"../hub\";\n";
+        files["src/app/p" + i + ".tsx"] = L(["import { Moving } from \"../components/k" + i + "\";", "export const P = () => <Moving />;"]);
+      }
+      files["src/components/hub/index.ts"] = Array.from({ length: 1000 }, (_, i) => "export * from \"../k" + i + "\";").join("\n") + "\nexport * from \"../ui/kit\";\n";
+      files[".specs/steering/design-system.md"] = HEAD + "| Moving | src/components/ui/kit.tsx |  | " + (watch ? "_Deprecated_" : "") + " |\n";
+      return project(null, files);
+    };
+    const G3 = { watch: web(true), settle: web(false) };
+    const rep = (p) => () => S.designSystemReport(p);
+    for (const g of [G1, G2, G3]) for (const p of Object.values(g)) S.designSystemReport(p);
+    const s = remeasure(() => ({
+      asks: r2(ratio(rep(G1.asksOn), rep(G1.asksOff))), nothing: r2(ratio(rep(G1.nothingOn), rep(G1.all))),
+      rows500: r2(ratio(rep(G2.on), rep(G2.all))), web: r2(ratio(rep(G3.watch), rep(G3.settle))),
+    }), (x) => x.asks <= 1.5 && x.nothing <= 1.5 && x.rows500 <= 1.5 && x.web <= 1.5);
+    const got = { asks: (S.designSystemReport(G1.asksOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal, nothing: (S.designSystemReport(G1.nothingOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal,
+      rows500: ((d) => [d.rowsTotal, d.rows.every((r) => r.filesTotal === 4)])(S.designSystemReport(G2.on).deprecatedUses || { rows: [] }) };
+    all("1.39 cost: the deprecated uses' watch reads and parses no more than settle would — a real-shaped app (600 pages, 40 SFCs, 20 MDX) with a row ≤ 1.5× the same report with none while settle asks a candidate, and ≤ 1.5× settle parsing every page when it asks none; 500 located rows over 2,000 pages ≤ 1.5× settle parsing them all; the hostile `export *` web ≤ 1.5× settle's own follow through it (got " +
+      js({ s, got }) + ")", {
+      asks: () => s.asks <= 1.5 && got.asks === 300,
+      nothing: () => s.nothing <= 1.5 && got.nothing === 300,
+      rows500: () => s.rows500 <= 1.5 && js(got.rows500) === js([500, true]),
+      web: () => s.web <= 1.5,
+    });
+  }
 };
