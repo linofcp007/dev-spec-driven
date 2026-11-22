@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.38.0] — 2026-11-21
+## [1.38.0] — 2026-11-22
 
 The +ui track's second round over the code: the project's own UI checks beside each feature's, a raw value read against the
 project's own scale, the widths the visual review captures, and a state matrix each design fills and doctor reads. No new
@@ -136,7 +136,7 @@ tool, command, hook or dependency.
 The MCP tool list is 9 characters shorter (spec_scan's "raw colours / sizes" is now "raw values"); SKILL.md is unchanged.
 
 ### Tests
-- `node mcp/test.js` 2891 assertions, `node cli/test-cli.js` 697 (was 2716 / 690). Each mutation list was written before
+- `node mcp/test.js` 2911 assertions, `node cli/test-cli.js` 698 (was 2716 / 690). Each mutation list was written before
   its fixtures: the base 66 (64 at first, the two survivors given fixtures); the prose 101 of 101; doctor `ui-states` 50 of
   50; the breakpoints 76 of 76; the scale's final replay 121 of 125 (the survivors timed cost guards and an equivalent);
   the project pass 95 and two for the `<style>` fix (91 at first, three more once given fixtures, one dead line deleted,
@@ -145,7 +145,7 @@ The MCP tool list is 9 characters shorter (spec_scan's "raw colours / sizes" is 
   list replayed on the merged tree: each mutant killed as on its own branch. Review 2's fixes: the UI rules 29 of 29; the
   scale 20 of 21 (one equivalent: `<` / `<=` under the epsilon) and review 1's 45 replayed, 44 of 44 once its painted
   fixtures were replaced (one line dead); the breakpoints and states 21 of 22 (one equivalent: `>` / `>=` at exactly six
-  widths).
+  widths). Review 3's two fixes (an rgb() with decimals taken at the 8 bits it paints; the blue channel pinned): 2 of 2.
 
 ## [1.37.0] — 2026-11-21
 
