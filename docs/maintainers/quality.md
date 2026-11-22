@@ -1450,10 +1450,11 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   longer declaration's property is not seen (a hostile shape only). `width-viewport` (`100vw` / `w-screen`) was cut to prose
   (ui-responsive.md): 1 real defect in 16 corpus hits — fixed overlays, compiled utilities, clipped decorations. (1.39) That
   prose said "the visual review measures the sideways scroll instead" — false: its captures hide scrollbars (ui-review.md's
-  `--hide-scrollbars`, Playwright's every headless launch — ITEM_2 measured Chrome's `scrollWidth 1258 / clientWidth 1243`
-  with them, 1258 / 1258 without), so a `100vw` box scrolls nothing there; it now says nothing measures it — check an
-  in-flow one by hand at a desktop size, scrollbars shown (a 17-docs row pins the capture line's flag, the reason). Keeping
-  the scrollbars in `floor-zoom` was cut (CRIT_2 cut 3: scrollbars shrink `clientWidth`, "the width got" undefined), and
+  `--hide-scrollbars`, Playwright's every headless launch — ITEM_2 measured Chrome's scroll width 1258 over a client width
+  of 1243 with them, 1258 / 1258 without), so a `100vw` box scrolls nothing there; it now says nothing measures it — check
+  an in-flow one by hand at a desktop size, scrollbars shown (a 17-docs row pins the capture line's flag, the reason).
+  Keeping the scrollbars in `floor-zoom` was cut (CRIT_2 cut 3: scrollbars shrink the client width, "the width got"
+  undefined), and
   `width-viewport` stays prose (ITEM_2: 22 boxes in 18 clones, 15 left after the best property, 1 likely defect).
 - **One file** — `uiChecksOf(lines, rel, over)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
   `DS_LINE_MAX`, its comments out, `cut` when it was longer; `over`, review 1 of 1.38: the file is longer than the text read —
@@ -1515,10 +1516,15 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   text seen while they are open (`textMark`); a close tag pops the elements opened since to its own name, an unmatched one
   costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below). (1.39, D4) Vue's `<component>`
   — no HTML element has that name — is judged as what its `is` names (`judgeTag`'s `name`): a BOUND `is` (`:is`,
-  `v-bind:is` — any `boundName` form) is a component — CONTROL in a click body, no click candidate, its own `style` not judged
-  (vben's alert.vue, `<component :is="… || VbenButton" @click>`: the corpus's 2 of 25 click-no-keyboard findings, both
-  false); a STATIC `is` is the element its literal names (`RE_ELEMENT` on the value as written, its quotes off — `is="MyCard"`
-  is a component, `is="button"` focusable, `is="img"` void); with no `is`, and an `is` on any other tag (a customized
+  `v-bind:is` — any `boundName` form; `bound`) is a component — no click candidate, its own `style` not judged (vben's
+  alert.vue, `<component :is="… || VbenButton" @click>`: 2 of the corpus's 25 click-no-keyboard findings, both false) —
+  yet in a click body it stays what 1.38 read (no CONTROL: `kind` undefined): ITEM_2's design made it a control there, and
+  the oracle replay found that silencing two TRUE findings the design had not counted — vben's preset tiles
+  (`blocks/layout/content.vue`, `blocks/theme/theme.vue`: a `<div @click>` holding a preview's or an icon's
+  `<component :is>` and the tile's name); the narrower reading keeps them, and a `<div @click>` whose `<component :is>` IS
+  a button warns as in 1.38 (a fixture); a STATIC `is` is the element its literal names (`RE_ELEMENT` on the value as
+  written, its quotes off — `is="MyCard"` is a component, a control in a body as any component; `is="button"` focusable, a
+  control in a body too; `is="img"` void); with no `is`, and an `is` on any other tag (a customized
   built-in, `<div is="x-panel">`), the tag as written; img-no-alt (`<img` as written) and paste-blocked (any tag) never read
   it (no widening: `<component is="img">` is no img-no-alt).
 - **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)

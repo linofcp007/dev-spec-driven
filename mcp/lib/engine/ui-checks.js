@@ -349,15 +349,17 @@ function judgeTag(tag, add) {
     if (blocks && !RE_READS_CLIPBOARD.test(v) && !forwardsEvent(v)) { add("paste-blocked", tag.line, "<" + tag.name + " " + e.attr + ">"); break; }
   }
   // (1.39, D4) Vue's `<component>` — no HTML element has that name — renders what its `is` names: a BOUND one (`:is`,
-  // `v-bind:is`) a component (vben's alert.vue: `<component :is="… || VbenButton" @click>`), CONTROL in a click body, its own
-  // style and click not judged; a static one (`is="div"`) that element — RE_ELEMENT on the literal as written, focusable and
-  // void as usual. Without an `is`, and an `is` on any other tag (a customized built-in), the tag as written; img-no-alt and
-  // paste read the tag as written too
+  // `v-bind:is`) a component — its own click and style not judged (vben's alert.vue: `<component :is="… || VbenButton"
+  // @click>`) — yet, in a click body, read as 1.38 read it: no control (a doubt there would silence true findings — vben's
+  // preset tiles, `<div @click>` holding `<component :is="theme.icon" />` and the tile's name); a static one (`is="div"`) that
+  // element — RE_ELEMENT on the literal as written, focusable and void as usual. Without an `is`, and an `is` on any other tag
+  // (a customized built-in), the tag as written; img-no-alt and paste read the tag as written too
+  const bound = tag.name === "component" && is === "";
   const name = tag.name === "component" && is !== null ? is : tag.name;
   const element = RE_ELEMENT.test(name);
   const focusable = name === "a" || name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(name);
   // (a `<label>` is no control in a body — never focused itself, the control it names is its own tag: review 2 of 1.37)
-  const kind = !element || (focusable && name !== "label") || name === "slot" ? CONTROL : undefined;
+  const kind = !bound && (!element || (focusable && name !== "label") || name === "slot") ? CONTROL : undefined;
   if (spread) return kind; // (a spread may hold any attribute)
   // font-size-viewport (1.38): an ELEMENT's own `style` attribute — never a component's prop, never a free `fontSize:` line
   // (CSS-in-JS, `sx`, `css()` nest their media queries where no line reader sees them: CRIT_3 must-fix 1)

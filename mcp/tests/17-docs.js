@@ -1365,12 +1365,7 @@ exports.run = async ({
       // engine's, and what a bound cut in the report alone — R2-E1, R2-E2)
       ["ui-code-scan: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
         () => /a comment `ui-check-off: <rule-id> <why>` on its line \(a declaration's, a class's\) or the line above — `\/\/`, `\/\* \*\/`, `<!-- -->`, not Blade's or Twig's: counted, never listed; only this comment silences \(a linter's is not read\) — an `<a>` a parent gives its href \(Next's `legacyBehavior`\) is one to silence/.test(checks)],
-      // (1.39 D4: Vue's `<component :is>` named among the components — the engine agrees: a control in a click body, never a
-      // click candidate itself)
-      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text one, `<component :is>`\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
-        && (() => { const E = require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier(), f = (t) => E.uiChecksOf(E.viewLines(t, "a.vue"), "a.vue").findings.length;
-          return f("<template><div @click=\"go\"><component :is=\"Btn\">Go</component></div></template>\n") === 0 && f("<template><component :is=\"Btn\" @click=\"go\">Go</component></template>\n") === 0
-            && f("<template><div @click=\"go\">Go</div></template>\n") === 1; })()
+      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
         && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")
         && checks.includes("the project's first " + num("DS_FOCUS_SHEETS") + " stylesheets — past them, named unjudged — 2.4.7")
         && /In the report alone: `transition-all` \(kits ship it\), what a bound cut\./.test(checks)],
