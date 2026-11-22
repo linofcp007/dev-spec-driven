@@ -3123,7 +3123,12 @@ function rawValuesIn(lines, kinds, cut) {
 // declaration (a stylesheet's line, a CSS-in-JS one — declarations()) whose property has a row: its FIRST top-level length
 // whose unit the row does not allow (offUnit: never inside calc() / clamp() / var(), never 0 — one finding a declaration; a
 // custom property or a Sass variable has no row: the table's names start with a letter); a Tailwind arbitrary size elsewhere
-// (RE_TW_SIZE) by the property it sets.
+// (RE_TW_UNIT) by the property it sets.
+// 1.39 (1.38.0 review 1's T2): RE_TW_UNIT is the units table's OWN pattern — RE_TW_SIZE's utilities in any unit (`text-[2vw]`,
+// `py-[3pt]`, `rounded-[50%]`), negative ones too (`-mt-[12px]`, `md:-mx-[8px]`, `mt-[-12px]`): m[1] the utility, m[2] its
+// value — a unit of at most 5 letters (CSS Values 4's longest: `svmin`, `dvmax`, `cqmin`; `text-[3inches]` is none).
+// RE_TW_SIZE stays the raw values' (px / rem / em, what a size token replaces): never one predicate for two rules.
+const RE_TW_UNIT = /(?<![\w-])(?:[a-z0-9-]{1,24}:){0,4}-?(p[trblxyse]?|m[trblxyse]?|gap(?:-[xy])?|space-[xy]|text|rounded(?:-[a-z]{1,2})?|leading|tracking)-\[(-?(?:\d+(?:\.\d+)?|\.\d+)(?:[a-z]{1,5}|%))\]/g;
 function unitsOf(lines, rowOf, room) {
   const list = [], byProperty = {};
   // (every finding counted by its property; its text made only for one listed)
@@ -3136,9 +3141,8 @@ function unitsOf(lines, rowOf, room) {
       });
       continue;
     }
-    for (const m of l.matchAll(RE_TW_SIZE)) {
-      const u = m[0].replace(/^(?:[a-z0-9-]{1,24}:)+/, ""), prop = twProperty(u.slice(0, u.indexOf("-["))), row = prop && rowOf(prop);
-      const unit = row && offUnit(u.slice(u.indexOf("-[") + 2, -1), row.units);
+    for (const m of l.matchAll(RE_TW_UNIT)) {
+      const prop = twProperty(m[1]), row = prop && rowOf(prop), unit = row && offUnit(m[2], row.units);
       if (unit && count(prop)) list.push({ line: n, property: prop, value: m[0], unit, allowed: row.units });
     }
   }

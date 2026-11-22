@@ -105,15 +105,13 @@ another value IN THE SAME NOTATION — one colour each, or one number each with 
 `hsl(217 91% 60%)`, `16px` against `1rem` are not compared, nor a name the code declares with two values or more (a theme,
 a twin sheet). `gone` lists the `_Token sources:_` files that no longer exist. Neither changes `inSync`: it compares names.
 
-**The units table.** In design-system.md, a table whose first header cell is `Property` (`Propriedade`, `Propiedad`) and with
-a column whose header starts with `Units` (`Unidades`, `Unidad`; `Allowed units` is none) holding CSS units is the team's
-convention — which units each property takes (`margin-*` covers `margin` and `margin-top`; a props table,
-`| Property | Type | Default |`, is none). A feature report's `units` lists each declaration whose value takes, outside
-parentheses, a unit its row does not give (never `0`, a unitless number or a negative length: `-8px`), and a Tailwind
-arbitrary size in px, rem or em (`p-[10px]`; never `-mt-[12px]`, `text-[2vw]`) by the property it sets: {`findings` — the
-first 50: `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}. The project report's
-`unitsTable` {`rows`, `unread`, `past` — rows past the first 50}. A report only — never finish, doctor or the brief — and no
-default: without the table both are null. An example: [steering-templates.md](steering-templates.md) → design-system.md.
+**The units table** — the team's convention of which units each property takes, in design-system.md (its shape and an
+example: [steering-templates.md](steering-templates.md) → design-system.md). A feature report's `units` lists each
+declaration whose value takes, outside parentheses, a unit its row does not give (never `0` or a unitless number; a negative
+length counts: `-8px`), and a Tailwind arbitrary size in any unit (`p-[10px]`, `-mt-[12px]`, `text-[2vw]`) by the property it
+sets: {`findings` — the first 50: `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}. The
+project report's `unitsTable` {`rows`, `unread`, `past` — rows past the first 50}. A report — never finish or doctor; a UI
+task's brief quotes its rows (their first 400 characters) — and no default: without the table both are null.
 
 **DESIGN.md** is not read; its own CLI writes a file that is:
 `npx @google/design.md export --format css-tailwind DESIGN.md > theme.css` (a token file by its name). **Breakpoints:** both

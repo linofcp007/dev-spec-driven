@@ -3631,6 +3631,9 @@ const brief = {
     designSystemUnknown: (list) => `Fora do registo — pede contexto antes de construir qualquer um (NEEDS_CONTEXT): ${list}`,
     designSystemNoRows: (file) => `O design não tem nenhuma linha de componente — o que \`${file}\` lista é para reutilizar antes de criar algo novo.`,
     designSystemTokens: (n, sources) => `Tokens: ${n} no registo${sources ? ` — definidos em ${sources}` : ""}.`,
+    designSystemUnits: (list, more) => "Unidades — a tabela do registo, a convenção da equipa: " + (list
+      ? list + "." + (more ? ` (mais ${more} ${more === 1 ? "linha" : "linhas"} no registo)` : "")
+      : `${more} ${more === 1 ? "linha" : "linhas"} no registo, ${more === 1 ? "longa" : "longas"} demais para citar aqui.`),
     designSystemLibraries: (list) => `Bibliotecas de componentes em que o projeto assenta: ${list}.`,
     design: "## Contexto de design",
     designToc: (p) => `Design completo: \`${p}\` — secções:`,

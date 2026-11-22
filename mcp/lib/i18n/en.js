@@ -3878,6 +3878,11 @@ const brief = {
     designSystemUnknown: (list) => `Not in the registry — ask before building them (NEEDS_CONTEXT): ${list}`,
     designSystemNoRows: (file) => `The design names no component row — read \`${file}\` and reuse what it lists before creating anything.`,
     designSystemTokens: (n, sources) => `Tokens: ${n} in the registry${sources ? ` — defined in ${sources}` : ""}.`,
+    // 1.39: the units table's rows the brief quotes (`list`: "font-size: rem · margin-*: rem, %") and `more`, the rows it left
+    // out — none quoted: one row is longer than the brief's bound
+    designSystemUnits: (list, more) => "Units — the registry's table, the team's convention: " + (list
+      ? list + "." + (more ? ` (+${more} more ${more === 1 ? "row" : "rows"} in the registry)` : "")
+      : `${more} ${more === 1 ? "row" : "rows"} in the registry, too long to quote here.`),
     designSystemLibraries: (list) => `Component libraries the project builds on: ${list}.`,
     design: "## Design context",
     designToc: (p) => `Full design: \`${p}\` — sections:`,

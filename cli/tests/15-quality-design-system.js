@@ -334,4 +334,31 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       help: () => /the raw values and the UI checks/.test(help.out) && !/raw colours/.test(help.out),
     });
   }
+
+  // --- 1.39: the task brief quotes the units table (its own bound); a negative length and a Tailwind size in any unit -----------
+  {
+    const mk = (lang) => {
+      const dir = path.join(tmp, "p139-units-" + lang);
+      SR.initProject(dir, ["ui"], lang);
+      write(dir, REG, "# Design System\n\n## Units\n| Property | Allowed units |\n|---|---|\n| font-size | rem |\n| margin-* | rem, % |\n");
+      const f = SR.createFeature(dir, { name: "Checkout", tracks: ["ui"], summary: "x", lang });
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the page\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/checkout/Page.tsx, src/checkout/c.css_\n");
+      write(dir, "src/checkout/Page.tsx", "export const Page = () => <p className=\"-mt-[12px] text-[2vw]\" />;\n");
+      write(dir, "src/checkout/c.css", ".a { margin: 0 -8px; }\n");
+      return { dir, slug: f.slug };
+    };
+    const en = mk("en"), pt = mk("pt");
+    const b = runIn(["brief", en.slug, "1", "--project", en.dir]), bJson = runIn(["brief", en.slug, "1", "--project", en.dir, "--json"]);
+    const bPt = runIn(["brief", pt.slug, "1", "--project", pt.dir]);
+    const fr = runIn(["design-system", en.slug, "--project", en.dir]);
+    const T = MSG("en").cliOutput;
+    all("1.39 brief / design-system (CLI): a UI task's brief prints the units table's rows (`| Property | Allowed units |`: a units column by a word of its header), --json carries designSystem.units as spec_task_brief does; the feature report lists a negative length and a Tailwind size in any unit; PT (got " +
+      js([b.out.slice(b.out.indexOf("## Design system")), bPt.out.slice(bPt.out.indexOf("## Design system")), fr.out]) + ")", {
+      line: () => b.code === 0 && b.out.includes("\n\nUnits — the registry's table, the team's convention: font-size: rem · margin-*: rem, %.\n"),
+      json: () => js(jsonOf(bJson).designSystem) === js(SR.taskBrief(en.dir, en.slug, 1).designSystem) && js(jsonOf(bJson).designSystem.units) === js({ rows: [{ props: ["font-size"], units: ["rem"] }, { props: ["margin-*"], units: ["rem", "%"] }], more: 0 }),
+      pt: () => bPt.code === 0 && bPt.out.includes("Unidades — a tabela do registo, a convenção da equipa: font-size: rem · margin-*: rem, %."),
+      units: () => fr.code === 0 && fr.out.includes(T.dsUnitsHead(3)) && fr.out.includes("    src/checkout/c.css:1  margin: 0 -8px  " + T.dsUnitsLine("px", "rem, %"))
+        && fr.out.includes("    src/checkout/Page.tsx:1  -mt-[12px]  " + T.dsUnitsLine("px", "rem, %")) && fr.out.includes("    src/checkout/Page.tsx:1  text-[2vw]  " + T.dsUnitsLine("vw", "rem")),
+    });
+  }
 };

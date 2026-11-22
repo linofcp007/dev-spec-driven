@@ -479,7 +479,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   deprecated component's entry carries its `_Deprecated: use X_` marker whole, first among its notes (1.37) — the rows
   doctor's `ui-deprecated` reads, no more (past the 500-row cap neither marks a component).
   `renderBrief` writes it after Reuse; the result's `designSystem` holds identifiers (`write: true`: `refs.designSystem`, the
-  names).
+  names). 1.39: the registry's units table (The units table, below) after the token line — its first rows whose text
+  (`props: units` and the ` · ` between) fits `DS_BRIEF_UNITS`, 400 characters, a bound of its own (the components' 1,500
+  untouched; a prefix: the first row that does not fit ends the quote, one too long alone is said, never cut), `more` the
+  rows left out plus the table's `past`; the null gate counts `reg.units` (a registry holding only the table opens the
+  part); the result's `designSystem.units` {rows, more}, only with a table (1.38's JSON otherwise).
 - **The code** (engine/design-system.js, LAZY — entries `designSystemReport`, `designSystemSeed`, `designSystemFinish`) —
   `scanCode`: ONE walk (`walkProject` + `gitignoreRules`, 20,000 counted files; a file read up to 256K characters; a view
   file's line read for raw values up to 2,000, a token file's line whole). A component (`componentOf`) = a view file (.tsx /
@@ -1262,28 +1266,36 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   CLI prints a drifted token as the row the code has, then the registry's value and the file.
 - **The units table** (1.38 — the team's convention, a report, never a default) — in design-system.md, found by its header
   wherever it stands: the first cell Property / Propriedade / Propiedad (`RE_DS_PROPERTY_HEAD`), a column whose header
-  STARTS with Units / Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place; a table headed
-  `| Property | Allowed units |` is none and nothing says so: 1.38.0 review 1's T3, said in ui-code-scan.md, the reader for
-  1.39's backlog) holding at least one CSS unit (`CSS_UNITS`: the
+  STARTS with Units / Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place), else (1.39, 1.38.0 review
+  1's T3) the first whose header holds the WORD (`RE_DS_UNITS_WORD`: `Allowed units`; its edges any script's letters,
+  digits or `_` — never `Community`, `Unitless`, PT `Valor unitário`, which `\b`, ASCII, would end at its `á`) — the 1.38
+  tier first, so every 1.38 table reads the same; no polarity (`Units to avoid`, `Avoid units` read as the allowed ones:
+  steering-templates.md says the column lists the ALLOWED units, CRIT_4 must-fix 11) — holding at least one CSS unit
+  (`CSS_UNITS`: the
   CSS Values 4 lengths, `%`, `fr` — a closed list in quality.js, the eager reader's) — a component's props table
   (`| Property | Type | Default |`) is none (CRIT_2). `dsUnitsTable` → the registry's `units` {rows: [{props (a property or `prefix-*`;
   never `--x`), units}], unread (a row with no CSS unit or no property, by its first cell), past (rows past `DS_UNIT_ROWS`,
   50: a count)}, several tables adding up; null without one. The feature report's `units` {findings (50), total,
-  byProperty} — null without a table; never finish, doctor or the brief: `unitsOf` over the file's ONE walk — a declaration
+  byProperty} — null without a table; never finish or doctor (the brief quotes the rows: The brief, above): `unitsOf` over
+  the file's ONE walk — a declaration
   whose property has a row (`unitRows`: the exact row, else the LONGEST `prefix-*`; `margin-*` covers `margin`), its FIRST
   top-level length the row does not allow (`offUnit`: never inside calc() / clamp() / var() — an unclosed one holds the
-  rest —, never 0, a unitless number, a hex colour's digits, a negative length — `RE_UNIT_LITERAL`'s lookbehind: a digit
-  after `-` is no literal, so `margin: 0 -8px` is not judged (1.38.0 review 1's T2: said in ui-code-scan.md, 1.39's
-  backlog) —; one finding a declaration; a custom property or a Sass variable has no row), and a Tailwind arbitrary size in
-  px / rem / em (1.37's `RE_TW_SIZE`: `text-[2vw]` and a negative `-mt-[12px]` are not read — T2 again, said) by the
-  property it sets (`twProperty`); every finding counted, the first 50
+  rest —, never 0, a unitless number, a hex colour's digits, a word's — `a-12px`, `$gap-8px`, `--12px`; 1.39, T2: a
+  negative length IS one, `RE_UNIT_LITERAL`'s second lookbehind — a minus at the value's start or after a blank or a comma
+  signs it: `margin: 0 -8px`, `-.5em` —; one finding a declaration; a custom property or a Sass variable has no row), and
+  a Tailwind arbitrary size in any unit, negative ones too, by the property it sets (`twProperty`) — 1.39's `RE_TW_UNIT`,
+  the table's own pattern (`-mt-[12px]`, `md:-mx-[8px]`, `mt-[-12px]`, `text-[2vw]`, `py-[3pt]`, `rounded-[50%]`: m[1]
+  the utility, m[2] its value; a unit of at most 5 letters, CSS's longest — `text-[3inches]` is none); 1.37's `RE_TW_SIZE`
+  stays the raw values' (px / rem / em, what a size token replaces):
+  never one predicate for two rules; every finding counted, the first 50
   made into rows. The third reader of the one walk measured 0.9–1.0× the report without a table on the real corpora,
   1.0–1.4× on 60 component sheets and ≤ 1.5× when every declaration is a finding (mcp/tests/15-quality-design-system-cost.js:
   ≤ 1.5× and ≤ 3×); a digit and a "names a property of the table" prefilter measured no gain (1.2× either way) and went.
   The project report's `unitsTable` {rows, unread, past} | null —
   never in `inSync`. On the real corpora with a rem / px table: shadcn's typeset.css `em` paddings, Bootstrap's
   `border-radius: 50%`, Breeze's `rounded-[10px]` — each true to the convention it was given (why it is a report).
-- **DESIGN.md: deferred again** (1.38) — the spec is `version: alpha` and changed after 1.37's design (a `motion` group,
+- **DESIGN.md: deferred again** (1.38, and 1.39 — DECISIONS, CRIT_4: it changed again on 2026-11-17, and read as the
+  registry's it renamed tokens 1.38 reports) — the spec is `version: alpha` and changed after 1.37's design (a `motion` group,
   nested colour groups, dimensions px / em / rem only); a YAML subset reader is a review series of its own. Its own CLI
   exports what is read today: `npx @google/design.md export --format css-tailwind DESIGN.md > theme.css` (a token file by
   name) or DTCG JSON.
@@ -2725,6 +2737,44 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   now taken at 8 bits (`Math.round`), a hex unchanged (the reviewer's corpora — every integer HSL token, cal.com, Radix,
   shadcn's pairs — identical). R3-T2: no fixture pinned the painted check's blue channel (`#eeeff3` → near now). Fixtures
   `paint.decimals` / `paint.blue`; the old window and a blue-blind check each fail them.
+- **1.39.0, chain E** (item 4 "the scale, round 2" as DECISIONS cut it: T2, T3 and the brief's units line; the size
+  families — `token` / `off` / nearest / a whole scale / the package scope: 0 judgments on the six common shapes, 282 of 291
+  from one app —, DESIGN.md's reader, motion off / nearest and R2-T2 cut — DECISIONS, CRIT_X's cut list) — T2: a negative
+  length is one (`RE_UNIT_LITERAL`'s second lookbehind: a minus at the value's start or after a blank or a comma; a word's,
+  `$gap-8px`'s, `--12px`'s never), and the units table reads Tailwind's sizes through its OWN `RE_TW_UNIT` (any unit of at
+  most 5 letters — CSS Values 4's longest, `svmin`; the designed `{1,6}` was an equivalent mutant, `text-[3inches]` now
+  none —, a leading or bracketed minus — m[1] the utility, m[2] its value), `RE_TW_SIZE` left the raw values' (the raw list is 1.38's
+  on every fixture, the oracle's run pinned). Re-measured with the DESIGNED regex (CRIT_4 must-fix 10 — the designer's
+  `[\s(,]` reads the same: `offUnit` takes a value's parentheses out first) over the clones of dsd-139d-1 / -2 / -4 (52
+  checkouts) under steering-templates' example table, against the 1.38.0 oracle: ADDITIONS ONLY, 0 findings dropped —
+  codecaine +278 (165 `…-[…cqw]` in its device mocks, 41 `vw`, 32 `vh`, 23 `svh`, 16 Tailwind negatives — `-mb-[0.22em]`,
+  `lg:-mr-[12vw]` —, 1 stylesheet negative), pico +119 (its themed copies' `margin-top: -0.125em`), outline +66, bulma +40,
+  cal.com +21, mantine +20 (`margin-left: -1px`), Bootstrap +4 (d4) / +7 (d1, d2: `_visually-hidden.scss:12`'s `-1px
+  !important`, the examples' `-25px`, `-.5em`), vben +3, Starlight +2 / +3, magicui +2 (`leading-[100%]`, `text-[40pt]`),
+  runwithbee +2 (`text-[11vw]`), sinhong +2 (`-ml-[3px]`), nuxt/ui +2, podman +1 (`py-[3pt]`), hyper-tube +1
+  (`-ml-[8.5px]`), open-props, contai, skill-deck, tailwindcss.com +1 each; shadcn v4 / svelte, Breeze, Sakai, Foundation,
+  motion-primitives, taxonomy, astro-paper and the other apps identical — each addition true to the convention it was given
+  (a report). T3: a units column by a WORD of its header (`RE_DS_UNITS_WORD`) when no header STARTS with it — the 1.38 tier
+  first, so every 1.38 table reads the same (a fixture of its four shapes); its edges any script's letters (a deviation
+  from the designed `\b`, which is ASCII: PT `Valor unitário` would end at its `á` — the narrower reading); no polarity,
+  said (steering-templates.md: the column lists the ALLOWED units; a 17-docs row runs `Units to avoid` through the reader —
+  CRIT_4 must-fix 11). The brief: the table's first rows within `DS_BRIEF_UNITS` (400, its own bound — a prefix; one row
+  too long alone is said, never cut), `more` the rows left out plus the table's `past`; the null gate counts `reg.units`
+  (CRIT_4 must-fix 7: a units-only registry got nothing); the result's `designSystem.units` {rows, more} — a NEW JSON field
+  (CRIT_X D6), only with a table: the oracle's brief, text and JSON, byte-identical without one, and with one only the
+  line and the field added. The table's shape moved from ui-code-scan.md to steering-templates.md (ui-code-scan.md 29,871 →
+  29,634 B); 17-docs re-pointed (the T2 clause against offUnit / RE_TW_UNIT / RE_TW_SIZE, the headers against
+  RE_DS_PROPERTY_HEAD / RE_DS_COL.units / RE_DS_UNITS_WORD, "never finish or doctor" and the brief's 400 in both files —
+  CRIT_4 must-fix 8). Cost, the feature report with a table, 1.39 against the oracle in one process, interleaved, medians of
+  9 (60 files × 300 lines, ≥ 1.1 s a call): Tailwind sizes as written 0.94×, every utility a finding (143,940 against 0)
+  1.12×, hostile lines (`-mt-[` never closed, `md:` chains) 1.00×, stylesheets whose every declaration is negative (19,800
+  against 0) 1.11× — no suite guard added: `RE_TW_UNIT` is `RE_TW_SIZE`'s linear shape, K2 guards the reader. The
+  mutation list came before the fixtures (%TEMP%/dsd-139-e/MUTATIONS.md): 49 of 49 killed in a copy — 17 on T2's two
+  patterns and unitsOf (the raw reader reading `RE_TW_UNIT` among them), 8 on T3, 15 on the brief (the bound at 4,000, a
+  `>=` for `>` — a 20-row table of exactly 400 —, the separators left out of the size, `continue` for `break`, `past` left
+  out of `more`, the components' budget charged), 9 prose clauses; one survivor of the first pass, the unit's designed
+  `{1,6}`, was equivalent on every CSS unit — the bound became `{1,5}` with a fixture each way (`pt-[2svmin]`,
+  `text-[3inches]`), the 52 checkouts identical under it.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
