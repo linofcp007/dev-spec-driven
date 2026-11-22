@@ -121,3 +121,16 @@ reports end in `breakpoints`, the widths the visual review captures ([ui-respons
 breakpoints) — its own limits (`breakpoint-widths`, `breakpoint-line`) never make a report truncated. **Doctor's
 `ui-states`** reads the design's state matrix, not the code ([ui-design-patterns.md](ui-design-patterns.md) → The states
 every view needs).
+
+### Deprecated components the code still imports
+
+While the registry marks a row `_Deprecated:_`, the project report adds `deprecatedUses`: for each such row the code holds a
+component file for, the files that still import it (`files`, the first 3 by path; `filesTotal`), its replacement as doctor
+names it (`use`) and its component files (`paths` — a namesake's importers count too); `unlocated`: rows with no .tsx / .jsx /
+.js / .vue / .svelte / .astro file (a library's, an Angular or a Blade one). A row named by its file is its **module** — any
+import of it counts (renamed, default, type-only, `require`, a non-component export, a namespace's member, an SFC with or
+without its extension) — and its components, followed through `export *` and a component folder's barrel; a component a file
+exports beside its own counts by its **name**. An .mdx / .vue tag no import binds is counted apart (`unbound`). Not seen (its
+`note`): a `.ts` file, a dynamic `import()`, a module only a bundler's alias or a virtual module names, a re-export under
+another name outside a component folder's index, a non-component export or a type through a barrel. **No import found is not
+unused.** Its `limits` (`usage-files`, `deprecated-follow`) never touch the report's `limits` or `inSync`.

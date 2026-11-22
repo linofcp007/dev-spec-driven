@@ -62,7 +62,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
                                value against the code's (tokenDrift), the units table's readers (offUnit, unitRows) — pure, no fs:
                                design-system.js calls it — LAZY (quality.md → Design-system registry)
   design-system.js             the design system against the code (designSystemReport, designSystemSeed, designSystemFinish):
-                               spec_scan {designSystem}, the seeded registry, finish — LAZY (the registry's reader: quality.js)
+                               spec_scan {designSystem}, the seeded registry, finish; settle's follow (followOf, 1.39 — a second
+                               instance for deprecatedWatch) — LAZY (the registry's reader: quality.js)
   ui-checks.js                 the UI checks (1.37: uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass; 1.38: uiProjectPass, uiOff): a
                                +ui feature's anti-patterns — the feature report's `uiChecks`, finish's warning; the project inventory
                                (design-system.js uiProject reads, the opt-in pass), the `_UI checks off:_` marker — LAZY (quality.md → UI checks)

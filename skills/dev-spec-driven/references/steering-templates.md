@@ -647,7 +647,8 @@ _Libraries: @mui/material_
   retired itself, the text names — by its name alone (`use Dialog`, not `Dialog/Sheet`, `Dialog.Root` or a path) —
   silent when the row's notes name that one, alone too, as this file writes it (`DataGrid`, not "the data grid"): a
   capitalised word reads as the name — to keep a component on purpose, write the name in a code span or a tag. It
-  retires the WHOLE component: write a retired variant or prop without the marker.
+  retires the WHOLE component: write a retired variant or prop without the marker. `dev-spec design-system` lists the
+  files that still import it.
 - A **units table** (below) is optional — the team's convention of which units each property takes: a report, never a
   default (none is written for you). `spec_scan {designSystem: true, name}` lists a feature's declarations off it
   (`units`), `spec_scan {designSystem: true}` the rows it could not read (`unitsTable`); never finish, doctor or the

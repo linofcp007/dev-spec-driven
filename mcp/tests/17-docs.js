@@ -1446,6 +1446,39 @@ exports.run = async ({
     });
   }
 
+  { // 1.39.0 A — deprecated uses' prose (DECISIONS A 5 / Shared 1, CRIT_X D1): ui-code-scan.md's LAST section says what the project
+    // report's `deprecatedUses` reads and what it does not (CRIT_1 must-fix 6: a namesake's importers count, a non-component export
+    // or a type through a barrel is not seen); ui-design-patterns.md's Later row and steering-templates.md's `_Deprecated:_` bullet
+    // point to it. A bound or a code a clause names is read from the engine's source. ONE assertion per clause.
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const ref = (f) => ws(raw("skills", "dev-spec-driven", "references", f));
+    const C = ref("ui-code-scan.md"), DP = ref("ui-design-patterns.md"), ST = ref("steering-templates.md");
+    const DS = raw("mcp", "lib", "engine", "design-system.js"), EN = require(path.join(root, "mcp", "lib", "i18n.js")).msg("en").quality.dsDepUsesNote;
+    const head = "### Deprecated components the code still imports", section = C.slice(C.indexOf(head));
+    const shown = (DS.match(/const DS_DEP_SHOWN = (\d+);/) || [])[1];
+    // (the note's "Not seen" list, as the engine words it — the docs' list is the same, in the same order)
+    const unseen = ((EN.match(/Not seen: (.*?)\. No import found/) || [])[1] || "").split(/, (?![^(]*\))/).map((x) => x.replace(/ \(.*\)$/, "").replace(/ reached /, " ").replace(/import\(\)/, "`import()`").replace(/\.ts file/, "`.ts` file"));
+    const rows = [
+      ["ui-code-scan: the deprecated uses are the file's last section", () => C.indexOf(head) > 0 && !section.slice(head.length).includes("### ")],
+      ["ui-code-scan: the files that still import a row — the first DS_DEP_SHOWN by path, all counted", () => shown && section.includes("(`files`, the first " + shown + " by path; `filesTotal`)")],
+      ["ui-code-scan: the replacement as doctor names it (dsReplacement, one expression)", () => section.includes("its replacement as doctor names it (`use`)") && /use: dsReplacement\(/.test(DS) && /dsReplacement\(opts\.registry, r\.key, names\)/.test(raw("mcp", "lib", "engine", "quality.js"))],
+      ["ui-code-scan: a namesake's importers count (CRIT_1 must-fix 6)", () => section.includes("its component files (`paths` — a namesake's importers count too)")],
+      ["ui-code-scan: unlocated — no component file whose importers the scan reads (CRIT_1 must-fix 4)", () => section.includes("`unlocated`: rows with no .tsx / .jsx / .js / .vue / .svelte / .astro file (a library's, an Angular or a Blade one)")],
+      ["ui-code-scan: a row named by its file is its module — any import of it", () => section.includes("A row named by its file is its **module** — any import of it counts (renamed, default, type-only, `require`, a non-component export, a namespace's member, an SFC with or without its extension)")],
+      ["ui-code-scan: …and its components through `export *` and a component folder's barrel", () => section.includes("and its components, followed through `export *` and a component folder's barrel")],
+      ["ui-code-scan: a component a file exports beside its own counts by its name", () => section.includes("a component a file exports beside its own counts by its **name**")],
+      ["ui-code-scan: an .mdx / .vue tag no import binds counted apart (RE_UNBOUND_FILE)", () => section.includes("An .mdx / .vue tag no import binds is counted apart (`unbound`)") && DS.includes("const RE_UNBOUND_FILE = /\\.(?:mdx|vue)$/i;")],
+      ["ui-code-scan: what is not seen — the note's list (CRIT_1 must-fixes 1, 6)", () => unseen.length === 5 && section.includes("Not seen (its `note`): " + unseen.join(", ") + ".")],
+      ["ui-code-scan: no import found is not unused", () => section.includes("**No import found is not unused.**")],
+      ["ui-code-scan: its limits never the report's (usage-files, deprecated-follow)", () => section.includes("Its `limits` (`usage-files`, `deprecated-follow`) never touch the report's `limits` or `inSync`.")
+        && DS.includes("code: \"usage-files\"") && DS.includes("code: \"deprecated-follow\"")],
+      ["ui-design-patterns: the Later row — per `_Deprecated:_` row, the files that still import it", () => DP.includes("Per `_Deprecated:_` row, it lists the files that still import it ([ui-code-scan.md](ui-code-scan.md)). |")],
+      ["steering-templates: the `_Deprecated:_` bullet — the project report lists the files that still import it", () => ST.includes("write a retired variant or prop without the marker. `dev-spec design-system` lists the files that still import it.")],
+    ];
+    for (const [label, check] of rows) all("1.39.0 A docs — " + label + (label.includes("not seen") ? " (got " + JSON.stringify(unseen) + ")" : ""), { holds: check });
+  }
+
   { // 1.38.0 F0c — font-size-viewport's prose: its criterion and failure (CRIT_3 §7), the three narrowings (CRIT_3 must-fix 1–3)
     // and what is not seen, in ui-code-scan.md's UI checks section (the 1.37 docs pass places it among the warn rules, read from
     // UI_RULES); tooling-reference's spec_scan row names it at its level
