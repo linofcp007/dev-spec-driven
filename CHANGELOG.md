@@ -16,8 +16,8 @@ tool, command, hook or dependency.
   Bounds, in the inventory's own `limits`: 5,000 view files / 32 MB (`ui-files`), a file's first 256K (`view-size` — a
   stylesheet longer than that, a compiled bundle, is counted there, the first such file by path named, and not checked:
   its focus styles excuse nothing, so the inventory may warn of a removal a feature report excuses by them), a line's
-  first 2,000 characters (`line-length`), a tag's 30 lines (`tag-length`). `outline-removed` keeps 1.37's rule at project scope — any focus style
-  in any file read excuses every removal —, so the removals a feature report leaves unjudged past the project's first 48
+  first 2,000 characters (`line-length`), a tag's 30 lines (`tag-length`). `outline-removed` keeps 1.37's rule at
+  project scope — any focus style in any file read excuses every removal —, so the removals a feature report leaves unjudged past the project's first 48
   stylesheets are judged here, and that "not judged" clause of the feature report and of `finish` now points to it. A
   feature report still looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a
   removal the inventory excuses by a focus style in another view file. Cost: the pass opens and parses every view and style
@@ -34,8 +34,8 @@ tool, command, hook or dependency.
 - **`_UI checks off: <rule-id> (reason)_` in design-system.md.** A line of its own (not a list item nor bold; each id bare,
   never in a code span) switches a UI check or the project fact off for the whole project — the inventory, every feature
   report (`off`: the rule, its reason, the findings it hid) and so `finish`: counted, never listed. An entry with no
-  reason in parentheses, an unknown id, another shape or one past the first 50 is not applied, and the report says why (`offIgnored`: `no-reason`, `unknown-rule`, `unreadable`,
-  `past-bound`). A design-system.md created for it alone enrols the project in the registry; without one, the inline
+  reason in parentheses, an unknown id, another shape or one past the first 50 is not applied, and the report says why
+  (`offIgnored`: `no-reason`, `unknown-rule`, `unreadable`, `past-bound`). A design-system.md created for it alone enrols the project in the registry; without one, the inline
   `ui-check-off:` comment silences one finding.
 - **A new UI check, `font-size-viewport` (warn, WCAG 1.4.4, failure F94).** Text sized in viewport units alone
   (`font-size: 5vw`, `calc(1vw + 1vh)`, `text-[5vw]`) does not grow with zoom; a size with a rem / em term does. Judged only
