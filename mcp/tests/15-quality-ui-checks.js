@@ -1170,9 +1170,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
 
   { // the checks against the read they share a text with: uiChecksOf over real-shaped files costs at most 3× rawValuesOf over the
     // same texts (CRIT_X decision 6: the text read once feeds both); finish without a registry costs at most 1.5× the feature
-    // report — it IS one (CRIT_X decision 5: measured as a ratio)
+    // report — it IS one (CRIT_X decision 5: measured as a ratio). 1,200 files (1.38.0: 120 made a ~1.3 ms denominator, and a
+    // GC pause spiked the ratio to 3–4× on 1.37 and 1.38 alike — a node:24-alpine run failed at 4.7 with both medians ~1.7)
     const texts = [];
-    for (let k = 0; k < 40; k++) {
+    for (let k = 0; k < 400; k++) {
       texts.push(["src/components/ui/button.tsx", lines("const v = cva(\"inline-flex transition-all outline-none focus-visible:ring-[3px] rounded-md\", { variants: {} })",
         "export function Button({ asChild, ...props }) {", "  const Comp = asChild ? Slot : \"button\"", "  return <Comp data-slot=\"button\" className={cn(v({ className }))} {...props} />", "}")]);
       texts.push(["src/components/Card.vue", lines("<template>", "  <div class=\"card\" @click=\"open = true\">", "    <img :src=\"cover\" :alt=\"title\" />", "  </div>", "</template>",
@@ -1191,7 +1192,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       const fin = time(() => T.designSystemFinish(g.p, g.slug)), rep = time(() => S.designSystemReport(g.p, { name: g.slug }));
       return { checks: Math.round(c / r * 100) / 100, finish: Math.round(fin / rep * 100) / 100 };
     }, (x) => x.checks <= 3 && x.finish <= 1.5);
-    all("1.37 UI checks: the checks cost at most 3× the raw-value read of the same 120 real-shaped files, and a finish without a registry at most 1.5× the feature report it runs (got " + js(s) + ")", {
+    all("1.37 UI checks: the checks cost at most 3× the raw-value read of the same 1,200 real-shaped files, and a finish without a registry at most 1.5× the feature report it runs (got " + js(s) + ")", {
       checks: () => s.checks <= 3,
       finish: () => s.finish <= 1.5,
     });

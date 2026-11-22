@@ -3007,6 +3007,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (%TEMP%/dsd-138f2-ui/MUTATIONS.md): 29 / 29 killed, each by its rule's fixture — every branch of the const (each step,
   `\d*`, the end guard, the `length:` hint in both brackets, a digit / `.`, each math function, `!?`, the `:`), the sheet's
   and the class list's tests, the prose (three) and uiProject's feed.
+- **1.38.0 release (Docker)** — the 1.37 cost check "the checks cost at most 3× the raw-value read" failed once in
+  node:24-alpine (4.7) and passed alone 3×; 1.37.0 and 1.38.0 measured in one process inside that image: medians 1.75 and
+  1.69 (node:22 1.60 and 1.79), both spiking to 3–4× — a ~1.3 ms denominator (120 files) a GC pause moves. The check now
+  reads 1,200 files (a ~13 ms denominator), its bound unchanged.
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table
