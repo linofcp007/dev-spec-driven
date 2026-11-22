@@ -130,8 +130,9 @@ function roundsTo(hsl, [r, g, b]) {
 }
 // (1.38.0 review 2) The pair's rounding both ways: the triple rounds to the HSL as written (roundsTo), OR the HSL as written
 // paints the triple at 8 bits a channel (each within half a unit of 1/255) — cal.com's hsla(220, 14%, 94%, 1) paints #eeeff2,
-// whose own HSL (225 13.3% 94.1%) does not round to it.
-const roundTrip = (hsl, rgb) => hsl.paint.every((c, i) => Math.abs(c - rgb[i]) * 255 <= 0.5 + 1e-9) || roundsTo(hsl, rgb);
+// whose own HSL (225 13.3% 94.1%) does not round to it. The triple is taken as the 8-bit colour it paints (review 3: an rgb()
+// with decimals — rgb(237.1 239 242) paints #edeff2, never #eeeff2; a hex is exact either way).
+const roundTrip = (hsl, rgb) => hsl.paint.every((c, i) => Math.abs(c * 255 - Math.round(rgb[i] * 255)) <= 0.5 + 1e-9) || roundsTo(hsl, rgb);
 // Two parsed colours (alphas alike) at ΔEOK d are the same colour: within their pair's tolerance — and an HSL one against a
 // hex / rgb one round-trips. (The tolerance stays the ceiling, the round trip only narrows it: 479 of the 16.7M hexes are
 // farther than 0.011 from their own integer HSL — near black, #020200 = hsl(60 100% 0%) at 0.084; saturated yellows to 0.013

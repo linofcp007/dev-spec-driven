@@ -2719,6 +2719,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   side's sRGB triple against the HSL's written precision) is 1.39's backlog. Lesson: a round trip is checked BOTH ways —
   the parent is the oracle in each direction (review 1's fix measured hex → HSL alone; review 2 ran every HSL token → its
   painted hex) —, and a new direction re-runs the old mutants: it absorbs the fixtures that only the old one decided.
+- **1.38.0 review 3** (tokens, two LOWs fixed without a round) — R3-T1: the painted check put its half-unit window around
+  the HSL's exact paint, not the 8-bit colour an rgb() with decimals paints, so rgb(237.1 239 242) (#edeff2) was
+  `hsla(220, 14%, 94%, 1)`'s token while #edeff2 itself was near, and rgb(238.4 239 242) (#eeeff2) was near — the triple is
+  now taken at 8 bits (`Math.round`), a hex unchanged (the reviewer's corpora — every integer HSL token, cal.com, Radix,
+  shadcn's pairs — identical). R3-T2: no fixture pinned the painted check's blue channel (`#eeeff3` → near now). Fixtures
+  `paint.decimals` / `paint.blue`; the old window and a blue-blind check each fail them.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four

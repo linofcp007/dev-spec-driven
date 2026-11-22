@@ -115,7 +115,11 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       // off) is not; the ceiling holds
       paint: { hex: pair("#eeeff2", "hsla(220, 14%, 94%, 1)"), rgb: pair("rgb(238, 239, 242)", "hsla(220, 14%, 94%, 1)"), radix: pair("#ffb224", "hsl(39, 100%, 57.0%)"),
         raw: pair("hsla(220, 14%, 94%, 1)", "#eeeff2"), half: [pair("#191919", "hsl(0 0% 10.0%)"), pair("#1a1a1a", "hsl(0 0% 10.0%)")],
-        clamp: pair("#ff2b00", "hsl(10.2 150% 50%)"), next: pair("#edeff2", "hsla(220, 14%, 94%, 1)"), ceiling: pair("#000005", "hsl(236 93% 1%)") },
+        clamp: pair("#ff2b00", "hsl(10.2 150% 50%)"), next: pair("#edeff2", "hsla(220, 14%, 94%, 1)"), ceiling: pair("#000005", "hsl(236 93% 1%)"),
+        // (review 3: an rgb() with decimals is the 8-bit colour it paints — 237.1 paints #edeff2, 238.4 the token's own #eeeff2;
+        // the blue channel pinned too)
+        decimals: [pair("rgb(237.1 239 242)", "hsla(220, 14%, 94%, 1)"), pair("rgb(238.4 239 242)", "hsla(220, 14%, 94%, 1)")],
+        blue: pair("#eeeff3", "hsla(220, 14%, 94%, 1)") },
       // (review 2: from here, pairs the HSL does NOT paint — the hex's rounding alone decides; `.6turn` is 216° ± 18°)
       exp: pair("#05787d", "hsl(1.83e2 92% 25%)"), turns: pair("#05787d", "hsl(903 92% 25%)"), turnHalf: pair("#3b82f6", "hsl(.6turn 91.2% 59.8%)"),
       moot: { grey: pair("#818181", "hsl(217 0% 51%)"), white: pair("#fefefe", "hsl(210 40% 100%)"), black: pair("#000", "hsl(0 100% 0%)") },
@@ -132,7 +136,8 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       cal: () => kind(got.cal) === "near" && got.cal.near.token === "--cal-bg-subtle" && got.rawHsl === "near" && got.rgbSide === "near",
       keep: () => got.keep.every((k) => k === "token"),
       prec: () => js(got.prec) === js({ s: ["near", "near"], l: "near", h: "near" }),
-      paint: () => js(got.paint) === js({ hex: "token", rgb: "token", radix: "token", raw: "token", half: ["token", "token"], clamp: "token", next: "near", ceiling: "near" }),
+      paint: () => js(got.paint) === js({ hex: "token", rgb: "token", radix: "token", raw: "token", half: ["token", "token"], clamp: "token", next: "near", ceiling: "near",
+        decimals: ["near", "token"], blue: "near" }),
       exp: () => got.exp === "token" && got.turns === "token" && got.turnHalf === "token",
       moot: () => js(got.moot) === js({ grey: "token", white: "token", black: "token" }),
       hue: () => got.hue.r === "token" && got.hue.g.every((k) => k === "token") && got.wrap === "token" && got.eps === "token",
