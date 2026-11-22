@@ -40,9 +40,10 @@ const UI_FILE = "ui.md"; // (the +ui steering file — TRACK_STEERING.ui)
 // --- ui.md's line ----------------------------------------------------------------------------------------------------------------
 // `- Breakpoints: …` — a list item (`-`, `*`, `+`), the label in any case, emphasis marks around it (`- **Breakpoints:** …`)
 const RE_UI_LINE = /^[ \t]*[-*+][ \t]+[*_]{0,2}breakpoints[*_]{0,2}[ \t]*:(.*)$/i;
-// the value's end: the first `·` no length follows (blanks skipped) — `320 · 390 · 768 px`, as the CLI prints the widths, is a
-// list; the stub's ` · text expansion …` (RTL · locale formats) ends it
-const RE_UI_END = /·(?![ \t]*\.?\d)/;
+// the value's end: the first `·` no length follows (blanks skipped — a no-break space too, U+00A0 / U+202F, the ones a thousands
+// group takes: 1.39, R2-BS-3) — `320 · 390 · 768 px`, as the CLI prints the widths, is a list; the stub's ` · text expansion …`
+// (RTL · locale formats) ends it
+const RE_UI_END = /·(?![ \t\u00a0\u202f]*\.?\d)/;
 const RE_UI_SLOT = /\[[^\]]*(?:\]|$)/g; // the stub's `[360 / 768 / 1280 px]` — what a `[` opens, closed or not
 // a length: a thousands group (`1.280`, `1,440`, `2 560` with a no-break space — one digit before it, a width being ≤ 3840, three
 // after; never a plain blank: `360 768 1280` is a list) or a number — then px / rem / em, or none

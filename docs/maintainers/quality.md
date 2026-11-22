@@ -1099,9 +1099,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   - `ui.md` — `.specs/steering/ui.md`'s FIRST `- Breakpoints:` line: a list item (`-`, `*`, `+`), the label in any case, `**` /
     `_` around it; outside the front matter, fenced / indented code and HTML comments — read line for line (`commentLines`,
     then `codeBlockLines` over what it leaves), so `at` is the file's own line. Its value runs to the first `·` that no length
-    follows (`RE_UI_END`: blanks skipped, then a digit or `.` and a digit — `320 · 390 · 768 px`, the widths as the CLI prints
-    them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it; so a note led by a number reads as more
-    widths and a name before a width ends the list — `sm 640 · md 768` is 640 —, as a no-break space after the `·` does:
+    follows (`RE_UI_END`: blanks skipped — a space, a tab and, 1.39 (R2-BS-3), the two no-break spaces a thousands group
+    takes, U+00A0 / U+202F; never another space character —, then a digit or `.` and a digit — `320 · 390 · 768 px`, the
+    widths as the CLI prints them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it; so a note led by
+    a number reads as more widths and a name before a width ends the list — `sm 640 · md 768` is 640:
     ui-responsive.md says to start a note with a word and to write `640 (sm) · 768 (md)`) and is read up to `BP_LINE` (200)
     characters — past them `breakpoint-line` {read, at}, and a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot,
     closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — and so does a filled value
@@ -2740,7 +2741,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   clone reports, 670 sampled sheets through the observer): only `partial` shapes differ — the clones with an adding theme
   (shadcn v4, cal.com coss-ui, shadcn-svelte, magicui) [320, 768, 1024, 1440, 1600, 2000] where 1.38 had 390 and said 1600,
   and 161 of the theme sample's sheets, each 390 out; the rest of every report identical. `cliOutput.bpFrom.partial` reworded
-  (the declared widths first, then the default set where room is left).
+  (the declared widths first, then the default set where room is left). R2-BS-3: `RE_UI_END`'s blank class takes U+00A0 and
+  U+202F (the ones `RE_UI_LENGTH`'s thousands group takes — French typography puts the narrow one before and after `·`),
+  written as escapes; `\s` would take U+2009 and line ends too (the fixture's thin space ends the list). R2-BS-2's
+  number-led note stays prose (ui-responsive.md item 1): telling `· 1200 px max content width` from `360 phone · 768 tablet`
+  is meaning, not syntax, and a lengths-only narrowing would end `640 (sm) · 768 (md)`, the form the docs recommend.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four

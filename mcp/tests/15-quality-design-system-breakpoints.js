@@ -103,6 +103,23 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // BP-ui-nbsp (1.39, R2-BS-3 — N1a, N1b, N2): a no-break space after the `·` (U+00A0, or U+202F, the narrow one French
+    // typography puts there) continues the list like a blank — the two a thousands group already takes; a word after it still ends
+    // the value, and so does a line break's absence of any (the class holds blanks, never `\s`'s line ends or any character)
+    const nb = String.fromCharCode(0xa0), nn = String.fromCharCode(0x202f);
+    const a0 = report("- Breakpoints: 360 ·" + nb + "768 ·" + nb + "1280 px\n"), af = report("- Breakpoints: 360 ·" + nn + "768 ·" + nn + "1280 px\n");
+    const mixed = report("- Breakpoints: 360 ·" + nb + nn + " 768 px ·" + nb + "text 1280 px\n"), word = report("- Breakpoints: 480 px ·" + nb + "max width 1200 px\n");
+    const other = report("- Breakpoints: 480 px ·" + String.fromCharCode(0x2009) + "960 px\n"); // (a thin space is no blank of the class)
+    all("1.39 breakpoints (ui.md — R2-BS-3): a no-break space (U+00A0 or U+202F) after a `·` continues the list as a blank does; a word after it still ends the value; another space character (U+2009) is no blank of the class (got " +
+      js({ a0: a0.widths, af: af.widths, mixed: mixed.widths, word: word.widths, other: other.widths }) + ")", {
+      nbsp: () => widths(a0) === js([320, 360, 768, 1280]) && a0.from === "ui.md",
+      narrow: () => widths(af) === js([320, 360, 768, 1280]),
+      mixed: () => widths(mixed) === js([320, 360, 768]),
+      word: () => widths(word) === js([320, 480]),
+      other: () => widths(other) === js([320, 480]),
+    });
+  }
+
   { // BP-ui-bound (U10): ui.md's value is read up to 200 characters, said; a number the bound cuts is no number
     // (the value is what follows the colon, its blank too: 1600 starts at its 208th character; 12800 straddles the bound, 1280
     // before it; 1280 ends right at it, a blank after it)
