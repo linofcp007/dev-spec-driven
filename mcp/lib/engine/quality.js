@@ -23,7 +23,8 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
-  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf;
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf,
+  naAnswer, uiStateNames; // markdown.js — 1.38 doctor's ui-states (an n/a cell; the state labels of every language, from the corpus)
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -35,7 +36,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
-  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf } = E); }
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf, naAnswer, uiStateNames } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -1142,6 +1143,20 @@ const DS_BRIEF_MAX = 12; // components the brief quotes…
 const DS_BRIEF_CHARS = 1500; // …and their size
 const DS_NAME_MAX = 40; // a longer name is compared with none (no component is called that)
 const DS_NEAR_ROWS = 30; // usage rows that pay a name comparison against the registry (past them: the exact name only)
+// (1.38) The units table — the team's convention of the units each property takes (a report, never a default): its first
+// header cell names properties (RE_DS_PROPERTY_HEAD), a column whose header STARTS with Units holds CSS units (RE_DS_COL.units
+// — by its header ONLY, never by place; `Allowed units` is none). A table so headed whose cells hold no CSS unit is not one (a
+// component's props table: `| Property |
+// Type | Default |`). CSS_UNITS: the CSS Values 4 lengths, `%` and `fr` — a closed list; another word of a units cell is dropped
+// (`rems`), and a row left with none is not read (`unread`, by its first cell).
+const RE_DS_PROPERTY_HEAD = /^(?:propert(?:y|ies)|propriedades?|propiedad(?:es)?)$/i;
+const CSS_UNITS = new Set(["px", "cm", "mm", "q", "in", "pt", "pc", "em", "rem", "ex", "rex", "cap", "rcap", "ch", "rch", "ic", "ric", "lh", "rlh",
+  "vw", "vh", "vi", "vb", "vmin", "vmax", "svw", "svh", "svi", "svb", "svmin", "svmax", "lvw", "lvh", "lvi", "lvb", "lvmin", "lvmax",
+  "dvw", "dvh", "dvi", "dvb", "dvmin", "dvmax", "cqw", "cqh", "cqi", "cqb", "cqmin", "cqmax", "%", "fr"]);
+const DS_UNIT_ROWS = 50; // units table rows read (past them: `past`, a count)
+const RE_DS_UNIT_PROP = /^[a-z](?:[a-z-]*[a-z])?(?:-\*)?$/; // a property, or `prefix-*` (never a custom property: `--gap`)
+// a units table cell's words, lower-cased: code spans and emphasis out (never the `*` of `margin-*`)
+const dsUnitWords = (c) => String(c == null ? "" : c).slice(0, DS_CELL_MAX * 2).replace(/[`_]|(?<!-)\*/g, " ").toLowerCase().split(/[\s,;·/|]+/).filter(Boolean);
 // A table's first header cell names what its rows are (EN / PT / ES); the other columns are found by their header, else by place.
 const RE_DS_COMPONENT_HEAD = /^component(?:e|es|s)?$/i;
 const RE_DS_TOKEN_HEAD = /^tokens?$/i;
@@ -1150,12 +1165,28 @@ const RE_DS_COL = {
   variants: /^varia/i,
   value: /^val/i,
   use: /^(?:use|usage|uso|utiliza|para)/i,
+  units: /^(?:units?|unidad(?:es?)?)\b/i, // (1.38: the units table's — EN / PT / ES)
 };
 // `_Token sources: a, b_` / `_Libraries: a, b_` — a line of its own, English-stable like the glossary's _Avoid:_; the value runs
-// to the line's end (a path may hold an underscore or a blank), its closing "_" dropped.
-const RE_DS_MARKER = /^[ \t]*_(Token sources|Libraries):[ \t]*(.*)$/gim;
+// to the line's end (a path may hold an underscore or a blank), its closing "_" dropped. (1.38) `_UI checks off: <rule-id>
+// (<reason>), …_` — the UI checks the project switches off (dsChecksOff).
+const RE_DS_MARKER = /^[ \t]*_(Token sources|Libraries|UI checks off):[ \t]*(.*)$/gim;
 const DS_MARKER_LINES = 100; // marker lines read (a registry has two)…
 const DS_MARKER_ENTRIES = 50; // …and the entries kept of each kind
+// (1.38) A `_UI checks off:_` line's entries (dsEntries: cut at `,` / `;` outside parentheses) into `out`: `<id> (<reason>)` →
+// { id (folded to lower case), reason (what the outer parentheses hold, commas too, trimmed, cut at DS_CELL_MAX — "" when
+// none or empty) }; an entry of another shape → { entry (as written, cut) }; past DS_MARKER_ENTRIES entries ONE more →
+// { entry, past: true, read } and no further one. This file names no rule id: engine/ui-checks.js uiOff validates them.
+const RE_DS_OFF_ENTRY = /^([a-z]+(?:-[a-z]+)*)\s*(?:\((.*)\))?$/i;
+function dsChecksOff(value, out) {
+  for (const w0 of dsEntries(value)) {
+    const w = w0.trim();
+    if (!w || out.some((e) => e.past)) continue;
+    if (out.length >= DS_MARKER_ENTRIES) { out.push({ entry: w.slice(0, DS_CELL_MAX), past: true, read: DS_MARKER_ENTRIES }); continue; }
+    const e = RE_DS_OFF_ENTRY.exec(w);
+    out.push(e ? { id: e[1].toLowerCase(), reason: (e[2] || "").trim().slice(0, DS_CELL_MAX) } : { entry: w.slice(0, DS_CELL_MAX) });
+  }
+}
 // A LIBRARY entry that names nothing, by its FIRST word (EN / PT / ES): "none", "none yet", "nenhuma ainda", "sin
 // bibliotecas", "n/a (custom only)", "TBD" — a nicety for what the brief and the report show, never what the check stands on
 // (no word list is complete: "por definir", "custom only" — designSystemCheck stands on `packaged`: a declared library that
@@ -1253,11 +1284,13 @@ function mdTables(text) {
 // libraries, packaged (it lists no component and declares a library that IS one — dsPackaged), total: { components, tokens }
 // (the rows the file holds), truncated, deprecated (1.37, a Map: the key of each name marked `_Deprecated:_` → its replacement as
 // the marker writes it, "" when it names no other listed component that is not deprecated itself — the names read in full only:
-// 1.37.0 review 1, doctor and the brief read the same rows) }. A row whose name is a slot ("[Button]"), blank or generic is none;
+// 1.37.0 review 1, doctor and the brief read the same rows), checksOff (1.38, `_UI checks off:_`'s entries — dsChecksOff) }. A
+// row whose name is a slot ("[Button]"), blank or generic is none;
 // a name listed twice counts once (the first row) — but deprecated is a property of the NAME: a later row of it carrying the
 // marker marks it (review 1), its text read from that row. Every component / token table of the file is read (finish appends a
 // table when the file doesn't end in one that can take its rows). `from`: the row's `_From: <feature>_` (left out of `notes`);
-// the `_Deprecated:_` marker is cut out of whichever cell holds it and shown FIRST in `notes`, whole.
+// the `_Deprecated:_` marker is cut out of whichever cell holds it and shown FIRST in `notes`, whole. 1.38: `tokenValues` (a Map:
+// every token row's value by its lower-cased name, past the cap too) and `units` (the units table — dsUnitsTable — or null).
 function designSystemRegistry(root) {
   const file = path.join(root, "steering", DESIGN_SYSTEM_FILE);
   const raw = readIfExists(file);
@@ -1265,10 +1298,15 @@ function designSystemRegistry(root) {
   const body = steeringFrontMatter(raw).body;
   const components = [], tokens = [], keys = new Set(), origins = new Map(), seenT = new Set(), deprecated = new Map(), entries = new Map();
   const total = { components: 0, tokens: 0 };
+  const tokenValues = new Map(); // (1.38) every token row's value by its lower-cased name, past the cap too — drift compares them all
+  let units = null;
   for (const t of mdTables(body)) {
     const head = dsCell(t.header[0] || "");
     const isC = RE_DS_COMPONENT_HEAD.test(head), isT = !isC && RE_DS_TOKEN_HEAD.test(head);
-    if (!isC && !isT) continue;
+    if (!isC && !isT) {
+      if (RE_DS_PROPERTY_HEAD.test(head)) units = dsUnitsTable(t, units);
+      continue;
+    }
     const col = (re, fallback) => { const i = t.header.findIndex((h, k) => k > 0 && re.test(dsCell(h))); return i > 0 ? i : fallback; };
     const cols = isC ? { a: col(RE_DS_COL.path, 1), b: col(RE_DS_COL.variants, 2) } : { a: col(RE_DS_COL.value, 1), b: col(RE_DS_COL.use, 2) };
     for (const r of t.rows) {
@@ -1307,6 +1345,7 @@ function designSystemRegistry(root) {
         if (seenT.has(key)) continue;
         seenT.add(key);
         total.tokens++;
+        tokenValues.set(key, cell(cols.a));
         if (tokens.length < DS_MAX_TOKENS) tokens.push({ name: token, value: cell(cols.a), use: cell(cols.b) });
       }
     }
@@ -1314,7 +1353,7 @@ function designSystemRegistry(root) {
   // (a deprecated row's replacement: the first component the file lists that its marker's text names and that is not deprecated
   // itself — review 1: `use Popup` when Popup is retired too names none, the next one named is — once every name is known)
   for (const [key, text] of deprecated) deprecated.set(key, (dsNameIn(text, DS_DEPRECATED_WORDS, (k) => keys.has(k) && !deprecated.has(k)) || { text: "" }).text);
-  const lists = { "token sources": [], libraries: [] };
+  const lists = { "token sources": [], libraries: [] }, checksOff = [];
   const weak = new Set(); // the libraries' WEAK aliases, lower-cased (dsAlias): cited only in a row's parenthesis
   let deps = null; // the project's package.json dependencies — read once, and only when a marker asks
   const dependencies = () => deps || (deps = projectDependencies(path.dirname(root)));
@@ -1326,6 +1365,7 @@ function designSystemRegistry(root) {
     // a BLANK follows that `_`, where `_sass/_variables.scss` is a path — review 5, the seed's own line was misread)
     const value = m[2].slice(0, 4000).trim().replace(/^_[ \t]+/, "").replace(/_$/, "").trim();
     if (/^\[.*\]$/.test(value)) continue; // the stub's slot, never filled in
+    if (!into) { dsChecksOff(value, checksOff); continue; } // (1.38: `_UI checks off:_`)
     const add = (w) => { if (w && w.length <= DS_CELL_MAX && !into.includes(w) && into.length < DS_MARKER_ENTRIES) into.push(w); };
     for (const w0 of dsEntries(value)) {
       if (into.length >= DS_MARKER_ENTRIES) break;
@@ -1379,7 +1419,27 @@ function designSystemRegistry(root) {
   // review 9: `Design System (acme-ui)` with no row refused `Reuse | acme-ui Button`)
   const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(lists.libraries.filter((l) => !weak.has(l.toLowerCase())), dependencies);
   return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, weakLibraries: weak,
-    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length, deprecated };
+    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length, deprecated, tokenValues, units,
+    checksOff }; // (1.38: `_UI checks off:_` — dsChecksOff's entries)
+}
+// (1.38) A table whose first header cell names properties, into the registry's units table → `into` (or null: no units column,
+// or no cell of it holds a CSS unit — not a units table) { rows: [{ props (`margin-*`, `font-size`), units }], unread (the first
+// cell of each row read with no CSS unit or no property), past (rows past DS_UNIT_ROWS: counted, not read) }. Several tables
+// add up.
+function dsUnitsTable(t, into) {
+  const at = t.header.findIndex((h, k) => k > 0 && RE_DS_COL.units.test(dsCell(h))); // (none: -1 — no row reads a unit, no table)
+  const rows = [], unread = [];
+  for (const r of t.rows) {
+    if (dsSlot(r[0] || "")) continue;
+    const props = dsUnitWords(r[0]).filter((w) => RE_DS_UNIT_PROP.test(w));
+    const units = [...new Set(dsUnitWords(r[at]).filter((w) => CSS_UNITS.has(w)))];
+    if (props.length && units.length) rows.push({ props, units }); else unread.push(dsCell(r[0]));
+  }
+  if (!rows.length) return into;
+  const u = into || { rows: [], unread: [], past: 0 };
+  for (const r of rows) if (u.rows.length + u.unread.length < DS_UNIT_ROWS) u.rows.push(r); else u.past++;
+  for (const n of unread) if (u.rows.length + u.unread.length < DS_UNIT_ROWS) u.unread.push(n); else u.past++;
+  return u;
 }
 // A text outside its parentheses, nested ones too (an unclosed one hides what follows it; a `)` nothing opened stays) —
 // and what its CLOSED parentheses and square brackets hold, nested ones with them (an unclosed one holds nothing:
@@ -2055,6 +2115,130 @@ function designSystemDeprecatedCheck(design, lang, opts = {}) {
   if (!items.length) return { id, status: "pass", detail: Q.dsDeprecatedNone };
   const shown = items.slice(0, 6).concat(items.length > 6 ? [Q.xacMore(items.length - 6)] : []);
   return { id, status: "warn", detail: Q.dsDeprecated(items.length, shown.join("; ")) };
+}
+
+// --- 1.38 doctor's ui-states: [UI] UI States' state matrix -------------------------------------------------------------------------
+// The matrix is the scaffold's own table, recognised by its a11y header cell — a header cell whose words ARE quality.uiStateA11y's in
+// any language ("Announced · focus", "Anunciado · foco"; from the corpus, markdown.js uiStateNames: an English doctor loads no other
+// language) —, never by its rows: a state machine (State | Event | Next state) or a contract table carries no such header. The
+// views are the columns strictly between the first (the state) and that cell — one whose header holds no letter or digit, or is
+// a slot or a generic word, is none —; the a11y column and every column after it are never judged (the critic and the reviewer
+// judge what they say). Only the section ui-sections reads (extractSection), its tables outside comments and fences (mdTables).
+// Bounded: US_TABLES tables, US_ROWS rows each, US_VIEWS view columns, every cell cut to US_CELL before any regex — a bound that
+// drops input says so (usTruncated).
+const UI_STATES_CHECK = "ui-states";
+const US_TABLES = 10;
+const US_ROWS = 60;
+const US_VIEWS = 12;
+const US_CELL = 400;
+const US_SHOWN = 5; // states named per view (or per no-row item), the rest counted
+// a text's words as the matrix compares them: accents folded, lower case, letters and digits
+const usWords = (s) => String(s).slice(0, US_CELL).normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+let US_VOCAB = null, US_VOCAB_OF = null;
+function usVocab() {
+  const names = uiStateNames();
+  if (US_VOCAB_OF !== names) {
+    US_VOCAB = { labels: names.labels.map(([id, l]) => [id, usWords(l)]).filter(([, w]) => w.length), a11y: new Set(names.a11y.map((l) => usWords(l).join(" "))) };
+    US_VOCAB_OF = names;
+  }
+  return US_VOCAB;
+}
+// The state a row's first cell names → its id | null: the cell's words begin with a label's (any language), the label's last word
+// perhaps the start of a longer one — `Errors`, `Error — recoverable`, `Loading (skeleton)`, `Exito`. No synonym: a renamed row
+// ("Spinner") names none, and the warn names the label to use.
+function uiStateOf(cell, vocab) {
+  const w = usWords(cell);
+  for (const [id, l] of vocab.labels) {
+    if (w.length < l.length) continue;
+    let k = 0;
+    while (k < l.length - 1 && w[k] === l[k]) k++;
+    if (k === l.length - 1 && w[k].startsWith(l[k])) return id;
+  }
+  return null;
+}
+// A view cell → "open" (nothing in it, a slot, a generic word — TBD, "—" —, an n/a with a reason under four words) · "na" (n/a —
+// a reason of four words or more: markdown.js naAnswer) · "designed" (anything else — what it says is the critic's to judge).
+function uiStateCell(c0) {
+  const c = String(c0 == null ? "" : c0).slice(0, US_CELL).trim();
+  if (dsSlot(c)) return "open";
+  const na = naAnswer([c]);
+  return na === "na" ? "na" : na ? "open" : "designed";
+}
+// [UI] UI States' matrices → null (no such section) | { tables: [{ index (the table's place in the section, from 1), views (their
+// header cells), gaps: [{ code: "no-row", id } | { code: "open", id, view (its place in views) }] }], truncated: { tables, rows,
+// views } }. `ids`: the states asked, in order (the feature language's uiStateLabels keys). Several rows naming one state are
+// joined: a view is answered when one of them answers it. A row whose ONLY view cell holding a letter or digit is an n/a answers
+// every view (one n/a says why the state does not exist here).
+function uiStateMatrix(design, ids) {
+  const sec = (trackSectionTable("ui") || []).find((s) => s.name === "UI States");
+  const body = sec ? extractSection(design || "", sec.syn, trackMarker("ui"), sec.loose) : null;
+  if (body == null) return null;
+  const vocab = usVocab();
+  const found = mdTables(body);
+  const truncated = { tables: found.length > US_TABLES, rows: false, views: false };
+  const tables = [];
+  found.slice(0, US_TABLES).forEach((t, i) => {
+    const a = t.header.findIndex((h) => vocab.a11y.has(usWords(h).join(" ")));
+    let cols = [];
+    for (let k = 1; k < a; k++) if (!dsSlot(t.header[k])) cols.push(k);
+    if (!cols.length) return;
+    if (cols.length > US_VIEWS) { truncated.views = true; cols = cols.slice(0, US_VIEWS); }
+    if (t.rows.length > US_ROWS) truncated.rows = true;
+    const answered = new Map(); // state id → the view columns answered
+    for (const r of t.rows.slice(0, US_ROWS)) {
+      const id = uiStateOf(r[0] || "", vocab);
+      if (!id) continue;
+      const set = answered.get(id) || answered.set(id, new Set()).get(id);
+      const kinds = cols.map((k) => uiStateCell(r[k]));
+      const worded = cols.map((k) => RE_DS_WORD.test(String(r[k] == null ? "" : r[k]).slice(0, US_CELL)));
+      const rowNa = worded.filter(Boolean).length === 1 && kinds[worded.indexOf(true)] === "na";
+      cols.forEach((k, j) => { if (rowNa || kinds[j] !== "open") set.add(k); });
+    }
+    const gaps = [];
+    for (const id of ids) {
+      const set = answered.get(id);
+      if (!set) { gaps.push({ code: "no-row", id }); continue; }
+      cols.forEach((k, j) => { if (!set.has(k)) gaps.push({ code: "open", id, view: j }); });
+    }
+    tables.push({ index: i + 1, views: cols.map((k) => dsCell(t.header[k])), gaps });
+  });
+  return { tables, truncated };
+}
+// doctor's ui-states (1.38) over an (active) design of a +ui feature → { id, status, detail, state }. States: unfilled (the section
+// missing, still the scaffold — its untouched matrix included — or holding nothing: ui-sections and the placeholder gate own it) ·
+// na (the section's ONE line "n/a — <reason>") · no-matrix (no anchored table: a prose matrix is not checked) · ok · open (a gap: a
+// listed state with no row, or a view whose cell is neither designed nor n/a — a WARN at size m / l and with no size) · small (the
+// same at size s: a pass whose note names the gaps). Never a fail, never an approval check, no stamp: no design before 1.38 holds the
+// anchored header. opts: { size }.
+function uiStatesCheck(design, lang, opts = {}) {
+  const Q = i18n.msg(lang).quality, id = UI_STATES_CHECK;
+  const out = (status, detail, state) => ({ id, status, detail, state });
+  const sec = (trackSectionTable("ui") || []).find((s) => s.name === "UI States");
+  const st = sec ? sectionState(design || "", [sec], trackMarker("ui"), { size: "m", lang })[0].status : "missing";
+  if (st === "missing" || st === "unfilled" || st === "template") return out("pass", Q.usUnfilled, "unfilled");
+  if (st === "na") return out("pass", Q.usNa, "na");
+  const ids = Object.keys(Q.uiStateLabels);
+  const m = uiStateMatrix(design, ids);
+  const cut = m && (m.truncated.tables || m.truncated.rows || m.truncated.views) ? "; " + Q.usTruncated(US_TABLES, US_ROWS, US_VIEWS) : "";
+  if (!m || !m.tables.length) return out("pass", Q.usNone + cut, "no-matrix");
+  const named = (labels) => labels.slice(0, US_SHOWN).concat(labels.length > US_SHOWN ? [Q.xacMore(labels.length - US_SHOWN)] : []).join(", ");
+  const items = [];
+  let n = 0, views = 0;
+  for (const t of m.tables) {
+    const parts = [];
+    const noRow = t.gaps.filter((g) => g.code === "no-row").map((g) => Q.uiStateLabels[g.id]);
+    if (noRow.length) parts.push(Q.usNoRow(named(noRow)));
+    t.views.forEach((v, j) => {
+      const open = t.gaps.filter((g) => g.code === "open" && g.view === j).map((g) => Q.uiStateLabels[g.id]);
+      if (open.length) parts.push(Q.usView(v, named(open)));
+    });
+    items.push(...(m.tables.length > 1 ? parts.map((p) => Q.usTable(t.index, p)) : parts));
+    n += t.gaps.length;
+    views += t.views.length;
+  }
+  if (!n) return out("pass", Q.usOk(views, ids.length) + cut, "ok");
+  const d = Q.usOpen(n, items.slice(0, 6).concat(items.length > 6 ? [Q.xacMore(items.length - 6)] : []).join("; ")) + cut;
+  return opts.size === "s" ? out("pass", Q.usSmall(d), "small") : out("warn", d, "open");
 }
 // The task brief's "Design system" part, for a task that builds what the user sees (tasks.js uiTask) → null (no registry, or it
 // lists nothing) | { file (the registry, as given), components: [{ kind, name, path, variants, notes, why }] (the design's rows
@@ -2946,4 +3130,5 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  designSystemDeprecatedCheck, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain, __link };
+  designSystemDeprecatedCheck, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,
+  UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, __link };

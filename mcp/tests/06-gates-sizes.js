@@ -110,7 +110,9 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     // `_Implements: [the test file T-01 goes in]_` — guard tests protects the red test the tick records; it was 5c72f8a5… in 1.35)
     // (and in 1.37, once for both lines: [UI] UI States gained a third line, the worst-case row, and [UI] Design System Usage a
     // last one, the contracts' optional `## [UI] Component Contracts` section — each appended, never edited; it was 66058013… in 1.36)
-    ok(got === "743f91a013ed12dc009a30c007ea5dc55564d771" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
+    // (and in 1.38, once: [UI] UI States gained a fourth line and the State | View | Announced · focus matrix, a row per state —
+    // appended; it was 743f91a0… in 1.37)
+    ok(got === "c44d30541e9e9ac714468910a1dbc00e87a9c280" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
       has(f.dir, "classification.md") && same,
       "1.21 F5: no size = the 1.20 scaffolds byte for byte (but the bugfix tasks.md, the short form on purpose) — the pinned sha1 of every no-size builder output of every pre-1.21 track combination (EN / PT / ES), and a create without a size writes no size key and the builders' own text (got " +
       JSON.stringify({ got, n: keys.length, state: stateOf(f.dir).size, same }) + ")");

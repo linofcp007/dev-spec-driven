@@ -90,7 +90,7 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
   key; the version check / unique constraint the design names for concurrent updates.
 - **+api:** the handlers return exactly what the contract file documents (status codes, problem+json errors with stable
   codes, headers); nothing breaking inside a version; Idempotency-Key and If-Match honoured where the design says.
-- **+ui:** design-system components and tokens (no one-off styles); every state of the design's state matrix handled; keyboard
+- **+ui:** design-system components and tokens (no one-off styles); every state of the design's state matrix handled, with the announcement and focus its row names; keyboard
   operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean. When
   the brief has a **Design system** part: the components the diff uses are the ones it lists — a component built beside a
   listed one is **Important** (reuse or extend the listed one), and so is a hard-coded colour, spacing or font size the diff
@@ -203,7 +203,8 @@ wrote the same helper). Decisions in `decisions.md` that the code contradicts ar
 findings, and so is a written rule the branch breaks or a fix its rewritten lines undo (§5, over the whole branch:
 MERGE_BASE is its BASE). On a +ui feature the dispatch may carry the design-system scan (`spec_scan {designSystem: true,
 name}` — the controller runs it): its `problems` (a design row that disagrees with the registry) and its `raw` values
-(`file:line value` — at most the first 50 of `total`; a colour names the registry token of that value) are **candidates** —
+(`file:line value` — at most the first 50 of `total`; `token` names the scale's token the value is; `near` is a hint — a
+close colour, not the token's) are **candidates** —
 one this branch added where the registry has a token is a finding, one a task report lists under "Raw values kept on purpose" is not. Rate each Critical /
 Important finding. Triage the ledger's deferred minors, unconfirmed
 findings and parked findings: which must be fixed before merge, which can ship.

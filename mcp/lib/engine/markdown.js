@@ -590,8 +590,16 @@ function sectionState(design, sections, marker, opts = {}) {
 // user edited is theirs. Fenced code is the user's too (no track block holds a fence: a section answered by a
 // ```json schema, an OpenAPI ```yaml or a ```mermaid diagram read as "only the template's guidance"): its content lines count,
 // its fence lines don't. A pack's guidance line holding the feature's {{name}} / {{slug}} (the scaffold filled them in) is a
-// LINEAR wildcard (wildcardMatch, the project templates' rule — never a regex built from template text).
-const sectionLineKey = (s) => String(s).replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
+// LINEAR wildcard (wildcardMatch, the project templates' rule — never a regex built from template text). A line holding `|`
+// (a table row, a pipe-less GFM one too) is keyed by its NON-EMPTY cells, trimmed, on both sides (1.38, CRIT_4 must-fix 2): a
+// blank column added (a second view), one deleted (the a11y column), compact pipes (`|Loading|||`) or the leading pipes
+// dropped (`Loading | |`) leave the scaffold's rows template — an untouched state matrix never reads as written at m / l.
+// (No template line holds a `|` but a table row.)
+const sectionLineKey = (s) => {
+  const t = String(s).replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/, "");
+  const key = t.includes("|") ? "| " + tableCells(t).filter(Boolean).join(" | ") + " |" : t;
+  return key.replace(/\s+/g, " ").trim().toLowerCase();
+};
 let SECTION_TEMPLATE_LINES = null; // process-wide: the built-in track blocks (EN / PT / ES)
 let SECTION_TEMPLATE_LINES_BR = null; // … their pt-BR twins, built on the first pt-BR feature
 const PACK_SECTION_LINES = new WeakMap(); // a call's pack registry → its packs' design-block lines (every language): { set, wild }
@@ -752,6 +760,32 @@ function naAnswer(own) {
   if (!m) return null;
   const words = own[0].slice(m[0].length).match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || [];
   return words.length >= NA_REASON_WORDS ? "na" : "na-short";
+}
+// +ui's state matrix (1.38 — doctor's ui-states, quality.js uiStatesCheck): every language's state labels (quality.uiStateLabels)
+// and the a11y header cell that recognises the matrix (quality.uiStateA11y), as `<id>\t<label>` lines — a state's English-stable
+// id, or UI_STATE_A11Y (no state is called that) for the header — each once, sorted. Read from the corpus (builtinCorpus):
+// rendered, they loaded pt.js, es.js and pt-BR into every English doctor of a +ui feature.
+const UI_STATE_A11Y = "a11y";
+function renderUiStateNames() {
+  const set = new Set();
+  for (const l of i18n.LANGS) {
+    const Q = i18n.msg(l).quality;
+    for (const [id, label] of Object.entries(Q.uiStateLabels)) set.add(id + "\t" + label);
+    set.add(UI_STATE_A11Y + "\t" + Q.uiStateA11y);
+  }
+  return sortList(set);
+}
+let UI_STATE_NAMES = null; // process-wide: { labels: [[id, label]], a11y: [label] }
+function uiStateNames() {
+  if (UI_STATE_NAMES) return UI_STATE_NAMES;
+  const c = builtinCorpus();
+  const names = { labels: [], a11y: [] };
+  for (const line of c ? c.uiStateNames : renderUiStateNames()) {
+    const tab = line.indexOf("\t");
+    if (line.slice(0, tab) === UI_STATE_A11Y) names.a11y.push(line.slice(tab + 1));
+    else names.labels.push([line.slice(0, tab), line.slice(tab + 1)]);
+  }
+  return (UI_STATE_NAMES = names);
 }
 // the active marker tracks' mandatory sections as every gate reads them (doctor `<track>-sections`, the design
 // approval, the design save check, status, the roadmap) → [[track, marker, rows]]. On a SIZED feature a section two active tracks
@@ -1061,9 +1095,11 @@ function renderTemplateSetsBr(base) {
 // asked of these sets. Every OTHER all-language template set a gate asks about comes from it too —
 // the steering stubs (isSteeringStub), the scaffold's diagrams (templateDiagramSet), the track design blocks' lines
 // (sectionTemplateLines), the bug report's slots (bugTemplateSlots) and the requirement templates (builtinTemplateReqs): rendered,
-// they loaded pt.js, es.js and pt-BR into every English doctor / next_action / done / finish / catalog (~78 ms a call).
+// they loaded pt.js, es.js and pt-BR into every English doctor / next_action / done / finish / catalog (~78 ms a call). So would
+// +ui's state labels (1.38, uiStateNames: `<id>\t<label>` lines — the one list read whole, not asked .has()).
 const CORPUS_FILE = "corpus.generated.json";
-const CORPUS_KEYS = ["brackets", "code", "bracketsBr", "codeBr", "tasks", "bugSteps", "diagrams", "sectionLines", "sectionLinesBr", "bugSlots"];
+const CORPUS_KEYS = ["brackets", "code", "bracketsBr", "codeBr", "tasks", "bugSteps", "diagrams", "sectionLines", "sectionLinesBr", "bugSlots",
+  "uiStateNames"];
 const sortList = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)); // code-unit order, stable across Node versions
 const CORPUS_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es.js", "i18n/pt-br.js", "i18n/pt.js", "engine/core.js",
   "engine/markdown.js", "engine/packs.js", "engine/tasks.js", "engine/tracks.js"]; // mcp/lib-relative, in hash order
@@ -1095,7 +1131,7 @@ const sourceStat = (rel) => {
 const LOADED_STATS = module.bundle ? null : new Map(CORPUS_SOURCES.map((rel) => [rel, sourceStat(rel)]));
 const sourcesUnchanged = () => !!LOADED_STATS && CORPUS_SOURCES.every((rel) => { const s = LOADED_STATS.get(rel); return s !== null && sourceStat(rel) === s; });
 // The built-in corpus as it renders now → { brackets, code, bracketsBr, codeBr, tasks, bugSteps, taskHeadings, steeringStubs,
-// diagrams, sectionLines, sectionLinesBr, bugSlots, templateReqs }: sorted string lists (the sets' members — code-unit order,
+// diagrams, sectionLines, sectionLinesBr, bugSlots, templateReqs, uiStateNames }: sorted string lists (the sets' members — code-unit order,
 // stable across Node versions) — the requirement templates in render order. What scripts/build.js writes, and what the tests compare.
 function renderCorpusData() {
   const sort = sortList;
@@ -1106,7 +1142,7 @@ function renderCorpusData() {
     taskHeadings: Object.fromEntries(VALID_TRACKS.map((t) => [t, sort(renderTrackTaskHeadings(t))])),
     // the gates' other all-language sets
     steeringStubs: renderSteeringStubs(), diagrams: renderTemplateDiagrams(), sectionLines: renderSectionLines("base"),
-    sectionLinesBr: renderSectionLines("pt-BR"), bugSlots: renderBugSlots(), templateReqs: renderTemplateReqs(),
+    sectionLinesBr: renderSectionLines("pt-BR"), bugSlots: renderBugSlots(), templateReqs: renderTemplateReqs(), uiStateNames: renderUiStateNames(),
     // the stop gate's lists of every language (guards.js stopPatterns — builtinStopGate): the Stop hook then loads one language
     stopGate: i18n.stopGateLists() };
 }
@@ -1158,6 +1194,7 @@ function localeLoaded(rel) {
   BUILTIN_CORPUS_FROM = "render";
   TEMPLATE_SETS = TEMPLATE_SETS_BR = TEMPLATE_TASKS = BUG_STEPS = null;
   STEERING_STUBS = TEMPLATE_DIAGRAMS = SECTION_TEMPLATE_LINES = SECTION_TEMPLATE_LINES_BR = BUG_SLOTS = TEMPLATE_REQS = null; // 1.24 r6 I-I2
+  UI_STATE_NAMES = null; // 1.38
   TASK_HEADINGS.clear(); // tracks.js's per-track sets, read from it
 }
 if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
@@ -1525,4 +1562,4 @@ module.exports = { stripHtmlComments, inertOutsideCode, commentLines,stripFenced
   isTemplatePlaceholder, placeholderReport, bracketPlaceholders, artifactState, headingsOnly, artifactReport,
   featurePlaceholders, placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, bugTemplateSlots,
   renderBugSlots, renderSectionLines, renderTemplateDiagrams, templateDiagramSet, renderSteeringStubs, isSteeringStub,
-  renderTemplateReqs, builtinTemplateReqs, __link };
+  renderTemplateReqs, builtinTemplateReqs, naAnswer, renderUiStateNames, uiStateNames, __link };

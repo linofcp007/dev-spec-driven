@@ -2,10 +2,10 @@
 
 /**
  * dev-spec-driven engine — the UI checks (1.37): anti-patterns in a +ui feature's view / style files that are wrong whatever
- * the taste. Six rules, ids English-stable, each with a level:
+ * the taste. Seven rules, ids English-stable, each with a level:
  *   warn   — the feature report AND one finish warning (never a blocker): `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1),
  *            `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked` (3.3.8 at a sign-in or code step; a
- *            usability defect elsewhere);
+ *            usability defect elsewhere), `font-size-viewport` (1.4.4, failure F94 — 1.38);
  *   report — the feature report only: `transition-all` (certain as syntax, a guideline as a finding — shadcn's own Button,
  *            Switch and Sidebar ship it, so `shadcn add` would earn a finish warning on kit code).
  * Static, bounded, linear in what it reads, read-only. A file is read through viewLines (design-system.js: the ONE line walk —
@@ -24,7 +24,11 @@ function __link(E) { ({ opensString, quoteEnd, readFileHeads, styleTokens, RE_ST
 
 // The rules: id → level (the report sorts warn first; finish counts warn alone).
 const UI_RULES = { "zoom-disabled": "warn", "img-no-alt": "warn", "outline-removed": "warn", "click-no-keyboard": "warn", "paste-blocked": "warn",
-  "transition-all": "report" };
+  "font-size-viewport": "warn", "transition-all": "report" };
+// (1.38) The project's facts: id → level — what the project inventory says beside the rules, never a file's finding, never a
+// feature report's or finish's; the `_UI checks off:_` marker switches one off as it does a rule (uiOff).
+const UI_FACTS = { "no-reduced-motion": "report" };
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const DS_TAG_LINES = 30; // one opening tag read over lines…
 const DS_TAG_CHARS = 4000; // …and characters: past either it is not judged, nor is a tag that starts inside it
 const DS_TAG_ATTRS = 100; // a tag's attributes read: one that holds more is not judged
@@ -346,6 +350,12 @@ function judgeTag(tag, add) {
   // (a `<label>` is no control in a body — never focused itself, the control it names is its own tag: review 2 of 1.37)
   const kind = !element || (focusable && tag.name !== "label") || tag.name === "slot" ? CONTROL : undefined;
   if (spread) return kind; // (a spread may hold any attribute)
+  // font-size-viewport (1.38): an ELEMENT's own `style` attribute — never a component's prop, never a free `fontSize:` line
+  // (CSS-in-JS, `sx`, `css()` nest their media queries where no line reader sees them: CRIT_3 must-fix 1)
+  if (element && named.has("style")) {
+    const size = styleFontSize(named.get("style") || "");
+    if (size) add("font-size-viewport", tag.line, "<" + tag.name + " style> " + size);
+  }
   // img-no-alt: `<img` (as written) with no alt in any binding, no accessible name (a non-empty `title` names it too, as axe-core's
   // image-alt reads it — review 1 of 1.37), not decorative, rendered
   if (tag.name === "img" && !named.has("alt") && !named.has("aria-label") && !named.has("aria-labelledby") && literal(named.get("title")) === "" &&
@@ -400,6 +410,73 @@ function transitionAll(prop, value) {
   }
   return false;
 }
+// MOTION declared (1.38 — the project fact no-reduced-motion; its OWN predicate, never transitionAll's nor item 2's
+// RE_MOTION_PROP, the properties that hold times): `animation` / `animation-name` naming one (never `none`, a global keyword, a
+// lone `var()`), a `transition` item naming `transform` / `translate` / `rotate` / `scale` for a LITERAL time over 0 (never
+// opacity, a colour, `all` — transition-all's), `scroll-behavior: smooth`. `@keyframes` is a block (sheetChecks); Tailwind's
+// utilities, twMotion. `transition-property` holds no time: never.
+const RE_MOTION_TRANSFORM = /^(?:transform|translate|rotate|scale)$/;
+const RE_MOTION_NONE = /^(?:none|initial|inherit|unset|revert|revert-layer|var\([^()]*\))$/i;
+function motionOf(prop, value) {
+  const v = value.replace(/\s*!\s*important\s*$/i, "").trim();
+  if (prop === "scroll-behavior") return v.toLowerCase() === "smooth";
+  if (prop === "animation" || prop === "animation-name") return v !== "" && !RE_MOTION_NONE.test(v);
+  if (prop !== "transition") return false;
+  return splitTop(v, isComma).some((item) => {
+    let property = null, duration = null; // (the first time is the duration, a second the delay)
+    for (const w of splitTop(item.trim(), isBlank)) {
+      if (RE_TIME.test(w)) { if (duration === null) duration = parseFloat(w); } else if (w && property === null && !RE_EASING.test(w)) property = w.toLowerCase();
+    }
+    return property !== null && RE_MOTION_TRANSFORM.test(property) && duration > 0;
+  });
+}
+// font-size-viewport (1.38 — WCAG 1.4.4, failure F94): a value of viewport lengths ALONE, which zooming does not enlarge —
+// numbers, viewport lengths (`vw` `vh` `vi` `vb` `vmin` `vmax` and their `s` / `l` / `d` forms: CSS Values 4's closed list),
+// `calc(` `clamp(` `min(` `max(`, `( ) , + - * /` and blanks, a last `!important` — holding one viewport length at least. Any
+// other term (a rem / em / px / % length, `var()`, a Sass function, a word) zooms or is unknown: no finding. ONE pass, each
+// character once (a regex of alternations under `+` backtracks on `calc(1vw + 1vw + …)`).
+const VIEWPORT_UNITS = new Set(["vw", "vh", "vi", "vb", "vmin", "vmax"].flatMap((u) => [u, "s" + u, "l" + u, "d" + u]));
+const VIEWPORT_FNS = new Set(["calc", "clamp", "min", "max"]);
+const isDigit = (c) => (c >= "0" && c <= "9") || c === ".";
+const isLower = (c) => c >= "a" && c <= "z";
+function viewportOnly(value) {
+  const v = value.toLowerCase();
+  let seen = false;
+  for (let i = 0; i < v.length;) {
+    const c = v[i];
+    if (" \t\n\r(),+-*/".includes(c)) { i++; continue; }
+    if (c === "!") return seen && v.slice(i + 1).trim() === "important";
+    const from = i;
+    if (isDigit(c)) {
+      while (i < v.length && isDigit(v[i])) i++;
+      const u = i;
+      while (i < v.length && isLower(v[i])) i++;
+      if (i > u) { if (!VIEWPORT_UNITS.has(v.slice(u, i))) return false; seen = true; }
+      continue;
+    }
+    if (!isLower(c)) return false;
+    while (i < v.length && isLower(v[i])) i++;
+    if (v[i] !== "(" || !VIEWPORT_FNS.has(v.slice(from, i))) return false;
+  }
+  return seen;
+}
+// An element's own `style` attribute as written (an HTML / Vue string, a JSX object) → its font size, `<prop>: <value>`, when
+// the value is viewport-only — else null: `font-size` or `fontSize`, quoted or not (Vue's `{ 'font-size': '5vw' }`), its value
+// a quoted literal read to its quote, else to `;`, a quote or `}` (`style="font-size: 5vw; color: red"`); a value that is no
+// literal (`fontSize: big ? "5vw" : "2rem"`, an object) is none. Each character once.
+const RE_STYLE_FONT = /(?<![\w-])(font-size|fontSize)["'`]?\s*:\s*/gi;
+function styleFontSize(v) {
+  RE_STYLE_FONT.lastIndex = 0;
+  for (let m = RE_STYLE_FONT.exec(v); m; m = RE_STYLE_FONT.exec(v)) {
+    const at = m.index + m[0].length, q = v[at], quoted = q === "\"" || q === "'" || q === "`";
+    let end = at;
+    if (quoted) { end = v.indexOf(q, at + 1); if (end === -1) end = v.length; } else while (end < v.length && !/[;"'`}]/.test(v[end])) end++;
+    const value = quoted ? v.slice(at + 1, end) : v.slice(at, end);
+    if (viewportOnly(value)) return m[1] + ": " + value.trim();
+    RE_STYLE_FONT.lastIndex = Math.max(end, RE_STYLE_FONT.lastIndex);
+  }
+  return null;
+}
 
 // --- Tailwind's utilities --------------------------------------------------------------------------------------------------------
 // A line's class-like tokens (cut at blanks, quotes and the punctuation code puts around a string) — variants, then the
@@ -419,8 +496,23 @@ function transitionAll(prop, value) {
 // `has-[:focus-visible]`, `group-[:focus]`, `peer-[:focus]` relational, a doubt (review 3 of 1.37: cut at its `:`, its
 // `focus-visible]` read as the element's own) —, an arbitrary variant (`[&:focus]`, `[&_*:focus]`: `&` is the element) by
 // its `:`-cut pieces, as before.
+// font-size-viewport (1.38): a BARE arbitrary text size, `text-[<value>]` (a `length:` hint, a `/<line-height>` modifier, `!`),
+// whose value is viewport-only — a CANDIDATE pushed on `sizes` (the first a call), decided when the FILE ends by its caller:
+// none stands once a class list of the file (a line read; a sheet's `@apply`s apart) held a font SIZE under a variant
+// (RE_TW_TEXT_VARIANT, after a variant's `:` and Tailwind 3's `!`: a type-scale step — `md:text-6xl`, `lg:text-base/7` — or an
+// arbitrary length — `sm:text-[1.2vw]`, a `length:` hint, `[clamp(` / `calc(` / `min(` / `max(` —; never a colour, an alignment,
+// a wrap — `dark:text-white`, `hover:text-[#111]`, an untyped `[var(…)]`, `md:text-center` — nor a project's own key,
+// `md:text-hero`: F94's note, CRIT_3 must-fix 3; review 1 of 1.38: decided by the LINE, a class list split over lines —
+// `cn("text-[8vw]", "md:text-7xl")`, a cva base, a wrapped class attribute — warned; review 2 of 1.38: any variant `text-`, a
+// colour's too, silenced the file). A value holding `(` is cut by the split: never judged (so is any arithmetic — its `_` blanks:
+// `text-[calc(1vw_+_1vh)]`).
+// MOTION (1.38, the project fact no-reduced-motion — move(line)): `animate-*` but `animate-none` (tailwindcss-animate's
+// `animate-in` too), `transition-transform`, `scroll-smooth`, under any variant.
 // → whether the text holds a focus style.
-const RE_TW_PICK = /transition-all|outline-|focus/;
+const RE_TW_PICK = /transition-all|outline-|focus|text-\[|animate-|transition-transform|scroll-smooth/;
+const twMotion = (u) => (u.startsWith("animate-") ? u !== "animate-none" : u === "transition-transform" || u === "scroll-smooth");
+const RE_TW_TEXT = /^text-\[(?:length:)?([^\]]*)\](?:\/.*)?$/;
+const RE_TW_TEXT_VARIANT = /:!?text-(?:(?:\d*x[sl]|sm|base|lg)(?![\w-])|[[(]length:|\[(?:[\d.]|(?:calc|clamp|min|max)\())/;
 const RE_TW_SPLIT = /[\s"'`{}(),;=<>]+/;
 const RE_TW_REMOVAL = /^outline-(?:none|hidden|0)$/;
 const RE_TW_NOTHING = /(?:^|-)(?:0|none|hidden|transparent)$/;
@@ -438,17 +530,22 @@ function variantsOf(tok) {
   }
   return out;
 }
-function utilities(s, line, add) {
+function utilities(s, line, add, move, sizes) {
   if (!RE_TW_PICK.test(s)) return false;
-  let focus = false;
+  let focus = false, size = null;
   for (const tok of s.split(RE_TW_SPLIT)) {
     if (!tok) continue;
+    // (a bare one only: RE_TW_TEXT is anchored — a variant's token starts with its variant; the first a line — a cost guard:
+    // a line of 60 bare sizes 1.9× without it)
+    if (size === null) { const m = RE_TW_TEXT.exec(tok.replace(/^!|!$/g, "")); if (m && viewportOnly(m[1])) size = tok; }
     const parts = tok.split(":");
     const util = parts.pop().replace(/^!|!$/g, "");
     if (util === "transition-all") { add("transition-all", line, tok); continue; }
+    if (move && twMotion(util)) move(line); // (and on: `focus:animate-pulse` is a focus style as before)
     if (!util || !parts.some(isFocusVariant)) continue;
     if (RE_TW_REMOVAL.test(util)) { if (variantsOf(tok).some((v) => (v[0] === "[" ? v.split(":") : [v]).some(isOwnFocus))) add("outline-removed", line, tok); } else if (!RE_TW_NOTHING.test(util)) focus = true;
   }
+  if (size !== null) sizes.push({ line, value: size });
   return focus;
 }
 
@@ -467,6 +564,22 @@ function utilities(s, line, add) {
 // `@apply` there by its bare utilities); a Tailwind focus utility in an `@apply`.
 // transition-all: a `transition` / `transition-property` declaration (transitionAll), a Tailwind `transition-all` in an
 // `@apply` — never inside `@media (prefers-reduced-motion: reduce)`.
+// font-size-viewport (1.38): a `font-size` declaration whose value is viewport-only (viewportOnly), a bare Tailwind
+// `text-[…vw]` in an `@apply` (utilities) — outside any CONDITIONAL block (an at-rule's but `@layer`'s: `@media`, `@container`,
+// `@supports`, a Sass `@include` or `@if`, a nested `@media` —, inherited by what it holds), and decided when the walk ends:
+// none is judged once the FILE declares a font size inside a conditional block (`font-size`, the `font` shorthand, an `@apply`
+// holding a `text-` utility), a block past DS_BLOCK_DEPTH went unread or the sheet was read only in part (`partial`: past the
+// read, a line cut at DS_LINE_MAX — review 1 of 1.38: the override sat past the cut) — F94's note, a size media queries adjust
+// may not fail (CRIT_3 must-fix 2); the `@apply` ones also once an `@apply` of the file held a size under a variant (as a
+// class list's: RE_TW_TEXT_VARIANT). An override in another file is not seen.
+const RE_LAYER = /^@layer\b/i;
+const RE_KEYFRAMES = /^@(?:-[a-z]+-)?keyframes\b/i;
+// A markup file's <style> block: its opening tag's line is a CSS line too (viewLines), so the block's FIRST rule reads it in its
+// prelude — `<style scoped> @media print` — read without it (1.38: an at-rule there read as none — a print / reduced-motion /
+// conditional block, keyframes — since 1.37); a second block's, after the first's `</style>` line, too (review 1 of 1.38: Vue's
+// global + scoped pair). Astro's `<style define:vars={{…}}>` is not: the walker opens blocks on its braces (1.39).
+const RE_STYLE_TAG = /^(?:<\/style\s*>\s*)?<style\b[^>]*>\s*/i;
+const RE_TW_TEXT_ANY = /(?:^|[\s:!])text-/;
 const RE_REMOVAL = /^(?:outline\s*:\s*(?:none|0(?:px)?)|outline-style\s*:\s*none|outline-width\s*:\s*0(?:px)?)(?:\s*!\s*important)?$/i;
 const RE_FOCUS_PSEUDO = /:focus(?:-visible|-within)?(?![\w-])/i;
 const RE_FOCUS_ITSELF = /:focus(?![\w-])/i;
@@ -521,22 +634,28 @@ function outlineShape(prelude) {
   }
   return shape;
 }
+// MOTION (1.38): a `@keyframes` block (any vendor prefix), a declaration motionOf takes, an `@apply`'s motion utility → move(line).
 // → whether the sheet holds a focus style; add (null: the focus fact alone — the project's sheets) takes the findings
-function sheetChecks(text, rel, add) {
+function sheetChecks(text, rel, add, move, partial) {
   let focus = false;
-  const open = []; // the open blocks, innermost last: { selector, shape, print, reduced, focus, removals, other }
+  const open = []; // the open blocks, innermost last: { selector, shape, print, reduced, cond, focus, removals, other }
   let deep = 0; // the blocks open past DS_BLOCK_DEPTH (their rule's extent is then unknown: never a "focus" candidate)
+  const sizes = []; // font-size-viewport's candidates, judged when the walk ends — unless the file sizes text conditionally
+  const tw = { sizes: [], variant: false }; // (…and the `@apply`s' bare text-[…vw] — unless one held a variant size)
+  let condSize = !!partial;
   styleTokens(text, rel, {
     block: (e) => {
-      if (deep || open.length >= DS_BLOCK_DEPTH) { if (deep++ === 0) open[open.length - 1].other = true; return; }
-      const p = open.length ? open[open.length - 1] : null, at = e.prelude[0] === "@";
-      open.push({ selector: e.prelude, shape: at ? null : outlineShape(e.prelude), print: (p != null && p.print) || (at && RE_PRINT.test(e.prelude)),
-        reduced: (p != null && p.reduced) || (at && RE_REDUCED.test(e.prelude)), focus: (p != null && p.focus) || (!at && RE_FOCUS_PSEUDO.test(e.prelude)),
-        removals: [], other: false });
+      if (deep || open.length >= DS_BLOCK_DEPTH) { if (deep++ === 0) { open[open.length - 1].other = true; condSize = true; } return; }
+      const pre = e.prelude.replace(RE_STYLE_TAG, "");
+      const p = open.length ? open[open.length - 1] : null, at = pre[0] === "@";
+      if (move && at && RE_KEYFRAMES.test(pre)) move(e.line);
+      open.push({ selector: pre, shape: at ? null : outlineShape(pre), print: (p != null && p.print) || (at && RE_PRINT.test(pre)),
+        reduced: (p != null && p.reduced) || (at && RE_REDUCED.test(pre)), cond: (p != null && p.cond) || (at && !RE_LAYER.test(pre)),
+        focus: (p != null && p.focus) || (!at && RE_FOCUS_PSEUDO.test(pre)), removals: [], other: false });
     },
     statement: (e) => {
       if (deep) return;
-      const b = open.length ? open[open.length - 1] : null, reduced = b != null && b.reduced;
+      const b = open.length ? open[open.length - 1] : null, reduced = b != null && b.reduced, cond = b != null && b.cond;
       const apply = /^@apply\s/i.test(e.text);
       // (an `@apply` in a focus rule: its bare utilities read as declarations — `outline-none` / `-hidden` / `-0` a removal,
       // RE_TW_NOTHING's nothing, any other draws; one with a variant draws — review 2 of 1.37: `*:focus { @apply outline-none }`
@@ -545,13 +664,18 @@ function sheetChecks(text, rel, add) {
       const removal = own ? own.some((u) => RE_TW_REMOVAL.test(u)) : RE_REMOVAL.test(e.text);
       const draws = own ? own.some((u) => u.includes(":") || !(RE_TW_REMOVAL.test(u) || RE_TW_NOTHING.test(u))) : !drawsNothing(e.text);
       if (b != null && b.focus && draws) focus = true;
-      // (a Tailwind `@apply`: its utilities, as a class list's — no motion rule inside a reduced-motion block)
-      if (apply && utilities(e.text, e.from, (rule, line, value) => { if (add && !(reduced && rule === "transition-all")) add(rule, line, value); })) focus = true;
+      // (a Tailwind `@apply`: its utilities, as a class list's — no motion rule inside a reduced-motion block; a viewport-only
+      // text size a candidate — one in a conditional block is dropped with the file's others: its @apply holds a text- utility)
+      if (apply && utilities(e.text, e.from, (rule, line, value) => { if (add && !(reduced && rule === "transition-all")) add(rule, line, value); }, move, tw.sizes)) focus = true;
+      if (apply && RE_TW_TEXT_VARIANT.test(e.text)) tw.variant = true;
       if (!add) return;
       if (b != null) { if (removal && !b.print) b.removals.push({ line: e.from, text: e.text }); if (draws) b.other = true; }
-      const d = apply || reduced ? null : RE_DECLARATION.exec(e.text);
+      // (the declaration read inside a reduced-motion block too: transition-all alone is skipped there)
+      const d = apply ? null : RE_DECLARATION.exec(e.text);
       const prop = d ? d[1].toLowerCase() : "";
-      if ((prop === "transition" || prop === "transition-property") && transitionAll(prop, d[2])) add("transition-all", e.from, e.text);
+      if (!reduced && (prop === "transition" || prop === "transition-property") && transitionAll(prop, d[2])) add("transition-all", e.from, e.text);
+      if (move && d && motionOf(prop, d[2])) move(e.from);
+      if (cond) { if (prop === "font-size" || prop === "font" || (apply && RE_TW_TEXT_ANY.test(e.text))) condSize = true; } else if (prop === "font-size" && viewportOnly(d[2])) sizes.push({ line: e.from, value: e.text });
     },
     close: () => {
       if (deep) { deep--; return; }
@@ -561,6 +685,7 @@ function sheetChecks(text, rel, add) {
       if (add && b.removals.length && (b.shape === "element" || (b.shape === "focus" && !b.other))) for (const r of b.removals) add("outline-removed", r.line, b.selector + " { " + r.text + " }");
     },
   });
+  if (add && !condSize) for (const s of tw.variant ? sizes : sizes.concat(tw.sizes)) add("font-size-viewport", s.line, s.value);
   return focus;
 }
 
@@ -570,16 +695,19 @@ function sheetChecks(text, rel, add) {
 const RE_ZOOM_OFF = /user-scalable\s*=\s*(?:no|0)(?![\w.])|userScalable\s*:\s*false(?![\w$])/i;
 const RE_MAX_SCALE = /(?:maximum-scale\s*=|maximumScale\s*:)\s*(\d+(?:\.\d+)?|\.\d+)/gi;
 // a `transition:` outside a stylesheet's lines — a style object (`transition: "all .3s"`), an inline style attribute, a
-// CSS-in-JS template's declaration line: its value to its quote's end, else to `;` / a quote / `}` / the line's end
-const RE_TRANSITION_PROP = /(?<![\w-])(transition(?:-property)?)\s*:\s*/gi;
-function scriptTransitions(l, line, add) {
+// CSS-in-JS template's declaration line: its value to its quote's end, else to `;` / a quote / `}` / the line's end; (1.38) and
+// the motion an `animation` / `animation-name` / `scroll-behavior` there declares (motionOf: move(line))
+const RE_TRANSITION_PROP = /(?<![\w-])(transition(?:-property)?|animation(?:-name)?|scroll-behavior)\s*:\s*/gi;
+function scriptTransitions(l, line, add, move) {
   RE_TRANSITION_PROP.lastIndex = 0;
   for (let m = RE_TRANSITION_PROP.exec(l); m; m = RE_TRANSITION_PROP.exec(l)) {
     const at = m.index + m[0].length, q = l[at];
     let end;
     if (q === "\"" || q === "'" || q === "`") { end = l.indexOf(q, at + 1); if (end === -1) end = l.length; } else { end = at; while (end < l.length && !/[;"'`}]/.test(l[end])) end++; }
     const value = q === "\"" || q === "'" || q === "`" ? l.slice(at + 1, end) : l.slice(at, end);
-    if (transitionAll(m[1].toLowerCase(), value)) add("transition-all", line, m[1] + ": " + value);
+    const prop = m[1].toLowerCase();
+    if (prop[0] === "t" && transitionAll(prop, value)) add("transition-all", line, m[1] + ": " + value);
+    if (motionOf(prop, value)) move(line);
     RE_TRANSITION_PROP.lastIndex = Math.max(end, RE_TRANSITION_PROP.lastIndex); // (past the value: each character read once)
   }
 }
@@ -604,11 +732,18 @@ function markIds(src) {
 // declaration — 1.37's first rule, back) — decided when it is found (the lines up to it are read). DS_CHECK_PER_FILE findings are kept; past them each is still
 // COUNTED — past: { byRule (the unsilenced ones), silenced } — never kept (review 1 of 1.37: a file of 200 report-level
 // findings hid its real ones, `total` read 200). cut: { lines (cut at DS_LINE_MAX), tags (tagReader's failed reads) }.
-// outline-removed findings are CANDIDATES (focus: does the file hold a focus style — uiChecksReport decides).
-function uiChecksOf(lines, rel) {
+// outline-removed findings are CANDIDATES (focus: does the file hold a focus style — uiChecksReport decides). motion (1.38):
+// { count (the lines declaring motion — motionOf, `@keyframes`, twMotion), line (the first) } — the project fact's, never a
+// finding (the project inventory alone reads it). over: the file is longer than the text read (review 1 of 1.38: with a line
+// cut at DS_LINE_MAX, the file read only in part — what the rest of the file decides is a doubt: font-size-viewport's
+// candidates in a sheet and the bare text-[…vw] of its class lines, never an element's own `style`, decided on its tag).
+function uiChecksOf(lines, rel, over) {
   const sheet = RE_STYLE_EXT.test(rel);
   const findings = [], seen = new Set(), marks = new Map(), css = [], past = { byRule: {}, silenced: 0 };
+  const tw = { sizes: [], variant: false }; // the class lines' bare text-[…vw] (utilities) · a variant size read
   let focus = false, anyCss = false, cutLines = 0;
+  const motion = { count: 0, line: 0 }, moved = new Set();
+  const move = (line) => { if (moved.has(line)) return; moved.add(line); motion.count++; if (!motion.line || line < motion.line) motion.line = line; };
   const add = (rule, line, value) => {
     const k = rule + ":" + line;
     if (seen.has(k)) return;
@@ -632,12 +767,37 @@ function uiChecksOf(lines, rel) {
       RE_MAX_SCALE.lastIndex = 0;
       for (let m = RE_MAX_SCALE.exec(l); m; m = RE_MAX_SCALE.exec(l)) if (parseFloat(m[1]) < 2) add("zoom-disabled", n, m[0]);
     }
-    if (utilities(l, n, add)) focus = true;
-    if (l.includes("transition")) scriptTransitions(l, n, add);
+    if (utilities(l, n, add, move, tw.sizes)) focus = true;
+    if (!tw.variant && RE_TW_TEXT_VARIANT.test(l)) tw.variant = true;
+    if (l.includes("transition") || l.includes("animation") || l.includes("scroll-behavior")) scriptTransitions(l, n, add, move);
   }
-  if (anyCss && sheetChecks(css.join("\n"), rel, add)) focus = true;
-  return { findings, focus, past, cut: { lines: cutLines, tags: tags ? tags.failed() : 0 } };
+  const partial = !!over || cutLines > 0;
+  if (anyCss && sheetChecks(css.join("\n"), rel, add, move, partial)) focus = true;
+  if (!tw.variant && !partial) for (const s of tw.sizes) add("font-size-viewport", s.line, s.value);
+  return { findings, focus, past, cut: { lines: cutLines, tags: tags ? tags.failed() : 0 }, motion };
 }
+
+// --- the project's switch (1.38) ---------------------------------------------------------------------------------------------------
+// `_UI checks off: <rule-id> (reason)[, …]_` in design-system.md (quality.js dsChecksOff reads its entries and names no id) →
+// { off: Map(id → reason), ignored: [{ entry, why, read? }] }: an entry is APPLIED only when its id is a rule's or a project
+// fact's (UI_RULES ∪ UI_FACTS, at call time: F0c's id is one) and it gives a reason in parentheses — else it is not applied and
+// the reports say why: `no-reason`, `unknown-rule`, `unreadable` (not `<id> (<reason>)`), `past-bound` (past DS_MARKER_ENTRIES
+// entries: `read`). An id named twice: the first. An applied rule is hidden PROJECT-WIDE — the inventory, every feature report
+// (`off`), finish (it reads the report) — counted, never listed; the inline `ui-check-off:` comment silences ONE occurrence.
+function uiOff(reg) {
+  const off = new Map(), ignored = [];
+  for (const e of (reg && reg.checksOff) || []) {
+    const why = e.past ? "past-bound" : e.id == null ? "unreadable" : !own(UI_RULES, e.id) && !own(UI_FACTS, e.id) ? "unknown-rule" : !e.reason ? "no-reason" : null;
+    if (why) ignored.push(Object.assign({ entry: e.id == null ? e.entry : e.id, why }, e.past ? { read: e.read } : {}));
+    else if (!off.has(e.id)) off.set(e.id, e.reason);
+  }
+  return { off, ignored };
+}
+// A report's `off` / `offIgnored` keys — present only when the marker holds an entry (a project without one keeps the 1.37
+// shape): off [{ rule, reason, count (the findings it hid in this report) }] of the ids `has` takes, in the marker's order.
+const offKeys = (offs, hidden, has) => (offs && (offs.off.size || offs.ignored.length)
+  ? { off: [...offs.off].filter(([id]) => has(id)).map(([rule, reason]) => ({ rule, reason, count: hidden.get(rule) || 0 })), offIgnored: offs.ignored } : {});
+const count1 = (m, k, n) => m.set(k, (m.get(k) || 0) + n);
 
 // --- the feature's files ---------------------------------------------------------------------------------------------------------
 // Does any of the project's stylesheets hold a focus style (sheetChecks over the WHOLE file — never the name-ranked token
@@ -680,10 +840,14 @@ function uiFocusPass(sheets) {
 // DS_CHECK_PER_FILE, count: the findings past it, file: the first}), then the pass's focus-sheets / focus-chars ({read,
 // count: the unsilenced candidates it left unjudged, file and line: the first listed of them by file then line, else the
 // first file holding one past its cap (no line), sheet / chars / alone: focus-chars' — a bound never hides a KNOWN candidate
-// silently: review 2 of 1.37, an Angular app of 60 components lost its true finding).
-function uiChecksReport(files, projectFocus, cap) {
+// silently: review 2 of 1.37, an Angular app of 60 components lost its true finding). offs (1.38, uiOff's): a rule the project
+// switched off — its findings counted in `off` (an inline-silenced one stays `silenced`: the comment first), never in findings,
+// total, byRule nor a limit's count; the focus search never runs for an off outline-removed; `off` / `offIgnored` (offKeys:
+// the rules alone — a project fact is the inventory's).
+function uiChecksReport(files, projectFocus, cap, offs) {
+  const off = offs ? offs.off : new Map(), hidden = new Map();
   let focus = files.some((f) => f.focus), limits = [];
-  if (!focus && files.some((f) => f.past.byRule["outline-removed"] || f.findings.some((x) => x.rule === "outline-removed" && !x.silenced))) ({ focus, limits } = projectFocus());
+  if (!focus && !off.has("outline-removed") && files.some((f) => f.past.byRule["outline-removed"] || f.findings.some((x) => x.rule === "outline-removed" && !x.silenced))) ({ focus, limits } = projectFocus());
   const stands = (rule) => !(rule === "outline-removed" && (focus || limits.length));
   const list = [], unlisted = [];
   const tagCut = { code: "tag-length", read: DS_TAG_LINES, count: 0, file: null }, fileCut = { code: "file-findings", read: DS_CHECK_PER_FILE, count: 0, file: null };
@@ -693,12 +857,13 @@ function uiChecksReport(files, projectFocus, cap) {
   for (const f of files) {
     for (const x of f.findings) {
       if (x.silenced) { silenced++; continue; }
+      if (off.has(x.rule)) { count1(hidden, x.rule, 1); continue; }
       if (stands(x.rule)) list.push({ rule: x.rule, level: UI_RULES[x.rule], file: f.rel, line: x.line, value: x.value });
       else if (limits.length) { unjudged.count++; if (unjudged.line == null || f.rel < unjudged.file || (f.rel === unjudged.file && x.line < unjudged.line)) Object.assign(unjudged, { file: f.rel, line: x.line }); }
     }
     let more = f.past.silenced;
     silenced += f.past.silenced;
-    for (const [rule, n] of Object.entries(f.past.byRule)) if (stands(rule)) { unlisted.push([rule, n]); more += n; } else if (limits.length) cut(unjudged, n, f.rel);
+    for (const [rule, n] of Object.entries(f.past.byRule)) if (off.has(rule)) count1(hidden, rule, n); else if (stands(rule)) { unlisted.push([rule, n]); more += n; } else if (limits.length) cut(unjudged, n, f.rel);
     cut(tagCut, f.cut.tags, f.rel);
     cut(fileCut, more, f.rel);
   }
@@ -709,7 +874,92 @@ function uiChecksReport(files, projectFocus, cap) {
   for (const x of list) byRule[x.rule] = (byRule[x.rule] || 0) + 1;
   for (const [rule, n] of unlisted) { byRule[rule] = (byRule[rule] || 0) + n; total += n; }
   const pass = limits.map((l) => Object.assign({ code: l.code, read: l.read }, unjudged, l));
-  return { findings: list.slice(0, cap), total, byRule, silenced, limits: [tagCut, fileCut].filter((c) => c.count).concat(pass) };
+  return Object.assign({ findings: list.slice(0, cap), total, byRule, silenced }, offKeys(offs, hidden, (id) => own(UI_RULES, id)),
+    { limits: [tagCut, fileCut].filter((c) => c.count).concat(pass) });
+}
+
+// --- the project's view files (1.38) -----------------------------------------------------------------------------------------------
+// The project INVENTORY — spec_scan {designSystem: true} / `dev-spec design-system` without a feature, when the operation asks
+// for it (designSystemReport's opts.uiPass; the engine's default runs none): each view file the pass reads (design-system.js
+// uiProject — the feature report's own predicate, uiViewFile) is fed ONCE and its findings are COUNTED, never kept — per rule
+// its count, the files holding one, the first place (by file, then line: a finding past a file's DS_CHECK_PER_FILE has no
+// line — its file is named only when no other place is) —, its memory bounded by the rules, never the files. outline-removed:
+// the 1.37 excuse rule at project scope — ANY focus style in any file read excuses every candidate (the feature report's rule
+// over every view file: the removals its focus search leaves unjudged past DS_FOCUS_SHEETS are judged here); a pass a bound
+// cut (`cut`: the files read) with no focus style read judges none, and its limit `ui-files` names them (count, first place).
+// The FACT no-reduced-motion (UI_FACTS): the files read declare motion (uiChecksOf's `motion`: an animation, a transform's
+// transition, smooth scrolling) and NONE of the texts read mentions reduced motion — RE_REDUCED_ASK on each WHOLE text as read
+// (never its lines cut at DS_LINE_MAX: a minified sheet's media query sits past the cut); said only when no read was cut — the
+// walk (truncated), the pass (`cut`), a file's (view-size): a mention may sit in what was not read (CRIT_1 must-fix 6). No
+// script search (a mention only in a .ts hook is not seen: the fact is worded "the view files read"). → facts: [{ code, count
+// (the lines declaring motion), file, line (the first by file, then line) }].
+// bounds: the reader's — { size: the characters read of a file, line: of a line } (the limits view-size / line-length name them).
+// offs (uiOff's): a rule or fact the project switched off — counted in `off` (an inline-silenced finding stays `silenced`),
+// never in total / byRule / rules / facts nor `ui-files`' count; `off` / `offIgnored` beside them (offKeys).
+// → { feed(rel, lines, over, text) (lines: viewLines of the file's text as read; over: the file is longer than that read),
+//     done(cut, truncated) → { read, total, silenced, byRule, rules: { id: {level, files, file, line?} }, off?, offIgnored?, facts,
+//     limits } }
+// (a mention: `prefers-reduced-motion`, `useReducedMotion`, `isReduceMotionEnabled`, `reduce_motion`, Tailwind's `motion-safe:` /
+// `motion-reduce:` — a word that only looks like one makes the fact said less, never wrongly)
+const RE_REDUCED_ASK = /reduced?[-_ ]?motion|motion-(?:safe|reduce)/i;
+function uiProjectPass(bounds, offs) {
+  const rules = new Map(); // id → { count, files, file, line } (line null: the first place is a file's past its cap)
+  const off = offs ? offs.off : new Map(), hidden = new Map(); // (1.38: the rules and facts the project switched off — counted)
+  let read = 0, silenced = 0, focus = false, asked = false;
+  const motion = { count: 0, file: null, line: null };
+  const cuts = { "view-size": { read: bounds.size, count: 0, file: null }, "line-length": { read: bounds.line, count: 0, file: null }, "tag-length": { read: DS_TAG_LINES, count: 0, file: null } };
+  const cutAt = (c, n, rel) => { if (!n) return; c.count += n; if (c.file == null || rel < c.file) c.file = rel; };
+  // (a listed place — a line — before a place past a file's cap; then the smaller path: each file is fed once)
+  const place = (e, rel, line) => {
+    if (e.file != null && ((line == null) !== (e.line == null) ? line == null : rel >= e.file)) return;
+    e.file = rel;
+    e.line = line;
+  };
+  return {
+    feed(rel, lines, over, text) {
+      const r = uiChecksOf(lines, rel, over);
+      read++;
+      if (r.focus) focus = true;
+      if (!asked && RE_REDUCED_ASK.test(text)) asked = true;
+      if (r.motion.count) { motion.count += r.motion.count; place(motion, rel, r.motion.line); }
+      const here = new Map(); // this file's: rule → { n, line (its smallest, null: past the cap alone) }
+      const take = (rule, n, line) => { const h = here.get(rule); if (!h) here.set(rule, { n, line }); else { h.n += n; if (line != null && (h.line == null || line < h.line)) h.line = line; } };
+      for (const x of r.findings) { if (x.silenced) silenced++; else if (off.has(x.rule)) count1(hidden, x.rule, 1); else take(x.rule, 1, x.line); }
+      silenced += r.past.silenced;
+      for (const [rule, n] of Object.entries(r.past.byRule)) if (off.has(rule)) count1(hidden, rule, n); else take(rule, n, null);
+      for (const [rule, h] of here) {
+        if (!rules.has(rule)) rules.set(rule, { count: 0, files: 0, file: null, line: null });
+        const e = rules.get(rule);
+        e.count += h.n;
+        e.files++;
+        place(e, rel, h.line);
+      }
+      if (over) cutAt(cuts["view-size"], 1, rel);
+      cutAt(cuts["line-length"], r.cut.lines, rel);
+      cutAt(cuts["tag-length"], r.cut.tags, rel);
+    },
+    done(cut, truncated) {
+      // (the excuse — any focus style read; a cut pass with none judges no removal)
+      const removal = rules.get("outline-removed");
+      let unjudged = null;
+      if (removal && (focus || cut)) { rules.delete("outline-removed"); if (!focus) unjudged = removal; }
+      const byRule = {}, out = {};
+      let total = 0;
+      for (const id of Object.keys(UI_RULES)) {
+        const e = rules.get(id);
+        if (!e) continue;
+        byRule[id] = e.count;
+        total += e.count;
+        out[id] = Object.assign({ level: UI_RULES[id], files: e.files, file: e.file }, e.line != null ? { line: e.line } : {});
+      }
+      const limits = cut ? [Object.assign({ code: "ui-files", read }, unjudged ? Object.assign({ count: unjudged.count, file: unjudged.file }, unjudged.line != null ? { line: unjudged.line } : {}) : {})] : [];
+      for (const code of ["view-size", "line-length", "tag-length"]) { const c = cuts[code]; if (c.count) limits.push({ code, read: c.read, count: c.count, file: c.file }); }
+      const said = motion.count && !asked && !cut && !truncated && !cuts["view-size"].count;
+      if (said && off.has("no-reduced-motion")) count1(hidden, "no-reduced-motion", motion.count);
+      const facts = said && !off.has("no-reduced-motion") ? [{ code: "no-reduced-motion", count: motion.count, file: motion.file, line: motion.line }] : [];
+      return Object.assign({ read, total, silenced, byRule, rules: out }, offKeys(offs, hidden, () => true), { facts, limits });
+    },
+  };
 }
 
 // spec_finish's part of a feature report's uiChecks → { total, byRule, top (the first 3: rule, file, line, value), limits (the
@@ -722,4 +972,4 @@ function uiFinishChecks(report) {
   return { total, byRule, top, limits: report.limits };
 }
 
-module.exports = { uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, __link };
+module.exports = { uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass, uiOff, __link };

@@ -139,7 +139,8 @@ run. The report's RED and GREEN runs of the target tests are the cycle's proof.
   that component's file is outside your `_Implements:_` files, NEEDS_CONTEXT first (Before you begin, step 3); a
   component it marks NEW is built through the system (tokens only, every state, keyboard and screen-reader support); one it
   lists as not in the registry is NEEDS_CONTEXT before you build it. Never a raw colour, spacing, radius or font size where
-  a token exists — a literal you keep on purpose goes into the Reuse block ("Raw values kept on purpose"), with why.
+  a token exists — a literal you keep on purpose goes into the Reuse block ("Raw values kept on purpose"), with why. When
+  `design-system.md` has a units table, write each property in the units it gives.
 - Don't restructure code outside your task. A small **preparatory** refactor the task itself needs — in its own files
   (the ones `_Implements:_` names; a unit outside them is NEEDS_CONTEXT, step 3), behaviour-preserving, on green, in its
   own commit — is fine; anything else you notice (a smell, a duplicate, a

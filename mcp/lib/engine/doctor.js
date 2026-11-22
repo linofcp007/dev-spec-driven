@@ -40,6 +40,7 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
 let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the tasks gate, the execution gate, its live views)
 let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
 let designSystemRegistry, designSystemCheck, designSystemGated, designSystemDeprecatedCheck; // quality.js — the design-system registry's checks (1.35; 1.37 ui-deprecated)
+let uiStatesCheck; // quality.js — 1.38 ui-states, [UI] UI States' state matrix
 let portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext, portCheckNumber; // port.js — +port's fence (1.36; portSchedule, portRecheckNext: review 1; portCheckNumber: review 2)
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.reviewModels)
@@ -71,7 +72,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
-  designSystemRegistry, designSystemCheck, designSystemGated, designSystemDeprecatedCheck, reviewModelsSetting, fastCheckOf, guardLevel, protectedTestsDoctor,
+  designSystemRegistry, designSystemCheck, designSystemGated, designSystemDeprecatedCheck, uiStatesCheck, reviewModelsSetting, fastCheckOf, guardLevel, protectedTestsDoctor,
   portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext, portCheckNumber } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
@@ -1109,6 +1110,12 @@ const DOCTOR_CHECKS = [
   // GATES, no stamp — it is about the registry of today, not a rule an approval was held to: spec_upgrade lists it (warnings).
   { id: "ui-deprecated", phase: 2, applies: (c) => uiDesigned(c) && !isRecord(c.state.finished) && !!c.designSystem && c.designSystem.deprecated.size > 0,
     run: (c) => designSystemDeprecatedCheck(c.designActive, c.lang, { registry: c.designSystem }) },
+  // 1.38 [UI] UI States' state matrix (quality.js uiStatesCheck) — the scaffold's own table, recognised by its a11y header cell: a
+  // listed state with no row, or a view whose cell is neither what the user sees nor `n/a — why`, WARNS at size m / l and with no
+  // size, is a note at s. Never a fail, never in GATES, no stamp (no design before 1.38 holds the anchored header), never on a
+  // finished feature; spec_upgrade lists it, an advisory warn (no `warnings` attention).
+  { id: "ui-states", phase: 2, applies: (c) => uiDesigned(c) && !isRecord(c.state.finished),
+    run: (c) => uiStatesCheck(c.designActive, c.lang, { size: c.size }) },
   // 1.36 +port (engine/port.js): the fence the plan draws — the baseline and the differential check, each with a runnable _Verify:_ (a
   // FAIL at size m / l, where the tasks approval refuses it — designReuseGated —, unless the tasks are approved already; a warn at s / no
   // size); a task listed before the baseline, a _Depends:_ that never reaches it (warns). Not while tasks.md is a later phase's template.

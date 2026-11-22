@@ -1889,7 +1889,7 @@ const COMMANDS = [
     args: ["@feature"],
     help: `  design-system [feature]         The design-system registry (.specs/steering/design-system.md) against the code: the components,
                                   tokens, token files and UI libraries it lacks, the rows whose path is gone; a feature: its Design System Usage rows
-                                  against the registry, the raw colours / sizes and the UI checks (anti-patterns) in its view files`,
+                                  against the registry, the raw values and the UI checks (anti-patterns) in its view files`,
     run(c) {
       // dev-spec design-system [feature] (= spec_scan {designSystem: true, name}) — read-only, exit 0
       const { out, fail, log } = c;
@@ -1898,6 +1898,22 @@ const COMMANDS = [
       const T = r.feature ? c.featureText(r.feature) : c.projectText();
       const more = (total, shown) => { if (total > shown) log(T.dsMore(total - shown)); };
       const cell = (s) => String(s).split("|").join(String.fromCharCode(92) + "|"); // a pasted row's cell: its `|` escaped
+      // 1.38: the breakpoints (both shapes) — the widths and where they come from, the ones not read, their own bounds (never the
+      // report's limits)
+      const breakpoints = (b) => {
+        log(T.bpHead(b.widths.join(" · "), T.bpFrom[b.partial ? "partial" : b.from](b.at)));
+        if (b.unreadTotal) log(T.bpUnread(b.unreadTotal, b.unread.map((u) => `${u.name} ${u.value} (${u.at})`).join(", ") + (b.unreadTotal > b.unread.length ? " … +" + (b.unreadTotal - b.unread.length) : "")));
+        b.limits.forEach((l) => log(T.bpLimit[l.code](l.read, l.count, l.first, l.at)));
+      };
+      // (1.38) what a raw value is against the scale: the token it is, or the colour it is close to
+      const judged = (x) => (x.token ? `  → ${x.token}` : x.near ? "  " + T.dsRawNear(x.near.token) : "");
+      // (1.38: the rules the project's `_UI checks off:_` marker switched off — each with the findings it hid and its reason —, and each
+      // entry not applied, why)
+      const offLines = (u) => {
+        if (!u.off) return;
+        if (u.off.length) log(T.uiOff(u.off.map((o) => o.rule + " " + o.count + " — " + o.reason).join("; ")));
+        u.offIgnored.forEach((e) => log(T.uiOffIgnored[e.why](e.entry, e.read)));
+      };
       return out(r, (r) => {
         if (!r.feature) log(r.registry.exists ? T.dsHead(r.registry.file, r.registry.components, r.registry.tokens) : T.dsHeadNone(r.registry.file));
         else log(T.dsFeatureHead(r.feature, r.usage ? r.usage.reuse : 0, r.usage ? r.usage.extend : 0, r.usage ? r.usage.new : 0));
@@ -1910,8 +1926,19 @@ const COMMANDS = [
           else if (!r.total) log(T.dsRawNone(r.viewFiles));
           else {
             log(T.dsRawHead(r.total, r.viewFiles));
-            r.raw.forEach((x) => log(`    ${x.file}:${x.line}  ${x.value}` + (x.token ? `  → ${x.token}` : "")));
+            r.raw.forEach((x) => log(`    ${x.file}:${x.line}  ${x.value}` + judged(x)));
             more(r.total, r.raw.length);
+            // 1.38: the values read twice or more (the first 10), and the lengths off the registry's units table
+            if (r.groups.length) {
+              log(T.dsRawGroupsHead);
+              r.groups.slice(0, 10).forEach((g) => log(T.dsRawGroup(g.value, g.count, g.files) + judged(g)));
+              more(r.groupsTotal, Math.min(10, r.groups.length));
+            }
+          }
+          if (r.units && r.units.total) {
+            log(T.dsUnitsHead(r.units.total));
+            r.units.findings.forEach((x) => log(`    ${x.file}:${x.line}  ${x.value}  ` + T.dsUnitsLine(x.unit, x.allowed.join(", "))));
+            more(r.units.total, r.units.findings.length);
           }
           // 1.37: the UI checks — each finding, a line of what each rule means, how many a comment silenced; the head names
           // finish's warning for a +ui feature alone (finish reads no other feature's — review 1 of 1.37)
@@ -1926,10 +1953,13 @@ const COMMANDS = [
           // (never "nothing" beside the removals a focus search left unjudged — review 2 of 1.37: its limit line names them)
           } else if (r.viewFiles && !u.limits.some((l) => l.code === "focus-sheets" || l.code === "focus-chars")) log(T.uiNone(r.viewFiles));
           if (u.silenced) log(T.uiSilenced(u.silenced));
+          offLines(u);
           // (a bound of the checks' own: the report's lines below say the ones they share)
           u.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count, l.sheet, l.chars, l.alone)));
+          breakpoints(r.breakpoints);
         } else {
           log(T.dsFound(r.found.components, r.found.tokens, r.found.sources.length));
+          breakpoints(r.breakpoints);
           if (r.registry.exists && r.missingTotal) {
             log(T.dsMissingHead(r.missingTotal));
             r.missing.forEach((m) => log("    | " + cell(m.name) + " | `" + cell(m.path) + "` |  |  |")); // a row to paste into the registry
@@ -1948,8 +1978,31 @@ const COMMANDS = [
           }
           if (r.registry.exists && r.newSources.length) log(T.dsSourcesNew(r.newSources.join(", ")));
           if (r.registry.exists && r.newLibraries.length) log(T.dsLibrariesNew(r.newLibraries.join(", ")));
+          // 1.38: the registry's token values the code holds otherwise (the row as the code has it), its token files gone, the
+          // units table's rows not read — none of them part of "in sync"
+          if (r.driftTotal) {
+            log(T.dsDriftHead(r.driftTotal));
+            r.drift.forEach((d) => log("    | " + cell(d.name) + " | " + cell(d.code) + " |  |   " + T.dsDriftWas(d.registry, d.source)));
+            more(r.driftTotal, r.drift.length);
+          }
+          if (r.gone.length) log(T.dsSourcesGone(r.gone.join(", ")));
+          if (r.unitsTable && r.unitsTable.unread.length) log(T.dsUnitsUnread(r.unitsTable.unread.join(", ")));
+          if (r.unitsTable && r.unitsTable.past) log(T.dsUnitsPast(r.unitsTable.past, r.unitsTable.rows + r.unitsTable.unread.length));
           // (never beside a component an unfinished feature is building: the registry does not list THAT one yet)
           if (r.inSync && !r.pendingTotal) log(T.dsInSync);
+          // 1.38: the UI checks of the project's view files — an inventory (each rule's count, files, first place), never a list
+          const u = r.uiChecks;
+          if (u) {
+            if (u.total) {
+              log(T.uiProjectHead(u.total, u.read));
+              Object.entries(u.rules).forEach(([id, x]) => log(T.uiProjectRule(id, u.byRule[id], x.files, x.line ? x.file + ":" + x.line : x.file, x.level === "report" ? T.uiReportTag : "")));
+            // (never "nothing" beside the removals a cut pass left unjudged: its limit line names them)
+            } else if (u.read && !u.limits.some((l) => l.code === "ui-files" && l.count)) log(T.uiProjectNone(u.read));
+            if (u.silenced) log(T.uiSilenced(u.silenced));
+            offLines(u);
+            u.facts.forEach((x) => log(T.uiFact[x.code](x.count, x.file + ":" + x.line)));
+            u.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count)));
+          }
         }
         r.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.file)));
       });

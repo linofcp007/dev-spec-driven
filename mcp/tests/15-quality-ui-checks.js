@@ -315,6 +315,271 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38.0 F0c: font-size-viewport (warn — WCAG 1.4.4, failure F94): text sized in viewport units ALONE does not grow when the
+    // page is zoomed. F94's note — "if media queries were used to adjust the size of text … it may not be a failure" — is held
+    // by three narrowings (CRIT_3 must-fix 1–3): outside a stylesheet only an element's OWN `style` attribute is read (never a
+    // free `fontSize:` line: CSS-in-JS, `sx`, `css()` nest their media queries where no line reader sees them); a stylesheet's
+    // viewport-only size is judged only when the FILE declares no font size inside a conditional block (`@media`, `@container`,
+    // `@supports`, a Sass `@include`, a nested `@media`); a bare Tailwind `text-[…vw]` only when its file's class lists (review 1
+    // of 1.38: its line's, before) hold no variant `text-` utility. The real shapes are CRIT_3's (its probe's shapes/ folder).
+    const PLAIN = lines(".hero h1 { font-size: 6vw; }", "@media (min-width: 900px) { .hero h1 { font-size: 4rem; } }");
+    const NESTING = lines(".hero h1 {", "  font-size: 6vw;", "  @media (width >= 48rem) {", "    font-size: 3rem;", "  }", "}");
+    const SASS = lines(".hero-title {", "  font-size: 6vw;", "  @include media-breakpoint-up(md) {", "    font-size: 3rem;", "  }", "}");
+    const VANILLA = lines("import { style } from \"@vanilla-extract/css\";", "export const title = style({", "  fontSize: \"8vw\",",
+      "  \"@media\": { \"screen and (min-width: 768px)\": { fontSize: \"4rem\" } },", "});");
+    const EMOTION = lines("const title = css({", "  fontSize: '6vw',", "  '@media (min-width: 768px)': { fontSize: '3rem' },", "});",
+      "export const Hero = () => <h1 css={title}>Hello</h1>;");
+    const MUI = lines("export function Hero() {", "  return (", "    <Typography", "      sx={(theme) => ({", "        fontSize: \"7vw\",",
+      "        [theme.breakpoints.up(\"md\")]: { fontSize: \"3rem\" },", "      })}", "    >", "      Ship faster", "    </Typography>", "  );", "}");
+    const TW = lines("export const A = () => <h1 className=\"text-[6vw] font-bold md:text-6xl\">Big</h1>;", // 1: a variant text- — silent
+      "export const B = () => <h1 className=\"text-[5vw] sm:text-[1.2vw]\">Big</h1>;", // 2: silent (R16, flipped)
+      "export const B2 = () => <h1 className=\"sm:text-[1.2vw] text-[5vw]\">Big</h1>;", // 3: silent (the other order)
+      "export const C = () => <p className=\"text-[5vw]\">404</p>;", // 4: FINDING (a lone text-[5vw])
+      "export const D = () => <h1 style={{ fontSize: \"5vw\" }}>Inline</h1>;", // 5: FINDING (the element's own style)
+      "export const E = () => <h1 className=\"sm:text-[5vw]\">x</h1>;", // 6: a variant one — never judged
+      "export const F1 = () => <i className=\"text-[length:5vw]\" />;", // 7: FINDING (a length: hint)
+      "export const F2 = () => <i className=\"text-[4dvw]/7\" />;", // 8: FINDING (a /line-height)
+      "export const F3 = () => <i className=\"!text-[3vmax]\" />;", // 9: FINDING
+      "export const F4 = () => <i className=\"text-[2vw]!\" />;", // 10: FINDING
+      "export const G = () => <i className=\"text-[2rem] text-[5vw] hover:text-red-500\" />;", // 11: silent (the file's variant sizes)
+      "export const H = () => <i className=\"text-[0] text-[5px] text-[var(--h)] text-[calc(1vw_+_1rem)] text-[vw]\" />;", // 12: nothing viewport
+      "export const I = () => <Heading style={{ fontSize: \"5vw\" }} />;", // 13: a component's style prop — silent
+      "export const J = () => <h1 {...p} style={{ fontSize: \"5vw\" }} />;", // 14: a spread — silent
+      "export const K = () => <h1 style={{ fontSize: \"5vw\", padding: \"1rem\" }} />;", // 15: FINDING (read to its quote)
+      "export const L = () => <h1 style={{ fontSize: \"1rem\", width: \"5vw\" }} />;", // 16: silent (another property's vw)
+      "export const M = () => <h1 style={{ fontSize: { xs: \"8vw\", md: \"3rem\" } }} />;", // 17: silent (an object value)
+      "export const N = () => <h1 style={{ fontSize: big ? \"5vw\" : \"2rem\" }} />;", // 18: silent (no one literal)
+      "export const O = () => <p style={{ fontSize: \"5vmin\" }} />;", // 19: FINDING (vmin)
+      "const Box = styled.h1`", "  font-size: 5vw;", "`;", // 20-22: a CSS-in-JS template line — silent
+      "export const Q = () => <i className=\"text-[5vw] md:text-6xl\" />;"); // 23: silent
+    // (review 1 of 1.38: the bare sizes are decided per FILE — TW's variant lines drop every one of its bare sizes, its inline
+    // styles stand; the same bare sizes in a file of no variant text- utility warn, the first viewport one a line)
+    const TW_LONE = lines("export const C = () => <p className=\"text-[5vw]\">404</p>;", // 1: FINDING
+      "export const F1 = () => <i className=\"text-[length:5vw]\" />;", "export const F2 = () => <i className=\"text-[4dvw]/7\" />;", // 2, 3: FINDINGS
+      "export const F3 = () => <i className=\"!text-[3vmax]\" />;", "export const F4 = () => <i className=\"text-[2vw]!\" />;", // 4, 5: FINDINGS
+      "export const H = () => <i className=\"text-[0] text-[5px] text-[var(--h)] text-[calc(1vw_+_1rem)] text-[vw]\" />;", // 6: nothing viewport
+      "export const G = () => <i className=\"text-[2rem] text-[5vw] text-red-500\" />;"); // 7: FINDING (a colour with no variant is none)
+    const VUE = lines("<template>", "  <h1 style=\"font-size: 5vw\">a</h1>", "  <h2 :style=\"{ 'font-size': '5vw' }\">b</h2>", "  <h3 :style=\"{ fontSize: size }\">c</h3>",
+      "  <p style=\"color: red; font-size:4vw !important\">d</p>", "  <p style=\"font-size: clamp(1rem, 0.5rem + 2vw, 2.5rem)\">e</p>", "</template>");
+    const SVELTE = lines("<h1 style=\"font-size: 8vw\">Hello</h1>", "<style>", "  .lead { font-size: 3vw; }", "</style>");
+    const BLADE = lines("<h1 style=\"font-size:4vw\">{{ $title }}</h1>");
+    // a stylesheet's values: numbers, viewport lengths, calc / clamp / min / max and arithmetic only — one a viewport length
+    const VALUES = lines(":root { font-size: calc(1vw + 1vh + .5vmin); }", // 1: FINDING
+      ".a { font-size: 0; }", ".b { font-size: calc(1.375rem + 1.5vw); }", ".c { font-size: calc(12px + 1vw); }", ".d { font-size: max(1em, 4vw); }",
+      ".e { font-size: calc(var(--s) * 1vw); }", ".f { font-size: math.div(16, 375) * 100vw; }", ".g { font: 5vw/1 sans-serif; }",
+      ".h { --font-size-fluid-3: clamp(2rem, 9vw, 3.5rem); }", // 2-9: silent
+      ".i { font-size: 5vw !important; }", ".j { font-size: 4dvw; }", ".k {", "  font-size:", "    clamp(2vw, 3svw, 4lvh);", "}", // 10, 11, 13: FINDINGS
+      ".l { font-size: 5VW; }", "@layer base { h1 { font-size: 5vw; } }", // 16, 17: FINDINGS (a layer is no condition)
+      ".m { font-size: 5vw !importantly; }", ".n { font-size: vw; }", ".o { font-size: 5 vw; }", // 18-20: silent
+      // (the mutation pass: a function outside calc / clamp / min / max is a doubt; a custom property is never a font size)
+      ".p { font-size: round(5vw, 1vw); }", ".q { --font-size-hero: 8vw; }"); // 21, 22: silent
+    const COND = { // one conditional font size anywhere in the file: every viewport-only size of the file is a doubt
+      below: lines("h1 { font-size: 5vw; }", "@media (min-width: 60rem) { h2 { font-size: 2rem; } }"),
+      above: lines("@supports (font-size: 1cqi) { h2 { font-size: 2rem; } }", "h1 { font-size: 5vw; }"),
+      container: lines("h1 { font-size: 5vw; }", "@container (min-width: 30rem) { h1 { font-size: 3rem; } }"),
+      nestedDeep: lines("h1 { font-size: 5vw; }", "@media (min-width: 60rem) { .a { .b { font-size: 2rem; } } }"),
+      shorthand: lines("h1 { font-size: 5vw; }", "@media (min-width: 60rem) { h1 { font: 2rem/1 serif; } }"),
+      inside: lines("@media (min-width: 60rem) { h1 { font-size: 3vw; } }"),
+      applyCond: lines("h1 { @apply text-[5vw]; }", "@media (min-width: 60rem) { h1 { @apply text-6xl; } }"),
+      applyIn: lines("@media (min-width: 60rem) { h1 { @apply text-[4vw]; } }"),
+      // (a block nested past DS_BLOCK_DEPTH is not read: what it holds may be a conditional size — a doubt)
+      deep: lines("h1 { font-size: 5vw; }", ...Array.from({ length: 65 }, () => ".w {"), "x: y;", ...Array.from({ length: 65 }, () => "}")),
+    };
+    const NOCOND = { // what is no condition: a layer, an at-rule block that sizes no text, an @apply alone
+      layerOnly: lines("@layer base { h1 { font-size: 5vw; } }", "@layer components { h2 { font-size: 2rem; } }"),
+      mediaOther: lines("h1 { font-size: 5vw; }", "@media (min-width: 60rem) { h1 { color: red; } }"),
+      shallow: lines("h1 { font-size: 5vw; }", ...Array.from({ length: 63 }, () => ".w {"), "x: y;", ...Array.from({ length: 63 }, () => "}")),
+      apply: lines("h1 { @apply text-[5vw] font-bold; }"),
+      applyVariant: lines("h1 { @apply text-[5vw] md:text-6xl; }"),
+    };
+    const SILENCED = lines("/* ui-check-off: font-size-viewport (a hero sized to the screen on purpose) */", "h1 { font-size: 5vw; }");
+    const SILENCED_TW = lines("export const P = () => (", "  // ui-check-off: font-size-viewport (decorative 404 digits)", "  <p className=\"text-[30vw]\">404</p>", ");");
+    const g = (text, rel) => got(text, rel).filter((f) => /font-size-viewport/.test(f));
+    const at = (...ns) => ns.map((n) => "font-size-viewport@" + n);
+    const R = {
+      plain: g(PLAIN, "src/plain.css"), nesting: g(NESTING, "src/nesting.css"), sass: g(SASS, "src/_hero.scss"), vanilla: g(VANILLA, "src/vanilla-hero.css.ts"),
+      emotion: g(EMOTION, "src/EmotionHero.tsx"), mui: g(MUI, "src/MuiHero.tsx"), tw: g(TW, "src/TwHero.tsx"), twLone: run(TW_LONE, "src/TwLone.tsx").findings.map((f) => f.rule + "@" + f.line + " " + f.value),
+      vue: g(VUE, "src/Hero.vue"), svelte: g(SVELTE, "src/Hero.svelte"),
+      blade: g(BLADE, "resources/views/hero.blade.php"), values: g(VALUES, "src/values.css"),
+      cond: Object.fromEntries(Object.entries(COND).map(([k, t]) => [k, g(t, "src/" + k + ".css")])),
+      nocond: Object.fromEntries(Object.entries(NOCOND).map(([k, t]) => [k, g(t, "src/" + k + ".css")])),
+      silenced: g(SILENCED, "src/s.css"), silencedTw: g(SILENCED_TW, "src/S.tsx"),
+    };
+    // a warn rule: listed before the report-level ones and counted in finish's warning
+    const files = [["src/Hero.svelte", SVELTE], ["src/Box.tsx", lines("export const B = () => <div className=\"transition-all\" />;")]].map(([rel, t]) => Object.assign({ rel }, run(t, rel)));
+    const rep = T.uiChecksReport(files, () => ({ focus: false, limits: [] }), 50), fin = T.uiFinishChecks(rep);
+    all("1.38.0 F0c: font-size-viewport (warn) — a stylesheet's viewport-only font size when the file declares no font size in a conditional block (CRIT_3's plain, nesting and Sass shapes silent; a layer is no condition), an element's own `style` attribute (JSX, HTML, Vue, Svelte, Blade — never a component's, never past a spread, never a free `fontSize:` line: vanilla-extract, emotion, MUI's sx), a bare `text-[…vw]` whose FILE holds no variant `text-` utility (R16 silent; review 1 of 1.38); values of numbers, viewport lengths and calc / clamp / min / max only (got " +
+      js({ R, report: rep.findings.map((f) => f.rule + ":" + f.level), finish: fin.byRule }) + ")", {
+      plain: () => js(R.plain) === "[]" && js(R.nesting) === "[]" && js(R.sass) === "[]",
+      cssInJs: () => js(R.vanilla) === "[]" && js(R.emotion) === "[]" && js(R.mui) === "[]",
+      tw: () => js(R.tw) === js(at(5, 15, 19)),
+      twLone: () => js(R.twLone) === js(["font-size-viewport@1 text-[5vw]", "font-size-viewport@2 text-[length:5vw]", "font-size-viewport@3 text-[4dvw]/7",
+        "font-size-viewport@4 !text-[3vmax]", "font-size-viewport@5 text-[2vw]!", "font-size-viewport@7 text-[5vw]"]),
+      markup: () => js(R.vue) === js(at(2, 3, 5)) && js(R.svelte) === js(at(1, 3)) && js(R.blade) === js(at(1)),
+      values: () => js(R.values) === js(at(1, 10, 11, 13, 16, 17)),
+      cond: () => Object.values(R.cond).every((x) => js(x) === "[]"),
+      nocond: () => js(R.nocond.layerOnly) === js(at(1)) && js(R.nocond.mediaOther) === js(at(1)) && js(R.nocond.shallow) === js(at(1))
+        && js(R.nocond.apply) === js(at(1)) && js(R.nocond.applyVariant) === "[]",
+      silenced: () => js(R.silenced) === js(["~font-size-viewport@2"]) && js(R.silencedTw) === js(["~font-size-viewport@3"]),
+      warn: () => js(rep.findings.map((f) => f.rule + ":" + f.level)) === js(["font-size-viewport:warn", "font-size-viewport:warn", "transition-all:report"])
+        && js(fin.byRule) === js({ "font-size-viewport": 2 }),
+    });
+  }
+
+  { // 1.38: MOTION declared (the project fact no-reduced-motion's — uiChecksOf's `motion`, never a finding): `@keyframes`, an
+    // animation naming one, a transform's transition for a literal time, smooth scrolling, Tailwind's animate-* /
+    // transition-transform / scroll-smooth under any variant — never an opacity / colour / `all` transition, `animation: none`,
+    // a global keyword, a lone var(), `animate-none`, a time of 0, a transition-property; one count a line, its first line
+    const mo = (text, rel) => { const r = run(text, rel); return [r.motion.count, r.motion.line]; };
+    const M = {
+      // (a shadcn dialog: tailwindcss-animate's animate-in under a data variant)
+      dialog: mo(lines("export const O = () => (", "  <DialogPrimitive.Overlay className=\"data-[state=open]:animate-in data-[state=closed]:animate-out fixed inset-0\" />", ");"), "src/components/ui/dialog.tsx"),
+      // (a Vue SFC: its <style scoped> keyframes after a template animate-spin — the first line is the smallest)
+      vue: mo(lines("<template>", "  <i class=\"animate-spin\" />", "</template>", "<style scoped>", ".pop { animation: pop .2s ease-out; }", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>"), "src/Pop.vue"),
+      keyframes: mo(lines("@-webkit-keyframes spin { to { transform: rotate(1turn) } }", ".a { color: red; }"), "src/spin.css"),
+      // (the first rule of a <style> block: its prelude carries the `<style scoped>` line before it)
+      vueFirst: mo(lines("<template>", "  <p>hi</p>", "</template>", "<style scoped>", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>"), "src/P.vue"),
+      // (a <style> before the template: its keyframes, found after the template's utility, is still the first line)
+      vueStyleFirst: mo(lines("<style>", ".a { animation: pop 1s; }", "</style>", "<template>", "  <i class=\"animate-spin\" />", "</template>"), "src/Q.vue"),
+      // (an HTML inline style: smooth scrolling on a markup line)
+      inline: mo(lines("<main style=\"scroll-behavior: smooth\">x</main>"), "src/a.html"),
+      svelte: mo(lines("<button class=\"transition-transform hover:scale-105\">a</button>", "<main class=\"md:scroll-smooth\">b</main>"), "src/Card.svelte"),
+      sheet: mo(lines("html { scroll-behavior: smooth; }", ".a { transition: transform 150ms ease, opacity 1s; }", ".b { transition: translate .2s; }", ".c { animation-name: fade; }"), "src/a.css"),
+      // (a style object and an inline style: a line each — two on one line count once)
+      script: mo(lines("const s = { transition: \"transform .3s\", animation: \"spin 1s linear infinite\" };", "const t = <div style={{ animation: \"pulse 2s\" }} />;"), "src/S.tsx"),
+      none: mo(lines(".a { transition: opacity .2s; }", ".b { transition: color .2s, background-color .2s; }", ".c { transition: all .3s; }", ".d { animation: none; }", ".e { animation: inherit; }",
+        ".f { animation-name: var(--anim); }", ".g { transition: transform 0s 1s; }", ".h { transition: transform var(--d); }", ".i { transition-property: transform; transition-duration: .2s; }",
+        ".j { scroll-behavior: auto; }"), "src/none.css"),
+      noneTw: mo(lines("<div class=\"motion-reduce:animate-none transition-opacity transition-colors\">x</div>"), "src/N.vue"),
+      apply: mo(lines(".btn { @apply animate-bounce; }"), "src/apply.css"),
+    };
+    // (an `animation:` value is no transition: `animation: 1s` never reads as transition-all — and a transition-all stays one)
+    const anim = got(lines("const s = { animation: \"1s ease\" };", "const t = { transition: \"all .3s\" };"), "src/A.tsx");
+    all("1.38: motion declared — keyframes (a vendor prefix too), an animation naming one, a transform's transition for a literal time, smooth scrolling, Tailwind's animate-* / transition-transform / scroll-smooth under a variant (an @apply's too), a style object's; never opacity / colour / all transitions, animation none / inherit / a lone var(), animate-none, a 0s duration, a var() time, transition-property; one a line, the first line (got " +
+      js({ M, anim }) + ")", {
+      dialog: () => js(M.dialog) === js([1, 2]),
+      vue: () => js(M.vue) === js([3, 2]),
+      keyframes: () => js(M.keyframes) === js([1, 1]) && js(M.vueFirst) === js([1, 5]) && js(M.vueStyleFirst) === js([2, 2]) && js(M.inline) === js([1, 1]),
+      svelte: () => js(M.svelte) === js([2, 1]),
+      sheet: () => js(M.sheet) === js([4, 1]),
+      script: () => js(M.script) === js([2, 1]),
+      none: () => js(M.none) === js([0, 0]) && js(M.noneTw) === js([0, 0]),
+      apply: () => js(M.apply) === js([1, 1]),
+      anim: () => js(anim) === js(["transition-all@2"]),
+    });
+  }
+
+  { // 1.38 (found by chain P): a markup file's <style> block — its opening tag's line is a CSS line, so its FIRST rule read the
+    // tag in its prelude and an at-rule there read as none since 1.37: a print / reduced-motion / conditional block — the same
+    // sheet as a .css file is silent; a first rule's value holds no tag; a later block is read as before
+    const sfc = (body, rel) => got("<template><h1>x</h1></template>\n<style scoped>\n" + body + "</style>\n", rel);
+    const S1 = { print: "@media print { button { outline: none; } }\n", reduced: "@media (prefers-reduced-motion: reduce) { .a { transition: all .2s; } }\n",
+      cond: "@media (min-width: 600px) { h1 { font-size: 2rem; } }\nh1 { font-size: 5vw; }\n" };
+    const R1 = Object.fromEntries(Object.entries(S1).map(([k, b]) => [k, [sfc(b, "src/A.vue"), sfc(b, "src/A.svelte"), got(b, "src/a.css")]]));
+    const first = run("<style>\nbutton:focus { outline: none; }\n</style>\n<template><b>x</b></template>\n", "src/P.vue").findings.map((f) => f.value);
+    const later = got("<style>\n.a { color: red; }\n@media print { button { outline: none; } }\nbutton { outline: none; }\n</style>\n", "src/L.vue");
+    all("1.38: a <style> block's first rule is read without its tag — an at-rule there is one (print, reduced motion, a condition: silent, as in a .css file), a first rule's value names no tag; later blocks as before (got " + js({ R1, first, later }) + ")", {
+      atRule: () => Object.values(R1).every((x) => x.every((y) => js(y) === "[]")),
+      value: () => js(first) === js(["button:focus { outline: none }"]),
+      later: () => js(later) === js(["outline-removed@4"]),
+    });
+  }
+
+  { // 1.38.0 review 1 (UP-5): a SECOND <style> block (Vue's global + scoped pair) — its first rule's prelude carried the first
+    // block's `</style>` line and its own tag: an at-rule there read as none (print, a condition, keyframes) — read as the first
+    // block's is; a first SELECTOR rule's value names no tag. (Astro's `define:vars` braces are not: the 1.39 backlog.)
+    const two = (first, second, close = "</style>") => lines("<template><h1 class=\"t\"><button>x</button></h1></template>", "<style>", first, close, "<style scoped>", ...second, "</style>");
+    const T2 = {
+      print: got(two(".b { color: red; }", ["@media print {", "  button { outline: none; }", "}"]), "src/TwoPrint.vue"),
+      size: got(two("h1 { font-size: 5vw; }", ["@media (min-width: 900px) {", "  .t { font-size: 4rem; }", "}"]), "src/TwoSize.vue"),
+      spaced: got(two(".b { color: red; }", ["@media print {", "  button { outline: none; }", "}"], "</style >"), "src/TwoSpaced.vue"),
+      svelte: got(two(".b { color: red; }", ["@media print {", "  button { outline: none; }", "}"]), "src/Two.svelte"),
+    };
+    const kf = run(two(".p { color: red; }", ["@keyframes pop { to { opacity: 1 } }"]), "src/TwoKf.vue").motion;
+    const sel = run(two(".b { color: red; }", ["button { outline: none; }"]), "src/TwoSel.vue").findings.map((f) => f.rule + "@" + f.line + " " + f.value);
+    all("1.38.0 review 1: a second <style> block's first rule is read without the first block's `</style>` and its own tag — an at-rule there is one (print, a condition: silent; keyframes: motion), `</style >` too; a selector rule's value names no tag (got " + js({ T2, kf, sel }) + ")", {
+      atRule: () => Object.values(T2).every((x) => js(x) === "[]"),
+      keyframes: () => js(kf) === js({ count: 1, line: 6 }),
+      selector: () => js(sel) === js(["outline-removed@6 button { outline: none }"]),
+    });
+  }
+
+  { // 1.38.0 review 1 (UP-3): the bare `text-[…vw]` is decided per FILE, as a stylesheet's size is — its candidates kept and
+    // dropped when ANY class list of the file held a size under a variant. Per line, a class list split over lines
+    // warned: the reviewer's cn() / cva / clsx() / a wrapped class attribute (JSX, Vue). Still warning: a lone bare size in a
+    // file of no variant `text-` (JSX, an HTML class), an element's own style beside a variant one (decided on its tag), a
+    // sheet's declaration beside an `@apply` of a colour variant (the @apply's variant drops the @apply sizes alone).
+    const S3 = {
+      cn: ["src/Hero.tsx", lines("export function Hero() {", "  return (", "    <h1", "      className={cn(", "        \"text-[8vw] font-bold leading-none\",", "        \"md:text-7xl\"", "      )}", "    >", "      Ship", "    </h1>", "  );", "}")],
+      cva: ["src/heading.tsx", lines("const heading = cva(\"text-[6vw] font-bold\", {", "  variants: { size: { lg: \"md:text-7xl\" } },", "});")],
+      clsx: ["src/T.tsx", lines("export const T = ({ big }) => (", "  <h1", "    className={clsx(", "      'text-[9vw]',", "      'lg:text-8xl',", "      big && 'font-black'", "    )}", "  >", "    x", "  </h1>", ");")],
+      attr: ["src/A.tsx", lines("export const T = () => (", "  <h1", "    className=\"text-[9vw] font-black", "      lg:text-8xl\"", "  >x</h1>", ");")],
+      vue: ["src/H.vue", lines("<template>", "  <h1", "    class=\"text-[9vw] font-black", "           lg:text-8xl\">x</h1>", "</template>")],
+      // (the variant anywhere in the file: above, another element's; Tailwind 3's important `lg:!text-7xl`)
+      above: ["src/B.tsx", lines("export const A = () => <p className=\"md:text-6xl\">a</p>;", "export const B = () => <p className=\"text-[5vw]\">b</p>;")],
+      important: ["src/I.tsx", lines("export const B = () => <p className=\"text-[5vw]\">b</p>;", "export const A = () => <p className=\"lg:!text-7xl\">a</p>;")],
+      // (a sheet: an @apply's variant size drops the @apply sizes of the file, in another rule too)
+      applyTwo: ["src/apply.css", lines("h1 { @apply text-[5vw]; }", ".lead { @apply md:text-6xl; }")],
+    };
+    // (review 2 of 1.38, R2-UP-1: only a variant that SETS A SIZE silences — a type-scale step, an arbitrary length — each
+    // shape of RE_TW_TEXT_VARIANT's one file a key; never a colour, an alignment, a wrap: the reviewer's Hero* shapes)
+    const sized = (v) => ["src/V.tsx", lines("export const B = () => <p className=\"text-[5vw]\">b</p>;", "export const A = () => <p className=\"" + v + "\">a</p>;")];
+    for (const [k, v] of Object.entries({ xs: "sm:text-xs", sm: "sm:text-sm", base: "lg:text-base", lg: "md:text-lg/7", bang: "md:text-6xl!", rem: "md:text-[2rem]",
+      dot: "md:text-[.875rem]", hint: "lg:text-[length:var(--h)]", paren: "md:text-(length:--h)", calc: "md:text-[calc(1rem_+_2vw)]",
+      clamp: "md:text-[clamp(2rem,6vw,5rem)]", min: "md:text-[min(6vw,5rem)]", max: "md:text-[max(2rem,6vw)]" })) S3[k] = sized(v);
+    const W3 = {
+      html: ["public/404.html", lines("<p class=\"text-[5vw] font-bold\">404</p>", "<p class=\"text-red-500\">x</p>")],
+      styleBeside: ["src/S.tsx", lines("export const A = () => <h1 className=\"md:text-6xl\" style={{ fontSize: \"5vw\" }}>a</h1>;")],
+      declColour: ["src/decl.css", lines("h1 { font-size: 5vw; }", ".btn { @apply hover:text-white; }")],
+      dark: ["src/D.tsx", lines("export const B = () => <p className=\"text-[5vw]\">b</p>;", "export const A = () => <p className=\"dark:text-white\">a</p>;")],
+      hover: ["src/HeroHover.tsx", lines("export function Hero() {", "  return (", "    <section>", "      <h1 className=\"text-[8vw] font-bold leading-none\">Ship faster</h1>",
+        "      <a href=\"/docs\" className=\"text-gray-600 hover:text-gray-900\">Read the docs</a>", "    </section>", "  );", "}")],
+      darkP: ["src/HeroDark.tsx", lines("export const Hero = () => (", "  <section className=\"bg-white dark:bg-black\">", "    <h1 className=\"text-[10vw] tracking-tight\">Launch</h1>",
+        "    <p className=\"text-zinc-700 dark:text-zinc-300\">Copy</p>", "  </section>", ");")],
+      group: ["src/HeroGroup.vue", lines("<template>", "  <header>", "    <h1 class=\"text-[7vw] font-black\">Title</h1>",
+        "    <nav><a class=\"group\"><span class=\"group-hover:text-indigo-600\">Pricing</span></a></nav>", "  </header>", "</template>")],
+      align: ["src/HeroAlign.tsx", lines("export const Hero = () => (", "  <div>", "    <h1 className=\"text-[9vw]\">Big</h1>", "    <p className=\"text-left md:text-center\">centred on desktop</p>", "  </div>", ");")],
+      // (a wrap; an arbitrary colour, an untyped var — Tailwind reads it as a colour —, daisyUI's `text-base-content` colour; a
+      // project's own key; a sheet's @apply sizes beside a colour-variant @apply)
+      wrap: ["src/W.tsx", lines("export const B = () => <p className=\"text-[5vw] md:text-nowrap\">b</p>;")],
+      hex: ["src/X.tsx", lines("export const B = () => <p className=\"text-[5vw] hover:text-[#111]\">b</p>;")],
+      cssVar: ["src/Y.tsx", lines("export const B = () => <p className=\"text-[5vw] md:text-[var(--brand)]\">b</p>;")],
+      daisy: ["src/Z.tsx", lines("export const B = () => <p className=\"text-[5vw] hover:text-base-content\">b</p>;")],
+      ownKey: ["src/K.tsx", lines("export const B = () => <p className=\"text-[5vw] md:text-hero\">b</p>;")],
+      applyColour: ["src/applyc.css", lines("h1 { @apply text-[5vw]; }", ".btn { @apply hover:text-white; }")],
+    };
+    const g3 = (o) => Object.fromEntries(Object.entries(o).map(([k, [rel, t]]) => [k, got(t, rel).filter((f) => /font-size-viewport/.test(f))]));
+    const silent = g3(S3), warns = g3(W3);
+    const warnAt = { html: 1, styleBeside: 1, declColour: 1, dark: 1, hover: 4, darkP: 3, group: 3, align: 3, wrap: 1, hex: 1, cssVar: 1, daisy: 1, ownKey: 1, applyColour: 1 };
+    all("1.38.0 review 1 / 2: a bare `text-[…vw]` is decided per FILE — silent when any class list of the file holds a SIZE under a variant (cn() / cva / clsx() / a wrapped class attribute in JSX and Vue, the variant above or below, `lg:!text-7xl`, each type-scale step and arbitrary length; a sheet's @apply in another rule); a lone one, one beside a colour / alignment / wrap / own-key variant (`dark:text-white`, `hover:text-gray-900`, `hover:text-[#111]`, `md:text-center`, `md:text-hero`), an element's own style beside a variant, a sheet's declaration or @apply beside a colour-variant @apply still warn (got " + js({ silent, warns }) + ")", {
+      silent: () => Object.keys(silent).length === 21 && Object.values(silent).every((x) => js(x) === "[]"),
+      warns: () => js(warns) === js(Object.fromEntries(Object.entries(warnAt).map(([k, n]) => [k, ["font-size-viewport@" + n]]))),
+    });
+  }
+
+  { // 1.38.0 review 1 (UP-4): a file read only in part — past the read (`over`: the caller read DS_READ_CHARS of a longer file)
+    // or a line cut at DS_LINE_MAX — judges none of the sizes the REST of the file decides: a sheet's (its override may sit past
+    // the cut — the reviewer's min.css, a theme's 270K style.css) and the bare `text-[…vw]` of its class lines; an element's own
+    // style is decided on its tag and still warns, as do the other rules; a file read whole as before
+    const one = (text, rel, over) => T.uiChecksOf(T.viewLines(text, rel), rel, over).findings.map((f) => f.rule + "@" + f.line);
+    const LONG = "const svg = \"" + "x".repeat(2100) + "\";"; // (a line viewLines cuts)
+    const P4 = {
+      overSheet: one("h1 { font-size: 5vw; }\n", "src/a.css", true), wholeSheet: one("h1 { font-size: 5vw; }\n", "src/a.css", false),
+      min: one(".hero{font-size:5vw}" + ".x{color:red}".repeat(170) + "@media (min-width:768px){.hero{font-size:3rem}}\n", "src/min.css"),
+      cutTsx: one(lines("export const C = () => <p className=\"text-[5vw]\">404</p>;", LONG), "src/C.tsx"),
+      overTsx: one(lines("export const C = () => <p className=\"text-[5vw]\">404</p>;"), "src/C.tsx", true),
+      wholeTsx: one(lines("export const C = () => <p className=\"text-[5vw]\">404</p>;"), "src/C.tsx"),
+      // (a markup file: its cut template line leaves its <style> block's sizes unjudged too — the file is read in part)
+      cutVue: one(lines("<template><p>" + "x".repeat(2100) + "</p></template>", "<style>", "h1 { font-size: 5vw; }", "</style>"), "src/C.vue"),
+      inline: one(lines("export const D = () => <h1 style={{ fontSize: \"5vw\" }}>x</h1>;", "export const I = () => <img src=\"/a.png\" />;", LONG), "src/D.tsx", true),
+    };
+    all("1.38.0 review 1: a file read only in part (past the read, a line cut) judges none of the font sizes the rest of the file decides — a sheet's, a bare text-[…vw]; an element's own style and the other rules still warn; read whole, as before (got " + js(P4) + ")", {
+      part: () => [P4.overSheet, P4.min, P4.cutTsx, P4.overTsx, P4.cutVue].every((x) => js(x) === "[]"),
+      whole: () => js(P4.wholeSheet) === js(["font-size-viewport@1"]) && js(P4.wholeTsx) === js(["font-size-viewport@1"]),
+      inline: () => js(P4.inline) === js(["font-size-viewport@1", "img-no-alt@2"]),
+    });
+  }
+
   { // silencing: one inline comment, any syntax of the file, on the finding's line or the one above
     const jsx = lines("export const A = () => (", "  <>", "    {/* ui-check-off: img-no-alt */}", "    <img src=\"/spacer.gif\" />", // 4: silenced (above)
       "    <img src=\"/b.png\" /> {/* ui-check-off: click-no-keyboard, img-no-alt */}", // 5: silenced (same line)
@@ -518,6 +783,27 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38.0 review 1 (UP-4): a sheet the feature report reads only in part — the reviewer's theme style.css of 270K (its
+    // responsive section past the read), a token file the feature edits (globals.css) the same — judges none of its font sizes:
+    // `view-size` says the bound, finish warns of none; the same sheet read whole warns
+    const past = (head) => { let s = head; for (let i = 0; s.length < 270 * 1024; i++) s += ".block-" + i + " { margin: 0 0 1.5rem; padding: 1rem 2rem; }\n"; return s + "@media (max-width: 768px) {\n  .hero-title { font-size: 2rem; }\n}\n"; };
+    const HERO = ".hero-title { font-size: 4.5vw; line-height: 1.1; }\n";
+    const g = feature("part", ["src/styles/style.css", "src/app/globals.css"]);
+    write(g.p, "src/styles/style.css", past("/* Theme */\n" + HERO));
+    write(g.p, "src/app/globals.css", past(GLOBALS + HERO));
+    const r = S.designSystemReport(g.p, { name: g.slug }), fin = T.designSystemFinish(g.p, g.slug);
+    const w = feature("part-whole", ["src/styles/style.css"]);
+    write(w.p, "src/styles/style.css", "/* Theme */\n" + HERO);
+    const rw = S.designSystemReport(w.p, { name: w.slug }).uiChecks;
+    all("1.38.0 review 1: a sheet the feature report reads in part (270K: a view file, a token file) judges no font size — view-size names both, finish warns of none; read whole it warns (got " +
+      js({ ui: r.uiChecks, fin: fin && fin.uiChecks, whole: rw.byRule }) + ")", {
+      part: () => !("font-size-viewport" in r.uiChecks.byRule) && r.uiChecks.byRule["transition-all"] === 1
+        && js(r.uiChecks.limits.map((l) => [l.code, l.count])) === js([["view-size", 2]]) && r.viewFiles === 1,
+      finish: () => !(fin && fin.uiChecks && fin.uiChecks.byRule["font-size-viewport"]),
+      whole: () => js(rw.byRule) === js({ "font-size-viewport": 1 }),
+    });
+  }
+
   { // the focus facts (CRIT_1 must-fix 4): ANY focus style excuses an outline removal — in the feature's own files (a Vue <style>),
     // else in any of the project's stylesheets, a .less or an `_a11y.scss` no name ranks; read only when a candidate exists
     const mk = (tag, extra) => {
@@ -699,6 +985,37 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.38: the project's `_UI checks off:_` marker hides a rule PROJECT-WIDE — the feature report's findings, total, byRule never
+    // hold it (counted in `off`, the rules alone: the fact is the inventory's), an inline-silenced one stays `silenced`, a finding
+    // past a file's cap is counted there too, the focus search never runs for an off outline-removed (49 sheets: no focus-sheets),
+    // and finish never warns of it; a registry without the marker keeps the 1.37 shape (no off keys)
+    const OFF = "# Design System\n\n_UI checks off: outline-removed (what-input: mouse and touch only), transition-all (kit code), no-reduced-motion (our own setting), img-no-alt_\n";
+    const QUIET = lines("*:focus {", "  /* ui-check-off: outline-removed */", "  outline: 0;", "}");
+    const LIST = lines("export const L = () => (", "  <ul>", ...Array.from({ length: 201 }, (_, i) => "    <li className=\"transition-all\">Row " + i + "</li>"), "  </ul>", ");");
+    const mk = (tag, registry) => {
+      const g = feature("off-" + tag, ["src/checkout/Checkout.tsx", "src/checkout/reset.css", "src/checkout/quiet.css", "src/checkout/List.tsx"], registry);
+      write(g.p, "src/checkout/Checkout.tsx", CHECKOUT);
+      write(g.p, "src/checkout/reset.css", RESET);
+      write(g.p, "src/checkout/quiet.css", QUIET);
+      write(g.p, "src/checkout/List.tsx", LIST);
+      for (let i = 0; i < 49; i++) write(g.p, "src/sheets/s" + String(i).padStart(3, "0") + ".css", ".s" + i + " { color: red; }\n");
+      return Object.assign(g, { r: S.designSystemReport(g.p, { name: g.slug }), fin: S.finishFeature(g.p, g.slug) });
+    };
+    const on = mk("on", OFF), plain = mk("plain", "# Design System\n");
+    const u = on.r.uiChecks, M = S.msg("en").finish;
+    const ui = (x) => (x.fin.warnings || []).filter((w) => /UI anti-pattern|outline removals? not judged/.test(w));
+    all("1.38: `_UI checks off:_` hides a rule project-wide — the feature report counts its findings in `off` (an inline-silenced one stays silenced, one past a file's cap counted too), never in findings / total / byRule; the focus search is not run for it; finish never warns of it; the fact and an entry without a reason are no rule off here; without the marker the 1.37 shape (got " +
+      js({ u, plainKeys: Object.keys(plain.r.uiChecks), fin: [on.fin.designSystem, ui(on)], plainFin: ui(plain) }) + ")", {
+      listed: () => js(u.findings.map((x) => x.rule)) === js(["click-no-keyboard", "img-no-alt"]) && u.total === 2 && js(u.byRule) === js({ "click-no-keyboard": 1, "img-no-alt": 1 }),
+      off: () => js(u.off) === js([{ rule: "outline-removed", reason: "what-input: mouse and touch only", count: 1 }, { rule: "transition-all", reason: "kit code", count: 202 }]),
+      ignored: () => js(u.offIgnored) === js([{ entry: "img-no-alt", why: "no-reason" }]),
+      silenced: () => u.silenced === 2,
+      noSearch: () => js(u.limits) === js([]) && plain.r.uiChecks.limits.some((l) => l.code === "focus-sheets"),
+      finish: () => js(on.fin.designSystem.uiChecks.byRule) === js({ "click-no-keyboard": 1, "img-no-alt": 1 }) && js(ui(on)) === js([M.uiChecks(2, "src/checkout/Checkout.tsx:2 click-no-keyboard; src/checkout/Checkout.tsx:5 img-no-alt", on.slug)]),
+      plain: () => js(Object.keys(plain.r.uiChecks)) === js(["findings", "total", "byRule", "silenced", "limits"]) && plain.r.uiChecks.byRule["transition-all"] === 202,
+    });
+  }
+
   { // every bound that cut what the checks read, or dropped a finding, is named in `uiChecks.limits` with a count and the first
     // file — in the report and in finish's designSystem.uiChecks (review 1 of 1.37: a long line, a file's 200 findings and its
     // 256K read dropped real findings with `limits` empty); a finding past a file's cap is still counted in total / byRule
@@ -817,6 +1134,16 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       // expression that never closes in a body)
       clickNest: [fill("<div onClick={go}>".repeat(100) + "x\n"), "x.tsx"], clickClose: [fill("<div onClick={go}>x" + "</b>".repeat(200) + "</div>\n"), "x.tsx"],
       clickControl: [fill("<div onClick={go}>x<button>b</button>\n"), "x.tsx"], clickBrace: [fill("<div onClick={go}>" + "{ (".repeat(300) + "<i>\n"), "x.tsx"],
+      // (1.38.0 F0c, font-size-viewport — ITEM_3's K2: runs of `text-[` the pick lets through, a class list of bare viewport sizes
+      // ended by a variant one, a sheet of `calc(1vw + 1vw + …)` values each as long as a line is read — the walker keeps a
+      // statement's last 2,000 characters —, styles of non-viewport font sizes read to their end)
+      textRun: [fill("text-[".repeat(300) + "\n"), "x.tsx"], textList: [fill("<p className=\"" + "text-[5vw] ".repeat(150) + "md:text-[2vw]\">x</p>\n"), "x.tsx"],
+      vwCalc: [fill("a { font-size: calc(" + "1vw + ".repeat(300) + "1vw); }\n"), "x.css"], styleRun: [fill("<h1 style=\"" + "font-size: 1rem; ".repeat(100) + "\">x</h1>\n"), "x.html"],
+      // (1.38, motion — CRIT_X D4's combined line: `animate-` widens the pick too; runs of it, class lists of motion utilities, a
+      // transition of endless transform items, a sheet of keyframes, a style object's endless animation list)
+      animRun: [fill("animate-".repeat(300) + "\n"), "x.tsx"], animList: [fill("<i className=\"" + "data-[state=open]:animate-in ".repeat(60) + "\">x</i>\n"), "x.tsx"],
+      motionSheet: ["a { transition:\n" + fill("  transform 1s,\n") + "}\n", "x.css"], keyframesRun: [fill("@keyframes k { }\n"), "x.css"],
+      animStyle: [fill("const s = { animation: \"" + "spin 1s, ".repeat(100) + "\" };\n"), "x.tsx"],
     };
     const time = (f) => { const ts = []; for (let k = 0; k < 5; k++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
     // (a stylesheet is read through the ONE CSS walk the registry's token reader already makes — styleTokens —: its ratio is to
@@ -843,9 +1170,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
 
   { // the checks against the read they share a text with: uiChecksOf over real-shaped files costs at most 3× rawValuesOf over the
     // same texts (CRIT_X decision 6: the text read once feeds both); finish without a registry costs at most 1.5× the feature
-    // report — it IS one (CRIT_X decision 5: measured as a ratio)
+    // report — it IS one (CRIT_X decision 5: measured as a ratio). 1,200 files (1.38.0: 120 made a ~1.3 ms denominator, and a
+    // GC pause spiked the ratio to 3–4× on 1.37 and 1.38 alike — a node:24-alpine run failed at 4.7 with both medians ~1.7)
     const texts = [];
-    for (let k = 0; k < 40; k++) {
+    for (let k = 0; k < 400; k++) {
       texts.push(["src/components/ui/button.tsx", lines("const v = cva(\"inline-flex transition-all outline-none focus-visible:ring-[3px] rounded-md\", { variants: {} })",
         "export function Button({ asChild, ...props }) {", "  const Comp = asChild ? Slot : \"button\"", "  return <Comp data-slot=\"button\" className={cn(v({ className }))} {...props} />", "}")]);
       texts.push(["src/components/Card.vue", lines("<template>", "  <div class=\"card\" @click=\"open = true\">", "    <img :src=\"cover\" :alt=\"title\" />", "  </div>", "</template>",
@@ -864,7 +1192,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       const fin = time(() => T.designSystemFinish(g.p, g.slug)), rep = time(() => S.designSystemReport(g.p, { name: g.slug }));
       return { checks: Math.round(c / r * 100) / 100, finish: Math.round(fin / rep * 100) / 100 };
     }, (x) => x.checks <= 3 && x.finish <= 1.5);
-    all("1.37 UI checks: the checks cost at most 3× the raw-value read of the same 120 real-shaped files, and a finish without a registry at most 1.5× the feature report it runs (got " + js(s) + ")", {
+    all("1.37 UI checks: the checks cost at most 3× the raw-value read of the same 1,200 real-shaped files, and a finish without a registry at most 1.5× the feature report it runs (got " + js(s) + ")", {
       checks: () => s.checks <= 3,
       finish: () => s.finish <= 1.5,
     });

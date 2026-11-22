@@ -16,7 +16,9 @@ Phase 6, opt-in.
   `portRole` (`port` · `after`) + `differential` on a +port task (its definition-of-done rule, `brief.portRules`); `dependsOn` (see
   Task dependencies); the loop's definition of done.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
-- **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
+- **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`, 6,000 characters since 1.38: a view task keeps +ui's filled state
+  matrix — `[UI] UI States`, ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views — beside the other `[UI]` sections, all five up to 2 views;
+  the brief ~≤ 10 KB) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
   feature's `x/`; a T-ID is read by its number (T-01 = T-1); a file needs a boundary on both sides (US-1.AC-1 is not US-1.AC-10).
   The task's own IDs fill the budget first, then the file / track ones, in design.md's order. A task proving a track's
   criterion takes that track's marked sections (`trackMarks`); 1.37: a `uiTask()` task — one that builds what the user sees —
@@ -44,7 +46,12 @@ Phase 6, opt-in.
   and before the code review; its Blockers, and the Majors a fresh reviewer confirms, are fix rounds, and a later round
   that changes a reviewed view runs it again, in verdict mode (1.37): a Blocker / Major that pass reports — a regression or
   one missed earlier — enters the loop like any other (a Major confirmed first), a minor is deferred; so every finding a
-  tick waits on can be fixed or, past round 5, parked.
+  tick waits on can be fixed or, past round 5, parked. What it captures (1.38, ui-review.md §2): per view, each designed
+  state at ONE width (the reference's, else 320) and the worst case at each of the project's breakpoints (at most 6,
+  `spec_scan {designSystem}`'s widths) — states plus widths, never states × widths, an `n/a` state never; a view past the
+  16-image dispatch splits, its states then its widths. A state's announcement and focus are its fixture test's to
+  assert, never judged from an image (the reviewer gets no new mode: a width capture is a pair or floor by its files, so
+  spec-ui-reviewer.md did not change).
 - **The protocol is prose; the engine never dispatches anything** (it stays cross-tool): `references/subagent-execution.md` and the
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
@@ -649,7 +656,8 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
 - **The snapshot** — at a feature's FIRST complete tasks approval at level tests (`approvePhase`: `p === "tasks"`, the approval
   complete — a role's waiting sign-off takes none; a fast-forward through tasks passes it on): `protectWalk(projectDir, first)` —
   each live feature's `.specs/<f>/tests/` FIRST (the approving feature's, `first`, before the others), then the project's test
-  files (`walkProject` — hidden / `SCAN_IGNORE` folders skipped, links never followed; `isCodeFile && isTestFile`), at most
+  files (`walkProject` — hidden / `SCAN_IGNORE` folders skipped, links never followed; `isCodeFile && isTestFile` — 1.38: a
+  Jest `__mocks__/` / `__fixtures__/` file and a Cypress `*.cy.<script>` among them, markdown-and-trace.md → Test code), at most
   `PROTECT_MAX_FILES` (2,000 — `truncated` past them; so a project past the cap still lists the feature's own failing tests).
   **The walk runs OUTSIDE the feature lock:** the facade wraps the locked approvePhase in `protectWalkFirst`, which walks only when
   this call may be that first approval (phase or `through` tasks, no revoke, no dry run, level tests, the list not `snapshotted`)
@@ -843,6 +851,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   it out. It goes as a regression does now (ui-review.md §5 rule 5) and `Open: N` counts it; the tick rules were right
   already. D4: the floor's WCAG 1.4.10 exception read "a box that scrolls inside the page is not the page scrolling" — any
   box; it is W3C's again, content that needs a two-dimensional layout for its meaning or use.
+- **1.38.0** (D — the capture matrix of items 3 and 4, CRIT_X D1) — the review captured "the views and states this task
+  built" at one viewport, the floor at 320 alone: no width a project designs for was ever looked at, and 15 states × 6
+  widths would blow every dispatch. One matrix for both items, kept in ui-review.md §2 (no ui-capture.md; its cap 10,000 →
+  12,000): the states at one width, the worst case — the state a width breaks — at every breakpoint, measured like the
+  floor (a `.json` each, a sideways scroll a Blocker), ≤ 6 widths — with their `.prev.png`, 12 images: one dispatch — and
+  the per-view split said in §3 for the rest (CRIT_3 must-fix 7). Each new state is reached through the worst case's data boundary;
+  a state the script can't reach is never shot as the default page. "On mobile" moved to ui-responsive.md → Checking it.
 - **1.31** — the brief's `preflight` key and the pre-flight (from google/elephant-goldfish-model's zero-decision rule): a
   brief that left a design choice open was found only when the implementer came back NEEDS_CONTEXT — a dispatch spent — or
   not at all when it chose alone.
@@ -898,6 +913,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   brief quoted — was only named. `want()` now ranks (1: every earlier rule, 2: the uiWork line alone) and the budget reads
   the task's IDs first, then the other rank-1 sections, then the rank-2 ones, each group in design.md's order. Fixtures: the
   reviewer's two shapes (08-tasks); the mutations: quality.md → History → 1.37.0 review 1.
+- **1.38.0** (DECISIONS shared point 5, CRIT_4 must-fix 1) — `BRIEF_DESIGN_BUDGET` 4,000 → 6,000. +ui's state matrix (the
+  1.38 template) filled with ~50 characters a view cell and a terse a11y cell measured 2,727 / 3,724 / 4,704 bytes at 1 / 2 /
+  3 views: at 4,000 a view task's brief lost Responsiveness & i18n and the Performance Budget at one view and `[UI] UI States`
+  itself — the section the task builds from — at two. At 6,000 the matrix is quoted at 1–3 views, all five `[UI]` sections at
+  1–2; at 3 views Responsiveness & i18n and the UI Performance Budget (the smallest, last in design.md's order) are named in
+  "Relevant but not included" (RB-2's order unchanged; neither a separate allowance nor a per-view quote — the ruling's
+  narrower choice). The brief grows to ~8.3 KB at 2 views, ~9 KB at 3. Fixture: 08-tasks (1, 2 and 3 views; it fails at
+  4,000); three 1.37 fixtures sized for 4,000 were re-sized past the new budget (M15's Big file, the 1.37 view brief's
+  Accessibility, RB-2's [UI] block).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
@@ -1204,6 +1228,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   accept and `protect <file>` read the typed path: through a junction a second key, the real file's lift left in force —
   `realRel`. **D4-1** (prose) /spec-finish step 1, the accept's note and verification.md: finish again after the accept, or the
   summary written before it names the test as changed.
+- **1.38.0** (chain P) — `isTestFile` gained Cypress's `*.cy.<script>`, `__mocks__/` and `__fixtures__/` (markdown-and-trace.md →
+  Test code and file reads): at level tests a manual mock or a fixture module is now a protected test — snapshotted at the
+  tasks approval, its edits asked about, finish's check — as a test file under `tests/` always was.
 
 ### Harness-observed evidence
 - **1.14 F1** — the observe hook, the `observed` stamp, `meta.evidence` and reason `unobserved`. Its feature review: **R1** — an

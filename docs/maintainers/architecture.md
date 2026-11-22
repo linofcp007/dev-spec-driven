@@ -58,10 +58,17 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   protect.js                   1.36 guard tests' protected tests: the snapshot, the tick record, the edit decision, protect / unprotect, finish's check
   upgrade.js · scan.js         spec_upgrade · the brownfield scan, coverage, the ONE notion of code / test file (isCodeFile)
   dupes.js                     the duplicate-code detector (duplicationReport, duplicateRuns): spec_scan {duplicates}, finish — LAZY
+  design-values.js             1.38: a raw value against the project's scale (tokenScale, judgeRaw, groupKey), a registry token's
+                               value against the code's (tokenDrift), the units table's readers (offUnit, unitRows) — pure, no fs:
+                               design-system.js calls it — LAZY (quality.md → Design-system registry)
   design-system.js             the design system against the code (designSystemReport, designSystemSeed, designSystemFinish):
                                spec_scan {designSystem}, the seeded registry, finish — LAZY (the registry's reader: quality.js)
-  ui-checks.js                 the UI checks (1.37: uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass): a +ui feature's
-                               anti-patterns — the feature report's `uiChecks`, finish's warning — LAZY (quality.md → UI checks)
+  ui-checks.js                 the UI checks (1.37: uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass; 1.38: uiProjectPass, uiOff): a
+                               +ui feature's anti-patterns — the feature report's `uiChecks`, finish's warning; the project inventory
+                               (design-system.js uiProject reads, the opt-in pass), the `_UI checks off:_` marker — LAZY (quality.md → UI checks)
+  breakpoints.js               1.38: the widths the visual review captures (breakpointWatch — the token walk's observer —,
+                               breakpointsReport): ui.md's line, Tailwind 4's `@theme`, the default set; spec_scan {designSystem}'s
+                               report alone — LAZY (quality.md → Design-system registry, Breakpoints)
   import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering —
                                LAZY (the tool lists IMPORT_TOOLS / STEERING_IMPORT_TOOLS: scaffold.js)
 mcp/lib/i18n.js · i18n/        the localized content: the facade (the tables, LAYOUTS — the structure every language shares)
@@ -126,7 +133,8 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   `approvalGuardDecision`'s CLI path, `engineVersion`'s package.json). Every `mcp/lib` source requires only Node core or a
   relative file.
 - **The lazy tier (1.30.1) — the second way to reach a name.** `LAZY` lists the modules no hook and no frequent call needs —
-  dupes.js, design-system.js (1.35), ui-checks.js (1.37) and import/ (~15 ms of every engine load until then) —, loaded on the first call of one
+  dupes.js, design-values.js (1.38), design-system.js (1.35), ui-checks.js (1.37), breakpoints.js (1.38) and import/ (~15 ms
+  of every engine load until then) —, loaded on the first call of one
   of `LAZY_ENTRIES` (`duplicateRuns`, `duplicationReport`, `designSystemReport`, `designSystemSeed`, `designSystemFinish`,
   `importSpec`, `planPaths`): the tier's functions an eager module links or the facade
   takes. Until then `E` holds a STUB of each (a function of the same name that loads the tier, then calls the real one), so the
@@ -154,8 +162,8 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 25 modules loaded with the engine (+ dupes.js,
-  design-system.js, ui-checks.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
+  costs ~0.65 ms before any compile (the open is the expensive part): 25 modules loaded with the engine (+ dupes.js, design-values.js,
+  design-system.js, ui-checks.js, breakpoints.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
   the module of the concept; a new file must earn its load cost. The facade's first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
   loads SLOWER with it. Measure by interleaving the variants in fresh processes, p50 + spread — never one run. On a slow file
@@ -184,11 +192,14 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   (`steeringStubs` — hashes, `isSteeringStub()`; `diagrams` — `templateDiagramSet()`; `sectionLines` / `sectionLinesBr` —
   `sectionTemplateLines()`; `bugSlots` — `bugTemplateSlots()`; `templateReqs` — `builtinTemplateReqs()`, whose criteria
   quality.js `builtinTemplateAcs` reads live; `stopGate` — `builtinStopGate()`, the stop gate's lists of every language,
-  `i18n.stopGateLists()`, which guards.js `stopPatterns` reads). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
+  `i18n.stopGateLists()`, which guards.js `stopPatterns` reads; `uiStateNames` — `uiStateNames()`, 1.38: +ui's state labels
+  and the state matrix's a11y header cell of every language, `<id>\t<label>` lines, the header's id `a11y` — the one list read
+  whole, by doctor's ui-states). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
   an engine set built from EVERY language's texts belongs here — a process loads only the languages it speaks
   (mcp/tests/16-conventions-build.js "I-I2" asserts an English doctor / next_action / done / finish / catalog / stop gate loads no pt.js,
   es.js or pt-br.js). A new builder or artifact goes into `templateCorpus()`, then rebuild. The per-project part (the
-  project's templates and packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only `.has()` is asked of the sets.
+  project's templates and packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only `.has()` is asked of the sets
+  (`uiStateNames` aside).
 - **The corpus is trusted only for the engine the process LOADED.** markdown.js stats every source as it loads
   (`LOADED_STATS`: size, mtime, ctime); the first placeholder question hashes them and trusts the file only while every stat
   is unchanged; a language file loaded later that changed drops it (`onLocaleLoad` → `localeLoaded`). So the long-lived MCP
@@ -200,7 +211,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   `mcp/lib/spec.bundle.js` — **git-ignored, never committed** (megabytes, stale after every engine change, a conflict on every
   merge, for an opt-in gain on slow file systems). The user builds it after each plugin update. It replaces an existing file
   only if that is a previous bundle (its `// GENERATED by scripts/build.js --bundle` header) or with `--force`
-  (`cliOutput.bundleNotOurs`). Each engine and i18n module and the engine's helpers (42 files: `engine/**`, `i18n.js`,
+  (`cliOutput.bundleNotOurs`). Each engine and i18n module and the engine's helpers (49 files in 1.38: `engine/**`, `i18n.js`,
   `i18n/*`, probe.js, latin1-scan.js — `bundledFiles()`) is its source VERBATIM inside a function run by a small registry
   (`moduleRegistry()`, emitted with `Function.prototype.toString`); `load(root)` keeps every module's ORIGINAL `__filename` /
   `__dirname`; a relative require resolves in the registry (else Node's loader at its original path), a bare one goes to
@@ -273,6 +284,21 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.37** — engine/ui-checks.js, the UI checks (quality.md → UI checks): LAZY after design-system.js — only the feature
   report and finish read it, never a hook — and a module of its own rather than ~500 more lines in design-system.js (3,400).
   16-conventions' lazy-tier test now counts `LAZY`'s own files rather than a list of names.
+- **1.38.0** — engine/breakpoints.js, the widths the visual review captures (quality.md → Design-system registry,
+  Breakpoints): LAZY after ui-checks.js — only spec_scan {designSystem}'s report reads it, through design-system.js, never a hook,
+  finish or the seed — a concern of its own (~150 lines: ui.md's line, Tailwind 4's `@theme` through the token walk's
+  observer, the report). The load-cost line above names it; the Layout tree and CLAUDE.md's LAZY list are the release's docs
+  pass (written there, with design-values.js — below).
+- **1.38.0** (chain T) — engine/design-values.js, what a raw value is against the project's own scale and a registry token's
+  value against the code's (quality.md → Design-system registry, Raw values against the scale, Token values): LAZY before
+  design-system.js, its one caller; pure — no fs, no require, nothing linked —: the colour maths (OKLab), font stacks,
+  motion's times and easings, the groups' key, drift's same-notation rule and the units table's readers, ~290 lines that
+  are a concern of their own rather than more of design-system.js (3,500). With breakpoints.js the bundle holds 49 files
+  (47 in 1.37; The build).
+- **1.38** (chain P) — no module: the project's UI checks live where their parts do — the READ (`uiProject`, the opt-in pass
+  after scanCode, and `uiViewFile`, the one view-reader predicate) in design-system.js, the COUNTS (`uiProjectPass`) and the
+  marker's ids (`uiOff`, `UI_FACTS`) in ui-checks.js, the marker's reader (`dsChecksOff`) in quality.js, which names no rule
+  id. design-system.js exports `uiProject` for one test (a truncated walk's scan).
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):
@@ -331,6 +357,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30.1** — the stop gate's lists (`stopGate`) joined the corpus: built from every language's table, they loaded pt.js, es.js
   and pt-br.js into every English Stop hook. Measured (median of 21 interleaved fresh processes, Windows 11, Node 26): the Stop
   hook on a claim 204.6 → 188.7 ms; the corpus grew from ~129 KB to ~152 KB.
+- **1.38.0** — `uiStateNames` joined the corpus (CRIT_4 must-fix 6): doctor's ui-states recognises a state-matrix row by a
+  label of ANY language, and rendered, those labels loaded pt.js, es.js and pt-br.js into every English doctor of a +ui
+  feature. The first list read whole rather than asked `.has()` (`<id>\t<label>` lines); `CORPUS_KEYS` holds it, so a corpus
+  without it renders, and `localeLoaded` drops it with the rest (two 16-conventions-build fixtures); the corpus grew by ~1.5 KB.
 
 ### Config paths
 - **v1.11** — `mcp/servers.json` replaced the root `.mcp.json` (CONNECTION_CLOSED in every maintainer session).

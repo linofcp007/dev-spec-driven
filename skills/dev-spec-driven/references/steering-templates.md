@@ -636,9 +636,9 @@ _Libraries: @mui/material_
 | PriceTag | `src/ui/PriceTag.tsx` |  | _From: checkout_ |
 ```
 
-- Keep the first header cell of each table (`Token`, `Component` — or their PT / ES forms) and the markers in
-  English (`_Token sources:_`, `_Libraries:_`, `_From:_`, `_Deprecated:_`): they are what the engine reads. Everything
-  else is yours.
+- Keep the first header cell of each table (`Token`, `Component`, `Property` — or their PT / ES forms) and the markers in
+  English (`_Token sources:_`, `_Libraries:_`, `_From:_`, `_Deprecated:_`, `_UI checks off:_`): they are what the engine
+  reads. Everything else is yours.
 - `_From: <feature>_` is written by `spec_finish` on the rows it adds: the feature that built the component, whose own
   design keeps saying New. Add it by hand when you list a component a feature is still building.
 - `_Deprecated: use DataGrid_` in any cell after a component's name retires it (`_Deprecated_` alone too, or a
@@ -648,6 +648,17 @@ _Libraries: @mui/material_
   silent when the row's notes name that one, alone too, as this file writes it (`DataGrid`, not "the data grid"): a
   capitalised word reads as the name — to keep a component on purpose, write the name in a code span or a tag. It
   retires the WHOLE component: write a retired variant or prop without the marker.
+- A **units table** (below) is optional — the team's convention of which units each property takes: a report, never a
+  default (none is written for you). `spec_scan {designSystem: true, name}` lists a feature's declarations off it
+  (`units`), `spec_scan {designSystem: true}` the rows it could not read (`unitsTable`); never finish, doctor or the
+  brief. `margin-*` covers `margin` and `margin-top`; a component's props table (`| Property | Type | Default |`) is none.
+- `_UI checks off: transition-all (our kit animates colours on purpose)_` — a line of its own, as `_Token sources:_` is
+  (in a list item or bold it is not read), each id bare (in a code span it is not applied), entries separated by
+  commas — switches a UI check off for the whole project: the project's report and every feature's count what it hides,
+  never list it, and finish never warns about it. An entry without its reason in parentheses, or naming no check or
+  project fact, is not applied — the report says why. A design-system.md written only for this line enrols the project in
+  the registry (doctor's `ui-design-system`, finish's New components); without one, silence a single finding with the
+  inline `ui-check-off:` comment (`references/ui-code-scan.md`).
 - A feature's design lists what it uses in `[UI] Design System Usage` (`Kind | Component | Why / notes`);
   `spec_doctor`'s `ui-design-system` checks those rows against this file, the task brief quotes the entries a UI task
   needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds
@@ -674,6 +685,17 @@ _Libraries: @mui/material_
   such a value is not listed, nor a plain JSON file — not in the design-tokens format — that shows no hex or functional
   colour, length or reference (a map of numbers) — add those rows by hand. A JSON key that is not words (a GUID, an API
   key, `w1280h720`) is not seeded.
+
+The units table, under any heading (PT `| Propriedade | Unidades |`, ES `| Propiedad | Unidad |`):
+
+```markdown
+## Units
+| Property | Units |
+|---|---|
+| font-size, line-height | rem |
+| margin-*, padding-*, gap | rem, % |
+| border-width, outline-width | px |
+```
 
 ---
 

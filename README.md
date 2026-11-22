@@ -132,7 +132,12 @@ feature's screens (where the registry has tokens) and adds its new components to
 (`spec_scan {designSystem: true, name}`) also runs the UI checks on the feature's view and style files — defects no taste
 excuses, such as zoom blocked, an image with no text alternative or a click the keyboard can't reach: on a +ui feature
 they are one more `finish` warning, registry or not, never a blocker, and a comment `ui-check-off: <rule-id>` with its
-reason, on the finding's line or the line above, silences one. A registry row marked `_Deprecated: use DataGrid_` retires
+reason, on the finding's line or the line above, silences one. Without a feature, `dev-spec design-system` also
+inventories the project's UI checks, counted per rule over every view and style file (a line
+`_UI checks off: <rule-id> (reason)_` in design-system.md switches one off everywhere), a feature's report names the
+token of the project's scale that a raw colour, font or timing already is, and both end in the project's breakpoints,
+the widths the visual review captures. `doctor`'s `ui-states` warns (a note at size s) when the design's state matrix
+gives a state no row or leaves a view's cell open. A registry row marked `_Deprecated: use DataGrid_` retires
 its component: `doctor` warns when a design still reuses or extends it, naming the replacement. A +ui task that changes
 what renders gets a visual review (not at size xs / s) — screenshots of the build compared with the design's reference by
 a reviewer that sees only the images —, and a view with no reference is held to the accessibility floor instead (320 px
@@ -318,7 +323,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (32 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine: 28 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
+│   ├── lib/engine/                   ← the engine: 30 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← localized content (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)

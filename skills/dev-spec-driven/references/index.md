@@ -51,7 +51,8 @@ the whole library.
   smells, the simplification pass, the refactor backlog
 - `references/ui-review.md` — the visual review of a +ui task: the reference per view, capturing the same state on both
   sides, the image-only reviewer, INVALID → recapture, the floor without a reference (320 px, 200 % zoom, focus), the
-  worst-case capture, the fix loop, the verdict pass after a fix
+  worst-case capture, the fix loop, the verdict pass after a fix, what to capture per view (each state at one width, the
+  worst case at every breakpoint)
 - `references/critic-review.md` — the deep review before a gate: who reviews by size (the critic, a cold read, two
   critics at l), keeping reviewers fresh, the triage (fix · contest · ask), the one re-audit
 - `references/review-feedback.md` — handling review comments against the spec · `references/red-flags.md` — the
@@ -70,8 +71,13 @@ the whole library.
 - +api: `references/api-design-patterns.md` (versioning, breaking changes, problem+json, pagination, idempotency, ETag,
   rate limits, contract tests)
 - +ui: `references/ui-design-patterns.md` (design system first and its registry `.specs/steering/design-system.md`,
-  component contracts, UI states and the worst case, forms and interaction details, motion, WCAG 2.2 AA and how to
-  test it, i18n, performance budgets)
+  component contracts, UI states and the worst case, forms and interaction details, motion, how each state is
+  announced and where focus goes, WCAG 2.2 AA and how to test it, i18n, performance budgets) ·
+  `references/ui-code-scan.md` (what `spec_scan {designSystem}` reads in the code and what it doesn't, the UI checks it
+  runs on a feature's files and the project's, switching one off, raw values against the scale, token drift, the units
+  table) · `references/ui-responsive.md` (the project's breakpoints and the lines to paste, layouts
+  without breakpoints, fluid type, which unit for what, viewport units, reflow at 320 px, zoom and text size, touch
+  targets and pointers, safe areas, images, tables, orientation, inputs)
 - +obs: `references/observability-patterns.md` (SLOs and burn-rate alerts, telemetry, runbooks, feature flags,
   progressive delivery, operability tests)
 - +data: `references/data-pipeline-patterns.md` (data contracts and schema evolution, quality checks and quarantine,

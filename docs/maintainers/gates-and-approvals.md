@@ -51,10 +51,13 @@ review findings — is in History at the end.
   `critical-flows` / `critical-flow-tests` (`critical`, 1.33), `ui-design-system` (`designSystem`, 1.35 — quality.md →
   Design-system registry; this check reads a file OUTSIDE the feature, so a design approved cleanly under it and unchanged
   since only warns when the registry moves on — `designSystemSettled`): a finished feature is never asked to reopen what it signed off (quality.md →
-  The stamp scheme, Critical flows). A new warn on an approved artifact → a new stamp key here. The one warn with none, on
+  The stamp scheme, Critical flows). A new warn on an approved artifact → a new stamp key here. The two warns with none, on
   purpose: `ui-deprecated` (1.37 — quality.md → Design-system registry) reports the registry of TODAY, a component the team
   marked `_Deprecated:_` after the design's approval, never a rule the approval was held to — so it is never a fail, and it
-  is not run once the feature has a finish recorded (what it built is history).
+  is not run once the feature has a finish recorded (what it built is history); `ui-states` (1.38 — quality.md → UI state
+  matrix) judges only the matrix the 1.38 scaffold writes, recognised by a header cell no earlier design holds, so an older
+  approval has nothing to be flagged for — a warn at m / l / no size, a note at s, never a fail, in no gate, not run after a
+  finish either.
 - **Phase order.** An EARLIER phase in `pendingGateList()` (phases with an artifact — a missing file never blocks forever),
   or an earlier approved phase whose content changed (`changedApprovedPhases()`: by content — never `byDate` or whitespace;
   a deleted approved artifact counts), adds the failing check `phase-order` (`gates.phaseOrder` / `phaseOrderChanged`) —
@@ -533,6 +536,10 @@ here. "r5 review" is 1.23's fifth review.
 - **1.37** — `ui-deprecated`, the first warn on an approved artifact with no stamp: it reports a team edit to the registry
   after the approval, not a release's new rule, so there is nothing an older approval could have been held to (quality.md →
   History, Design-system registry); `ui-design-system` and it share one `applies` (`uiDesigned`).
+- **1.38.0** — `ui-states`, the second warn with no stamp: the design (ITEM_4) stamped every design approval (a uiStates
+  key, never built) and passed a design approved without it as legacy; once the critique anchored the matrix to the scaffold's 1.38 a11y header
+  cell, no design approved before could be flagged, and the stamp, its history record and the legacy branch were cut
+  (CRIT_4). Its `applies` is ui-deprecated's without the registry: `uiDesigned`, no finish recorded.
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

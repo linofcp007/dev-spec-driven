@@ -190,5 +190,11 @@ function stopLineClaim(words, tested, work) {
     String.raw`|(?=[ \t]*[.,!:—–-][^\n]*?(?<![\p{L}\p{N}_])${tested}(?![\p{L}\p{N}_]))|\s+${work})`;
 }
 
+// +ui's state matrix (1.38): a language's UI_STATES — { labels: { <English-stable id>: label, … } in the matrix's order, head,
+// view, a11y } — as the UI States template's table: a header row, its separator and one row per state, its other cells blank.
+// The one source of the rows and of quality's uiStateLabels / uiStateHead / uiStateView / uiStateA11y.
+const uiStateTable = (s) => [`| ${s.head} | ${s.view} | ${s.a11y} |`, "|---|---|---|", ...Object.values(s.labels).map((l) => `| ${l} | | |`)].join("\n");
+
 module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, signalTracks, templateTests, greenLine, templateTestRows,
-  cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli, FEATURE_SIZES, SIZE_CORE_ACS, coreTemplateAcs, CORE_SUPERSEDED_BY, coreSuperseded, stopLineClaim };
+  cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli, FEATURE_SIZES, SIZE_CORE_ACS, coreTemplateAcs, CORE_SUPERSEDED_BY, coreSuperseded, stopLineClaim,
+  uiStateTable };

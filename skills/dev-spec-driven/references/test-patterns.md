@@ -108,9 +108,10 @@ task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits
 - Only test files are read: source files in a broad list of languages — the one guard mode, `spec_scan` and
   `spec_scan {coverage: true}` count as code (JS/TS, Python, Go, Rust, Java/Kotlin/Scala/Groovy, C#/F#/VB, Ruby, PHP, Swift,
   Objective-C, C/C++, Vue/Svelte, PowerShell, shell, SQL, Lua, R, Perl, Elixir/Erlang, Haskell, Clojure, Dart, Julia,
-  Nim, OCaml …), plus a Bats suite (`*.bats`) and Perl's `t/*.t` — that sit under a `test/`, `tests/`, `__tests__/`,
-  `spec/` or `e2e/` folder (or the Portuguese `teste/` / `testes/` and the Spanish `prueba/` / `pruebas/`, any case) or
-  are named like a test in their language (`*.test.ts`, `*.spec.js`, `test_*.py`,
+  Nim, OCaml …), plus a Bats suite (`*.bats`) and Perl's `t/*.t` — that sit under a `test/`, `tests/`, `__tests__/`, `__test__/`,
+  `spec/` or `e2e/` folder (or the Portuguese `teste/` / `testes/` and the Spanish `prueba/` / `pruebas/`, any case; Jest's
+  `__mocks__/` and `__fixtures__/` too) or are named like a test in their language (`*.test.ts`, `*.spec.js`, Cypress's
+  `*.cy.ts` — a Welsh-locale module named so reads as a test too —, `test_*.py`,
   `*_test.go`, `*Test.java`, `*Tests.cs`, `*Tests.fs`, `*Spec.scala`, `*_test.exs`, Pester's `*.Tests.ps1` (beside the
   code too), `*_test.sh`, `*_test.cc` / `*_unittest.cc`, `*_spec.lua`, `test-*.R`, `*_SUITE.erl` / `*_tests.erl`,
   `*_test.clj`, `*Tests.m` …). A shell / C / C++ `test_*` file and an hspec `*Spec.hs` count in a test folder only, and a

@@ -35,9 +35,9 @@ Capture the views and states this task built, never the whole app.
 - **Both sides alike:** the same viewport and device scale, theme, locale and data; animations finished, the loading
   over (unless the state IS loading). Both fresh: the reference from the path `design.md` names — never an earlier
   `--ref.png` copy.
-- **The worst case** (the state matrix's row of extremes) is a state of its own: `<view>--worst--build.png`, its data
-  put in through the boundary the other states use (a story, a mock, a fixture route) — never by editing the markup;
-  none: `not captured (no data boundary)`.
+- **The worst case** (the state matrix's row of extremes) is a state of its own: `<view>--worst--build.png` (`--w768--`
+  in the name at a breakpoint, below), its data put in through the boundary the other states use (a story, a mock, a
+  fixture route) — never by editing the markup; none: `not captured (no data boundary)`.
 - **Files:** `.specs/<feature>/.execution/ui/task-N/<view>--<state>--ref.png`, `--build.png`, `--floor-320.png`… (a new
   `.execution/` gets a `.gitignore` holding `*` first).
 - **The kept script:** keep the capture script at `.execution/ui/capture.<ext>` — every round and the verdict pass take
@@ -46,6 +46,26 @@ Capture the views and states this task built, never the whole app.
   yourself.
 - **No way to capture** (no headless browser, no script, no running app): ledger `Task N: ui review — skipped (no
   capture tool)` and say so at the checkpoint. Never "passed".
+
+**What to capture, per view** — its states plus its widths, never every state at every width; a state the matrix
+answers `n/a` is never captured:
+
+| What | Width | Captured as |
+|---|---|---|
+| Each designed state | one: the reference's; no reference, 320 | a pair where the reference shows it, else a build capture judged on the floor |
+| The worst case | each of the project's breakpoints | `<view>--worst--w<width>--build.png` and its `.json`; at 320, `floor-320` for a view with no reference |
+| `floor-zoom`, `floor-focus` | the table below | a view with no reference |
+
+- **Widths:** the project's breakpoints, at most 6, 320 first — ui.md's `- Breakpoints:` line, else the code's, else
+  320 · 390 · 768 · 1024 · 1440; `dev-spec design-system <feature>` prints them ([ui-responsive.md](ui-responsive.md) → The
+  project's breakpoints). Scale 1 above 320; a `--w<width>--ref.png` beside a capture makes it a pair. Each has its
+  `.json`, as the floor's do: a measured sideways scroll at any width is a Blocker.
+- **Each state through its data boundary**, the worst case's (a story, a mock, a fixture route): a delayed response for
+  Slow network, a 409 / 412 for Conflict, a 404 route for Not found, an invalid submit for Form validation, the moment
+  after a delete for Undo. The script waits for the state's own element (its text or role) before the shot; a state it
+  can't reach is `not captured (no data boundary)`, never shot as the default page.
+- **Announced · focus is never judged from an image:** each state's fixture test asserts it — the live region's role and
+  text, a focus assertion ([ui-design-patterns.md](ui-design-patterns.md) → Visual regression and component tests).
 
 **The floor** — for each view with no reference, three measured captures of its worst case (else its first loaded
 state), taken by a tool that sets the viewport and records the width it got (Playwright's `viewport`, Puppeteer's
@@ -60,9 +80,8 @@ asked makes the capture INVALID.
 | `floor-focus` | the review viewport, Tab pressed until focus is inside the task's region (50 at most) — keys only, never a click or a script's `focus()` | 2.4.7, 2.4.11 |
 
 `floor-spacing` (1.5 line height, 2em paragraphs, .12em letters, .16em words — 1.4.12) only where the script can add a
-style. On mobile: the smallest supported width and the OS text size closest to 200 % (iOS AX2, Android scale 2.0);
-Android's pseudo-locales only where the build enables them. A capture the tool can't take is listed under Not judged
-and ledgered — never clean.
+style. On mobile: [ui-responsive.md](ui-responsive.md) → Checking it. A capture the tool can't take is listed under Not
+judged and ledgered — never clean.
 
 ## 3. Dispatch — the images only
 
@@ -71,8 +90,8 @@ viewport, theme, locale — say when the locale is a pseudo-locale), the task's 
 and `.specs/steering/ui.md` when it exists. Never the code, the diff, the brief or your view of it. **Pair or floor is a
 property of the files:** a `--build.png` with its `--ref.png` beside it is a pair; every other build capture, and every
 `floor-*` one, is judged on the floor. At most 16 images a dispatch, the `.prev.png` counted — past that, one per
-view. Size l: two independent reviewers in one message; a difference both report counts at once, one only one reports
-is confirmed first (§4).
+view; a view past that alone: its states, then its widths, in dispatches of their own. Size l: two independent
+reviewers in one message; a difference both report counts at once, one only one reports is confirmed first (§4).
 
 ## 4. The verdict
 

@@ -405,8 +405,9 @@ function projectFileInside(realRoot, full) {
 // scope levels, the reuse check's neighbours and the status line's tests gate. Julia (test/runtests.jl), Nim (tests/),
 // OCaml (dune's test/), Rust (tests/) and R (tests/testthat/) keep their tests in these folders. The plugin's other
 // languages name the folder too (1.34.1): teste/ · testes/ (Portuguese) and prueba/ · pruebas/ (Spanish) — a Portuguese
-// PowerShell project's Testes\Testes.Core.ps1 runner was never read, so its tests gate could not pass without a waiver.
-const TEST_DIRS = new Set(["test", "tests", "__tests__", "__test__", "spec", "e2e", "teste", "testes", "prueba", "pruebas"]);
+// PowerShell project's Testes\Testes.Core.ps1 runner was never read, so its tests gate could not pass without a waiver. (1.38) A test
+// harness's folders too — Jest's `__mocks__/` (a manual mock: test code, never a component of the app) and `__fixtures__/`.
+const TEST_DIRS = new Set(["test", "tests", "__tests__", "__test__", "spec", "e2e", "teste", "testes", "prueba", "pruebas", "__mocks__", "__fixtures__"]);
 // Perl's test folders — for a .t file only (t/basic.t, xt/pod.t): a t/ folder of another language is no test folder.
 const PERL_TEST_DIRS = new Set(["t", "xt"]);
 // Only the conventions — every alternative anchored, the names are one path segment (linear):
@@ -417,11 +418,13 @@ const PERL_TEST_DIRS = new Set(["t", "xt"]);
 //   x_spec.rb (RSpec) · x_spec.lua (busted) · x_SUITE.erl (Common Test) · x_tests.erl (EUnit)
 //   FooTest(s).java / .kt / .cs / .swift / .php / .scala · FooIT.java · FooTests.fs / FooSpec.scala / FooSuite.groovy (F#,
 //   ScalaTest, Spock) · FooTests.m / .mm (XCTest) / FooTests.vb · FooSpec.kt
+//   (1.38) x.cy.ts / .tsx / .js / .jsx / .mjs / .cts… (Cypress) — a SCRIPT only: strings.cy.json (a Welsh locale's data) is no
+//   test; a Welsh locale MODULE named so (messages.cy.ts) reads as one — the caveat is documented, no syntax tells them apart
 // A module that merely ends in "spec" / "test" without the separator is code: dev-spec.js, lib/spec.js, latest.sh,
 // contest.py, inspect.lua, attest.c. A PREFIX alone names no shell / C / C++ test and "Spec" no Haskell one
 // (scripts/test_data.sh, test-connection.sh, src/test_utils.c, lib/test_helper.c, lib/DevSpec.hs are production code) —
 // those count under a test folder (shunit / Bats / Unity / hspec keep their tests in test/), their SUFFIXES anywhere.
-const RE_TEST_NAME = /\.(?:test|spec)\.[a-z0-9]+$|^tests?\.(?:[cm]?[jt]s|py)$|^test[-_][^/]*\.(?:[cm]?[jt]s|py|[Rr])$|_test\.(?:go|py|c|cc|cpp|cxx|sh|bash|exs|dart|clj|cljs|cljc)$|_unittest\.(?:c|cc|cpp|cxx)$|_spec\.(?:rb|lua)$|_(?:SUITE|tests)\.erl$|(?:Tests?|IT)\.(?:java|kt|cs|swift|php|scala)$|(?:Tests?|Spec|Suite)\.(?:fs|fsx|scala|groovy)$|Tests?\.(?:m|mm|vb)$|Spec\.kt$/;
+const RE_TEST_NAME = /\.(?:test|spec)\.[a-z0-9]+$|^tests?\.(?:[cm]?[jt]s|py)$|^test[-_][^/]*\.(?:[cm]?[jt]s|py|[Rr])$|_test\.(?:go|py|c|cc|cpp|cxx|sh|bash|exs|dart|clj|cljs|cljc)$|_unittest\.(?:c|cc|cpp|cxx)$|_spec\.(?:rb|lua)$|_(?:SUITE|tests)\.erl$|(?:Tests?|IT)\.(?:java|kt|cs|swift|php|scala)$|(?:Tests?|Spec|Suite)\.(?:fs|fsx|scala|groovy)$|Tests?\.(?:m|mm|vb)$|Spec\.kt$|\.cy\.[cm]?[jt]sx?$/;
 // The conventions whose case doesn't matter (Windows file systems): Pester's *.Tests.ps1 (Invoke-Pester's default filter,
 // anywhere in the tree) and a Bats suite (*.bats).
 const RE_TEST_NAME_EXTRA = /\.tests\.ps1$|\.bats$/i;

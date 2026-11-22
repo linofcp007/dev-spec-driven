@@ -235,7 +235,8 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
 ### +ui
 - **Registries:** `[UI]`; `UI_SECTIONS` Design System Usage · UI States · Accessibility · Responsiveness & i18n · UI
   Performance Budget — every ordinary name `loose` (a core "## Accessibility" or "[SaaS] Performance Budget" never stands in);
-  steering `ui.md`; US-1.AC-24..27; UI States' block has a SECOND line since 1.32 — the reference per view the visual review
+  steering `ui.md` (its `- Breakpoints:` line is read since 1.38 — the widths the visual review captures: quality.md →
+  Design-system registry, Breakpoints); US-1.AC-24..27; UI States' block has a SECOND line since 1.32 — the reference per view the visual review
   compares the build with (`references/ui-review.md`), appended so the 1.31 one-line block still reads as template text;
   Design System Usage's block has a second line and a `Kind | Component | Why / notes` table since 1.35 — the rows doctor's
   `ui-design-system` checks against the registry `.specs/steering/design-system.md` (a steering STUB, never in
@@ -245,7 +246,18 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
   (localized in PT / ES), never under the table — `designSystemUsage` would read its states table's `New` row as a usage row
   and the m / l gate would fail. That h2 is NOT a `UI_SECTIONS` entry (`ui-sections` never asks for it, the scaffold writes
   none) and no reader reads it — a task proving a `[UI]` criterion gets it in its brief's Design context like any
-  `[UI]`-titled h2. Each new line is ≤ 180 characters in
+  `[UI]`-titled h2. Since 1.38 (one change, one re-pin) UI States has a FOURTH line — the state matrix's shape, pointing to
+  `references/ui-design-patterns.md` — and, after a blank line, the matrix itself: `State | View | Announced · focus`, one
+  row per state, every other cell blank (no slot: `placeholderReport` reads nothing in it). Its rows and header are built
+  from each language file's `UI_STATES` (`uiStateTable`, i18n/common.js) — the same values quality's `uiStateLabels` /
+  `uiStateHead` / `uiStateView` / `uiStateA11y` hold, the state ids English-stable: one source. A table row's template key is
+  its NON-EMPTY cells (markdown-and-trace.md → Readers), so a view column added, the a11y column deleted or compact pipes
+  keep the untouched matrix template. The guide the line points to (ui-design-patterns.md → The states every view needs)
+  writes the same 16 labels in the same order under the same `State` and `Announced · focus` cells — 17-docs' 1.38.0 D
+  block reads them from `uiStateLabels` / `uiStateHead` / `uiStateA11y`: a label renamed in `UI_STATES` is renamed in the
+  guide's row in the same commit. Its paragraph on the matrix says what doctor's `ui-states` reads, and
+  `references/ui-responsive.md` / ui-review.md §2 say where the visual review's widths come from (`spec_scan
+  {designSystem}`'s breakpoints): a change to either engine rule changes that prose too. Each new line is ≤ 180 characters in
   every language, appended (an edited line would turn a 1.36 design's guidance into its author's text: the 05 fixture's
   `prefix` pins the 1.36 lines byte for byte);
   reserved frontend / front-end / ux / gui / wcag — **never `a11y` / `accessibility`**: the
@@ -966,6 +978,32 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   contract lives under its own optional h2, not under the usage table — a states table's `New` row there is read as a usage
   row and failed the m / l gate (the placement fixture pins it). Not in `UI_SECTIONS`, not scaffolded: a section the
   template asked for would turn every feature without a New component into a doctor warning. Mutation pass 21 of 21.
+- **1.38.0** (F0b — CRIT_X D6 as the owner's DECISIONS 4 amends it) — +ui's template changes ONCE: UI States' fourth line and
+  the state matrix (item 4: 16 states — the five new ones Slow network, Not found, Conflict, Undo, Form validation — and the
+  `Announced · focus` column), appended; item 3's Responsiveness line was cut (the block's first line already asks for the
+  breakpoints and how the layout adapts). The line names ui-design-patterns.md, where the matrix's guide stays (no
+  ui-states.md). The rows come from each language's `UI_STATES`, which quality's `uiStateLabels` exposes for doctor's
+  `ui-states` (chain S). CRIT_4 must-fix 2: with a whole-line key, the first edit of every multi-view feature (a blank view
+  column) turned the 16 untouched rows into the author's lines and the m / l gate passed an empty matrix — a table row is now
+  keyed by its non-empty cells. The 1.37 fixtures that read the block's LAST line (`short`, `worstWritten`, `prefix`,
+  `threeLines`) read its first lines by place; the scaffold's section report at s / m / l and the corpus's 1,723 texts are
+  1.37.0's. The no-size sha1 re-pinned once (743f91a0… → c44d3054…). Mutation pass: 9, 8 killed at first — the survivor
+  (the key on a line STARTING with `|`) let a pipe-less copy of the untouched matrix read as written; any line holding `|` is
+  keyed by its cells now, the pipe-less shape a fixture, the key's three mutants rerun on it: killed.
+- **1.38.0** (D — items 3 and 4's prose as CRIT_3 / CRIT_4 and the DECISIONS cut them) — the matrix's guide grows IN PLACE
+  in ui-design-patterns.md (no ui-states.md, CRIT_X D1): the states table took the template's labels — 1.37's own read
+  "Error — recoverable" and "Signed out / expired", a second vocabulary beside the scaffold's — and an `Announced · focus`
+  column; the five new rows follow CRIT_4 must-fixes 7–11, checked on w3.org: 4.1.3's "5 errors on page" follows an
+  unsuccessful fill, not a submit; 2.4.11 asks that focus be not ENTIRELY hidden (partly covered passes AA); W3C's 5-second
+  new-mail notice is no 2.2.1 time limit because the inbox shows the mail, so an Undo needs a second home or stays until
+  dismissed; Conflict picks one mechanism (a message that takes focus is a change of context); Not found is announced by
+  the route announcer or focus to the h1; Undo names 3.3.4's three ways. Item 3's template line stayed cut: "what each
+  view changes per breakpoint" lives in the critic, the checklists and `references/ui-responsive.md`. The 17-docs rows read
+  the labels from the template's source, so the guide cannot drift from the scaffold. Mutation pass 101 of 101 (the
+  prose rows, the budgets, and the four properties the rows read from the engine and the template).
+- **1.38.0** (chain R, item 3) — the `ui.md` stub's `- Breakpoints:` line is READ: spec_scan {designSystem}'s `breakpoints`
+  takes its widths from it first (quality.md → Design-system registry, Breakpoints). No stub changed (CRIT_X D3: rewording it
+  is the harmful hash change); its `[360 / 768 / 1280 px]` slot is not read, so an untouched stub gives the default set.
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.

@@ -394,6 +394,14 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   is the bare marker (the colon outside the italics, as the other markers never read it). The marker retires the WHOLE
   component, wherever it stands: a deprecated variant or prop is written without it (the user docs say so — a
   `ghost (_deprecated_)` variants cell retires the component).
+- **`_UI checks off: <rule-id> (reason)[, …]_`** (1.38, `dsChecksOff`) — a line of its own like `_Libraries:_` (`RE_DS_MARKER`,
+  the same `DS_MARKER_LINES` count, never inside a comment or a fence; a list item or a bold line is none — the user docs say
+  so, review 1 of 1.38), the project's switch for a UI check (UI checks →
+  The marker). Its entries cut by `dsEntries` (at `,` / `;` outside parentheses): `<id> (<reason>)` (`RE_DS_OFF_ENTRY`, any
+  case — the id folded) → `{id, reason}`, the reason what the outer parentheses hold, commas and nested parentheses kept,
+  trimmed, cut at `DS_CELL_MAX` ("" for none, `()` or `( )`); any other shape (`transition-all: kit code`, `outline-removed —
+  modality`, an id in a code span — the user docs say "bare") → `{entry}`, as written, cut; past `DS_MARKER_ENTRIES` (50) ONE more `{entry, past, read}` and no further one (a
+  later marker line too). The registry's `checksOff`. quality.js names NO rule id: engine/ui-checks.js `uiOff` validates them.
 - **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
   mcp/tests/06-gates-sizes.js changed on purpose). `designSystemUsage(design)` → the table rows whose first cell is a kind word
@@ -935,8 +943,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     looked for once a line where it is known (`tagEnd`: a line of openers with no `>` after them was quadratic, review 1). In `.vue` alone a kebab tag with a dash is the component Vue resolves (`<my-button>` → MyButton; one word,
     `<card>`, needs Vue's own element list: never). Read after every script, one queue, the same counters (markups first
     or counted apart lost a script's reading).
-  - **Read ahead** (`readFileHeads`, files.js): the exports read and the usage queue take their files through it — the
-    first AHEAD_PROBE in sequence and timed; when they average AHEAD_SLOW_US or more and AHEAD_MIN remain, AHEAD_WORKERS
+  - **Read ahead** (`readFileHeads`, files.js): the exports read and the usage queue take their files through it (the UI
+    checks' focus search and the project inventory too) — the first AHEAD_PROBE in sequence and timed; when they average
+    AHEAD_SLOW_US or more, AHEAD_MIN remain AND the files left × the probe's average reach AHEAD_START_US (the pool's own
+    start, measured once — 32 + 64 missing paths, pool on vs off: 68–81 ms; review 1 of 1.38: a pool started for the 64–300
+    files of a small tree's UI pass cost more than reading them all), AHEAD_WORKERS
     worker threads (`worker_threads`, Node core) open the rest, worker j the files j, j + W, …, each at most AHEAD_WINDOW
     ahead of the one taken (a SharedArrayBuffer of counters and a stop flag; the main thread waits with `Atomics.wait`); a
     worker silent for AHEAD_STALL_MS, or none that starts, leaves the rest to readFileHead. The text is readFileHead's
@@ -1057,21 +1068,78 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   the registry — the CLI prints each as a row to paste), `pending` (in the code and declared New by an unfinished feature's
   design — `pendingNew`: its finish adds it; a row pasted for it would read as already listed), `stale` (`stalePath` —
   below), `newTokens` (against `tokenNames` — every token the file lists),
-  `newSources` / `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`,
-  `counts`, `newComponents`, `uiChecks` (1.37 — UI checks, below). `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
-  total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `total`).
+  `newSources` / `newLibraries`, `drift` / `gone` / `unitsTable` (1.38 — Token values, The units table, below), `inSync`, and
+  (1.38) `uiChecks` — the project's UI checks, an inventory, when the OPERATION asks (`{uiPass: true}`: the engine's default
+  runs none — UI checks → The project inventory). A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`, `counts`, `groups` and `units` (1.38 — Raw values
+  against the scale, Groups, The units table, below), `newComponents`, `uiChecks` (1.37 — UI checks, below). Both shapes end
+  in `breakpoints` (1.38 — Breakpoints, below). `missing`, `pending`, `stale`, `newTokens`, `drift`, `raw` and `groups` hold
+  their first 50 (`DS_LIST`) with a total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`,
+  `driftTotal`, `total`, `groupsTotal`).
 - **`limits`** — the bounds that CUT what a report read, `[{code, read, file?}]`: files (the walk's cap) · token-files ·
   token-candidates · file-size (`file`) · tokens · registry-rows (rows past 500 are not checked for a gone path) ·
   component-files (a bound of the export read: `DS_EXPORT_FILES`, `DS_EXPORT_CHARS`, `DS_EXPORT_NAMES` — `read`: the
   files read) · workspace-manifests (a bound of the workspace patterns, or a declared pattern not followed —
   `read`: the manifests read, 0 too) — 1.35.1, the project report's alone ·
   view-files (a feature's 200; its report carries every code but tokens and registry-rows — a stylesheet left out of the
-  sources is read for raw values); `truncated` = one of them, and then the report is NEVER `inSync` (said of NAMES: a
-  token's value is not compared, nor a token the code no longer declares — `cliOutput.dsInSync` says so, review 7) — what it
+  sources is read for raw values) · font-values / motion-values (1.38, a feature's: a file's fonts / motion values past their
+  own `DS_RAW_PER_FILE` — `file`, the first it cut); `truncated` = one of them, and then the report is NEVER `inSync` (said
+  of NAMES: a token's value is not compared — 1.38's `drift` lists the values the code holds otherwise, beside it, never in
+  it —, nor a token the code no longer declares — `cliOutput.dsInSync` says so, review 7) — what it
   did not
   read it cannot vouch for (the CLI prints `cliOutput.dsLimit[code](read, file)`, never "the registry and the code agree"
   beside one). A new bound gets its OWN code and line in en / pt / es, and is said only when it cut something: a false
   bound is a false alarm for good.
+- **Breakpoints** (1.38 — engine/breakpoints.js, LAZY after ui-checks.js: `breakpointWatch`, `breakpointsReport`) — the widths
+  the visual review captures: `breakpoints` {widths, from: `ui.md` | `code` | `default`, partial, at (the source's first place,
+  file:line; null for the default set), unread, unreadTotal, limits}, the LAST key of both shapes, the same in each. Built by
+  designSystemReport alone — never in featureReport, which finish calls too —, and its observer rides only the report's scan
+  (`scanCode(root, withComponents, withBreakpoints)`): finish's scan and the seed's carry none (CRIT_3 must-fix 4: they ran it
+  and dropped it — V8 coverage of a child proves no breakpoints.js function runs there: "BP-never" in
+  mcp/tests/15-quality-design-system-breakpoints.js). The first source that gives a width in [320, 3840] decides:
+  - `ui.md` — `.specs/steering/ui.md`'s FIRST `- Breakpoints:` line: a list item (`-`, `*`, `+`), the label in any case, `**` /
+    `_` around it; outside the front matter, fenced / indented code and HTML comments — read line for line (`commentLines`,
+    then `codeBlockLines` over what it leaves), so `at` is the file's own line. Its value runs to the first `·` that no length
+    follows (`RE_UI_END`: blanks skipped, then a digit or `.` and a digit — `320 · 390 · 768 px`, the widths as the CLI prints
+    them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it; so a note led by a number reads as more
+    widths and a name before a width ends the list — `sm 640 · md 768` is 640 —, as a no-break space after the `·` does:
+    ui-responsive.md says to start a note with a word and to write `640 (sm) · 768 (md)`) and is read up to `BP_LINE` (200)
+    characters — past them `breakpoint-line` {read, at}, and a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot,
+    closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — and so does a filled value
+    kept in brackets (`[576 / 768 px]`: ui-responsive.md says to write the widths without them). A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
+    size), a bare number in the unit written NEXT (`360 / 768 / 1280 px`, `30 / 48 / 80 rem`) else px; a thousands group
+    (`1.280`, `1,440`, a no-break space — one digit before it: a width is ≤ 3840) before px or none is an integer, before rem /
+    em a decimal (`1.250rem`); a plain blank is never a group (`360 768 1280` is a list), so `1 280` reads as 1 and 280. A width
+    is a min edge, its fraction rounded up (767.5px → 768). Why ui.md and not design-system.md (DECISIONS D3): every stub holds
+    the line in EN / PT / ES under that label, +ui creates it, and it is fingerprinted into the approvals — editing it re-flags
+    the approved designs, which is right (a design says what each view does per breakpoint); design-system.md holds what the
+    code scan compares.
+  - `code` — Tailwind 4's `--breakpoint-<name>` among the OWN statements of a TOP-LEVEL block whose whole prelude is `@theme`
+    and its options (`RE_THEME`: inline, static, reference, default; a nested @theme is not read — Tailwind 4 declares its theme at the top level), read through the
+    observer the token walk already carries (the token loop and the global-sheet loop, in their order: token files, then the
+    sheet candidates; a sheet that is no source counts too) — never a second walk (CRIT_3 must-fix 5); an observer only for a
+    text holding `@theme` (else the walk builds no event). The last declaration of a name is kept; `--breakpoint-<name>:
+    initial` drops it; `--breakpoint-*: initial` / `--*: initial` drop the file's earlier ones and set `reset`. `partial` = a
+    length read and no reset anywhere: Tailwind keeps its own five, which the engine never holds (stale data) — the default
+    set joins them. A value other than `0` or a px / rem / em length, or wider than 3840 → `unread` {name, value, at} (the
+    first 5, `unreadTotal` — of the sources asked: never the code's beside a deciding ui.md; `cliOutput.bpUnread` points to
+    ui.md's line, never "rewrite the value" — must-fix 6). What it inherits from the walk: the sheets the token scan reads —
+    a token file by name, a global sheet by name (`sheetRank`) up to `DS_TOKEN_READS`, where that search ends without a word
+    (its own rule, review 5); a Tailwind 4 project's `@theme` is in its entry sheet (globals / app / index / tailwind.css),
+    which ranks first.
+  - `default` — `[320, 390, 768, 1024, 1440]`.
+  The widths: 320 first (WCAG 1.4.10's reflow width — 1280 at 400 %; a narrower edge is the floor's), ascending, once each,
+  `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —, past it the narrowest 5 and the widest of
+  them all, whatever their source (under `partial` the code's and the default set's together: a declared width may be one
+  left out — ui-responsive.md says so, and to list the widths in ui.md's line to choose them); `breakpoint-widths` {read,
+  count, first — the narrowest left out, the sixth} (`cliOutput.bpLimit` names the count and that width, never the rule).
+  Which widths should stand for Tailwind's live layouts under `partial` — a declared one over a default one, 768 / 1024 /
+  1440 over 390 — is 1.39's to weigh (History → 1.38.0 review 2).
+  `breakpoints.limits` never feed the report's `limits`, `truncated` or `inSync`
+  (they bound the widths, not the registry's comparison — CRIT_X D5d; a fixture: an in-sync project whose ui.md line is cut
+  stays in sync). Not read (1.39, or never): a Sass map, `@custom-media`, a file named for breakpoints, a JS config
+  (Tailwind 3's `screens` — and `container.screens`, a max width, the trap), `@container`. CLI: `cliOutput.bp*` (`bpHead`,
+  `bpFrom` per source and partial, `bpUnread`, `bpLimit`), after the project's counts (`dsFound`) and after a feature's UI
+  checks.
 - **A stale row** (`stalePath`) names a CODE FILE OF THE PROJECT that is gone. A reading counts only when its last segment
   has a file extension (`src/components/Card` may be Card.tsx or a folder) that is no document's or image's (`RE_DOC_EXT`: a
   note cites README.md) and its FIRST segment is on disk — `next/link`, `primereact/button`, `~/components/Button.vue`, a
@@ -1083,7 +1151,7 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   that is right: a root-level file, a path whose first folder is gone as a whole, `_shared/` (`dsCell` drops the
   underscore), a row naming a gone file AND one that is there ("was src/old/Card.jsx, now src/components/Card.tsx" —
   review 3's "the first word decides" called it stale; so `Gone.tsx — replaced by Card.tsx` is not stale either). The
-  user docs list them (ui-design-patterns.md → the scan table).
+  user docs list them (ui-code-scan.md → the scan table).
 - **The seed** — `steering_scaffold design-system.md` (`scaffoldSteeringFile`) writes the stub with the code's rows in place of
   its slot rows (`designSystemSeed` → `seeded` {components, tokens}); a table the code has no row for keeps its slot; nothing
   found: the plain stub; a project template for the file wins; never over an existing file.
@@ -1110,17 +1178,121 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   only: a selection or tween target, `.find`, `d3.select`, `gsap.to`, `scrollTo` — with 6 digits those take colours,
   `picker.select("#1d4ed8")`), an entity, a
   comment (`withoutComments`: outside a stylesheet a `/*` opens one only at a line's start, after a blank or `{ ( ; ,` —
-  `accept="image/*"` holds none). A colour equal to a registry token's value carries `token` (`colorKey`). Not read: a size
+  `accept="image/*"` holds none). What a raw value IS against the project's tokens: Raw values against the scale, below
+  (1.37: a colour equal to a registry token's value TEXT carried `token`). Not read: a size
   in a JSX `style={{…}}` object. The line walk (1.37) is `viewLines(text, rel)` — rawValuesOf's loop head, the ONE walk of a
   view file's lines its readers share (the raw values, the UI checks): a GENERATOR of `{ n (1-based), src (cut at
   DS_LINE_MAX), l (without its comments), css (a stylesheet's line — a `<style>` block's opening and closing lines too) }`.
-  A generator, never a list: rawValuesOf stops at DS_RAW_PER_FILE values and reads no further line (over a list, a
-  20,000-line sheet cost every line — CRIT_1: 1.1 → 6.4 ms; mcp/tests/15-quality-design-system-walks.js times the stop as a
-  ratio against a sheet with no value). Behaviour-preserving when it came: the raw values of 5,256 real view files
-  byte-identical to 1.36's, every earlier assertion unchanged.
+  `rawValuesOf(text, rel)` reads it as a generator: it stops at DS_RAW_PER_FILE values and reads no further line (over a
+  list, a 20,000-line sheet cost every line — CRIT_1: 1.1 → 6.4 ms; mcp/tests/15-quality-design-system-walks.js times the
+  stop as a ratio against a sheet with no value). The FEATURE REPORT (1.38, CRIT_X D5c) walks each file once into a list
+  — `[...viewLines(text, rel)]` — that its readers share, `rawValuesIn(lines, kinds, cut)`, `uiChecksOf(lines, rel)` and
+  `unitsOf`: the UI checks read every line anyway, so the list costs no line the report did not walk (1.37 walked twice).
+  A stylesheet line's piece split is `declarations(l, cb)`, the ONE copy the raw values and the units table share.
+  Behaviour-preserving when it came: the raw values of 5,256 real view files byte-identical to 1.36's, every earlier
+  assertion unchanged (1.37); the list and `declarations` — rawValuesOf / uiChecksOf of 1,962 real view files, 15 feature
+  reports and their finish parts — byte-identical to the F0 tip of 1.38.
+- **Raw values against the scale** (1.38 — engine/design-values.js: the lazy tier's, before design-system.js; pure — no fs,
+  no require, nothing linked) — the feature report judges each raw value against the project's OWN scale, `tokenScale(the
+  registry's rows read with their values, the code's tokens the registry does not name)`, built once a report: the
+  registry's rows first (a value both hold names the registry's token; a name the registry holds keeps the registry's value
+  — the code's is not on the scale). COLOURS (`parseColor`: hex 3 / 4 / 6 / 8, rgb / rgba, hsl / hsla, oklab, oklch —
+  comma or space syntax, % channels, an alpha after `/` or as a 4th argument, a hue in deg / turn / rad / grad, `none` = 0
+  as CSS Color 4 says: Tailwind 4 writes `--color-neutral-900: oklch(20.5% 0 none)`) → OKLab. `token`: the NEAREST token
+  of the SAME colour (of equals the first: the registry's) — exact within one notation (ΔEOK ≤ 1e-4: float noise, a
+  powerless hue), across two within the rounding of the PAIR as written (0.011 with an HSL side: integer HSL's as CRIT_2
+  measured it — `#05787d` = `hsl(183 92% 25%)` at 0.0106; 0.001 otherwise: a hex written as 3-decimal oklch is within 0.0007) — CRIT_2 must-fix 2:
+  one 0.011 for every pair made Tailwind's zinc (`#18181b`, `#09090b`, `#e4e4e7`, `#f4f4f5`) shadcn v4's neutral tokens,
+  0.003–0.008 apart; alphas within 0.01. An HSL side against a hex / rgb one (1.38.0 reviews 1 and 2) is ALSO judged by
+  the pair's rounding BOTH ways (`roundTrip`, `sameAt`) — the same colour when EITHER holds: (1) the sRGB triple, written in
+  HSL as precisely as the HSL side is, gives its numbers (`roundsTo`) — each channel within half a unit of its last written
+  digit (`halfDigit`: `96.1%` 0.05, an exponent counted; the hue's in its own unit, `.5turn` 18°), the hue moot at s 0, s at
+  l 100 (at l 0 the HSL paints black, the one hex within 0.011 of it — (2) decides; review 2 took the dead `l === 0` out),
+  a hue's turns and sign never matter; CSS's clamps first (`rgb(300 0 0)` = `#f00`, `hsl(0 150% 50%)` too):
+  `#05787d` = `hsl(183 92% 25%)`, which paints `#05757a`; (2) the HSL as written, painted at the hex's 8 bits a channel
+  (`hsl.paint` — the clamped triple parseColor already computes for `ok`), IS the triple: each channel within half a unit
+  of 1/255, so a channel painted at exactly n.5 has both neighbours (`hsl(0 0% 10.0%)`, 25.5: `#191919` and `#1a1a1a`):
+  cal.com's `hsla(220, 14%, 94%, 1)` paints `#eeeff2`, whose own HSL (225 13.3% 94.1%) does not round to it — the colour a
+  picker, devtools' Computed pane (`rgb(238, 239, 242)`) or a palette's docs give. Neither holds for Tailwind's zinc hexes
+  against shadcn's `hsl()` neutrals, nor for cal.com's `#efefef` (its `--cal-bg-subtle` paints `#eeeff2`): `near`. The 0.011
+  stays the CEILING — the round trip only narrows 1.38's rule, never widens it: integer HSL is NOT within 0.011 of every
+  hex (479 of the 16.7M hexes are farther from their own integer HSL: `#020200` = `hsl(60 100% 0%)`, black, at 0.084 —
+  OKLab's L is steep near black —, saturated yellows to 0.013; and 76 of the 3.56M integer HSL tokens' painted hexes, all
+  at l 1–2 %: `hsl(236 93% 1%)` paints `#000005` at 0.0136), and those stay what 1.38 said. HSL against oklab / oklch keeps
+  the 0.011 alone — so Tailwind 4's `oklch()` zinc IS shadcn's `hsl()` neutral (0.0082 apart — as far as zinc's hex, which
+  the round trip keeps `near`): said, ui-code-scan.md. `near`
+  (a hint, `{token, delta}`): the NEAREST token within the JND (0.02 ΔEOK), never the first. hwb / lab / lch / `color()` / a
+  named colour are not parsed: the same TEXT names the token (1.37's rule, `colorKey`, moved here; a hex is always parsed
+  now, so its 3-digit spelling-out went). FONTS: a `font-family` STACK (`fontStackOf`: its LAST family a generic one — CSS
+  Fonts 4's closed list —, one that is not, nothing built: `var(`, a Sass / Less variable, an interpolation) by its primary
+  family, against the font tokens of the REGISTRY's rows only — `designValue` drops a code token's stack and the value
+  gate stays (CRIT_2 must-fix 3), so a code `--font-sans` alone reads no font; a stack ending in an emoji font (`…,
+  sans-serif, "Apple Color Emoji"`, Tailwind's own) is none, knowingly. MOTION: a transition / animation declaration
+  (`RE_MOTION_PROP` — the properties that HOLD times and easings; item 1's "motion declared" is another predicate, never one
+  for two rules) or a Tailwind `duration-[…]` / `delay-[…]` / `ease-[…]` (`RE_TW_MOTION`: variants counted, no bracket
+  inside — `ease-[` written 300 times on a line costs one short look each) holding a literal time above 1 ms (`timesOf`:
+  the reduced-motion reset `0.01ms` is never raw, the 1px hairline's precedent) or an easing function (`easingsOf`: a
+  cubic-bezier of four numbers, steps(), linear(); a keyword is none — never asked); `token` when EVERY literal is a
+  duration / easing token's (s → ms; the first time's name), never a nearest (CRIT_2: a loop's period on a 150 / 250 ms
+  scale read as a fixed-duration rule). Nothing built is read (`RE_SIZE_BUILT`: shadcn's `duration-[calc(var(--x)*400ms)]`).
+  A kind is READ only when the scale holds such a token (fonts: a registry row's stack; motion: a duration or easing token,
+  the registry's or the code's): `counts.font` / `counts.motion` exist only then — without them the report is 1.37's shape.
+  SIZES stay raw, never judged (DECISIONS cut size families: on every real shape checked — shadcn's calc() radii, Tailwind's
+  base `--spacing`, Bootstrap's named Sass, Breeze, Tailwind 3's JS config — they decided nothing). Each new kind has its OWN
+  per-file bound, `DS_RAW_PER_FILE` values (a transition-heavy sheet never hides its colours — CRIT_2 must-fix 5), said in
+  the report's `limits` (`font-values` / `motion-values`, the first file it cut); with kinds the early exit waits until
+  each kind is past its bound. Only the LISTED rows and groups are judged (≤ 100 × the scale: no window, no sort).
+  `rawValuesOf(text, rel)` (no kinds) is 1.37's reader, value for value.
+- **Groups** (1.38, the feature report's `groups` / `groupsTotal`) — every value read (past the 50 listed rows too), keyed by
+  what it IS (`groupKey`: a colour notation-free — `#1E40AF`, `#1e40af`, `rgb(30 64 175)` and a `text-[#1e40af]` are one;
+  a stack by its families; a Tailwind utility without its variants; the rest as written), those read twice or more, the
+  most frequent first (a tie in reading order), each `{kind, value (as first written), count, files, at}` judged like a row.
+  Sizes live here: Breeze's `#FF2D20` ×147 in 7 files, `rounded-[10px]` ×10 — the finding a size scale would have made.
+- **Token values — drift and gone** (1.38, the project report's `drift` / `driftTotal`, `gone`) — `registryValues`: a code
+  token whose registry row holds another value IN THE SAME NOTATION (`tokenDrift`: one parsed colour each in one notation,
+  `sameColor` there — `#3b82f6` and `hsl(217 91% 60%)` are not compared, nor zinc's hex and an oklch token: DECISIONS'
+  "differs within a notation", the narrower reading —; or one quantity each with one unit, s → ms — 16px and 1rem are not
+  compared); a reference, several parts, a stack: never. The code's value is its FIRST declaration, and a name the code
+  declares with two values or more is `multi` (scanCode's `firstValue` Map, `again`: a theme's `:root` / `.dark`, two
+  sources, a TWIN global sheet — CRIT_2 must-fix 1, review 7's `order`: a registry written from the second app's main.css)
+  — never compared. Every registry row's value is kept, past the reader's 1,000 (`tokenValues`, as `tokenNames` keeps
+  every name): no registry-tokens limit (CRIT_2's cut). `gone`: the `_Token sources:_` files that are gone, judged as a
+  row's path is (`stalePath`: every doubt not judged — a root-level file, a path whose first folder is gone, one out of the
+  project). NEITHER is part of `inSync` (DECISIONS: what "in sync" compares stays the names, and `dsInSync` says so); the
+  CLI prints a drifted token as the row the code has, then the registry's value and the file.
+- **The units table** (1.38 — the team's convention, a report, never a default) — in design-system.md, found by its header
+  wherever it stands: the first cell Property / Propriedade / Propiedad (`RE_DS_PROPERTY_HEAD`), a column whose header
+  STARTS with Units / Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place; a table headed
+  `| Property | Allowed units |` is none and nothing says so: 1.38.0 review 1's T3, said in ui-code-scan.md, the reader for
+  1.39's backlog) holding at least one CSS unit (`CSS_UNITS`: the
+  CSS Values 4 lengths, `%`, `fr` — a closed list in quality.js, the eager reader's) — a component's props table
+  (`| Property | Type | Default |`) is none (CRIT_2). `dsUnitsTable` → the registry's `units` {rows: [{props (a property or `prefix-*`;
+  never `--x`), units}], unread (a row with no CSS unit or no property, by its first cell), past (rows past `DS_UNIT_ROWS`,
+  50: a count)}, several tables adding up; null without one. The feature report's `units` {findings (50), total,
+  byProperty} — null without a table; never finish, doctor or the brief: `unitsOf` over the file's ONE walk — a declaration
+  whose property has a row (`unitRows`: the exact row, else the LONGEST `prefix-*`; `margin-*` covers `margin`), its FIRST
+  top-level length the row does not allow (`offUnit`: never inside calc() / clamp() / var() — an unclosed one holds the
+  rest —, never 0, a unitless number, a hex colour's digits, a negative length — `RE_UNIT_LITERAL`'s lookbehind: a digit
+  after `-` is no literal, so `margin: 0 -8px` is not judged (1.38.0 review 1's T2: said in ui-code-scan.md, 1.39's
+  backlog) —; one finding a declaration; a custom property or a Sass variable has no row), and a Tailwind arbitrary size in
+  px / rem / em (1.37's `RE_TW_SIZE`: `text-[2vw]` and a negative `-mt-[12px]` are not read — T2 again, said) by the
+  property it sets (`twProperty`); every finding counted, the first 50
+  made into rows. The third reader of the one walk measured 0.9–1.0× the report without a table on the real corpora,
+  1.0–1.4× on 60 component sheets and ≤ 1.5× when every declaration is a finding (mcp/tests/15-quality-design-system-cost.js:
+  ≤ 1.5× and ≤ 3×); a digit and a "names a property of the table" prefilter measured no gain (1.2× either way) and went.
+  The project report's `unitsTable` {rows, unread, past} | null —
+  never in `inSync`. On the real corpora with a rem / px table: shadcn's typeset.css `em` paddings, Bootstrap's
+  `border-radius: 50%`, Breeze's `rounded-[10px]` — each true to the convention it was given (why it is a report).
+- **DESIGN.md: deferred again** (1.38) — the spec is `version: alpha` and changed after 1.37's design (a `motion` group,
+  nested colour groups, dimensions px / em / rem only); a YAML subset reader is a review series of its own. Its own CLI
+  exports what is read today: `npx @google/design.md export --format css-tailwind DESIGN.md > theme.css` (a token file by
+  name) or DTCG JSON.
 - **spec_finish** (`designSystemFinish`; +ui and a registry, never on the `gateOnly` path) — the raw values as a WARNING, never
   a blocker, and only when the registry holds tokens or names token files (`tokens`: else there is nothing to replace them
-  with) — `finish.designSystemRaw`: the count, the first 3, the call that lists them. A READY written finish appends the
+  with) — `finish.designSystemRaw`: the count, the first 3, the call that lists them. Colours and sizes alone (1.38: the
+  report is called with `{finish: true}` — no font or motion kind, no group, no units walk —, so its total, counts and the
+  four prose files' "raw colours / sizes" stay true: CRIT_2 must-fix 4); its top rows carry the judgment (`token` / `near`).
+  A READY written finish appends the
   design's New components to the registry (`registerComponents`): under the roadmap lock, the registry read AGAIN past the
   call's read cache (`forgetCached` — doctor read it before the lock) and judged by `keys` (past the reader's cap too: no row
   twice); into the component table the file ENDS in when it has a column for the origin (neither the path's nor the
@@ -1224,17 +1396,62 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
 
 ## UI checks (1.37)
 A +ui feature's view / style files read for anti-patterns that are wrong whatever the taste — engine/ui-checks.js (LAZY,
-after design-system.js), the feature report's `uiChecks` and ONE finish warning. FEATURE level only in 1.37: the project report
-reads no view file for them (CRIT_X decision 3 — one shared project pass is 1.38's). Every doubt reads as "not judged": a
-wrong finding sends a team to fix code that is right.
-- **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the feature report AND finish's warning, never a blocker:
+after design-system.js), the feature report's `uiChecks` and ONE finish warning; (1.38) the project's view files too, as an
+INVENTORY of counts in the project report when the operation asks (below), with one project fact (`no-reduced-motion`) and the
+project's switch (the `_UI checks off:_` marker). Every doubt reads as "not judged": a
+wrong finding sends a team to fix code that is right. The user docs: `references/ui-code-scan.md` (the scan table — what the
+code scan reads and what it doesn't — and the UI checks section; ui-design-patterns.md keeps one pointer line to it, its
+registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`.
+- **Rules** — ids English-stable, a level each (`UI_RULES`): `warn` — the reports (a feature's, the project inventory) and
+  finish's warning, never a blocker:
   `zoom-disabled` (WCAG 1.4.4), `img-no-alt` (1.1.1), `outline-removed` (2.4.7), `click-no-keyboard` (2.1.1), `paste-blocked`
   (3.3.8 at a sign-in or code step — W3C scopes it to authentication; elsewhere a usability defect, Vercel's "never block
-  paste": review 1 of 1.37); `report` — the feature report alone: `transition-all` (certain as syntax, a guideline as a
-  finding: shadcn's own
+  paste": review 1 of 1.37), `font-size-viewport` (1.4.4, failure F94 — 1.38); `report` — the reports alone, never finish:
+  `transition-all` (certain as syntax, a guideline as a finding: shadcn's own
   Button, Switch and Sidebar ship it, so `shadcn add` would warn on kit code).
-- **One file** — `uiChecksOf(lines, rel)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
-  `DS_LINE_MAX`, its comments out, `cut` when it was longer) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
+- **font-size-viewport** (1.38) — text sized in viewport units ALONE, which zooming does not enlarge. `viewportOnly(value)`:
+  ONE hand pass (a regex of alternations under `+` backtracks on `calc(1vw + 1vw …)`), lower-cased — numbers, the 24
+  viewport units (`vw vh vi vb vmin vmax`, each with `s` / `l` / `d`: CSS Values 4's closed list), `calc( clamp( min( max(`,
+  `( ) , + - * /`, blanks, a last `!important`; any other term (rem / em / px / %, `var()`, `math.div`, a word) → false; one
+  viewport length at least (`font-size: 0` is none). F94's own note — "if media queries were used to adjust the size of text
+  … it may not be a failure" — makes three NARROWINGS (CRIT_3 must-fix 1–3; the design judged the enclosing block alone and
+  warned on six real shapes): (1) outside a stylesheet ONLY an element's own `style` attribute, read in `judgeTag` through
+  `attributesOf` (`styleFontSize`: `font-size` / `fontSize`, quoted or not, its value a quoted literal or read to `;` / a
+  quote / `}` — JSX `style={{}}`, HTML / Blade `style=""`, Vue `:style`, Angular `[style]`), never a component's prop (`sx`,
+  `style` on `<Heading>`), never past a spread, never a free `fontSize:` line (vanilla-extract `style({})`, emotion
+  `css({})`, MUI `sx` nest their media queries where no line reader sees them); (2) a stylesheet's `font-size` (a sheet, a
+  `<style>` block, styled-jsx — `sheetChecks`) is a CANDIDATE outside any conditional block (an at-rule block but `@layer`'s,
+  inherited: `@media`, `@container`, `@supports`, a Sass `@include` / `@if`, a nested `@media`) and the candidates are added
+  when the walk ENDS, only if the file declared no font size inside one (`font-size`, the `font` shorthand, an `@apply` holding
+  a `text-` utility), no block past `DS_BLOCK_DEPTH` went unread and the file was read WHOLE (review 1 of 1.38: `uiChecksOf`'s
+  `over` — its caller read `DS_READ_CHARS` of a longer file — or a line cut at `DS_LINE_MAX` makes it `partial`, and
+  `sheetChecks` starts with `condSize` set: a theme's 270K style.css, a minified sheet, held their override past the cut) — a
+  cross-file override (`style.css` + `responsive.css`)
+  is not seen (the user docs say so: silence it); the declaration is read inside a reduced-motion block too, transition-all
+  alone skipped there (behaviour-preserving); (3) Tailwind (`utilities` — `RE_TW_PICK` widened by `text-\[`): a BARE
+  `text-[<v>]` (`RE_TW_TEXT`, anchored — a variant's token is none; `length:` hint, a `/<line-height>`, `!`; a value holding
+  `(` — any arithmetic — is cut by the split) whose value is viewport-only is a CANDIDATE (the first of a line, pushed on the
+  caller's list) decided when the FILE ends, by (2)'s property — a font SIZE the file sets under a condition (review 1 of
+  1.38: decided by the line, a class list split over lines — `cn("text-[8vw]", "md:text-7xl")`, a cva base with its
+  responsive variant below, a wrapped JSX `className` / Vue `class` — warned): none stands once a non-CSS line of the file
+  held a SIZE under a variant (`RE_TW_TEXT_VARIANT`, after `:` / `:!`: a type-scale step — `md:text-6xl`, `sm:text-xs`,
+  `lg:text-base/7`, `md:text-6xl!` — or an arbitrary length — a digit or `.` first, a `length:` hint in `[…]` or Tailwind 4's
+  `(…)`, `clamp(` / `calc(` / `min(` / `max(`); never a colour — `dark:text-white`, `hover:text-[#111]`, an untyped
+  `[var(…)]`, which Tailwind reads as one, daisyUI's `text-base-content` —, an alignment (`md:text-center`) or a wrap; review 2
+  of 1.38: any variant `text-` did, a colour's too, so a hero beside a nav link's `hover:` colour was silent, ~70 % of
+  Breeze's and Jetstream's view files), nor in a `partial` file. The trade-off: a project's own size key under a variant
+  (`md:text-hero`) is no size here — the bare one warns, the team silences it (ui-code-scan.md says so). A sheet's `@apply`
+  sizes are decided over its `@apply` statements by the same const (their variant size drops the `@apply` sizes, never the
+  sheet's declarations), a markup file's class lines and its `<style>` block apart (as before). A conditional `@apply`
+  holding ANY `text-` utility still sets (2)'s `condSize` (`RE_TW_TEXT_ANY`, F0c's — a colour in a `@media` drops the sheet's
+  sizes: 1.39 backlog). An element's own `style` is
+  decided on its tag, never deferred. Never: the `font` shorthand, a custom property
+  (`--font-size-fluid-3`), a CSS-in-JS template line of a script. The walker keeps a statement's last 2,000 characters, so a
+  longer declaration's property is not seen (a hostile shape only). `width-viewport` (`100vw` / `w-screen`) was cut to prose
+  (ui-responsive.md): 1 real defect in 16 corpus hits — fixed overlays, compiled utilities, clipped decorations.
+- **One file** — `uiChecksOf(lines, rel, over)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
+  `DS_LINE_MAX`, its comments out, `cut` when it was longer; `over`, review 1 of 1.38: the file is longer than the text read —
+  featureReport's two calls and the inventory's `feed` pass it) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
   one finding per rule and line, at a tag's or a declaration's FIRST line (a Tailwind utility's: its class's line),
   silenced or not decided when it is found;
   `DS_CHECK_PER_FILE` (200) kept a file — past it each is still COUNTED (`past`: {byRule, silenced}), never kept (review 1 of
@@ -1341,6 +1558,14 @@ wrong finding sends a team to fix code that is right.
   `transition-property: all`, Tailwind's `transition-all` (variants, `!`, `@apply`), a style object / inline style /
   CSS-in-JS line — never inside `@media (prefers-reduced-motion: reduce)` nor a block nested in one (CRIT_1 must-fix 7).
   Blocks nested past `DS_BLOCK_DEPTH` (64) are not judged, nor what they hold, and their rule is never a "focus" candidate.
+  A markup file's `<style>` block: its opening tag's line is a CSS line (viewLines), so the block's FIRST rule carries it in
+  its prelude — read without it (`RE_STYLE_TAG`, 1.38: an at-rule there read as none since 1.37, a print / reduced-motion /
+  conditional block — outline-removed, transition-all, font-size-viewport false positives on an SFC; a first rule's value
+  named the tag); a SECOND block's first prelude carries the first's `</style>` line before its own tag — stripped with it
+  (review 1 of 1.38: Vue's documented global + scoped pair, `@media print` / a condition / keyframes there). Not Astro's
+  `<style define:vars={{…}}>`: the walker opens blocks on its braces and the next prelude reads `> @media …` (the user docs
+  say to silence it; 1.39 backlog — viewLines yielding a `<style>` line's text after its tag's end only would let
+  `RE_STYLE_TAG` go).
   The statement events' `from` (the line a statement's text starts on) places a finding at a declaration's first line.
 - **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
   (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
@@ -1358,7 +1583,10 @@ wrong finding sends a team to fix code that is right.
   report's order, holding one, no `line`), and for focus-chars `sheet` (the sheet that ended the search), `chars` (the
   bound, `DS_FOCUS_CHARS`) and `alone` (that sheet alone is longer than it, else the characters parsed before it would
   have taken the search past it — review 3 of 1.37: the clause named no bound, nor that one compiled sheet was the cause). The
-  CLI prints that line in place of `uiNone`; spec_finish says it (below). The bounds are measured, not chosen (History): the highest that kept, in
+  CLI prints that line in place of `uiNone`; spec_finish says it (below); (1.38) each of the three clauses (`dsLimit`
+  focus-sheets / focus-chars, `finish.uiUnjudged`) points to the project inventory, which judges them over every view file
+  (The project inventory, below — the feature report and finish keep these bounds: CRIT_1 must-fix 1, the owner's ≤ 2×
+  finish bar). The bounds are measured, not chosen (History): the highest that kept, in
   every series where an antivirus scans each open (~1 ms), the report with the pass at its sheets bound ≤ 2.5× the same
   report with no candidate, finish's part ≤ 2×, and modules that all name `:focus` at the chars bound ≤ 3×.
   Any focus style excuses any removal: the reader cannot compute the cascade, and a team that wrote focus styles designed
@@ -1373,12 +1601,15 @@ wrong finding sends a team to fix code that is right.
   a multi-line markup tag no comment fits beside a later line's class (keep the class on the tag's first line, or a `//`
   line inside a JSX tag). Counted in `silenced`, never
   listed, never in finish. Two lines up, another id, a string's text, no id: nothing; a linter's own suppression
-  (`eslint-disable-next-line jsx-a11y/…`, `svelte-ignore a11y_…`) is not read (the user docs say so). No project switch in
-  1.37 (the `_UI checks off:_` marker is 1.38's).
-- **The feature report** (`featureReport`) — the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
+  (`eslint-disable-next-line jsx-a11y/…`, `svelte-ignore a11y_…`) is not read (the user docs say so). The project's switch
+  for a whole rule is the `_UI checks off:_` marker (1.38, below); a finding both silences counts as silenced (the comment
+  first).
+- **The feature report** (`featureReport`) — its view files are those `uiViewFile` takes (1.38: THE view-reader predicate, the
+  project inventory's too — a view or style file that is no test (`isTestFile`: 1.38 adds `__mocks__/`, `__fixtures__/`,
+  Cypress's `*.cy.<script>`), story, mock / fixture by name, type declaration); the text it reads once feeds the raw values AND `uiChecksOf` (CRIT_X decision 6);
   its token files (a globals.css it edits) are read for the checks ALONE — never for raw values, never in `viewFiles`, within
   `DS_VIEW_FILES` files read in all. `uiChecks` (`uiChecksReport`) = {findings (the first `DS_LIST`: rule, level, file, line,
-  value — warn first, then by file and line), total, byRule, silenced, limits}; its limits — EVERY bound that cut a read or
+  value — warn first, then by file and line), total, byRule, silenced, off?, offIgnored? (1.38 — the marker, below), limits}; its limits — EVERY bound that cut a read or
   dropped a finding, one code a bound (review 1 of 1.37: a long line, a file's 200 findings and its 256K read dropped real
   findings with `limits` empty): `view-files` (the feature's file cap cut what the checks read), then with {read, count, file
   (the first)} `view-size` (a file longer than `DS_READ_CHARS`: read DS_READ_CHARS + 1 to know), `line-length` (lines cut at
@@ -1399,11 +1630,81 @@ wrong finding sends a team to fix code that is right.
   removals a focus search left unjudged its last clause (`finish.uiUnjudged`: the count, the first file:line, why — at the
   characters bound, the bound and whether one sheet alone passes it), or,
   with no finding, that clause the warning alone (review 2 of 1.37); `res.designSystem.uiChecks` only when it has findings
-  or that limit (the 1.35 shape otherwise). The report's other bounds never reach finish's text.
+  or that limit (the 1.35 shape otherwise). The report's other bounds never reach finish's text. A rule the project
+  switched off (1.38) never reaches it: finish reads a report that holds none — its code is unchanged.
+- **The project inventory** (1.38 — item 1 as the DECISIONS cut it) — spec_scan {designSystem: true} / `dev-spec
+  design-system` WITHOUT a feature, when the OPERATION asks: operations.js passes `{uiPass: true}`, the engine's default runs
+  no pass (the 204 direct `designSystemReport(` calls of the suites keep their result and their timings — CRIT_X D4; never an
+  MCP or CLI argument; a feature report ignores it). `uiChecks` = {read, total, silenced, byRule, rules: {id: {level, files,
+  file, line?}}, off?, offIgnored?, facts, limits} — COUNTS, never a list (no `findings` key: it never reads as a clean
+  list), never finish. `uiProject(scan, reg)` (design-system.js) reads AFTER scanCode, on its own (sharing settle's and the
+  exports loop's reads saved the bare read alone — parsing is 70–85 % of the pass — and threaded the read through settle:
+  cut, CRIT_X D4), the walk's view files that pass `uiViewFile`, the stylesheets first (a pass a bound cuts has read the focus
+  styles it could), then the shorter path; each file's first `DS_READ_CHARS` (one more asked for: `over`), `DS_UI_FILES`
+  (5,000) files / `DS_UI_CHARS` (32 MB) characters at most. A STYLESHEET past the read (`over` and `RE_STYLE_EXT` — a
+  compiled bundle) is fed with no line (review 1 of 1.38, UP-1: Bulma's 13 were most of its pass): counted in `read` and in
+  `view-size` (which names the first over-long file by path, maybe not it — the CLI line says the project's checks skip such
+  a sheet), never parsed — its rules, focus styles and motion unseen: a removal elsewhere only its focus styles would have
+  excused stands, where a feature report may excuse it (its focus search reads a sheet whole up to `DS_FOCUS_CHARS`; none
+  on the clones: Bulma's and cal.com's other files hold focus styles; ui-code-scan.md says it — review 2 of 1.38, R2-UP-2;
+  1.39 backlog). A feature report and finish keep 1.37's read of its first `DS_READ_CHARS` (a fixture). `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
+  and keeps counts — its memory bounded by the rules, never the files: per rule its count (past a file's `DS_CHECK_PER_FILE`
+  too — CRIT_1 must-fix 7), the FILES holding one (never the findings), its first place by file then line (a place past a
+  file's cap has no line and is named only when no listed place exists — the feature report's unjudged rule); an
+  inline-silenced finding in `silenced`; `byRule` / `rules` in `UI_RULES`' order (warn first). outline-removed under the 1.37
+  excuse rule at PROJECT scope (CRIT_1 must-fix 2): any focus style in any file read — a class-list focus utility in another
+  view file too — excuses every candidate, the feature report's rule over every view file, so the removals its focus search
+  leaves unjudged past `DS_FOCUS_SHEETS` are judged here (a parity fixture: the inventory and the feature report agree on the
+  same files); a pass a bound cut with no focus style read judges none. On the same files only: a feature report looks in its
+  own files and the project's stylesheets alone, so a focus style only in a view file outside the feature (a Button's
+  `focus-visible:ring-2`) excuses a removal in the inventory, never in that feature report or its finish (review 1 of 1.38,
+  UP-6 — kept: a class-list search project-wide reads every view file; ui-code-scan.md says it). `limits`, its own — never the report's `limits`,
+  `truncated` or `inSync`: `ui-files` {read, count?, file?, line?: the removals it left unjudged}, `view-size`, `line-length`,
+  `tag-length` {read, count, file: the smallest path} (the pass builds them; featureReport builds the feature's). The CLI
+  prints it after the registry part (`uiProjectHead`, `uiProjectRule` a rule — `uiReportTag` for a report-level one —,
+  `uiProjectNone`, `uiSilenced`, the off lines, the fact, its limits; never "nothing" beside a `ui-files` count). `uiProject`
+  is exported for one fixture (a truncated walk takes 20,001 view files: a scan of the same files marked truncated).
+- **Motion and the fact `no-reduced-motion`** (1.38, `UI_FACTS`) — `uiChecksOf`'s `motion` {count: the LINES declaring
+  motion, line: the first}, never a finding, from its OWN predicate (CRIT_X D5b: never transitionAll's, never item 2's
+  `RE_MOTION_PROP` — the properties that hold times): `@keyframes` (a vendor prefix; `RE_KEYFRAMES`, anchored, on the
+  prelude `sheetChecks` reads — a `<style>` block's first rule without its tag line, `RE_STYLE_TAG`), `motionOf`: `animation`
+  / `animation-name` naming one (never `none`, a global keyword, a lone `var()`), a `transition` item naming `transform` /
+  `translate` / `rotate` / `scale` for a LITERAL time over 0 (the first time is the duration: `transform 0s 1s` is none;
+  never `transition-property` — it holds no time —, opacity, a colour, `all`), `scroll-behavior: smooth`; `twMotion`:
+  Tailwind's `animate-*` but `animate-none` (tailwindcss-animate's `animate-in`), `transition-transform`, `scroll-smooth`,
+  under any variant (`RE_TW_PICK` widened; a motion utility under a focus variant still DRAWS — `focus:animate-pulse` stays a
+  focus style); a script line's style object / inline style (`scriptTransitions` reads `animation` / `animation-name` /
+  `scroll-behavior` too — an `animation: 1s` value never reads as transition-all). The FACT, the inventory's alone (never a
+  feature report's or finish's; WCAG 2.3.3 is AAA): the files read declare motion and NONE of the texts read mentions
+  reduced motion — `RE_REDUCED_ASK` on each WHOLE text as read, never its lines cut at `DS_LINE_MAX` (a minified sheet's
+  media query sits past the cut) — and NO read was cut (CRIT_1 must-fix 6: the walk, `ui-files`, a file's `view-size` — a
+  mention may sit in what was not read). `facts: [{code, count, file, line}]`; the CLI's `uiFact[code]`. No script search
+  (cut — CRIT_1: it never changed the answer on 9 repos): a mention only in a `.ts` hook is not seen, so the line says "the
+  view files read"; framer-motion props (`animate={{x}}`) are not motion — the fact is said less, never wrongly.
+- **The marker `_UI checks off: <rule-id> (reason)_`** (1.38 — the registry's `checksOff`, Design-system registry above) —
+  `uiOff(reg)` → {off: Map(id → reason), ignored: [{entry, why, read?}]}: an entry is APPLIED only when its id is a rule's
+  or a project fact's (`UI_RULES` ∪ `UI_FACTS`, at call time — F0c's font-size-viewport is one: CRIT_X D7.4) and it gives a
+  reason in parentheses; else it is not applied and the reports say why — `no-reason`, `unknown-rule`, `unreadable` (not
+  `<id> (<reason>)`: CRIT_1 must-fix 10), `past-bound` (the entry past `DS_MARKER_ENTRIES`, with `read`); an id named twice:
+  the first. An applied rule is hidden PROJECT-WIDE — counted, never listed: the inventory's `off` (the fact too: its count
+  when it would have been said; an off outline-removed counts its unsilenced CANDIDATES — no focus excuse is asked of an off
+  rule, in either report), every feature report's `off` (`offKeys`: the RULES alone; an inline-silenced finding stays
+  `silenced`, the comment first; a finding past a file's cap counted there; the focus search never runs for an off
+  outline-removed) and so finish, which reads that report. `off` / `offIgnored` appear only when the marker holds an entry (a
+  project without one keeps the 1.37 shape). Its spellings, in the user docs (review 1 of 1.38, UP-7 — prose alone): a line
+  of its own, as `_Token sources:_` (`RE_DS_MARKER`, anchored: a list item or a bold `**UI checks off:**` is no marker — read
+  as nothing, said nowhere), each id bare (one in a code span — the docs write ids so — reads `unreadable`). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
+  and each entry not applied (`uiOffIgnored[why]`) after the silenced count. A design-system.md written only for the marker
+  enrols the project in the registry (`ui-design-system`, finish's New-component append — the user docs say so, CRIT_X D3);
+  what-input's modality removals (`[data-whatintent='mouse'] { *:focus { outline: none } }`: no syntax tells a modality
+  scope from a page scope — a name list) are judged as written: the inline `ui-check-off: outline-removed` on that rule is
+  the narrow answer, the marker switches every removal of the project off.
 - **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
   tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
   of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —
-  nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes — each ≤ 3×
+  nested candidates never closed, unmatched close tags, a control in each body, an expression that never closes, and (1.38)
+  four for font-size-viewport — runs of `text-[`, class lists of bare viewport sizes a variant one ends, a sheet of
+  line-long `calc(1vw + 1vw + …)` values, inline styles of non-viewport sizes — each ≤ 3×
   plain JSX of the same size (measured 0.07–2.5×) — a file whose every line is a finding is not one of them and is not
   bounded: ~4× (review 2 of 1.37, hostile3: a 256K HTML file of an `<img>` a line 4.0–4.3×, a TSX one 3.3–3.6×, a sheet
   of removals 2.7×, the same on the parent); the checks ≤ 3× the raw-value read of the same files (1.0× on 526 real
@@ -1412,11 +1713,68 @@ wrong finding sends a team to fix code that is right.
   reading the same views, 1,000 sheets none naming focus: 1.2–1.3× at 48). The sheet of braces is the walker's every block: three allocation-free
   fast paths in styleTokens (`unmaskInterpolation` of a text with no mask, `pageWide` of an empty prelude, `RE_MIXIN` only
   after an `@` — the last a cost guard alone: +45 % on that sheet without it, under the bound) took it from ~5× to ~1.5× —
-  tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus.
-- **Not in 1.37** (cut — CRIT_1, the decisions; review 1's S12, deferred to 1.38: test-harness files — `*.cy.tsx`,
-  `__mocks__/`, `__fixtures__/`, `.storybook/`, `playwright/` — still read as view files): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion` raw kind and
-  `no-reduced-motion` (1.38, on one shared project pass), the `_UI checks off:_` marker (1.38), the `addEventListener` paste
-  form, a `hint` level.
+  tokens, raw values and every event byte-identical on the 2,493 real stylesheets of the F0 corpus. (1.38) Five motion
+  inputs join them — runs of `animate-`, class lists of motion utilities, a transition of endless transform items, a sheet
+  of keyframes, a style object's endless animation list: 0.08–1.34× (`RE_TW_PICK`'s widenings, F0c's `text-[` and these,
+  in ONE set — CRIT_X D4). G1′ (mcp/tests/15-quality-ui-project.js): the project pass — the report with it less the report
+  without — ≤ 1.5 × (a bare read of its files + `uiChecksOf(viewLines)` of the same texts in memory), on 400 real-shaped files
+  ~70 % Bootstrap-like Sass by characters (parsing unminified CSS is a Sass tree's cost), interleaved: 0.96× measured. The
+  project report with the pass is NOT bounded against 1.37's: it opens and parses every view and style file the pass reads,
+  so its ratio is high where 1.37's report read almost nothing (a small CSS / Vue tree) — the measured spread per clone is
+  in History (1.38.0 review 1, the cost).
+- **Not in 1.37 nor 1.38** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion`
+  raw kind (item 2's), the `addEventListener` paste form, a `hint` level; 1.38's cuts — deprecated uses (1.39), sharing
+  settle's reads, the `:is` / `v-bind:is` narrowing (backlog), the reduced-motion script search, the 5,000 / 32 MB focus bound
+  in the feature report and finish, `DS_FOCUS_*` printed in MB.
+
+## UI state matrix (1.38)
++ui's `[UI] UI States` scaffold ends in a state matrix (the template — markdown-and-trace.md → Readers, tracks.md): `State` ·
+a column per view · `Announced · focus`, a row per listed state (16 English-stable ids — languages.md). Doctor's `ui-states`
+reads it: quality.js `uiStatesCheck` over `uiStateMatrix`, the `DOCTOR_CHECKS` entry right after `ui-deprecated` (phase 2, the
+same `uiDesigned` feature, never once `state.finished` is recorded). The user docs: ui-design-patterns.md → The states every
+view needs (the detail points there), tooling-reference.md's id.
+- **The anchor** — a table of the section (`extractSection` with the UI States synonyms, the section ui-sections reads, then
+  `mdTables`: comments and fences out — a table under another h2, a contract's, is never read) is a matrix when one header
+  cell's words ARE a localized `quality.uiStateA11y` (`usWords`: accents folded, lower case, the whole cell — `Announced`,
+  `Announced · focus (WCAG)` are none). Never by its rows: a state machine (`State | Event | Next state`) or a component's
+  own states table carries no such cell. Lost: a hand-built matrix without the column — read as prose (`usNone`).
+- **The views** — the columns strictly between the first (the state) and the anchor; a header holding no letter or digit, a
+  `[slot]` or a generic word is none (`dsSlot`); no view → no matrix. The a11y column and every column after it (a `Notes`)
+  are never judged — what they say is the critic's and the reviewer's; judged, deleting the column silenced the warn.
+- **The rows** — `uiStateOf`: the first cell's words begin with a label's — the label's LAST word may be the start of a longer
+  one (`Errors`, `Error — recoverable`, `Loading (skeleton)`, `Exito`), every other word whole (`Nothing found` is not Not
+  found) — in EN / PT / ES / pt-BR (`uiStateNames`, below). No synonym list: a renamed row (`Spinner`) names nothing and the
+  warn names the label to use. A state's rows are joined: a view is answered when one of them answers it.
+- **The cells** — `uiStateCell`: open (`dsSlot` — nothing, a mark, a `[slot]`, TBD —, or an n/a whose reason is under four
+  words: `naAnswer` `na-short`), `na` (`naAnswer`, markdown.js, exported for it — the sized-section rule), designed (any other
+  words). A row whose ONLY view cell holding a letter or digit is an `na` answers every view (one "n/a — why" says the state
+  does not exist here); another worded view cell, TBD included, is judged on its own; the a11y cell never counts.
+- **The verdict** — the section's own state first (`sectionState` at size m, as ui-design-system reads its section):
+  missing / unfilled / template → a pass, `usUnfilled` (ui-sections and the placeholder gate own it — the untouched matrix is
+  template lines by F0b's row key — a matrix of `TBD` / dashes is not: its cells are written for that key, so ui-sections and
+  the m / l gate pass it and only this check says each is open, the owner's ruling in 1.38.0 review 1, BS-3 — and the gate
+  judges the SECTION: once a line of it is written, its TODO gone, an untouched matrix passes it too and this check warns about
+  every cell, R2-DOC2); `na` → a pass,
+  `usNa`; no anchored table → a pass, `usNone`. The gaps — `no-row` (once per table: each anchored table is a matrix of its
+  own, two never share their rows — ui-design-patterns.md says a row per state in each, BS-4) and `open` (per view and
+  state), counted together — WARN at size m / l and with no size (`usOpen`: per table its
+  no-row item, then each view's open states — `US_SHOWN` (5) named per item, six items, the rest counted; `usTable` names the
+  table's place in the section when it holds several matrices); at size s the same detail is a pass (`usSmall`); none →
+  `usOk(views, states)`. The labels in the feature's language; detail only (`{id, status, detail}` — `state` for the tests).
+- **No gate, no stamp** — never a fail, not `warnsOnly`, not in `GATES`, not in the save hook, finish or the brief. No stamp:
+  no design approved before 1.38 can hold the anchored header (gates-and-approvals.md → Gates). spec_upgrade lists it as
+  ADVISORY — `UI_STATES_CHECK` beside `DESIGN_WEIGH_IDS` / `CRITICAL_FLOW_IDS` in upgrade.js: no `warnings` attention.
+- **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns; every cell cut to `US_CELL`
+  (400) before any regex; a bound that drops input appends `usTruncated` to the detail (`usNone` too). Linear: the section
+  reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the same text (a 5 MB cell, 200K rows, 20K tables,
+  a 1M-word label); 1 MB cells cost what a same-size prose section does (15-quality-ui-states.js, a ratio). The one shape
+  past it: a header row of 1,000,000 view cells (8 MB on one line) costs ~2.1× `sectionState` (2.1–2.6 s against 1.0–1.2 s)
+  — each header cell's words are read for the anchor before `US_VIEWS` applies; linear, and no gate waits on it (a 1.39
+  bound: compare a cell with the anchor only when its length could hold one).
+- **Every language, from the corpus** — the labels and the anchor cells of EN / PT / ES / pt-BR come from the corpus key
+  `uiStateNames` (markdown.js `uiStateNames()` / `renderUiStateNames()`: `<id>\t<label>` lines, `UI_STATE_A11Y` — `a11y` — as
+  the anchor's id; architecture.md → The build): an English doctor loads no pt.js / es.js (a child-process fixture). The
+  state ids order the gaps: the feature language's `uiStateLabels` keys.
 
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
@@ -2204,6 +2562,169 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   rawValuesOf alone 1.03–1.28× the parent on a 20,000-line sheet (within the 1.5× bound); the walker without an observer
   0.94×. Mutation passes: 10 of 10 (one equivalent in output — the pre-existing blank-line skip, a cost guard: 6× on
   20,000 blank lines) and 14 of 14.
+- **1.38.0** (item 3 of the owner's 1.38 list, "Responsive": the widths the visual review captures — Breakpoints, above) —
+  designed with three code readers (Tailwind 4 `@theme`, `@custom-media`, a Sass map named `…breakpoints`), a loop over files
+  named for breakpoints, 8 widths and a `declared` list; the critique (CRIT_3) and the ruling (DECISIONS) cut the last four —
+  a framework's own breakpoints sit in node_modules or in files the scan never opens, Bulma's map is nested, a file-name list
+  is a name list — and moved the `@theme` reader onto the token walk's events (no second walk; the critic measured one at
+  +0.2–3 % of the report: a should). Must-fixes kept: computed for spec_scan {designSystem} alone (4 — finish and the seed
+  had run it and dropped it), the walk's observer (5), `bpUnread` pointing to ui.md's line (6), 6 widths (16 images a
+  dispatch), `at` for `declared`. Real shapes: shadcn v4 (`apps/v4/app/globals.css:44`: `@theme inline` adding 3xl / 4xl —
+  partial, the default set and 2000, 1600 left out and said), shadcn-svelte (the same), tailwindcss.com (two `@theme` blocks,
+  no breakpoint — the default set; `@media (width <= theme(--breakpoint-sm))` declares nothing), Tailwind's own reset example
+  (complete), Breeze / Jetstream / taxonomy / sakai-vue / Bootstrap / Bulma / Open Props (nothing read — the default set).
+  The project report and the seed on those clones are the parent's byte for byte but the new key. Writing the mutation list
+  first showed five shapes no fixture could tell (the length regex's lookarounds — greedy left-to-right matching never starts
+  inside a number —, rounding a rem × 16, the emphasis marks after the colon, a word pre-test on ui.md, a null text): taken
+  out before the pass. Mutation pass: 76 of 76 — one survivor at first (the no-break-space group had no fixture: added).
+  Cost, ratios at the same moment: the `@theme` pre-test is a cost guard (the report on 100 candidate sheets without one
+  1.14× with it); 100 sheets of 400-declaration `@theme` blocks 1.30× the same as `@themx` (≤ 1.5); the hostile inputs of the
+  suite's K2 ≤ 3×. On the clones the machine (three other chains' suites) swung parent against chain 0.74–2.26× either way
+  with the roles swapped: no difference to measure — without an `@theme` the added work is an `includes` per walked sheet and
+  one ui.md read.
+- **1.38.0 review 1** (Breakpoints — BS-1, BS-2, BS-6, BS-7) — the CLI prints the widths joined by ` · ` and its messages
+  say to list them in ui.md's line, but the value ended at the FIRST `·`: the printed list pasted read as [320], nothing
+  said (MEDIUM). It ends now at the first `·` that no length follows (`RE_UI_END`; the stub's ` · text expansion` still
+  ends it, `480 / 960 px · max content width 1200 px` too). Past six widths under `partial`, the default set's 390 / 1440
+  were kept over a project's own 1600 (shadcn v4, cal.com, shadcn-svelte): the default set's give way first now — those
+  three clones capture [320, 390, 768, 1024, 1600, 2000], 1440 said; `cliOutput.bpLimit` lost "the narrowest 5 and the
+  widest" (no longer the rule) rather than gain a second message. A filled value kept in brackets stays the stub's slot
+  (prose: ui-responsive.md says to write the widths without them; listing it as unread would be a new mechanism for a LOW
+  — 1.39 backlog). K2 times each pair interleaved, the median of 5 rounds of tens of ms, ≤ 3× + 50 ms — over 3 calls the
+  ui.md denominator was ~5 ms and the full suite failed it under load; its line pair ≤ 5× + 50 ms (a list line is captured,
+  searched and cut, a prose line refused at its first character: 1.5–3× at rest, 4.6× seen under four suites' load). The reviewer's replay (bp-shapes.js, bp-lines.js) against the parent differs in
+  the two dot lists and one partial shape (Tailwind's five overridden without a reset: [320, 480, 768, 1024, 1280, 1536],
+  390 and 1440 said — was 1280 dropped for 390) and nothing else. Mutation pass (the list before the fixtures): 18 of 18,
+  one a timing mutant (the end searched in a 2,000-character window per `·`: K2's line pair 609 ms against 34). Cost, both
+  engines in one process, interleaved, medians of 7: the stub, the printed line, prose and 50,000 lines 0.6–1.2× the
+  parent (noise); the hostile 256K `1 · 1 · …` line 1.5–2.2× (+2–2.7 ms a report: the parent stopped at its first `·`,
+  the fix reads the whole line, linear — K2's line pair holds it); a partial report of 3,000 declared widths
+  1.3–1.4× (+0.5 ms).
+- **1.38.0 review 2** (Breakpoints — R2-BS-1, made by review 1's BS-2: a subtraction; R2-BS-2, R2-BS-3: prose) — review 1
+  filled the places a theme's widths left with the default set's NARROWEST first, so 390 — under any Tailwind theme the
+  floor's own layout again (Tailwind's narrowest is 640) — was kept over 768 / 1024 / 1440, and a theme adding three widths
+  or more lost the tablet / laptop range (480 + 1600 + 1920 → [320, 390, 480, 768, 1600, 1920]; 1600 / 1800 / 2000 / 2400 →
+  [320, 390, 1600, 1800, 2000, 2400], md to 2xl never captured; 400 / 480 / 560 / 600 → nothing above 600). Of the
+  reviewer's two ways — a widest-first fill (the same cap changed a second time) or the parent's — the owner took the
+  parent's: 9c6185aa's cap byte for byte (the narrowest five and the widest of the union, whatever their source; BS-1's
+  `RE_UI_END` kept), said in ui-responsive.md (a declared width may be one left out — list the widths in ui.md's line to
+  choose them). Which widths should stand for a framework's live layouts under `partial` (the default-first order, a
+  widest-first fill, a width per live layout) is 1.39 backlog. `bpLimit` stays as review 1 left it: "the first X px — the
+  review takes 6" is true of the restored rule. Replays against both parents: cap-probe.js on this tree is 9c6185aa's line
+  for line (nine shapes); cap-layouts.js 9c6185aa's widths on its six (5 distinct layouts each, as on both parents);
+  real-themes.js (shadcn v4, cal.com coss-ui, shadcn-svelte, tailwindcss, tw_site, Bootstrap) 9c6185aa's on all six;
+  bp-shapes / bp-lines / dot-probe equal review 1's tree but for one partial shape (Tailwind's five overridden without a
+  reset: [320, 390, 480, 768, 1024, 1536] again, 1280 the first left out) and 9c6185aa's but for BS-1's dot lists;
+  bs1-cli.js differs from review 1's tree only on shadcn's partial line (1440 kept, 1600 said) and from 9c6185aa's only by
+  BS-1 and bpLimit's dropped clause. R2-BS-2 / R2-BS-3: the `·` rule goes on past a `·` a length follows, so a note led by a
+  number (`· 1200 px max content width`) is more widths — on a full Tailwind line it pushes a declared width out, said —,
+  and a name before a width (`sm 640 · md 768`) ends the list at its first `·`, as a no-break space after the `·` does (the
+  same on both parents): prose — ui-responsive.md item 1 (a note starts with a word; `640 (sm) · 768 (md)`); continuing over
+  a segment of lengths alone, or a wider blank class, are mechanisms — 1.39 backlog. 17-docs runs each example through the
+  engine. Mutation pass (the list before the fixtures): 22 — 14 on the four restored lines (the default set joining or
+  always joining, the floor, the Set, the sort, the cap's slice and its widest, the count, `first`, the limit's guard, and
+  review 1's order and a widest-first fill put back: each killed by the partial-cap fixture, shadcn's `real` row and the
+  CLI's partial row) and 8 on the prose (each 17-docs clause and the examples it runs): 21 killed, one equivalent left (`>`
+  → `>=` in the cap: at exactly six, the narrowest five and the widest ARE the six). Cost (bp-ab.js, both engines in one
+  process, interleaved, medians of 7): against review 1's tree 0.88–1.06× on every ui.md shape, a partial report of 3,000
+  declared widths 0.78× (review 1's fill was the added work); against 9c6185aa the partial report 0.94× (the same code).
+- **1.38.0** (item 2 of the 1.38 round, "tokens against the scale", as DECISIONS cut it — chain T) — first the D5 refactor,
+  behaviour-preserving and alone in its commit (the base chain P rebased on): the feature report walks each view file ONCE
+  into a list its readers share (1.37 walked twice; a units reader would have made three), rawValuesOf keeps its generator,
+  `declarations(l, cb)` is the one copy of a stylesheet line's piece split; its oracle replay against the F0 tip —
+  rawValuesOf and uiChecksOf of 1,962 real view files, 15 feature reports and their finish parts on copies of shadcn v4,
+  Bootstrap 6, Breeze and Tailwind 4 — byte-identical. Then engine/design-values.js, raw values against the scale, groups,
+  drift and gone, the units table (the bullets above). What the critics changed (CRIT_2, CRIT_X): ONE 0.011 tolerance for
+  every notation pair made Tailwind's zinc shadcn's neutrals — the tolerance follows the pair as written; size families on /
+  off / nearest cut (they decided nothing on every real shape checked — ~5 % on the best, cal.com's rem radii — and touched
+  three settled readers); motion `off` / `nearest` cut; the brief's units line cut (it spent the components' budget); fonts
+  from the registry's rows only; finish counts colours and sizes alone; twins feed `multi`; a props table is no units
+  table; drift and gone kept OUT of `inSync` (DECISIONS: 56 assertions pin it, nobody changes it in 1.38); every row's value
+  kept past the reader's cap instead of a registry-tokens limit; DESIGN.md deferred again. tools/list −9 ("raw values").
+  The mutation pass listed its mutants before the fixtures: 121 on the first pass, 109 killed at first — four survivors
+  wanted a fixture (Tailwind's `gap-x` → column-gap and the other utility mappings, `1.005s` = `1005ms` — `1.1s` × 1000 IS
+  1100 in floats —, a motion-only scale for the early exit: a font kind with no value held the loop open, a slot row of a
+  units table), five lines went as equivalent (a hex is always parsed — `colorKey`'s 3-digit spelling-out; a lone family
+  can never be a stack; a motion value always holds a literal; tokenDrift's empty-side check; a units column not found
+  leaves no row), and so did the colour / quantity length bounds (the patterns are anchored, the inputs bounded before
+  them), a utility's bracket slice and the units reader's digit / "names a property of the table" prefilters (timed: 1.2×
+  with or without — no gain). Kept and timed as cost guards: `RE_TW_MOTION`'s bracket-free value (4.4× without, on
+  `ease-[` × 330 a line), finish's `{finish: true}` skipping the units walk and the groups (1.04× / 1.07×). Equivalent and
+  kept: `RE_MOTION_PROP` widened to `transition-property` (no other property holds a time — the closed list DECISIONS
+  names; its anchor IS tested: a custom property `--transition-duration` is never motion). The final replay on the last
+  tree: 125 mutants, 121 killed, the two finish cost guards and that equivalent left. And the 1.37 readers the split moved
+  (declarations' piece rules, rawValuesIn's 1.37 lines, take()) mutated again — 14, 12 killed by the area's older files at
+  first; two wanted a fixture no file had (a value written twice on one line is one value; a colour in a selector's
+  attribute — what a `{` follows — is none): 14 of 14.
+- **1.38.0 review 1** (tokens: T1 MEDIUM; T2 / T3 LOW, prose) — T1: one 0.011 for every pair with an HSL side absorbed
+  any colour that close, however precisely the HSL side was written: once shadcn's Tailwind 4 upgrade wraps its neutrals in
+  `hsl()`, Tailwind's zinc hexes were its tokens again (`#18181b` → `--primary: hsl(0 0% 9%)`, 0.0083 — what CRIT_2's
+  must-fix 2 had taken out for oklch), cal.com's `#efefef` its bluish `--cal-bg-subtle: hsla(220, 14%, 94%, 1)`, 51
+  Tailwind v3 hexes ANOTHER palette colour's token against a 1-decimal hsl palette; and the judge returned the FIRST colour
+  within tolerance, so an exact token listed after an HSL one lost. Now an HSL side against a hex / rgb one also round-trips
+  at its written precision (`roundsTo`) and the judge keeps the nearest. The 0.011 stays the ceiling — the narrower reading
+  of the owner's decision, said: the round trip alone would have WIDENED 1.38 where the HSL is coarser than the 0.011
+  (CRIT_2's 0.0106 was one hex's distance, not integer HSL's worst: measured over all 16.7M hexes, 479 are farther from their
+  own integer HSL, `#020200` = `hsl(60 100% 0%)` at 0.084 — a token past the JND —, 0.013 at l 10–95), so every judgement
+  the fix changes goes token → near or none, never the other way. Trade-off: Tailwind v3's 286 hexes against their own hsl
+  as shadcn's _legacy-colors.ts writes it (1 decimal) — 240 stay `token`, 46 become `near`: those hsl values are not their
+  hex's rounding (mauve / olive / mist / taupe derived from oklch; slate-950's hue 222.2 against its hex's 228.6); each
+  hex against its own HSL rounded ONCE (0, 1 or 2 decimals): 286 of 286; another palette colour's token: 51 → 0. Replays
+  against the parent: the 12 real clones' reports identical but cal.com's `#efefef` and `#eee` (→ near); finish's part on
+  7 clones identical; the CLI's EN / PT / ES lines differ only on the `#18181b` row the fix meant, `--json` = the engine;
+  cal.com's tokens.css, hex by hex: 37 token → near, 0 differences with the reviewer's prototype. Cost, ratios at the same moment: the hostile judge — 100
+  hexes against 2,000 HSL tokens all within 0.011, where 1.38 returned at the first — 1.5× 1.38's own worst case (the
+  full scan with no token: 24 against 15 ms); a feature report of 100 files × 200 such hexes 1.03×. The mutation list came
+  before the fixtures and took three lines out as dead (the saturation's `d = 0` guard, the hue's sign and turn
+  normalisations — the circular distance covers both —, the judge's `else` between its two trackers): 45 of 45 killed (39
+  in design-values.js, 6 prose clauses), one equivalent left (`within`'s `<=` against `<`: the epsilon absorbs the
+  boundary). T2 / T3, said and the readers left to 1.39's backlog: a negative length (`margin: 0 -8px`, `-mt-[12px]`) and a
+  Tailwind size outside px / rem / em (`text-[2vw]`) are not judged; the units column's header STARTS with Units, so
+  `| Property | Allowed units |` is no table and nothing says so — ui-code-scan.md says both, 17-docs pins each clause
+  against the engine (offUnit, RE_TW_SIZE, RE_DS_COL.units).
+- **1.38.0 review 2** (tokens: R2-T1 MEDIUM, made by review 1's fix; R2-T2 LOW, prose) — R2-T1: review 1's round trip
+  asked ONE way (the hex written in HSL rounds to the HSL's numbers), never the other (the HSL as written, painted at the
+  hex's 8 bits, IS the hex), so an HSL token's own painted colour — what a picker, devtools' Computed pane or a palette's
+  docs give — was `near`, "close, not the same colour": cal.com's `#eeeff2` against its `hsla(220, 14%, 94%, 1)`, 49.6 %
+  of all integer HSL tokens' painted hexes, ~99–100 % of 1- and 2-decimal ones; cal.com's tokens.css 24 of 74 near, Radix
+  Colors 0.1.9 260 of 336; and fix 1's `prec` fixtures pinned three HSL values that PAINT their hex as near. Review 1's
+  trade-off line had measured one direction (hex → HSL); of its 46 shadcn pairs gone near, 39 paint their hex. Now both
+  ways (`roundTrip`: painted OR roundsTo, still under the 0.011 ceiling — parseColor keeps the painted triple it already
+  computed for `ok`). The reviewer's prototype, re-derived (+5 lines; on its 38 HSL spellings, identical). Both directions
+  measured against the parent (9c6185aa, the 0.011 alone): every integer HSL token's painted hex is its token, 3,563,924 of
+  3,564,000 — the parent's own count, the 76 left the ceiling's (l 1–2 %) —, 50,000 random 1- and 50,000 2-decimal ones
+  all; new `token` where the parent said none: 0 — the fix is never wider than 9c6185aa; cal.com 49 own + 25 another token
+  (24 the same value, one whose value paints the same hex: `hsla(33, …)` and `hsla(34, 100%, 92%)` are both `#ffedd6`),
+  0 near; Radix 334 + 2 (identical values), 0 near; shadcn's own 1-decimal pairs 279 of 286 (the 7 left neither round
+  from the hex nor paint it: slate-950, mauve-100 / 600 / 950, olive-200, mist-200, violet-950). What T1 fixed stays:
+  zinc's hexes against shadcn's hsl() neutrals near (0.0083 / 0.0032 / 0.0046 / 0.0058), `#efefef` near, cal.com's 292
+  Tailwind hexes 0 differences from the release, another palette colour's token 0, an exact token after an HSL one wins;
+  the 12 real clones' reports identical to the release's; the CLI's EN / PT / ES lines and `--json` too. The fixtures:
+  `prec`'s three replaced by values a decimal off that paint ANOTHER hex (`hsl(183.0 92.3% 25.5%)` paints `#05777d`, not
+  `#05787d`; `#3c82f5`, `#19191c`); `paint` — the painted hex and rgb() from either side, Radix's `#ffb224`, a channel
+  painted at exactly n.5 (both neighbours: `#191919` needs the epsilon), a clamped HSL, the next hex over (0.56 off) near,
+  a painted hex past the ceiling near. Mutation pass, listed before the fixtures: 20 of 21 (16 in design-values.js, 5 prose
+  clauses; `<` for `<=` equivalent — the epsilon absorbs the boundary); fix 1's 45 re-run on the fix: 38 at first — the
+  painted direction absorbed every fixture whose HSL paints its hex (the hue sectors' `#ff8000` / `#80ff00` / `#008000`,
+  `#808080`, `#fff`, a hue two turns round, `3.14159rad`, the reviewer's own `prec.s`, 1.02 off its hex's s where the
+  half is 0.05 or 0.5 alike): each replaced by a pair the HSL does NOT paint (`#ff8100`, `#81ff00`, `#008100`, `#818181`
+  against `hsl(217 0% 51%)`, `#fefefe`, `hsl(903 92% 25%)`, `.6turn` ± 18°, `#2563eb` against `hsl(221.2 83.5% 53.3%)`),
+  and roundsTo's `hsl.l === 0` taken out as dead (at l 0 the HSL paints black, the one hex within 0.011 of it — `#000001`
+  is 0.037 away): 44 of 44. Cost, both engines in one process, interleaved, medians: the hostile judge (100 hexes against
+  2,000 HSL tokens all within 0.011) 0.97–1.25× the release's, median 1.05× (12–13 ms); ÷ 1.38's own worst case (the full
+  scan with no token) 1.59–1.63×, the release's 1.51–1.84× in the same runs; a spread scale 1.01–1.03×. R2-T2:
+  "Tailwind's zinc is not shadcn's neutral, in oklch or in hsl()" — Tailwind 4's own `oklch()` zinc IS the `hsl()`
+  neutral (an HSL side against oklch / oklab keeps the 0.011, the owner's T1 scope): said — zinc's HEXES are not the
+  neutral, its oklch is (ui-code-scan.md, pinned by 17-docs against the engine); making the claim true (the oklch / oklab
+  side's sRGB triple against the HSL's written precision) is 1.39's backlog. Lesson: a round trip is checked BOTH ways —
+  the parent is the oracle in each direction (review 1's fix measured hex → HSL alone; review 2 ran every HSL token → its
+  painted hex) —, and a new direction re-runs the old mutants: it absorbs the fixtures that only the old one decided.
+- **1.38.0 review 3** (tokens, two LOWs fixed without a round) — R3-T1: the painted check put its half-unit window around
+  the HSL's exact paint, not the 8-bit colour an rgb() with decimals paints, so rgb(237.1 239 242) (#edeff2) was
+  `hsla(220, 14%, 94%, 1)`'s token while #edeff2 itself was near, and rgb(238.4 239 242) (#eeeff2) was near — the triple is
+  now taken at 8 bits (`Math.round`), a hex unchanged (the reviewer's corpora — every integer HSL token, cal.com, Radix,
+  shadcn's pairs — identical). R3-T2: no fixture pinned the painted check's blue channel (`#eeeff3` → near now). Fixtures
+  `paint.decimals` / `paint.blue`; the old window and a blue-blind check each fail them.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
@@ -2329,3 +2850,198 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   plain JSX and the checks add nothing over a walk with a do-nothing observer (46–53 ms vs 47–52 ms). A stylesheet's ratio is
   now to the larger of plain JSX and that shared walk (≤ 3×), with a coarse ≤ 10× plain JSX for a walk that stopped being
   linear; a mutant that pays O(text) on every block past the depth bound still fails it. The CHANGELOG says so.
+- **1.38.0** (F0a, the UI references split — CRIT_X D1 / D2) — ui-design-patterns.md (59,965 B against its 60,000 cap) could
+  not take 1.38's prose: its code-scan table (19,201 B) and its UI checks section moved WHOLE to the new
+  `references/ui-code-scan.md` (cap 30,000), its Responsiveness section to the new `references/ui-responsive.md` (cap
+  12,000), each byte-identical (17-docs pins the table's whitespace-folded sha1; the 1.37 docs pass reads the checks there,
+  its registry slice ending at the next h2); the pointers that said "below" name the new file, and so do
+  tooling-reference's spec_scan row and index.md's +ui line. Mutation pass 10 of 10.
+- **1.38.0** (F0c, item 3 of the owner's 1.38 list as CRIT_3 and the DECISIONS cut it) — `font-size-viewport`, the seventh
+  rule. The design judged a vw-only size by its enclosing block alone and warned on six real shapes F94's note excuses (a
+  sibling `@media` override, CSS nesting, a Sass `@include`, vanilla-extract / emotion / MUI objects) and on R16's
+  `text-[5vw] sm:text-[1.2vw]`; the three narrowings (the element's own `style` only; the file's conditional font sizes; a
+  variant `text-` on the line) made all of them silent while the inline styles, `:root { font-size: calc(1vw + 1vh +
+  .5vmin) }`, a Svelte `<style>`'s `3vw` and a lone `text-[5vw]` still warn. `width-viewport` was cut (CRIT_3: 16 corpus
+  hits, ~12 unique, one plausible defect — Headless UI's documented Dialog, compiled `.w-screen`, clipped decorations), and
+  with it the `-screen` pick. Oracle replay (15,636 view / style files of the designers' clones, 1.37.0 against F0c): the
+  six 1.37 rules byte-identical, no font-size-viewport finding (no raw vw font size in the corpus at all). Hostile 256K
+  inputs (`text-[` runs, bare-size class lists, line-long vw `calc()` values, long inline styles): 0.1–1.3× plain JSX.
+  Mutation pass — 66 mutants, the list written before the code: F0a's 10, F0b's 9, F0c's 32 and a replay of 1.37's list on
+  the lines F0c touched or shares (15 — 1.37's own list was not kept on disk) — 64 killed at first; the two survivors
+  wanted a fixture: the row key on a line STARTING with `|` let a pipe-less copy of the untouched matrix read as written
+  (the key now reads any line holding `|`; tracks.md), and a PT key renamed fell back to EN's text unseen (each language's
+  text asserted). Three lines went before the pass as having no input of their own: a `font` pre-test before the style
+  reader (no effect, no cost), `_` read as a blank in a Tailwind value (any arithmetic needs `(`, which the class split
+  cuts), the `@apply` wrapper's own conditional test (an `@apply` in a conditional block holding a `text-` utility drops
+  the file's candidates anyway). Two `else`s are equivalent by structure (a vw size in a conditional block, a variant
+  `text-[…vw]`: each is dropped by the rule beside it).
+- **1.38.0** (chain P, item 1 of the owner's 1.38 list as CRIT_1 and the DECISIONS cut it — the design was L, ~31 mechanisms
+  across the four items; CUT TO M+) — the project inventory, the fact `no-reduced-motion`, the `_UI checks off:_` marker.
+  The design shared settle's, the exports loop's and the token `head()`'s reads with the pass and threaded deprecated uses
+  through settle (`watch`); CRIT_X D4 measured that sharing saves the bare read alone (parsing is 70–85 % of the pass) and
+  CRIT_1 that the shared budgets let a watch move a verdict (`DS_PASS_STEPS`), so the pass reads on its OWN after scanCode and
+  settle is untouched; deprecated uses went to 1.39. The pass is OPT-IN (the operation's `{uiPass: true}`): the design's
+  `{uiPass: false}` seam would have touched 54 `remeasure(` calls, two child-process probes and the `pair()` helpers (CRIT_1
+  must-fix 9). The feature report and finish keep 48 / 384K (CRIT_1 must-fix 1 over CRIT_X D4 — 5,000 focus-free CSS modules
+  made the feature report 13.5× the no-candidate one, sheets naming `:focus` 12 s at 32 MB parsed), and their unjudged clauses
+  point to the inventory, which judges past 48 under the 1.37 excuse rule at project scope — the design's per-file excuse
+  narrowed the rule (CRIT_1: `reset.css` + a `focus-visible:ring-2` Button gave 1 where every feature report gives 0). The
+  separate reduced-motion script search was cut (it never changed the answer on the nine clones); the fact is said only when
+  no read was cut (CRIT_1 must-fix 6). The marker's unreadable entry has a `why` of its own (CRIT_1 must-fix 10); `past-bound`
+  says the 50-entry bound. Cut too: the `:is` narrowing (backlog), the MB rendering and the `DS_FOCUS_SHEETS` rename.
+  Found while building: a `<style>` block's first rule carries its `<style scoped>` line in its prelude, so `@keyframes` there
+  was missed — and so, since 1.37, was every at-rule the rules test with `prelude[0] === "@"`: an SFC whose FIRST block is
+  `@media print`, a `prefers-reduced-motion` one or a conditional block (`@media`, `@supports`) gave outline-removed,
+  transition-all and font-size-viewport false positives. Fixed in this chain, a droppable commit the owner kept (c9b4e322,
+  then 128054e9 took out its pre-test — no output, no measurable cost): `sheetChecks` reads every block's prelude without a
+  leading `<style…>` tag (`RE_STYLE_TAG`) — the at-rule, the selector and the keyframes alike, `RE_KEYFRAMES` back to its
+  anchored form (A stylesheet's structure, above).
+  Measured: on the nine clones no fact (six declare motion — 21–449 lines —, each mentions reduced motion in a view file);
+  cal.com's inventory 59 in 1,117 files (zoom-disabled 3, img-no-alt 2, click-no-keyboard 11, transition-all 43 — the
+  design's numbers), vben 60, shadcn-svelte 65, shadcn-ui 89 (transition-all alone), Bootstrap and Foundation 0. G1′ (the
+  pass ÷ a bare read + the checks in memory): the test's 400 files 0.88–0.96; the clones 0.63–1.36 over two series
+  (a throwaway probe over the designers' clones — shadcn-ui, cal.com, vben, Bootstrap, Breeze); the report with the pass ÷ the 1.37 report: shadcn-ui
+  1.64–1.72, cal.com 1.22–1.23, vben 1.42–1.58, Bootstrap 1.85–2.24, Breeze 2.84–2.88 (+38–255 ms on Bootstrap's and
+  Breeze's 43–303 ms base; on those five alone — review 1 of 1.38 measured every clone of the designers: below). Oracle replay — `uiChecksOf` of the clones' 8,478 view / style files (findings,
+  focus, past, cut), their nine project reports at the engine's default, six feature reports and finish parts on copies of
+  three trees: byte-identical against 1.37.0 and the chain's parent, before and after the `<style>` fix. Mutation pass, the
+  list written before the code (MUTATIONS.md, 95) plus two for the fix: 91 killed at first; three wanted a fixture (a
+  limit's first file by path, the one character past the read, the fact under the pass's bound alone — view-size had masked
+  it), now killed; one line deleted (the `<style>` strip's pre-test: no output, no measurable cost); one equivalent — the
+  bound's `>=` as `>` (the read-ahead's slice holds the same 5,000: the 5,001st reads as nothing and cuts one step later).
+- **1.38.0** (the docs pass, after the five chains merged) — ui-code-scan.md took the release's user prose (the project's UI
+  checks and the fact, the marker, raw values against the scale, token values, the units table, DESIGN.md's export route,
+  the breakpoints' and ui-states' pointers), steering-templates.md the units table's example and the marker's line,
+  tooling-reference.md one rewrite of the spec_scan {designSystem} row. mcp/tests/17-docs.js's "1.38.0 Z docs" block reads
+  every rule / fact id, limit code, bound and `why` code from the engine's SOURCE and runs each prose example through the
+  engine (the steering example IS a units table and an applied marker to the registry's reader; the tooling row names every
+  key both report shapes return on a project built to fill each 1.38 part). Where chain D's prose and the merged engine
+  disagreed, the prose was corrected: ui-design-patterns.md's matrix paragraph (a row's n/a alone among its VIEW cells, the
+  label in any language and never after a word, a dash / TBD open, every anchored table, the columns from the a11y one on
+  unjudged) and its registry table (a colour that IS a token's in any notation; "in sync" of names, drift and gone beside
+  it), ui-responsive.md's breakpoints (the first source with a width ≥ 320, ui.md's first line outside code and comments,
+  its slot, a top-level `@theme`, the two resets, past six, who prints them, the values not read).
+- **1.38.0 review 1** (area ui — the UI-project reviewer's UP-3 … UP-7; the cost findings UP-1 / UP-2 are another fix
+  agent's) — UP-3 (MEDIUM): the bare `text-[…vw]` narrowing was decided by the LINE, and shadcn / Next class lists are
+  routinely split over lines (`cn("text-[8vw] font-bold", "md:text-7xl")`, a cva base with its responsive variant below, a
+  wrapped JSX / Vue class attribute): each warned, finish too, while the same classes on one line were silent. It is decided
+  per FILE now, as a stylesheet's size is: `utilities` pushes the candidates on its caller's list (its own variant test
+  gone — `RE_TW_TEXT`, anchored, takes no variant's token, so `variantsOf` left that branch), and the caller drops them all
+  once any non-CSS line held `:text-` / `:!text-` (`RE_TW_TEXT_VARIANT`, Tailwind 3's important too); a sheet's `@apply`
+  sizes the same over its `@apply` statements — never its declarations: a colour-variant `@apply` beside `font-size: 5vw`
+  keeps the finding. UP-4 (LOW, a subtraction): a sheet read in part (its override past the 256K read — a theme's 270K
+  style.css — or past a 2,000-character line cut — a minified sheet) was judged as if whole; `uiChecksOf` takes `over`
+  (featureReport's two calls, the inventory's `feed`) and a `partial` file — past the read or a line cut — judges none of
+  the sizes the rest of the file decides (the sheet's `condSize` starts set; the bare `text-[…vw]` too, as UP-3 made them
+  per file — the same property; in a markup file a cut template line counts, a doubt read as not judged); an element's own
+  `style` is decided on its tag and stands. UP-5 (LOW, the minimal form): `RE_STYLE_TAG` also strips a leading `</style>`
+  (a second block's first rule); Astro's `define:vars` documented for the user (silence it) and left to 1.39. UP-6 / UP-7
+  (LOW, prose): ui-code-scan.md says a feature report's focus search is narrower than the inventory's, and the marker's
+  spellings (ui-code-scan.md, steering-templates.md: a line of its own as `_Token sources:_` — a list item or bold is not
+  read —, each id bare); a 17-docs row runs the four spellings through the registry's reader and `uiOff`. Oracle: the
+  parent against the fix, `uiChecksOf` of the 20 clones' 17,590 view / style files read as the reports read them (22 past
+  the read, 75 with a cut line): byte-identical (no vw text size in the corpus). Cost: the fix's `uiChecksOf` ÷ the
+  parent's, one process, interleaved with the order alternated, median of 10 — five clones 0.87–1.08, hostile 256K inputs
+  aimed at the changed lines (runs of `text-[`, bare sizes a variant ends, lines of `:text-`, a sheet of `@apply` sizes,
+  two-block SFCs) 0.74–1.04. Mutation pass, the list written before the fixtures (%TEMP%/dsd-138f1-ui/MUTATIONS.md, 34):
+  32 killed at first; the first candidate a line (`size === null`) a cost guard — a line of 60 bare sizes 1.9× without
+  it, kept; a `text-[` pre-test before the anchored `RE_TW_TEXT` output-equivalent and no effect beyond noise in three
+  series: deleted. R1-DOC4 (LOW, prose): the levels' current rule still read 1.37's ("`warn` — the feature report AND
+  finish's warning", "`report` — the feature report alone"); since 1.38 the project inventory counts both levels (tagged
+  `report`), so `warn` is the reports (a feature's, the project inventory) and finish's warning, `report` the reports alone,
+  never finish; a 17-docs row pins both clauses and each `UI_RULES` id under its level.
+- **1.38.0 review 1, the cost** (UP-1 HIGH, UP-2 and DOC1 MEDIUM) — the report with the pass was 4–10× 1.37's on five of the
+  designers' own clones, against the "1.2–2.9×" the release note said of five others. UP-1: the owner kept the pass on the
+  operation and narrowed it by a property — a stylesheet past the read (a compiled bundle) is fed with no line, counted and
+  named in the existing `view-size` entry (it could carry it: count and first file; only its CLI line gained "the project's
+  UI checks skip a stylesheet that long"); a feature report and finish keep 1.37's read. On the clones only Bulma (13 such
+  sheets) and cal.com (one generated `globals.css`) hold one: Bulma's pass ~940 → ~440 ms, cal.com's inventory 59 → 57
+  (that sheet's two transition-all); line-length no longer counts the skipped sheets' lines. Not fixed, said above: a skipped
+  sheet's focus styles excuse nothing (no clone affected — 1.39 backlog). UP-2: on Windows the pass's probe often averaged
+  past 200 µs (each read followed by a parse), so 8 workers started for 64–300 files and cost more than reading them all;
+  readFileHeads now also asks the files left × the probe's average to reach AHEAD_START_US (80 ms, the pool's start
+  measured once). Taxonomy's pass started the pool in 2–5 of 7 runs before, none after (its report ×2.0–3.2 → ×1.3–1.4
+  1.37's); cal.com / shadcn-ui / shadcn-svelte / vben still start it. DOC1: re-measured on every clone the two reviewers used, both
+  engines and 1.37 in one process, interleaved, the order rotating, median of 7, a Windows machine shared with other runs
+  (opens 1–2.7 ms each), two series — the report with the pass ÷ 1.37's, the ms it adds, [the parent's ratio]: sakai-vue
+  (47 view files) ×9.2–14 +129–260 [×10–12]; open-props (85) ×6.3–7.8 +88–98 [×6.6–8.5]; Jetstream (110) ×2.8–3.5 +48–59
+  [×2.8–3.3]; Foundation (123) ×10–11 +369–410 [×8.4–10] — its 1.37 report reads almost nothing (43 ms) and each of its
+  opens cost ~2 ms then —; Breeze (168) ×3.8–4.0 +287–636 [×4.4–5.1]; taxonomy (97) ×1.3–1.4 +39–63 [×2.0–3.2];
+  Bootstrap (254) ×2.1–2.2 +524–597 [×1.6–3.3]; Bulma (544) ×4.2–5.6 +485–553 [×7.7–8.2]; vben (721) ×1.4–1.6 +426–536
+  [×1.6–1.8]; cal.com (1,108) ×1.25–1.33 +547–787 [×1.2–1.4]; shadcn-svelte (2,174) ×1.65–1.67 +682–1,106 [×1.6–1.8];
+  shadcn-ui (3,562) ×1.9–2.0 +1,341–1,471 [×1.9–2.2]. G1′ (paired, median of 7): 0.79–1.53 (Bootstrap's 1.53 one
+  series, 1.27 the other) but sakai-vue's 2.21 in the second (the parent 2.27 at that moment; 1.31 the first — review 2
+  of 1.38's R2-DOC6: the range had dropped it); 15 reps on the eight small and mid trees: medians 0.86–1.16 (sakai-vue
+  1.09), upper quartiles ≤ 1.23. The read-ahead's 1.35.4 gain kept: shadcn-ui's report 1.71× slower with the pool off, 1.04× the parent's rule. The pass
+  scales with the view and style text it reads and the files it opens: the ratio is high where 1.37's report read almost
+  nothing; Foundation shows the bound's price on a quiet moment (start 32 ms: the pool would have saved ~30 ms there).
+  Fixtures: a sheet past the read, one of exactly 256K and an HTML page past it, the feature report and finish over the
+  sheet (15-quality-ui-project.js); both read-ahead bounds hit exactly, 1 ns a read either side (…-read-ahead.js); the
+  prose against uiProject's feed (17-docs.js). Mutation pass, the list first (MUTATIONS.md): 17 / 17 killed.
+- **1.38.0 review 2** (area ui — R2-UP-1 MEDIUM, made by fix round 1's UP-3; R2-UP-2 / R2-DOC1, R2-DOC6 LOW, prose) — UP-3
+  decided the bare `text-[…vw]` per file with the per-line predicate unchanged, `:text-` after any variant: a nav link's
+  `hover:text-gray-900`, a `dark:text-white`, an `md:text-center` anywhere silenced a hero's `text-[8vw]`, while the same
+  design in CSS (a `:hover` colour) warned — not (2)'s property, a font size under a condition. The reviewer's probe (a hero
+  line on top of every view file of the 20 clones, the drops classified with a cut line first): 1,333 of 14,512 markup files
+  dropped by a non-size variant (Breeze 238 of 334, Jetstream 72 of 109), 266 by a size one. `RE_TW_TEXT_VARIANT` now takes
+  a SIZE alone (a type-scale step, an arbitrary length — UI checks above) — the reviewer's prototype (`\[` for any arbitrary
+  value) narrowed: `hover:text-[#111]` and an untyped `[var(…)]` are colours. The probe after: 0 by a non-size variant, 266
+  by a size one, the 54 cut and 6 over-read files unchanged. One shape beyond 9c6185aa's per-line rule, meant: a colour
+  variant on the hero's OWN line (`text-[8vw] dark:text-white`) warns now (it was silent there too). Trade-off, in
+  ui-code-scan.md: a project's own key (`md:text-hero`) no longer silences. Fixtures: S3.dark moved to the warning rows with
+  the reviewer's four Hero* shapes, a wrap, `hover:text-[#111]`, `[var(--brand)]`, daisyUI's `text-base-content`,
+  `md:text-hero` and a sheet's `@apply` sizes beside a colour-variant `@apply`; one silent row per shape the const takes; a
+  17-docs row runs the prose's two examples through the engine. Oracle: `uiChecksOf` of the clones' 15,630 view / style
+  files, this tree against cf72f0cd — identical (no vw text size in the corpus); the reviewer's shapes / twostyle /
+  parity / bundlefocus / marker / proj scripts identical but next-dark.tsx (the line above, now warning). R2-UP-2 / R2-DOC1:
+  ui-code-scan.md said a sheet past 256K is "named" in view-size (only the first file by path is) and that any focus style
+  in any file read excuses (a skipped sheet counts as read, its focus styles excuse nothing): it now says counted, and the
+  inventory may warn of a removal a feature report excuses by such a sheet (the mechanism stays: 1.39 backlog, above);
+  ui-code-scan.md stays ≤ 30,000 by two examples cut (`calc(1vw + 1vh)`, the UP-6 sentence's `focus-visible:ring-2`).
+  R2-DOC6: the cost entry above names sakai-vue's G1′ 2.21. Left as found (pre-existing since F0c, 1.39 backlog): a
+  conditional `@apply` of any `text-` utility sets `condSize` (`RE_TW_TEXT_ANY`). Cost, this tree ÷ cf72f0cd, one process,
+  interleaved: `uiChecksOf` over six clones' real view files (median of 9) 0.87–1.09; hostile 256K inputs aimed at the
+  predicate (median of 11) 0.86–1.36 — runs of colour variants, `md:text-[#111]` / `[var(…)]` — and 4.0 on lines of
+  `:text-` + 1,900 digits (0.9 ms against plain JSX's 13: the `\d*` backtrack, linear); a file whose colour variants no
+  longer drop its 5,000 bare sizes 1.31 (the findings it now counts). Mutation pass, the list written before the fixtures
+  (%TEMP%/dsd-138f2-ui/MUTATIONS.md): 29 / 29 killed, each by its rule's fixture — every branch of the const (each step,
+  `\d*`, the end guard, the `length:` hint in both brackets, a digit / `.`, each math function, `!?`, the `:`), the sheet's
+  and the class list's tests, the prose (three) and uiProject's feed.
+- **1.38.0 release (Docker)** — the 1.37 cost check "the checks cost at most 3× the raw-value read" failed once in
+  node:24-alpine (4.7) and passed alone 3×; 1.37.0 and 1.38.0 measured in one process inside that image: medians 1.75 and
+  1.69 (node:22 1.60 and 1.79), both spiking to 3–4× — a ~1.3 ms denominator (120 files) a GC pause moves. The check now
+  reads 1,200 files (a ~13 ms denominator), its bound unchanged.
+
+### UI state matrix
+- **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table
+  holding two listed rows, judged the a11y column, and an approval stamp (a uiStates key, never built) with a `legacy` branch. The critique
+  (CRIT_4) ran that reader on real shapes: a data-fetching state machine (`State | Event | Next state`) read 13 no-row, a
+  trailing Notes column 15 gaps, the Worst case's empty a11y cell one — so the matrix is the scaffold's own table, anchored by
+  its localized a11y header cell, the views between, the a11y column unjudged; the stamp went (no 1.37 design can hold that
+  header: the legacy branch protected nothing). The ruling (DECISIONS) kept it a warn at m / l / no size, a note at s, outside
+  every gate, advisory in spec_upgrade (the critique: any warn outside the advisory ids added `warnings` attention), and moved
+  the brief's design budget to 6,000 with it (tasks-and-evidence.md → History). The corpus key (`uiStateNames`, CRIT_4 must-fix
+  6) keeps every language's labels out of an English doctor. The oracle replay (the same 32 +ui features on 1.37.0, the F0
+  tip and this chain): the only differences are the new check — a pass with `usNone` on every 1.37 shape (prose, the guide's
+  own table, a state machine), `usOk` on a full matrix at 1–3 views, the gap a warn at m / l / no size and a note at s — and
+  spec_upgrade listing it (attention unchanged). Mutation pass (the list written before the fixtures): 50 of 50 killed, each
+  by the fixture of its rule — one only after a fix (the no-size fixture passed `undefined` to a helper whose default size
+  was m: "no size warns" was never asked); one cost guard timed apart, not a mutant: the cell cut (`US_CELL`) — without it
+  the matrix reader is 2–4× slower on 1 MB cells and the check ~1.8× (269–307 ms vs 143–165 ms, a 3 MB section), linear
+  either way, so the 2× ratio fixture holds both. Two fixtures in 16-conventions-build own the corpus key: a corpus without
+  it renders; `localeLoaded` drops the cached labels with the corpus.
+- **1.38.0 review 1** (BS-3, BS-4, BS-5 — prose, the owner's ruling) — a matrix of `TBD` / dashes read as written, so the
+  m / l gate passed it though the CHANGELOG said it never passes an empty matrix: the docs now say the gate refuses the
+  untouched matrix and `ui-states` warns about each such cell (markdown-and-trace.md → History; a cell key of the answering
+  cells — the reviewer's prototype — set aside, a 1.39 candidate). Two anchored tables splitting the 16 states warned 16
+  `no-row` gaps while the user doc said "a state's rows count together … every table": the doc now says each table is a
+  matrix of its own, a row per state in each (the rule unchanged — counting across tables is 1.39's to weigh). The cost
+  note named 0.1–0.35× but a header of 1,000,000 view cells costs ~2.1× `sectionState` (measured again: 2.1 s against 1.0
+  s, 2.6 against 1.2; the other hostile shapes 0.07–0.32×): said above, with the bound that would close it (a length
+  pre-test before `usWords`) left for 1.39 — a LOW fixed by prose, not by a new test of the header.
+- **1.38.0 review 2** (R2-DOC2 — prose) — review 1's docs said the m / l gate refuses the untouched matrix; it refuses a UI
+  States section left as the template, and the gate reads the SECTION: write the scaffold's reference line (its TODO line
+  gone) and the untouched matrix passes, `ui-states` warning about its 16 rows — the end a `TBD` matrix comes to (9c6185aa
+  and this tree alike: the engine unchanged, in EN / PT / ES). ui-design-patterns.md and the verdict bullet above say so;
+  17-docs runs a written line over the untouched matrix (filled, `ui-states` warns) and over the scaffold with its TODO
+  (unfilled).

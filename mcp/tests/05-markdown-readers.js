@@ -612,10 +612,13 @@ exports.run = async ({ ok, all, S, tmp, require, __dirname }) => {
     // the two blocks as the scaffold writes them, by place: [Design System Usage, UI States]
     const blocks = (lang) => I.trackDesignBlock("ui", lang).split(/^## \[UI\] /m).slice(1, 3).map((s) => s.slice(s.indexOf("\n") + 1).replace(/^> \*\*TODO\*\*.*\n/, "").trimEnd());
     const last = (s) => s.slice(s.lastIndexOf("\n") + 1);
+    // (1.38.0: UI States gained a fourth line and the state matrix's table AFTER the worst-case line — these rows read the block's
+    // FIRST lines, by place: the 1.36 two, the 1.37 third)
+    const worstLine = (lang) => blocks(lang)[1].split("\n")[2];
     const WORST = { en: /worst-case/, pt: /pior caso/, es: /peor caso/, "pt-BR": /pior caso/ };
-    // every line 1.31…1.36 wrote is still there, untouched: the blocks less their appended line hash as 1.36's did (EN / PT / ES)
+    // every line 1.31…1.36 wrote is still there, untouched: the blocks less their appended lines hash as 1.36's did (EN / PT / ES)
     const h = crypto.createHash("sha1");
-    for (const l of ["en", "pt", "es"]) { const [dsu, states] = blocks(l); h.update(dsu.replace(/\n\n- [^\n]*$/, "") + "\0" + states.replace(/\n- [^\n]*$/, "") + "\0"); }
+    for (const l of ["en", "pt", "es"]) { const [dsu, states] = blocks(l); h.update(dsu.replace(/\n\n- [^\n]*$/, "") + "\0" + states.split("\n").slice(0, 2).join("\n") + "\0"); }
     const prefix = h.digest("hex");
     const doc = (heading, lines) => "# Design: x\n\n## [UI] " + heading + "\n" + lines.join("\n") + "\n\n## Next\nx\n";
     const ST1 = "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).";
@@ -624,7 +627,7 @@ exports.run = async ({ ok, all, S, tmp, require, __dirname }) => {
     const DS2 = "- One row per component, checked against the registry (.specs/steering/design-system.md — spec_doctor's ui-design-system): Reuse = one it lists, used as is · Extend = a new variant of one it lists · New = none it lists fits — say why; it joins the registry when the feature is finished. No component at all: replace the table with one line, n/a — why.";
     const TABLE = ["", "| Kind | Component | Why / notes |", "|---|---|---|", "| Reuse | [component the registry lists] | [what it does in this view] |", "| New | [new component] | [why no listed component fits] |"];
     const old = { states31: doc("UI States", [ST1]), states36: doc("UI States", [ST1, ST2]), dsu34: doc("Design System Usage", [DS1]), dsu36: doc("Design System Usage", [DS1, DS2, ...TABLE]) };
-    const worstWritten = doc("UI States", [ST1, ST2, last(blocks("en")[1]), "- Orders, worst case: a 120-character customer name wraps to two lines; 0 orders shows the empty state, 4,812 the pager."]);
+    const worstWritten = doc("UI States", [ST1, ST2, worstLine("en"), "- Orders, worst case: a 120-character customer name wraps to two lines; 0 orders shows the empty state, 4,812 the pager."]);
     // the placement: a contract written under its own h2 is no usage row — the gate at m passes and ui-sections reads as without it;
     // the SAME contract under the usage table (an h3) is read as rows (its states table's New, the key table's "New tab") and fails
     const p = path.join(tmp, "proj-ui-contracts");
@@ -642,20 +645,80 @@ exports.run = async ({ ok, all, S, tmp, require, __dirname }) => {
     const finish = (lang) => S.msg(lang).secPrivacy.finishChecks.ui[1];
     all("1.37: +ui's UI States gains a third line (the worst-case row) and Design System Usage a last one (the contracts' optional `## [UI] Component Contracts` h2), both appended — every 1.31…1.36 block and the new scaffold (EN / PT / ES / pt-BR) read as template, a written worst-case row as filled; a contract under its own h2 is no usage row (the gate at m passes, ui-sections unchanged), under the table it is; finish's +ui check names the floor and the worst case (got " +
       js({ scaffold: LANGS.map((l) => [st(scaffold(l), "UI States", l), st(scaffold(l), "Design System Usage", l)]), prefix, old: Object.keys(old).map((k) => st(old[k], /states/.test(k) ? "UI States" : "Design System Usage")),
-        worst: st(worstWritten, "UI States"), gate: [gate(plain), gate(own), gate(under)], lens: LANGS.map((l) => blocks(l).map((b) => last(b).length)) }) + ")", {
+        worst: st(worstWritten, "UI States"), gate: [gate(plain), gate(own), gate(under)], lens: LANGS.map((l) => [last(blocks(l)[0]).length, worstLine(l).length]) }) + ")", {
       scaffold: () => LANGS.every((l) => st(scaffold(l), "UI States", l) === "template" && st(scaffold(l), "Design System Usage", l) === "template"),
       prefix: () => prefix === "55697e2f276d0240103d75c2da849bb5aeba2db3", // the 1.36 blocks (EN / PT / ES), byte for byte
       oldStates31: () => st(old.states31, "UI States") === "template",
       oldStates36: () => st(old.states36, "UI States") === "template",
       oldDsu34: () => st(old.dsu34, "Design System Usage") === "template",
       oldDsu36: () => st(old.dsu36, "Design System Usage") === "template",
-      threeLines: () => LANGS.every((l) => { const b = blocks(l)[1].split("\n"); return b.length === 3 && b.every((x) => x.startsWith("- ")) && WORST[l].test(b[2]); }),
+      threeLines: () => LANGS.every((l) => { const b = blocks(l)[1].split("\n").slice(0, 3); return b.length === 3 && b.every((x) => x.startsWith("- ")) && WORST[l].test(b[2]); }),
       contractLine: () => LANGS.every((l) => /^- [^\n]*`## \[UI\] [^`\n]+`/.test(last(blocks(l)[0])) && /\|\n\n- [^\n]*$/.test(blocks(l)[0])),
-      short: () => LANGS.every((l) => blocks(l).every((b) => last(b).length <= 180)),
+      short: () => LANGS.every((l) => last(blocks(l)[0]).length <= 180 && worstLine(l).length <= 180),
       written: () => st(worstWritten, "UI States") === "filled",
       placementGate: () => gate(plain) === "pass" && gate(own) === "pass" && gate(under) === "fail",
       placementSections: () => sections(own) === sections(plain),
       finishText: () => LANGS.every((l) => /\b320 px\b/.test(finish(l)) && /\b200 %/.test(finish(l)) && WORST[l].test(finish(l).replace("worst case", "worst-case"))),
+    });
+  }
+
+  { // 1.38.0 F0b: +ui's UI States gains a fourth line and the state matrix — a `State | View | Announced · focus` table, a row per
+    // state, its rows and header quality's uiStateLabels / uiStateHead / uiStateView / uiStateA11y (one source) — APPENDED in ONE
+    // change, one re-pin (CRIT_X D6 as DECISIONS 4 amends it: item 3's Responsiveness line cut). A table row is keyed by its
+    // NON-EMPTY trimmed cells on both sides (CRIT_4 must-fix 2): a blank view column added (a second view), the a11y column
+    // deleted or compact pipes keep an untouched matrix template, so the m / l gate refuses a section left that way (once a
+    // line of the section is written, the untouched matrix passes the gate — doctor's ui-states warns about its cells).
+    const I = require("./lib/i18n.js");
+    const UI = E.trackSectionTable("ui");
+    const LANGS = ["en", "pt", "es", "pt-BR"];
+    const IDS = ["loading", "slow-network", "empty-first-use", "empty-no-results", "error", "partial", "offline", "permission-denied",
+      "not-found", "signed-out", "conflict", "stale", "success", "undo", "form-validation", "worst-case"];
+    const st = (md, lang, size) => E.sectionState(md, UI, "[UI]", { lang: lang || "en", size }).find((s) => s.section === "UI States").status;
+    const block = (lang) => { const s = I.trackDesignBlock("ui", lang).split(/^## \[UI\] /m)[2]; return s.slice(s.indexOf("\n") + 1).replace(/^> \*\*TODO\*\*.*\n/, "").trimEnd(); };
+    const lines = (lang) => block(lang).split("\n");
+    const doc = (ls) => "# Design: x\n\n## [UI] UI States\n" + ls.join("\n") + "\n\n## Next\nx\n";
+    const q = (lang) => S.msg(lang).quality;
+    const en = lines("en"), at = en.indexOf(""), head = en.slice(0, at), table = en.slice(at + 1);
+    // the shapes an author leaves the matrix untouched in: a blank view column added, the a11y column deleted, compact pipes,
+    // the leading and trailing pipes dropped (a pipe-less GFM table — the mutation pass)
+    const addCol = table.map((r, i) => (i === 1 ? "|---|---|---|---|" : r + " |"));
+    const delCol = table.map((r, i) => (i === 1 ? "|---|---|" : r.replace(/ [^|]*\|$/, "")));
+    const compact = table.map((r) => r.replace(/ *\| */g, "|"));
+    const pipeless = table.map((r) => r.replace(/^\| | \|$/g, ""));
+    const untouched = { scaffold: table, addCol, delCol, compact, pipeless };
+    const filledRow = table.map((r, i) => (i === 2 ? "| Loading | a skeleton of the order rows | status \"Loading orders\" · focus stays |" : r));
+    const old = [en.slice(0, 1), en.slice(0, 2), en.slice(0, 3)]; // the 1.31, 1.36 and 1.37 blocks
+    // the scaffold's section report at no size / s / m / l, as 1.37.0's (its own scaffold — the matrix changes no verdict)
+    const report = (size) => js(E.trackSectionReport(I.design(Object.assign({ name: "x", tracks: ["core", "ui"], label: "core +ui" }, size ? { size } : {}), "en").replace(/^> \*\*TODO\*\*.*\n/gm, ""),
+      ["core", "ui"], { size, lang: "en" }).map(([tr, , rows]) => [tr, rows.map((r) => r.section + ":" + r.status + (r.tier ? ":" + r.tier : ""))]));
+    const SIZED = js([["ui", ["Design System Usage:template:extended", "UI States:template:core", "Accessibility:template:core", "Responsiveness & i18n:template:extended", "UI Performance Budget:template:extended"]]]);
+    const UNSIZED = js([["ui", ["Design System Usage:template", "UI States:template", "Accessibility:template", "Responsiveness & i18n:template", "UI Performance Budget:template"]]]);
+    // ui-design-system reads its own section: the matrix's rows (Error, Undo…) are never usage rows
+    const p = path.join(tmp, "proj-ui-matrix");
+    S.initProject(p, ["ui"], "en");
+    put(p, ".specs/steering/design-system.md", "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| Button | `src/components/Button.tsx` | primary | every action |\n");
+    const reg = E.designSystemRegistry(path.join(p, ".specs"));
+    const usage = "# Design: x\n\n## [UI] Design System Usage\n| Kind | Component | Why / notes |\n|---|---|---|\n| Reuse | Button | the form's actions |\n| New | DateRangePicker | no listed picker takes a range |\n\n## [UI] UI States\n";
+    const dsc = (states) => js(E.designSystemCheck(usage + states + "\n", "en", { registry: reg, gate: "m", slug: "x" }));
+    const rows = (lang) => { const ls = lines(lang); return ls.slice(ls.indexOf("") + 1); };
+    const cells = (r) => r.replace(/^\| | \|$/g, "").split(" | ");
+    all("1.38.0 F0b: +ui's UI States gains a fourth line (≤ 180 characters, naming ui-design-patterns.md) and the State | View | Announced · focus matrix, its rows quality's labels — appended: the 1.31…1.37 blocks and the new scaffold (EN / PT / ES / pt-BR) read as template, a blank column added, the a11y column deleted or compact pipes too (at no size, m, l), one written row as filled; no slot; the section report at s / m / l and the corpus's text count as 1.37.0's; ui-design-system's rows unchanged (got " +
+      js({ untouched: Object.fromEntries(Object.entries(untouched).map(([k, t]) => [k, [st(doc([...head, "", ...t])), st(doc([...head, "", ...t]), "en", "m")]])),
+        filled: st(doc([...head, "", ...filledRow]), "en", "m"), old: old.map((o) => st(doc(o))), lens: LANGS.map((l) => [...lines(l)[3]].length),
+        sized: report("m"), corpus: E.templateCorpus().length }) + ")", {
+      appended: () => LANGS.every((l) => { const ls = lines(l); return ls.length === 4 + 1 + 18 && ls.slice(0, 4).every((x) => x.startsWith("- ")) && ls[4] === ""
+        && [...ls[3]].length <= 180 && /\(references\/ui-design-patterns\.md\)\.$/.test(ls[3]); }),
+      oneSource: () => LANGS.every((l) => { const r = rows(l), Q = q(l); return js(Object.keys(Q.uiStateLabels)) === js(IDS) && js(cells(r[0])) === js([Q.uiStateHead, Q.uiStateView, Q.uiStateA11y])
+        && r[1] === "|---|---|---|" && js(r.slice(2).map((x) => cells(x)[0])) === js(Object.values(Q.uiStateLabels)) && r.slice(2).every((x) => / \| \| \|$/.test(x)); }),
+      scaffold: () => LANGS.every((l) => st(I.design({ name: "x", tracks: ["core", "ui"], label: "core +ui" }, l).replace(/^> \*\*TODO\*\*.*\n/gm, ""), l) === "template"
+        && st(doc(lines(l)), l, "m") === "template"),
+      oldBlocks: () => old.every((o) => st(doc(o)) === "template" && st(doc(o), "en", "m") === "template"),
+      untouched: () => Object.values(untouched).every((t) => ["", "s", "m", "l"].every((size) => st(doc([...head, "", ...t]), "en", size || undefined) === "template")),
+      oneRowWritten: () => st(doc([...head, "", ...filledRow]), "en", "m") === "filled" && st(doc([...head, "", ...filledRow])) === "filled",
+      noSlot: () => LANGS.every((l) => E.placeholderReport(lines(l).slice(3).join("\n")).length === 0),
+      sizes: () => report(undefined) === UNSIZED && ["s", "m", "l"].every((size) => report(size) === SIZED),
+      corpusTexts: () => E.templateCorpus().length === 1723, // 1.37.0's count: an appended line adds no text (a release adding a block re-pins)
+      dsRows: () => dsc(lines("en").join("\n")) === dsc("- Orders: loading, empty, error with a Retry."),
     });
   }
 };

@@ -46,7 +46,8 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     stale: () => drift.out.includes(T.dsStaleHead(1)) && drift.out.includes("    DatePicker — src/components/date-picker.tsx"),
     lists: () => drift.out.includes(T.dsSourcesNew("src/styles/theme.css")) && drift.out.includes(T.dsLibrariesNew("antd")) && !drift.out.includes(T.dsInSync) && drift.code === 0,
     tokens: () => drift.out.includes(T.dsTokensNew(1)) && drift.out.includes("    | --radius | 8px |  |"),
-    json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.designSystemReport(p)),
+    // (1.38: the operation opts into the project's UI checks — the engine's default runs none, CRIT_X D4)
+    json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.designSystemReport(p, { uiPass: true })),
   });
 
   // --- a feature against the registry: its rows, its raw values; an unknown feature; PT; help ----------------------------------------
@@ -199,6 +200,24 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     });
   }
 
+  // --- 1.38: doctor's ui-states — [UI] UI States' matrix leaves a state neither designed nor n/a ---------------------------------------
+  {
+    const sp = path.join(tmp, "p138-ui-states");
+    SR.initProject(sp, ["ui"], "en");
+    const f = SR.createFeature(sp, { name: "Orders", tracks: ["ui"], summary: "x", size: "m" });
+    const Qs = MSG("en").quality;
+    const rows = Object.values(Qs.uiStateLabels || {}).map((l) => "| " + l + " | " + (l === "Stale" ? "" : "what the list shows") + " | |");
+    fs.writeFileSync(path.join(f.dir, "design.md"), "# Design: Orders\n\n## [UI] UI States\nThe orders list, state by state.\n\n| State | Orders list | Announced · focus |\n|---|---|---|\n" + rows.join("\n") + "\n");
+    const human = runIn(["doctor", f.slug, "--project", sp]);
+    const asJson = jsonOf(runIn(["doctor", f.slug, "--project", sp, "--json"]));
+    const want = () => Qs.usOpen(1, Qs.usView("Orders list", "Stale")); // (lazy: the parent has no such key)
+    const line = human.out.split("\n").find((l) => / ui-states /.test(l));
+    all("1.38 doctor (CLI): a +ui feature whose state matrix leaves a cell open prints the ▲ ui-states line; --json carries {id, status, detail} (got " + js({ line, json: (asJson.checks || []).find((c) => c.id === "ui-states") }) + ")", {
+      line: () => line === "  ▲ ui-states — " + want(),
+      json: () => js((asJson.checks || []).find((c) => c.id === "ui-states")) === js({ id: "ui-states", status: "warn", detail: want() }),
+    });
+  }
+
   // --- review 8: "in sync" is never printed beside a component an unfinished feature is building --------------------------------------
   {
     const sp = path.join(tmp, "p135-ds-pending");
@@ -215,6 +234,104 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       js([clean.out, out.out, asJson.inSync, asJson.pendingTotal]) + ")", {
       clean: () => clean.code === 0 && clean.out.includes(T.dsInSync),
       pending: () => out.out.includes(T.dsPending("Chip (chips)")) && !out.out.includes(T.dsInSync) && asJson.inSync === true && asJson.pendingTotal === 1,
+    });
+  }
+
+  // --- 1.38 R: the breakpoints — the project's after its counts, a feature's after its UI checks; each source, the unread, the bounds -------
+  {
+    const UI = ".specs/steering/ui.md";
+    const bp = (tag, lang, css, uiLine) => {
+      const d = path.join(tmp, "p138-bp-" + tag);
+      SR.initProject(d, ["ui"], lang);
+      if (css != null) write(d, "src/app.css", css);
+      if (uiLine != null) fs.writeFileSync(path.join(d, UI), fs.readFileSync(path.join(d, UI), "utf8").replace(/^- Breakpoints: .*$/m, uiLine));
+      return d;
+    };
+    const uiAt = (d) => UI + ":" + (fs.readFileSync(path.join(d, UI), "utf8").split("\n").findIndex((l) => l.startsWith("- Breakpoints:")) + 1);
+    const at = (out, line) => out.split("\n").indexOf(line);
+    // partial: an @theme that only adds (shadcn v4's 3xl / 4xl) — the default set joins, the 7th width said
+    const partial = bp("partial", "en", "@import \"tailwindcss\";\n@theme inline {\n  --breakpoint-3xl: 1600px;\n  --breakpoint-4xl: 2000px;\n}\n");
+    const pOut = runIn(["design-system", "--project", partial]);
+    const pJson = jsonOf(runIn(["design-system", "--project", partial, "--json"]));
+    // code alone (a reset), with six unread values: five listed, the sixth counted
+    const code = bp("code", "en", "@theme {\n  --breakpoint-*: initial;\n  --breakpoint-x: calc(40rem + 1px);\n  --breakpoint-md: 50rem;\n" +
+      ["var(--w)", "auto", "40vw", "250rem", "1e3px"].map((v, i) => "  --breakpoint-u" + i + ": " + v + ";\n").join("") + "}\n");
+    const cOut = runIn(["design-system", "--project", code]);
+    // ui.md's line, too long: it decides, and its bound is said
+    const line = bp("line", "en", null, "- Breakpoints: 600 / 1200 px " + "x".repeat(220));
+    const lOut = runIn(["design-system", "--project", line]);
+    // nothing declared: the default set; a feature's report prints it after its UI checks
+    const none = bp("none", "en", null, null);
+    const f = SR.createFeature(none, { name: "Grid", tracks: ["ui"], summary: "x" });
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/grid/Grid.tsx_\n");
+    write(none, "src/grid/Grid.tsx", "export const Grid = () => <div className=\"grid\" />;\n");
+    const nOut = runIn(["design-system", "--project", none]), fOut = runIn(["design-system", f.slug, "--project", none]);
+    const fJson = jsonOf(runIn(["design-system", f.slug, "--project", none, "--json"]));
+    const pt = bp("pt", "pt", null, null), ptOut = runIn(["design-system", "--project", pt]);
+    const P = MSG("pt").cliOutput;
+    const DEF = "320 · 390 · 768 · 1024 · 1440";
+    all("1.38 design-system (CLI): the breakpoints line — the widths and where they come from (ui.md's line, the code's @theme, partial: the default set and what the code adds, none: the default set), the unread ones, its own bounds (the 7th width, ui.md's 200 characters); right after the project's counts, after a feature's UI checks; PT; --json is the engine's, both shapes (got " +
+      js([pOut.out, cOut.out, lOut.out, nOut.out, fOut.out, ptOut.out]) + ")", {
+      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 390 · 768 · 1024 · 1440 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
+        pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1600)),
+      json: () => js(pJson.breakpoints) === js(SR.designSystemReport(partial).breakpoints) && pJson.breakpoints.partial === true,
+      code: () => cOut.out.includes(T.bpHead("320 · 800", T.bpFrom.code("src/app.css:4"))) &&
+        cOut.out.includes(T.bpUnread(6, "--breakpoint-x calc(40rem + 1px) (src/app.css:3), --breakpoint-u0 var(--w) (src/app.css:5), --breakpoint-u1 auto (src/app.css:6), --breakpoint-u2 40vw (src/app.css:7), --breakpoint-u3 250rem (src/app.css:8) … +1")),
+      line: () => lOut.out.includes(T.bpHead("320 · 600 · 1200", T.bpFrom["ui.md"](uiAt(line)))) && lOut.out.includes(T.bpLimit["breakpoint-line"](200, undefined, undefined, uiAt(line))),
+      none: () => nOut.out.includes(T.bpHead(DEF, T.bpFrom.default())) && !nOut.out.includes("⚠"),
+      feature: () => fOut.code === 0 && at(fOut.out, T.bpHead(DEF, T.bpFrom.default())) > at(fOut.out, T.uiNone(1)) && at(fOut.out, T.uiNone(1)) > 0 &&
+        js(fJson.breakpoints) === js(SR.designSystemReport(none, { name: f.slug }).breakpoints),
+      pt: () => ptOut.out.includes(P.bpHead(DEF, P.bpFrom.default())),
+    });
+
+    // 1.38.0 review 1 (BS-1): the widths as the CLI prints them, pasted over the stub's slot as its message says, are read whole —
+    // EN / PT / ES (the stub's ` · text expansion …` still ends the value)
+    const pasted = ["en", "pt", "es"].map((lang) => {
+      const d = bp("paste-" + lang, lang, null, null), X = MSG(lang).cliOutput;
+      const first = runIn(["design-system", "--project", d]).out, printed = (/^ {2}breakpoints: (.+?) px — /m.exec(first) || ["", "?"])[1];
+      fs.writeFileSync(path.join(d, UI), fs.readFileSync(path.join(d, UI), "utf8").replace("[360 / 768 / 1280 px]", printed + " px"));
+      const again = runIn(["design-system", "--project", d]);
+      return { lang, printed, line: (fs.readFileSync(path.join(d, UI), "utf8").match(/^- Breakpoints: .*$/m) || [""])[0], ok: again.out.includes(X.bpHead(DEF, X.bpFrom["ui.md"](uiAt(d)))) };
+    });
+    all("1.38.0 review 1 design-system (CLI): the default widths as printed (`320 · 390 · 768 · 1024 · 1440`), pasted into ui.md's Breakpoints line, read back whole from the line — EN / PT / ES (got " + js(pasted) + ")", {
+      printed: () => pasted.every((x) => x.printed === DEF),
+      read: () => pasted.every((x) => x.ok),
+    });
+  }
+
+  // --- 1.38: a raw value against the scale, the repeated values, the units table; the registry's values against the code ----------
+  {
+    // (the PT registry's units table holds 60 rows more: past the 50 read)
+    const more = (lang) => (lang === "pt" ? Array.from({ length: 60 }, (_, i) => "| p" + "abcdefghijklmnopqrstuvwxyz"[i % 26] + "abc"[Math.floor(i / 26)] + " | px |\n").join("") : "");
+    const mk = (lang) => {
+      const dir = path.join(tmp, "p138-ds-" + lang);
+      SR.initProject(dir, ["ui"], lang);
+      write(dir, REG, "# Design System\n\n_Token sources: src/styles/tokens.css, src/styles/gone.css_\n\n| Token | Value | Use |\n|---|---|---|\n| --primary | oklch(0.205 0 0) | x |\n| --duration-normal | 150ms | x |\n" +
+        "| --ease-out | cubic-bezier(0.22, 1, 0.36, 1) | x |\n\n| Property | Units |\n|---|---|\n| font-size | rem |\n| spacing | small |\n" + more(lang));
+      write(dir, "src/styles/tokens.css", ":root {\n  --primary: oklch(0.205 0 0);\n  --duration-normal: .2s;\n  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);\n}\n");
+      const f = SR.createFeature(dir, { name: "Checkout", tracks: ["ui"], summary: "x", lang });
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the page\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/checkout/_\n");
+      write(dir, "src/checkout/c.css", ".a { color: #171717; background: #18181b; font-size: 14px; transition: opacity 150ms; }\n.b { color: #171717; }\n");
+      return { dir, slug: f.slug };
+    };
+    const en = mk("en"), pt = mk("pt");
+    const fr = runIn(["design-system", en.slug, "--project", en.dir]), frJson = runIn(["design-system", en.slug, "--project", en.dir, "--json"]);
+    const pr = runIn(["design-system", "--project", en.dir]), prJson = runIn(["design-system", "--project", en.dir, "--json"]);
+    const ptOut = runIn(["design-system", pt.slug, "--project", pt.dir]), ptProject = runIn(["design-system", "--project", pt.dir]);
+    const help = runIn(["design-system", "--help"]);
+    const P = MSG("pt").cliOutput;
+    all("1.38 design-system (CLI): a raw colour of the scale names its token (→), one close to a token says so (≈ … not the same colour), a motion value of the scale its token; the repeated values (×n in n files); the lengths off the units table with what the table allows; the project report prints a drifted token as the row the code has, the registry's value and the file, the token files gone and the units rows not read; --json is the engine's; PT (got " +
+      js([fr.out, pr.out, ptOut.out]) + ")", {
+      raw: () => fr.code === 0 && fr.out.includes("    src/checkout/c.css:1  #171717  → --primary") && fr.out.includes("    src/checkout/c.css:1  #18181b  " + T.dsRawNear("--primary")) &&
+        fr.out.includes("    src/checkout/c.css:1  transition: opacity 150ms  → --duration-normal"),
+      groups: () => fr.out.includes(T.dsRawGroupsHead) && fr.out.includes(T.dsRawGroup("#171717", 2, 1) + "  → --primary"),
+      units: () => fr.out.includes(T.dsUnitsHead(1)) && fr.out.includes("    src/checkout/c.css:1  font-size: 14px  " + T.dsUnitsLine("px", "rem")),
+      drift: () => pr.code === 0 && pr.out.includes(T.dsDriftHead(1)) && pr.out.includes("    | --duration-normal | .2s |  |   " + T.dsDriftWas("150ms", "src/styles/tokens.css")),
+      gone: () => pr.out.includes(T.dsSourcesGone("src/styles/gone.css")) && pr.out.includes(T.dsUnitsUnread("spacing")),
+      json: () => js(jsonOf(frJson)) === js(SR.designSystemReport(en.dir, { name: en.slug })) && js(jsonOf(prJson)) === js(SR.designSystemReport(en.dir, { uiPass: true })),
+      pt: () => ptOut.code === 0 && ptOut.out.includes("    src/checkout/c.css:1  #18181b  " + P.dsRawNear("--primary")) && ptOut.out.includes(P.dsUnitsHead(1)) && ptOut.out.includes(P.dsRawGroupsHead),
+      past: () => ptProject.out.includes(P.dsUnitsPast(12, 50)) && !pr.out.includes(T.dsUnitsPast(0, 2).slice(0, 20)),
+      help: () => /the raw values and the UI checks/.test(help.out) && !/raw colours/.test(help.out),
     });
   }
 };

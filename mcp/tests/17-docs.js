@@ -887,9 +887,10 @@ exports.run = async ({
     const checklist = sectionOf(refRaw("ui-design-patterns.md"), "## Design checklist");
     const rows = [
       // references/ui-review.md — the protocol
-      ["ui-review: no reference → the floor alone, ledgered, never passed; the file ≤ 10,000 bytes", R,
+      // (1.38.0: the cap 10,000 → 12,000 — §2 takes the capture matrix, CRIT_X D1)
+      ["ui-review: no reference → the floor alone, ledgered, never passed; the file ≤ 12,000 bytes", R,
         /\*\*No reference → the floor alone\*\* \(§2\): ledger `Task N: ui review — floor only \(no reference\)` and say at the checkpoint that the look was never compared with a design\. It is never "passed"\./,
-        () => bytes("skills", "dev-spec-driven", "references", "ui-review.md") <= 10000],
+        () => bytes("skills", "dev-spec-driven", "references", "ui-review.md") <= 12000],
       ["ui-review: the worst case's own capture, through the data boundary, never edited markup", R,
         /\*\*The worst case\*\*[^.]*is a state of its own: `<view>--worst--build\.png`/, /never by editing the markup/],
       ["ui-review: the floor through a tool that sets the viewport and records the width — never the Chrome command line", R,
@@ -905,7 +906,8 @@ exports.run = async ({
       ["ui-review: one viewport per image", R, /one viewport per image/],
       ["ui-review: at most 16 images a dispatch, the .prev.png counted", R, /At most 16 images a dispatch, the `\.prev\.png` counted/],
       ["ui-review: the reviewer told when the locale is a pseudo-locale", R, /say when the locale is a pseudo-locale/],
-      ["ui-review: mobile in one line — the text size closest to 200 %, Android pseudo-locales only where enabled", R,
+      // (1.38.0: the line moved to ui-responsive.md → Checking it, CRIT_X D1 / D2)
+      ["ui-responsive: mobile in one line — the text size closest to 200 %, Android pseudo-locales only where enabled", ws(refRaw("ui-responsive.md")),
         /On mobile: the smallest supported width and the OS text size closest to 200 % \(iOS AX2, Android scale 2\.0\); Android's pseudo-locales only where the build enables them\./],
       ["ui-review: a capture the tool can't take — Not judged, never clean", R, /A capture the tool can't take is listed under Not judged and ledgered — never clean\./],
       ["ui-review: pair or floor is a property of the files", R, /\*\*Pair or floor is a property of the files:\*\* a `--build\.png` with its `--ref\.png` beside it is a pair; every other build capture, and every `floor-\*` one, is judged on the floor\./],
@@ -990,9 +992,11 @@ exports.run = async ({
       ["ui-design-patterns: the accessibility finding line — criterion, element, impact, fix, found by; no [A11Y] tag", P,
         /Each finding, one line — criterion — element — impact — fix — found by/, /\*\*Blocker\*\* \(a user can't finish the task\), \*\*Major\*\* \(finishes with real difficulty\) or \*\*Minor\*\* \(a workaround exists\)/,
         { not: /\[A11Y\]/ }],
-      ["ui-design-patterns: the checklist — 13 References kept, 14 Motion appended, the worst case and the contract; the file ≤ 60,000 bytes", checklist,
+      // (1.38.0 Z: the cap re-pinned 60,000 → 48,000 — CRIT_X D1: the code scan and the UI checks moved to ui-code-scan.md,
+      // Responsiveness to ui-responsive.md; the state matrix grew in place — 43,814 bytes at the docs pass)
+      ["ui-design-patterns: the checklist — 13 References kept, 14 Motion appended, the worst case and the contract; the file ≤ 48,000 bytes", checklist,
         /13\. \*\*References\*\*/, /14\. \*\*Motion\*\*/, /and the worst case/, /a New \/ Extend component's contract/,
-        () => bytes("skills", "dev-spec-driven", "references", "ui-design-patterns.md") <= 60000],
+        () => bytes("skills", "dev-spec-driven", "references", "ui-design-patterns.md") <= 48000],
       // references/subagent-execution.md — the controller's protocol
       ["subagent-execution: the tree — the kept script, the floor captures, .prev.png", X, /ui\/capture\.<ext> written by you: the kept capture script/, /--floor-320\.png…; a retaken one's old file kept as \.prev\.png/],
       ["subagent-execution: the re-review ledger line", X, /Task 3: ui re-review \(round 1\) — U1 resolved, U2 partial; 0 regressions → fix round 2\/5/],
@@ -1032,47 +1036,337 @@ exports.run = async ({
     }
   }
 
+  { // 1.38.0 D — items 3 and 4's prose (DECISIONS "D", CRIT_3 must-fix 7, CRIT_4 must-fixes 7–11): ui-responsive.md's
+    // content, the state matrix grown IN PLACE in ui-design-patterns.md (the template's 16 labels, the Announced · focus
+    // column, what doctor's ui-states reads), ui-review.md §2's capture matrix (each designed state at one width, the worst
+    // case at every breakpoint, ≤ 6 widths, the dispatch split) and the critic / reviewer / checklist / index clauses. The
+    // 1.37 UI prose block's form: ONE assertion per prose rule, each failing with its rule undone (chain D's mutation pass)
+    // and failing on F0 (8b4ece4a). The state labels and the matrix's a11y header are read from the template's source
+    // (i18n's quality.uiState*, by their English-stable ids), the UI rule ids and doctor's steering check from the engine.
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const refRaw = (f) => raw("skills", "dev-spec-driven", "references", f);
+    const bytes = (...p) => fs.statSync(path.join(root, ...p)).size;
+    const sectionOf = (text, head) => {
+      const lines = text.split("\n"), at = lines.findIndex((l) => l.startsWith(head)), level = (head.match(/^#+/) || [""])[0].length;
+      if (at < 0) return "";
+      const end = lines.findIndex((l, i) => i > at && /^#+ /.test(l) && l.match(/^#+/)[0].length <= level);
+      return ws(lines.slice(at, end < 0 ? lines.length : end).join("\n"));
+    };
+    // a table under a line that starts with `after` (the first table past it): its header cells and its rows' cells
+    const tableAfter = (text, after) => {
+      const lines = text.split("\n"), at = lines.findIndex((l) => l.startsWith(after));
+      const h = at < 0 ? -1 : lines.findIndex((l, i) => i > at && l.startsWith("|"));
+      const cells = (l) => l.split("|").slice(1, -1).map((c) => c.trim());
+      const rows = [];
+      for (let i = h + 2; h >= 0 && i < lines.length && lines[i].startsWith("|"); i++) rows.push(cells(lines[i]));
+      return { head: h < 0 ? [] : cells(lines[h]), rows };
+    };
+    const Q = require(path.join(root, "mcp", "lib", "i18n.js")).msg("en").quality;
+    const L = Q.uiStateLabels || {}, labels = Object.values(L);
+    const RS = ws(refRaw("ui-responsive.md")), R = ws(refRaw("ui-review.md")), Praw = refRaw("ui-design-patterns.md");
+    const P = ws(Praw), states = sectionOf(Praw, "## The states every view needs"), checklist = sectionOf(Praw, "## Design checklist");
+    const matrix = tableAfter(Praw, "## The states every view needs"), capture = tableAfter(refRaw("ui-review.md"), "**What to capture, per view**");
+    const rowOf = (id) => ws((matrix.rows.find((r) => r[0] === "**" + L[id] + "**") || []).join(" | "));
+    const item = (n) => (checklist.match(new RegExp(" " + n + "\\. (.*?)(?= " + (n + 1) + "\\. \\*\\*|$)")) || ["", ""])[1];
+    const C = ws(raw("agents", "spec-critic.md")), V = ws(raw("agents", "spec-reviewer.md")), T = ws(refRaw("track-checklists.md"));
+    const I = ws(refRaw("index.md")), uiRules = raw("mcp", "lib", "engine", "ui-checks.js"), doctorSrc = raw("mcp", "lib", "engine", "doctor.js");
+    // (1.38.0 Z) the engine the corrected rows run their examples through: a project whose ui.md holds `text` → its breakpoints
+    const Eng = require(path.join(root, "mcp", "lib", "engine", "index.js"));
+    let bpN = 0;
+    const bpOf = (text) => {
+      const d = path.join(tmp, "z138-bp-" + ++bpN);
+      fs.mkdirSync(path.join(d, ".specs", "steering"), { recursive: true });
+      fs.writeFileSync(path.join(d, ".specs", "steering", "ui.md"), "# UI\n\n" + text + "\n");
+      return Eng.loadLazyTier().breakpointsReport(d, null);
+    };
+    const rows = [
+      // references/ui-responsive.md — item 3's prose (ITEM_3 §6 as CRIT_3 and the DECISIONS cut it)
+      ["responsive: the design says per view what changes at each of the project's breakpoints", RS,
+        /The design says, per view, what changes at each of the project's breakpoints — columns, navigation, what moves or hides\./],
+      // (1.38.0 Z: corrected to engine/breakpoints.js — the first source with a width ≥ 320 decides, ui.md's FIRST line outside
+      // code and comments, its slot unread, a bare number's unit, thousands, 200 characters; a top-level @theme, `partial` as
+      // the resets say; past six; who prints them; the values not read — each example below run through breakpointsReport)
+      ["responsive: where the widths come from — the first source with a width ≥ 320: ui.md's first line, a top-level Tailwind 4 @theme, else the default set; ≤ 6, 320 first; who prints them, what is not read — as breakpoints.js reads them", RS,
+        /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` that no length follows \(`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width ends the list: write `640 \(sm\) · 768 \(md\)`, not `sm 640 · md 768` \(640 alone\); px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; a `\[…\]` is the stub's slot and never read — write the widths without the brackets —, so an untouched stub falls through;/,
+        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set joins the theme's — list them all in ui\.md to choose\); 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
+        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set joins a theme's, a declared width may be one left out — list the widths in ui\.md's line to choose them\./,
+        /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px\) with its place — write the widths in ui\.md's line then\./,
+        () => {
+          const got = (line) => { const r = bpOf(line); return [r.from, r.widths.join(" "), r.unread.map((u) => u.value).join("|"), r.limits.map((l) => l.code).join(",")].join(" / "); };
+          // (1.38.0 review 1: the printed list read whole, a filled bracket unread; review 2: a theme's declared 1600 the one left out
+          // beside the default set, R2-BS-1 — a note led by a number read as a width, a name before a width ending the list, R2-BS-2 / 3)
+          const lazy = Eng.loadLazyTier(), css = "@theme inline {\n  --breakpoint-3xl: 1600px;\n  --breakpoint-4xl: 2000px;\n}\n", w = lazy.breakpointWatch();
+          lazy.styleTokens(css, "a.css", w.on("a.css", css));
+          const theme = lazy.breakpointsReport(path.join(tmp, "z138-bp-none"), w.found);
+          return got("- Breakpoints: 360 / 768 / 1,440 px · text expansion") === "ui.md / 320 360 768 1440 /  / "
+            && got("- Breakpoints: 320 · 390 · 768 px · text expansion") === "ui.md / 320 390 768 /  / "
+            && got("- Breakpoints: 360 / 768 / 1280 px · max width 1200 px") === "ui.md / 320 360 768 1280 /  / "
+            && got("- Breakpoints: 360 / 768 / 1280 px · 1200 px max width") === "ui.md / 320 360 768 1200 1280 /  / "
+            && got("- Breakpoints: 640 (sm) · 768 (md)") === "ui.md / 320 640 768 /  / " && got("- Breakpoints: sm 640 · md 768") === "ui.md / 320 640 /  / "
+            && got("- Breakpoints: [576 / 768 / 992 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
+            && theme.widths.join(" ") === "320 390 768 1024 1440 2000" && theme.limits[0].first === 1600
+            && got("- Breakpoints: [360 / 768 / 1280 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
+            && got("- Breakpoints: 240 / 300 px") === "default / 320 390 768 1024 1440 /  / "
+            && got("- Breakpoints: 30 / 48 / 80 rem") === "ui.md / 320 480 768 1280 /  / "
+            && got("- Breakpoints: 400 / 500 / 600 / 700 / 800 / 900 / 1000 px") === "ui.md / 320 400 500 600 700 1000 /  / breakpoint-widths"
+            && got("- Breakpoints: 360 / 768 / 5000 px") === "ui.md / 320 360 768 / 5000 px / "
+            && got("```\n- Breakpoints: 500 px\n```\n<!-- - Breakpoints: 550 px -->\n- Breakpoints: 600 px") === "ui.md / 320 600 /  / ";
+        }],
+      ["responsive: what is never read, and the lines to paste into ui.md (Tailwind's defaults, Bootstrap 5)", RS,
+        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a Sass map are never read: paste the line into ui\.md instead/,
+        /- Tailwind's defaults: `- Breakpoints: 640 \/ 768 \/ 1024 \/ 1280 \/ 1536 px`/, /- Bootstrap 5: `- Breakpoints: 576 \/ 768 \/ 992 \/ 1200 \/ 1400 px`/],
+      ["responsive: editing the line re-flags approved designs — doctor's steering check, by its engine id", RS,
+        /editing the line makes doctor warn `steering-changed-since-approval` on approved designs — on purpose/,
+        () => doctorSrc.includes('"steering-changed-since-approval"')],
+      ["responsive: container queries — a component answers to its own width", RS, /`container-type: inline-size` on the wrapper, `@container \(min-width: 30rem\)` in the component/],
+      ["responsive: the intrinsic grid — one column at 320 px, no media query, min(100%, …) against overflow", RS,
+        /`grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 16rem\), 1fr\)\)` holds as many columns as fit, one at 320 px, with no media query; the `min\(100%, …\)` keeps a column from overflowing a narrower box\./],
+      ["responsive: fluid type — a token with a rem term; viewport units alone fail 1.4.4 (F94), the UI check by its engine id", RS,
+        /A fluid size is a \*\*token\*\* with a rem term: `--text-3xl: clamp\(1\.75rem, 1\.2rem \+ 2vw, 2\.5rem\)`\. The rem part grows when the user zooms or sets a larger font; viewport units alone don't — WCAG 1\.4\.4, failure F94, the UI check `font-size-viewport`/,
+        () => /"font-size-viewport": "warn"/.test(uiRules)],
+      ["responsive: the largest size ≤ 2.5 × the smallest, credited to Maxwell Barvian", RS,
+        /Keep the largest size at most \*\*2\.5 ×\*\* the smallest: the browser's zoom can then still double the text at any window width \(Maxwell Barvian, Smashing Magazine, 2023\)\./],
+      ["responsive: which unit for what — rem text, % / fr layout, dvh / svh sections, px borders; a convention; the units table", RS,
+        /\| Text, and the space that grows with it \| `rem` \(`em` inside a component\) \| follows the user's font size and zoom \|/, /\| Borders, hairlines, shadows \| `px` \| stays crisp \|/,
+        /A convention, not a WCAG rule: px-only text still zooms in every current browser — it only ignores the user's default font size\./,
+        /Write the team's choice in `design-system\.md`'s units table, which the code scan compares the code with \(\[ui-code-scan\.md\]\(ui-code-scan\.md\)\)\./],
+      ["responsive: 100vw and the classic scrollbar — 100 % in flow, a fixed overlay fine, no check; Chrome 145's condition", RS,
+        /an in-flow box at `width: 100vw` is a scrollbar wider than the page — a sideways scroll\. Use `100%` there\./,
+        /A fixed overlay \(`position: fixed; inset: 0`\) or a decoration its parent clips is fine, so no check flags `100vw`: the visual review measures the sideways scroll instead\./,
+        /Chrome 145 subtracts the scrollbar from `vw` only where the root reserves its room \(`scrollbar-gutter: stable`, `overflow-y: scroll`\) — Bramus Van Damme, bram\.us, 2026\./],
+      ["responsive: 100vh on a phone — svh / dvh / lvh, the 100vh; 100dvh pair, min-height harmless", RS,
+        /`svh` is the smallest viewport, `dvh` follows the toolbars \(relaid out as they move\), `lvh` the largest\./,
+        /A full-height app shell: `height: 100vh; height: 100dvh;`/, /`min-height: 100vh` only lets a box grow — harmless unless something is pinned to its bottom\./],
+      ["responsive: 2.5.8 — the 24-px circle, and its other exceptions", RS,
+        /2\.5\.8 \(AA\) accepts a target under 24 × 24 CSS px when a 24-px circle centred on it touches no other target and no other small target's circle/,
+        /exempts a control whose function another one on the page offers at full size, a link inside a sentence, a size the browser sets and a size that is essential\./],
+      ["responsive: pointer and hover media queries; never an action only hover reaches", RS,
+        /`@media \(pointer: coarse\)` — a finger is the main pointer: larger targets and gaps\. `@media \(hover: hover\)` — hover effects only where the main pointer hovers; `any-pointer` \/ `any-hover`/,
+        /Never an action that only hover reaches\./],
+      ["responsive: safe areas — viewport-fit=cover, env(safe-area-inset-*) never under the padding; never maximum-scale (zoom-disabled)", RS,
+        /`viewport-fit=cover` in the viewport meta/, /`padding-bottom: max\(1rem, env\(safe-area-inset-bottom\)\)`/,
+        /Never `maximum-scale=1` or `user-scalable=no` in that meta: they block zoom \(1\.4\.4 — the UI check `zoom-disabled`\)\./, () => /"zoom-disabled": "warn"/.test(uiRules)],
+      ["responsive: images — srcset and sizes, picture, aspect-ratio", RS, /`srcset` with the widths you have and `sizes` that says the layout/, /`<picture>` where a layout wants another crop, `width` \/ `height` or `aspect-ratio` so nothing shifts as it loads/],
+      ["responsive: tables at small widths — a labelled, focusable scroll box or stacked rows; what is around it reflows; never a column hidden silently", RS,
+        /1\.4\.10 excepts content that needs two dimensions, not what is around it: the heading, the search and the pagination still reflow\./,
+        /`<div role="region" aria-labelledby="orders-title" tabindex="0">` with `overflow-x: auto`, so a keyboard user can scroll it\./,
+        /Never hide a column silently at a width: say it is hidden and how to show it\./],
+      ["responsive: orientation — no lock (F97), no rotate message (F100), unless essential", RS,
+        /Never lock the page to portrait or landscape \(1\.3\.4, AA — failure F97\), and never ask the user to rotate the device \(F100\), unless one orientation is essential/],
+      ["responsive: zoom — 400 % of 1280 px is 320 CSS px; 1.4.12's spacing clips nothing", RS,
+        /400 % zoom of a 1280-px window lays the page out at 320 CSS px: the reflow width is what a desktop user who zooms gets, not only a phone/,
+        /a 1\.5 line height, paragraphs 2 × the font size apart, letters 0\.12em and words 0\.16em \(1\.4\.12\) clips nothing/],
+      ["responsive: inputs — type, inputmode, autocomplete, enterkeyhint; 16 px so iOS does not zoom, never maximum-scale", RS,
+        /`enterkeyhint` \(`search`, `send`, `next`\) names the Enter key\./, /Inputs take a font of at least 16 px: iOS Safari zooms into a smaller one on focus — never cured with `maximum-scale=1`\./],
+      ["responsive: checking it — the worst case at every width, the other states at one (ui-review.md → 2)", RS,
+        /The visual review captures each view's worst case at every width above, measured, and its other states at one \(\[ui-review\.md\]\(ui-review\.md\) → 2\)\./],
+      ["responsive: credited to Vercel's Web Interface Guidelines; the file ≤ 12,000 bytes", RS,
+        /After Vercel's Web Interface Guidelines \(MIT\) for the 16-px inputs, the safe areas and the target sizes\./,
+        () => bytes("skills", "dev-spec-driven", "references", "ui-responsive.md") <= 12000],
+      // references/ui-review.md §2 — the capture matrix of items 3 and 4 (CRIT_X D1) and §3's split (CRIT_3 must-fix 7)
+      ["ui-review: what to capture per view — states plus widths, never every state at every width, never an n/a state", R,
+        /\*\*What to capture, per view\*\* — its states plus its widths, never every state at every width; a state the matrix answers `n\/a` is never captured:/],
+      ["ui-review: each designed state at one width — the reference's, else 320 — a pair where the reference shows it", () =>
+        JSON.stringify(capture.rows[0]) === JSON.stringify(["Each designed state", "one: the reference's; no reference, 320", "a pair where the reference shows it, else a build capture judged on the floor"])],
+      // (1.38.0 review 1, R1-DOC2: `floor-320` only for a view with no reference — the floor's own scope, §3's pair-or-floor rule;
+      // a view with a reference keeps `--w320--build.png`, a pair where a 320 reference exists)
+      ["ui-review: the worst case at every breakpoint, named by width, its .json; at 320 floor-320 for a view with no reference", () =>
+        JSON.stringify(capture.rows[1]) === JSON.stringify(["The worst case", "each of the project's breakpoints", "`<view>--worst--w<width>--build.png` and its `.json`; at 320, `floor-320` for a view with no reference"])
+          && JSON.stringify(capture.head) === JSON.stringify(["What", "Width", "Captured as"])],
+      ["ui-review: the widths — ≤ 6, 320 first, their sources, the CLI that prints them; scale 1 above 320; a pair by its ref; a sideways scroll a Blocker", R,
+        /\*\*Widths:\*\* the project's breakpoints, at most 6, 320 first — ui\.md's `- Breakpoints:` line, else the code's, else 320 · 390 · 768 · 1024 · 1440; `dev-spec design-system <feature>` prints them \(\[ui-responsive\.md\]\(ui-responsive\.md\) → The project's breakpoints\)\./,
+        /Scale 1 above 320; a `--w<width>--ref\.png` beside a capture makes it a pair\. Each has its `\.json`, as the floor's do: a measured sideways scroll at any width is a Blocker\./],
+      ["ui-review: each state through its data boundary; the script waits for its own element; never the default page", R,
+        /a delayed response for Slow network, a 409 \/ 412 for Conflict, a 404 route for Not found, an invalid submit for Form validation, the moment after a delete for Undo\./,
+        /The script waits for the state's own element \(its text or role\) before the shot; a state it can't reach is `not captured \(no data boundary\)`, never shot as the default page\./],
+      ["ui-review: Announced · focus never judged from an image — each state's fixture asserts it", R,
+        /\*\*Announced · focus is never judged from an image:\*\* each state's fixture test asserts it — the live region's role and text, a focus assertion/],
+      ["ui-review: a view past 16 images — its states, then its widths, in dispatches of their own", R,
+        /At most 16 images a dispatch, the `\.prev\.png` counted — past that, one per view; a view past that alone: its states, then its widths, in dispatches of their own\./],
+      ["ui-review: On mobile moved to ui-responsive.md, a pointer left", R, /On mobile: \[ui-responsive\.md\]\(ui-responsive\.md\) → Checking it\./,
+        { not: /On mobile: the smallest supported width/ }],
+      ["ui-review: the worst case's name at a breakpoint", R, /`<view>--worst--build\.png` \(`--w768--` in the name at a breakpoint, below\)/],
+      // references/ui-design-patterns.md — the state matrix in place (item 4, CRIT_4 must-fixes 7–11)
+      ["ui-design-patterns: the matrix's rows are the template's labels in order, its header the template's State and a11y cells", () =>
+        labels.length === 16 && JSON.stringify(matrix.rows.map((r) => r[0])) === JSON.stringify(labels.map((l) => "**" + l + "**"))
+          && JSON.stringify(matrix.head) === JSON.stringify([Q.uiStateHead, "When", "What the user sees", Q.uiStateA11y, "Common mistake"])
+          && matrix.rows.every((r) => r.length === 5 && r.every((c) => c.length > 0))],
+      ["ui-design-patterns: Slow network — a status and Cancel; a timeout is Error", () =>
+        /a "still working" message where the result will appear, and \*\*Cancel\*\*; a timeout becomes Error \| the message as a status; focus stays/.test(rowOf("slow-network"))],
+      ["ui-design-patterns: Not found — said in the title and h1; announced by the route announcer or focus to the h1", () =>
+        /the title and h1 say so, with a way on \(search, the list\) \| announced: the framework's route announcer, or focus to the h1/.test(rowOf("not-found"))],
+      ["ui-design-patterns: Conflict — Reload or Keep mine, input kept; one mechanism", () =>
+        /what changed, and \*\*Reload\*\* or \*\*Keep mine\*\* — the user's input kept \| an alert; focus stays on the action — one mechanism, never both/.test(rowOf("conflict"))],
+      ["ui-design-patterns: Undo — until dismissed or a second home; focus to the next item, never lost", () =>
+        /the item gone, and \*\*Undo\*\* until dismissed — or a second home \(the trash\) \| a status; focus to the next item, never lost to `<body>`/.test(rowOf("undo"))],
+      ["ui-design-patterns: Form validation — focus to the summary on submit; a field's message tied to it, focus kept", () =>
+        /on submit, focus to the summary; on leaving a field, its message tied to it \(`aria-describedby`\), focus not moved/.test(rowOf("form-validation"))],
+      // (1.38.0 Z: the two rows below corrected to quality.js's reader — a row's n/a among its VIEW cells, the label in any
+      // language and never after a word, a state's rows together, a dash / TBD open, EVERY anchored table, the columns from the
+      // a11y one on unjudged, an untouched scaffold and an n/a section passing — each example run through the engine)
+      ["ui-design-patterns: the matrix in design.md — the views between State and Announced · focus, n/a — why, a row's n/a among its view cells", states,
+        /a column per view between `State` and `Announced · focus` — name the `View` column after the first view and add one per other view \(a screen, a route, a dialog; a component's own states belong to its contract\)\./,
+        /or `n\/a — why` in four words or more; an `n\/a — why` alone among a row's view cells answers every view\./],
+      ["ui-design-patterns: what doctor's ui-states reads — labels in any language, open cells, every anchored table, the a11y column on unjudged; a warn at m / l / no size, a note at s, never a gate — as uiStateMatrix reads them", states,
+        /Doctor's `ui-states` finds each state by its label, in any of the plugin's languages — a qualifier after it is fine \(`Error — payment`, `Errors`\), a word before it is not \(`Network error`\), and a state's rows in one table count together — and warns about a state with no row and each cell left open \(blank, a dash, a `\[slot\]`, `TBD`, an `n\/a` without its four words\)/,
+        /at size m \/ l or with no size; a note at size s; never a refusal, never part of a gate, never on a finished feature\./,
+        /It reads every table of the section whose header holds `Announced · focus` \(in any of those languages\) — each a matrix of its own, a row per state in each: two tables never share their rows — and never judges that column or one after it — the critic does; a prose matrix is not checked, and an untouched scaffold or an `n\/a` section passes\./,
+        // (1.38.0 review 1, BS-3: the gate refuses the untouched matrix, never a TBD one; review 2, R2-DOC2: only in a section left
+        // as the template — a line written, its TODO gone, passes the untouched matrix too — sectionState below)
+        /The design gate at size m \/ l refuses a UI States section left as the template \(its matrix untouched — a view column added or deleted, the table reformatted — and nothing else written\); once a line of it is written \(its TODO line gone\), an untouched matrix passes the gate as a `TBD` \/ dash one does — `ui-states` is what warns about each open cell\./,
+        () => {
+          const ids = ["loading", "error", "empty-first-use", "offline", "success", "stale", "partial"];
+          const m = Eng.uiStateMatrix("# Design\n\n## [UI] UI States\n\n| " + Q.uiStateHead + " | Checkout | " + Q.uiStateA11y + " | Notes |\n|---|---|---|---|\n"
+            + "| Errors | the error and Retry | an alert | |\n| Loading | — | | |\n| Loading (skeleton) | a skeleton | | |\n| Empty — first use | TBD | | |\n"
+            + "| Offline | n/a — no network use here at all | a status | |\n| Success | n/a — no | | |\n| Stale | — | | |\n| Partial | [what the user sees] | | |\n\n"
+            + "| State | Checkout | Announced · focus |\n|---|---|---|\n| Network error | the error | |\n\n"
+            + "| Estado | Checkout | Anunciado · foco |\n|---|---|---|\n| A carregar | o esqueleto | |\n", ids);
+          const gaps = (t) => t.gaps.map((g) => g.code + ":" + g.id).join(" ");
+          const scaffold = (() => { const p = path.join(tmp, "z138-states"); S.initProject(p, ["ui"], "en"); return fs.readFileSync(path.join(S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" }).dir, "design.md"), "utf8"); })();
+          // the scaffold's matrix, a view column added (untouched: the template's) or every view cell TBD (written: the gate passes it,
+          // ui-states warns)
+          const sec = Eng.trackSectionTable("ui").find((s) => s.name === "UI States"), bare = scaffold.replace(/^> \*\*TODO\*\*[^\n]*\n/gm, "");
+          const gate = (design) => Eng.sectionState(design, [sec], Eng.trackMarker("ui"), { size: "m", lang: "en" })[0].status;
+          const head = "| " + Q.uiStateHead + " | " + Q.uiStateView + " | " + Q.uiStateA11y + " |\n|---|---|---|";
+          const added = bare.replace(head, "| " + Q.uiStateHead + " | Orders | " + Q.uiStateView + " | " + Q.uiStateA11y + " |\n|---|---|---|---|").replace(/^(\| [^|\n]+ )\| \| \|$/gm, "$1| | | |");
+          const tbd = bare.replace(/^(\| [^|\n]+ )\| \| \|$/gm, "$1| TBD | |");
+          const line = (d) => d.replace("## [UI] UI States\n", "## [UI] UI States\nThe checkout, built against design/checkout.png.\n");
+          return m.tables.length === 3 && gaps(m.tables[0]) === "open:empty-first-use open:success open:stale open:partial"
+            && m.tables[1].gaps.some((g) => g.code === "no-row" && g.id === "error") && !m.tables[2].gaps.some((g) => g.id === "loading")
+            && m.tables[1].gaps.some((g) => g.code === "no-row" && g.id === "loading")
+            && Eng.uiStatesCheck(scaffold, "en", { size: "m" }).status === "pass" && Eng.uiStatesCheck("# Design\n\n## [UI] UI States\n\nn/a — this feature has no screens at all\n", "en", { size: "m" }).status === "pass"
+            && gate(bare) === "template" && bare.includes(head) && added.includes("| Orders |") && gate(added) === "template"
+            && tbd !== bare && gate(tbd) === "filled" && Eng.uiStatesCheck(tbd, "en", { size: "m" }).status === "warn"
+            && line(bare) !== bare && gate(line(bare)) === "filled" && Eng.uiStatesCheck(line(bare), "en", { size: "m" }).status === "warn"
+            && line(scaffold) !== scaffold && gate(line(scaffold)) === "unfilled";
+        }],
+      ["ui-design-patterns: 4.1.3 — a live region before its text, no focus move; W3C's 5-errors example after an unsuccessful fill", states,
+        /through a live region that exists before its text changes, without moving focus \(4\.1\.3\)/,
+        /W3C's own example is "5 errors on page", added after an unsuccessful fill of a form\./, { not: /5 errors on page"?,? (?:shown |added )?after a submit/ }],
+      ["ui-design-patterns: one mechanism a row — a message that takes focus is a change of context", states,
+        /A message that takes focus is a change of context instead, so each row picks one mechanism — a live region, or focus moved, never both\./],
+      ["ui-design-patterns: where focus moves — the next item, the trigger (2.4.3), the summary; never lost to <body>", states,
+        /Focus moves when its place goes away or the user must act: to the next item after a delete, back to the trigger when a dialog closes \(2\.4\.3\), to the summary on a failed submit — never lost to `<body>`\./],
+      ["ui-design-patterns: 2.4.11 — never entirely hidden; partly covered passes AA, Enhanced is AAA", states,
+        /never hides the focused element entirely \(2\.4\.11 — partly covering it still passes AA; Focus Not Obscured \(Enhanced\), AAA, asks for none of it covered\)/,
+        { not: /never covers (?:the )?focus/ }],
+      ["ui-design-patterns: 2.2.1 per W3C's example — a timed message is a time limit only when nothing else shows it", states,
+        /A message that disappears on a timer is a time limit \(2\.2\.1\) only when nothing else shows the same: W3C's example, a new-mail notice gone after 5 s, is none because the inbox shows the mail/,
+        /an Undo that leaves with its toast needs a second home \(the trash\), or stays until dismissed\./],
+      ["ui-design-patterns: Undo is one of 3.3.4's three ways — a confirm-dialog design writes its row", states,
+        /Undo is one of 3\.3\.4's three ways for a delete \(reversible, checked, confirmed\): a design that confirms in a dialog instead writes that in its Undo row, not n\/a\./],
+      ["ui-design-patterns: each state's fixture through a mocked response, asserting its announcement and focus by property", P,
+        /reached through a mocked response \(a delay, a 404, a 409\)/,
+        /Each asserts its row's Announced · focus: the live region's role and text, and where focus is, with a focus assertion \(Playwright's `toBeFocused`, Cypress's `have\.focus`/],
+      ["ui-design-patterns: checklist 2 — a column per view, every template state, n/a — why, announced and focus", () =>
+        /^\*\*The state matrix\*\* — a column per view, a row per state: .*empty \(first use and no results\).*and the worst case — each designed or `n\/a — why`, with how it is announced and where focus goes\.$/.test(item(2))
+          && labels.filter((l) => !/—/.test(l) && l !== L["worst-case"]).every((l) => item(2).includes(" " + l.toLowerCase()))],
+      ["ui-design-patterns: checklist 4 — the project's breakpoints and what each view changes at each", () =>
+        /^\*\*Layout\*\* — the project's breakpoints and what each view changes at each \(\[ui-responsive\.md\]\(ui-responsive\.md\)\)/.test(item(4))],
+      ["ui-design-patterns: where the decisions go — the matrix's shape, what each view changes per breakpoint", P,
+        /the \*\*state matrix\*\* \(a row per state, a column per view\)/, /what each view changes per breakpoint, the accessibility plan/],
+      ["ui-design-patterns: the visual review — each state at one width, the worst case at each breakpoint", P,
+        /in the same state and settings \(each at one width, the worst case at each breakpoint\)/],
+      // the critic, the reviewer, the checklists, the index (CRIT_X D7.7: items 3 and 4 in one edit; Z adds item 2's line)
+      ["spec-critic: every listed state designed or n/a, how each is announced, where focus goes — the worst-case phrase kept", C,
+        /and the worst case — each field's realistic extreme and where its limit comes from; every listed state designed or n\/a with a reason, how each is announced and where focus goes\)/],
+      ["spec-critic: what each view changes at the project's breakpoints", C, /say what each view changes at the project's breakpoints, cover i18n, and set a Core Web Vitals budget\./],
+      ["spec-reviewer: every state handled, with the announcement and focus its row names", V,
+        /every state of the design's state matrix handled, with the announcement and focus its row names;/],
+      ["track-checklists: Phase 2 — Responsiveness & i18n says what each view changes per breakpoint", T,
+        /Responsiveness & i18n \(what each view changes at the project's breakpoints — `references\/ui-responsive\.md`\)/],
+      ["track-checklists: Phase 2 — the matrix: a column per view, n/a — why, announced and focus", T,
+        /The matrix: a column per view, a row per state — each designed or `n\/a — why`, with how it is announced and where focus goes\./],
+      ["track-checklists: Phase 3 — each state a fixture asserting its announcement and focus; the worst case at each breakpoint", T,
+        /\(each state a fixture asserting its announcement and focus; a contract's states as fixtures, its keys as component tests\)/,
+        /on the floor where it has none, the worst case at each breakpoint \(`references\/ui-review\.md`\)/],
+      ["index: ui-review's line — what to capture per view", I, /what to capture per view \(each state at one width, the worst case at every breakpoint\)/],
+      ["index: ui-responsive's line — its contents", I,
+        /`references\/ui-responsive\.md` \(the project's breakpoints and the lines to paste, layouts without breakpoints, fluid type, which unit for what, viewport units, reflow at 320 px, zoom and text size, touch targets and pointers, safe areas, images, tables, orientation, inputs\)/],
+      ["index: ui-design-patterns' line — how each state is announced and where focus goes", I, /motion, how each state is announced and where focus goes, WCAG 2\.2 AA/],
+      // (1.38.0 review 1, R1-DOC3: each README's +ui paragraph names what 1.38 added, in its language — the project's UI checks
+      // and their `_UI checks off:_` switch, the scale's token, the breakpoints, doctor's ui-states and its note at s; the marker,
+      // the check id and the note read from the engine. R1-DOC4: quality.md's level rule — the reports, the project inventory
+      // too; finish only for `warn` — each UI_RULES id under its own level's clause)
+      ...[["README.md", /Without a feature, `dev-spec design-system` also inventories the project's UI checks, counted per rule over every view and style file \(a line `_UI checks off: <rule-id> \(reason\)_` in design-system\.md switches one off everywhere\), a feature's report names the token of the project's scale that a raw colour, font or timing already is, and both end in the project's breakpoints, the widths the visual review captures\./,
+          /`doctor`'s `ui-states` warns \(a note at size s\) when the design's state matrix gives a state no row or leaves a view's cell open\./],
+        ["README.pt.md", /Sem uma feature, o `dev-spec design-system` faz também o inventário das verificações de interface do projeto, contadas por regra em todos os ficheiros de vista e de estilos \(uma linha `_UI checks off: <rule-id> \(motivo\)_` no design-system\.md desliga uma em todo o lado\), o relatório de uma feature indica, para cada cor, fonte ou temporização fixa, o token da escala do projeto que ela já é, e os dois acabam nos breakpoints do projeto, as larguras que a revisão visual captura\./,
+          /O `ui-states` do `doctor` avisa \(uma nota no tamanho s\) quando a matriz de estados do design deixa um estado sem linha ou a célula de uma vista por preencher\./],
+        ["README.es.md", /Sin una funcionalidad, `dev-spec design-system` hace también el inventario de las comprobaciones de interfaz del proyecto, contadas por regla en todos los ficheros de vista y de estilos \(una línea `_UI checks off: <rule-id> \(motivo\)_` en design-system\.md desactiva una en todas partes\), el informe de una funcionalidad nombra, para cada color, fuente o temporización fijos, el token de la escala del proyecto que ya es, y los dos terminan en los breakpoints del proyecto, los anchos que captura la revisión visual\./,
+          /El `ui-states` de `doctor` avisa \(una nota en el tamaño s\) cuando la matriz de estados del diseño deja un estado sin fila o la celda de una vista sin rellenar\./]]
+        .map(([f, ...res]) => [f + ": the +ui paragraph — the project's UI checks, `_UI checks off:_`, the scale's token, the breakpoints, doctor's ui-states (a note at s)", ws(raw(f)), ...res,
+          () => /const RE_DS_MARKER = .*\|UI checks off\)/.test(raw("mcp", "lib", "engine", "quality.js")) && /const UI_STATES_CHECK = "ui-states";/.test(raw("mcp", "lib", "engine", "quality.js")),
+          () => {
+            const open = "# Design\n\n## [UI] UI States\n\n| " + Q.uiStateHead + " | Checkout | " + Q.uiStateA11y + " |\n|---|---|---|\n| " + L.loading + " | TBD | |\n";
+            return Eng.uiStatesCheck(open, "en", { size: "s" }).state === "small" && Eng.uiStatesCheck(open, "en", { size: "s" }).status === "pass"
+              && Eng.uiStatesCheck(open, "en", { size: "m" }).status === "warn";
+          }]),
+      ["quality.md (maintainers): UI checks → Rules — warn: the reports and finish's warning; report: the reports alone, never finish; each UI_RULES id under its level", () => {
+        const lines = raw("docs", "maintainers", "quality.md").split("\n"), at = lines.findIndex((l) => l.startsWith("## UI checks"));
+        const r = at < 0 ? -1 : lines.findIndex((l, i) => i > at && l.startsWith("- **Rules**"));
+        const e = r < 0 ? -1 : lines.findIndex((l, i) => i > r && /^- \*\*/.test(l));
+        const rule = r < 0 ? "" : ws(lines.slice(r, e < 0 ? lines.length : e).join("\n"));
+        const [warnPart, reportPart] = rule.split("`report` — ");
+        const levels = [...((uiRules.match(/const UI_RULES = \{([^}]*)\}/) || ["", ""])[1]).matchAll(/"([a-z-]+)": "([a-z]+)"/g)].map((m) => [m[1], m[2]]);
+        return /`warn` — the reports \(a feature's, the project inventory\) and finish's warning, never a blocker:/.test(warnPart)
+          && /^the reports alone, never finish:/.test(reportPart || "") && levels.length >= 7
+          && levels.every(([id, level]) => (level === "warn" ? warnPart : reportPart).includes("`" + id + "`") && !(level === "warn" ? reportPart : warnPart).includes("`" + id + "`"));
+      }],
+    ];
+    const cond = (text, c) => c instanceof RegExp ? () => c.test(text) : typeof c === "function" ? c : () => !c.not.test(text);
+    const condName = (c, i) => c instanceof RegExp ? "matches " + c.source.slice(0, 70) : typeof c === "function" ? "check " + i : "never " + c.not.source.slice(0, 60);
+    for (const [label, text, ...checks] of rows) {
+      const cs = typeof text === "function" ? [text] : checks;
+      all("1.38 UI prose — " + label, Object.fromEntries(cs.map((c, i) => [condName(c, i), cond(text, c)])));
+    }
+  }
+
   { // 1.37 the docs pass — items 1 and 2's user prose: the UI checks (engine/ui-checks.js) and the registry's `_Deprecated:_`
     // marker with doctor's ui-deprecated (quality.js). The rule ids, their levels and the bounds the prose quotes are read from
     // the engine's source, so a rule added, removed or moved between levels without the prose fails here.
     const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
     const ws = (t) => t.replace(/\s+/g, " ");
     const refRaw = (f) => raw("skills", "dev-spec-driven", "references", f);
+    // (1.38.0: the UI checks section moved WHOLE to ui-code-scan.md — read there; the registry slice of ui-design-patterns.md
+    // ends at the next h2)
     const P = refRaw("ui-design-patterns.md"), S = ws(refRaw("steering-templates.md")), T = ws(refRaw("track-checklists.md"));
-    const lines = P.split("\n"), at = lines.findIndex((l) => l.startsWith("### UI checks"));
-    const end = lines.findIndex((l, i) => i > at && /^#+ /.test(l));
-    const checks = at < 0 ? "" : ws(lines.slice(at, end < 0 ? lines.length : end).join("\n"));
+    const scanLines = refRaw("ui-code-scan.md").split("\n"), at = scanLines.findIndex((l) => l.startsWith("### UI checks"));
+    const end = scanLines.findIndex((l, i) => i > at && /^#+ /.test(l));
+    const checks = at < 0 ? "" : ws(scanLines.slice(at, end < 0 ? scanLines.length : end).join("\n"));
+    const lines = P.split("\n"), regAt = lines.findIndex((l) => l.startsWith("### The registry"));
+    const regEnd = lines.findIndex((l, i) => i > regAt && /^## /.test(l));
     const src = raw("mcp", "lib", "engine", "ui-checks.js");
     const rulesSrc = (src.match(/const UI_RULES = \{([^}]*)\}/) || ["", ""])[1];
     const rules = [...rulesSrc.matchAll(/"([a-z-]+)": "([a-z]+)"/g)].map((m) => ({ id: m[1], level: m[2] }));
     const num = (name) => Number(((src.match(new RegExp("const " + name + " = (\\d+)")) || [])[1]));
     const [warnPart, reportPart] = checks.split("In the report alone");
-    const registry = at < 0 ? "" : ws(lines.slice(lines.findIndex((l) => l.startsWith("### The registry")), at).join("\n"));
+    const registry = regAt < 0 || regEnd < 0 ? "" : ws(lines.slice(regAt, regEnd).join("\n"));
     const rows = [
-      ["ui-design-patterns: the UI checks section — every warn rule before 'In the report alone', every report rule after it",
+      ["ui-code-scan: the UI checks section — every warn rule before 'In the report alone', every report rule after it",
         () => rules.length >= 6 && reportPart !== undefined
           && rules.every((r) => (r.level === "warn" ? warnPart : reportPart).includes("`" + r.id + "`"))
           && rules.every((r) => !(r.level === "warn" ? reportPart : warnPart).includes("`" + r.id + "`"))],
-      ["ui-design-patterns: the UI checks — each warn rule's WCAG criterion", () => /`zoom-disabled` \([^)]*WCAG 1\.4\.4\)/.test(checks)
+      ["ui-code-scan: the UI checks — each warn rule's WCAG criterion", () => /`zoom-disabled` \([^)]*WCAG 1\.4\.4\)/.test(checks)
         && /`img-no-alt` \([^)]*1\.1\.1\)/.test(checks) && /`outline-removed` \(.*?2\.4\.7\)/.test(checks)
         && /`click-no-keyboard` \(.*?2\.1\.1\)/.test(checks) && /`paste-blocked` \([^)]*3\.3\.8 at a sign-in or code step, a usability defect elsewhere\)/.test(checks)],
       // (review 1 of 1.37: a role or a key handler alone reaches nothing — D1; a named handler is followed by no rule, but only
       // paste's is never judged — D3; a linter's suppression is not read, a CSS finding sits on its declaration — S11, D8)
-      ["ui-design-patterns: the UI checks — click-no-keyboard asks a tabindex (a role or a key handler alone is not enough)", () =>
+      ["ui-code-scan: the UI checks — click-no-keyboard asks a tabindex (a role or a key handler alone is not enough)", () =>
         /`click-no-keyboard` \(a click handler on an element the keyboard cannot reach: no `tabindex` — a role or a key handler alone is not enough — 2\.1\.1\)/.test(checks)],
-      ["ui-design-patterns: the UI checks — a +ui feature's finish warning, never a blocker; one more warning registry or not",
+      ["ui-code-scan: the UI checks — a +ui feature's finish warning, never a blocker; one more warning registry or not",
         () => /For a \+ui feature, a warning of `spec_finish` too, never a blocker/.test(checks)
           && /The UI checks' findings are one more warning, registry or not\./.test(registry)],
       // (review 2 of 1.37: on its line or the line above whatever that line holds — S5's narrowing out —, the comment forms
       // that silence and a class's own line — R2-D1, R2-F4, R2-D5; what is not judged — R2-S6; the focus search's bound, the
       // engine's, and what a bound cut in the report alone — R2-E1, R2-E2)
-      ["ui-design-patterns: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
+      ["ui-code-scan: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
         () => /a comment `ui-check-off: <rule-id> <why>` on its line \(a declaration's, a class's\) or the line above — `\/\/`, `\/\* \*\/`, `<!-- -->`, not Blade's or Twig's: counted, never listed; only this comment silences \(a linter's is not read\) — an `<a>` a parent gives its href \(Next's `legacyBehavior`\) is one to silence/.test(checks)],
-      ["ui-design-patterns: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
+      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
         && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")
         && checks.includes("the project's first " + num("DS_FOCUS_SHEETS") + " stylesheets — past them, named unjudged — 2.4.7")
         && /In the report alone: `transition-all` \(kits ship it\), what a bound cut\./.test(checks)],
-      ["ui-design-patterns: the Review row points to the UI checks", () => /— and the \*\*UI checks\*\* of the same files \(below\)/.test(registry)],
+      ["ui-design-patterns: the Review row points to the UI checks (ui-code-scan.md since 1.38.0)", () => /— and the \*\*UI checks\*\* of the same files \(\[ui-code-scan\.md\]\(ui-code-scan\.md\)\)/.test(registry)],
       // (1.37.0 review 1: the whole component — never a variant or a prop —, a replacement not retired itself, the notes' name in
       // the registry's letter case; review 2: punctuation after the word, never a word; the replacement named on its own)
       ["ui-design-patterns: `_Deprecated:_` — the marker, its replacement rule, credited to Impeccable", () =>
@@ -1081,8 +1375,9 @@ exports.run = async ({
         /`ui-deprecated` warns — never refuses — when a Reuse \/ Extend row names a component the registry marks `_Deprecated:_`, naming its replacement; silent once the row's notes name it in the registry's letter case/.test(registry)],
       ["ui-design-patterns: one Vercel credit line, naming the UI checks too", () => (P.match(/Vercel's Web Interface Guidelines \(MIT\)/g) || []).length === 1
         && /After Vercel's Web Interface Guidelines \(MIT\) — the UI checks' rules too\./.test(P)],
+      // (1.38.0 Z: `_UI checks off:_` joins the English markers — the units table's `Property` the first header cells)
       ["steering-templates: `_Deprecated:_` among the English markers, and its bullet", () =>
-        /\(`_Token sources:_`, `_Libraries:_`, `_From:_`, `_Deprecated:_`\): they are what the engine reads/.test(S)
+        /\(`_Token sources:_`, `_Libraries:_`, `_From:_`, `_Deprecated:_`, `_UI checks off:_`\): they are what the engine reads/.test(S)
           && /`_Deprecated: use DataGrid_` in any cell after a component's name retires it \(`_Deprecated_` alone too, or a punctuation mark after the word — a word makes it a note: `_Deprecated in favour of DataGrid_` retires nothing\): doctor's `ui-deprecated` warns when a design still reuses or extends it, naming the first other listed component, not retired itself, the text names — by its name alone \(`use Dialog`, not `Dialog\/Sheet`, `Dialog\.Root` or a path\) — silent when the row's notes name that one, alone too, as this file writes it \(`DataGrid`, not "the data grid"\): a capitalised word reads as the name — to keep a component on purpose, write the name in a code span or a tag\. It retires the WHOLE component: write a retired variant or prop without the marker\./.test(S)],
       ["track-checklists: finish — the UI checks' warnings fixed or silenced with a reason", () =>
         /the UI checks' warnings \(`spec_scan \{designSystem: true, name\}`\) fixed or silenced with a reason/.test(T)],
@@ -1109,6 +1404,352 @@ exports.run = async ({
       rows.push([f + ": the +ui paragraph — the UI checks (run, warn never block, ui-check-off), `_Deprecated:_`, the floor", () => res.every((re) => re.test(t))]);
     }
     for (const [label, check] of rows) all("1.37 docs pass — " + label, { holds: check });
+  }
+
+  { // 1.38.0 F0a — the UI references split (CRIT_X D1 / D2): ui-design-patterns.md's code-scan table and its UI checks section
+    // moved WHOLE to references/ui-code-scan.md, its Responsiveness section to references/ui-responsive.md; pointers left
+    // behind. The table's whitespace-folded text is 1.37.0's to the byte (its sha1 below): an edit of the table is deliberate
+    // and re-pins it, saying why. (The UI checks section is pinned clause by clause by the 1.37 docs pass above.)
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ").trim();
+    const refRaw = (f) => raw("skills", "dev-spec-driven", "references", f);
+    const bytes = (f) => Buffer.byteLength(refRaw(f), "utf8");
+    const P = refRaw("ui-design-patterns.md"), C = refRaw("ui-code-scan.md"), R = refRaw("ui-responsive.md");
+    const cl = C.split("\n"), tAt = cl.findIndex((l) => l === "**What the code scan reads — and what it doesn't.**");
+    let tEnd = tAt + 2;
+    while (tEnd < cl.length && cl[tEnd].startsWith("|")) tEnd++;
+    const table = tAt < 0 ? "" : ws(cl.slice(tAt, tEnd).join("\n"));
+    const sha = require("crypto").createHash("sha1").update(table).digest("hex");
+    const pl = P.split("\n"), rAt = pl.findIndex((l) => l === "## Responsiveness");
+    const rEnd = pl.findIndex((l, i) => i > rAt && /^## /.test(l));
+    const resp = rAt < 0 ? "" : pl.slice(rAt + 1, rEnd).join("\n").trim();
+    const regAt = pl.findIndex((l) => l.startsWith("### The registry")), regEnd = pl.findIndex((l, i) => i > regAt && /^## /.test(l));
+    const registry = ws(pl.slice(regAt, regEnd).join("\n"));
+    const I = ws(refRaw("index.md")), uiLine = (I.match(/- \+ui: .*?(?= - \+obs:)/) || [""])[0];
+    const tool = (refRaw("tooling-reference.md").split("\n").find((l) => l.startsWith("| `spec_scan {designSystem: true}`")) || "");
+    all("1.38.0 F0a: the code-scan table and the UI checks moved whole to ui-code-scan.md, Responsiveness to ui-responsive.md — pointers left behind, the two caps (got " +
+      JSON.stringify({ sha, table: table.length, scan: bytes("ui-code-scan.md"), responsive: bytes("ui-responsive.md") }) + ")", {
+      tableIdentical: () => sha === "77ce56108eac96e5204db8426e73e44bad3aa276" && table.length === 18970,
+      checksMoved: () => /^### UI checks — defects whatever the taste$/m.test(C) && !/^### UI checks/m.test(P),
+      tableGone: () => !P.includes("What the code scan reads — and what it doesn't.") && !/^\| Components \|/m.test(P),
+      onePointer: () => /^What the code scan reads and what it doesn't, and the UI checks it runs: \[ui-code-scan\.md\]\(ui-code-scan\.md\)\.$/m.test(P),
+      registryPointers: () => /\(what it reads, and what it doesn't: \[ui-code-scan\.md\]\(ui-code-scan\.md\)\)/.test(registry)
+        && /\(what is never "gone": \[ui-code-scan\.md\]\(ui-code-scan\.md\)\)/.test(registry) && !/\(below\)|: below\)|the table below\)/.test(registry),
+      responsivePointer: () => resp.split("\n").length === 2 && /\[ui-responsive\.md\]\(ui-responsive\.md\)\.$/.test(resp) && /^## Responsiveness$/m.test(R),
+      backLinks: () => /\[ui-design-patterns\.md\]\(ui-design-patterns\.md\)/.test(C) && /\[ui-design-patterns\.md\]\(ui-design-patterns\.md\)/.test(R),
+      caps: () => bytes("ui-code-scan.md") <= 30000 && bytes("ui-responsive.md") <= 12000,
+      index: () => /`references\/ui-code-scan\.md`/.test(uiLine) && /`references\/ui-responsive\.md`/.test(uiLine)
+        && /component contracts, UI states and the worst case, forms and interaction details, motion/.test(uiLine),
+      tooling: () => /What the scan reads and what it doesn't: `references\/ui-code-scan\.md`/.test(tool),
+    });
+  }
+
+  { // 1.38.0 F0c — font-size-viewport's prose: its criterion and failure (CRIT_3 §7), the three narrowings (CRIT_3 must-fix 1–3)
+    // and what is not seen, in ui-code-scan.md's UI checks section (the 1.37 docs pass places it among the warn rules, read from
+    // UI_RULES); tooling-reference's spec_scan row names it at its level
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const scan = raw("skills", "dev-spec-driven", "references", "ui-code-scan.md").split("\n"), at = scan.findIndex((l) => l.startsWith("### UI checks"));
+    const end = scan.findIndex((l, i) => i > at && /^#+ /.test(l));
+    const checks = at < 0 ? "" : ws(scan.slice(at, end < 0 ? scan.length : end).join("\n"));
+    const tool = (raw("skills", "dev-spec-driven", "references", "tooling-reference.md").split("\n").find((l) => l.startsWith("| `spec_scan {designSystem: true}`")) || "");
+    all("1.38.0 F0c: ui-code-scan.md's UI checks name font-size-viewport (WCAG 1.4.4, failure F94), what keeps it certain (a stylesheet's size only when its file sizes no text conditionally, an element's own style attribute, a bare text-[…vw] with no size under a variant in its file — reviews 1 and 2 of 1.38) and what is not seen; tooling-reference's spec_scan row lists it among the warn rules", {
+      criterion: () => /`font-size-viewport` \(text sized in viewport units alone.*?which zooming does not enlarge: WCAG 1\.4\.4, failure F94/.test(checks),
+      sheet: () => /only when that file declares no font size inside `@media`, `@container`, `@supports` or a Sass `@include` \(nested too\)/.test(checks),
+      inline: () => /an element's own `style` attribute, never a component's prop or a CSS-in-JS object \(`sx`, `css\(\)`, `style\(\)`\)/.test(checks),
+      // (review 1 of 1.38: decided per FILE — the per-line test went; review 2: a SIZE under a variant, the prose's examples
+      // through the engine — `md:text-6xl` silences the file's bare one, a colour or a key of the project's own does not)
+      tailwind: () => {
+        const T = require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier();
+        const bare = (v) => T.uiChecksOf(T.viewLines("<p class=\"text-[5vw]\">a</p>\n<p class=\"" + v + "\">b</p>\n", "a.html"), "a.html").findings.length;
+        const said = checks.match(/a bare `text-\[…vw\]` only when its file holds no size under a variant \(`([^`]+)`; not a colour, nor a key of your own: `([^`]+)`\)/);
+        return !!said && bare(said[1]) === 0 && bare(said[2]) === 1 && bare("dark:text-white") === 1;
+      },
+      notSeen: () => /An override in another file is not seen: silence that one\./.test(checks),
+      tooling: () => /paste-blocked · font-size-viewport, `level` warn/.test(tool),
+    });
+  }
+
+  { // 1.38.0 Z — the docs pass: ui-code-scan.md's 1.38 prose (the project's UI checks and the fact no-reduced-motion, the
+    // `_UI checks off:_` marker, raw values against the scale, token values, the units table, DESIGN.md, the breakpoints and
+    // doctor's ui-states pointers), test-patterns' test files and index.md's line — read against the engine's SOURCE: every
+    // rule / fact id, limit code, bound and `why` code below comes from mcp/lib/engine/*.js, so one added, removed or changed
+    // without the prose fails here (never a hand list). ONE assertion per prose clause: the docs pass's mutation pass drops each
+    // clause in a copy and its row fails (%TEMP%/dsd-138-z/MUTATIONS.md).
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const eng = (f) => raw("mcp", "lib", "engine", f);
+    const UC = eng("ui-checks.js"), DS = eng("design-system.js"), DV = eng("design-values.js"), BP = eng("breakpoints.js"), QY = eng("quality.js");
+    // a constant's value as the source writes it — `5000`, `32 * 1024 * 1024`, `0.011` — and its prose spelling
+    const num = (src, name) => { const m = src.match(new RegExp("const " + name + " = ([0-9.e* -]+);")); return m ? m[1].split("*").reduce((a, x) => a * Number(x.trim()), 1) : NaN; };
+    const n = (v) => v.toLocaleString("en-US"); // 5000 → "5,000"
+    const fnBody = (src, name) => { const at = src.indexOf("function " + name + "("); return at < 0 ? "" : src.slice(at, src.indexOf("\n}\n", at)); };
+    const idsOf = (src, name) => [...(((src.match(new RegExp("const " + name + " = \\{([^}]*)\\}")) || [])[1] || "").matchAll(/"([a-z-]+)":/g))].map((m) => m[1]);
+    const regexOf = (src, name) => { const m = src.match(new RegExp("const " + name + " = /(.*)/([a-z]*);")); return m ? new RegExp(m[1], m[2]) : /(?!)/; };
+    const rules = idsOf(UC, "UI_RULES"), facts = idsOf(UC, "UI_FACTS");
+    const pass = fnBody(UC, "uiProjectPass");
+    // (the limit codes the inventory builds — a fact's `code` is a fact's, below)
+    const passCodes = [...pass.matchAll(/code: "([a-z-]+)"/g)].map((m) => m[1]).concat(((pass.match(/for \(const code of \[([^\]]*)\]\)/) || [])[1] || "").match(/[a-z-]+/g) || [])
+      .filter((c) => !facts.includes(c));
+    const whys = [...((UC.match(/const why = [^\n]*/) || [""])[0]).matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
+    const kinds = DS.match(/for \(const kind of \[([^\]]*)\]\) if \(kindCut\[kind\]\) limits\.push\(\{ code: kind \+ "(-[a-z]+)"/) || [];
+    const kindCodes = ((kinds[1] || "").match(/[a-z]+/g) || []).map((k) => k + kinds[2]);
+    const bpCodes = [...BP.matchAll(/code: "([a-z-]+)"/g)].map((m) => m[1]);
+    const B = { files: num(DS, "DS_UI_FILES"), chars: num(DS, "DS_UI_CHARS"), read: num(DS, "DS_READ_CHARS"), line: num(DS, "DS_LINE_MAX"), tag: num(UC, "DS_TAG_LINES"),
+      sheets: num(UC, "DS_FOCUS_SHEETS"), entries: num(QY, "DS_MARKER_ENTRIES"), unitRows: num(QY, "DS_UNIT_ROWS"), perFile: num(DS, "DS_RAW_PER_FILE"), list: num(DS, "DS_LIST"),
+      jnd: num(DV, "DS_JND"), hsl: num(DV, "DS_SAME_HSL"), cross: num(DV, "DS_SAME_CROSS"), alpha: num(DV, "DS_ALPHA") };
+    const scanRaw = raw("skills", "dev-spec-driven", "references", "ui-code-scan.md"), scanLines = scanRaw.split("\n");
+    const section = (head) => { const at = scanLines.findIndex((l) => l === head), end = scanLines.findIndex((l, i) => i > at && /^#+ /.test(l)); return at < 0 ? "" : ws(scanLines.slice(at, end < 0 ? scanLines.length : end).join("\n")); };
+    const proj = section("### The project's UI checks"), scale = section("### Raw values against the project's scale");
+    const offPara = (proj.match(/\*\*Off for the project\.\*\*.*$/) || [""])[0];
+    const tick = (id) => "`" + id + "`";
+    const TP = ws(raw("skills", "dev-spec-driven", "references", "test-patterns.md")), SC = eng("scan.js");
+    const testDirs = (((SC.match(/const TEST_DIRS = new Set\(\[([^\]]*)\]\)/) || [])[1] || "").match(/"[a-z0-9_]+"/g) || []).map((d) => d.slice(1, -1));
+    const uiLine = (ws(raw("skills", "dev-spec-driven", "references", "index.md")).match(/`references\/ui-code-scan\.md` \([^)]*\)/) || [""])[0];
+    const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
+    const STraw = raw("skills", "dev-spec-driven", "references", "steering-templates.md"), ST = ws(STraw);
+    const DP = ws(raw("skills", "dev-spec-driven", "references", "ui-design-patterns.md"));
+    // a registry holding `text`, read by the engine (quality.js designSystemRegistry)
+    const regOf = (name, text) => {
+      const d = path.join(tmp, "z138-reg-" + name, ".specs");
+      fs.mkdirSync(path.join(d, "steering"), { recursive: true });
+      fs.writeFileSync(path.join(d, "steering", "design-system.md"), "# Design System\n\n" + text);
+      return E.designSystemRegistry(d);
+    };
+    const toolRow = raw("skills", "dev-spec-driven", "references", "tooling-reference.md").split("\n").find((l) => l.startsWith("| `spec_scan {designSystem: true}` |")) || "";
+    // both report shapes on a project that fills every 1.38 part (a drifted token, a gone source, a units table with an
+    // unread row, the marker with an applied and an unknown entry, raw colours exact and near, a font, a motion value, a
+    // repeated value, an img-no-alt, motion declared and no reduced-motion mention) → the keys they return (`ok` aside: every
+    // result's), each of which the row must name in a code span; `sane`: the fixture filled what it was built to fill
+    const scanKeys = () => {
+      const p = path.join(tmp, "z138-scan");
+      S.initProject(p, ["ui"], "en");
+      const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), text); };
+      put(".specs/steering/design-system.md", "# Design System\n\n## Tokens\n_Token sources: src/styles/tokens.css, src/old/gone.css_\n\n| Token | Value | Use |\n|---|---|---|\n"
+        + "| --brand | #1d4ed8 | primary |\n| --font-body | Inter, sans-serif | text |\n| --duration-fast | 150ms | hover |\n\n## Units\n| Property | Units |\n|---|---|\n| padding-* | rem |\n| spacing | small |\n\n"
+        + "_UI checks off: transition-all (the kit animates on purpose), nope (x)_\n");
+      put("src/styles/tokens.css", ":root {\n  --brand: #1e40af;\n}\n");
+      put("src/checkout/Pay.tsx", "export function Pay() {\n  return <div className=\"p-[13px] text-[#1d4ed9]\" style={{ color: \"#1d4ed8\" }}><img src=\"a.png\" />Pay</div>;\n}\n");
+      put("src/checkout/pay.css", ".pay {\n  font-family: Inter, sans-serif;\n  transition: transform 150ms ease;\n  color: #1d4ed8;\n}\n.all {\n  transition: all 200ms;\n}\n");
+      const f = S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" });
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the checkout\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/checkout/_\n  - _Verify: npm test_\n");
+      const pr = S.designSystemReport(p, { uiPass: true }), fr = S.designSystemReport(p, { name: f.slug });
+      const keys = new Set(), add = (o) => { for (const k of Object.keys(o || {})) if (k !== "ok") keys.add(k); };
+      const first = (list) => (list || [])[0];
+      [pr, fr, pr.breakpoints, pr.unitsTable, pr.uiChecks, first(pr.drift), first(Object.values(pr.uiChecks.rules)), first(pr.uiChecks.facts), first(pr.uiChecks.off),
+        first(pr.uiChecks.offIgnored), fr.counts, first(fr.groups), fr.units, first(fr.units && fr.units.findings), fr.uiChecks, first(fr.uiChecks.off)].forEach(add);
+      for (const r of fr.raw || []) { add(r); if (r.near) add(r.near); }
+      const sane = pr.drift.length === 1 && pr.gone.length === 1 && pr.unitsTable && pr.unitsTable.unread.length === 1 && pr.uiChecks.facts.length === 1
+        && pr.uiChecks.off.length === 1 && pr.uiChecks.offIgnored.length === 1 && Object.keys(pr.uiChecks.rules).length >= 1
+        && ["font", "motion"].every((k) => fr.raw.some((r) => r.kind === k && r.token)) && fr.raw.some((r) => r.near) && fr.groups.length >= 1
+        && fr.units && fr.units.findings.length >= 1 && fr.uiChecks.off.length === 1;
+      return { keys: [...keys], missed: [...keys].filter((k) => !toolRow.includes("`" + k + "`")), sane };
+    };
+    const rows = [
+      ["intro: what the file says — the scale, the units table, the project's checks, switching one off; the file ≤ 30,000 bytes", () =>
+        /what a raw value is against the project's own scale, the units table, and the UI checks it runs on a feature's view and style files and on the project's — and how a team switches one off\./.test(ws(scanRaw))
+          && Buffer.byteLength(scanRaw, "utf8") <= 30000],
+      ["inventory: both surfaces, the keys; counts, never a list, never finish", () =>
+        /`spec_scan \{designSystem: true\}` \/ `dev-spec design-system` \(no feature\) also run the UI checks over the project's view and style files — an inventory, `uiChecks`: `read`, `total`, `silenced`, `byRule` and `rules` \(per rule its level, the files holding one, the first place\), `facts`, `limits`\./.test(proj)
+          && /Counts, never a list, never a finish warning: each feature's report lists its own\./.test(proj)],
+      ["opt-in: the tool and the CLI ask for it, the engine's default runs none — as operations.js and designSystemReport do", () =>
+        /The tool and the CLI ask for it; the engine's own default runs none\./.test(proj) && /S\.designSystemReport\(dir, \{ name: o\.name, uiPass: true \}\)/.test(raw("mcp", "lib", "operations.js"))
+          && /\.\.\.\(opts\.uiPass \? \{ uiChecks: uiProject\(scan, reg\) \} : \{\}\)/.test(DS)],
+      ["bounds: the inventory's files / characters, a file's and a line's read, a tag's — every code uiProjectPass emits, its own limits", () =>
+        passCodes.length === 4 && passCodes.every((c) => proj.includes(tick(c)))
+          && proj.includes("at most " + n(B.files) + " files and " + B.chars / 1048576 + " MB (`" + passCodes[0] + "`, naming the outline removals it left unjudged)")
+          && proj.includes("each file's first " + B.read / 1024 + "K and a line's first " + n(B.line) + " characters (`view-size`, `line-length`; a tag past " + B.tag + " lines, `tag-length` — each with a count and the first file)")
+          && proj.includes("its own limits, never the report's `limits` or `truncated`")],
+      // (review 1 of 1.38, UP-1: what the prose says of a long stylesheet is what uiProject feeds the pass)
+      // (review 2 of 1.38, R2-UP-2 / R2-DOC1: counted there — the first file by path is named —, and fed no line, its focus
+      // styles excuse nothing)
+      ["a stylesheet past the read: counted in view-size, never checked, its focus styles excuse nothing — uiProject feeds it no line", () =>
+        proj.includes("A stylesheet past " + B.read / 1024 + "K (a compiled bundle) is counted in `view-size`, never checked: its focus styles excuse nothing, so the inventory may warn of a removal a feature report excuses by them.")
+          && /pass\.feed\(x\.rel, over && RE_STYLE_EXT\.test\(x\.rel\) \? \[\] : viewLines\(text, x\.rel\), over, text\)/.test(DS)],
+      ["order: the stylesheets first, then the shorter path", () => /Stylesheets are read first, then the shorter path/.test(proj)],
+      ["view files: no test, story, mock or fixture", () => /A test, a story, a mock or a fixture is no view file\./.test(proj)],
+      ["outline-removed: the project-wide excuse, the removals past the focus search's sheets judged here, a cut pass judges none", () =>
+        proj.includes("any focus style in any file read excuses every removal —, so the removals a feature report leaves unjudged past the project's first " + B.sheets + " stylesheets are judged here")
+          && /a cut pass that read no focus style judges none\./.test(proj)],
+      ["fact: every project fact id (UI_FACTS), WCAG 2.3.3 AAA, what declares motion", () =>
+        facts.length >= 1 && facts.every((id) => proj.includes("The fact " + tick(id) + " (WCAG 2.3.3, AAA)"))
+          && /the view files declare motion — an animation, a transform's transition, smooth scrolling — and none of the files read mentions reduced motion/.test(proj)],
+      ["fact: each mention the prose names is one the engine reads (RE_REDUCED_ASK)", () => {
+        const said = (proj.match(/mentions reduced motion \(([^)]*)\)/) || ["", ""])[1].match(/`[^`]+`/g) || [];
+        const re = regexOf(UC, "RE_REDUCED_ASK");
+        return said.length >= 4 && said.every((w) => re.test(w.slice(1, -1)));
+      }],
+      ["fact: said only when no read was cut — the inventory's bound by its code; a script's mention not seen", () =>
+        proj.includes("Said only when no read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); a mention only in a script (a `.ts` hook) is not seen.")],
+      ["marker: `_UI checks off: <rule-id> (reason)_` — the label the registry reads (RE_DS_MARKER), an example entry a rule; off everywhere, counted never listed", () =>
+        /\|UI checks off\)/.test((QY.match(/const RE_DS_MARKER = [^\n]*/) || [""])[0]) && offPara.includes("`_UI checks off: <rule-id> (reason)_`")
+          && rules.includes(((offPara.match(/`_UI checks off: ([a-z-]+) \(/) || [])[1]))
+          && /switches a UI check or a project fact off everywhere: the inventory, every feature report \(`off`: the rule, its reason, the findings it hid\) and so finish — counted, never listed \(an inline-silenced finding stays `silenced`\)\./.test(offPara)],
+      ["marker: every `why` code uiOff gives (from its source), the entries bound", () =>
+        whys.length === 4 && whys.every((w) => offPara.includes(tick(w))) && offPara.includes("one past the first " + B.entries + " entries is not applied")],
+      ["marker: creating design-system.md for it enrols the project in the registry", () =>
+        /Creating design-system\.md for the marker alone enrols the project in the registry: a written finish adds the feature's New components to it, and from its first component doctor's `ui-design-system` checks every design's rows against it \(a refusal at size m \/ l\) — without a registry, use the inline comment\./.test(offPara)],
+      ["marker: what-input's modality rule — the inline comment, never the marker", () =>
+        /A what-input modality rule \(`\[data-whatintent='mouse'\] \*:focus \{ outline: none \}`\) is judged as written: silence it with an inline `ui-check-off: outline-removed` on that rule — the marker would switch off every removal of the project\./.test(offPara)],
+      ["colours: every notation the engine parses, the tolerances (design-values.js), alphas", () =>
+        ((DV.match(/const RE_COLOR_CALL = \/\^\(([^)]*)\)/) || [])[1] || "").split("|").map((f) => f.replace(/a\?$/, "")).every((f) => scale.includes("`" + f + "()`"))
+          && scale.includes("(`none` reads as 0)")
+          && scale.includes("across two within the rounding of the pair as written (" + B.hsl + " ΔEOK with an HSL side, " + B.cross + " otherwise; an HSL side")
+          && scale.includes("), alphas within " + B.alpha)],
+      // (1.38.0 review 1, T1 / review 2, R2-T1) an HSL side against a hex / rgb by the pair's rounding both ways, its examples
+      // as the engine judges them; the nearest token of several
+      ["colours: an HSL side against a hex / rgb by the rounding both ways — the examples (judgeRaw); the nearest of several", () => {
+        const j = (value, ...tok) => T.judgeRaw({ kind: "color", value }, T.tokenScale(tok.map(([name, v]) => ({ name, value: v })), []));
+        return scale.includes("`token` names the token the value IS (the nearest of several), in any notation")
+          && scale.includes("an HSL side against a hex or `rgb()` also both ways: the other in HSL rounds to its numbers or the HSL paints it, 8 bits a channel — `#05787d` is `hsl(183 92% 25%)`, `#eeeff2` `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`)")
+          && j("#05787d", ["--a", "hsl(183 92% 25%)"]).token === "--a" && j("#eeeff2", ["--a", "hsl(220 14% 94%)"]).token === "--a"
+          && !j("#18181b", ["--a", "hsl(0 0% 9%)"]).token && j("#18181b", ["--a", "hsl(240 5.9% 10%)"], ["--b", "#18181b"]).token === "--b";
+      }],
+      // (review 2, R2-T2) zinc's hexes are not the neutral in either notation; its oklch() is the hsl() one (an HSL side's 0.011)
+      ["colours: `near` — the nearest within the JND, a hint; zinc's hexes against the neutral, its oklch() against the hsl() one; what is not parsed matches by text", () => {
+        const j = (value, tok) => T.judgeRaw({ kind: "color", value }, T.tokenScale([{ name: "--a", value: tok }], []));
+        return scale.includes("`near` {`token`, `delta`} the nearest within " + B.jnd + " ΔEOK — a hint, never the token's colour (Tailwind's zinc hexes are not shadcn's neutral; its `oklch()` zinc is the `hsl()` one, within " + B.hsl + ")")
+          && !j("#18181b", "hsl(0 0% 9%)").token && !j("#18181b", "oklch(0.205 0 0)").token && j("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)").token === "--a"
+          && /`hwb\(\)`, `lab\(\)`, `lch\(\)`, `color\(\)` and a named colour match by text alone\./.test(scale);
+      }],
+      ["fonts: a stack by its first family, against the registry rows' font tokens only", () =>
+        /\*\*Fonts\*\* — a `font-family` stack ending in a generic family, by its first family, against the registry rows' font tokens only \(a code token's stack is never read; one ending in a named emoji font is no stack\)\. Read when the registry holds one\./.test(scale)],
+      ["motion: literal times and the easing functions the engine reads (RE_EASING), Tailwind's arbitrary utilities, never a nearest", () =>
+        ((DV.match(/const RE_EASING = [^\n]*?\(((?:[a-z-]+\|)+[a-z-]+)\)/) || [])[1] || "x").split("|").every((f) => scale.includes("`" + f + "()`"))
+          && /a `transition` \/ `animation` declaration's literal times above 1 ms and easing functions/.test(scale)
+          && /Tailwind's `duration-\[…\]` \/ `delay-\[…\]` \/ `ease-\[…\]`: `token` when each literal is a duration or easing token's, never a nearest\. Read when the scale holds such a token\./.test(scale)],
+      ["sizes: raw, no size scale", () => /\*\*Sizes\*\* stay raw: no size scale is guessed\./.test(scale)],
+      ["kinds: counts only when read, their own per-file bound and codes (design-system.js)", () =>
+        kindCodes.length === 2 && scale.includes("`counts` gains `font` / `motion` only when read; each has its own bound, a file's first " + B.perFile + " (" + kindCodes.map(tick).join(" / ") + ", with the first file)")],
+      ["groups: by what each value is — the example one group (groupKey) — the most frequent first, the first 50 and the total", () =>
+        scale.includes("`groups`: the values read twice or more, by what each is (`#1E40AF`, `rgb(30 64 175)` and `text-[#1e40af]` are one; a utility without its variants), the most frequent first — the first " + B.list + ", `groupsTotal`.")
+          && new Set(["#1E40AF", "rgb(30 64 175)", "#1e40af"].map((value) => T.groupKey({ kind: "color", value }))).size === 1],
+      ["finish: colours and sizes alone", () => /Finish still counts colours and sizes alone\./.test(scale)],
+      ["drift: the same notation — the examples never compared (tokenDrift), a name with two values skipped; the first 50", () =>
+        scale.includes("The project report's `drift` (the first " + B.list + ", `driftTotal`) lists a registry token the code declares with another value IN THE SAME NOTATION")
+          && /`#3b82f6` against `hsl\(217 91% 60%\)`, `16px` against `1rem` are not compared, nor a name the code declares with two values or more \(a theme, a twin sheet\)\./.test(scale)
+          && T.tokenDrift("#3b82f6", "hsl(217 91% 60%)") === null && T.tokenDrift("16px", "1rem") === null && T.tokenDrift("150ms", "0.2s") === "quantity"],
+      ["gone, and neither changes inSync", () => /`gone` lists the `_Token sources:_` files that no longer exist\. Neither changes `inSync`: it compares names\./.test(scale)],
+      ["units table: the headers the registry reads (RE_DS_PROPERTY_HEAD, RE_DS_COL.units) in EN / PT / ES; a props table is none", () => {
+        // (1.38.0 review 1, T3: the header STARTS with the word — `Allowed units` is none)
+        const heads = (scale.match(/first header cell is `Property` \(`([^`]+)`, `([^`]+)`\) and with a column whose header starts with `Units` \(`([^`]+)`, `([^`]+)`; `([^`]+)` is none\)/) || []).slice(1);
+        const prop = regexOf(QY, "RE_DS_PROPERTY_HEAD"), unit = new RegExp(((QY.match(/units: \/(.*)\/i,/) || [])[1] || "(?!)"), "i");
+        return heads.length === 5 && [ "Property", heads[0], heads[1]].every((h) => prop.test(h)) && ["Units", heads[2], heads[3]].every((h) => unit.test(h))
+          && !unit.test(heads[4]) && unit.test(heads[4].split(" ").pop()) && /a props table, `\| Property \| Type \| Default \|`, is none/.test(scale);
+      }],
+      ["units: the feature report's findings and their keys, the first 50; never a negative length, a Tailwind size in px / rem / em alone (offUnit, RE_TW_SIZE)", () => {
+        // (1.38.0 review 1, T2: what the units table does not judge, as the engine reads it)
+        const tw = new RegExp(regexOf(DS, "RE_TW_SIZE").source);
+        return scale.includes("{`findings` — the first " + B.list + ": `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}")
+          && /lists each declaration whose value takes, outside parentheses, a unit its row does not give \(never `0`, a unitless number or a negative length: `-8px`\), and a Tailwind arbitrary size in px, rem or em \(`p-\[10px\]`; never `-mt-\[12px\]`, `text-\[2vw\]`\) by the property it sets/.test(scale)
+          && T.offUnit("0 -8px", ["rem"]) === null && T.offUnit("0 8px", ["rem"]) === "px"
+          && tw.test("p-[10px]") && !tw.test("-mt-[12px]") && !tw.test("text-[2vw]");
+      }],
+      ["units: the project's unitsTable and its rows bound; a report only, no default", () =>
+        scale.includes("The project report's `unitsTable` {`rows`, `unread`, `past` — rows past the first " + B.unitRows + "}.")
+          && /A report only — never finish, doctor or the brief — and no default: without the table both are null\./.test(scale)],
+      ["DESIGN.md: not read; its own CLI's export to a token file", () =>
+        /\*\*DESIGN\.md\*\* is not read; its own CLI writes a file that is: `npx @google\/design\.md export --format css-tailwind DESIGN\.md > theme\.css` \(a token file by its name\)\./.test(scale)],
+      ["breakpoints: both reports, where they come from, every limit code breakpoints.js gives, never truncated", () =>
+        bpCodes.length === 2 && bpCodes.every((c) => scale.includes(tick(c)))
+          && /both reports end in `breakpoints`, the widths the visual review captures \(\[ui-responsive\.md\]\(ui-responsive\.md\) → The project's breakpoints\) — its own limits .* never make a report truncated\./.test(scale)],
+      ["doctor's ui-states: the design's matrix, not the code — a pointer", () =>
+        /\*\*Doctor's `ui-states`\*\* reads the design's state matrix, not the code \(\[ui-design-patterns\.md\]\(ui-design-patterns\.md\) → The states every view needs\)/.test(scale)
+          && /const UI_STATES_CHECK = "ui-states";/.test(QY)],
+      ["test-patterns: every test folder isTestFile reads (TEST_DIRS — Jest's __mocks__ / __fixtures__ too) and Cypress's *.cy.ts with the Welsh-locale caveat", () =>
+        testDirs.length >= 12 && testDirs.every((d) => TP.includes("`" + d + "/`"))
+          && /Cypress's `\*\.cy\.ts` — a Welsh-locale module named so reads as a test too —/.test(TP)
+          && E.isTestFile("src/i18n/messages.cy.ts") && !E.isTestFile("src/i18n/strings.cy.json")],
+      ["index: ui-code-scan's line names the project's checks, switching one off, the scale, drift and the units table", () =>
+        /the UI checks it runs on a feature's files and the project's, switching one off, raw values against the scale, token drift, the units table\)/.test(uiLine)],
+      // references/steering-templates.md (item 2): the units table's example and the marker's line — each READ by the engine
+      ["steering-templates: `Property` among the first header cells kept as written", () =>
+        /Keep the first header cell of each table \(`Token`, `Component`, `Property` — or their PT \/ ES forms\)/.test(ST)],
+      ["steering-templates: the units table's example IS one to the registry's reader, under its PT / ES headers too; a report, never a default", () => {
+        const block = (STraw.match(/The units table, under any heading \(PT `\| Propriedade \| Unidades \|`, ES `\| Propiedad \| Unidad \|`\):\n\n```markdown\n([\s\S]*?)```/) || [])[1] || "";
+        const read = (head) => regOf("units-" + head.length, block.replace("| Property | Units |", head)).units;
+        const all3 = ["| Property | Units |", "| Propriedade | Unidades |", "| Propiedad | Unidad |"].map(read);
+        return all3.every((u) => u && u.rows.length === 3 && !u.unread.length && u.rows.every((r) => r.props.length && r.units.length))
+          && /- A \*\*units table\*\* \(below\) is optional — the team's convention of which units each property takes: a report, never a default \(none is written for you\)\./.test(ST)
+          && /`spec_scan \{designSystem: true, name\}` lists a feature's declarations off it \(`units`\), `spec_scan \{designSystem: true\}` the rows it could not read \(`unitsTable`\); never finish, doctor or the brief\./.test(ST)
+          && /`margin-\*` covers `margin` and `margin-top`; a component's props table \(`\| Property \| Type \| Default \|`\) is none\./.test(ST);
+      }],
+      ["steering-templates: the marker's example line is applied (uiOff); counted never listed, finish silent; an entry not applied is said", () => {
+        const line = (ST.match(/- `(_UI checks off: [^`]*_)`/) || [])[1] || "";
+        const off = T.uiOff(regOf("marker", line + "\n"));
+        return off.off.size === 1 && rules.includes([...off.off.keys()][0]) && !off.ignored.length
+          && /switches a UI check off for the whole project: the project's report and every feature's count what it hides, never list it, and finish never warns about it\. An entry without its reason in parentheses, or naming no check or project fact, is not applied — the report says why\./.test(ST);
+      }],
+      ["steering-templates: the marker's cost — the registry it enrols; the inline comment without one", () =>
+        /A design-system\.md written only for this line enrols the project in the registry \(doctor's `ui-design-system`, finish's New components\); without one, silence a single finding with the inline `ui-check-off:` comment/.test(ST)],
+      // references/tooling-reference.md's spec_scan {designSystem} row (item 3): every key the two report shapes RETURN — read
+      // from a report of each, on a project built to fill every 1.38 part — and every code above, named in the one row
+      ["tooling-reference: the spec_scan {designSystem} row names every key both shapes return and every 1.38 code", () => {
+        const { keys, missed, sane } = scanKeys();
+        const codes = [...passCodes, ...kindCodes, ...bpCodes, ...facts, ...whys];
+        return sane && keys.length >= 60 && !missed.length && codes.length >= 13 && codes.every((c) => toolRow.includes(c))
+          && /the tool and the CLI ask for it, the engine's default runs none/.test(toolRow) && /never in it, and `gone` and the units table never change it either/.test(toolRow);
+      }],
+      // (item 5's reach: chain S's doctor entry, corrected to uiStateMatrix as ui-design-patterns.md is — the D block runs the examples)
+      ["tooling-reference: doctor's ui-states — the anchor in any language, every anchored table, an n/a alone among a row's view cells, the a11y column and after unjudged", () => {
+        const doc = ws(raw("skills", "dev-spec-driven", "references", "tooling-reference.md"));
+        return /recognised by its `Announced · focus` header cell in any language, every such table of the section:/.test(doc)
+          && /\(an n\/a alone among a row's view cells answers its row\); the a11y column and the ones after it are not judged, a matrix in prose is not checked\./.test(doc);
+      }],
+      // item 2's one-liners (DECISIONS "T"): the checklist, the reviewer, the implementer
+      ["track-checklists: Phase 2 — a team's units convention declared once, as the registry's units table", () =>
+        /A team with a convention for units declares it once, as `design-system\.md`'s units table \(`references\/ui-code-scan\.md`\)\./.test(ws(raw("skills", "dev-spec-driven", "references", "track-checklists.md")))],
+      ["spec-reviewer: a raw value's `token` is the scale's; `near` a hint, never the token's colour", () =>
+        /`token` names the scale's token the value is; `near` is a hint — a close colour, not the token's\) are \*\*candidates\*\*/.test(ws(raw("agents", "spec-reviewer.md")))],
+      ["spec-implementer: each property in the units the registry's units table gives", () =>
+        /When `design-system\.md` has a units table, write each property in the units it gives\./.test(ws(raw("agents", "spec-implementer.md")))],
+      // ui-design-patterns.md's registry table, corrected to chain T's engine (item 5): a colour names the token it IS, in any
+      // notation, `near` a hint; "in sync" is said of names, drift and gone listed beside it — tokenDrift's same-notation rule
+      ["ui-design-patterns: the Review row — a colour that is a token's, in any notation, names it; one only close to it a hint", () =>
+        /a colour that is a token's, in any notation, names that token — one only close to it, `near`, is a hint\) — and the \*\*UI checks\*\*/.test(DP)],
+      ["ui-design-patterns: the Later row — in sync of names; drift (the same notation) and gone beside it, never in it; a token gone from the code not reported", () =>
+        /"In sync" is said of names: a token the code holds with another value in the same notation \(`drift`\) and a token file that is gone \(`gone`\) are listed beside it, never in it; a token the code no longer declares is not reported — review the token rows when the tokens change\./.test(DP)],
+    ];
+    // (a label without a file's name is ui-code-scan.md's)
+    for (const [label, check] of rows) all("1.38.0 Z docs — " + label, { holds: check });
+  }
+
+  { // 1.38.0 review 1 (area ui) — the prose of its fixes, each clause read where the user meets it, its bounds from the engine's
+    // SOURCE: a file read in part judges no per-file font size (UP-4), Astro's define:vars block (UP-5, the 1.39 backlog), why a
+    // feature report may warn where the inventory does not (UP-6), the marker's real spellings (UP-7)
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const js = (v) => JSON.stringify(v);
+    const num = (src, name) => { const m = src.match(new RegExp("const " + name + " = ([0-9.e* -]+);")); return m ? m[1].split("*").reduce((a, x) => a * Number(x.trim()), 1) : NaN; };
+    const DS = raw("mcp", "lib", "engine", "design-system.js");
+    const C = ws(raw("skills", "dev-spec-driven", "references", "ui-code-scan.md")), ST = ws(raw("skills", "dev-spec-driven", "references", "steering-templates.md"));
+    const read = num(DS, "DS_READ_CHARS") / 1024, line = num(DS, "DS_LINE_MAX").toLocaleString("en-US");
+    // (the spellings the prose names, through the registry's reader and uiOff: a list item, a bold line — no entry at all —,
+    // an id in a code span — not applied; the bare line applied)
+    const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
+    const offOf = (name, text) => {
+      const d = path.join(tmp, "r138-marker-" + name, ".specs");
+      fs.mkdirSync(path.join(d, "steering"), { recursive: true });
+      fs.writeFileSync(path.join(d, "steering", "design-system.md"), "# Design System\n\n" + text + "\n");
+      const o = T.uiOff(E.designSystemRegistry(d));
+      return [o.off.size, o.ignored.map((x) => x.why)];
+    };
+    const spell = { bare: offOf("bare", "_UI checks off: img-no-alt (decorative)_"), item: offOf("item", "- _UI checks off: img-no-alt (decorative)_"),
+      bold: offOf("bold", "**UI checks off:** img-no-alt (decorative)"), code: offOf("code", "_UI checks off: `img-no-alt` (decorative)_") };
+    const spelled = js(spell) === js({ bare: [1, []], item: [0, []], bold: [0, []], code: [0, ["unreadable"]] });
+    const R1 = [
+      ["ui-code-scan: a file read in part judges neither per-file font size (the read and the line bounds, design-system.js)", () =>
+        C.includes("Neither the stylesheet's nor the bare one is judged in a file read in part (past " + read + "K, a line past " + line + " characters).")],
+      ["ui-code-scan: an Astro define:vars block's first at-rule — silence what it gives", () =>
+        /An Astro `<style define:vars>` block's first at-rule reads as a selector: silence what it gives\./.test(C)],
+      ["ui-code-scan: a feature report's focus search is narrower than the inventory's — it may warn where the inventory does not", () =>
+        /A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a removal the inventory excuses by one in another view file: check that the removal's elements get it, or silence it\./.test(C)],
+      ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare (the engine agrees)", () => spelled
+        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(a list item or a bold line is not read\), the marker in English, each id bare \(one in a code span is not applied\)/.test(C)],
+      ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare (the engine agrees)", () => spelled
+        && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare \(in a code span it is not applied\), entries separated by commas/.test(ST)],
+    ];
+    for (const [label, check] of R1) all("1.38.0 review 1 docs — " + label + (label.includes("spellings") ? " (got " + js(spell) + ")" : ""), { holds: check });
   }
 
   // Release hygiene: the three version fields agree.

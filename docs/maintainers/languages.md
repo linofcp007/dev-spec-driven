@@ -39,6 +39,8 @@ how they came to be — the releases and review findings — is in History at th
   `no-go` / `pivot`), `**Checkpoint:**`, the Kind values `example` / `property`, the steering front matter
   (`inclusion: always|fileMatch|manual`, `fileMatchPattern`), `{{name}}`…`{{date}}`, every stable code (check ids, `step`,
   reasons, statuses), the ` ```mermaid ` / ` ```typescript ` fences and the eval harness's `## System` / `## User Template`.
+  The +ui state matrix's state ids (1.38: `UI_STATES.labels`' keys, `loading` … `worst-case`, the same in every language file)
+  stay English; their labels and the matrix's header cells are translated (the template's rows are built from them).
 - **TRANSLATED, but matched by synonyms**, so PT / ES specs pass doctor and clarify: EARS keywords (QUANDO / CUANDO, O SISTEMA
   DEVE / EL SISTEMA DEBE… — `earsValidate`), section headings (`TRACK_SECTIONS`, the `RE_*` matchers), `DECISION_LABELS`,
   spike.md's headings, the Kind column header, the converge heading (`Phase: Convergence` / `Fase: Convergência` /

@@ -21,7 +21,8 @@ matrix. The rules come first; how they came to be — the releases and review fi
   contexts come from ONE stack pass — a back-walk per heading is quadratic.
 - **Section states** (`sectionState`): `missing` · `unfilled` · `template` · `filled`; on a sized feature also `na` /
   `na-short` / `covered` (TRACK_OVERLAPS), read by every gate through `trackSectionReport()` + `sectionVerdict()`
-  (gates-and-approvals.md → Right-sized rigor); `spec_status` shows them.
+  (gates-and-approvals.md → Right-sized rigor); `spec_status` shows them. The n/a rule is ONE reader, `naAnswer()` (exported
+  since 1.38: doctor's ui-states reads a state-matrix cell with it — quality.md → UI state matrix).
   - **Unfilled:** the `> **TODO**` sentinel outside comments and code, or nothing WRITTEN — `writtenContent()` =
     `sectionContent()` (no structure: sub-headings, a thematic break, a table's header / separator rows) minus the lines that
     answer nothing: a generic slot word (`genericAnswer()`: `isGenericSlot`'s TODO / TBD / "…", "Pending" in any language,
@@ -31,7 +32,13 @@ matrix. The rules come first; how they came to be — the releases and review fi
     quality.js's `genericUnit` is `genericAnswer`.
   - **Template:** every visible line is a scaffold line of a track design block (`sectionOwnLines()` — exact lines, every
     language, the packs' with `{{name}}` / `{{slug}}` as a linear wildcard); an edited guidance line is the user's, a TBD
-    beside it is not. It fails a new approval and warns on an approved design.
+    beside it is not. It fails a new approval and warns on an approved design. A line's key (`sectionLineKey`, the corpus's
+    `sectionLines` too) is whitespace-folded and lower-cased, a list bullet or quote marker dropped; a line holding `|` (a
+    table row, a pipe-less GFM one too — no template line holds a `|` but a table row) is keyed by its non-empty cells,
+    trimmed (`tableCells`), on both sides (1.38): a blank column added, a column deleted, compact pipes or the outer pipes
+    dropped leave a scaffold row a scaffold row — a cell written makes it the author's, a `TBD` or a dash too (so a state
+    matrix of `TBD` / dashes passes ui-sections and the m / l gate; doctor's `ui-states` warns about each such cell —
+    quality.md → UI state matrix).
 - **Doctor's `mermaid`:** `mermaidState(design)` → present · template · missing, over the ```` ``` ```` / `~~~` blocks
   whose info string starts with `mermaid`, outside comments. `template` — each holds a scaffold diagram
   (`templateDiagramSet()`, every language and design size, from the corpus; `renderTemplateDiagrams()` when it is stale) —
@@ -131,7 +138,16 @@ matrix. The rules come first; how they came to be — the releases and review fi
   `isTestFile()` calls a test — ONE rule (engine/scan.js; trace's `isTestCodePath` is it): the test folders (`TEST_DIRS`;
   `t/` / `xt/` for Perl's `.t`) and each language's naming convention (`RE_TEST_NAME`, `RE_TEST_NAME_EXTRA`), anchored and
   linear. A name merely ending in "spec" / "test", or a name-only `test_*.sh` / `test_*.c` / `*Spec.hs`, is code outside a
-  test folder.
+  test folder. (1.38) A test harness's files too: Cypress's `*.cy.<script>` (`\.cy\.[cm]?[jt]sx?$` — a script only: a Welsh
+  locale's `strings.cy.json` is data; a Welsh locale MODULE named so, `messages.cy.ts`, reads as a test — the documented caveat,
+  no syntax tells them apart), Jest's `__mocks__/` and `__fixtures__/` (`TEST_DIRS`, any case). `.storybook/` (hidden: the walk
+  never enters it) and `playwright/` (a scraper's `src/playwright/` is production code) are not added. **The blast radius** of
+  any change to the rule — every caller: the guard (`test-file` at the scope level, `tests-phase` in Phase 4 — guards.js),
+  protected tests (protect.js `isTest`: at level tests a manual mock is a protected test), the brownfield scan and coverage
+  (scan.js — test counts, entrypoints, `isTestFixture`), trace's test-code scan (`isTestCodePath`), dupes.js (its default
+  `tests: false` skips them), design-system.js (scanCode's components — a `__mocks__/` component is no row; cal.com's eight each have a
+  real twin, so its report does not move —, its barrels, settle's test / story readers, and `uiViewFile`: the feature report's view files and the
+  project's UI checks); run both full suites, 10-guards and 13-imports (13-imports holds the matrix).
 - **Fixtures:** `isTestFixture()` — a `TEST_DATA_EXT` file (`.sql`, `.ipynb`) in a test folder with no test name
   (`testNamed()`, + pgTAP's), or any file under `testdata/`, is data: the scans and coverage skip it (guard mode still asks).
   A plan's File column claims one (`fixtureClaim()`; `scannableTestPath()` keeps it) by the file itself or the folder
@@ -231,6 +247,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and a 'T-01' in a seed counted as the test. `readFileHead()` replaced reading the whole file then slicing. The 1.21.1 review
   dropped the name-only `test_*.sh` / `test_*.c` / `*Spec.hs` rules (`scripts/test_data.sh`, `src/test_utils.c`,
   `lib/DevSpec.hs` were tests).
+- **1.38.0** (chain P, item 1 — the 1.37 review's S12, deferred: a mock's `<img>`, a `cy.mount(<div onClick>)` warned in the
+  UI checks) — `isTestFile` gains Cypress's `*.cy.<script>`, `__mocks__/` and `__fixtures__/` for EVERY reader, never for the UI
+  checks alone (one rule: a test file is one everywhere). The design missed dupes.js, scan.js's entrypoints / counts and
+  scanCode's components in the blast radius (CRIT_1 must-fix 12); the Welsh-locale `.cy.ts` caveat is CRIT_1's. The last
+  commit of its chain, on its own, so it can be dropped.
 - **1.21.1 review 2** — a plan-claimed fixture is read (`fixtureClaim()`, pgTAP's `test/sql/users.sql`); `scannableTestPath()`
   stopped dropping fixtures (a plan naming one warned forever). `readFileHead`'s cap became characters: a byte cap lost a T-ID
   behind 150,000 'é'.
@@ -289,6 +310,21 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   placeholders failed and status said phase requirements. `RE_IMPL_ANNOTATED`: `_Implements: src/lib/a.ts (the helper)_` was a
   missing file that blocked doctor and finish. `criterionBlocks` takes SETEXT headings: "Acceptance Criteria" over `-------`
   opened no AC context.
+- **1.38.0** (F0b, CRIT_4 must-fix 2) — the template key of a table row is its non-empty cells: +ui's new state matrix is
+  16 rows of a label and blank cells, and with the whole line as the key the first edit of a multi-view design (a blank view
+  column), deleting the a11y column or a compact `|Loading|||` turned every untouched row into the author's line —
+  `ui-sections` and the m / l gate passed an empty matrix. The Design System Usage rows (no blank cell) keep their keys; a
+  separator row's key changed and reaches no reader (separators are structure). A one-column user table whose cells are all
+  state labels (`| Error |`) now reads as template wherever it stands: it says nothing a label does not. The mutation pass
+  found the key's first form — a line STARTING with `|` — let a pipe-less copy of the untouched matrix (`Loading | |`) read
+  as written: keyed now on any line holding `|` (no template line holds one outside a table row, so the corpus kept its keys).
+- **1.38.0** (chain S) — `naAnswer` exported: doctor's `ui-states` reads each view cell of the state matrix with the sized
+  sections' n/a rule (`na` answers, `na-short` is open) instead of a second n/a reader.
+- **1.38.0 review 1** (BS-3) — a matrix whose cells are all `TBD` or a dash read as filled, so the m / l gate passed it while
+  the CHANGELOG said it "never passes an empty matrix". A key of the cells that ANSWER (`genericAnswer` out — the reviewer's
+  prototype, checked on 1,320 section states) was set aside: the owner chose prose — the untouched matrix (a column added or
+  deleted, reformatted) is template, a `TBD` / dash one is written and doctor's `ui-states` warns about each such cell, as
+  the Template bullet above and ui-design-patterns.md now say (a 17-docs row runs both through `sectionState`). 1.39 backlog.
 
 ### Requirements traceability matrix
 - **1.14 F5** — the matrix: `trace_check {matrix: true}`, `trace --matrix` / `--csv`, the export's section and `.rtm.csv`.

@@ -9,7 +9,15 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, stopLineClaim } = require("./common.js"); // load time
+const { DEV_SPEC, stopLineClaim, uiStateTable } = require("./common.js"); // load time
+// +ui's state matrix (1.38) — en.js's UI_STATES, the same ids in the same order: the template's table and quality's uiState* keys
+const UI_STATES = {
+  labels: { loading: "A carregar", "slow-network": "Rede lenta", "empty-first-use": "Vazio — primeiro uso", "empty-no-results": "Vazio — sem resultados",
+    error: "Erro", partial: "Parcial", offline: "Offline", "permission-denied": "Sem permissão", "not-found": "Não encontrado",
+    "signed-out": "Sessão terminada", conflict: "Conflito", stale: "Desatualizado", success: "Sucesso", undo: "Desfazer",
+    "form-validation": "Validação do formulário", "worst-case": "Pior caso" },
+  head: "Estado", view: "Vista", a11y: "Anunciado · foco",
+};
 // The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
 let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
@@ -80,7 +88,7 @@ const text = {
     ],
     ui: [
       ["Uso do Design System", "- Os componentes do design system usados e os tokens (cor, espaçamento, tipografia) · cada componente novo: porque os existentes não servem e como entra no sistema (documentado, revisto, na biblioteca de componentes) · nenhum estilo avulso nem cor fixa no código.\n- Uma linha por componente, verificada contra o registo (.specs/steering/design-system.md — a verificação ui-design-system do spec_doctor): Reutilizar = um que o registo lista, usado tal como está · Estender = uma variante nova de um que ele lista · Novo = nenhum dos listados serve — com a razão; entra no registo quando a feature é concluída. Sem nenhum componente: uma só linha em vez da tabela, n/a — a razão.\n\n| Tipo | Componente | Porquê / notas |\n|---|---|---|\n| Reutilizar | [componente que o registo lista] | [o que faz nesta vista] |\n| Novo | [componente novo] | [a razão de nenhum dos listados servir] |\n\n- Uma linha Novo / Estender tem contrato — estados, teclado, papel / nome, variantes numa só prop enumerada, slots — numa secção opcional `## [UI] Contratos de Componentes`."],
-      ["Estados da Interface", "- Por vista, uma matriz de estados: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso — o que o utilizador vê e pode fazer em cada um; validação de formulários (no campo + um resumo, os valores mantidos).\n- A referência com que cada vista é construída: uma exportação do design ou um protótipo HTML que o utilizador aprovou — um por estado quando diferem — e o seu caminho · a revisão visual compara o que foi construído com ela, estado a estado (references/ui-review.md).\n- Uma linha de pior caso: cada campo no seu extremo realista (valor mais longo, 0 / 1 / milhares, sem imagem, o idioma mais longo ou RTL) · o que quebra ou trunca · a sua captura."],
+      ["Estados da Interface", "- Por vista, uma matriz de estados: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso — o que o utilizador vê e pode fazer em cada um; validação de formulários (no campo + um resumo, os valores mantidos).\n- A referência com que cada vista é construída: uma exportação do design ou um protótipo HTML que o utilizador aprovou — um por estado quando diferem — e o seu caminho · a revisão visual compara o que foi construído com ela, estado a estado (references/ui-review.md).\n- Uma linha de pior caso: cada campo no seu extremo realista (valor mais longo, 0 / 1 / milhares, sem imagem, o idioma mais longo ou RTL) · o que quebra ou trunca · a sua captura.\n- Matriz: coluna por vista, linha por estado — o que se vê, ou n/a — porquê (4+ palavras); Anunciado · foco: o que se diz, onde vai o foco (references/ui-design-patterns.md).\n\n" + uiStateTable(UI_STATES)],
       ["Acessibilidade", "- WCAG 2.2 AA: operável com o teclado e ordem de foco visível · nome / etiqueta em cada controlo · contraste (4,5:1 no texto, 3:1 na interface) · tamanho dos alvos (24×24 px) · movimento reduzido · erros identificados em texto · como é testado (uma verificação automática + uma passagem manual com teclado e leitor de ecrã)."],
       ["Design Responsivo e i18n", "- Breakpoints e como o layout se adapta · expansão do texto (+30–40 %) · layouts da direita para a esquerda · formatos do locale (datas, números, moeda) · todas as strings no catálogo de traduções."],
       ["Orçamento de Desempenho da Interface", "- Core Web Vitals no percentil 75: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 · o orçamento de JS / imagens desta vista · como é medido (laboratório + utilizadores reais)."],
@@ -1041,7 +1049,7 @@ const msg = {
       // (1.37 revisão 2: as remoções do contorno que uma procura de foco parada num limite deixou por avaliar — sheet: a folha
       // que parou a procura no limite de caracteres, chars: esse limite, alone: essa folha sozinha excede-o (revisão 3); a
       // última frase do aviso, ou o aviso sozinho)
-      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} ${n === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} (a primeira: ${at}): as folhas de estilo do projeto ${sheet ? `a partir de ${sheet}` : `além das primeiras ${read}`} não foram lidas à procura de um estilo de foco${sheet ? ` (essa folha ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa)` : ""} — confirmar que o projeto desenha um, ou ${n === 1 ? "silenciá-la" : "silenciá-las"}`,
+      uiUnjudged: (n, at, read, sheet, chars, alone) => `${n} ${n === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} (a primeira: ${at}): as folhas de estilo do projeto ${sheet ? `a partir de ${sheet}` : `além das primeiras ${read}`} não foram lidas à procura de um estilo de foco${sheet ? ` (essa folha ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa)` : ""} — as verificações de interface do projeto ${n === 1 ? "avaliam-na" : "avaliam-nas"} (spec_scan {designSystem: true} · ${DEV_SPEC} design-system); confirmar que o projeto desenha um, ou ${n === 1 ? "silenciá-la" : "silenciá-las"}`,
       noImplements: (file) => `nenhuma tarefa indica os seus ficheiros em _Implements:_ — a baseline de deriva, a deteção de duplicados e a atribuição do dev-guardian não veem código desta feature. Acrescenta _Implements: <caminho>_ a cada tarefa que escreveu código (um ${file} editado volta a ser aprovado), ou ignora isto se nenhuma o fez.`,
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
@@ -1555,10 +1563,28 @@ const msg = {
       dsHeadNone: (file) => `Design system — ainda sem registo (${file})`,
       dsCreate: `  cria-o a partir do código: ${DEV_SPEC} steering design-system.md`,
       dsFound: (comps, tokens, files) => `  no código: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} em ${files} ${files === 1 ? "ficheiro de tokens" : "ficheiros de tokens"}`,
+      // 1.38: os breakpoints — as larguras que a revisão visual captura (o `breakpoints` de spec_scan {designSystem: true})
+      bpHead: (widths, how) => `  breakpoints: ${widths} px — as larguras que a revisão visual captura (${how})`,
+      bpFrom: {
+        "ui.md": (at) => `a linha Breakpoints de ${at}`,
+        code: (at) => `declaradas em ${at}`,
+        partial: (at) => `o conjunto por omissão da revisão, e o que ${at} acrescenta às da sua framework — para escolher, lista-as todas na linha Breakpoints de .specs/steering/ui.md`,
+        default: () => "nenhuma declarada — o conjunto por omissão da revisão: lista as tuas na linha Breakpoints de .specs/steering/ui.md",
+      },
+      bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint cuja largura não foi lida" : "breakpoints cuja largura não foi lida"} — ${list}: escreve as larguras do projeto (320–3840 px) na linha Breakpoints de .specs/steering/ui.md`,
+      bpLimit: {
+        "breakpoint-widths": (read, count, first) => `  (${count} ${count === 1 ? "largura não capturada" : "larguras não capturadas"}, a primeira ${first} px — a revisão captura ${read})`,
+        "breakpoint-line": (read, count, first, at) => `  (${at}: só os primeiros ${read} caracteres da linha Breakpoints são lidos)`,
+      },
       dsMissingHead: (n) => `  no código, fora do registo (${n}) — uma linha por cada:`,
       dsStaleHead: (n) => `  no registo, mas o caminho não indica nenhum ficheiro (${n}):`,
       dsSourcesNew: (list) => `  ficheiros de tokens que o registo não indica (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  bibliotecas de UI no package.json que o registo não indica (_Libraries:_): ${list}`,
+      dsDriftHead: (n) => `  valores de tokens que o código tem diferentes do registo (${n}) — a linha como o código a tem:`,
+      dsDriftWas: (v, src) => `(o registo: ${v}; o código: ${src})`,
+      dsSourcesGone: (list) => `  ficheiros de tokens que o registo indica e que já não existem (_Token sources:_): ${list}`,
+      dsUnitsUnread: (list) => `  linhas da tabela de unidades que não indicam nenhuma unidade CSS ou nenhuma propriedade (não lidas): ${list}`,
+      dsUnitsPast: (n, read) => `  (só as primeiras ${read} linhas da tabela de unidades são lidas: mais ${n} ${n === 1 ? "não é" : "não são"})`,
       dsInSync: "  o registo lista todos os componentes, tokens, ficheiros de tokens e bibliotecas de UI que a leitura encontrou (a comparação é por nomes, não pelo valor de um token)",
       dsMore: (n) => `    … e mais ${n}`,
       dsLimit: {
@@ -1571,20 +1597,29 @@ const msg = {
         "view-files": (n) => `  (só os primeiros ${n} ficheiros de vista da feature são lidos à procura de valores fixos)`,
         // (1.37 revisão 2: at — o ficheiro:linha da primeira remoção não avaliada, count — quantas, sheet — a folha que parou a procura;
         // revisão 3: chars — o limite de caracteres, alone — essa folha sozinha excede-o)
-        "focus-sheets": (n, at, count) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados nas primeiras ${n} folhas de estilo do projeto, um limite)`,
-        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados em ${n} ${n === 1 ? "folha de estilo" : "folhas de estilo"}, até ${sheet}, que ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa)`,
+        "focus-sheets": (n, at, count) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados nas primeiras ${n} folhas de estilo do projeto, um limite — as verificações de interface do projeto avaliam-nas: ${DEV_SPEC} design-system)`,
+        "focus-chars": (n, at, count, sheet, chars, alone) => `  (${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"} — a primeira: ${at}: os estilos de foco foram procurados em ${n} ${n === 1 ? "folha de estilo" : "folhas de estilo"}, até ${sheet}, que ${alone ? "sozinha excede os" : "teria levado a análise além dos"} ${chars / 1024}K caracteres que uma procura de foco analisa — as verificações de interface do projeto avaliam-nas: ${DEV_SPEC} design-system)`,
         // (1.37 revisão 1: os outros limites das verificações de interface — count: quantos cortou, file: o primeiro)
-        "view-size": (n, file, count) => `  (${count} ${count === 1 ? "ficheiro de vista é maior" : "ficheiros de vista são maiores"} do que os ${n} caracteres lidos de cada ficheiro — o primeiro: ${file}: as verificações de interface não leram o resto)`,
+        "view-size": (n, file, count) => `  (${count} ${count === 1 ? "ficheiro de vista é maior" : "ficheiros de vista são maiores"} do que os ${n} caracteres lidos de cada ficheiro — o primeiro: ${file}: as verificações de interface não leram o resto, e as do projeto deixam de fora uma folha de estilo tão longa)`,
         "line-length": (n, file, count) => `  (${count} ${count === 1 ? "linha tem" : "linhas têm"} mais de ${n} caracteres — a primeira em ${file}: cada uma é lida até aí, e uma tag que ela corta não é avaliada)`,
         "tag-length": (n, file, count) => `  (${count} ${count === 1 ? "tag não é avaliada" : "tags não são avaliadas"} — a primeira em ${file}: lida além de ${n} linhas ou do limite de caracteres do leitor)`,
         "file-findings": (n, file, count) => `  (mais ${count} ${count === 1 ? "achado de interface" : "achados de interface"} além dos ${n} de um ficheiro — o primeiro em ${file}: contados, não listados)`,
+        // (1.38: as verificações de interface do projeto — n: os ficheiros de vista lidos; at / count: as remoções do contorno não avaliadas)
+        "ui-files": (n, at, count) => `  (as verificações de interface leram ${n === 1 ? "o primeiro ficheiro de vista" : `os primeiros ${n} ficheiros de vista`} do projeto, um limite: o resto não é contado${count ? ` — ${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"}, a primeira: ${at}` : ""})`,
         "component-files": (n) => `  (foram lidos ${n} ficheiros de componentes à procura dos outros componentes que exportam, e foi atingido um limite — os ficheiros ou caracteres lidos, ou os nomes guardados de um ficheiro: o resto não é comparado)`,
         "workspace-manifests": (n) => `  (foi atingido um limite dos padrões de workspace — lidos ${n} dos ficheiros package.json dos pacotes do workspace: as bibliotecas dos restantes não são comparadas)`,
+        "font-values": (n, file) => `  (só as primeiras ${n} pilhas de fontes de um ficheiro são lidas — o primeiro ficheiro que passou disso: ${file})`,
+        "motion-values": (n, file) => `  (só os primeiros ${n} valores de movimento de um ficheiro são lidos — o primeiro ficheiro que passou disso: ${file})`,
       },
       dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reutilizar: ${reuse} · Estender: ${extend} · Novo: ${news}`,
       dsFeatureNoRows: "  o design não tem nenhuma linha de componente ([UI] Uso do Design System)",
       dsRawHead: (n, files) => `  valores fixos nos ficheiros de vista (${n} em ${files} ${files === 1 ? "ficheiro" : "ficheiros"}) — candidatos a um token:`,
-      dsRawNone: (files) => `  nenhuma cor nem tamanho fixos ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`}`,
+      dsRawNear: (t) => `≈ ${t} (próxima, não a mesma cor)`,
+      dsRawGroupsHead: "  valores repetidos (os mais frequentes primeiro):",
+      dsRawGroup: (v, n, files) => `    ${v} ×${n} em ${files} ${files === 1 ? "ficheiro" : "ficheiros"}`,
+      dsUnitsHead: (n) => `  unidades fora da tabela de unidades do registo (${n}) — a convenção da equipa, um relatório:`,
+      dsUnitsLine: (unit, allowed) => `(${unit}; a tabela: ${allowed})`,
+      dsRawNone: (files) => `  nenhum valor fixo ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`}`,
       dsNoViewFiles: "  nenhum ficheiro de vista ou de estilo entre os ficheiros de _Implements:_ — nada a ler",
       dsRegistered: (list) => `  ✓ acrescentado ao registo do design system: ${list}`,
       dsUnregistered: (list) => `  ▲ não acrescentado ao registo do design system (não é um nome simples de componente, ou o ficheiro não pôde ser escrito): ${list}`,
@@ -1600,9 +1635,29 @@ const msg = {
         "outline-removed": "o contorno de foco é removido e nenhum estilo de foco do projeto o substitui — manter um indicador visível (:focus-visible com um contorno, um anel ou uma borda; WCAG 2.4.7)",
         "click-no-keyboard": "um handler de clique num elemento que o teclado não alcança — usar um <button> ou um <a href>, ou torná-lo focável: um tabindex, com um role e um handler de tecla (WCAG 2.1.1)",
         "paste-blocked": "um handler de colar cancela a colagem sem ler a área de transferência — nunca bloquear o colar: gestores de palavras-passe, códigos longos (WCAG 3.3.8 num passo de autenticação ou de código; noutros sítios, um defeito de usabilidade)",
+        // 1.38
+        "font-size-viewport": "texto dimensionado só em unidades do viewport (font-size: 5vw, text-[5vw]) não aumenta quando se amplia a página — dar-lhe um termo em rem / em: clamp(1rem, 0.5rem + 2vw, 2.5rem) (WCAG 1.4.4, falha F94)",
         "transition-all": "transition: all (ou sem propriedade) anima todas as propriedades que mudam, também as de layout — listar as que se devem mover",
       },
       uiSilenced: (n) => `  (${n} ${n === 1 ? "silenciada" : "silenciadas"} por um comentário ui-check-off)`,
+      // 1.38: as verificações de interface dos ficheiros de vista do projeto (o `uiChecks` de spec_scan {designSystem: true}: um
+      // inventário — contagens e o primeiro sítio de cada regra, nunca uma lista; tag: uiReportTag de uma regra só do relatório, ou "")
+      uiProjectHead: (n, files) => `  Verificações de interface nos ficheiros de vista do projeto (${n} ${files === 1 ? "no ficheiro lido" : `nos ${files} lidos`}) — o relatório de cada feature lista as suas; o spec_finish avisa das de uma feature +ui:`,
+      uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} em ${files} ${files === 1 ? "ficheiro" : "ficheiros"}${tag ? " " + tag : ""} — a primeira: ${at}`,
+      uiProjectNone: (files) => `  Verificações de interface: nada ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`} do projeto`,
+      // (os factos do projeto por código — at: o primeiro local, ficheiro:linha)
+      uiFact: {
+        "no-reduced-motion": (n, at) => `  ▲ o código declara movimento — uma animação, uma transição de transform ou um scroll suave (${n} ${n === 1 ? "local" : "locais"}, o primeiro: ${at}) — e nenhum dos ficheiros de vista do projeto lidos menciona movimento reduzido: oferecer uma variante reduzida — @media (prefers-reduced-motion: reduce), o motion-reduce: / motion-safe: do Tailwind (WCAG 2.3.3, AAA)`,
+      },
+      // (o marcador `_UI checks off:_` do projeto em design-system.md — list: `<regra> <quantas escondeu> — <motivo>`, unidas por `; `;
+      // e: uma entrada não aplicada, como o relatório a nomeia; n: as entradas lidas)
+      uiOff: (list) => `  (desligadas no projeto — _UI checks off:_ em design-system.md: ${list})`,
+      uiOffIgnored: {
+        "no-reason": (e) => `  ▲ _UI checks off:_ indica ${e} sem um motivo entre parênteses — não aplicada: escrever \`${e} (porquê)\``,
+        "unknown-rule": (e) => `  ▲ _UI checks off:_ indica ${e}, que não é uma verificação de interface nem um facto do projeto — não aplicada`,
+        unreadable: (e) => `  ▲ _UI checks off:_ contém "${e}", que não segue \`<id-da-regra> (motivo)\` — não aplicada`,
+        "past-bound": (e, n) => `  ▲ _UI checks off:_ é lido até às primeiras ${n} entradas — "${e}" e as seguintes não são aplicadas`,
+      },
       dsTokensNew: (n) => `  tokens no código, fora do registo (${n}) — uma linha por cada:`,
       dsPending: (list) => `  no código, construídos por uma feature ainda não concluída (entram no registo no finish dela): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,
@@ -3450,6 +3505,20 @@ const quality = {
     dsDeprecatedNone: "a secção Uso do Design System não reutiliza nenhum componente que o registo marca como obsoleto",
     dsDeprecated: (n, list) => `a secção Uso do Design System reutiliza ou estende ${n} ${n === 1 ? "componente que o registo (.specs/steering/design-system.md) marca como obsoleto" : "componentes que o registo (.specs/steering/design-system.md) marca como obsoletos"} — ${list}: passar para o que o marcador indica, ou nomear esse componente nas notas da linha para dizer a razão de este ficar`,
     dsDeprecatedItem: (name, use) => (use ? `'${name}' (usar ${use})` : `'${name}'`),
+    // 1.38 a matriz de estados do +ui: o rótulo de cada estado pelo seu id (estável, em inglês) e as células do cabeçalho
+    // (UI_STATES — a tabela do modelo é construída com os mesmos valores)
+    uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,
+    // …e a verificação ui-states do spec_doctor sobre ela (um aviso no tamanho m / l e sem tamanho, uma nota no s — nunca uma falha)
+    usUnfilled: "a secção [UI] Estados da Interface ainda não está escrita — a sua matriz de estados é verificada quando estiver",
+    usNa: "a secção [UI] Estados da Interface diz n/a — nenhuma vista a verificar",
+    usNone: "nenhuma matriz de estados em [UI] Estados da Interface (a tabela do modelo: Estado, uma coluna por vista, depois Anunciado · foco) — uma matriz em prosa não é verificada",
+    usOk: (views, n) => `a matriz de [UI] Estados da Interface responde aos ${n} estados ${views === 1 ? "na sua vista" : `nas suas ${views} vistas`}`,
+    usOpen: (n, list) => `a matriz de [UI] Estados da Interface deixa ${n} ${n === 1 ? "lacuna" : "lacunas"}, um estado da lista nem descrito nem n/a — ${list}. Uma linha por estado; em cada vista, o que o utilizador vê e pode fazer, ou n/a — porquê (4+ palavras); uma célula n/a responde à linha inteira (references/ui-design-patterns.md → The states every view needs)`,
+    usNoRow: (labels) => `sem linha: ${labels}`,
+    usView: (view, labels) => `${view}: ${labels}`,
+    usTable: (n, item) => `tabela ${n} › ${item}`,
+    usSmall: (d) => `no tamanho s, a matriz fica ao critério do autor — ${d}`,
+    usTruncated: (t, r, v) => `só foram lidas as primeiras ${t} tabelas, ${r} linhas de cada uma e ${v} colunas de vista`,
     dsUnfilled: "a secção Uso do Design System ainda não está escrita — é verificada contra o registo quando estiver",
     dsNoRegistry: `ainda não há registo do design system (.specs/steering/design-system.md) — o inventário único de componentes e tokens a partir do qual todas as features +ui constroem. Cria-o a partir do código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `o registo do design system (.specs/steering/design-system.md) ainda não lista nenhum componente — falta acrescentar os que já existem (spec_scan {designSystem: true} · ${DEV_SPEC} design-system mostra o que o código tem)`,

@@ -1655,7 +1655,9 @@ function designSections(designText) {
   return heads.map((h, k) => ({ title: h.text, body: lines.slice(h.body, k + 1 < heads.length ? heads[k + 1].i : lines.length).join("\n").trim() }));
 }
 
-const BRIEF_DESIGN_BUDGET = 4000; // chars of design text carried into a brief (keeps it ~≤8 KB)
+// chars of design text carried into a brief — 6,000 since 1.38 (4,000 before): a task building a view keeps +ui's filled state
+// matrix (`[UI] UI States`, ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views) beside the other [UI] sections, the brief ~≤10 KB
+const BRIEF_DESIGN_BUDGET = 6000;
 
 function taskBrief(projectDir, name, number, opts = {}) {
   const f = existingFeature(projectDir, name);
