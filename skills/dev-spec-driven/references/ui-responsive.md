@@ -29,16 +29,18 @@ from the first of these that gives a width of 320 px or more:
 
 1. `.specs/steering/ui.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · `
    that no length follows (`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text
-   expansion` ends it; px, or rem / em at 16 px; a bare number takes the unit written after it, `360 / 768 / 1280 px`;
-   `1,440` is one width), its first 200 characters; a `[…]` is the stub's slot and never read — write the widths without
-   the brackets —, so an untouched stub falls through;
+   expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width
+   ends the list: write `640 (sm) · 768 (md)`, not `sm 640 · md 768` (640 alone); px, or rem / em at 16 px; a bare
+   number takes the unit written after it, `360 / 768 / 1280 px`; `1,440` is one width), its first 200 characters;
+   a `[…]` is the stub's slot and never read — write the widths without the brackets —, so an untouched stub falls
+   through;
 2. a top-level Tailwind 4 `@theme` block's `--breakpoint-*` in a stylesheet the code scan reads (unless the sheets reset
    them — `--breakpoint-*: initial` or `--*: initial` —, Tailwind keeps its own five too, which are not read: the default
    set joins the theme's — list them all in ui.md to choose);
 3. the default set: 320 · 390 · 768 · 1024 · 1440 px.
 
-At most six widths, 320 first (the reflow width) — past six, the default set's give way first where they joined a
-theme's, then the narrowest five and the widest; the rest said.
+At most six widths, 320 first (the reflow width) — past six, the narrowest five and the widest, the rest said; where
+the default set joins a theme's, a declared width may be one left out — list the widths in ui.md's line to choose them.
 `dev-spec design-system <feature>` prints them and where they came from (without a feature too, and
 `spec_scan {designSystem: true}` in both shapes), and lists a value it could not read (`calc()`, `var()`, wider than
 3840 px) with its place — write the widths in ui.md's line then. A framework's own defaults (in its package), Tailwind

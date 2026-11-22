@@ -25,8 +25,8 @@ function __link(E) { ({ codeBlockLines, commentLines, readIfExists, specsRoot, s
 const BP_DEFAULT = [320, 390, 768, 1024, 1440]; // the review's default set
 const BP_FLOOR = 320; // a width below it is the floor's (captured anyway) — the floor is always the first width
 const BP_CEIL = 3840; // a width above it is not read (`unread`)
-const BP_WIDTHS = 6; // widths the review captures (ui-review.md: one dispatch of images per view) — past them the default set's
-// that joined the code's give way first, then the narrowest BP_WIDTHS - 1 and the widest, said
+const BP_WIDTHS = 6; // widths the review captures (ui-review.md: one dispatch of images per view) — past them the narrowest
+// BP_WIDTHS - 1 and the widest, said
 const BP_UNREAD = 5; // unread breakpoints listed (`unreadTotal` counts them all)
 const BP_LINE = 200; // characters of ui.md's Breakpoints value read — past them, said
 const BP_EM = 16; // px per rem / em in a media query (the initial font size, whatever the page sets)
@@ -135,27 +135,22 @@ function codeBreakpoints(found) {
 // "ui.md" | "code" | "default", partial (the code's widths and the default set: Tailwind keeps its own five too), at (the source's
 // first place, file:line — null for the default set), unread (the first BP_UNREAD — [{ name, value, at }]: a value that is no
 // length, or wider than BP_CEIL — of the sources read: never the code's when ui.md decides), unreadTotal, limits ([{ code, read,
-// … }]: breakpoint-widths {count, first} — widths past BP_WIDTHS, the narrowest one left out; breakpoint-line {at} — ui.md's value
+// … }]: breakpoint-widths {count, first} — widths past BP_WIDTHS, the first one left out; breakpoint-line {at} — ui.md's value
 // longer than BP_LINE) }. `found`: what the scan's walk saw (breakpointWatch's). Its limits never join the report's (`limits`,
 // `truncated`, `inSync`): they bound the widths, not the registry's comparison.
-const sorted = (xs) => [...new Set([BP_FLOOR, ...xs])].sort((a, b) => a - b); // 320 first, ascending, once each
-const cap = (xs) => (xs.length > BP_WIDTHS ? [...xs.slice(0, BP_WIDTHS - 1), xs[xs.length - 1]] : xs); // the narrowest 5 and the widest
 function breakpointsReport(projectDir, found) {
   const ui = uiBreakpoints(path.resolve(projectDir));
   const unread = [], limits = [];
-  let from = "default", partial = false, at = null, widths = BP_DEFAULT, fill = [];
+  let from = "default", partial = false, at = null, widths = BP_DEFAULT;
   if (ui) { unread.push(...ui.unread); if (ui.cut) limits.push({ code: "breakpoint-line", read: BP_LINE, at: ui.at }); }
   if (ui && ui.widths.length) { from = "ui.md"; at = ui.at; widths = ui.widths; } else {
     const code = codeBreakpoints(found);
     unread.push(...code.unread);
-    if (code.widths.length) { from = "code"; at = code.at; partial = code.partial; widths = code.widths; if (partial) fill = BP_DEFAULT; }
+    if (code.widths.length) { from = "code"; at = code.at; partial = code.partial; widths = partial ? [...code.widths, ...BP_DEFAULT] : code.widths; }
   }
-  // partial: the default set stands in for the framework's own widths (never read) — a declared width is a fact, so the
-  // default set's give way first, its narrowest kept in the places the project's widths leave
-  const own = cap(sorted(widths));
-  const kept = sorted([...own, ...fill.filter((w) => !own.includes(w)).slice(0, BP_WIDTHS - own.length)]);
-  const left = sorted([...widths, ...fill]).filter((w) => !kept.includes(w));
-  if (left.length) limits.push({ code: "breakpoint-widths", read: BP_WIDTHS, count: left.length, first: left[0] });
+  const all = [...new Set([BP_FLOOR, ...widths])].sort((a, b) => a - b);
+  const kept = all.length > BP_WIDTHS ? [...all.slice(0, BP_WIDTHS - 1), all[all.length - 1]] : all;
+  if (kept.length < all.length) limits.push({ code: "breakpoint-widths", read: BP_WIDTHS, count: all.length - kept.length, first: all[BP_WIDTHS - 1] });
   return { widths: kept, from, partial, at, unread: unread.slice(0, BP_UNREAD), unreadTotal: unread.length, limits };
 }
 

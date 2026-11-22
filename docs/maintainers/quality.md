@@ -1100,8 +1100,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     `_` around it; outside the front matter, fenced / indented code and HTML comments — read line for line (`commentLines`,
     then `codeBlockLines` over what it leaves), so `at` is the file's own line. Its value runs to the first `·` that no length
     follows (`RE_UI_END`: blanks skipped, then a digit or `.` and a digit — `320 · 390 · 768 px`, the widths as the CLI prints
-    them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it) and is read up to `BP_LINE` (200) characters
-    — past them `breakpoint-line` {read, at}, and a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot,
+    them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it; so a note led by a number reads as more
+    widths and a name before a width ends the list — `sm 640 · md 768` is 640 —, as a no-break space after the `·` does:
+    ui-responsive.md says to start a note with a word and to write `640 (sm) · 768 (md)`) and is read up to `BP_LINE` (200)
+    characters — past them `breakpoint-line` {read, at}, and a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot,
     closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — and so does a filled value
     kept in brackets (`[576 / 768 px]`: ui-responsive.md says to write the widths without them). A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
     size), a bare number in the unit written NEXT (`360 / 768 / 1280 px`, `30 / 48 / 80 rem`) else px; a thousands group
@@ -1126,10 +1128,12 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     which ranks first.
   - `default` — `[320, 390, 768, 1024, 1440]`.
   The widths: 320 first (WCAG 1.4.10's reflow width — 1280 at 400 %; a narrower edge is the floor's), ascending, once each,
-  `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —; past it, under `partial`, the default set's
-  widths give way first (its narrowest kept in the places the code's leave: a declared width is a fact, the default set a
-  stand-in for the framework's own five, never read), then the narrowest 5 and the widest; `breakpoint-widths` {read, count —
-  every width left out —, first — the narrowest of them} (`cliOutput.bpLimit` names the count and that width, never the rule).
+  `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —, past it the narrowest 5 and the widest of
+  them all, whatever their source (under `partial` the code's and the default set's together: a declared width may be one
+  left out — ui-responsive.md says so, and to list the widths in ui.md's line to choose them); `breakpoint-widths` {read,
+  count, first — the narrowest left out, the sixth} (`cliOutput.bpLimit` names the count and that width, never the rule).
+  Which widths should stand for Tailwind's live layouts under `partial` — a declared one over a default one, 768 / 1024 /
+  1440 over 390 — is 1.39's to weigh (History → 1.38.0 review 2).
   `breakpoints.limits` never feed the report's `limits`, `truncated` or `inSync`
   (they bound the widths, not the registry's comparison — CRIT_X D5d; a fixture: an in-sync project whose ui.md line is cut
   stays in sync). Not read (1.39, or never): a Sass map, `@custom-media`, a file named for breakpoints, a JS config
@@ -1729,7 +1733,9 @@ view needs (the detail points there), tooling-reference.md's id.
 - **The verdict** — the section's own state first (`sectionState` at size m, as ui-design-system reads its section):
   missing / unfilled / template → a pass, `usUnfilled` (ui-sections and the placeholder gate own it — the untouched matrix is
   template lines by F0b's row key — a matrix of `TBD` / dashes is not: its cells are written for that key, so ui-sections and
-  the m / l gate pass it and only this check says each is open, the owner's ruling in 1.38.0 review 1, BS-3); `na` → a pass,
+  the m / l gate pass it and only this check says each is open, the owner's ruling in 1.38.0 review 1, BS-3 — and the gate
+  judges the SECTION: once a line of it is written, its TODO gone, an untouched matrix passes it too and this check warns about
+  every cell, R2-DOC2); `na` → a pass,
   `usNa`; no anchored table → a pass, `usNone`. The gaps — `no-row` (once per table: each anchored table is a matrix of its
   own, two never share their rows — ui-design-patterns.md says a row per state in each, BS-4) and `open` (per view and
   state), counted together — WARN at size m / l and with no size (`usOpen`: per table its
@@ -2575,6 +2581,34 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   parent (noise); the hostile 256K `1 · 1 · …` line 1.5–2.2× (+2–2.7 ms a report: the parent stopped at its first `·`,
   the fix reads the whole line, linear — K2's line pair holds it); a partial report of 3,000 declared widths
   1.3–1.4× (+0.5 ms).
+- **1.38.0 review 2** (Breakpoints — R2-BS-1, made by review 1's BS-2: a subtraction; R2-BS-2, R2-BS-3: prose) — review 1
+  filled the places a theme's widths left with the default set's NARROWEST first, so 390 — under any Tailwind theme the
+  floor's own layout again (Tailwind's narrowest is 640) — was kept over 768 / 1024 / 1440, and a theme adding three widths
+  or more lost the tablet / laptop range (480 + 1600 + 1920 → [320, 390, 480, 768, 1600, 1920]; 1600 / 1800 / 2000 / 2400 →
+  [320, 390, 1600, 1800, 2000, 2400], md to 2xl never captured; 400 / 480 / 560 / 600 → nothing above 600). Of the
+  reviewer's two ways — a widest-first fill (the same cap changed a second time) or the parent's — the owner took the
+  parent's: 9c6185aa's cap byte for byte (the narrowest five and the widest of the union, whatever their source; BS-1's
+  `RE_UI_END` kept), said in ui-responsive.md (a declared width may be one left out — list the widths in ui.md's line to
+  choose them). Which widths should stand for a framework's live layouts under `partial` (the default-first order, a
+  widest-first fill, a width per live layout) is 1.39 backlog. `bpLimit` stays as review 1 left it: "the first X px — the
+  review takes 6" is true of the restored rule. Replays against both parents: cap-probe.js on this tree is 9c6185aa's line
+  for line (nine shapes); cap-layouts.js 9c6185aa's widths on its six (5 distinct layouts each, as on both parents);
+  real-themes.js (shadcn v4, cal.com coss-ui, shadcn-svelte, tailwindcss, tw_site, Bootstrap) 9c6185aa's on all six;
+  bp-shapes / bp-lines / dot-probe equal review 1's tree but for one partial shape (Tailwind's five overridden without a
+  reset: [320, 390, 480, 768, 1024, 1536] again, 1280 the first left out) and 9c6185aa's but for BS-1's dot lists;
+  bs1-cli.js differs from review 1's tree only on shadcn's partial line (1440 kept, 1600 said) and from 9c6185aa's only by
+  BS-1 and bpLimit's dropped clause. R2-BS-2 / R2-BS-3: the `·` rule goes on past a `·` a length follows, so a note led by a
+  number (`· 1200 px max content width`) is more widths — on a full Tailwind line it pushes a declared width out, said —,
+  and a name before a width (`sm 640 · md 768`) ends the list at its first `·`, as a no-break space after the `·` does (the
+  same on both parents): prose — ui-responsive.md item 1 (a note starts with a word; `640 (sm) · 768 (md)`); continuing over
+  a segment of lengths alone, or a wider blank class, are mechanisms — 1.39 backlog. 17-docs runs each example through the
+  engine. Mutation pass (the list before the fixtures): 22 — 14 on the four restored lines (the default set joining or
+  always joining, the floor, the Set, the sort, the cap's slice and its widest, the count, `first`, the limit's guard, and
+  review 1's order and a widest-first fill put back: each killed by the partial-cap fixture, shadcn's `real` row and the
+  CLI's partial row) and 8 on the prose (each 17-docs clause and the examples it runs): 21 killed, one equivalent left (`>`
+  → `>=` in the cap: at exactly six, the narrowest five and the widest ARE the six). Cost (bp-ab.js, both engines in one
+  process, interleaved, medians of 7): against review 1's tree 0.88–1.06× on every ui.md shape, a partial report of 3,000
+  declared widths 0.78× (review 1's fill was the added work); against 9c6185aa the partial report 0.94× (the same code).
 - **1.38.0** (item 2 of the 1.38 round, "tokens against the scale", as DECISIONS cut it — chain T) — first the D5 refactor,
   behaviour-preserving and alone in its commit (the base chain P rebased on): the feature report walks each view file ONCE
   into a list its readers share (1.37 walked twice; a units reader would have made three), rawValuesOf keeps its generator,
@@ -2909,3 +2943,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   note named 0.1–0.35× but a header of 1,000,000 view cells costs ~2.1× `sectionState` (measured again: 2.1 s against 1.0
   s, 2.6 against 1.2; the other hostile shapes 0.07–0.32×): said above, with the bound that would close it (a length
   pre-test before `usWords`) left for 1.39 — a LOW fixed by prose, not by a new test of the header.
+- **1.38.0 review 2** (R2-DOC2 — prose) — review 1's docs said the m / l gate refuses the untouched matrix; it refuses a UI
+  States section left as the template, and the gate reads the SECTION: write the scaffold's reference line (its TODO line
+  gone) and the untouched matrix passes, `ui-states` warning about its 16 rows — the end a `TBD` matrix comes to (9c6185aa
+  and this tree alike: the engine unchanged, in EN / PT / ES). ui-design-patterns.md and the verdict bullet above say so;
+  17-docs runs a written line over the untouched matrix (filled, `ui-states` warns) and over the scaffold with its TODO
+  (unfilled).

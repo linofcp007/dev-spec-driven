@@ -270,10 +270,10 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     const pt = bp("pt", "pt", null, null), ptOut = runIn(["design-system", "--project", pt]);
     const P = MSG("pt").cliOutput;
     const DEF = "320 · 390 · 768 · 1024 · 1440";
-    all("1.38 design-system (CLI): the breakpoints line — the widths and where they come from (ui.md's line, the code's @theme, partial: the default set and what the code adds — the default set's give way first past six, 1.38.0 review 1 —, none: the default set), the unread ones, its own bounds (the 7th width, ui.md's 200 characters); right after the project's counts, after a feature's UI checks; PT; --json is the engine's, both shapes (got " +
+    all("1.38 design-system (CLI): the breakpoints line — the widths and where they come from (ui.md's line, the code's @theme, partial: the default set and what the code adds, none: the default set), the unread ones, its own bounds (the 7th width, ui.md's 200 characters); right after the project's counts, after a feature's UI checks; PT; --json is the engine's, both shapes (got " +
       js([pOut.out, cOut.out, lOut.out, nOut.out, fOut.out, ptOut.out]) + ")", {
-      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 390 · 768 · 1024 · 1600 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
-        pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1440)),
+      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 390 · 768 · 1024 · 1440 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
+        pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1600)),
       json: () => js(pJson.breakpoints) === js(SR.designSystemReport(partial).breakpoints) && pJson.breakpoints.partial === true,
       code: () => cOut.out.includes(T.bpHead("320 · 800", T.bpFrom.code("src/app.css:4"))) &&
         cOut.out.includes(T.bpUnread(6, "--breakpoint-x calc(40rem + 1px) (src/app.css:3), --breakpoint-u0 var(--w) (src/app.css:5), --breakpoint-u1 auto (src/app.css:6), --breakpoint-u2 40vw (src/app.css:7), --breakpoint-u3 250rem (src/app.css:8) … +1")),
