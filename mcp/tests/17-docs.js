@@ -1089,8 +1089,9 @@ exports.run = async ({
       // the resets say; past six; who prints them; the values not read — each example below run through breakpointsReport)
       ["responsive: where the widths come from — the first source with a width ≥ 320: ui.md's first line, a top-level Tailwind 4 @theme, else the default set; ≤ 6, 320 first; who prints them, what is not read — as breakpoints.js reads them", RS,
         /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` that no length follows \(`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width ends the list: write `640 \(sm\) · 768 \(md\)`, not `sm 640 · md 768` \(640 alone\); px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; a `\[…\]` is the stub's slot and never read — write the widths without the brackets —, so an untouched stub falls through;/,
-        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set joins the theme's — list them all in ui\.md to choose\); 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
-        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set joins a theme's, a declared width may be one left out — list the widths in ui\.md's line to choose them\./,
+        // (1.39, BS-2: under partial the theme's own widths first, the default set fills the places left in its order)
+        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set fills the places the theme's widths leave — list them all in ui\.md to choose\); 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
+        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set fills a theme's places, it comes in the order 768, 1024, 1440, 390, and only where room is left — list the widths in ui\.md's line to choose them\./,
         /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px\) with its place — write the widths in ui\.md's line then\./,
         () => {
           const got = (line) => { const r = bpOf(line); return [r.from, r.widths.join(" "), r.unread.map((u) => u.value).join("|"), r.limits.map((l) => l.code).join(",")].join(" / "); };
@@ -1105,7 +1106,7 @@ exports.run = async ({
             && got("- Breakpoints: 360 / 768 / 1280 px · 1200 px max width") === "ui.md / 320 360 768 1200 1280 /  / "
             && got("- Breakpoints: 640 (sm) · 768 (md)") === "ui.md / 320 640 768 /  / " && got("- Breakpoints: sm 640 · md 768") === "ui.md / 320 640 /  / "
             && got("- Breakpoints: [576 / 768 / 992 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
-            && theme.widths.join(" ") === "320 390 768 1024 1440 2000" && theme.limits[0].first === 1600
+            && theme.widths.join(" ") === "320 768 1024 1440 1600 2000" && theme.limits.length === 0 // (1.39, BS-2)
             && got("- Breakpoints: [360 / 768 / 1280 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
             && got("- Breakpoints: 240 / 300 px") === "default / 320 390 768 1024 1440 /  / "
             && got("- Breakpoints: 30 / 48 / 80 rem") === "ui.md / 320 480 768 1280 /  / "

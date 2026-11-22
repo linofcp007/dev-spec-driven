@@ -8,7 +8,8 @@
  *             up to the first `·` no length follows, a `[…]` slot left unread — the team's standard, fingerprinted into the approvals;
  *   code    — Tailwind 4's `--breakpoint-<name>` in a top-level `@theme` block of a stylesheet the token scan reads, through the
  *             observer that walk carries (never a second walk); `partial` when no `--breakpoint-*: initial` / `--*: initial`
- *             reset them — Tailwind keeps its own then, which the engine never assumes (stale data): the default set joins;
+ *             reset them — Tailwind keeps its own then, which the engine never assumes (stale data): the default set fills
+ *             the places the theme's widths leave (1.39, BS-2: 768 · 1024 · 1440 · 390);
  *   default — 320 · 390 · 768 · 1024 · 1440.
  * Not read (1.39, or never): a Sass map, `@custom-media`, a file named for breakpoints, a JS config (Tailwind 3's `screens`).
  * A width is a min edge in CSS px (rem / em × 16 — a media query's em is the initial font size), 320 first — WCAG 1.4.10's
@@ -23,6 +24,10 @@ let codeBlockLines, commentLines, readIfExists, specsRoot, steeringFrontMatter, 
 function __link(E) { ({ codeBlockLines, commentLines, readIfExists, specsRoot, steeringFrontMatter, toPosix } = E); }
 
 const BP_DEFAULT = [320, 390, 768, 1024, 1440]; // the review's default set
+// (1.39, BS-2) under `partial`, the default set fills the places the theme's own widths leave, in this order: tablet, laptop,
+// desktop, then the phone — under any Tailwind theme 390 is the floor's layout (its narrowest is 640): on 308 real partial themes
+// it never captured one more layout, so it goes last, where it keeps an uncapped theme's widths 1.38's
+const BP_FILL = [768, 1024, 1440, 390];
 const BP_FLOOR = 320; // a width below it is the floor's (captured anyway) — the floor is always the first width
 const BP_CEIL = 3840; // a width above it is not read (`unread`)
 const BP_WIDTHS = 6; // widths the review captures (ui-review.md: one dispatch of images per view) — past them the narrowest
@@ -132,12 +137,13 @@ function codeBreakpoints(found) {
 }
 
 // spec_scan {designSystem: true}'s `breakpoints` (both shapes) → { widths (ascending, BP_FLOOR first, BP_WIDTHS at most), from:
-// "ui.md" | "code" | "default", partial (the code's widths and the default set: Tailwind keeps its own five too), at (the source's
-// first place, file:line — null for the default set), unread (the first BP_UNREAD — [{ name, value, at }]: a value that is no
-// length, or wider than BP_CEIL — of the sources read: never the code's when ui.md decides), unreadTotal, limits ([{ code, read,
-// … }]: breakpoint-widths {count, first} — widths past BP_WIDTHS, the first one left out; breakpoint-line {at} — ui.md's value
-// longer than BP_LINE) }. `found`: what the scan's walk saw (breakpointWatch's). Its limits never join the report's (`limits`,
-// `truncated`, `inSync`): they bound the widths, not the registry's comparison.
+// "ui.md" | "code" | "default", partial (the code's widths, then the default set where room is left: Tailwind keeps its own five
+// too), at (the source's first place, file:line — null for the default set), unread (the first BP_UNREAD — [{ name, value, at }]:
+// a value that is no length, or wider than BP_CEIL — of the sources read: never the code's when ui.md decides), unreadTotal,
+// limits ([{ code, read, … }]: breakpoint-widths {count, first} — the source's own widths past BP_WIDTHS, the first one left out
+// (never a default one the fill had no room for); breakpoint-line {at} — ui.md's value longer than BP_LINE) }. `found`: what the
+// scan's walk saw (breakpointWatch's). Its limits never join the report's (`limits`, `truncated`, `inSync`): they bound the
+// widths, not the registry's comparison.
 function breakpointsReport(projectDir, found) {
   const ui = uiBreakpoints(path.resolve(projectDir));
   const unread = [], limits = [];
@@ -146,11 +152,16 @@ function breakpointsReport(projectDir, found) {
   if (ui && ui.widths.length) { from = "ui.md"; at = ui.at; widths = ui.widths; } else {
     const code = codeBreakpoints(found);
     unread.push(...code.unread);
-    if (code.widths.length) { from = "code"; at = code.at; partial = code.partial; widths = partial ? [...code.widths, ...BP_DEFAULT] : code.widths; }
+    if (code.widths.length) { from = "code"; at = code.at; partial = code.partial; widths = code.widths; }
   }
-  const all = [...new Set([BP_FLOOR, ...widths])].sort((a, b) => a - b);
+  // the source's own widths first — past BP_WIDTHS the narrowest BP_WIDTHS - 1 and the widest, the rest said —, then under
+  // `partial` the default set in BP_FILL's order, where room is left (1.39, BS-2: a theme's declared width is never one left out
+  // for a default one)
+  const asc = (a, b) => a - b;
+  const all = [...new Set([BP_FLOOR, ...widths])].sort(asc);
   const kept = all.length > BP_WIDTHS ? [...all.slice(0, BP_WIDTHS - 1), all[all.length - 1]] : all;
   if (kept.length < all.length) limits.push({ code: "breakpoint-widths", read: BP_WIDTHS, count: all.length - kept.length, first: all[BP_WIDTHS - 1] });
+  if (partial) { for (const w of BP_FILL) if (kept.length < BP_WIDTHS && !kept.includes(w)) kept.push(w); kept.sort(asc); }
   return { widths: kept, from, partial, at, unread: unread.slice(0, BP_UNREAD), unreadTotal: unread.length, limits };
 }
 

@@ -1129,11 +1129,14 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   - `default` — `[320, 390, 768, 1024, 1440]`.
   The widths: 320 first (WCAG 1.4.10's reflow width — 1280 at 400 %; a narrower edge is the floor's), ascending, once each,
   `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —, past it the narrowest 5 and the widest of
-  them all, whatever their source (under `partial` the code's and the default set's together: a declared width may be one
-  left out — ui-responsive.md says so, and to list the widths in ui.md's line to choose them); `breakpoint-widths` {read,
-  count, first — the narrowest left out, the sixth} (`cliOutput.bpLimit` names the count and that width, never the rule).
-  Which widths should stand for Tailwind's live layouts under `partial` — a declared one over a default one, 768 / 1024 /
-  1440 over 390 — is 1.39's to weigh (History → 1.38.0 review 2).
+  the SOURCE's own widths; `breakpoint-widths` {read, count, first — the narrowest left out, the sixth} counts and names
+  only those (`cliOutput.bpLimit` names the count and that width, never the rule). Then, under `partial` alone, the default
+  set FILLS the places left (1.39, BS-2 — `BP_FILL`): 768, 1024, 1440, 390 in that order, each not already there, up to
+  six — a theme's declared width is never one left out for a default one, and a default width the fill had no room for is
+  never said (shadcn v4's 1600 / 2000 → [320, 768, 1024, 1440, 1600, 2000], no limit; Tailwind's five restated →
+  [320, 640, 768, 1024, 1280, 1536]; 1920 alone → [320, 390, 768, 1024, 1440, 1920], 1.38's). The order: under any
+  Tailwind theme 390 is the floor's own layout (Tailwind's narrowest is 640), so it fills last; tablet / laptop / desktop
+  before it (History → 1.39.0, the table of 308 real themes). Not partial (ui.md, a reset theme): no fill.
   `breakpoints.limits` never feed the report's `limits`, `truncated` or `inSync`
   (they bound the widths, not the registry's comparison — CRIT_X D5d; a fixture: an in-sync project whose ui.md line is cut
   stays in sync). Not read (1.39, or never): a Sass map, `@custom-media`, a file named for breakpoints, a JS config
@@ -2725,6 +2728,19 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   now taken at 8 bits (`Math.round`), a hex unchanged (the reviewer's corpora — every integer HSL token, cal.com, Radix,
   shadcn's pairs — identical). R3-T2: no fixture pinned the painted check's blue channel (`#eeeff3` → near now). Fixtures
   `paint.decimals` / `paint.blue`; the old window and a blue-blind check each fail them.
+- **1.39.0** (item 3 of the 1.39 round, "Breakpoints and states, round 2" — chain B, as CRIT_3 and the DECISIONS cut it) —
+  BS-2, the fill under `partial` (Breakpoints, above): the theme's own widths first, capped and said as any source's, then
+  `BP_FILL` = 768 · 1024 · 1440 · 390 where room is left; `breakpoint-widths` counts and names only the theme's own widths
+  (CRIT_3 must-fix 4 — the design's "the narrowest left out" named 390 on shadcn, a width not the project's). The order, on
+  308 real Tailwind 4 partial themes (a width's layout = the widest live breakpoint ≤ it, Tailwind's five counted unless
+  overridden — oracle data in the designer's probe, never in the engine): 1.38's cap captured 1,493 live layouts, review 1's
+  ascending fill 1,570, a widest-first fill 1,632, this order 1,645 (11 themes with no tablet layout, 19 with no laptop);
+  dropping 390 altogether captures the same 1,645 — it fills last so that an uncapped theme keeps 1.38's widths byte for
+  byte; the 36 themes still losing a declared width declare six or more of 320 px and up. Oracle replay against 1.38.0 (36
+  clone reports, 670 sampled sheets through the observer): only `partial` shapes differ — the clones with an adding theme
+  (shadcn v4, cal.com coss-ui, shadcn-svelte, magicui) [320, 768, 1024, 1440, 1600, 2000] where 1.38 had 390 and said 1600,
+  and 161 of the theme sample's sheets, each 390 out; the rest of every report identical. `cliOutput.bpFrom.partial` reworded
+  (the declared widths first, then the default set where room is left).
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four

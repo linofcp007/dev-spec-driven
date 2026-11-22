@@ -36,11 +36,12 @@ from the first of these that gives a width of 320 px or more:
    through;
 2. a top-level Tailwind 4 `@theme` block's `--breakpoint-*` in a stylesheet the code scan reads (unless the sheets reset
    them — `--breakpoint-*: initial` or `--*: initial` —, Tailwind keeps its own five too, which are not read: the default
-   set joins the theme's — list them all in ui.md to choose);
+   set fills the places the theme's widths leave — list them all in ui.md to choose);
 3. the default set: 320 · 390 · 768 · 1024 · 1440 px.
 
 At most six widths, 320 first (the reflow width) — past six, the narrowest five and the widest, the rest said; where
-the default set joins a theme's, a declared width may be one left out — list the widths in ui.md's line to choose them.
+the default set fills a theme's places, it comes in the order 768, 1024, 1440, 390, and only where room is left — list
+the widths in ui.md's line to choose them.
 `dev-spec design-system <feature>` prints them and where they came from (without a feature too, and
 `spec_scan {designSystem: true}` in both shapes), and lists a value it could not read (`calc()`, `var()`, wider than
 3840 px) with its place — write the widths in ui.md's line then. A framework's own defaults (in its package), Tailwind
