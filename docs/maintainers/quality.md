@@ -1507,7 +1507,14 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `{{ $x }}` or `{!! $x !!}`: review 2 of 1.37), a line cut at `DS_LINE_MAX`: a doubt, clearing every candidate open (the control is in each body). An
   empty body or one of elements alone (an overlay layer, an icon `<svg>`) is a doubt too. Nested candidates each get the
   text seen while they are open (`textMark`); a close tag pops the elements opened since to its own name, an unmatched one
-  costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below).
+  costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below). (1.39, D4) Vue's `<component>`
+  — no HTML element has that name — is judged as what its `is` names (`judgeTag`'s `name`): a BOUND `is` (`:is`,
+  `v-bind:is` — any `boundName` form) is a component — CONTROL in a click body, no click candidate, its own `style` not judged
+  (vben's alert.vue, `<component :is="… || VbenButton" @click>`: the corpus's 2 of 25 click-no-keyboard findings, both
+  false); a STATIC `is` is the element its literal names (`RE_ELEMENT` on the value as written, its quotes off — `is="MyCard"`
+  is a component, `is="button"` focusable, `is="img"` void); with no `is`, and an `is` on any other tag (a customized
+  built-in, `<div is="x-panel">`), the tag as written; img-no-alt (`<img` as written) and paste-blocked (any tag) never read
+  it (no widening: `<component is="img">` is no img-no-alt).
 - **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)
   and reads no clipboard (`RE_READS_CLIPBOARD`, the API — `clipboardData`, `navigator.clipboard`, `getData` —, never the
   word: review 2 of 1.37, a handler's own "Pasting from the clipboard is disabled" excused it), or a bare `.prevent` /
@@ -1724,8 +1731,8 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   in History (1.38.0 review 1, the cost).
 - **Not in 1.37 nor 1.38** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion`
   raw kind (item 2's), the `addEventListener` paste form, a `hint` level; 1.38's cuts — deprecated uses (1.39), sharing
-  settle's reads, the `:is` / `v-bind:is` narrowing (backlog), the reduced-motion script search, the 5,000 / 32 MB focus bound
-  in the feature report and finish, `DS_FOCUS_*` printed in MB.
+  settle's reads, the reduced-motion script search, the 5,000 / 32 MB focus bound in the feature report and finish,
+  `DS_FOCUS_*` printed in MB (the `:is` / `v-bind:is` narrowing came in 1.39: D4).
 
 ## UI state matrix (1.38)
 +ui's `[UI] UI States` scaffold ends in a state matrix (the template — markdown-and-trace.md → Readers, tracks.md): `State` ·

@@ -40,8 +40,9 @@ In the report alone: `transition-all` (kits ship it), what a bound cut. Silence 
 `ui-check-off: <rule-id> <why>` on its line (a declaration's, a class's) or the line above — `//`, `/* */`, `<!-- -->`,
 not Blade's or Twig's: counted, never listed; only this comment silences (a linter's is not read) — an `<a>` a parent gives its
 href (Next's `legacyBehavior`) is one to silence. A doubt is never judged: a named paste handler, a click whose content
-holds a control, a component (an icon or a text component too) or a slot, or no text (an icon or an image alone), a
-spread (`{...props}`), a tag in an attribute or a one-line template literal, Pug, a tag past 100 attributes or 30 lines.
+holds a control, a component (an icon, a text one, Vue's `<component :is>`) or a slot, or no text (an icon or an image
+alone), a spread (`{...props}`), a tag in an attribute or a one-line template literal, Pug, a tag past 100 attributes or 30
+lines.
 
 ### The project's UI checks
 

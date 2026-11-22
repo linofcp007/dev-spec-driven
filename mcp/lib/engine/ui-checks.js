@@ -329,12 +329,15 @@ function judgeTag(tag, add) {
   if (!attrs) return CONTROL;
   const spread = attrs.some((a) => a.spread);
   const named = new Map(), events = [];
+  let is = null; // (1.39) the `is` of Vue's `<component>`: the literal a static one names, "" for a bound one
   for (const a of attrs) {
     if (a.spread) continue;
     const ev = eventOf(a.name);
     if (ev) { ev.attr = a.name; ev.value = a.value; events.push(ev); continue; }
     const b = boundName(a.name);
-    if (!named.has(b)) named.set(b, a.value);
+    if (named.has(b)) continue;
+    named.set(b, a.value);
+    if (b === "is") is = a.name.toLowerCase() === "is" ? (a.value || "").replace(/^["'`]|["'`]$/g, "") : "";
   }
   const shown = (b) => named.has(b) && literal(named.get(b)) !== "false"; // present and not literally false
   // paste-blocked: any tag (a component passes it down) — an inline handler that cancels the paste and reads no clipboard,
@@ -345,10 +348,16 @@ function judgeTag(tag, add) {
     const blocks = e.value == null ? e.mods.includes("prevent") || e.mods.includes("preventDefault") : RE_CANCELS.test(v);
     if (blocks && !RE_READS_CLIPBOARD.test(v) && !forwardsEvent(v)) { add("paste-blocked", tag.line, "<" + tag.name + " " + e.attr + ">"); break; }
   }
-  const element = RE_ELEMENT.test(tag.name);
-  const focusable = tag.name === "a" || tag.name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(tag.name);
+  // (1.39, D4) Vue's `<component>` — no HTML element has that name — renders what its `is` names: a BOUND one (`:is`,
+  // `v-bind:is`) a component (vben's alert.vue: `<component :is="… || VbenButton" @click>`), CONTROL in a click body, its own
+  // style and click not judged; a static one (`is="div"`) that element — RE_ELEMENT on the literal as written, focusable and
+  // void as usual. Without an `is`, and an `is` on any other tag (a customized built-in), the tag as written; img-no-alt and
+  // paste read the tag as written too
+  const name = tag.name === "component" && is !== null ? is : tag.name;
+  const element = RE_ELEMENT.test(name);
+  const focusable = name === "a" || name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(name);
   // (a `<label>` is no control in a body — never focused itself, the control it names is its own tag: review 2 of 1.37)
-  const kind = !element || (focusable && tag.name !== "label") || tag.name === "slot" ? CONTROL : undefined;
+  const kind = !element || (focusable && name !== "label") || name === "slot" ? CONTROL : undefined;
   if (spread) return kind; // (a spread may hold any attribute)
   // font-size-viewport (1.38): an ELEMENT's own `style` attribute — never a component's prop, never a free `fontSize:` line
   // (CSS-in-JS, `sx`, `css()` nest their media queries where no line reader sees them: CRIT_3 must-fix 1)
@@ -370,7 +379,7 @@ function judgeTag(tag, add) {
   if (!click || !element) return kind;
   const role = literal(named.get("role")).split(/\s+/)[0];
   if (focusable || named.has("tabindex") || ROLE_REACHED.has(role) || named.has("inert") || shown("aria-hidden")) return kind;
-  if (click.mods.some((m) => RE_OFF_ELEMENT.test(m)) || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "") || VOID.has(tag.name)) return kind;
+  if (click.mods.some((m) => RE_OFF_ELEMENT.test(m)) || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "") || VOID.has(name)) return kind;
   return { value: "<" + tag.name + " " + click.attr + ">" };
 }
 

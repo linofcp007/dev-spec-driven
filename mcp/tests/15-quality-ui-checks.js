@@ -134,6 +134,32 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.39 (D4): Vue's `<component>` renders what its `is` names — a BOUND one (`:is`, `v-bind:is`) is a component: no click
+    // candidate (vben's alert.vue, the corpus's two click-no-keyboard findings on it), a CONTROL in a click body, its own style
+    // not judged; a static one is that element (focusable, void as usual); no `is`, an `is` on another tag (a customized
+    // built-in), img-no-alt and paste read the tag as written (as 1.38)
+    const alert = lines("<template>", "  <AlertDialogCancel v-if=\"showCancel\" as-child>", "    <component", "      :is=\"components.DefaultButton || VbenButton\"", "      :disabled=\"loading\"",
+      "      variant=\"outline\"", "      @click=\"handleCancel\"", "    >", "      {{ cancelText || $t('common.cancel') }}", "    </component>", "  </AlertDialogCancel>", "  <AlertDialogAction as-child>",
+      "    <component v-bind:is=\"components.PrimaryButton || VbenButton\" :loading=\"loading\" @click=\"handleConfirm\">", "      {{ confirmText || $t('common.confirm') }}", "    </component>", "  </AlertDialogAction>", "</template>");
+    const shapes = lines("<template>", "  <component is=\"div\" @click=\"go\">Open</component>", // 2: FINDING (a static div, as 1.38)
+      "  <component is=\"button\" @click=\"go\">Go</component>", // 3: a static button is focusable
+      "  <div is=\"x-panel\" @click=\"go\">Open</div>", // 4: FINDING (a customized built-in is the tag as written)
+      "  <div @click=\"go\"><component :is=\"Btn\">Go</component></div>", // 5: the bound one is a control in the div's body
+      "  <component :is=\"H\" style=\"font-size: 5vw\">x</component>", // 6: a component's style is not judged
+      "  <component is=\"div\" style=\"font-size: 5vw\">x</component>", // 7: FINDING (an element's own style)
+      "  <component @click=\"go\">Open</component>", // 8: FINDING (no `is`: the tag as written, as 1.38)
+      "  <component is=\"MyCard\" @click=\"go\">Open</component>", // 9: a static component name (RE_ELEMENT on the literal as written)
+      "  <component :is=\"Field\" @paste.prevent />", // 10: FINDING (paste: any tag)
+      "  <component is=\"img\" src=\"/a.png\" />", // 11: img-no-alt reads the tag as written (no widening)
+      "  <component is=img @click=\"go\">x</component>", // 12: an unquoted static void element: no body, no candidate
+      "</template>");
+    const vben = got(alert, "packages/@core/ui-kit/popup-ui/src/alert/alert.vue"), S4 = got(shapes, "src/views/Shapes.vue");
+    all("1.39 (D4): Vue's `<component :is>` / `v-bind:is` is a component — vben's alert.vue is silent (1.38: two click-no-keyboard), a bound one is a control in a click body and its style is not judged; a static `is` is that element (`div` judged, `button` focusable, `img` void, `MyCard` a component); no `is`, an `is` on a `<div>`, paste and img-no-alt read the tag as written (got " + js({ vben, S4 }) + ")", {
+      vben: () => js(vben) === "[]",
+      shapes: () => js(S4) === js(["click-no-keyboard@2", "click-no-keyboard@4", "font-size-viewport@7", "click-no-keyboard@8", "paste-blocked@10"]),
+    });
+  }
+
   { // click-no-keyboard by its body (review 1 of 1.37, Laravel's starter kits): a click candidate is judged only when its body —
     // read to its matching close tag within 30 lines / 4,000 characters — holds content a user reads (text, an expression that is
     // no slot outlet) and nothing that is or may render a control (focusable by default, a component / custom element, <slot>,
