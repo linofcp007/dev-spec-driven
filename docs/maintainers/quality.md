@@ -1417,12 +1417,20 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   alone skipped there (behaviour-preserving); (3) Tailwind (`utilities` — `RE_TW_PICK` widened by `text-\[`): a BARE
   `text-[<v>]` (`RE_TW_TEXT`, anchored — a variant's token is none; `length:` hint, a `/<line-height>`, `!`; a value holding
   `(` — any arithmetic — is cut by the split) whose value is viewport-only is a CANDIDATE (the first of a line, pushed on the
-  caller's list) decided when the FILE ends, as (2) — review 1 of 1.38: decided by the line, a class list split over lines
-  (`cn("text-[8vw]", "md:text-7xl")`, a cva base with its responsive variant below, a wrapped JSX `className` / Vue `class`)
-  warned: none stands once a line of the file held a `text-` utility under a variant (`RE_TW_TEXT_VARIANT`, `:text-` /
-  `:!text-` anywhere on a non-CSS line — a colour's `dark:text-white` too, as the per-line test had it), nor in a `partial`
-  file; a sheet's `@apply` sizes are decided over its `@apply` statements (their variant drops the `@apply` sizes, never the
-  sheet's declarations), a markup file's class lines and its `<style>` block apart (as before). An element's own `style` is
+  caller's list) decided when the FILE ends, by (2)'s property — a font SIZE the file sets under a condition (review 1 of
+  1.38: decided by the line, a class list split over lines — `cn("text-[8vw]", "md:text-7xl")`, a cva base with its
+  responsive variant below, a wrapped JSX `className` / Vue `class` — warned): none stands once a non-CSS line of the file
+  held a SIZE under a variant (`RE_TW_TEXT_VARIANT`, after `:` / `:!`: a type-scale step — `md:text-6xl`, `sm:text-xs`,
+  `lg:text-base/7`, `md:text-6xl!` — or an arbitrary length — a digit or `.` first, a `length:` hint in `[…]` or Tailwind 4's
+  `(…)`, `clamp(` / `calc(` / `min(` / `max(`); never a colour — `dark:text-white`, `hover:text-[#111]`, an untyped
+  `[var(…)]`, which Tailwind reads as one, daisyUI's `text-base-content` —, an alignment (`md:text-center`) or a wrap; review 2
+  of 1.38: any variant `text-` did, a colour's too, so a hero beside a nav link's `hover:` colour was silent, ~70 % of
+  Breeze's and Jetstream's view files), nor in a `partial` file. The trade-off: a project's own size key under a variant
+  (`md:text-hero`) is no size here — the bare one warns, the team silences it (ui-code-scan.md says so). A sheet's `@apply`
+  sizes are decided over its `@apply` statements by the same const (their variant size drops the `@apply` sizes, never the
+  sheet's declarations), a markup file's class lines and its `<style>` block apart (as before). A conditional `@apply`
+  holding ANY `text-` utility still sets (2)'s `condSize` (`RE_TW_TEXT_ANY`, F0c's — a colour in a `@media` drops the sheet's
+  sizes: 1.39 backlog). An element's own `style` is
   decided on its tag, never deferred. Never: the `font` shorthand, a custom property
   (`--font-size-fluid-3`), a CSS-in-JS template line of a script. The walker keeps a statement's last 2,000 characters, so a
   longer declaration's property is not seen (a hostile shape only). `width-viewport` (`100vw` / `w-screen`) was cut to prose
@@ -2874,7 +2882,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   Bootstrap (254) ×2.1–2.2 +524–597 [×1.6–3.3]; Bulma (544) ×4.2–5.6 +485–553 [×7.7–8.2]; vben (721) ×1.4–1.6 +426–536
   [×1.6–1.8]; cal.com (1,108) ×1.25–1.33 +547–787 [×1.2–1.4]; shadcn-svelte (2,174) ×1.65–1.67 +682–1,106 [×1.6–1.8];
   shadcn-ui (3,562) ×1.9–2.0 +1,341–1,471 [×1.9–2.2]. G1′ (paired, median of 7): 0.79–1.53 (Bootstrap's 1.53 one
-  series, 1.27 the other); 15 reps on the eight small and mid trees: medians 0.86–1.16, upper quartiles ≤ 1.23. The
+  series, 1.27 the other) but sakai-vue's 2.21 in the second (the parent 2.27 at that moment; 1.31 the first — review 2
+  of 1.38's R2-DOC6: the range had dropped it); 15 reps on the eight small and mid trees: medians 0.86–1.16 (sakai-vue
+  1.09), upper quartiles ≤ 1.23. The
   read-ahead's 1.35.4 gain kept: shadcn-ui's report 1.71× slower with the pool off, 1.04× the parent's rule. The pass
   scales with the view and style text it reads and the files it opens: the ratio is high where 1.37's report read almost
   nothing; Foundation shows the bound's price on a quiet moment (start 32 ms: the pool would have saved ~30 ms there).

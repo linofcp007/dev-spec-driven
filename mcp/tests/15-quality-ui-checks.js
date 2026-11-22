@@ -341,7 +341,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       "export const F2 = () => <i className=\"text-[4dvw]/7\" />;", // 8: FINDING (a /line-height)
       "export const F3 = () => <i className=\"!text-[3vmax]\" />;", // 9: FINDING
       "export const F4 = () => <i className=\"text-[2vw]!\" />;", // 10: FINDING
-      "export const G = () => <i className=\"text-[2rem] text-[5vw] hover:text-red-500\" />;", // 11: silent (a variant text-)
+      "export const G = () => <i className=\"text-[2rem] text-[5vw] hover:text-red-500\" />;", // 11: silent (the file's variant sizes)
       "export const H = () => <i className=\"text-[0] text-[5px] text-[var(--h)] text-[calc(1vw_+_1rem)] text-[vw]\" />;", // 12: nothing viewport
       "export const I = () => <Heading style={{ fontSize: \"5vw\" }} />;", // 13: a component's style prop — silent
       "export const J = () => <h1 {...p} style={{ fontSize: \"5vw\" }} />;", // 14: a spread — silent
@@ -505,7 +505,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
   }
 
   { // 1.38.0 review 1 (UP-3): the bare `text-[…vw]` is decided per FILE, as a stylesheet's size is — its candidates kept and
-    // dropped when ANY class list of the file held a `text-` utility under a variant. Per line, a class list split over lines
+    // dropped when ANY class list of the file held a size under a variant. Per line, a class list split over lines
     // warned: the reviewer's cn() / cva / clsx() / a wrapped class attribute (JSX, Vue). Still warning: a lone bare size in a
     // file of no variant `text-` (JSX, an HTML class), an element's own style beside a variant one (decided on its tag), a
     // sheet's declaration beside an `@apply` of a colour variant (the @apply's variant drops the @apply sizes alone).
@@ -515,23 +515,45 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       clsx: ["src/T.tsx", lines("export const T = ({ big }) => (", "  <h1", "    className={clsx(", "      'text-[9vw]',", "      'lg:text-8xl',", "      big && 'font-black'", "    )}", "  >", "    x", "  </h1>", ");")],
       attr: ["src/A.tsx", lines("export const T = () => (", "  <h1", "    className=\"text-[9vw] font-black", "      lg:text-8xl\"", "  >x</h1>", ");")],
       vue: ["src/H.vue", lines("<template>", "  <h1", "    class=\"text-[9vw] font-black", "           lg:text-8xl\">x</h1>", "</template>")],
-      // (the variant anywhere in the file: above, another element's; Tailwind 3's important `lg:!text-7xl`; a colour's)
+      // (the variant anywhere in the file: above, another element's; Tailwind 3's important `lg:!text-7xl`)
       above: ["src/B.tsx", lines("export const A = () => <p className=\"md:text-6xl\">a</p>;", "export const B = () => <p className=\"text-[5vw]\">b</p>;")],
       important: ["src/I.tsx", lines("export const B = () => <p className=\"text-[5vw]\">b</p>;", "export const A = () => <p className=\"lg:!text-7xl\">a</p>;")],
-      dark: ["src/D.tsx", lines("export const B = () => <p className=\"text-[5vw]\">b</p>;", "export const A = () => <p className=\"dark:text-white\">a</p>;")],
-      // (a sheet: an @apply's variant drops the @apply sizes of the file, in another rule too)
+      // (a sheet: an @apply's variant size drops the @apply sizes of the file, in another rule too)
       applyTwo: ["src/apply.css", lines("h1 { @apply text-[5vw]; }", ".lead { @apply md:text-6xl; }")],
     };
+    // (review 2 of 1.38, R2-UP-1: only a variant that SETS A SIZE silences — a type-scale step, an arbitrary length — each
+    // shape of RE_TW_TEXT_VARIANT's one file a key; never a colour, an alignment, a wrap: the reviewer's Hero* shapes)
+    const sized = (v) => ["src/V.tsx", lines("export const B = () => <p className=\"text-[5vw]\">b</p>;", "export const A = () => <p className=\"" + v + "\">a</p>;")];
+    for (const [k, v] of Object.entries({ xs: "sm:text-xs", sm: "sm:text-sm", base: "lg:text-base", lg: "md:text-lg/7", bang: "md:text-6xl!", rem: "md:text-[2rem]",
+      dot: "md:text-[.875rem]", hint: "lg:text-[length:var(--h)]", paren: "md:text-(length:--h)", calc: "md:text-[calc(1rem_+_2vw)]",
+      clamp: "md:text-[clamp(2rem,6vw,5rem)]", min: "md:text-[min(6vw,5rem)]", max: "md:text-[max(2rem,6vw)]" })) S3[k] = sized(v);
     const W3 = {
       html: ["public/404.html", lines("<p class=\"text-[5vw] font-bold\">404</p>", "<p class=\"text-red-500\">x</p>")],
       styleBeside: ["src/S.tsx", lines("export const A = () => <h1 className=\"md:text-6xl\" style={{ fontSize: \"5vw\" }}>a</h1>;")],
       declColour: ["src/decl.css", lines("h1 { font-size: 5vw; }", ".btn { @apply hover:text-white; }")],
+      dark: ["src/D.tsx", lines("export const B = () => <p className=\"text-[5vw]\">b</p>;", "export const A = () => <p className=\"dark:text-white\">a</p>;")],
+      hover: ["src/HeroHover.tsx", lines("export function Hero() {", "  return (", "    <section>", "      <h1 className=\"text-[8vw] font-bold leading-none\">Ship faster</h1>",
+        "      <a href=\"/docs\" className=\"text-gray-600 hover:text-gray-900\">Read the docs</a>", "    </section>", "  );", "}")],
+      darkP: ["src/HeroDark.tsx", lines("export const Hero = () => (", "  <section className=\"bg-white dark:bg-black\">", "    <h1 className=\"text-[10vw] tracking-tight\">Launch</h1>",
+        "    <p className=\"text-zinc-700 dark:text-zinc-300\">Copy</p>", "  </section>", ");")],
+      group: ["src/HeroGroup.vue", lines("<template>", "  <header>", "    <h1 class=\"text-[7vw] font-black\">Title</h1>",
+        "    <nav><a class=\"group\"><span class=\"group-hover:text-indigo-600\">Pricing</span></a></nav>", "  </header>", "</template>")],
+      align: ["src/HeroAlign.tsx", lines("export const Hero = () => (", "  <div>", "    <h1 className=\"text-[9vw]\">Big</h1>", "    <p className=\"text-left md:text-center\">centred on desktop</p>", "  </div>", ");")],
+      // (a wrap; an arbitrary colour, an untyped var — Tailwind reads it as a colour —, daisyUI's `text-base-content` colour; a
+      // project's own key; a sheet's @apply sizes beside a colour-variant @apply)
+      wrap: ["src/W.tsx", lines("export const B = () => <p className=\"text-[5vw] md:text-nowrap\">b</p>;")],
+      hex: ["src/X.tsx", lines("export const B = () => <p className=\"text-[5vw] hover:text-[#111]\">b</p>;")],
+      cssVar: ["src/Y.tsx", lines("export const B = () => <p className=\"text-[5vw] md:text-[var(--brand)]\">b</p>;")],
+      daisy: ["src/Z.tsx", lines("export const B = () => <p className=\"text-[5vw] hover:text-base-content\">b</p>;")],
+      ownKey: ["src/K.tsx", lines("export const B = () => <p className=\"text-[5vw] md:text-hero\">b</p>;")],
+      applyColour: ["src/applyc.css", lines("h1 { @apply text-[5vw]; }", ".btn { @apply hover:text-white; }")],
     };
     const g3 = (o) => Object.fromEntries(Object.entries(o).map(([k, [rel, t]]) => [k, got(t, rel).filter((f) => /font-size-viewport/.test(f))]));
     const silent = g3(S3), warns = g3(W3);
-    all("1.38.0 review 1: a bare `text-[…vw]` is decided per FILE — silent when any class list of the file holds a variant `text-` utility (cn() / cva / clsx() / a wrapped class attribute in JSX and Vue, the variant above or below, `lg:!text-7xl`, `dark:text-white`; a sheet's @apply in another rule); a lone one, an element's own style beside a variant, a sheet's declaration beside a colour-variant @apply still warn (got " + js({ silent, warns }) + ")", {
-      silent: () => Object.values(silent).every((x) => js(x) === "[]"),
-      warns: () => js(warns) === js({ html: ["font-size-viewport@1"], styleBeside: ["font-size-viewport@1"], declColour: ["font-size-viewport@1"] }),
+    const warnAt = { html: 1, styleBeside: 1, declColour: 1, dark: 1, hover: 4, darkP: 3, group: 3, align: 3, wrap: 1, hex: 1, cssVar: 1, daisy: 1, ownKey: 1, applyColour: 1 };
+    all("1.38.0 review 1 / 2: a bare `text-[…vw]` is decided per FILE — silent when any class list of the file holds a SIZE under a variant (cn() / cva / clsx() / a wrapped class attribute in JSX and Vue, the variant above or below, `lg:!text-7xl`, each type-scale step and arbitrary length; a sheet's @apply in another rule); a lone one, one beside a colour / alignment / wrap / own-key variant (`dark:text-white`, `hover:text-gray-900`, `hover:text-[#111]`, `md:text-center`, `md:text-hero`), an element's own style beside a variant, a sheet's declaration or @apply beside a colour-variant @apply still warn (got " + js({ silent, warns }) + ")", {
+      silent: () => Object.keys(silent).length === 21 && Object.values(silent).every((x) => js(x) === "[]"),
+      warns: () => js(warns) === js(Object.fromEntries(Object.entries(warnAt).map(([k, n]) => [k, ["font-size-viewport@" + n]]))),
     });
   }
 

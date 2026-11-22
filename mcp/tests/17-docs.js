@@ -1445,12 +1445,18 @@ exports.run = async ({
     const end = scan.findIndex((l, i) => i > at && /^#+ /.test(l));
     const checks = at < 0 ? "" : ws(scan.slice(at, end < 0 ? scan.length : end).join("\n"));
     const tool = (raw("skills", "dev-spec-driven", "references", "tooling-reference.md").split("\n").find((l) => l.startsWith("| `spec_scan {designSystem: true}`")) || "");
-    all("1.38.0 F0c: ui-code-scan.md's UI checks name font-size-viewport (WCAG 1.4.4, failure F94), what keeps it certain (a stylesheet's size only when its file sizes no text conditionally, an element's own style attribute, a bare text-[…vw] with no variant text- utility in its file — review 1 of 1.38) and what is not seen; tooling-reference's spec_scan row lists it among the warn rules", {
+    all("1.38.0 F0c: ui-code-scan.md's UI checks name font-size-viewport (WCAG 1.4.4, failure F94), what keeps it certain (a stylesheet's size only when its file sizes no text conditionally, an element's own style attribute, a bare text-[…vw] with no size under a variant in its file — reviews 1 and 2 of 1.38) and what is not seen; tooling-reference's spec_scan row lists it among the warn rules", {
       criterion: () => /`font-size-viewport` \(text sized in viewport units alone.*?which zooming does not enlarge: WCAG 1\.4\.4, failure F94/.test(checks),
       sheet: () => /only when that file declares no font size inside `@media`, `@container`, `@supports` or a Sass `@include` \(nested too\)/.test(checks),
       inline: () => /an element's own `style` attribute, never a component's prop or a CSS-in-JS object \(`sx`, `css\(\)`, `style\(\)`\)/.test(checks),
-      // (review 1 of 1.38: decided per FILE — the per-line test went)
-      tailwind: () => /a bare `text-\[…vw\]` only when its file holds no `text-` utility under a variant \(`md:text-6xl`\)/.test(checks),
+      // (review 1 of 1.38: decided per FILE — the per-line test went; review 2: a SIZE under a variant, the prose's examples
+      // through the engine — `md:text-6xl` silences the file's bare one, a colour or a key of the project's own does not)
+      tailwind: () => {
+        const T = require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier();
+        const bare = (v) => T.uiChecksOf(T.viewLines("<p class=\"text-[5vw]\">a</p>\n<p class=\"" + v + "\">b</p>\n", "a.html"), "a.html").findings.length;
+        const said = checks.match(/a bare `text-\[…vw\]` only when its file holds no size under a variant \(`([^`]+)`; not a colour, nor a key of your own: `([^`]+)`\)/);
+        return !!said && bare(said[1]) === 0 && bare(said[2]) === 1 && bare("dark:text-white") === 1;
+      },
       notSeen: () => /An override in another file is not seen: silence that one\./.test(checks),
       tooling: () => /paste-blocked · font-size-viewport, `level` warn/.test(tool),
     });
@@ -1547,8 +1553,10 @@ exports.run = async ({
           && proj.includes("each file's first " + B.read / 1024 + "K and a line's first " + n(B.line) + " characters (`view-size`, `line-length`; a tag past " + B.tag + " lines, `tag-length` — each with a count and the first file)")
           && proj.includes("its own limits, never the report's `limits` or `truncated`")],
       // (review 1 of 1.38, UP-1: what the prose says of a long stylesheet is what uiProject feeds the pass)
-      ["a stylesheet past the read: named in view-size, never checked — uiProject feeds it no line", () =>
-        proj.includes("A stylesheet past " + B.read / 1024 + "K (a compiled bundle) is named in `view-size`, never checked.")
+      // (review 2 of 1.38, R2-UP-2 / R2-DOC1: counted there — the first file by path is named —, and fed no line, its focus
+      // styles excuse nothing)
+      ["a stylesheet past the read: counted in view-size, never checked, its focus styles excuse nothing — uiProject feeds it no line", () =>
+        proj.includes("A stylesheet past " + B.read / 1024 + "K (a compiled bundle) is counted in `view-size`, never checked: its focus styles excuse nothing, so the inventory may warn of a removal a feature report excuses by them.")
           && /pass\.feed\(x\.rel, over && RE_STYLE_EXT\.test\(x\.rel\) \? \[\] : viewLines\(text, x\.rel\), over, text\)/.test(DS)],
       ["order: the stylesheets first, then the shorter path", () => /Stylesheets are read first, then the shorter path/.test(proj)],
       ["view files: no test, story, mock or fixture", () => /A test, a story, a mock or a fixture is no view file\./.test(proj)],
@@ -1723,7 +1731,7 @@ exports.run = async ({
       ["ui-code-scan: an Astro define:vars block's first at-rule — silence what it gives", () =>
         /An Astro `<style define:vars>` block's first at-rule reads as a selector: silence what it gives\./.test(C)],
       ["ui-code-scan: a feature report's focus search is narrower than the inventory's — it may warn where the inventory does not", () =>
-        /A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a removal the inventory excuses by one in another view file \(a `focus-visible:ring-2`\): check that the removal's elements get it, or silence it\./.test(C)],
+        /A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a removal the inventory excuses by one in another view file: check that the removal's elements get it, or silence it\./.test(C)],
       ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare (the engine agrees)", () => spelled
         && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(a list item or a bold line is not read\), the marker in English, each id bare \(one in a code span is not applied\)/.test(C)],
       ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare (the engine agrees)", () => spelled

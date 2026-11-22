@@ -26,12 +26,13 @@ with no alt — 1.1.1), `outline-removed` (`outline: none` on an element, `*` or
 feature's files or the project's first 48 stylesheets — past them, named unjudged — 2.4.7), `click-no-keyboard` (a click
 handler on an element the keyboard cannot reach: no `tabindex` — a role or a key handler alone is not enough — 2.1.1),
 `paste-blocked` (an inline paste handler that cancels — 3.3.8 at a sign-in or code step, a usability defect elsewhere),
-`font-size-viewport` (text sized in viewport units alone — `font-size: 5vw`, `calc(1vw + 1vh)`, `text-[5vw]` — which
+`font-size-viewport` (text sized in viewport units alone — `font-size: 5vw`, `text-[5vw]` — which
 zooming does not enlarge: WCAG 1.4.4, failure F94; a size with a rem / em term zooms: `clamp(1rem, 0.5rem + 2vw, 2.5rem)`).
 F94's note — a size media queries adjust may not fail — keeps it to what is certain: a stylesheet's (a `<style>` block's)
 size only when that file declares no font size inside `@media`, `@container`, `@supports` or a Sass `@include` (nested
 too); an element's own `style` attribute, never a component's prop or a CSS-in-JS object (`sx`, `css()`, `style()`);
-a bare `text-[…vw]` only when its file holds no `text-` utility under a variant (`md:text-6xl`). Neither the stylesheet's
+a bare `text-[…vw]` only when its file holds no size under a variant (`md:text-6xl`; not a colour, nor a key of your own:
+`md:text-hero`). Neither the stylesheet's
 nor the bare one is judged in a file read in part (past 256K, a line past 2,000 characters). An override in another file
 is not seen: silence that one. An Astro `<style define:vars>` block's first at-rule reads as a selector: silence what it
 gives.
@@ -51,10 +52,11 @@ its own. The tool and the CLI ask for it; the engine's own default runs none. St
 path — at most 5,000 files and 32 MB (`ui-files`, naming the outline removals it left unjudged), each file's first 256K and
 a line's first 2,000 characters (`view-size`, `line-length`; a tag past 30 lines, `tag-length` — each with a count and the
 first file): its own limits, never the report's `limits` or `truncated`. A stylesheet past 256K (a compiled bundle) is
-named in `view-size`, never checked. A test, a story, a mock or a fixture is no view file. `outline-removed` keeps its rule — any focus style in any file read excuses every removal —, so the removals a feature
+counted in `view-size`, never checked: its focus styles excuse nothing, so the inventory may warn of a removal a feature
+report excuses by them. A test, a story, a mock or a fixture is no view file. `outline-removed` keeps its rule — any focus style in any file read excuses every removal —, so the removals a feature
 report leaves unjudged past the project's first 48 stylesheets are judged here; a cut pass that read no focus style judges
 none. A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a
-removal the inventory excuses by one in another view file (a `focus-visible:ring-2`): check that the removal's elements
+removal the inventory excuses by one in another view file: check that the removal's elements
 get it, or silence it.
 
 The fact `no-reduced-motion` (WCAG 2.3.3, AAA): the view files declare motion — an animation, a transform's transition,
