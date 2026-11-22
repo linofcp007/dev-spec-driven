@@ -666,7 +666,8 @@ exports.run = async ({ ok, all, S, tmp, require, __dirname }) => {
     // state, its rows and header quality's uiStateLabels / uiStateHead / uiStateView / uiStateA11y (one source) — APPENDED in ONE
     // change, one re-pin (CRIT_X D6 as DECISIONS 4 amends it: item 3's Responsiveness line cut). A table row is keyed by its
     // NON-EMPTY trimmed cells on both sides (CRIT_4 must-fix 2): a blank view column added (a second view), the a11y column
-    // deleted or compact pipes keep an untouched matrix template, so the m / l gate never passes an empty one.
+    // deleted or compact pipes keep an untouched matrix template, so the m / l gate refuses a section left that way (once a
+    // line of the section is written, the untouched matrix passes the gate — doctor's ui-states warns about its cells).
     const I = require("./lib/i18n.js");
     const UI = E.trackSectionTable("ui");
     const LANGS = ["en", "pt", "es", "pt-BR"];

@@ -14,8 +14,9 @@ tool, command, hook or dependency.
   checks over every view and style file of the project — an inventory, `uiChecks`: per rule the count, the files holding
   one and the first place; counts, never a list, and never a `finish` warning (each feature's report still lists its own).
   Bounds, in the inventory's own `limits`: 5,000 view files / 32 MB (`ui-files`), a file's first 256K (`view-size` — a
-  stylesheet longer than that, a compiled bundle, is named there and not checked), a line's first 2,000 characters
-  (`line-length`), a tag's 30 lines (`tag-length`). `outline-removed` keeps 1.37's rule at project scope — any focus style
+  stylesheet longer than that, a compiled bundle, is counted there, the first such file by path named, and not checked:
+  its focus styles excuse nothing, so the inventory may warn of a removal a feature report excuses by them), a line's
+  first 2,000 characters (`line-length`), a tag's 30 lines (`tag-length`). `outline-removed` keeps 1.37's rule at project scope — any focus style
   in any file read excuses every removal —, so the removals a feature report leaves unjudged past the project's first 48
   stylesheets are judged here, and that "not judged" clause of the feature report and of `finish` now points to it. A
   feature report still looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a
@@ -32,24 +33,28 @@ tool, command, hook or dependency.
   and a mention only in a script is not seen.
 - **`_UI checks off: <rule-id> (reason)_` in design-system.md.** A line of its own (not a list item nor bold; each id bare,
   never in a code span) switches a UI check or the project fact off for the whole project — the inventory, every feature
-  report (`off`: the rule, its reason, the findings it hid) and so `finish`: counted, never listed. An entry with no reason in parentheses, an unknown id, another shape or one past the
-  first 50 is not applied, and the report says why (`offIgnored`: `no-reason`, `unknown-rule`, `unreadable`,
+  report (`off`: the rule, its reason, the findings it hid) and so `finish`: counted, never listed. An entry with no
+  reason in parentheses, an unknown id, another shape or one past the first 50 is not applied, and the report says why (`offIgnored`: `no-reason`, `unknown-rule`, `unreadable`,
   `past-bound`). A design-system.md created for it alone enrols the project in the registry; without one, the inline
   `ui-check-off:` comment silences one finding.
 - **A new UI check, `font-size-viewport` (warn, WCAG 1.4.4, failure F94).** Text sized in viewport units alone
   (`font-size: 5vw`, `calc(1vw + 1vh)`, `text-[5vw]`) does not grow with zoom; a size with a rem / em term does. Judged only
   when certain: a stylesheet's size when that file sizes no text inside `@media`, `@container`, `@supports` or a Sass
   `@include`; an element's own `style` attribute, never a component's prop or a CSS-in-JS object (`sx`); a bare
-  `text-[…vw]` when its file holds no variant `text-` utility (a class list split over lines — `cn()`, `clsx()`, a cva
-  base — reads as one). Neither size is judged in a file read in part (past 256K, a line past 2,000 characters). An
-  override in another file is not seen: `ui-check-off: font-size-viewport` silences that one.
+  `text-[…vw]` when its file holds no size under a variant — a type-scale step or a length (`md:text-6xl`,
+  `md:text-[2rem]`), never a colour, an alignment or a key of your own (`md:text-hero`: silence that one) — and a class
+  list split over lines (`cn()`, `clsx()`, a cva base) reads as one. Neither the stylesheet's size nor the bare
+  `text-[…vw]` is judged in a file read in part (past 256K, a line past 2,000 characters); an element's own `style`
+  still is. An override in another file is not seen: `ui-check-off: font-size-viewport` silences that one.
 - **Raw values against your own scale.** A feature's report (`spec_scan {designSystem: true, name}` /
   `dev-spec design-system <feature>`) reads each raw value against the project's scale — the registry's token rows, then
   the code's tokens the registry lacks. A colour names the token it IS (`token`; the nearest of several) in any notation —
   hex, rgb, hsl, oklab, oklch, `none` as 0 —: exact within a notation, within the pair's rounding across two (0.011 ΔEOK
-  with an HSL side, 0.001 otherwise; an HSL token against a hex or rgb() also as precisely as it is written — `#05787d` is
-  `hsl(183 92% 25%)`, `#18181b` is not `hsl(0 0% 9%)`: Tailwind's zinc is not shadcn's neutral, in oklch or in hsl());
-  `near` names the nearest token within 0.02 ΔEOK, a hint. A
+  with an HSL side, 0.001 otherwise; an HSL token against a hex or rgb() by that rounding both ways — the hex in HSL
+  rounds to the token's numbers, or the token paints the hex at 8 bits a channel: `#05787d` is `hsl(183 92% 25%)`,
+  `#eeeff2` is `hsla(220, 14%, 94%, 1)`, `#18181b` is not `hsl(0 0% 9%)` — Tailwind's zinc hexes are not shadcn's
+  neutral, in oklch or in hsl(); an oklch or oklab value against an HSL token is still judged within 0.011, so Tailwind
+  4's oklch zinc reads as shadcn's hsl() neutral); `near` names the nearest token within 0.02 ΔEOK, a hint. A
   `font-family` stack is read against the registry rows' font tokens, a transition / animation time or easing (and
   Tailwind's `duration-[…]` / `delay-[…]` / `ease-[…]`) against the duration and easing tokens — each only when the scale
   holds one, each with its own per-file bound (`font-values` / `motion-values`); sizes stay raw. `groups` gathers the
@@ -71,9 +76,10 @@ tool, command, hook or dependency.
   first outside code and comments, when it gives a width of 320 px or more; its widths up to the first ` · ` that no length
   follows, so the list as the CLI prints it (`320 · 390 · 768 px`) reads whole; a value in brackets is the stub's slot, not
   read —, else Tailwind 4's `--breakpoint-*` in a top-level `@theme` (read during the token scan — no second walk; `partial`
-  when the theme leaves Tailwind's own five in place: the default set joins, and gives way first past six widths — a
-  declared width is kept), else 320 · 390 · 768 · 1024 · 1440. At most 6, 320 first; a
-  value not read is listed with its place; its bounds in its own `limits`, never the report's. Never computed by `finish`
+  when the theme leaves Tailwind's own five in place: the default set joins), else 320 · 390 · 768 · 1024 · 1440. At
+  most 6, 320 first — past six the narrowest five and the widest, the rest said (where the default set joins a theme's, a
+  declared width may be one left out: list the widths in ui.md's line to choose them); a value not read is listed with
+  its place; its bounds in its own `limits`, never the report's. Never computed by `finish`
   or the design-system seed.
 - **doctor `ui-states`.** `[UI] UI States`' state matrix — the scaffold's table, recognised by its `Announced · focus`
   header cell in any language — warns when a listed state has no row (in each table: two matrices never share their
@@ -94,7 +100,9 @@ tool, command, hook or dependency.
   row per state — 16, the new ones Slow network, Not found, Conflict, Undo and Form validation —, appended so a 1.31–1.37
   design still reads as template. A table row's template key is now its non-empty cells: an untouched matrix with a view
   column added, the a11y column deleted, compact or no outer pipes still reads as template, so the m / l design gate
-  refuses it; a matrix of `TBD` or dashes passes the gate — doctor's `ui-states` warns about each such cell.
+  refuses a UI States section left that way with nothing else written; once a line of the section is written (its TODO
+  line gone), an untouched matrix passes the gate as a `TBD` / dash one does — doctor's `ui-states` warns about each open
+  cell.
 - **The state matrix's guide.** ui-design-patterns.md → The states every view needs lists the 16 states with how each is
   announced and where focus goes (4.1.3 status messages, one mechanism a row, 2.4.3, 2.4.11 not entirely hidden, 2.2.1 per
   W3C's new-mail example, 3.3.4's three ways for Undo), how to fill the matrix in design.md and what doctor's `ui-states`
@@ -134,7 +142,10 @@ The MCP tool list is 9 characters shorter (spec_scan's "raw colours / sizes" is 
   the project pass 95 and two for the `<style>` fix (91 at first, three more once given fixtures, one dead line deleted,
   one equivalent); the docs pass 86 of 86. Review 1's fixes: the cost 17 of 17, the UI rules 34 (32 at first, a timed
   cost guard kept, a dead pre-test deleted), the scale 45 of 45, breakpoints and states 18 of 18, the docs 21 of 21. Every
-  list replayed on the merged tree: each mutant killed as on its own branch.
+  list replayed on the merged tree: each mutant killed as on its own branch. Review 2's fixes: the UI rules 29 of 29; the
+  scale 20 of 21 (one equivalent: `<` / `<=` under the epsilon) and review 1's 45 replayed, 44 of 44 once its painted
+  fixtures were replaced (one line dead); the breakpoints and states 21 of 22 (one equivalent: `>` / `>=` at exactly six
+  widths).
 
 ## [1.37.0] — 2026-11-21
 
