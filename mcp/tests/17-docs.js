@@ -1088,10 +1088,12 @@ exports.run = async ({
       // code and comments, its slot unread, a bare number's unit, thousands, 200 characters; a top-level @theme, `partial` as
       // the resets say; past six; who prints them; the values not read — each example below run through breakpointsReport)
       ["responsive: where the widths come from — the first source with a width ≥ 320: ui.md's first line, a top-level Tailwind 4 @theme, else the default set; ≤ 6, 320 first; who prints them, what is not read — as breakpoints.js reads them", RS,
-        /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` that no length follows \(`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width ends the list: write `640 \(sm\) · 768 \(md\)`, not `sm 640 · md 768` \(640 alone\); px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; a `\[…\]` is the stub's slot and never read — write the widths without the brackets —, so an untouched stub falls through;/,
-        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set joins the theme's — list them all in ui\.md to choose\); 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
-        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set joins a theme's, a declared width may be one left out — list the widths in ui\.md's line to choose them\./,
-        /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px\) with its place — write the widths in ui\.md's line then\./,
+        /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` that no length follows \(`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width ends the list: write `640 \(sm\) · 768 \(md\)`, not `sm 640 · md 768` \(640 alone\); px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; the stub's own `\[…\]` slot is never read, so an untouched stub falls through — your widths written inside its brackets are, and any other bracket is an aside, never a width \(`480 \/ 960 px \[1200 in print\]` is 480 and 960\);/,
+        // (1.39, BS-2: under partial the theme's own widths first, the default set fills the places left in its order)
+        // (1.39: + the Sass map)
+        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set fills the places the theme's widths leave — list them all in ui\.md to choose\), and a top-level Sass map whose name ends in `breakpoints` \(`\$grid-breakpoints`, `\$breakpoints`, an override in `@use … with \(…\)`\) in a \.scss sheet the scan reads — a plain assignment over a `!default` one; 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
+        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set fills a theme's places, it comes in the order 768, 1024, 1440, 390, and only where room is left — list the widths in ui\.md's line to choose them\./,
+        /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px, `map-merge\(…\)`\) with its place — write the widths in ui\.md's line then\./,
         () => {
           const got = (line) => { const r = bpOf(line); return [r.from, r.widths.join(" "), r.unread.map((u) => u.value).join("|"), r.limits.map((l) => l.code).join(",")].join(" / "); };
           // (1.38.0 review 1: the printed list read whole, a filled bracket unread; review 2: a theme's declared 1600 the one left out
@@ -1104,17 +1106,28 @@ exports.run = async ({
             && got("- Breakpoints: 360 / 768 / 1280 px · max width 1200 px") === "ui.md / 320 360 768 1280 /  / "
             && got("- Breakpoints: 360 / 768 / 1280 px · 1200 px max width") === "ui.md / 320 360 768 1200 1280 /  / "
             && got("- Breakpoints: 640 (sm) · 768 (md)") === "ui.md / 320 640 768 /  / " && got("- Breakpoints: sm 640 · md 768") === "ui.md / 320 640 /  / "
-            && got("- Breakpoints: [576 / 768 / 992 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
-            && theme.widths.join(" ") === "320 390 768 1024 1440 2000" && theme.limits[0].first === 1600
+            && got("- Breakpoints: [576 / 768 / 992 px] · text expansion") === "ui.md / 320 576 768 992 /  / " // (1.39, BS-6)
+            && got("- Breakpoints: 480 / 960 px [1200 in print]") === "ui.md / 320 480 960 /  / "
+            && theme.widths.join(" ") === "320 768 1024 1440 1600 2000" && theme.limits.length === 0 // (1.39, BS-2)
             && got("- Breakpoints: [360 / 768 / 1280 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
             && got("- Breakpoints: 240 / 300 px") === "default / 320 390 768 1024 1440 /  / "
             && got("- Breakpoints: 30 / 48 / 80 rem") === "ui.md / 320 480 768 1280 /  / "
             && got("- Breakpoints: 400 / 500 / 600 / 700 / 800 / 900 / 1000 px") === "ui.md / 320 400 500 600 700 1000 /  / breakpoint-widths"
             && got("- Breakpoints: 360 / 768 / 5000 px") === "ui.md / 320 360 768 / 5000 px / "
             && got("```\n- Breakpoints: 500 px\n```\n<!-- - Breakpoints: 550 px -->\n- Breakpoints: 600 px") === "ui.md / 320 600 /  / ";
+        },
+        () => { // (1.39) the Sass map's claims, through the scan: a plain map over the vendored `!default` one (custom.scss, a sheet
+          // the scan opens by name), a `with` override, `map-merge(…)` listed unread, `_config.scss` (no name the scan opens) not read
+          const proj = (tag, files) => { const d = path.join(tmp, "z139-bp-" + tag); for (const [rel, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(d, rel)), { recursive: true }); fs.writeFileSync(path.join(d, rel), text); } return S.designSystemReport(d).breakpoints; };
+          const vars = "$grid-breakpoints: (\n  xs: 0,\n  sm: 576px,\n  md: 768px\n) !default;\n";
+          const plain = proj("plain", { "scss/_variables.scss": vars, "scss/custom.scss": "$grid-breakpoints: (xs: 0, sm: 600px, md: 900px);\n", "scss/_config.scss": "$breakpoints: (tv: 3000px);\n" });
+          const withIt = proj("with", { "scss/custom.scss": "@use 'bootstrap' with (\n  $grid-breakpoints: (\n    xs: 0,\n    md: 900px\n  )\n);\n" });
+          const merge = proj("merge", { "scss/_variables.scss": vars, "scss/custom.scss": "$grid-breakpoints: map-merge($grid-breakpoints, (xxl: 1600px));\n" });
+          return plain.from === "code" && plain.widths.join(" ") === "320 600 900" && withIt.widths.join(" ") === "320 900"
+            && merge.from === "default" && merge.unread.map((u) => u.value).join("|") === "map-merge($grid-breakpoints, (xxl: 1600px))";
         }],
       ["responsive: what is never read, and the lines to paste into ui.md (Tailwind's defaults, Bootstrap 5)", RS,
-        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a Sass map are never read: paste the line into ui\.md instead/,
+        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a map in a file the scan does not open by name \(`_config\.scss`, `_settings\.scss`\) are never read: paste the line into ui\.md instead/,
         /- Tailwind's defaults: `- Breakpoints: 640 \/ 768 \/ 1024 \/ 1280 \/ 1536 px`/, /- Bootstrap 5: `- Breakpoints: 576 \/ 768 \/ 992 \/ 1200 \/ 1400 px`/],
       ["responsive: editing the line re-flags approved designs — doctor's steering check, by its engine id", RS,
         /editing the line makes doctor warn `steering-changed-since-approval` on approved designs — on purpose/,

@@ -639,11 +639,19 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   over lines, its last DS_PRELUDE characters, `#{…}` as written), `on.statement({ text, block, line, from })` (`from`, 1.37: the line its text
   starts on) when a `;` OUTSIDE
   parentheses or a `}` ends one (the walker's pending text and the piece — its lines joined by a blank; never blank, never
-  a prelude), `on.close({ id, line })` when a `}` closes a block (a stray one closes none). Each handler is optional and is
+  a prelude), `on.close({ id, line })` when a `}` closes a block (a stray one closes none), and (1.39, the Sass map reader)
+  `on.open({ name, value, block, line })` when a token declaration's LINE leaves it open — no `;` / `}` ended it there (a
+  multi-line map, a value below its name, each override of `@use … with (`): its name, what the line holds after the colon
+  (flags kept, its FIRST DS_PRELUDE characters), its block; built only when `on.open` exists, never in an indented .sass (a
+  line's end ends a declaration there). Each handler is optional and is
   given a fresh object of plain values: nothing it does reaches the tokens. The events read the walker's state, they never
   steer it — so they inherit its view: a `;` inside parentheses (a Less mixin's parameters, an unquoted `data:` URL) ends no
   statement and what stands before it is not kept; after a token declaration left open at its line's end the next statement
-  starts below it; an indented .sass file has no block. Behaviour-preserving when it came: the tokens of 2,493 real
+  starts below it — its rest is the VERY NEXT event when that is a statement of the same block, and is lost when any other
+  event comes first: in `@use … with (` mode every override is a declaration of its own and resets the walker's pending
+  text, so a map another override follows is never delivered (CRIT_3 §1 — Dashticz's loader.scss yields `)` alone, and with
+  `$container-max-widths` last its `sm: 540px, md: 720px ) )` would have read as breakpoints); a reader of `open` voids it then
+  (breakpoints.js: one unread); an indented .sass file has no block. Behaviour-preserving when it came: the tokens of 2,493 real
   stylesheets byte-identical to 1.36's, with and without an observer; an observer costs ~1.3–1.6× the walk
   (mcp/tests/15-quality-design-system-walks.js pins the events on one sheet and that a handler writing into what it is
   given changes no token).
@@ -1103,13 +1111,18 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   - `ui.md` — `.specs/steering/ui.md`'s FIRST `- Breakpoints:` line: a list item (`-`, `*`, `+`), the label in any case, `**` /
     `_` around it; outside the front matter, fenced / indented code and HTML comments — read line for line (`commentLines`,
     then `codeBlockLines` over what it leaves), so `at` is the file's own line. Its value runs to the first `·` that no length
-    follows (`RE_UI_END`: blanks skipped, then a digit or `.` and a digit — `320 · 390 · 768 px`, the widths as the CLI prints
-    them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it; so a note led by a number reads as more
-    widths and a name before a width ends the list — `sm 640 · md 768` is 640 —, as a no-break space after the `·` does:
+    follows (`RE_UI_END`: blanks skipped — a space, a tab and, 1.39 (R2-BS-3), the two no-break spaces a thousands group
+    takes, U+00A0 / U+202F; never another space character —, then a digit or `.` and a digit — `320 · 390 · 768 px`, the
+    widths as the CLI prints them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it; so a note led by
+    a number reads as more widths and a name before a width ends the list — `sm 640 · md 768` is 640:
     ui-responsive.md says to start a note with a word and to write `640 (sm) · 768 (md)`) and is read up to `BP_LINE` (200)
     characters — past them `breakpoint-line` {read, at}, and a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot,
-    closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — and so does a filled value
-    kept in brackets (`[576 / 768 px]`: ui-responsive.md says to write the widths without them). A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
+    closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — but (1.39, BS-6 as CRIT_3
+    must-fix 5 narrowed it) a CLOSED one at the slot's own place, opening the value after the label's closing emphasis marks
+    and blanks (`RE_UI_FILLED`), whose text is no template's (`isTemplatePlaceholder` — the placeholder gate's own predicate,
+    under the project's template scope: the stub's slot is one in every language) is the team's filled value: its lengths are
+    read with the rest of the value (`[576 / 768 px] · text` → 576, 768); every other bracket keeps the rule, so an aside after
+    the widths (`480 / 960 px [1200 in print]`, `[see Figma frame 1440]`) is never a width. A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
     size), a bare number in the unit written NEXT (`360 / 768 / 1280 px`, `30 / 48 / 80 rem`) else px; a thousands group
     (`1.280`, `1,440`, a no-break space — one digit before it: a width is ≤ 3840) before px or none is an integer, before rem /
     em a decimal (`1.250rem`); a plain blank is never a group (`360 768 1280` is a list), so `1 280` reads as 1 and 280. A width
@@ -1124,23 +1137,50 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     text holding `@theme` (else the walk builds no event). The last declaration of a name is kept; `--breakpoint-<name>:
     initial` drops it; `--breakpoint-*: initial` / `--*: initial` drop the file's earlier ones and set `reset`. `partial` = a
     length read and no reset anywhere: Tailwind keeps its own five, which the engine never holds (stale data) — the default
-    set joins them. A value other than `0` or a px / rem / em length, or wider than 3840 → `unread` {name, value, at} (the
+    set fills the places the theme's widths leave (below). A value other than `0` or a px / rem / em length, or wider than 3840 → `unread` {name, value, at} (the
     first 5, `unreadTotal` — of the sources asked: never the code's beside a deciding ui.md; `cliOutput.bpUnread` points to
     ui.md's line, never "rewrite the value" — must-fix 6). What it inherits from the walk: the sheets the token scan reads —
     a token file by name, a global sheet by name (`sheetRank`) up to `DS_TOKEN_READS`, where that search ends without a word
     (its own rule, review 5); a Tailwind 4 project's `@theme` is in its entry sheet (globals / app / index / tailwind.css),
-    which ranks first.
+    which ranks first. And (1.39, the Sass map reader) a TOP-LEVEL assignment, in a .scss sheet the same walk reads (the
+    observer's pre-test: `.scss` ∧ the text holds `breakpoints`, lower case as the name rule reads it), of a variable whose LAST `-` /
+    `_` word is `breakpoints` (`RE_SASS_NAME` — a convention, not a name list: `$grid-breakpoints`, Bootstrap 6's and sass-mq's
+    `$breakpoints`, `$mq-breakpoints`; never `$spacers`, a 0-led map of lengths a value property would take, nor
+    `$grid-breakpoints-custom`): plain, `!default`, or an override of `@use … with (…)` / `@forward … with (…)` (on one
+    statement: the `with` group's entries; over lines: each override is the walk's own `open`). Its value (`sassValue`): a
+    literal map, to its own `)` (`parenGroup`: one pass, depth-1 commas, quotes skipped; one that never closes — a stray `}`
+    ended its statement — one unread) — each `0` / px / rem / em entry a min
+    edge, any other entry (`md: $tablet`, a unitless `750`, `5000px`) `unread` as `$name.key` (a quoted key unquoted); an entry
+    that opens a map (Bulma's `"mobile": ("until": $tablet)`) makes it no breakpoints at all (nothing, nothing unread); a list
+    (`$show-breakpoints: (mobile, tablet)` — no key in its first entry; `"a" "b"`) nothing; anything else holding `$` or `(` (a
+    variable, `map-merge(…)`, `map.merge(…)`) one `unread`, as the Tailwind reader's (CRIT_3 must-fix 2 — "nothing" was a
+    silent drop). Over lines (the walk's `open`, quality.md's contract above): a map its line closes is read at once (an
+    override's `(…),`); otherwise it is PENDING, completed only by the very next event when that is a top-level statement —
+    any other event first (another open, a block; a close or a nested statement always follows a block event, which voided it
+    first — no close handler is built) or the file's end voids it: one `unread` `{name, value: "( …"}` at its line (CRIT_3
+    must-fix 1: Dashticz's `with (` map then `$container-max-widths` — never 540 / 720 read). A part of DS_PRELUDE characters
+    is one the walk may have cut → one unread, never misread; a one-line map that long loses its name to the walk's tail cut
+    and is silent. Precedence (`codeBreakpoints`): per name, a plain or `with` assignment sets aside the `!default` ones,
+    read or not (a plain `map-merge` leaves the default set and its unread line); otherwise all count; names unite; `at` = the
+    first KEPT declaration with a length (must-fix 3: a vendored `_variables.scss` walks first and is set aside) — the files
+    in the walk's order, a file's Tailwind declarations before its maps (no sheet holds both). A map is whole: `partial`
+    stays Tailwind's (a Tailwind width read), so no default width fills a map.
+    Not read: a map in a file the walk does not open by name (`_config.scss`, `_settings.scss`, `_vars.scss`, `core.scss`,
+    `mixins.scss` — 14 of the designer's 26 sampled assignments; ui-responsive.md: paste the line), a .sass file, a .css one.
   - `default` — `[320, 390, 768, 1024, 1440]`.
   The widths: 320 first (WCAG 1.4.10's reflow width — 1280 at 400 %; a narrower edge is the floor's), ascending, once each,
   `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —, past it the narrowest 5 and the widest of
-  them all, whatever their source (under `partial` the code's and the default set's together: a declared width may be one
-  left out — ui-responsive.md says so, and to list the widths in ui.md's line to choose them); `breakpoint-widths` {read,
-  count, first — the narrowest left out, the sixth} (`cliOutput.bpLimit` names the count and that width, never the rule).
-  Which widths should stand for Tailwind's live layouts under `partial` — a declared one over a default one, 768 / 1024 /
-  1440 over 390 — is 1.39's to weigh (History → 1.38.0 review 2).
+  the SOURCE's own widths; `breakpoint-widths` {read, count, first — the narrowest left out, the sixth} counts and names
+  only those (`cliOutput.bpLimit` names the count and that width, never the rule). Then, under `partial` alone, the default
+  set FILLS the places left (1.39, BS-2 — `BP_FILL`): 768, 1024, 1440, 390 in that order, each not already there, up to
+  six — a theme's declared width is never one left out for a default one, and a default width the fill had no room for is
+  never said (shadcn v4's 1600 / 2000 → [320, 768, 1024, 1440, 1600, 2000], no limit; Tailwind's five restated →
+  [320, 640, 768, 1024, 1280, 1536]; 1920 alone → [320, 390, 768, 1024, 1440, 1920], 1.38's). The order: under any
+  Tailwind theme 390 is the floor's own layout (Tailwind's narrowest is 640), so it fills last; tablet / laptop / desktop
+  before it (History → 1.39.0, the table of 308 real themes). Not partial (ui.md, a reset theme): no fill.
   `breakpoints.limits` never feed the report's `limits`, `truncated` or `inSync`
   (they bound the widths, not the registry's comparison — CRIT_X D5d; a fixture: an in-sync project whose ui.md line is cut
-  stays in sync). Not read (1.39, or never): a Sass map, `@custom-media`, a file named for breakpoints, a JS config
+  stays in sync). Not read (or never): `@custom-media` (cut in 1.39 — History), a file named for breakpoints, a JS config
   (Tailwind 3's `screens` — and `container.screens`, a max width, the trap), `@container`. CLI: `cliOutput.bp*` (`bpHead`,
   `bpFrom` per source and partial, `bpUnread`, `bpLimit`), after the project's counts (`dsFound`) and after a feature's UI
   checks.
@@ -1776,13 +1816,14 @@ view needs (the detail points there), tooling-reference.md's id.
 - **No gate, no stamp** — never a fail, not `warnsOnly`, not in `GATES`, not in the save hook, finish or the brief. No stamp:
   no design approved before 1.38 can hold the anchored header (gates-and-approvals.md → Gates). spec_upgrade lists it as
   ADVISORY — `UI_STATES_CHECK` beside `DESIGN_WEIGH_IDS` / `CRITICAL_FLOW_IDS` in upgrade.js: no `warnings` attention.
-- **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns; every cell cut to `US_CELL`
-  (400) before any regex; a bound that drops input appends `usTruncated` to the detail (`usNone` too). Linear: the section
-  reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the same text (a 5 MB cell, 200K rows, 20K tables,
-  a 1M-word label); 1 MB cells cost what a same-size prose section does (15-quality-ui-states.js, a ratio). The one shape
-  past it: a header row of 1,000,000 view cells (8 MB on one line) costs ~2.1× `sectionState` (2.1–2.6 s against 1.0–1.2 s)
-  — each header cell's words are read for the anchor before `US_VIEWS` applies; linear, and no gate waits on it (a 1.39
-  bound: compare a cell with the anchor only when its length could hold one).
+- **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns, the anchor looked for in a
+  header's first `US_HEADER` (64) cells (1.39, BS-5 — past them, none found, the table is none and `truncated.views` says a
+  bound cut: the view bound's words, no new argument, CRIT_3 must-fix 6; found within them, the cells after it are never
+  read, nothing said); every cell cut to `US_CELL` (400) before any regex; a bound that drops input appends `usTruncated` to
+  the detail (`usNone` too). Linear: the section reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the
+  same text (a 5 MB cell, 200K rows, 20K tables, a 1M-word label, and since US_HEADER a header of 200,000 cells, the anchor
+  last: ~0.3×, 1.38's 2.1–2.75× — each header cell's words were read for the anchor before `US_VIEWS` applied); 1 MB cells
+  cost what a same-size prose section does (15-quality-ui-states.js, ratios).
 - **Every language, from the corpus** — the labels and the anchor cells of EN / PT / ES / pt-BR come from the corpus key
   `uiStateNames` (markdown.js `uiStateNames()` / `renderUiStateNames()`: `<id>\t<label>` lines, `UI_STATE_A11Y` — `a11y` — as
   the anchor's id; architecture.md → The build): an English doctor loads no pt.js / es.js (a child-process fixture). The
@@ -2775,6 +2816,55 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   out of `more`, the components' budget charged), 9 prose clauses; one survivor of the first pass, the unit's designed
   `{1,6}`, was equivalent on every CSS unit — the bound became `{1,5}` with a fixture each way (`pt-[2svmin]`,
   `text-[3inches]`), the 52 checkouts identical under it.
+- **1.39.0** (item 3 of the 1.39 round, "Breakpoints and states, round 2" — chain B, as CRIT_3 and the DECISIONS cut it) —
+  BS-2, the fill under `partial` (Breakpoints, above): the theme's own widths first, capped and said as any source's, then
+  `BP_FILL` = 768 · 1024 · 1440 · 390 where room is left; `breakpoint-widths` counts and names only the theme's own widths
+  (CRIT_3 must-fix 4 — the design's "the narrowest left out" named 390 on shadcn, a width not the project's). The order, on
+  308 real Tailwind 4 partial themes (a width's layout = the widest live breakpoint ≤ it, Tailwind's five counted unless
+  overridden — oracle data in the designer's probe, never in the engine): 1.38's cap captured 1,493 live layouts, review 1's
+  ascending fill 1,570, a widest-first fill 1,632, this order 1,645 (11 themes with no tablet layout, 19 with no laptop);
+  dropping 390 altogether captures the same 1,645 — it fills last so that an uncapped theme keeps 1.38's widths byte for
+  byte; the 36 themes still losing a declared width declare six or more of 320 px and up. Oracle replay against 1.38.0 (36
+  clone reports, 670 sampled sheets through the observer): only `partial` shapes differ — the clones with an adding theme
+  (shadcn v4, cal.com coss-ui, shadcn-svelte, magicui) [320, 768, 1024, 1440, 1600, 2000] where 1.38 had 390 and said 1600,
+  and 161 of the theme sample's sheets, each 390 out; the rest of every report identical. `cliOutput.bpFrom.partial` reworded
+  (the declared widths first, then the default set where room is left). R2-BS-3: `RE_UI_END`'s blank class takes U+00A0 and
+  U+202F (the ones `RE_UI_LENGTH`'s thousands group takes — French typography puts the narrow one before and after `·`),
+  written as escapes; `\s` would take U+2009 and line ends too (the fixture's thin space ends the list). R2-BS-2's
+  number-led note stays prose (ui-responsive.md item 1): telling `· 1200 px max content width` from `360 phone · 768 tablet`
+  is meaning, not syntax, and a lengths-only narrowing would end `640 (sm) · 768 (md)`, the form the docs recommend. BS-6
+  (1.38.0 review 1's LOW, prose until now): the design read every closed bracket whose text is no template's; CRIT_3's
+  probe (bs6.js) showed it misreading asides — `480 / 960 px [1200 in print]` +1200, `640 / 1024 px [see Figma frame 1440]`
+  +1440 — so it reads only the slot's own place (must-fix 5): the replay's ui.md lines differ in the filled brackets alone
+  (`[576 / 768 / 992 / 1200 / 1400 px] · text`, its bold-label twin, `[576 / 768 px] 1200 px [1600 in print]` → 576 and 768
+  joining 1200); the stub in EN / PT / ES / pt-BR, `[TBD]`, the asides and an unclosed `[` unchanged.
+  The Sass map reader (the chain's LAST commits, droppable — DECISIONS): first the walk's `open` event alone
+  (design-system.js: built only when `on.open` exists, never in a .sass; the F0c sheet's events and every token
+  byte-identical with an open handler — mcp/tests/15-quality-design-system-walks.js), then the reader. The design read "open
+  + the next top-level statement"; CRIT_3 showed it false in `@use … with (` mode — each override resets the walker's pending
+  text, so Dashticz's loader.scss delivers `)` alone and, with `$container-max-widths` last, `sm: 540px, md: 720px ) )` as
+  the map's rest (540 / 720 read as breakpoints; the designer's sass.js had filed it "nested-or-fn"): the void rule
+  (must-fix 1), "nothing" for a variable or `map-merge` made `unread` (must-fix 2), `at` the first KEPT (must-fix 3). The
+  shapes on the designer's 100-file sample (repos/sass): 23 sheets now give widths (Bootstrap 5 overrides and copies —
+  multi-line, a trailing comma, `!default`, one-line), 5 give an unread
+  line and the default set (Dashticz's voided `with` map; `$breakpoints: $grid-breakpoints` ×3, a variable; matise-gryd's
+  unitless `750` entries), every other sheet unchanged, every token list identical; of the clones only sass-mq moves —
+  its `examples/custom/custom.scss` (`@use '../../mq' as responsive with ($breakpoints: (…))`, an app's override shape) →
+  [320, 640, 800, 1024, 1600]; Bootstrap 6's `_config.scss`, Bulma's nested map, sass-mq's `_mq.scss` are no files the walk
+  opens by name — the libraries, rightly. Mutants CRIT_3 §8 added (V1 / V2 / P1 / P2 / A1 / L1 / B1 / N1) each have their
+  fixture; K5 went with BS-3. Two handlers were left out as provably dead: a `close` one, and the pending path's "a nested
+  statement voids" — after a top-level open, any nested event follows a block event, which voided it. Cost (K3c, medians of
+  5 interleaved, ratios against the `breakpointz` twins the pre-test skips, with other chains' suites running): 100
+  Bootstrap-sized sheets with a map 0.96–1.35×; 256K hostile sheets — an open per line 1.0–1.17× (the first opens a
+  parenthesis the walk never sees closed: the rest are map keys, one unread), a one-line map per line 1.67–2.3× (the first
+  `sassValue` built its parts through `map` / `filter`: 2.7×; one loop now), a voiding list per line 1.35–2.2×. The project
+  report against 1.38.0 (both engines in one process, interleaved, medians of 5 — the whole chain: the fill, the line
+  rules, the reader): shadcn-ui 0.98×, mantine 1.05×, cal.com 1.03×, vben 1.09×, bootstrap 1.08×, starlight 1.11×,
+  bulma 1.05×, breeze 1.05×, taxonomy 1.25× (+44 ms on 178 — no sheet the reader observes: noise of the loaded machine),
+  sass-mq 0.80× — within the DECISIONS bar (≤ 1.25× at ≥ 700 views, ≤ +150 ms below). `@custom-media` CUT (CRIT_3 / CRIT_X cut 3): an alias list, not a set — of
+  47 sampled files 10 define one width (median 2), so a single `--md` would capture [320, 768] where 1.38 captured five;
+  PostCSS / Lightning only; its seven mutants the largest block. Tailwind 3's `screens` stays cut (41 of 104 sampled keys are
+  `container.screens`, a max width).
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
@@ -3095,3 +3185,16 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and this tree alike: the engine unchanged, in EN / PT / ES). ui-design-patterns.md and the verdict bullet above say so;
   17-docs runs a written line over the untouched matrix (filled, `ui-states` warns) and over the scaffold with its TODO
   (unfilled).
+- **1.39.0** (item 3 of the 1.39 round — chain B; BS-5 alone of the matrix's three) — `US_HEADER` (64): the anchor looked
+  for in a header's first 64 cells, `t.header.slice(0, US_HEADER)`, the cut folded into `truncated.views` (CRIT_3 must-fix
+  6: no fourth `usTruncated` argument, so the three languages and 1.38's bound fixture stay as they were). The design's
+  length pre-test did not fix the measured shape — 1,000,000 cells of 4–8 characters each pass "≤ the longest label" —,
+  and a `dsSlot` pass over the columns before the anchor costs as much as the word read. Measured: 200,000 cells, the anchor
+  last, 0.29× `sectionState` (1.38: 2.25–2.84×, the designer's header.js re-run by the critic). Lost: an anchor past cell
+  64 — no real header has one; said when it happens. BS-3 (a row keyed by its answering cells, so a matrix of `TBD` /
+  dashes / ticks reads as template and the gate refuses it) is CUT (CRIT_X cut 4: 1.39's only new refusal, at size s where
+  1.38 only noted, through `sectionLineKey`, which every track's and pack's tables share, and four approved-design
+  surfaces — spec_upgrade's attention, the roadmap's list, status' `filled`, the save hook): 1.38's prose stands. BS-4
+  (tables with the same views one matrix in parts, its detail prefixed "tables 1 + 3 ›") is CUT (CRIT_3: a narrowing that hides a real gap —
+  desktop / mobile matrices with the same views, one lacking `Offline`, would go silent): 1.38's prose — a row per state in
+  each table — stands. The `uiStates` stamp stays cut: nothing in 1.39 makes `ui-states` warn on a design 1.38 passed.

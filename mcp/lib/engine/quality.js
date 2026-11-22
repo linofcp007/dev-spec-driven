@@ -2133,12 +2133,13 @@ function designSystemDeprecatedCheck(design, lang, opts = {}) {
 // views are the columns strictly between the first (the state) and that cell — one whose header holds no letter or digit, or is
 // a slot or a generic word, is none —; the a11y column and every column after it are never judged (the critic and the reviewer
 // judge what they say). Only the section ui-sections reads (extractSection), its tables outside comments and fences (mdTables).
-// Bounded: US_TABLES tables, US_ROWS rows each, US_VIEWS view columns, every cell cut to US_CELL before any regex — a bound that
-// drops input says so (usTruncated).
+// Bounded: US_TABLES tables, US_ROWS rows each, US_VIEWS view columns, the anchor looked for in a header's first US_HEADER cells
+// (1.39), every cell cut to US_CELL before any regex — a bound that drops input says so (usTruncated).
 const UI_STATES_CHECK = "ui-states";
 const US_TABLES = 10;
 const US_ROWS = 60;
 const US_VIEWS = 12;
+const US_HEADER = 64; // (1.39, BS-5) a header's cells read for the anchor — past them, with none found, said as a view bound
 const US_CELL = 400;
 const US_SHOWN = 5; // states named per view (or per no-row item), the rest counted
 // a text's words as the matrix compares them: accents folded, lower case, letters and digits
@@ -2187,7 +2188,8 @@ function uiStateMatrix(design, ids) {
   const truncated = { tables: found.length > US_TABLES, rows: false, views: false };
   const tables = [];
   found.slice(0, US_TABLES).forEach((t, i) => {
-    const a = t.header.findIndex((h) => vocab.a11y.has(usWords(h).join(" ")));
+    const a = t.header.slice(0, US_HEADER).findIndex((h) => vocab.a11y.has(usWords(h).join(" ")));
+    if (a < 0 && t.header.length > US_HEADER) truncated.views = true; // (the anchor may sit past the cells read: said)
     let cols = [];
     for (let k = 1; k < a; k++) if (!dsSlot(t.header[k])) cols.push(k);
     if (!cols.length) return;

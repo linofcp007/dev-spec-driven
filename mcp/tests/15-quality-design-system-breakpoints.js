@@ -103,6 +103,43 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // BP-ui-bracket (1.39, BS-6 — U3, U4, B2, B3, B4; U2 and B1 are BP-ui-slot's stubs and aside): a CLOSED `[…]` at the slot's
+    // own place — opening the value, after the label's closing emphasis marks and blanks — whose text is no template's is the
+    // team's filled value, read; the stub's own slot (the template's text) is not, an unclosed one is not, nor a bracket anywhere
+    // else (the rest of the value after the filled one is read as ever, its own brackets left out); the template test asks the
+    // bracket's text, never the whole value
+    const filled = report("- Breakpoints: [576 / 768 / 992 / 1200 / 1400 px] · text expansion +30–40 % · RTL: [yes / no]\n");
+    const unclosed = report("- Breakpoints: [576 / 768 px · text\n"), bold = report("- **Breakpoints:** [576 / 768 px]\n");
+    const rest = report("- Breakpoints: [576 / 768 px] 1200 px [1600 in print]\n"), stubThen = report("- Breakpoints: [360 / 768 / 1280 px] 600 px\n");
+    const later = report("- Breakpoints: 600 px [640 / 960 px]\n");
+    all("1.39 breakpoints (ui.md — BS-6): a closed `[…]` opening the value whose text is no template's is read (`from: \"ui.md\"`), with the rest of the value; the stub's own slot, an unclosed `[`, a bracket elsewhere are not (got " +
+      js({ filled: [filled.from, filled.widths], unclosed: unclosed.widths, bold: bold.widths, rest: rest.widths, stubThen: stubThen.widths, later: later.widths }) + ")", {
+      filled: () => filled.from === "ui.md" && widths(filled) === js([320, 576, 768, 992, 1200, 1400]) && filled.at === UI + ":1" && filled.unreadTotal === 0,
+      unclosed: () => unclosed.from === "default" && js(unclosed.widths) === js(DEFAULT),
+      bold: () => bold.from === "ui.md" && widths(bold) === js([320, 576, 768]),
+      rest: () => widths(rest) === js([320, 576, 768, 1200]),
+      stubThen: () => widths(stubThen) === js([320, 600]),
+      later: () => widths(later) === js([320, 600]),
+    });
+  }
+
+  { // BP-ui-nbsp (1.39, R2-BS-3 — N1a, N1b, N2): a no-break space after the `·` (U+00A0, or U+202F, the narrow one French
+    // typography puts there) continues the list like a blank — the two a thousands group already takes; a word after it still ends
+    // the value, and so does a line break's absence of any (the class holds blanks, never `\s`'s line ends or any character)
+    const nb = String.fromCharCode(0xa0), nn = String.fromCharCode(0x202f);
+    const a0 = report("- Breakpoints: 360 ·" + nb + "768 ·" + nb + "1280 px\n"), af = report("- Breakpoints: 360 ·" + nn + "768 ·" + nn + "1280 px\n");
+    const mixed = report("- Breakpoints: 360 ·" + nb + nn + " 768 px ·" + nb + "text 1280 px\n"), word = report("- Breakpoints: 480 px ·" + nb + "max width 1200 px\n");
+    const other = report("- Breakpoints: 480 px ·" + String.fromCharCode(0x2009) + "960 px\n"); // (a thin space is no blank of the class)
+    all("1.39 breakpoints (ui.md — R2-BS-3): a no-break space (U+00A0 or U+202F) after a `·` continues the list as a blank does; a word after it still ends the value; another space character (U+2009) is no blank of the class (got " +
+      js({ a0: a0.widths, af: af.widths, mixed: mixed.widths, word: word.widths, other: other.widths }) + ")", {
+      nbsp: () => widths(a0) === js([320, 360, 768, 1280]) && a0.from === "ui.md",
+      narrow: () => widths(af) === js([320, 360, 768, 1280]),
+      mixed: () => widths(mixed) === js([320, 360, 768]),
+      word: () => widths(word) === js([320, 480]),
+      other: () => widths(other) === js([320, 480]),
+    });
+  }
+
   { // BP-ui-bound (U10): ui.md's value is read up to 200 characters, said; a number the bound cuts is no number
     // (the value is what follows the colon, its blank too: 1600 starts at its 208th character; 12800 straddles the bound, 1280
     // before it; 1280 ends right at it, a blank after it)
@@ -201,17 +238,156 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
-  { // BP-partial-cap (R2b — 1.38.0 review 1 gave the default set's widths way first; review 2, R2-BS-1, restored this cap: that
-    // order kept 390 — the floor's own layout under any Tailwind theme — over 768 / 1024 / 1440): under partial, BP-cap's rule over
-    // the union, whatever its source — the narrowest five and the widest; a declared width may be the one left out, the limit
-    // counts them and names the first (fix 1's order and a widest-first fill each fail here — 1.39 backlog)
+  { // BP-fill (1.39, BS-2 — F1–F9, L1, L2; it replaces 1.38's BP-partial-cap, R2-BS-1's restored union cap): under partial the
+    // theme's own widths first (past six the narrowest five and the widest, the rest said), then the default set where room is
+    // left, in the order 768 · 1024 · 1440 · 390; `breakpoint-widths` counts and names only the theme's own widths left out — a
+    // default one the fill had no room for is never said. The union cap (1.38), review 1's ascending fill, a widest-first fill,
+    // 390 never filled, the fill before the cap, the fill when not partial, past six or twice: each fails here
     const add = (...ws) => "@theme inline {\n" + ws.map((w, i) => "  --breakpoint-w" + i + ": " + w + "px;\n").join("") + "}\n";
     const two = report(null, add(1600, 2000)), four = report(null, add(1600, 1800, 2000, 2400)), seven = report(null, add(400, 500, 600, 700, 800, 900, 1000));
-    all("1.38.0 review 2 breakpoints (@theme, partial): past six widths the narrowest five and the widest of the theme's and the default set's together, a declared width left out as a default one is; `breakpoint-widths` counts all left out, `first` the narrowest (got " +
-      js({ two, four: [four.widths, four.limits], seven: [seven.widths, seven.limits] }) + ")", {
-      two: () => widths(two) === js([320, 390, 768, 1024, 1440, 2000]) && two.partial === true && two.from === "code" && js(two.limits) === js([{ code: "breakpoint-widths", read: 6, count: 1, first: 1600 }]),
-      four: () => widths(four) === js([320, 390, 768, 1024, 1440, 2400]) && js(four.limits) === js([{ code: "breakpoint-widths", read: 6, count: 3, first: 1600 }]),
-      seven: () => widths(seven) === js([320, 390, 400, 500, 600, 1440]) && seven.partial === true && js(seven.limits) === js([{ code: "breakpoint-widths", read: 6, count: 6, first: 700 }]),
+    const asc = report(null, add(1600, 1800, 2000)), widest = report(null, add(1600, 1920, 2560)), one = report(null, add(1920)), twice = report(null, add(768, 1600));
+    const five = report(null, add(640, 768, 1024, 1280, 1536)); // Tailwind's own five restated, no reset
+    const reset = report(null, "@theme {\n  --breakpoint-*: initial;\n  --breakpoint-md: 50rem;\n}\n");
+    all("1.39 breakpoints (@theme, partial — BS-2): the theme's own widths first, then the default set where room is left (768 · 1024 · 1440 · 390), six at most, ascending; past six the theme's own narrowest five and widest; `breakpoint-widths` counts and names only the theme's own widths left out; a reset theme gets no default width (got " +
+      js({ two: [two.widths, two.limits], four: [four.widths, four.limits], seven: [seven.widths, seven.limits], asc: asc.widths, widest: widest.widths, one: one.widths, twice: twice.widths, five: [five.widths, five.limits], reset: [reset.widths, reset.partial] }) + ")", {
+      two: () => widths(two) === js([320, 768, 1024, 1440, 1600, 2000]) && two.partial === true && two.from === "code" && js(two.limits) === js([]),
+      four: () => widths(four) === js([320, 768, 1600, 1800, 2000, 2400]) && js(four.limits) === js([]),
+      seven: () => widths(seven) === js([320, 400, 500, 600, 700, 1000]) && seven.partial === true && js(seven.limits) === js([{ code: "breakpoint-widths", read: 6, count: 2, first: 800 }]),
+      ascending: () => widths(asc) === js([320, 768, 1024, 1600, 1800, 2000]) && js(asc.limits) === js([]),
+      widestFirst: () => widths(widest) === js([320, 768, 1024, 1600, 1920, 2560]),
+      phoneLast: () => widths(one) === js([320, 390, 768, 1024, 1440, 1920]) && js(one.limits) === js([]),
+      once: () => widths(twice) === js([320, 390, 768, 1024, 1440, 1600]),
+      declaredFirst: () => widths(five) === js([320, 640, 768, 1024, 1280, 1536]) && js(five.limits) === js([]),
+      notPartial: () => widths(reset) === js([320, 800]) && reset.partial === false && js(reset.limits) === js([]),
+    });
+  }
+
+  // --- 1.39: a Sass map named …breakpoints (the walk's `open` event, the void rule, precedence — CRIT_3 must-fixes 1–3) -------------
+  // several sheets walked in order (the scan's: token files, then the sheet candidates) → the report
+  const sheets = (files) => {
+    const d = path.join(tmp, "bp-" + ++n);
+    fs.mkdirSync(d, { recursive: true });
+    const w = T.breakpointWatch();
+    for (const [rel, css] of files) T.styleTokens(css, rel, w.on(rel, css));
+    return T.breakpointsReport(d, w.found);
+  };
+  const BS5 = lines("$grid-breakpoints: (", "  xs: 0,", "  sm: 576px,", "  md: 768px,", "  lg: 992px,", "  xl: 1200px,", "  xxl: 1400px", ") !default;");
+  const names = (r) => js(r.unread.map((u) => [u.name, u.value, u.at]));
+
+  { // BP-sass-shapes (S1, S2, S2b, S3, S4, S7, S8, S10, E1, E2, A2): Bootstrap 6's `_config.scss` map as written (a comment line
+    // inside, `!default`) → its widths, at its `$` line; the name's LAST word is `breakpoints` — `$breakpoints`, `$mq-breakpoints`,
+    // never `$spacers` (a 0-led map of lengths too) or `$grid-breakpoints-custom`; a block's own map is not read (one-line or over
+    // lines); an entry that is no length unread as `$name.key` (keys quoted or not), a nested map (Bulma) nothing, a list nothing;
+    // a map never `partial`, so no default width fills it
+    const bs6 = report(null, lines("// Breakpoints", "//", "// Define the minimum dimensions at which your layout will change.", "", "// scss-docs-start breakpoints",
+      "$breakpoints: (", "  xs: 0,", "  // the phones", "  sm: 576px,", "  md: 768px,", "  lg: 1024px,", "  xl: 1280px,", "  2xl: 1536px", ") !default;", "// scss-docs-end breakpoints"), "scss/_config.scss");
+    const named = report(null, lines("$spacers: (0: 0, 1: .25rem, 5: 400px);", "$grid-breakpoints-custom: (sm: 700px);", "$mq-breakpoints: (tablet: 740px, desktop: 980px);"), "src/main.scss");
+    const local = report(null, lines(".x { $grid-breakpoints: (sm: 600px); }", ".y {", "  $grid-breakpoints: (", "    sm: 650px", "  );", "}"), "src/main.scss");
+    const entries = report(null, lines("$breakpoints: (xs: 0, \"sm\": 600px, md: $tablet, 'lg': 750, xl: 5000px, xxl: 80em);"), "src/main.scss");
+    const bulma = report(null, lines("$breakpoints: (", "  \"mobile\": (", "    \"until\": $tablet,", "  ),", "  \"tablet\": (", "    \"from\": $tablet,", "  ),", ") !default;"), "sass/utilities/_variables.scss");
+    const list = report(null, lines("$show-breakpoints: (mobile, tablet, desktop);", "$x-breakpoints: \"a\" \"b\";", "$y-breakpoints: ();"), "src/main.scss");
+    const quoted = report(null, lines("$q-breakpoints: (sm: 600px, note: \"a, b)\", md: 900px);"), "src/main.scss"); // (a quoted `,` / `)` cuts nothing)
+    all("1.39 breakpoints (a Sass map): a top-level `$…breakpoints` literal map's 0 / px / rem / em entries are min edges — Bootstrap 6's over lines (a comment inside), at its `$` line; `$spacers` / `$grid-breakpoints-custom` / a block's own map are not read; a non-length entry is unread `$name.key`; a nested map and a list give nothing; never partial (got " +
+      js({ bs6, named: named.widths, local: local.widths, entries, bulma: [bulma.widths, bulma.unreadTotal], list: [list.widths, list.unreadTotal] }) + ")", {
+      bs6: () => widths(bs6) === js([320, 576, 768, 1024, 1280, 1536]) && bs6.from === "code" && bs6.at === "scss/_config.scss:6" && bs6.partial === false && bs6.unreadTotal === 0 && js(bs6.limits) === js([]),
+      named: () => widths(named) === js([320, 740, 980]) && named.at === "src/main.scss:3",
+      local: () => local.from === "default" && local.unreadTotal === 0,
+      entries: () => widths(entries) === js([320, 600, 1280]) &&
+        names(entries) === js([["$breakpoints.md", "$tablet", "src/main.scss:1"], ["$breakpoints.lg", "750", "src/main.scss:1"], ["$breakpoints.xl", "5000px", "src/main.scss:1"]]),
+      bulma: () => bulma.from === "default" && bulma.unreadTotal === 0,
+      list: () => list.from === "default" && list.unreadTotal === 0,
+      quoted: () => widths(quoted) === js([320, 600, 900]) && names(quoted) === js([["$q-breakpoints.note", "\"a, b)\"", "src/main.scss:1"]]),
+    });
+  }
+
+  { // BP-sass-with (S5, V1, V3, E3): `@use … with (…)` — sass-mq's own example override (examples/custom/custom.scss, MIT) over
+    // lines and on one line; a map that is the last override (its rest the `with`'s closing statement, read to the map's own `)`)
+    // or whole on its line (`(…),` — read at once); a map another override follows over lines (Dashticz's loader.scss, MIT) is
+    // never delivered whole by the walk: one unread, and the next map's widths (`$container-max-widths`) never read, in either order
+    const mq = report(null, lines("// Simple way to use Sass MQ with custom params", "", "@use '../../mq' as responsive with (", "  $breakpoints: (", "    vga: 640px,", "    svga: 800px,",
+      "    xga: 1024px,", "    uxga: 1600px,", "  )", ");", "", "body {", "  font-size: 100%;", "}"), "examples/custom/custom.scss");
+    const mqOne = report(null, lines("@use '../../mq' as responsive with ($breakpoints: (vga: 640px, svga: 800px, xga: 1024px, uxga: 1600px));"), "src/custom.scss");
+    const last = report(null, lines("@use 'bootstrap' with (", "  $primary: #f00,", "  $grid-breakpoints: (", "    xs: 0,", "    sm: 600px", "  )", ");"), "src/custom.scss");
+    const now = report(null, lines("@use 'bootstrap' with (", "  $grid-breakpoints: (xs: 0, sm: 600px),", "  $primary: red", ");"), "src/custom.scss");
+    const dash = (second) => lines("// Retain the Bootstrap 3 breakpoints", "@use 'bootstrap/scss/bootstrap' with (", "  $grid-breakpoints: (", "    xs: 0,", "    sm: 768px,", "    md: 992px,",
+      "    lg: 1200px,", "  ),", "  $container-max-widths: (", "    sm: 540px,", "    md: 720px,", "  )" + (second ? "," : ""), ...(second ? ["  $grid-gutter-width: 30px"] : []), ");", "@use 'bootstrap3-compat';");
+    const d1 = report(null, dash(true), "src/loader.scss"), d2 = report(null, dash(false), "src/loader.scss");
+    all("1.39 breakpoints (a Sass map, `@use … with`): sass-mq's override over lines and on one line → [320, 640, 800, 1024, 1600]; the map as the last override or whole on its line read; Dashticz's map followed by another override → one unread `$grid-breakpoints` at its line, the default set — never 540 / 720 (got " +
+      js({ mq: [mq.widths, mq.at], mqOne: mqOne.widths, last: last.widths, now: now.widths, d1, d2: d2.widths }) + ")", {
+      mq: () => widths(mq) === js([320, 640, 800, 1024, 1600]) && mq.at === "examples/custom/custom.scss:4" && mq.unreadTotal === 0,
+      mqOne: () => widths(mqOne) === js([320, 640, 800, 1024, 1600]) && mqOne.at === "src/custom.scss:1",
+      last: () => widths(last) === js([320, 600]) && last.unreadTotal === 0 && last.at === "src/custom.scss:3",
+      now: () => widths(now) === js([320, 600]) && now.unreadTotal === 0,
+      dashticz: () => [d1, d2].every((r) => r.from === "default" && names(r) === js([["$grid-breakpoints", "( …", "src/loader.scss:3"]])),
+    });
+  }
+
+  { // BP-sass-void (V2, V4, V5, S9): a pending open is completed only by the very NEXT event, a top-level statement — a block event
+    // first, a nested open or statement first, the file's end: one unread, nothing read; a 3,000-character map over lines (its rest
+    // cut by the walk at DS_PRELUDE) one unread, no width; the same map on one line loses its name to the cut — nothing (said)
+    const block = report(null, lines("$grid-breakpoints: (", ".a {}", "sm: 600px);"), "src/main.scss");
+    const nested = report(null, lines("$grid-breakpoints: (", ".x {", "  $y: (", "    a: 1px", "  );", "}", "sm: 600px);"), "src/main.scss");
+    const eof = report(null, "$grid-breakpoints: (\n  sm: 600px\n)", "src/main.scss");
+    const stray = report(null, "$grid-breakpoints: (xs: 0, sm: 600px }\n", "src/main.scss"); // (a stray `}` ends the statement, its map unclosed)
+    const ws = Array.from({ length: 300 }, (_, i) => "w" + i + ": " + (400 + i) + "px");
+    const longMulti = report(null, lines("$grid-breakpoints: (", "  xs: 0,", ...ws.map((w) => "  " + w + ","), ") !default;"), "src/main.scss");
+    const longOne = report(null, lines("$grid-breakpoints: (xs: 0, " + ws.join(", ") + ");"), "src/main.scss");
+    // its FIRST line past DS_PRELUDE (the open's value is cut), then its end; a statement whose cut leaves exactly a map's
+    // assignment, or a `@use … with (`, at its head — the walk kept its last DS_PRELUDE characters: never read as whole
+    const longHead = report(null, lines("$grid-breakpoints: (xs: 0, " + ws.join(", ") + ",", ");"), "src/main.scss");
+    // (the statement's last DS_PRELUDE characters are `head`, entries of 1px, then `close`)
+    const at2000 = (head, close) => { let b = head; for (let i = 0; b.length < T.DS_PRELUDE; i++) b += ", p" + i + ": 1px"; return "$filler: " + "x".repeat(500) + " " + b.slice(0, T.DS_PRELUDE - close.length) + close; };
+    const cutAssign = report(null, lines(at2000("$grid-breakpoints: (sm: 600px", ")") + ";"), "src/main.scss");
+    const cutWith = report(null, lines(at2000("@use 'b' with ($grid-breakpoints: (sm: 600px", "))") + ";"), "src/main.scss");
+    const tails = [at2000("$grid-breakpoints: (sm: 600px", ")"), at2000("@use 'b' with ($grid-breakpoints: (sm: 600px", "))")].map((s) => s.slice(-T.DS_PRELUDE).slice(0, 18));
+    all("1.39 breakpoints (a Sass map — the void rule): an open the next event does not complete (a block, a nested declaration, the file's end) → one unread at its line; a map past DS_PRELUDE over lines, or its first line past it → one unread; on one line → nothing (the walk's cut took its name); a cut statement that happens to start with an assignment or a `with` is never read (got " +
+      js({ block: names(block), nested: names(nested), eof: names(eof), longMulti: [longMulti.from, names(longMulti)], longOne: [longOne.from, longOne.unreadTotal], longHead: [longHead.from, longHead.unreadTotal],
+        cutAssign: [cutAssign.from, cutAssign.unreadTotal], cutWith: [cutWith.from, cutWith.unreadTotal] }) + ")", {
+      longHead: () => longHead.from === "default" && longHead.unreadTotal === 1 && longHead.unread[0].at === "src/main.scss:1",
+      cutAssign: () => cutAssign.from === "default" && cutAssign.unreadTotal === 1 && cutAssign.unread[0].name === "$grid-breakpoints",
+      cutWith: () => cutWith.from === "default" && cutWith.unreadTotal === 0 && js(tails) === js(["$grid-breakpoints:", "@use 'b' with ($gr"]),
+      block: () => block.from === "default" && names(block) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
+      nested: () => nested.from === "default" && names(nested) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
+      eof: () => eof.from === "default" && names(eof) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
+      unclosed: () => stray.from === "default" && names(stray) === js([["$grid-breakpoints", "(xs: 0, sm: 600px", "src/main.scss:1"]]),
+      longMulti: () => longMulti.from === "default" && names(longMulti) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
+      longOne: () => longOne.from === "default" && longOne.unreadTotal === 0,
+    });
+  }
+
+  { // BP-sass-precedence (S6, P1, P2, P3, P4, P5, A1, A3): per name, a plain or `with` assignment sets aside the `!default` ones —
+    // read or not; otherwise all count; names unite; `at` the first KEPT declaration with a length, in the walk's order; a variable
+    // or a function value (map-merge) is unread, never nothing
+    const vars = ["scss/_variables.scss", BS5];
+    const plain = sheets([vars, ["scss/custom.scss", lines("$enable-shadows: true;", "$grid-breakpoints: (xs: 0, md: 900px);")]]);
+    const withIt = sheets([vars, ["scss/custom.scss", lines("@use 'bootstrap' with ($grid-breakpoints: (xs: 0, sm: 600px, md: 900px));")]]);
+    const merge = sheets([vars, ["scss/custom.scss", lines("$grid-breakpoints: map-merge($grid-breakpoints, (xxxl: 1920px));")]]);
+    const variable = sheets([["src/styles.scss", lines("$breakpoints: $grid-breakpoints;")]]);
+    const unite = sheets([vars, ["scss/custom.scss", lines("$mq-breakpoints: (tablet: 740px);")]]);
+    const defaults = sheets([["scss/_variables.scss", lines("$grid-breakpoints: (xs: 0, sm: 600px) !default;")], ["src/theme.scss", lines("$grid-breakpoints: (xs: 0, md: 900px) !default;")]]);
+    const mixed = sheets([["src/_variables.scss", lines("$grid-breakpoints: (xs: 0, sm: 600px);")], ["src/app.css", lines("@theme inline {", "  --breakpoint-3xl: 1600px;", "}")]]);
+    all("1.39 breakpoints (a Sass map — precedence): a plain map (or a `with` override) sets aside the `!default` one of its name — read or not (a map-merge: unread, the default set); `at` the first kept; names unite; two `!default` ones both count; a variable is unread (got " +
+      js({ plain: [plain.widths, plain.at], withIt: withIt.widths, merge: [merge.from, names(merge)], variable: names(variable), unite: unite.widths, defaults: [defaults.widths, defaults.at], mixed: [mixed.widths, mixed.at, mixed.partial] }) + ")", {
+      plain: () => widths(plain) === js([320, 900]) && plain.at === "scss/custom.scss:2" && plain.partial === false,
+      withIt: () => widths(withIt) === js([320, 600, 900]) && withIt.at === "scss/custom.scss:1",
+      merge: () => merge.from === "default" && names(merge) === js([["$grid-breakpoints", "map-merge($grid-breakpoints, (xxxl: 1920px))", "scss/custom.scss:1"]]),
+      variable: () => variable.from === "default" && names(variable) === js([["$breakpoints", "$grid-breakpoints", "src/styles.scss:1"]]),
+      unite: () => widths(unite) === js([320, 576, 740, 768, 992, 1400]) && js(unite.limits) === js([{ code: "breakpoint-widths", read: 6, count: 1, first: 1200 }]) && unite.at === "scss/_variables.scss:1",
+      defaults: () => widths(defaults) === js([320, 600, 900]) && defaults.at === "scss/_variables.scss:1",
+      walkOrder: () => mixed.at === "src/_variables.scss:1" && mixed.partial === true && widths(mixed) === js([320, 600, 768, 1024, 1440, 1600]),
+    });
+  }
+
+  { // BP-sass-files (S11, S12, S13): the map reader reads .scss alone — never a .css (no Sass there, an `@theme` beside it or not)
+    // nor an indented .sass; a .scss with no `breakpoints` in it gets no observer (the pre-test: no event built)
+    const css = report(null, lines("@theme { --x: 1px; }", "$grid-breakpoints: (sm: 600px);"), "src/app.css");
+    const sass = report(null, lines("$grid-breakpoints: (sm: 600px)", "$a: 1;"), "src/app.sass");
+    const w = T.breakpointWatch(), text = lines("$grid: (sm: 600px);", ".a { color: red; }");
+    all("1.39 breakpoints (a Sass map — which files): a .css or a .sass holding a `$grid-breakpoints` map gives nothing; a .scss without the word `breakpoints` gets no observer (got " +
+      js({ css: css.from, sass: sass.from, none: w.on("src/main.scss", text) }) + ")", {
+      css: () => css.from === "default" && css.unreadTotal === 0,
+      sass: () => sass.from === "default" && sass.unreadTotal === 0,
+      pretest: () => w.on("src/main.scss", text) === null && w.found.files.length === 0,
     });
   }
 
@@ -243,10 +419,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const ui = fs.readFileSync(path.join(p, UI), "utf8");
     fs.writeFileSync(path.join(p, UI), ui.replace(/^- Breakpoints: .*$/m, "- Breakpoints: 600 / 1200 px " + "x".repeat(220)));
     const cutRep = S.designSystemReport(p);
-    all("1.38 breakpoints (shadcn v4's globals.css, through the token walk): `@theme inline` adds 3xl / 4xl to Tailwind's own → partial: the default set joins, 6 widths (1600 left out, said), at app/globals.css:45; the project and the feature carry the same `breakpoints`, last; its limits never reach the report's `limits` / `truncated` / `inSync`; MCP = engine (got " +
+    all("1.38 breakpoints (shadcn v4's globals.css, through the token walk): `@theme inline` adds 3xl / 4xl to Tailwind's own → partial: 1600 and 2000, then the default set where room is left (1.39, BS-2: 768 · 1024 · 1440 — no width of the theme's left out, nothing said), at app/globals.css:45; the project and the feature carry the same `breakpoints`, last; its limits never reach the report's `limits` / `truncated` / `inSync`; MCP = engine (got " +
       js({ bp: proj.breakpoints, inSync: proj.inSync, limits: proj.limits, cut: [cutRep.breakpoints, cutRep.inSync, cutRep.limits] }) + ")", {
-      real: () => js(proj.breakpoints) === js({ widths: [320, 390, 768, 1024, 1440, 2000], from: "code", partial: true, at: "app/globals.css:45", unread: [], unreadTotal: 0,
-        limits: [{ code: "breakpoint-widths", read: 6, count: 1, first: 1600 }] }),
+      real: () => js(proj.breakpoints) === js({ widths: [320, 768, 1024, 1440, 1600, 2000], from: "code", partial: true, at: "app/globals.css:45", unread: [], unreadTotal: 0,
+        limits: [] }),
       inSync: () => proj.inSync === true && js(proj.limits) === js([]) && proj.truncated === false,
       shapes: () => js(feat.breakpoints) === js(proj.breakpoints) && Object.keys(proj).pop() === "breakpoints" && Object.keys(feat).pop() === "breakpoints",
       mcp: () => js(viaMcp.breakpoints) === js(proj.breakpoints) && js(featMcp.breakpoints) === js(feat.breakpoints),
@@ -265,6 +441,24 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     all("1.38 breakpoints (the walks): a token file's @theme and a global sheet's that is no token source are both read, the token file first (got " + js({ bp: r.breakpoints, sources: r.found.sources }) + ")", {
       both: () => js(r.breakpoints.widths) === js([320, 800, 1600]) && r.breakpoints.from === "code" && r.breakpoints.partial === false,
       order: () => r.breakpoints.at === "src/styles/theme.css:3" && js(r.found.sources) === js(["src/styles/theme.css"]),
+    });
+  }
+
+  { // BP-sass-scan (1.39): through the scan's walks — a Bootstrap 5 app whose vendored `scss/_variables.scss` (a token file by name)
+    // keeps the `!default` map and whose `scss/custom.scss` (a sheet candidate, no custom property in it) overrides it before
+    // importing Bootstrap: the override decides, at its line; the MCP result the engine's; a sheet the scan never opens by name
+    // (`scss/_config.scss`) is not read
+    const p = path.join(tmp, "proj-bp-sass");
+    fs.mkdirSync(p, { recursive: true });
+    write(p, "scss/_variables.scss", lines("$white: #fff !default;", "$primary: #0d6efd !default;", "", BS5));
+    write(p, "scss/custom.scss", lines("// the app's own breakpoints", "$grid-breakpoints: (", "  xs: 0,", "  sm: 600px,", "  md: 900px,", "  lg: 1200px", ");", "", "@import \"bootstrap/scss/bootstrap\";"));
+    write(p, "scss/_config.scss", lines("$breakpoints: (xs: 0, tv: 3000px);"));
+    const r = S.designSystemReport(p);
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_scan", arguments: { projectDir: p, designSystem: true } }));
+    all("1.39 breakpoints (a Sass map, through the scan): the vendored `!default` map in a token file and the app's plain override in custom.scss — the override's widths, at its line; `_config.scss` unread by the walk; MCP = engine (got " +
+      js(r.breakpoints) + ")", {
+      scan: () => js(r.breakpoints) === js({ widths: [320, 600, 900, 1200], from: "code", partial: false, at: "scss/custom.scss:2", unread: [], unreadTotal: 0, limits: [] }),
+      mcp: () => js(viaMcp.breakpoints) === js(r.breakpoints),
     });
   }
 
@@ -355,6 +549,30 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       theme: () => within(s, 0) && decls.size === 1,
       line: () => within(s, 2) && js(rep(dLine)().limits.map((l) => l.code)) === js(["breakpoint-line"]),
       many: () => within(s, 4) && rep(dMany)().at === UI + ":1" && rep(dList)().at === UI + ":50001",
+    });
+
+    // K3c (1.39 — the Sass map reader, cost guards): 100 .scss sheets, each Bootstrap's map and 300 rules reading it
+    // (`map-get($grid-breakpoints, md)`), walked with the observer and reported ≤ 1.5× (+ 50 ms) their `breakpointz` twins (no
+    // observer: the pre-test); hostile 256K sheets — a `$x-breakpoints: (` per line (the first opens a parenthesis the walk never
+    // sees closed: one open, the rest map keys, one unread), a one-line map per line, `$a-breakpoints: 1px,` per line (each open
+    // voiding the last) — each ≤ 3× (+ 50 ms) its twin. Medians of 5 interleaved rounds (measured at rest: 0.96–1.25×; 1.0×,
+    // 1.7–2.3×, 1.1–1.5×)
+    const sassSheet = BS5 + Array.from({ length: 300 }, (_, i) => ".c" + i + " { width: map-get($grid-breakpoints, md); color: red; }").join("\n") + "\n";
+    const twin = (t) => t.split("breakpoints").join("breakpointz");
+    const fill = (unit) => unit.repeat(Math.ceil(256 * 1024 / unit.length));
+    const dEmpty = path.join(tmp, "bp-k3c");
+    fs.mkdirSync(dEmpty, { recursive: true });
+    const scss = (texts) => () => { const w = T.breakpointWatch(); for (const t of texts) T.styleTokens(t, "src/custom.scss", w.on("src/custom.scss", t)); return T.breakpointsReport(dEmpty, w.found); };
+    const real = Array(100).fill(sassSheet), hostile = [fill("$x-breakpoints: (\n"), fill("$x-breakpoints: (a: 1px, b: 2px);\n"), fill("$a-breakpoints: 1px,\n")];
+    const runs = [scss(real), scss(real.map(twin)), ...hostile.flatMap((h) => [scss([h]), scss([twin(h)])])];
+    runs.forEach((f) => f()); // warm
+    const ok3 = (x) => x[0] <= 1.5 * x[1] + 50 && [2, 4, 6].every((i) => x[i] <= 3 * x[i + 1] + 50);
+    const k = remeasure(() => [...pair(runs[0], runs[1], 1), ...pair(runs[2], runs[3], 1), ...pair(runs[4], runs[5], 1), ...pair(runs[6], runs[7], 1)], ok3, 3);
+    const got = runs.filter((_, i) => i % 2 === 0).map((f) => f());
+    all("1.39 breakpoints (cost — the Sass map reader): 100 sheets with a map and 300 rules ≤ 1.5× (+ 50 ms) their twins the pre-test skips; 256K sheets of an open per line, a one-line map per line, a voiding list per line each ≤ 3× (+ 50 ms) its twin — medians of 5 interleaved rounds (got [real, twin, open, twin, one-line, twin, voids, twin] ms " +
+      js(k.map((x) => Math.round(x))) + ")", {
+      real: () => k[0] <= 1.5 * k[1] + 50 && js(got[0].widths) === js([320, 576, 768, 992, 1200, 1400]),
+      hostile: () => [2, 4, 6].every((i) => k[i] <= 3 * k[i + 1] + 50) && got[1].unreadTotal === 1 && got[2].unreadTotal === 0 && got[3].unreadTotal > 10000,
     });
   }
 };

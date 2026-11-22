@@ -185,6 +185,43 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     });
   }
 
+  // --- 1.39 (BS-5 — H1–H4): the anchor is looked for in a header's first 64 cells; past them, none found, the table is none and
+  // the detail says a bound cut (the view bound's own words: CRIT_3 must-fix 6, no new argument); found within them, the cells
+  // after it cost nothing and say nothing
+  {
+    const cut = () => "; " + Q().usTruncated(10, 60, 12);
+    const named = Array.from({ length: 12 }, (_, i) => "View " + (i + 1));
+    const blanks = (n) => Array.from({ length: n }, () => "");
+    const cell = (l, v) => (v ? said(l, v) : "");
+    const at63 = check(states(matrix([...named, ...blanks(50)], cell))); // State + 62 columns: the anchor is the 64th cell (index 63)
+    const at64 = check(states(matrix([...named, ...blanks(51)], cell))); // …the 65th (index 64)
+    const notes = check(states(matrix([...named, ...blanks(27)], cell, { after: Array.from({ length: 60 }, () => "Notes") }))); // anchor at 40, 101 cells
+    all("1.39 ui-states — the anchor is read in a header's first 64 cells: at its 64th it is a matrix (12 views, blank columns between), at its 65th none — usNone and the cut said; an anchor at 40 with 60 columns after it is read whole, nothing said (got " +
+      js([at63.detail, at64.detail, notes.detail]) + ")", {
+      within: () => at63.state === "ok" && at63.detail === Q().usOk(12, 16),
+      past: () => at64.state === "no-matrix" && at64.detail === Q().usNone + cut(),
+      after: () => notes.state === "ok" && notes.detail === Q().usOk(12, 16),
+    });
+    // H1 (cost): 200,000 header cells, the anchor last — the matrix reader against sectionState on the same design, medians of 5
+    // interleaved rounds (1.38: 2.1–2.75× — each cell's words read for the anchor; 1.39: what parsing the row costs)
+    const sec = (E.trackSectionTable("ui") || []).find((s) => s.name === "UI States");
+    const hostile = states(table(["State", ...Array.from({ length: 200000 }, (_, i) => "v" + i + "xxxx"), "Announced · focus"], [["Loading", "a", ""]]));
+    const ids = Object.keys(Q().uiStateLabels);
+    const time = (f) => { const t0 = process.hrtime.bigint(); const r = f(); return [Number(process.hrtime.bigint() - t0) / 1e6, r]; };
+    E.uiStateMatrix(hostile, ids); E.sectionState(hostile, [sec], E.trackMarker("ui"), { size: "m", lang: "en" }); // warm
+    const t = remeasure(() => {
+      const xa = [], xb = [];
+      let m = null;
+      for (let r = 0; r < 5; r++) { const [a, got] = time(() => E.uiStateMatrix(hostile, ids)); m = got; xa.push(a); xb.push(time(() => E.sectionState(hostile, [sec], E.trackMarker("ui"), { size: "m", lang: "en" }))[0]); }
+      const med = (xs) => xs.sort((x, y) => x - y)[2];
+      return { matrix: med(xa), section: med(xb), tables: m.tables.length, views: m.truncated.views };
+    }, (s) => s.matrix <= s.section + 50);
+    all("1.39 ui-states (cost — BS-5): a header of 200,000 cells, the anchor last, costs the matrix reader ≤ 1× sectionState (+ 50 ms) on the same design — medians of 5 interleaved rounds — and reads as none, said (got " + js(t) + ")", {
+      bound: () => t.matrix <= t.section + 50,
+      said: () => t.tables === 0 && t.views === true,
+    });
+  }
+
   // --- the status: a warn at m / l / no size, a note at s; the section's own state first ---------------------------------------------------
   {
     const gappy = states(matrix(["Orders list"], (l) => (l === "Stale" ? "" : said(l, "list"))));

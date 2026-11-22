@@ -1629,7 +1629,7 @@ const msg = {
       bpFrom: {
         "ui.md": (at) => `the Breakpoints line of ${at}`,
         code: (at) => `declared in ${at}`,
-        partial: (at) => `the review's default set, and what ${at} adds to its framework's own — to choose, list them all in .specs/steering/ui.md's Breakpoints line`,
+        partial: (at) => `what ${at} adds to its framework's own, then the review's default set where room is left — to choose, list them all in .specs/steering/ui.md's Breakpoints line`,
         default: () => "none declared — the review's default set: list yours in .specs/steering/ui.md's Breakpoints line",
       },
       bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint" : "breakpoints"} whose width was not read — ${list}: write the project's widths (320–3840 px) in .specs/steering/ui.md's Breakpoints line`,

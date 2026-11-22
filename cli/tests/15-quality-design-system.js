@@ -249,7 +249,8 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     };
     const uiAt = (d) => UI + ":" + (fs.readFileSync(path.join(d, UI), "utf8").split("\n").findIndex((l) => l.startsWith("- Breakpoints:")) + 1);
     const at = (out, line) => out.split("\n").indexOf(line);
-    // partial: an @theme that only adds (shadcn v4's 3xl / 4xl) — the default set joins, the 7th width said
+    // partial: an @theme that only adds (shadcn v4's 3xl / 4xl) — its widths, then the default set where room is left (1.39, BS-2:
+    // 768 · 1024 · 1440; 390 had no room, and a default width is never said)
     const partial = bp("partial", "en", "@import \"tailwindcss\";\n@theme inline {\n  --breakpoint-3xl: 1600px;\n  --breakpoint-4xl: 2000px;\n}\n");
     const pOut = runIn(["design-system", "--project", partial]);
     const pJson = jsonOf(runIn(["design-system", "--project", partial, "--json"]));
@@ -272,9 +273,9 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     const DEF = "320 · 390 · 768 · 1024 · 1440";
     all("1.38 design-system (CLI): the breakpoints line — the widths and where they come from (ui.md's line, the code's @theme, partial: the default set and what the code adds, none: the default set), the unread ones, its own bounds (the 7th width, ui.md's 200 characters); right after the project's counts, after a feature's UI checks; PT; --json is the engine's, both shapes (got " +
       js([pOut.out, cOut.out, lOut.out, nOut.out, fOut.out, ptOut.out]) + ")", {
-      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 390 · 768 · 1024 · 1440 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
-        pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1600)),
-      json: () => js(pJson.breakpoints) === js(SR.designSystemReport(partial).breakpoints) && pJson.breakpoints.partial === true,
+      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 768 · 1024 · 1440 · 1600 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
+        !pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1600)) && !pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 390)),
+      json: () => js(pJson.breakpoints) === js(SR.designSystemReport(partial).breakpoints) && pJson.breakpoints.partial === true && pJson.breakpoints.limits.length === 0,
       code: () => cOut.out.includes(T.bpHead("320 · 800", T.bpFrom.code("src/app.css:4"))) &&
         cOut.out.includes(T.bpUnread(6, "--breakpoint-x calc(40rem + 1px) (src/app.css:3), --breakpoint-u0 var(--w) (src/app.css:5), --breakpoint-u1 auto (src/app.css:6), --breakpoint-u2 40vw (src/app.css:7), --breakpoint-u3 250rem (src/app.css:8) … +1")),
       line: () => lOut.out.includes(T.bpHead("320 · 600 · 1200", T.bpFrom["ui.md"](uiAt(line)))) && lOut.out.includes(T.bpLimit["breakpoint-line"](200, undefined, undefined, uiAt(line))),
@@ -296,6 +297,20 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     all("1.38.0 review 1 design-system (CLI): the default widths as printed (`320 · 390 · 768 · 1024 · 1440`), pasted into ui.md's Breakpoints line, read back whole from the line — EN / PT / ES (got " + js(pasted) + ")", {
       printed: () => pasted.every((x) => x.printed === DEF),
       read: () => pasted.every((x) => x.ok),
+    });
+
+    // 1.39: a Bootstrap 5 app's Sass map (scss/custom.scss, a sheet candidate) — the code's widths and where they are declared, and
+    // a map another override follows (unread, listed) — EN / PT / ES; --json is the engine's
+    const sass = ["en", "pt", "es"].map((lang) => {
+      const d = bp("sass-" + lang, lang, null, null), X = MSG(lang).cliOutput;
+      write(d, "scss/custom.scss", "$grid-breakpoints: (\n  xs: 0,\n  sm: 600px,\n  md: 900px\n);\n@use 'x' with (\n  $breakpoints: (\n    a: 1px\n  ),\n  $primary: red\n);\n");
+      const out = runIn(["design-system", "--project", d]), json = jsonOf(runIn(["design-system", "--project", d, "--json"]));
+      return { lang, out: out.out.split("\n").filter((l) => /breakpoint/i.test(l)), ok: out.code === 0 && out.out.includes(X.bpHead("320 · 600 · 900", X.bpFrom.code("scss/custom.scss:1"))) &&
+        out.out.includes(X.bpUnread(1, "$breakpoints ( … (scss/custom.scss:7)")), json: js(json.breakpoints) === js(SR.designSystemReport(d).breakpoints) };
+    });
+    all("1.39 design-system (CLI): a Sass `$grid-breakpoints` map's widths, declared in its file:line, and a `with` override the walk did not deliver whole listed unread — EN / PT / ES; --json = the engine (got " + js(sass) + ")", {
+      line: () => sass.every((x) => x.ok),
+      json: () => sass.every((x) => x.json),
     });
   }
 
