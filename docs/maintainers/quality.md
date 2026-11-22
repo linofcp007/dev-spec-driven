@@ -1421,12 +1421,20 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   alone skipped there (behaviour-preserving); (3) Tailwind (`utilities` — `RE_TW_PICK` widened by `text-\[`): a BARE
   `text-[<v>]` (`RE_TW_TEXT`, anchored — a variant's token is none; `length:` hint, a `/<line-height>`, `!`; a value holding
   `(` — any arithmetic — is cut by the split) whose value is viewport-only is a CANDIDATE (the first of a line, pushed on the
-  caller's list) decided when the FILE ends, as (2) — review 1 of 1.38: decided by the line, a class list split over lines
-  (`cn("text-[8vw]", "md:text-7xl")`, a cva base with its responsive variant below, a wrapped JSX `className` / Vue `class`)
-  warned: none stands once a line of the file held a `text-` utility under a variant (`RE_TW_TEXT_VARIANT`, `:text-` /
-  `:!text-` anywhere on a non-CSS line — a colour's `dark:text-white` too, as the per-line test had it), nor in a `partial`
-  file; a sheet's `@apply` sizes are decided over its `@apply` statements (their variant drops the `@apply` sizes, never the
-  sheet's declarations), a markup file's class lines and its `<style>` block apart (as before). An element's own `style` is
+  caller's list) decided when the FILE ends, by (2)'s property — a font SIZE the file sets under a condition (review 1 of
+  1.38: decided by the line, a class list split over lines — `cn("text-[8vw]", "md:text-7xl")`, a cva base with its
+  responsive variant below, a wrapped JSX `className` / Vue `class` — warned): none stands once a non-CSS line of the file
+  held a SIZE under a variant (`RE_TW_TEXT_VARIANT`, after `:` / `:!`: a type-scale step — `md:text-6xl`, `sm:text-xs`,
+  `lg:text-base/7`, `md:text-6xl!` — or an arbitrary length — a digit or `.` first, a `length:` hint in `[…]` or Tailwind 4's
+  `(…)`, `clamp(` / `calc(` / `min(` / `max(`); never a colour — `dark:text-white`, `hover:text-[#111]`, an untyped
+  `[var(…)]`, which Tailwind reads as one, daisyUI's `text-base-content` —, an alignment (`md:text-center`) or a wrap; review 2
+  of 1.38: any variant `text-` did, a colour's too, so a hero beside a nav link's `hover:` colour was silent, ~70 % of
+  Breeze's and Jetstream's view files), nor in a `partial` file. The trade-off: a project's own size key under a variant
+  (`md:text-hero`) is no size here — the bare one warns, the team silences it (ui-code-scan.md says so). A sheet's `@apply`
+  sizes are decided over its `@apply` statements by the same const (their variant size drops the `@apply` sizes, never the
+  sheet's declarations), a markup file's class lines and its `<style>` block apart (as before). A conditional `@apply`
+  holding ANY `text-` utility still sets (2)'s `condSize` (`RE_TW_TEXT_ANY`, F0c's — a colour in a `@media` drops the sheet's
+  sizes: 1.39 backlog). An element's own `style` is
   decided on its tag, never deferred. Never: the `font` shorthand, a custom property
   (`--font-size-fluid-3`), a CSS-in-JS template line of a script. The walker keeps a statement's last 2,000 characters, so a
   longer declaration's property is not seen (a hostile shape only). `width-viewport` (`100vw` / `w-screen`) was cut to prose
@@ -1625,10 +1633,11 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   styles it could), then the shorter path; each file's first `DS_READ_CHARS` (one more asked for: `over`), `DS_UI_FILES`
   (5,000) files / `DS_UI_CHARS` (32 MB) characters at most. A STYLESHEET past the read (`over` and `RE_STYLE_EXT` — a
   compiled bundle) is fed with no line (review 1 of 1.38, UP-1: Bulma's 13 were most of its pass): counted in `read` and in
-  `view-size` (which names it — the CLI line says the project's checks skip such a sheet), never parsed — its rules, focus
-  styles and motion unseen: a removal elsewhere only its focus styles would have excused stands (none on the clones: Bulma's
-  and cal.com's other files hold focus styles; 1.39 backlog). A feature report and finish keep 1.37's read of its first
-  `DS_READ_CHARS` (a fixture). `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
+  `view-size` (which names the first over-long file by path, maybe not it — the CLI line says the project's checks skip such
+  a sheet), never parsed — its rules, focus styles and motion unseen: a removal elsewhere only its focus styles would have
+  excused stands, where a feature report may excuse it (its focus search reads a sheet whole up to `DS_FOCUS_CHARS`; none
+  on the clones: Bulma's and cal.com's other files hold focus styles; ui-code-scan.md says it — review 2 of 1.38, R2-UP-2;
+  1.39 backlog). A feature report and finish keep 1.37's read of its first `DS_READ_CHARS` (a fixture). `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
   and keeps counts — its memory bounded by the rules, never the files: per rule its count (past a file's `DS_CHECK_PER_FILE`
   too — CRIT_1 must-fix 7), the FILES holding one (never the findings), its first place by file then line (a place past a
   file's cap has no line and is named only when no listed place exists — the feature report's unjudged rule); an
@@ -2908,13 +2917,43 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   Bootstrap (254) ×2.1–2.2 +524–597 [×1.6–3.3]; Bulma (544) ×4.2–5.6 +485–553 [×7.7–8.2]; vben (721) ×1.4–1.6 +426–536
   [×1.6–1.8]; cal.com (1,108) ×1.25–1.33 +547–787 [×1.2–1.4]; shadcn-svelte (2,174) ×1.65–1.67 +682–1,106 [×1.6–1.8];
   shadcn-ui (3,562) ×1.9–2.0 +1,341–1,471 [×1.9–2.2]. G1′ (paired, median of 7): 0.79–1.53 (Bootstrap's 1.53 one
-  series, 1.27 the other); 15 reps on the eight small and mid trees: medians 0.86–1.16, upper quartiles ≤ 1.23. The
-  read-ahead's 1.35.4 gain kept: shadcn-ui's report 1.71× slower with the pool off, 1.04× the parent's rule. The pass
+  series, 1.27 the other) but sakai-vue's 2.21 in the second (the parent 2.27 at that moment; 1.31 the first — review 2
+  of 1.38's R2-DOC6: the range had dropped it); 15 reps on the eight small and mid trees: medians 0.86–1.16 (sakai-vue
+  1.09), upper quartiles ≤ 1.23. The read-ahead's 1.35.4 gain kept: shadcn-ui's report 1.71× slower with the pool off, 1.04× the parent's rule. The pass
   scales with the view and style text it reads and the files it opens: the ratio is high where 1.37's report read almost
   nothing; Foundation shows the bound's price on a quiet moment (start 32 ms: the pool would have saved ~30 ms there).
   Fixtures: a sheet past the read, one of exactly 256K and an HTML page past it, the feature report and finish over the
   sheet (15-quality-ui-project.js); both read-ahead bounds hit exactly, 1 ns a read either side (…-read-ahead.js); the
   prose against uiProject's feed (17-docs.js). Mutation pass, the list first (MUTATIONS.md): 17 / 17 killed.
+- **1.38.0 review 2** (area ui — R2-UP-1 MEDIUM, made by fix round 1's UP-3; R2-UP-2 / R2-DOC1, R2-DOC6 LOW, prose) — UP-3
+  decided the bare `text-[…vw]` per file with the per-line predicate unchanged, `:text-` after any variant: a nav link's
+  `hover:text-gray-900`, a `dark:text-white`, an `md:text-center` anywhere silenced a hero's `text-[8vw]`, while the same
+  design in CSS (a `:hover` colour) warned — not (2)'s property, a font size under a condition. The reviewer's probe (a hero
+  line on top of every view file of the 20 clones, the drops classified with a cut line first): 1,333 of 14,512 markup files
+  dropped by a non-size variant (Breeze 238 of 334, Jetstream 72 of 109), 266 by a size one. `RE_TW_TEXT_VARIANT` now takes
+  a SIZE alone (a type-scale step, an arbitrary length — UI checks above) — the reviewer's prototype (`\[` for any arbitrary
+  value) narrowed: `hover:text-[#111]` and an untyped `[var(…)]` are colours. The probe after: 0 by a non-size variant, 266
+  by a size one, the 54 cut and 6 over-read files unchanged. One shape beyond 9c6185aa's per-line rule, meant: a colour
+  variant on the hero's OWN line (`text-[8vw] dark:text-white`) warns now (it was silent there too). Trade-off, in
+  ui-code-scan.md: a project's own key (`md:text-hero`) no longer silences. Fixtures: S3.dark moved to the warning rows with
+  the reviewer's four Hero* shapes, a wrap, `hover:text-[#111]`, `[var(--brand)]`, daisyUI's `text-base-content`,
+  `md:text-hero` and a sheet's `@apply` sizes beside a colour-variant `@apply`; one silent row per shape the const takes; a
+  17-docs row runs the prose's two examples through the engine. Oracle: `uiChecksOf` of the clones' 15,630 view / style
+  files, this tree against cf72f0cd — identical (no vw text size in the corpus); the reviewer's shapes / twostyle /
+  parity / bundlefocus / marker / proj scripts identical but next-dark.tsx (the line above, now warning). R2-UP-2 / R2-DOC1:
+  ui-code-scan.md said a sheet past 256K is "named" in view-size (only the first file by path is) and that any focus style
+  in any file read excuses (a skipped sheet counts as read, its focus styles excuse nothing): it now says counted, and the
+  inventory may warn of a removal a feature report excuses by such a sheet (the mechanism stays: 1.39 backlog, above);
+  ui-code-scan.md stays ≤ 30,000 by two examples cut (`calc(1vw + 1vh)`, the UP-6 sentence's `focus-visible:ring-2`).
+  R2-DOC6: the cost entry above names sakai-vue's G1′ 2.21. Left as found (pre-existing since F0c, 1.39 backlog): a
+  conditional `@apply` of any `text-` utility sets `condSize` (`RE_TW_TEXT_ANY`). Cost, this tree ÷ cf72f0cd, one process,
+  interleaved: `uiChecksOf` over six clones' real view files (median of 9) 0.87–1.09; hostile 256K inputs aimed at the
+  predicate (median of 11) 0.86–1.36 — runs of colour variants, `md:text-[#111]` / `[var(…)]` — and 4.0 on lines of
+  `:text-` + 1,900 digits (0.9 ms against plain JSX's 13: the `\d*` backtrack, linear); a file whose colour variants no
+  longer drop its 5,000 bare sizes 1.31 (the findings it now counts). Mutation pass, the list written before the fixtures
+  (%TEMP%/dsd-138f2-ui/MUTATIONS.md): 29 / 29 killed, each by its rule's fixture — every branch of the const (each step,
+  `\d*`, the end guard, the `length:` hint in both brackets, a digit / `.`, each math function, `!?`, the `:`), the sheet's
+  and the class list's tests, the prose (three) and uiProject's feed.
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table

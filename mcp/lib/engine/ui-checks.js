@@ -498,10 +498,13 @@ function styleFontSize(v) {
 // its `:`-cut pieces, as before.
 // font-size-viewport (1.38): a BARE arbitrary text size, `text-[<value>]` (a `length:` hint, a `/<line-height>` modifier, `!`),
 // whose value is viewport-only — a CANDIDATE pushed on `sizes` (the first a call), decided when the FILE ends by its caller:
-// none stands once a class list of the file (a line read; a sheet's `@apply`s apart) held a `text-` utility under a variant
-// (RE_TW_TEXT_VARIANT: `sm:text-[1.2vw]`, `md:text-6xl`, `dark:text-white` — F94's note, CRIT_3 must-fix 3; review 1 of 1.38:
-// decided by the LINE, a class list split over lines — `cn("text-[8vw]", "md:text-7xl")`, a cva base, a wrapped class
-// attribute — warned). A value holding `(` is cut by the split: never judged (so is any arithmetic — its `_` blanks:
+// none stands once a class list of the file (a line read; a sheet's `@apply`s apart) held a font SIZE under a variant
+// (RE_TW_TEXT_VARIANT, after a variant's `:` and Tailwind 3's `!`: a type-scale step — `md:text-6xl`, `lg:text-base/7` — or an
+// arbitrary length — `sm:text-[1.2vw]`, a `length:` hint, `[clamp(` / `calc(` / `min(` / `max(` —; never a colour, an alignment,
+// a wrap — `dark:text-white`, `hover:text-[#111]`, an untyped `[var(…)]`, `md:text-center` — nor a project's own key,
+// `md:text-hero`: F94's note, CRIT_3 must-fix 3; review 1 of 1.38: decided by the LINE, a class list split over lines —
+// `cn("text-[8vw]", "md:text-7xl")`, a cva base, a wrapped class attribute — warned; review 2 of 1.38: any variant `text-`, a
+// colour's too, silenced the file). A value holding `(` is cut by the split: never judged (so is any arithmetic — its `_` blanks:
 // `text-[calc(1vw_+_1vh)]`).
 // MOTION (1.38, the project fact no-reduced-motion — move(line)): `animate-*` but `animate-none` (tailwindcss-animate's
 // `animate-in` too), `transition-transform`, `scroll-smooth`, under any variant.
@@ -509,7 +512,7 @@ function styleFontSize(v) {
 const RE_TW_PICK = /transition-all|outline-|focus|text-\[|animate-|transition-transform|scroll-smooth/;
 const twMotion = (u) => (u.startsWith("animate-") ? u !== "animate-none" : u === "transition-transform" || u === "scroll-smooth");
 const RE_TW_TEXT = /^text-\[(?:length:)?([^\]]*)\](?:\/.*)?$/;
-const RE_TW_TEXT_VARIANT = /:!?text-/; // a `text-` utility after a variant's `:` (`md:!text-6xl`, Tailwind 3's important)
+const RE_TW_TEXT_VARIANT = /:!?text-(?:(?:\d*x[sl]|sm|base|lg)(?![\w-])|[[(]length:|\[(?:[\d.]|(?:calc|clamp|min|max)\())/;
 const RE_TW_SPLIT = /[\s"'`{}(),;=<>]+/;
 const RE_TW_REMOVAL = /^outline-(?:none|hidden|0)$/;
 const RE_TW_NOTHING = /(?:^|-)(?:0|none|hidden|transparent)$/;
@@ -567,8 +570,8 @@ function utilities(s, line, add, move, sizes) {
 // none is judged once the FILE declares a font size inside a conditional block (`font-size`, the `font` shorthand, an `@apply`
 // holding a `text-` utility), a block past DS_BLOCK_DEPTH went unread or the sheet was read only in part (`partial`: past the
 // read, a line cut at DS_LINE_MAX — review 1 of 1.38: the override sat past the cut) — F94's note, a size media queries adjust
-// may not fail (CRIT_3 must-fix 2); the `@apply` ones also once an `@apply` of the file held a variant `text-` utility (as a
-// class list's: utilities). An override in another file is not seen.
+// may not fail (CRIT_3 must-fix 2); the `@apply` ones also once an `@apply` of the file held a size under a variant (as a
+// class list's: RE_TW_TEXT_VARIANT). An override in another file is not seen.
 const RE_LAYER = /^@layer\b/i;
 const RE_KEYFRAMES = /^@(?:-[a-z]+-)?keyframes\b/i;
 // A markup file's <style> block: its opening tag's line is a CSS line too (viewLines), so the block's FIRST rule reads it in its
@@ -638,7 +641,7 @@ function sheetChecks(text, rel, add, move, partial) {
   const open = []; // the open blocks, innermost last: { selector, shape, print, reduced, cond, focus, removals, other }
   let deep = 0; // the blocks open past DS_BLOCK_DEPTH (their rule's extent is then unknown: never a "focus" candidate)
   const sizes = []; // font-size-viewport's candidates, judged when the walk ends — unless the file sizes text conditionally
-  const tw = { sizes: [], variant: false }; // (…and the `@apply`s' bare text-[…vw] — unless one held a variant text- utility)
+  const tw = { sizes: [], variant: false }; // (…and the `@apply`s' bare text-[…vw] — unless one held a variant size)
   let condSize = !!partial;
   styleTokens(text, rel, {
     block: (e) => {
@@ -737,7 +740,7 @@ function markIds(src) {
 function uiChecksOf(lines, rel, over) {
   const sheet = RE_STYLE_EXT.test(rel);
   const findings = [], seen = new Set(), marks = new Map(), css = [], past = { byRule: {}, silenced: 0 };
-  const tw = { sizes: [], variant: false }; // the class lines' bare text-[…vw] (utilities) · a variant text- utility read
+  const tw = { sizes: [], variant: false }; // the class lines' bare text-[…vw] (utilities) · a variant size read
   let focus = false, anyCss = false, cutLines = 0;
   const motion = { count: 0, line: 0 }, moved = new Set();
   const move = (line) => { if (moved.has(line)) return; moved.add(line); motion.count++; if (!motion.line || line < motion.line) motion.line = line; };
