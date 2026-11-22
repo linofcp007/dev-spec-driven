@@ -1772,13 +1772,14 @@ view needs (the detail points there), tooling-reference.md's id.
 - **No gate, no stamp** — never a fail, not `warnsOnly`, not in `GATES`, not in the save hook, finish or the brief. No stamp:
   no design approved before 1.38 can hold the anchored header (gates-and-approvals.md → Gates). spec_upgrade lists it as
   ADVISORY — `UI_STATES_CHECK` beside `DESIGN_WEIGH_IDS` / `CRITICAL_FLOW_IDS` in upgrade.js: no `warnings` attention.
-- **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns; every cell cut to `US_CELL`
-  (400) before any regex; a bound that drops input appends `usTruncated` to the detail (`usNone` too). Linear: the section
-  reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the same text (a 5 MB cell, 200K rows, 20K tables,
-  a 1M-word label); 1 MB cells cost what a same-size prose section does (15-quality-ui-states.js, a ratio). The one shape
-  past it: a header row of 1,000,000 view cells (8 MB on one line) costs ~2.1× `sectionState` (2.1–2.6 s against 1.0–1.2 s)
-  — each header cell's words are read for the anchor before `US_VIEWS` applies; linear, and no gate waits on it (a 1.39
-  bound: compare a cell with the anchor only when its length could hold one).
+- **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns, the anchor looked for in a
+  header's first `US_HEADER` (64) cells (1.39, BS-5 — past them, none found, the table is none and `truncated.views` says a
+  bound cut: the view bound's words, no new argument, CRIT_3 must-fix 6; found within them, the cells after it are never
+  read, nothing said); every cell cut to `US_CELL` (400) before any regex; a bound that drops input appends `usTruncated` to
+  the detail (`usNone` too). Linear: the section reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the
+  same text (a 5 MB cell, 200K rows, 20K tables, a 1M-word label, and since US_HEADER a header of 200,000 cells, the anchor
+  last: ~0.3×, 1.38's 2.1–2.75× — each header cell's words were read for the anchor before `US_VIEWS` applied); 1 MB cells
+  cost what a same-size prose section does (15-quality-ui-states.js, ratios).
 - **Every language, from the corpus** — the labels and the anchor cells of EN / PT / ES / pt-BR come from the corpus key
   `uiStateNames` (markdown.js `uiStateNames()` / `renderUiStateNames()`: `<id>\t<label>` lines, `UI_STATE_A11Y` — `a11y` — as
   the anchor's id; architecture.md → The build): an English doctor loads no pt.js / es.js (a child-process fixture). The
@@ -3075,3 +3076,16 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and this tree alike: the engine unchanged, in EN / PT / ES). ui-design-patterns.md and the verdict bullet above say so;
   17-docs runs a written line over the untouched matrix (filled, `ui-states` warns) and over the scaffold with its TODO
   (unfilled).
+- **1.39.0** (item 3 of the 1.39 round — chain B; BS-5 alone of the matrix's three) — `US_HEADER` (64): the anchor looked
+  for in a header's first 64 cells, `t.header.slice(0, US_HEADER)`, the cut folded into `truncated.views` (CRIT_3 must-fix
+  6: no fourth `usTruncated` argument, so the three languages and 1.38's bound fixture stay as they were). The design's
+  length pre-test did not fix the measured shape — 1,000,000 cells of 4–8 characters each pass "≤ the longest label" —,
+  and a `dsSlot` pass over the columns before the anchor costs as much as the word read. Measured: 200,000 cells, the anchor
+  last, 0.29× `sectionState` (1.38: 2.25–2.84×, the designer's header.js re-run by the critic). Lost: an anchor past cell
+  64 — no real header has one; said when it happens. BS-3 (a row keyed by its answering cells, so a matrix of `TBD` /
+  dashes / ticks reads as template and the gate refuses it) is CUT (CRIT_X cut 4: 1.39's only new refusal, at size s where
+  1.38 only noted, through `sectionLineKey`, which every track's and pack's tables share, and four approved-design
+  surfaces — spec_upgrade's attention, the roadmap's list, status' `filled`, the save hook): 1.38's prose stands. BS-4
+  (tables with the same views one matrix in parts, `usTables`) is CUT (CRIT_3: a narrowing that hides a real gap —
+  desktop / mobile matrices with the same views, one lacking `Offline`, would go silent): 1.38's prose — a row per state in
+  each table — stands. The `uiStates` stamp stays cut: nothing in 1.39 makes `ui-states` warn on a design 1.38 passed.
