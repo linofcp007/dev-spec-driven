@@ -1596,18 +1596,22 @@ exports.run = async ({
           && scale.includes("(`none` reads as 0)")
           && scale.includes("across two within the rounding of the pair as written (" + B.hsl + " ΔEOK with an HSL side, " + B.cross + " otherwise; an HSL side")
           && scale.includes("), alphas within " + B.alpha)],
-      // (1.38.0 review 1, T1) the HSL side's written precision against a hex / rgb, its examples as the engine judges them; the
-      // nearest token of several
-      ["colours: an HSL side against a hex / rgb by its written precision — the examples (judgeRaw); the nearest of several", () => {
+      // (1.38.0 review 1, T1 / review 2, R2-T1) an HSL side against a hex / rgb by the pair's rounding both ways, its examples
+      // as the engine judges them; the nearest token of several
+      ["colours: an HSL side against a hex / rgb by the rounding both ways — the examples (judgeRaw); the nearest of several", () => {
         const j = (value, ...tok) => T.judgeRaw({ kind: "color", value }, T.tokenScale(tok.map(([name, v]) => ({ name, value: v })), []));
         return scale.includes("`token` names the token the value IS (the nearest of several), in any notation")
-          && scale.includes("an HSL side against a hex or `rgb()` also as precisely as it is written: the other, in HSL, rounds to its numbers — `#05787d` is `hsl(183 92% 25%)`, `#18181b` is not `hsl(0 0% 9%)`)")
-          && j("#05787d", ["--a", "hsl(183 92% 25%)"]).token === "--a" && !j("#18181b", ["--a", "hsl(0 0% 9%)"]).token
-          && j("#18181b", ["--a", "hsl(240 5.9% 10%)"], ["--b", "#18181b"]).token === "--b";
+          && scale.includes("an HSL side against a hex or `rgb()` also both ways: the other in HSL rounds to its numbers or the HSL paints it, 8 bits a channel — `#05787d` is `hsl(183 92% 25%)`, `#eeeff2` `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`)")
+          && j("#05787d", ["--a", "hsl(183 92% 25%)"]).token === "--a" && j("#eeeff2", ["--a", "hsl(220 14% 94%)"]).token === "--a"
+          && !j("#18181b", ["--a", "hsl(0 0% 9%)"]).token && j("#18181b", ["--a", "hsl(240 5.9% 10%)"], ["--b", "#18181b"]).token === "--b";
       }],
-      ["colours: `near` — the nearest within the JND, a hint; what is not parsed matches by text", () =>
-        scale.includes("`near` {`token`, `delta`} the nearest within " + B.jnd + " ΔEOK — a hint, never the token's colour (Tailwind's zinc is not shadcn's neutral)")
-          && /`hwb\(\)`, `lab\(\)`, `lch\(\)`, `color\(\)` and a named colour match by text alone\./.test(scale)],
+      // (review 2, R2-T2) zinc's hexes are not the neutral in either notation; its oklch() is the hsl() one (an HSL side's 0.011)
+      ["colours: `near` — the nearest within the JND, a hint; zinc's hexes against the neutral, its oklch() against the hsl() one; what is not parsed matches by text", () => {
+        const j = (value, tok) => T.judgeRaw({ kind: "color", value }, T.tokenScale([{ name: "--a", value: tok }], []));
+        return scale.includes("`near` {`token`, `delta`} the nearest within " + B.jnd + " ΔEOK — a hint, never the token's colour (Tailwind's zinc hexes are not shadcn's neutral; its `oklch()` zinc is the `hsl()` one, within " + B.hsl + ")")
+          && !j("#18181b", "hsl(0 0% 9%)").token && !j("#18181b", "oklch(0.205 0 0)").token && j("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)").token === "--a"
+          && /`hwb\(\)`, `lab\(\)`, `lch\(\)`, `color\(\)` and a named colour match by text alone\./.test(scale);
+      }],
       ["fonts: a stack by its first family, against the registry rows' font tokens only", () =>
         /\*\*Fonts\*\* — a `font-family` stack ending in a generic family, by its first family, against the registry rows' font tokens only \(a code token's stack is never read; one ending in a named emoji font is no stack\)\. Read when the registry holds one\./.test(scale)],
       ["motion: literal times and the easing functions the engine reads (RE_EASING), Tailwind's arbitrary utilities, never a nearest", () =>
