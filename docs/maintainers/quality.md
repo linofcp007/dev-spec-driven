@@ -3086,6 +3086,6 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   dashes / ticks reads as template and the gate refuses it) is CUT (CRIT_X cut 4: 1.39's only new refusal, at size s where
   1.38 only noted, through `sectionLineKey`, which every track's and pack's tables share, and four approved-design
   surfaces — spec_upgrade's attention, the roadmap's list, status' `filled`, the save hook): 1.38's prose stands. BS-4
-  (tables with the same views one matrix in parts, `usTables`) is CUT (CRIT_3: a narrowing that hides a real gap —
+  (tables with the same views one matrix in parts, its detail prefixed "tables 1 + 3 ›") is CUT (CRIT_3: a narrowing that hides a real gap —
   desktop / mobile matrices with the same views, one lacking `Offline`, would go silent): 1.38's prose — a row per state in
   each table — stands. The `uiStates` stamp stays cut: nothing in 1.39 makes `ui-states` warn on a design 1.38 passed.
