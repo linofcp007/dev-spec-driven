@@ -1700,7 +1700,10 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   outline-removed) and so finish, which reads that report. `off` / `offIgnored` appear only when the marker holds an entry (a
   project without one keeps the 1.37 shape). Its spellings, in the user docs (review 1 of 1.38, UP-7 — prose alone): a line
   of its own, as `_Token sources:_` (`RE_DS_MARKER`, anchored: a list item or a bold `**UI checks off:**` is no marker — read
-  as nothing, said nowhere), each id bare (one in a code span — the docs write ids so — reads `unreadable`). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
+  as nothing, said nowhere), each id bare or in ONE balanced code span (1.39, UP-7 — `RE_DS_OFF_ENTRY`'s two branches: the
+  docs write ids in one, so the 1.38 docs' own spelling read `unreadable`; a lone backtick on either side or a doubled pair
+  is another shape — `unreadable`; the list item and the bold line stay unread: the anchor is `_Token sources:_`' and
+  `_Libraries:_`' too). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
   and each entry not applied (`uiOffIgnored[why]`) after the silenced count. A design-system.md written only for the marker
   enrols the project in the registry (`ui-design-system`, finish's New-component append — the user docs say so, CRIT_X D3);
   what-input's modality removals (`[data-whatintent='mouse'] { *:focus { outline: none } }`: no syntax tells a modality

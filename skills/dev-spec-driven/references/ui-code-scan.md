@@ -66,9 +66,8 @@ smooth scrolling — and none of the files read mentions reduced motion (`prefer
 only in a script (a `.ts` hook) is not seen.
 
 **Off for the project.** `_UI checks off: <rule-id> (reason)_` — a line of its own in design-system.md (a list item or a
-bold line is not read), the marker in English, each id bare (one in a code span is not applied), entries separated by
-commas (`_UI checks off: transition-all (the kit animates on purpose)_`) — switches a UI check
-or a project fact off everywhere: the inventory, every feature report (`off`: the rule, its reason, the findings it hid)
+bold line is not read), the marker in English, each id bare or in a code span, entries separated by commas
+(`_UI checks off: transition-all (the kit animates on purpose)_`) — switches a UI check or a project fact off everywhere: the inventory, every feature report (`off`: the rule, its reason, the findings it hid)
 and so finish — counted, never listed (an inline-silenced finding stays `silenced`). An entry with no reason in
 parentheses, an id that is no check or fact, another shape or one past the first 50 entries is not applied, and the report
 says why (`offIgnored`, `why`: `no-reason`, `unknown-rule`, `unreadable`, `past-bound`). Creating design-system.md for the

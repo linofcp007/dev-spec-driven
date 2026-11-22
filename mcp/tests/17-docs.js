@@ -1731,8 +1731,8 @@ exports.run = async ({
     const DS = raw("mcp", "lib", "engine", "design-system.js");
     const C = ws(raw("skills", "dev-spec-driven", "references", "ui-code-scan.md")), ST = ws(raw("skills", "dev-spec-driven", "references", "steering-templates.md"));
     const read = num(DS, "DS_READ_CHARS") / 1024, line = num(DS, "DS_LINE_MAX").toLocaleString("en-US");
-    // (the spellings the prose names, through the registry's reader and uiOff: a list item, a bold line — no entry at all —,
-    // an id in a code span — not applied; the bare line applied)
+    // (the spellings the prose names, through the registry's reader and uiOff: a list item, a bold line — no entry at all —;
+    // the bare line applied; 1.39 UP-7: an id in ONE code span applied too, a lone or a doubled backtick `unreadable`)
     const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
     const offOf = (name, text) => {
       const d = path.join(tmp, "r138-marker-" + name, ".specs");
@@ -1742,8 +1742,9 @@ exports.run = async ({
       return [o.off.size, o.ignored.map((x) => x.why)];
     };
     const spell = { bare: offOf("bare", "_UI checks off: img-no-alt (decorative)_"), item: offOf("item", "- _UI checks off: img-no-alt (decorative)_"),
-      bold: offOf("bold", "**UI checks off:** img-no-alt (decorative)"), code: offOf("code", "_UI checks off: `img-no-alt` (decorative)_") };
-    const spelled = js(spell) === js({ bare: [1, []], item: [0, []], bold: [0, []], code: [0, ["unreadable"]] });
+      bold: offOf("bold", "**UI checks off:** img-no-alt (decorative)"), code: offOf("code", "_UI checks off: `img-no-alt` (decorative)_"),
+      lone: offOf("lone", "_UI checks off: `img-no-alt (decorative)_"), double: offOf("double", "_UI checks off: ``img-no-alt`` (decorative)_") };
+    const spelled = js(spell) === js({ bare: [1, []], item: [0, []], bold: [0, []], code: [1, []], lone: [0, ["unreadable"]], double: [0, ["unreadable"]] });
     const R1 = [
       ["ui-code-scan: a file read in part judges neither per-file font size (the read and the line bounds, design-system.js)", () =>
         C.includes("Neither the stylesheet's nor the bare one is judged in a file read in part (past " + read + "K, a line past " + line + " characters).")],
@@ -1751,10 +1752,10 @@ exports.run = async ({
         /An Astro `<style define:vars>` block's first at-rule reads as a selector: silence what it gives\./.test(C)],
       ["ui-code-scan: a feature report's focus search is narrower than the inventory's — it may warn where the inventory does not", () =>
         /A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a removal the inventory excuses by one in another view file: check that the removal's elements get it, or silence it\./.test(C)],
-      ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare (the engine agrees)", () => spelled
-        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(a list item or a bold line is not read\), the marker in English, each id bare \(one in a code span is not applied\)/.test(C)],
-      ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare (the engine agrees)", () => spelled
-        && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare \(in a code span it is not applied\), entries separated by commas/.test(ST)],
+      ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare or in a code span (the engine agrees)", () => spelled
+        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(a list item or a bold line is not read\), the marker in English, each id bare or in a code span, entries separated by commas/.test(C)],
+      ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare or in a code span (the engine agrees)", () => spelled
+        && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare or in a code span, entries separated by commas/.test(ST)],
     ];
     for (const [label, check] of R1) all("1.38.0 review 1 docs — " + label + (label.includes("spellings") ? " (got " + js(spell) + ")" : ""), { holds: check });
   }

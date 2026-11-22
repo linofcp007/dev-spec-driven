@@ -292,6 +292,17 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.39 (UP-7): an id in ONE balanced code span is applied — the docs write ids so —, its reason the parentheses'; a code
+    // span around a name that is no rule is unknown-rule; a lone backtick (either side) or a doubled pair is another shape
+    const MARKER = "# Design System\n\n_UI checks off: `img-no-alt` (decorative art), `foo` (x), `click-no-keyboard (x), paste-blocked` (x), ``zoom-disabled`` (x), transition-all (kit code)_\n";
+    const u = inv(project("marker-code", { ".specs/steering/design-system.md": MARKER, "src/A.tsx": "export const A = () => <div className=\"transition-all\"><img src=\"/a.png\" /></div>;\n" }));
+    all("1.39 project UI checks: `_UI checks off:_` — an id in one code span applied with its reason (as a bare one), a code span naming no rule unknown-rule, a lone or a doubled backtick unreadable (got " + js({ off: u.off, ignored: u.offIgnored }) + ")", {
+      off: () => js(u.off) === js([{ rule: "img-no-alt", reason: "decorative art", count: 1 }, { rule: "transition-all", reason: "kit code", count: 1 }]) && u.total === 0,
+      ignored: () => js(u.offIgnored) === js([{ entry: "foo", why: "unknown-rule" }, { entry: "`click-no-keyboard (x)", why: "unreadable" }, { entry: "paste-blocked` (x)", why: "unreadable" },
+        { entry: "``zoom-disabled`` (x)", why: "unreadable" }]),
+    });
+  }
+
   { // the marker's bounds: DS_MARKER_ENTRIES (50) entries read — the 51st said `past-bound` (with the bound) and not applied —, a
     // reason cut at DS_CELL_MAX (200); an entry the reason of which is only past the bound is never applied silently
     const entries = Array.from({ length: 50 }, (_, i) => "img-no-alt (reason " + i + ")").concat(["click-no-keyboard (the 51st)"]);
