@@ -316,11 +316,12 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
   { // 1.39 (D6): the search's bounds and order, on scans built here (uiProject over a scan's lists — the files real, their
     // paths the list's): DS_MOTION_SCRIPTS (2,000) files, DS_MOTION_CHARS (8 MB) characters — the next past either is not
     // read, the fact stays and `motion-scripts` says which bound (`bound`); the shorter path first, then by path; never run
-    // where the fact would not be said (a view's mention, no motion, a truncated walk, a view read in part) and never over a
+    // where the fact would not be said (a view's mention, no motion, a truncated walk, a view read in part, a view pass its
+    // bound cut) and never over a
     // view file, a test or a story (a spy on each entry's `full`)
     const d = project("motion-bounds", { "src/a.css": "@keyframes pop { to { opacity: 1 } }\n", "src/m.css": "@media (prefers-reduced-motion: reduce) { * { animation: none; } }\n", "src/plain.css": ".a { color: red; }\n",
       "src/big.html": "<!--\n" + ("y".repeat(99) + "\n").repeat(2700) + "-->\n", "lib/p.ts": "export const p = 1;\n", "lib/m.ts": "export const r = matchMedia(\"(prefers-reduced-motion: reduce)\");\n",
-      "lib/b.ts": "y".repeat(256 * 1024) });
+      "lib/b.ts": "y".repeat(256 * 1024), "src/p.html": "<!--\n" + "y".repeat(256 * 1024 - 9) + "-->\n" });
     const F = (rel) => path.join(d, rel), P = F("lib/p.ts"), M = F("lib/m.ts"), B = F("lib/b.ts");
     const view = (rel) => ({ rel, full: F(rel) });
     const motion = [view("src/a.css")];
@@ -341,8 +342,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const spy = (rel) => ({ rel, get full() { asked.push(rel); return P; } });
     const spies = () => ["src/App.tsx", "src/components/Card.js", "e2e/helpers.ts", "src/a.test.ts", "src/b.stories.ts", "src/c.mock.ts", "src/hooks/use-motion.ts"].map(spy);
     const runs = {};
+    // (a view pass its 32 MB bound cut: the keyframes sheet, then 129 pages of exactly 256K — the 129th unread)
+    const pages = [view("src/a.css")].concat(Array.from({ length: 129 }, (_, i) => ({ rel: "src/p/p" + String(i).padStart(3, "0") + ".html", full: F("src/p.html") })));
     for (const [k, views, truncated] of [["mention", [view("src/a.css"), view("src/m.css")], false], ["still", [view("src/plain.css")], false], ["truncated", motion, true],
-      ["part", [view("src/a.css"), view("src/big.html")], false], ["open", motion, false]]) {
+      ["part", [view("src/a.css"), view("src/big.html")], false], ["cut", pages, false], ["open", motion, false]]) {
       asked.length = 0;
       sc(spies(), views, truncated);
       runs[k] = asked.slice();
@@ -351,7 +354,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       files: () => S1.last2000.facts === 0 && S1.past2000.facts === 1 && js(S1.past2000.limits) === js(F1),
       order: () => S1.shorter.facts === 0 && S1.byPath.facts === 0,
       chars: () => S1.chars.facts === 1 && js(S1.chars.limits) === js(F2) && S1.charsIn.facts === 0,
-      notRun: () => ["mention", "still", "truncated", "part"].every((k) => js(runs[k]) === "[]"),
+      notRun: () => ["mention", "still", "truncated", "part", "cut"].every((k) => js(runs[k]) === "[]"),
       onlyScripts: () => js(runs.open) === js(["src/hooks/use-motion.ts"]),
     });
     // (a cost guard — the search ends at the first mention: 400 scripts whose first mentions cost at most half the same 400 with
