@@ -1437,7 +1437,9 @@ exports.run = async ({
         && /\(what is never "gone": \[ui-code-scan\.md\]\(ui-code-scan\.md\)\)/.test(registry) && !/\(below\)|: below\)|the table below\)/.test(registry),
       responsivePointer: () => resp.split("\n").length === 2 && /\[ui-responsive\.md\]\(ui-responsive\.md\)\.$/.test(resp) && /^## Responsiveness$/m.test(R),
       backLinks: () => /\[ui-design-patterns\.md\]\(ui-design-patterns\.md\)/.test(C) && /\[ui-design-patterns\.md\]\(ui-design-patterns\.md\)/.test(R),
-      caps: () => bytes("ui-code-scan.md") <= 30000 && bytes("ui-responsive.md") <= 12000,
+      // (1.39.0: ui-code-scan.md's cap 30,000 → 32,000 — the pinned "What the code scan reads" table is 64 % of it, and the file
+      // is read on demand from index.md's +ui line alone; 1.39's scan prose — deprecated uses, the script search — needs the room)
+      caps: () => bytes("ui-code-scan.md") <= 32000 && bytes("ui-responsive.md") <= 12000,
       index: () => /`references\/ui-code-scan\.md`/.test(uiLine) && /`references\/ui-responsive\.md`/.test(uiLine)
         && /component contracts, UI states and the worst case, forms and interaction details, motion/.test(uiLine),
       tooling: () => /What the scan reads and what it doesn't: `references\/ui-code-scan\.md`/.test(tool),
@@ -1546,9 +1548,9 @@ exports.run = async ({
       return { keys: [...keys], missed: [...keys].filter((k) => !toolRow.includes("`" + k + "`")), sane };
     };
     const rows = [
-      ["intro: what the file says — the scale, the units table, the project's checks, switching one off; the file ≤ 30,000 bytes", () =>
+      ["intro: what the file says — the scale, the units table, the project's checks, switching one off; the file ≤ 32,000 bytes (1.39.0's cap, the F0a row's)", () =>
         /what a raw value is against the project's own scale, the units table, and the UI checks it runs on a feature's view and style files and on the project's — and how a team switches one off\./.test(ws(scanRaw))
-          && Buffer.byteLength(scanRaw, "utf8") <= 30000],
+          && Buffer.byteLength(scanRaw, "utf8") <= 32000],
       ["inventory: both surfaces, the keys; counts, never a list, never finish", () =>
         /`spec_scan \{designSystem: true\}` \/ `dev-spec design-system` \(no feature\) also run the UI checks over the project's view and style files — an inventory, `uiChecks`: `read`, `total`, `silenced`, `byRule` and `rules` \(per rule its level, the files holding one, the first place\), `facts`, `limits`\./.test(proj)
           && /Counts, never a list, never a finish warning: each feature's report lists its own\./.test(proj)],
