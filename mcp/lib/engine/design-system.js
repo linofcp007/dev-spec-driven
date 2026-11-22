@@ -2650,8 +2650,10 @@ function followOf(scripts, project, index, prefill) {
 // (1.39) watch: the deprecated uses' watch (deprecatedWatch) or null — it sees what settle reads and never what settle asks:
 // every component file read for its exports (whatever settle asks), then each file of settle's queue as it is read (the
 // uses settle parsed, or its text), and where settle's bound stopped the read. With a watch and nothing asked, the queue is
-// read for the watch alone (settle's order and bound; nothing told, no `.ts` file).
+// read for the watch alone (settle's order and bound; nothing told, no `.ts` file) — never for an idle one: no row located,
+// nothing it could count (+51 to +117 ms read for nothing on trees where the row's component is a library's).
 function settle(results, scripts, markups, read, places, watch) {
+  if (watch && watch.idle) watch = null;
   const dropped = new Set(), rendered = new Set();
   const asked = new Map(), byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map(), exportsOf = new Map(), localsOf = new Map();
   const ask = (path, name, local, kind) => {
@@ -2887,6 +2889,7 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     return false;
   };
   return {
+    idle: !located.size, // (no row the code holds a file for: nothing to look for — settle reads nothing for it, `read` 0)
     // a component file read for what it exports (settle's `results`): its uses as that read gave them
     result: (rel, u) => { if (inScope(rel)) { read++; seeUses(rel, u); } },
     // a file of settle's queue: the uses settle parsed (u), else its own parse of the text — when it names what is watched

@@ -541,6 +541,9 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const fifty = depProject("fifty", Array.from({ length: 51 }, (_, i) => "| C" + String(i).padStart(2, "0") + " | src/components/C" + String(i).padStart(2, "0") + ".tsx |  | _Deprecated_ |"), big);
     const r51 = usesOf(S.designSystemReport(fifty));
     const u51 = usesOf(S.designSystemReport(depProject("unlocated", Array.from({ length: 51 }, (_, i) => "| U" + String(i).padStart(2, "0") + " |  |  | _Deprecated_ |"), {})));
+    // (no row located — the marked component is a library's: nothing to look for, nothing read for it)
+    const idle = usesOf(S.designSystemReport(depProject("idle", ["| Modal |  |  | _Deprecated_ |"], { "src/components/Table.tsx": compFile("Table"),
+      "src/app/page.tsx": L(["import { Table } from \"../components/Table\";", "export const P = () => <Table />;"]) })));
     const sync = depProject("sync", ["| Table | src/components/Table.tsx |  | _Deprecated_ |"], { "package.json": js({ name: "s" }), "src/components/Table.tsx": compFile("Table"),
       "src/app/page.tsx": L(["import { Table } from \"../components/Table\";", "export const P = () => <Table />;"]) });
     const rs = S.designSystemReport(sync);
@@ -552,6 +555,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       first3: () => js(uses(r5, "Table")) === js([5, ["src/app/p0/page.tsx", "src/app/p1/page.tsx", "src/app/p2/page.tsx"]]),
       paths3: () => js(rowOf(r5, "Table").paths) === js(["src/components/B/Table.tsx", "src/components/C/Table.tsx", "src/components/D/Table.tsx"]) && rowOf(r5, "Table").pathsTotal === 4,
       unlocated50: () => u51.unlocated.length === 50 && u51.unlocatedTotal === 51 && u51.unlocated[49] === "U49",
+      idle: () => js([idle.rows, idle.unlocated, idle.read]) === js([[], ["Modal"], 0]),
       fifty: () => r51.rows.length === 50 && r51.rowsTotal === 51 && r51.rows[49].name === "C49",
       inSync: () => rs.inSync === true && js(rs.limits) === js([]) && rowOf(rs, "Table").filesTotal === 1,
       absent: () => !("deprecatedUses" in S.designSystemReport(plain)) && !("deprecatedUses" in feat),

@@ -1000,7 +1000,7 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   places and its tells run only when it asks; the watch sees every component file read for its exports (`result`, whatever
   settle asks), then each file of settle's queue as read (`see`: the uses settle parsed, or its own parse of the text — the
   queue, order and bound are settle's: with nothing asked, the JSX scripts and the markup files), and where the bound stopped
-  (`cut`). Two rules, two predicates: a row named by its FILE — every namesake, RE_JSX_FILE ∪ RE_MARKUP_FILE only (an Angular
+  (`cut`) — unless it is `idle` (no row located: settle reads nothing for it, `read` 0). Two rules, two predicates: a row named by its FILE — every namesake, RE_JSX_FILE ∪ RE_MARKUP_FILE only (an Angular
   `*.component.ts` is imported by `.ts` files: `unlocated`) — is its MODULE: a binding whose module IS the file counts
   (`byKey`, indexed: the key exactly, an index's folder, an SFC's key without its extension — the `TWIN` entry, its platform
   infix dropped as moduleKey drops it —, `X/index.vue` by its folder; never `pointsTo`'s prefix: a folder import is not every
