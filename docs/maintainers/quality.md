@@ -2804,10 +2804,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   opens by name — the libraries, rightly. Mutants CRIT_3 §8 added (V1 / V2 / P1 / P2 / A1 / L1 / B1 / N1) each have their
   fixture; K5 went with BS-3. Two handlers were left out as provably dead: a `close` one, and the pending path's "a nested
   statement voids" — after a top-level open, any nested event follows a block event, which voided it. Cost (K3c, medians of
-  5 interleaved, ratios against the `breakpointz` twins the pre-test skips): 100 Bootstrap-sized sheets with a map 0.96–1.33×;
-  256K hostile sheets — an open per line 1.0× (the first opens a parenthesis the walk never sees closed: the rest are map
-  keys, one unread), a one-line map per line 1.7–2.7× (the first `sassValue` built its parts through `map` / `filter`: 2.7×;
-  one loop now), a voiding list per line 1.1–1.7×. `@custom-media` CUT (CRIT_3 / CRIT_X cut 3): an alias list, not a set — of
+  5 interleaved, ratios against the `breakpointz` twins the pre-test skips, with other chains' suites running): 100
+  Bootstrap-sized sheets with a map 0.96–1.35×; 256K hostile sheets — an open per line 1.0–1.17× (the first opens a
+  parenthesis the walk never sees closed: the rest are map keys, one unread), a one-line map per line 1.67–2.3× (the first
+  `sassValue` built its parts through `map` / `filter`: 2.7×; one loop now), a voiding list per line 1.35–2.2×. The project
+  report against 1.38.0 (both engines in one process, interleaved, medians of 5 — the whole chain: the fill, the line
+  rules, the reader): shadcn-ui 0.98×, mantine 1.05×, cal.com 1.03×, vben 1.09×, bootstrap 1.08×, starlight 1.11×,
+  bulma 1.05×, breeze 1.05×, taxonomy 1.25× (+44 ms on 178 — no sheet the reader observes: noise of the loaded machine),
+  sass-mq 0.80× — within the DECISIONS bar (≤ 1.25× at ≥ 700 views, ≤ +150 ms below). `@custom-media` CUT (CRIT_3 / CRIT_X cut 3): an alias list, not a set — of
   47 sampled files 10 define one width (median 2), so a single `--md` would capture [320, 768] where 1.38 captured five;
   PostCSS / Lightning only; its seven mutants the largest block. Tailwind 3's `screens` stays cut (41 of 104 sampled keys are
   `container.screens`, a max width).
