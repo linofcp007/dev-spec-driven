@@ -1672,6 +1672,9 @@ const msg = {
         "ui-files": (n, at, count) => `  (the UI checks read the project's first ${n} view ${n === 1 ? "file" : "files"}, a bound: the rest is not counted${count ? ` — ${count} outline ${count === 1 ? "removal" : "removals"} not judged, the first: ${at}` : ""})`,
         "component-files": (n) => `  (${n} component files were read for the further components they export, and a bound was reached — the files or characters read, or the names kept of one file: the rest is not compared)`,
         "workspace-manifests": (n) => `  (a bound of the workspace patterns was reached — ${n} of the workspace packages' package.json files read: the libraries of the rest are not compared)`,
+        // (1.39: the deprecated uses' own bounds — `deprecatedUses.limits`, never the report's)
+        "usage-files": (n) => `  (the deprecated components' uses were looked for in the first ${n} files the scan reads — a bound of files or characters: the rest is not counted)`,
+        "deprecated-follow": (n, chars, steps) => `  (the re-exports followed for the deprecated components' uses reached a bound — ${n} files, ${chars / 1048576} MB or ${steps} steps: an import through the rest is not counted)`,
         // (1.38: the new kinds' own bound a file — file: the first it cut)
         "font-values": (n, file) => `  (only a file's first ${n} font stacks are read — the first file past it: ${file})`,
         "motion-values": (n, file) => `  (only a file's first ${n} motion values are read — the first file past it: ${file})`,
@@ -3752,6 +3755,8 @@ const quality = {
     dsDeprecatedNone: "Design System Usage reuses no component the registry marks deprecated",
     dsDeprecated: (n, list) => `Design System Usage reuses or extends ${n} ${n === 1 ? "component" : "components"} the registry (.specs/steering/design-system.md) marks deprecated — ${list}: move to what its marker names, or name that component in the row's notes to say why this one stays`,
     dsDeprecatedItem: (name, use) => (use ? `'${name}' (use ${use})` : `'${name}'`),
+    // 1.39: the project report's deprecatedUses.note — what the search does not see (CRIT_1 must-fix 1: the JSON says it too)
+    dsDepUsesNote: "Read: the project's .tsx / .jsx / .js and .mdx / .vue / .svelte / .astro files, tests and stories aside. Not seen: a .ts file (a registration, a route table, an Angular component's imports), a dynamic import(), a module only a bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a non-component export or a type reached through a barrel. No import found is not unused: check what is not read before removing a file.",
     // 1.38 +ui's state matrix: each state's label by its English-stable id and the header's cells (UI_STATES — the template's
     // table is built from the same values)
     uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,

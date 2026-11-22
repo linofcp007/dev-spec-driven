@@ -2099,6 +2099,10 @@ function designSystemCheck(design, lang, opts = {}) {
 // (its letters and digits as written, case and accents kept — in one Unicode form: review 2, an NFD `á` in the notes is the
 // registry's NFC `á`)
 const dsLetters = (s) => String(s).normalize("NFC").replace(/[^\p{L}\p{N}]+/gu, "");
+// A deprecated row's replacement as the registry writes it — the replacement's row name, else the marker's text, else "" (1.37
+// review 2: the name doctor's warn prints is the one that silences it; 1.39: the project report's `deprecatedUses` names it so
+// too — ONE expression). names: the registry's key → row name (built once by a caller asking many keys).
+const dsReplacement = (reg, key, names = new Map(reg.components.map((c) => [c.key, c.name]))) => names.get(dsKey(reg.deprecated.get(key))) || reg.deprecated.get(key) || "";
 function designSystemDeprecatedCheck(design, lang, opts = {}) {
   const Q = i18n.msg(lang).quality, id = "ui-deprecated";
   const dep = opts.registry && opts.registry.deprecated && opts.registry.deprecated.size ? opts.registry.deprecated : null;
@@ -2107,7 +2111,7 @@ function designSystemDeprecatedCheck(design, lang, opts = {}) {
   const items = [], seen = new Set();
   for (const r of usage ? usage.rows : []) {
     if (r.kind === "new" || !dep.has(r.key) || seen.has(r.key)) continue;
-    const use = names.get(dsKey(dep.get(r.key))) || dep.get(r.key), as = dsLetters(use);
+    const use = dsReplacement(opts.registry, r.key, names), as = dsLetters(use);
     if (dsNameIn(r.why, Infinity, (x, t) => dsLetters(t) === as)) continue;
     seen.add(r.key);
     items.push(Q.dsDeprecatedItem(r.name, use));
@@ -3130,5 +3134,5 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  designSystemDeprecatedCheck, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,
+  designSystemDeprecatedCheck, dsReplacement, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,
   UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, __link };
