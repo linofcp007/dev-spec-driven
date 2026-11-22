@@ -1606,6 +1606,10 @@ const msg = {
         "file-findings": (n, file, count) => `  (mais ${count} ${count === 1 ? "achado de interface" : "achados de interface"} além dos ${n} de um ficheiro — o primeiro em ${file}: contados, não listados)`,
         // (1.38: as verificações de interface do projeto — n: os ficheiros de vista lidos; at / count: as remoções do contorno não avaliadas)
         "ui-files": (n, at, count) => `  (as verificações de interface leram ${n === 1 ? "o primeiro ficheiro de vista" : `os primeiros ${n} ficheiros de vista`} do projeto, um limite: o resto não é contado${count ? ` — ${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"}, a primeira: ${at}` : ""})`,
+        // (1.39: a procura nos scripts do facto — n: os scripts lidos; bound: files | chars, o limite que a terminou (nenhum:
+        // todos foram lidos; um limite termina-a depois de 32 scripts pelo menos); count / file: os scripts lidos só em parte, o
+        // primeiro pelo caminho)
+        "motion-scripts": (n, file, count, bound) => `  (procurou-se uma menção a movimento reduzido ${bound ? `nos primeiros ${n} scripts do projeto, o caminho mais curto primeiro — um limite ${bound === "chars" ? "dos seus caracteres" : "do seu número"}` : `${n === 1 ? "no script" : `nos ${n} scripts`} do projeto`}${count ? ` — ${count} ${count === 1 ? "lido" : "lidos"} só em parte, o primeiro: ${file}` : ""}: uma menção para lá do que foi lido não é vista)`,
         "component-files": (n) => `  (foram lidos ${n} ficheiros de componentes à procura dos outros componentes que exportam, e foi atingido um limite — os ficheiros ou caracteres lidos, ou os nomes guardados de um ficheiro: o resto não é comparado)`,
         "workspace-manifests": (n) => `  (foi atingido um limite dos padrões de workspace — lidos ${n} dos ficheiros package.json dos pacotes do workspace: as bibliotecas dos restantes não são comparadas)`,
         "font-values": (n, file) => `  (só as primeiras ${n} pilhas de fontes de um ficheiro são lidas — o primeiro ficheiro que passou disso: ${file})`,
@@ -1647,7 +1651,7 @@ const msg = {
       uiProjectNone: (files) => `  Verificações de interface: nada ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`} do projeto`,
       // (os factos do projeto por código — at: o primeiro local, ficheiro:linha)
       uiFact: {
-        "no-reduced-motion": (n, at) => `  ▲ o código declara movimento — uma animação, uma transição de transform ou um scroll suave (${n} ${n === 1 ? "local" : "locais"}, o primeiro: ${at}) — e nenhum dos ficheiros de vista do projeto lidos menciona movimento reduzido: oferecer uma variante reduzida — @media (prefers-reduced-motion: reduce), o motion-reduce: / motion-safe: do Tailwind (WCAG 2.3.3, AAA)`,
+        "no-reduced-motion": (n, at) => `  ▲ o código declara movimento — uma animação, uma transição de transform ou um scroll suave (${n} ${n === 1 ? "local" : "locais"}, o primeiro: ${at}) — e nenhum dos ficheiros de vista e scripts do projeto lidos menciona movimento reduzido: oferecer uma variante reduzida — @media (prefers-reduced-motion: reduce), o motion-reduce: / motion-safe: do Tailwind (WCAG 2.3.3, AAA)`,
       },
       // (o marcador `_UI checks off:_` do projeto em design-system.md — list: `<regra> <quantas escondeu> — <motivo>`, unidas por `; `;
       // e: uma entrada não aplicada, como o relatório a nomeia; n: as entradas lidas)

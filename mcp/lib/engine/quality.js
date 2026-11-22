@@ -1183,14 +1183,16 @@ const DS_MARKER_ENTRIES = 50; // …and the entries kept of each kind
 // { id (folded to lower case), reason (what the outer parentheses hold, commas too, trimmed, cut at DS_CELL_MAX — "" when
 // none or empty) }; an entry of another shape → { entry (as written, cut) }; past DS_MARKER_ENTRIES entries ONE more →
 // { entry, past: true, read } and no further one. This file names no rule id: engine/ui-checks.js uiOff validates them.
-const RE_DS_OFF_ENTRY = /^([a-z]+(?:-[a-z]+)*)\s*(?:\((.*)\))?$/i;
+// (1.39, UP-7) the id bare or in ONE balanced code span — `` `img-no-alt` (decorative) ``, as the docs write ids; a lone or a
+// doubled backtick is another shape
+const RE_DS_OFF_ENTRY = /^(?:`([a-z]+(?:-[a-z]+)*)`|([a-z]+(?:-[a-z]+)*))\s*(?:\((.*)\))?$/i;
 function dsChecksOff(value, out) {
   for (const w0 of dsEntries(value)) {
     const w = w0.trim();
     if (!w || out.some((e) => e.past)) continue;
     if (out.length >= DS_MARKER_ENTRIES) { out.push({ entry: w.slice(0, DS_CELL_MAX), past: true, read: DS_MARKER_ENTRIES }); continue; }
     const e = RE_DS_OFF_ENTRY.exec(w);
-    out.push(e ? { id: e[1].toLowerCase(), reason: (e[2] || "").trim().slice(0, DS_CELL_MAX) } : { entry: w.slice(0, DS_CELL_MAX) });
+    out.push(e ? { id: (e[1] || e[2]).toLowerCase(), reason: (e[3] || "").trim().slice(0, DS_CELL_MAX) } : { entry: w.slice(0, DS_CELL_MAX) });
   }
 }
 // A LIBRARY entry that names nothing, by its FIRST word (EN / PT / ES): "none", "none yet", "nenhuma ainda", "sin

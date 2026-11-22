@@ -1606,6 +1606,10 @@ const msg = {
         "file-findings": (n, file, count) => `  (${count} ${count === 1 ? "hallazgo de interfaz más" : "hallazgos de interfaz más"} allá de los ${n} de un fichero — el primero en ${file}: contados, no listados)`,
         // (1.38: las comprobaciones de interfaz del proyecto — n: los ficheros de vista leídos; at / count: las eliminaciones del contorno sin evaluar)
         "ui-files": (n, at, count) => `  (las comprobaciones de interfaz leyeron ${n === 1 ? "el primer fichero de vista" : `los primeros ${n} ficheros de vista`} del proyecto, un límite: el resto no se cuenta${count ? ` — ${count} ${count === 1 ? "eliminación del contorno sin evaluar" : "eliminaciones del contorno sin evaluar"}, la primera: ${at}` : ""})`,
+        // (1.39: la búsqueda en los scripts del hecho — n: los scripts leídos; bound: files | chars, el límite que la terminó
+        // (ninguno: se leyeron todos; un límite la termina tras 32 scripts por lo menos); count / file: los scripts leídos solo en
+        // parte, el primero por ruta)
+        "motion-scripts": (n, file, count, bound) => `  (se buscó una mención del movimiento reducido ${bound ? `en los primeros ${n} scripts del proyecto, la ruta más corta primero — un límite ${bound === "chars" ? "de sus caracteres" : "de su número"}` : `${n === 1 ? "en el script" : `en los ${n} scripts`} del proyecto`}${count ? ` — ${count} ${count === 1 ? "leído" : "leídos"} solo en parte, el primero: ${file}` : ""}: una mención más allá de lo leído no se ve)`,
         "component-files": (n) => `  (se leyeron ${n} ficheros de componentes en busca de los demás componentes que exportan, y se alcanzó un límite — los ficheros o caracteres leídos, o los nombres guardados de un fichero: el resto no se compara)`,
         "workspace-manifests": (n) => `  (se alcanzó un límite de los patrones de workspace — leídos ${n} de los ficheros package.json de los paquetes del workspace: las bibliotecas de los demás no se comparan)`,
         "font-values": (n, file) => `  (solo se leen las primeras ${n} pilas de fuentes de un fichero — el primer fichero que lo superó: ${file})`,
@@ -1647,7 +1651,7 @@ const msg = {
       uiProjectNone: (files) => `  Comprobaciones de interfaz: nada en ${files === 1 ? "el fichero de vista" : `los ${files} ficheros de vista`} del proyecto`,
       // (los hechos del proyecto por código — at: el primer lugar, fichero:línea)
       uiFact: {
-        "no-reduced-motion": (n, at) => `  ▲ el código declara movimiento — una animación, una transición de transform o un desplazamiento suave (${n} ${n === 1 ? "lugar" : "lugares"}, el primero: ${at}) — y ninguno de los ficheros de vista del proyecto leídos menciona el movimiento reducido: ofrecer una variante reducida — @media (prefers-reduced-motion: reduce), motion-reduce: / motion-safe: de Tailwind (WCAG 2.3.3, AAA)`,
+        "no-reduced-motion": (n, at) => `  ▲ el código declara movimiento — una animación, una transición de transform o un desplazamiento suave (${n} ${n === 1 ? "lugar" : "lugares"}, el primero: ${at}) — y ninguno de los ficheros de vista y scripts del proyecto leídos menciona el movimiento reducido: ofrecer una variante reducida — @media (prefers-reduced-motion: reduce), motion-reduce: / motion-safe: de Tailwind (WCAG 2.3.3, AAA)`,
       },
       // (el marcador `_UI checks off:_` del proyecto en design-system.md — list: `<regla> <cuántos ocultó> — <motivo>`, unidas por `; `;
       // e: una entrada no aplicada, como la nombra el informe; n: las entradas leídas)

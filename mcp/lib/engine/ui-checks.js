@@ -329,12 +329,15 @@ function judgeTag(tag, add) {
   if (!attrs) return CONTROL;
   const spread = attrs.some((a) => a.spread);
   const named = new Map(), events = [];
+  let is = null; // (1.39) the `is` of Vue's `<component>`: the literal a static one names, "" for a bound one
   for (const a of attrs) {
     if (a.spread) continue;
     const ev = eventOf(a.name);
     if (ev) { ev.attr = a.name; ev.value = a.value; events.push(ev); continue; }
     const b = boundName(a.name);
-    if (!named.has(b)) named.set(b, a.value);
+    if (named.has(b)) continue;
+    named.set(b, a.value);
+    if (b === "is") is = a.name.toLowerCase() === "is" ? (a.value || "").replace(/^["'`]|["'`]$/g, "") : "";
   }
   const shown = (b) => named.has(b) && literal(named.get(b)) !== "false"; // present and not literally false
   // paste-blocked: any tag (a component passes it down) — an inline handler that cancels the paste and reads no clipboard,
@@ -345,10 +348,18 @@ function judgeTag(tag, add) {
     const blocks = e.value == null ? e.mods.includes("prevent") || e.mods.includes("preventDefault") : RE_CANCELS.test(v);
     if (blocks && !RE_READS_CLIPBOARD.test(v) && !forwardsEvent(v)) { add("paste-blocked", tag.line, "<" + tag.name + " " + e.attr + ">"); break; }
   }
-  const element = RE_ELEMENT.test(tag.name);
-  const focusable = tag.name === "a" || tag.name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(tag.name);
+  // (1.39, D4) Vue's `<component>` — no HTML element has that name — renders what its `is` names: a BOUND one (`:is`,
+  // `v-bind:is`) a component — its own click and style not judged (vben's alert.vue: `<component :is="… || VbenButton"
+  // @click>`) — yet, in a click body, read as 1.38 read it: no control (a doubt there would silence true findings — vben's
+  // preset tiles, `<div @click>` holding `<component :is="theme.icon" />` and the tile's name); a static one (`is="div"`) that
+  // element — RE_ELEMENT on the literal as written, focusable and void as usual. Without an `is`, and an `is` on any other tag
+  // (a customized built-in), the tag as written; img-no-alt and paste read the tag as written too
+  const bound = tag.name === "component" && is === "";
+  const name = tag.name === "component" && is !== null ? is : tag.name;
+  const element = RE_ELEMENT.test(name);
+  const focusable = name === "a" || name === "area" ? named.has("href") || named.has("routerlink") : FOCUSABLE.has(name);
   // (a `<label>` is no control in a body — never focused itself, the control it names is its own tag: review 2 of 1.37)
-  const kind = !element || (focusable && tag.name !== "label") || tag.name === "slot" ? CONTROL : undefined;
+  const kind = !bound && (!element || (focusable && name !== "label") || name === "slot") ? CONTROL : undefined;
   if (spread) return kind; // (a spread may hold any attribute)
   // font-size-viewport (1.38): an ELEMENT's own `style` attribute — never a component's prop, never a free `fontSize:` line
   // (CSS-in-JS, `sx`, `css()` nest their media queries where no line reader sees them: CRIT_3 must-fix 1)
@@ -370,7 +381,7 @@ function judgeTag(tag, add) {
   if (!click || !element) return kind;
   const role = literal(named.get("role")).split(/\s+/)[0];
   if (focusable || named.has("tabindex") || ROLE_REACHED.has(role) || named.has("inert") || shown("aria-hidden")) return kind;
-  if (click.mods.some((m) => RE_OFF_ELEMENT.test(m)) || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "") || VOID.has(tag.name)) return kind;
+  if (click.mods.some((m) => RE_OFF_ELEMENT.test(m)) || (click.value == null && click.mods.includes("stop")) || RE_DELEGATES.test(click.value || "") || VOID.has(name)) return kind;
   return { value: "<" + tag.name + " " + click.attr + ">" };
 }
 
@@ -889,16 +900,22 @@ function uiChecksReport(files, projectFocus, cap, offs) {
 // cut (`cut`: the files read) with no focus style read judges none, and its limit `ui-files` names them (count, first place).
 // The FACT no-reduced-motion (UI_FACTS): the files read declare motion (uiChecksOf's `motion`: an animation, a transform's
 // transition, smooth scrolling) and NONE of the texts read mentions reduced motion — RE_REDUCED_ASK on each WHOLE text as read
-// (never its lines cut at DS_LINE_MAX: a minified sheet's media query sits past the cut); said only when no read was cut — the
-// walk (truncated), the pass (`cut`), a file's (view-size): a mention may sit in what was not read (CRIT_1 must-fix 6). No
-// script search (a mention only in a .ts hook is not seen: the fact is worded "the view files read"). → facts: [{ code, count
+// (never its lines cut at DS_LINE_MAX: a minified sheet's media query sits past the cut); said only when no view read was cut
+// — the walk (truncated), the pass (`cut`), a file's (view-size): a mention may sit in what was not read (CRIT_1 must-fix 6).
+// (1.39, D6) wouldSay(cut, truncated) is that predicate, asked BEFORE done: when it holds, the caller reads the project's other
+// scripts for a mention (design-system.js uiProject — its read, its bounds) and hands each text to mention(text), the same
+// RE_REDUCED_ASK → true once one mentions (the read ends there): the fact is taken back, never added. → facts: [{ code, count
 // (the lines declaring motion), file, line (the first by file, then line) }].
 // bounds: the reader's — { size: the characters read of a file, line: of a line } (the limits view-size / line-length name them).
 // offs (uiOff's): a rule or fact the project switched off — counted in `off` (an inline-silenced finding stays `silenced`),
-// never in total / byRule / rules / facts nor `ui-files`' count; `off` / `offIgnored` beside them (offKeys).
+// never in total / byRule / rules / facts nor `ui-files`' count; `off` / `offIgnored` beside them (offKeys). (The search runs
+// for an off fact too: its `off` count is the fact as it would have been said.)
 // → { feed(rel, lines, over, text) (lines: viewLines of the file's text as read; over: the file is longer than that read),
-//     done(cut, truncated) → { read, total, silenced, byRule, rules: { id: {level, files, file, line?} }, off?, offIgnored?, facts,
-//     limits } }
+//     wouldSay(cut, truncated), mention(text),
+//     done(cut, truncated, scripts) → { read, total, silenced, byRule, rules: { id: {level, files, file, line?} }, off?, offIgnored?,
+//     facts, limits } } — scripts: the search's { read, bound (null | files | chars: the bound that ended it), count (the scripts
+//     read only in part), file (the first of those by path) }, null when none ran; its limit `motion-scripts` {read, bound?,
+//     count?, file?} beside the fact (or its off count) when a bound ended it or a script was read only in part
 // (a mention: `prefers-reduced-motion`, `useReducedMotion`, `isReduceMotionEnabled`, `reduce_motion`, Tailwind's `motion-safe:` /
 // `motion-reduce:` — a word that only looks like one makes the fact said less, never wrongly)
 const RE_REDUCED_ASK = /reduced?[-_ ]?motion|motion-(?:safe|reduce)/i;
@@ -915,7 +932,10 @@ function uiProjectPass(bounds, offs) {
     e.file = rel;
     e.line = line;
   };
+  const wouldSay = (cut, truncated) => !!(motion.count && !asked && !cut && !truncated && !cuts["view-size"].count);
   return {
+    wouldSay,
+    mention(text) { if (RE_REDUCED_ASK.test(text)) asked = true; return asked; },
     feed(rel, lines, over, text) {
       const r = uiChecksOf(lines, rel, over);
       read++;
@@ -938,7 +958,7 @@ function uiProjectPass(bounds, offs) {
       cutAt(cuts["line-length"], r.cut.lines, rel);
       cutAt(cuts["tag-length"], r.cut.tags, rel);
     },
-    done(cut, truncated) {
+    done(cut, truncated, scripts) {
       // (the excuse — any focus style read; a cut pass with none judges no removal)
       const removal = rules.get("outline-removed");
       let unjudged = null;
@@ -954,7 +974,11 @@ function uiProjectPass(bounds, offs) {
       }
       const limits = cut ? [Object.assign({ code: "ui-files", read }, unjudged ? Object.assign({ count: unjudged.count, file: unjudged.file }, unjudged.line != null ? { line: unjudged.line } : {}) : {})] : [];
       for (const code of ["view-size", "line-length", "tag-length"]) { const c = cuts[code]; if (c.count) limits.push({ code, read: c.read, count: c.count, file: c.file }); }
-      const said = motion.count && !asked && !cut && !truncated && !cuts["view-size"].count;
+      const said = wouldSay(cut, truncated);
+      // (1.39: the script search a bound ended, or that read a script only in part — beside the fact or its off count)
+      if (said && scripts && (scripts.bound || scripts.count)) {
+        limits.push(Object.assign({ code: "motion-scripts", read: scripts.read }, scripts.bound ? { bound: scripts.bound } : {}, scripts.count ? { count: scripts.count, file: scripts.file } : {}));
+      }
       if (said && off.has("no-reduced-motion")) count1(hidden, "no-reduced-motion", motion.count);
       const facts = said && !off.has("no-reduced-motion") ? [{ code: "no-reduced-motion", count: motion.count, file: motion.file, line: motion.line }] : [];
       return Object.assign({ read, total, silenced, byRule, rules: out }, offKeys(offs, hidden, () => true), { facts, limits });

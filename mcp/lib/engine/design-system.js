@@ -51,6 +51,8 @@ const DS_LIST = 50; // rows a report lists (`missingTotal`, `staleTotal`, `newTo
 const DS_VIEW_FILES = 200; // a feature's view files read
 const DS_UI_FILES = 5000; // (1.38) the project's view files the UI checks' inventory reads…
 const DS_UI_CHARS = 32 * 1024 * 1024; // …and their characters: past either, its `ui-files` limit says so
+const DS_MOTION_SCRIPTS = 2000; // (1.39) the project's other scripts the inventory reads for a mention of reduced motion…
+const DS_MOTION_CHARS = 8 * 1024 * 1024; // …and their characters: past either, its `motion-scripts` limit says which
 const DS_RAW_PER_FILE = 200; // raw values kept per file (1.38: colours and sizes together, fonts and motion each on their own)
 const DS_KIND_VALUE = 300; // a font stack's or a motion declaration's characters kept as its raw value (its literals judged from them)
 const BS = String.fromCharCode(92); // a backslash, built: an escaped pipe in a table cell
@@ -2958,7 +2960,7 @@ function scanCode(root, withComponents = true, withBreakpoints = false) {
   const packages = packageLibraries(root);
   capped.workspaces = packages.cut;
   capped.manifests = packages.read;
-  return { components, tokens, sources, twins, libraries: packages.libraries, views, files: walk.files, truncated: walk.truncated, capped, realRoot, multi,
+  return { components, tokens, sources, twins, libraries: packages.libraries, views, scripts, files: walk.files, truncated: walk.truncated, capped, realRoot, multi,
     breakpoints: bp ? bp.found : null };
 }
 
@@ -3290,26 +3292,52 @@ const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files
 // counted in `read` and in view-size (the first such file by path named); its rules, focus styles and motion unseen (a feature report and finish
 // keep 1.37's read of its first DS_READ_CHARS). Never in a feature report, finish or the seed. Its limits never reach the
 // report's `limits`, `truncated` or `inSync`. reg: the registry (its `_UI checks off:_` marker — uiOff).
+// (1.39, D6) Then — only when the fact no-reduced-motion is about to be said (pass.wouldSay: motion read, no mention, no view
+// read cut) — the project's OTHER scripts (scan.scripts that are no view file, test, story, mock or declaration: a `.ts`
+// hook, a styled-components `globals.ts`, a test setup — `jest.setup.js` is no test by name: said less, never wrongly) are
+// read for a mention (pass.mention, RE_REDUCED_ASK — the views' own predicate), the shorter path first, each to DS_READ_CHARS,
+// ending at the first mention or at DS_MOTION_SCRIPTS files / DS_MOTION_CHARS characters: a mention takes the fact back (it
+// never adds one); a search a bound cut, or a script read only in part, keeps it, and the pass's `motion-scripts` limit says
+// so (`bound`: which). Both reads go through readHeads (one loop).
 function uiProject(scan, reg) {
   const order = (a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
   const list = scan.views.filter((x) => uiViewFile(x.rel)).sort((a, b) => RE_STYLE_EXT.test(b.rel) - RE_STYLE_EXT.test(a.rel) || a.rel.length - b.rel.length || order(a, b));
   const pass = uiProjectPass({ size: DS_READ_CHARS, line: DS_LINE_MAX }, uiOff(reg)); // (1.38: the marker's rules off)
-  const heads = readFileHeads(list.slice(0, DS_UI_FILES).map((x) => x.full), DS_READ_CHARS + 1);
-  let n = 0, chars = 0, cut = false;
+  const cut = readHeads(list, DS_UI_FILES, DS_UI_CHARS, (x, text, over) => { pass.feed(x.rel, over && RE_STYLE_EXT.test(x.rel) ? [] : viewLines(text, x.rel), over, text); }).cut != null;
+  let scripts = null; // (a walk the file cap cut: the fact no-reduced-motion is not said — nor searched for)
+  if (pass.wouldSay(cut, scan.truncated)) {
+    const more = scan.scripts.filter((x) => !isViewFile(x.rel) && !isTestFile(x.rel) && !RE_NOT_COMPONENT_FILE.test(x.rel)).sort((a, b) => a.rel.length - b.rel.length || order(a, b));
+    const part = { count: 0, file: null }; // (the scripts read only in part — the first by path)
+    const r = readHeads(more, DS_MOTION_SCRIPTS, DS_MOTION_CHARS, (x, text, over) => {
+      if (over) { part.count++; if (part.file == null || x.rel < part.file) part.file = x.rel; }
+      return pass.mention(text);
+    });
+    scripts = { read: r.read, bound: r.cut, count: part.count, file: part.file };
+  }
+  return pass.done(cut, scan.truncated, scripts);
+}
+// The inventory's bounded read — ONE loop for its two reads (CRIT_2 must-fix 7): list's files in order, each one's first
+// DS_READ_CHARS characters (one more asked for: `over`), read ahead (readFileHeads); at most `files` files and `chars`
+// characters — the next one past either is not read. take(x, text, over) → true ends the read (a mention). → { read (the
+// files read), cut: null | "files" | "chars" (the bound that ended it) }
+function readHeads(list, files, chars, take) {
+  const heads = readFileHeads(list.slice(0, files).map((x) => x.full), DS_READ_CHARS + 1);
+  let n = 0, seen = 0, cut = null;
   try {
     for (const x of list) {
-      if (n >= DS_UI_FILES || chars >= DS_UI_CHARS) { cut = true; break; }
+      if (n >= files) { cut = "files"; break; }
+      if (seen >= chars) { cut = "chars"; break; }
       const t = heads.next();
       n++;
       if (t == null) continue;
       const over = t.length > DS_READ_CHARS, text = over ? t.slice(0, DS_READ_CHARS) : t;
-      chars += text.length;
-      pass.feed(x.rel, over && RE_STYLE_EXT.test(x.rel) ? [] : viewLines(text, x.rel), over, text);
+      seen += text.length;
+      if (take(x, text, over)) break;
     }
   } finally {
     heads.stop();
   }
-  return pass.done(cut, scan.truncated); // (a walk the file cap cut: the fact no-reduced-motion is not said)
+  return { read: n, cut };
 }
 function designSystemReport(projectDir, opts = {}) {
   const root = path.resolve(projectDir);

@@ -1144,9 +1144,12 @@ exports.run = async ({
         /\| Text, and the space that grows with it \| `rem` \(`em` inside a component\) \| follows the user's font size and zoom \|/, /\| Borders, hairlines, shadows \| `px` \| stays crisp \|/,
         /A convention, not a WCAG rule: px-only text still zooms in every current browser — it only ignores the user's default font size\./,
         /Write the team's choice in `design-system\.md`'s units table, which the code scan compares the code with \(\[ui-code-scan\.md\]\(ui-code-scan\.md\)\)\./],
-      ["responsive: 100vw and the classic scrollbar — 100 % in flow, a fixed overlay fine, no check; Chrome 145's condition", RS,
+      // (1.39: "the visual review measures the sideways scroll instead" was false — its captures hide scrollbars, as
+      // ui-review.md's capture line still writes: nothing measures it, the reader checks one by hand)
+      ["responsive: 100vw and the classic scrollbar — 100 % in flow, a fixed overlay fine, no check and nothing measures it (the captures hide scrollbars); Chrome 145's condition", RS,
         /an in-flow box at `width: 100vw` is a scrollbar wider than the page — a sideways scroll\. Use `100%` there\./,
-        /A fixed overlay \(`position: fixed; inset: 0`\) or a decoration its parent clips is fine, so no check flags `100vw`: the visual review measures the sideways scroll instead\./,
+        /A fixed overlay \(`position: fixed; inset: 0`\) or a decoration its parent clips is fine, so no check flags `100vw` — and the visual review's captures hide scrollbars \(`--hide-scrollbars`, Playwright's headless default\), so nothing measures it: check an in-flow `100vw` box yourself at a desktop size, scrollbars shown\./,
+        { not: /measures the sideways scroll instead/ }, () => /`chrome --headless=new --hide-scrollbars/.test(R),
         /Chrome 145 subtracts the scrollbar from `vw` only where the root reserves its room \(`scrollbar-gutter: stable`, `overflow-y: scroll`\) — Bramus Van Damme, bram\.us, 2026\./],
       ["responsive: 100vh on a phone — svh / dvh / lvh, the 100vh; 100dvh pair, min-height harmless", RS,
         /`svh` is the smallest viewport, `dvh` follows the toolbars \(relaid out as they move\), `lvh` the largest\./,
@@ -1512,7 +1515,8 @@ exports.run = async ({
     const bpCodes = [...BP.matchAll(/code: "([a-z-]+)"/g)].map((m) => m[1]);
     const B = { files: num(DS, "DS_UI_FILES"), chars: num(DS, "DS_UI_CHARS"), read: num(DS, "DS_READ_CHARS"), line: num(DS, "DS_LINE_MAX"), tag: num(UC, "DS_TAG_LINES"),
       sheets: num(UC, "DS_FOCUS_SHEETS"), entries: num(QY, "DS_MARKER_ENTRIES"), unitRows: num(QY, "DS_UNIT_ROWS"), perFile: num(DS, "DS_RAW_PER_FILE"), list: num(DS, "DS_LIST"),
-      jnd: num(DV, "DS_JND"), hsl: num(DV, "DS_SAME_HSL"), cross: num(DV, "DS_SAME_CROSS"), alpha: num(DV, "DS_ALPHA") };
+      jnd: num(DV, "DS_JND"), hsl: num(DV, "DS_SAME_HSL"), cross: num(DV, "DS_SAME_CROSS"), alpha: num(DV, "DS_ALPHA"),
+      motionFiles: num(DS, "DS_MOTION_SCRIPTS"), motionChars: num(DS, "DS_MOTION_CHARS") };
     const scanRaw = raw("skills", "dev-spec-driven", "references", "ui-code-scan.md"), scanLines = scanRaw.split("\n");
     const section = (head) => { const at = scanLines.findIndex((l) => l === head), end = scanLines.findIndex((l, i) => i > at && /^#+ /.test(l)); return at < 0 ? "" : ws(scanLines.slice(at, end < 0 ? scanLines.length : end).join("\n")); };
     const proj = section("### The project's UI checks"), scale = section("### Raw values against the project's scale");
@@ -1571,7 +1575,7 @@ exports.run = async ({
         /The tool and the CLI ask for it; the engine's own default runs none\./.test(proj) && /S\.designSystemReport\(dir, \{ name: o\.name, uiPass: true \}\)/.test(raw("mcp", "lib", "operations.js"))
           && /\.\.\.\(opts\.uiPass \? \{ uiChecks: uiProject\(scan, reg\) \} : \{\}\)/.test(DS)],
       ["bounds: the inventory's files / characters, a file's and a line's read, a tag's — every code uiProjectPass emits, its own limits", () =>
-        passCodes.length === 4 && passCodes.every((c) => proj.includes(tick(c)))
+        passCodes.length === 5 && passCodes.every((c) => proj.includes(tick(c)))
           && proj.includes("at most " + n(B.files) + " files and " + B.chars / 1048576 + " MB (`" + passCodes[0] + "`, naming the outline removals it left unjudged)")
           && proj.includes("each file's first " + B.read / 1024 + "K and a line's first " + n(B.line) + " characters (`view-size`, `line-length`; a tag past " + B.tag + " lines, `tag-length` — each with a count and the first file)")
           && proj.includes("its own limits, never the report's `limits` or `truncated`")],
@@ -1594,8 +1598,12 @@ exports.run = async ({
         const re = regexOf(UC, "RE_REDUCED_ASK");
         return said.length >= 4 && said.every((w) => re.test(w.slice(1, -1)));
       }],
-      ["fact: said only when no read was cut — the inventory's bound by its code; a script's mention not seen", () =>
-        proj.includes("Said only when no read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); a mention only in a script (a `.ts` hook) is not seen.")],
+      // (1.39, D6: the scripts are searched — the bounds from the source, the order and the filter the engine's: a test setup is
+      // no test by name, so its mention counts)
+      ["fact: said only when no view read was cut — the inventory's bound by its code; the scripts searched, a test setup's too, their bounds and code", () =>
+        proj.includes("Said only when no view read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); scripts count too, test setups included (" + n(B.motionFiles) + " by shorter path, " + B.motionChars / 1048576 + " MB: `" + passCodes[1] + "`).")
+          && passCodes[1] === "motion-scripts" && /const more = scan\.scripts\.filter\(\(x\) => !isViewFile\(x\.rel\) && !isTestFile\(x\.rel\) && !RE_NOT_COMPONENT_FILE\.test\(x\.rel\)\)\.sort\(\(a, b\) => a\.rel\.length - b\.rel\.length \|\| order\(a, b\)\)/.test(DS)
+          && ["jest.setup.js", "vitest.setup.ts", "playwright.config.ts", "src/setupTests.ts"].every((f) => !require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier().isTestFile(f))],
       ["marker: `_UI checks off: <rule-id> (reason)_` — the label the registry reads (RE_DS_MARKER), an example entry a rule; off everywhere, counted never listed", () =>
         /\|UI checks off\)/.test((QY.match(/const RE_DS_MARKER = [^\n]*/) || [""])[0]) && offPara.includes("`_UI checks off: <rule-id> (reason)_`")
           && rules.includes(((offPara.match(/`_UI checks off: ([a-z-]+) \(/) || [])[1]))
@@ -1744,8 +1752,8 @@ exports.run = async ({
     const DS = raw("mcp", "lib", "engine", "design-system.js");
     const C = ws(raw("skills", "dev-spec-driven", "references", "ui-code-scan.md")), ST = ws(raw("skills", "dev-spec-driven", "references", "steering-templates.md"));
     const read = num(DS, "DS_READ_CHARS") / 1024, line = num(DS, "DS_LINE_MAX").toLocaleString("en-US");
-    // (the spellings the prose names, through the registry's reader and uiOff: a list item, a bold line — no entry at all —,
-    // an id in a code span — not applied; the bare line applied)
+    // (the spellings the prose names, through the registry's reader and uiOff: a list item, a bold line — no entry at all —;
+    // the bare line applied; 1.39 UP-7: an id in ONE code span applied too, a lone or a doubled backtick `unreadable`)
     const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
     const offOf = (name, text) => {
       const d = path.join(tmp, "r138-marker-" + name, ".specs");
@@ -1755,8 +1763,9 @@ exports.run = async ({
       return [o.off.size, o.ignored.map((x) => x.why)];
     };
     const spell = { bare: offOf("bare", "_UI checks off: img-no-alt (decorative)_"), item: offOf("item", "- _UI checks off: img-no-alt (decorative)_"),
-      bold: offOf("bold", "**UI checks off:** img-no-alt (decorative)"), code: offOf("code", "_UI checks off: `img-no-alt` (decorative)_") };
-    const spelled = js(spell) === js({ bare: [1, []], item: [0, []], bold: [0, []], code: [0, ["unreadable"]] });
+      bold: offOf("bold", "**UI checks off:** img-no-alt (decorative)"), code: offOf("code", "_UI checks off: `img-no-alt` (decorative)_"),
+      lone: offOf("lone", "_UI checks off: `img-no-alt (decorative)_"), double: offOf("double", "_UI checks off: ``img-no-alt`` (decorative)_") };
+    const spelled = js(spell) === js({ bare: [1, []], item: [0, []], bold: [0, []], code: [1, []], lone: [0, ["unreadable"]], double: [0, ["unreadable"]] });
     const R1 = [
       ["ui-code-scan: a file read in part judges neither per-file font size (the read and the line bounds, design-system.js)", () =>
         C.includes("Neither the stylesheet's nor the bare one is judged in a file read in part (past " + read + "K, a line past " + line + " characters).")],
@@ -1764,10 +1773,10 @@ exports.run = async ({
         /An Astro `<style define:vars>` block's first at-rule reads as a selector: silence what it gives\./.test(C)],
       ["ui-code-scan: a feature report's focus search is narrower than the inventory's — it may warn where the inventory does not", () =>
         /A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a removal the inventory excuses by one in another view file: check that the removal's elements get it, or silence it\./.test(C)],
-      ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare (the engine agrees)", () => spelled
-        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(a list item or a bold line is not read\), the marker in English, each id bare \(one in a code span is not applied\)/.test(C)],
-      ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare (the engine agrees)", () => spelled
-        && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare \(in a code span it is not applied\), entries separated by commas/.test(ST)],
+      ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare or in a code span (the engine agrees)", () => spelled
+        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(never a list item or bold\), the marker in English, ids bare or in a code span, entries separated by commas/.test(C)],
+      ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare or in a code span (the engine agrees)", () => spelled
+        && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare or in a code span, entries separated by commas/.test(ST)],
     ];
     for (const [label, check] of R1) all("1.38.0 review 1 docs — " + label + (label.includes("spellings") ? " (got " + js(spell) + ")" : ""), { holds: check });
   }
