@@ -119,8 +119,21 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
       return project(null, files);
     };
     const G1 = { asksOn: app("asks", true), asksOff: app("asks", false), nothingOn: app("nothing", true), all: app("all", false) };
-    // G2: 500 LOCATED rows (500 component files, every one marked) and 2,000 pages each importing one — the module check is
-    // indexed by key and the prefilter is two linear passes (never `includes` × the names, never a loop of rows a binding)
+    // G2: 500 LOCATED rows (500 component files, every one marked), 1,000 pages each importing one and 1,000 pages of 16 KB that
+    // name none — the module check indexed by key; and the prefilter two linear passes, whatever the rows: on 200 pages of 64 KB
+    // that name none, 500 rows marked ≤ 1.25× one (`includes` × the names scanned a text whole once a name)
+    const quiet = (rowsMarked) => {
+      const files = { "package.json": js({ name: "g2q" }) }, rows = [];
+      for (let c = 0; c < 500; c++) {
+        const n = "C" + String(c).padStart(3, "0");
+        files["src/components/ui/" + n.toLowerCase() + ".tsx"] = L(["export function " + n + "() { return <div />; }"]);
+        rows.push("| " + n + " | src/components/ui/" + n.toLowerCase() + ".tsx |  | " + (c < rowsMarked ? "_Deprecated_" : "") + " |");
+      }
+      for (let i = 0; i < 200; i++) files["src/app/q" + i + ".tsx"] = L(["export const Q = () => <section />;"].concat(Array.from({ length: 800 }, (_, k) => "const w" + k + " = \"" + "z".repeat(70) + "\";")));
+      files[".specs/steering/design-system.md"] = HEAD + rows.join("\n") + "\n";
+      return project(null, files);
+    };
+    const G2q = { q500: quiet(500), q1: quiet(1) };
     const many = (marked) => {
       const files = { "package.json": js({ name: "g2" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }) };
       const rows = [];
@@ -129,9 +142,10 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
         files["src/components/ui/" + n.toLowerCase() + ".tsx"] = L(["export function " + n + "() { return <div />; }"].concat(c === 0 && !marked ? ["export const Moving = motion(Box);"] : []));
         rows.push("| " + n + " | src/components/ui/" + n.toLowerCase() + ".tsx |  | " + (marked ? "_Deprecated_" : "") + " |");
       }
-      for (let i = 0; i < 2000; i++) {
+      for (let i = 0; i < 1000; i++) {
         const n = "C" + String(i % 500).padStart(3, "0");
         files["src/app/p" + i + ".tsx"] = L(["import { " + n + " } from \"@/components/ui/" + n.toLowerCase() + "\";"].concat(marked ? [] : ["// Moving"], ["export const P = () => <" + n + " />;"], Array.from({ length: 20 }, (_, k) => "const v" + k + " = \"" + "y".repeat(60) + "\";")));
+        files["src/app/q" + i + ".tsx"] = L((marked ? [] : ["// Moving"]).concat(["export const Q = () => <section />;"], Array.from({ length: 200 }, (_, k) => "const w" + k + " = \"" + "z".repeat(70) + "\";")));
       }
       files[".specs/steering/design-system.md"] = HEAD + rows.join("\n") + "\n";
       return project(null, files);
@@ -151,19 +165,26 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
     };
     const G3 = { watch: web(true), settle: web(false) };
     const rep = (p) => () => S.designSystemReport(p);
-    for (const g of [G1, G2, G3]) for (const p of Object.values(g)) S.designSystemReport(p);
+    // (a feature's report builds no watch — scanCode(root, false) reads no component's name: its cost is the same with a row
+    // marked as with none; built, it read every page for nothing, ×3.6–4 on shadcn-ui and Starlight)
+    const featOf = (p) => { const f = S.createFeature(p, { name: "Orders", tracks: ["ui"], summary: "x" }); return () => S.designSystemReport(p, { name: f.slug }); };
+    const F = { on: featOf(G1.nothingOn), off: featOf(app("nothing", false)) };
+    for (const g of [G1, G2, G2q, G3]) for (const p of Object.values(g)) S.designSystemReport(p);
+    F.on(); F.off();
     const s = remeasure(() => ({
       asks: r2(ratio(rep(G1.asksOn), rep(G1.asksOff))), nothing: r2(ratio(rep(G1.nothingOn), rep(G1.all))),
-      rows500: r2(ratio(rep(G2.on), rep(G2.all))), web: r2(ratio(rep(G3.watch), rep(G3.settle))),
-    }), (x) => x.asks <= 1.5 && x.nothing <= 1.5 && x.rows500 <= 1.5 && x.web <= 1.5);
+      rows500: r2(ratio(rep(G2.on), rep(G2.all))), web: r2(ratio(rep(G3.watch), rep(G3.settle))), feature: r2(ratio(F.on, F.off)), prefilter: r2(ratio(rep(G2q.q500), rep(G2q.q1))),
+    }), (x) => x.asks <= 1.5 && x.nothing <= 1.5 && x.rows500 <= 1.5 && x.web <= 1.5 && x.feature <= 1.25 && x.prefilter <= 1.25);
     const got = { asks: (S.designSystemReport(G1.asksOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal, nothing: (S.designSystemReport(G1.nothingOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal,
-      rows500: ((d) => [d.rowsTotal, d.rows.every((r) => r.filesTotal === 4)])(S.designSystemReport(G2.on).deprecatedUses || { rows: [] }) };
-    all("1.39 cost: the deprecated uses' watch reads and parses no more than settle would — a real-shaped app (600 pages, 40 SFCs, 20 MDX) with a row ≤ 1.5× the same report with none while settle asks a candidate, and ≤ 1.5× settle parsing every page when it asks none; 500 located rows over 2,000 pages ≤ 1.5× settle parsing them all; the hostile `export *` web ≤ 1.5× settle's own follow through it (got " +
+      rows500: ((d) => [d.rowsTotal, d.rows.every((r) => r.filesTotal === 2)])(S.designSystemReport(G2.on).deprecatedUses || { rows: [] }) };
+    all("1.39 cost: the deprecated uses' watch reads and parses no more than settle would — a real-shaped app (600 pages, 40 SFCs, 20 MDX) with a row ≤ 1.5× the same report with none while settle asks a candidate, and ≤ 1.5× settle parsing every page when it asks none; 500 located rows over 2,000 pages (half naming none) ≤ 1.5× settle parsing them all; the hostile `export *` web ≤ 1.5× settle's own follow through it; a feature's report with a row marked ≤ 1.25× with none (it builds no watch); 500 rows marked over pages that name none ≤ 1.25× one (got " +
       js({ s, got }) + ")", {
       asks: () => s.asks <= 1.5 && got.asks === 300,
       nothing: () => s.nothing <= 1.5 && got.nothing === 300,
       rows500: () => s.rows500 <= 1.5 && js(got.rows500) === js([500, true]),
       web: () => s.web <= 1.5,
+      feature: () => s.feature <= 1.25 && !("deprecatedUses" in F.on()),
+      prefilter: () => s.prefilter <= 1.25,
     });
   }
 };
