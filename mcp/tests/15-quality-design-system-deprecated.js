@@ -426,7 +426,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
     [KIT + "table.tsx"]: compFile("Table", ["export function TableRow() { return <tr />; }", "export const tableVariants = 1;"]),
     [KIT + "data-grid.tsx"]: compFile("DataGrid"),
-    [KIT + "card.tsx"]: compFile("Card", ["export function CardHeader() { return <div />; }"]),
+    [KIT + "card.tsx"]: compFile("Card", ["export function CardHeader() { return <div />; }", "export function CardFooter() { return <div />; }"]),
     [KIT + "sonner.tsx"]: L(["export function Toaster() { return <div />; }", "export const toast = (m) => m;"]),
     [KIT + "index.ts"]: L(["export * from \"./sonner\";", "export * from \"./menu\";"]),
     [KIT + "toast.tsx"]: compFile("Toast"), [KIT + "chart.tsx"]: L(["export function ChartContainer() { return <div />; }"]),
@@ -448,12 +448,15 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     "src/app/users/both.tsx": L(["import { Table } from \"@/components/ui/table\";", "import * as K from \"@/components/ui/table\";", "export const P = () => <Table><K.TableRow /></Table>;"]),
     "src/app/users/renamed.tsx": L(["import { Avatar as A } from \"../../components/ui/avatar\";", "export const P = () => <A />;"]),
     "src/app/users/default.tsx": L(["import Box from \"@/components/ui/panel\";", "export const P = () => <Box />;"]),
+    // (the module written with its .js extension, NodeNext's way: the base the prefilter asks is the path's, its extension dropped)
+    "src/app/users/default-js.tsx": L(["import Pane from \"@/components/ui/panel.js\";", "export const P = () => <Pane />;"]),
     "src/app/users/types.tsx": L(["import type { FieldProps } from \"@/components/ui/field\";", "export const p = (x: FieldProps) => x.name;"]),
     "src/app/users/require.js": L(["const { Chip } = require(\"../../components/ui/chip\");", "module.exports = () => Chip;"]),
     "src/app/users/dynamic.tsx": L(["import { lazy } from \"react\";", "const D = lazy(() => import(\"@/components/ui/drawer\"));", "export const P = () => <D />;"]),
     "src/app/users/namespace.tsx": L(["import * as UI from \"@/components/ui\";", "export const P = () => <UI.Menu />;"]),
     "src/app/users/ns-button.tsx": L(["import * as UI from \"@/components/ui\";", "export const P = () => <UI.Button />;"]),
     "src/app/users/header.tsx": L(["import { CardHeader } from \"@/components/ui/card\";", "export const P = () => <CardHeader />;"]),
+    "src/app/users/footer.tsx": L(["import { CardFooter } from \"@/components/ui/card\";", "export const P = () => <CardFooter />;"]),
     "src/app/users/card-only.tsx": L(["import { Card } from \"@/components/ui/card\";", "export const P = () => <Card />;"]),
     "src/app/users/toast-fn.tsx": L(["import { toast } from \"@/components/ui/sonner\";", "export const P = () => toast(1);"]),
     "src/app/users/folder.tsx": L(["import { Toaster } from \"@/components/ui\";", "export const P = () => <Toaster />;"]),
@@ -477,7 +480,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     "| Field | src/components/ui/field.tsx |  | " + mark() + " |", "| Chip | src/components/ui/chip.tsx |  | " + mark() + " |", "| Drawer | src/components/ui/drawer.tsx |  | " + mark() + " |",
     "| Menu | src/components/ui/menu.tsx |  | " + mark() + " |", "| Badge | src/components/badge.tsx |  | " + mark() + " |", "| Button | src/components/ui/button.tsx |  |  |",
     "| Tree | src/components/ui/tree.tsx |  |  |", "| TreeNode | src/components/ui/tree.tsx |  | " + mark() + " |",
-    "| Select | src/components/ui/select/index.tsx |  | " + mark() + " |"];
+    "| Select | src/components/ui/select/index.tsx |  | " + mark() + " |", "| CardFooter | src/components/ui/card.tsx |  | " + mark() + " |"];
   const MARK = (use) => "_Deprecated" + (use ? ": " + use : "") + "_", NONE = () => "";
   // the report with the markers against the same report with none — every key but `deprecatedUses` byte-identical (settle's
   // verdicts are a scan's with no row: the watch is its own instance)
@@ -498,27 +501,27 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const doc = checkOf(g);
     all("1.39 deprecatedUses (a React kit, settle asking nothing): for each `_Deprecated:_` row the code holds a component file for, in the registry's order, the files that still import it — its replacement as doctor names it; a row named by its file is its MODULE: a named, renamed, default (its local name is no watched name: the module's base), type-only or `require` import of the file, a non-component export of it (`toast`), a namespace member, the components it exports through a folder's barrel (`{ Toaster }`), every namesake's importers (`billing/components/table.tsx`); a component a file exports beside its own counts by its NAME (`CardHeader`, never `{ Card }`); one count a file; a component file read for its exports is an importer too; never a dynamic import(), a test, a story, a mock, a folder import of another member, a file's own local `<Table />`; an .mdx tag no import binds counted apart; a located row with no importer listed with 0, an unlocated one named; never the report's limits or inSync; the same report with no marker holds every other key the same (got " +
       js({ rows: d.rows, unlocated: d.unlocated, read: d.read, limits: d.limits, same: diff.same, doc }) + ")", {
-      order: () => js(d.rows.map((x) => x.name)) === js(["Table", "CardHeader", "Sonner", "Toast", "Chart", "Callout", "Avatar", "Panel", "Field", "Chip", "Drawer", "Menu", "Badge", "TreeNode", "Select"]) && d.rowsTotal === 15,
+      order: () => js(d.rows.map((x) => x.name)) === js(["Table", "CardHeader", "Sonner", "Toast", "Chart", "Callout", "Avatar", "Panel", "Field", "Chip", "Drawer", "Menu", "Badge", "TreeNode", "Select", "CardFooter"]) && d.rowsTotal === 16,
       indexFolder: () => js(uses(r, "Select")) === js([1, ["src/app/users/select.tsx"]]),
       ownFile: () => js(uses(r, "TreeNode")) === js([0, []]) && js(rowOf(r, "TreeNode").paths) === js(["src/components/ui/tree.tsx"]),
       use: () => rowOf(r, "Table").use === "DataGrid" && rowOf(r, "CardHeader").use === "Card" && rowOf(r, "Toast").use === "" && doc && doc.detail === Q().dsDeprecated(1, Q().dsDeprecatedItem("Table", "DataGrid")),
       namesakes: () => js(rowOf(r, "Table").paths) === js(["src/billing/components/table.tsx", "src/components/ui/table.tsx"]) && rowOf(r, "Table").pathsTotal === 2,
       module: () => js(uses(r, "Table")) === js([4, ["src/app/users/both.tsx", "src/app/users/named.tsx", "src/app/users/variants.tsx"]]),
       renamed: () => js(uses(r, "Avatar")) === js([1, ["src/app/users/renamed.tsx"]]),
-      defaultBase: () => js(uses(r, "Panel")) === js([1, ["src/app/users/default.tsx"]]),
+      defaultBase: () => js(uses(r, "Panel")) === js([2, ["src/app/users/default-js.tsx", "src/app/users/default.tsx"]]),
       typeOnly: () => js(uses(r, "Field")) === js([1, ["src/app/users/types.tsx"]]),
       require: () => js(uses(r, "Chip")) === js([1, ["src/app/users/require.js"]]),
       dynamic: () => js(uses(r, "Drawer")) === js([0, []]),
       namespace: () => js(uses(r, "Menu")) === js([1, ["src/app/users/namespace.tsx"]]),
-      name: () => js(uses(r, "CardHeader")) === js([1, ["src/app/users/header.tsx"]]) && rowOf(r, "CardHeader").unbound === 0,
+      name: () => js(uses(r, "CardHeader")) === js([1, ["src/app/users/header.tsx"]]) && rowOf(r, "CardHeader").unbound === 0 && js(uses(r, "CardFooter")) === js([1, ["src/app/users/footer.tsx"]]),
       moduleExport: () => js(uses(r, "Sonner")) === js([2, ["src/app/users/folder.tsx", "src/app/users/toast-fn.tsx"]]),
       kitParts: () => js(uses(r, "Chart")) === js([1, ["src/app/users/chart.tsx"]]) && rowOf(r, "Chart").pathsTotal === 1,
       result: () => js(uses(r, "Badge")) === js([1, ["src/components/badge-list.tsx"]]),
       unbound: () => js(uses(r, "Callout")) === js([1, ["docs/bound.mdx"]]) && rowOf(r, "Callout").unbound === 2 && rowOf(r, "Callout").unboundAt === "docs/guide.mdx" && rowOf(r, "Table").unbound === 0 && !("unboundAt" in rowOf(r, "Table")),
       none: () => js(uses(r, "Toast")) === js([0, []]) && rowOf(r, "Toast").pathsTotal === 1,
       unlocated: () => js(d.unlocated) === js(["Modal"]) && d.unlocatedTotal === 1,
-      // (in scope: the 19 component files, the 18 pages and the 4 .mdx — never the test, the story, the mock)
-      read: () => d.read === 41 && js(d.limits) === js([]) && d.note === Q().dsDepUsesNote,
+      // (in scope: the 19 component files, the 20 pages and the 4 .mdx — never the test, the story, the mock)
+      read: () => d.read === 43 && js(d.limits) === js([]) && d.note === Q().dsDepUsesNote,
       report: () => js(r.limits) === js([]) && r.truncated === false,
       differential: () => diff.same === true && diff.off === false,
     });
@@ -566,6 +569,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       // Vue CLI / webpack: an SFC imported with no extension, a folder's index.vue by its folder
       "src/views/list.vue": L(["<script>", "import Table from '@/components/Table'", "import Pagination from '@/components/Pagination'", "export default { components: { Table, Pagination } }", "</script>",
         "<template><Table /><pagination /></template>"]),
+      "src/views/motion.vue": L(["<script setup>", "import { MotionBox } from '@/components/kit'", "</script>", "<template><MotionBox /></template>"]),
       "src/views/with-ext.vue": L(["<script setup>", "import Table from '@/components/Table.vue'", "</script>", "<template><Table /></template>"]),
       // (a platform infix, as an import names the module: `@/components/Chart.client` is Chart.client.vue)
       "src/components/Chart.client.vue": L(["<template><canvas /></template>"]),
@@ -592,7 +596,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       "| Button | packages/ui/src/components/button/button.vue |  | " + mark() + " |", "| DataTable | src/components/DataTable.vue |  | " + mark() + " |",
       "| Tree | src/components/Tree.vue |  | " + mark() + " |", "| Grid | src/app/components/grid/grid.component.ts |  | " + mark() + " |",
       "| Badge | src/components/Badge.svelte |  | " + mark() + " |", "| Hero | src/components/Hero.astro |  | " + mark() + " |",
-      "| Sheet | src/lib/components/ui/sheet/sheet.svelte |  | " + mark() + " |", "| Chart | src/components/Chart.client.vue |  | " + mark() + " |"];
+      "| Sheet | src/lib/components/ui/sheet/sheet.svelte |  | " + mark() + " |", "| Chart | src/components/Chart.client.vue |  | " + mark() + " |",
+      "| MotionBox | src/components/kit.tsx |  | " + mark() + " |"];
     const p = depProject("sfc", VUE_ROWS(MARK), vue);
     const r = S.designSystemReport(p), d = usesOf(r);
     const diff = differential(p, VUE_ROWS);
@@ -607,6 +612,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       astro: () => js(uses(r, "Hero")) === js([1, ["src/pages/index.astro"]]),
       namespaceBase: () => js(uses(r, "Sheet")) === js([2, ["src/lib/components/ui/sheet/index.js", "src/routes/+page.svelte"]]),
       angular: () => js(d.unlocated) === js(["Grid"]) && !d.rows.some((x) => x.name === "Grid"),
+      candidate: () => js(uses(r, "MotionBox")) === js([1, ["src/views/motion.vue"]]),
       differential: () => diff.same === true,
     });
   }
