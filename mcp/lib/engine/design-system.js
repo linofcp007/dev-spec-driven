@@ -2643,7 +2643,11 @@ function followOf(scripts, project, index, prefill) {
   };
   return { resolve, placed, spent };
 }
-function settle(results, scripts, markups, read, places) {
+// (1.39) watch: the deprecated uses' watch (deprecatedWatch) or null — it sees what settle reads and never what settle asks:
+// every component file read for its exports (whatever settle asks), then each file of settle's queue as it is read (the
+// uses settle parsed, or its text), and where settle's bound stopped the read. With a watch and nothing asked, the queue is
+// read for the watch alone (settle's order and bound; nothing told, no `.ts` file).
+function settle(results, scripts, markups, read, places, watch) {
   const dropped = new Set(), rendered = new Set();
   const asked = new Map(), byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map(), exportsOf = new Map(), localsOf = new Map();
   const ask = (path, name, local, kind) => {
@@ -2657,8 +2661,8 @@ function settle(results, scripts, markups, read, places) {
     for (const c of r.found.candidates) ask(r.path, c.name, c.local, "candidate");
     if (r.found.defaultName != null) defaults.set(r.path, r.found.defaultName);
   }
-  if (!asked.size) return { dropped, rendered };
-  const project = places();
+  if (!asked.size && !watch) return { dropped, rendered };
+  const project = asked.size ? places() : null;
   for (const r of results) {
     // (every name the file gives, a component's or not, and the locals they stand for: a provider's tag may be a part of one)
     exportsOf.set(r.path, new Set(r.found.names.concat(r.found.candidates.map((c) => c.name))));
@@ -2674,7 +2678,7 @@ function settle(results, scripts, markups, read, places) {
   const note = (path, name, what) => { const e = asked.has(path) ? asked.get(path).get(name) : null; if (e) e[what] = true; };
   // a provider's tag: the part it names when the file gives one so (`Tooltip.Provider`), else its root used as a context
   const provide = (path, name) => { if (exportsOf.has(path) && exportsOf.get(path).has(name)) note(path, name, "rendered"); else note(path, name.slice(0, name.lastIndexOf(".")), "context"); };
-  const F = followOf(scripts, project, { byName, byBase, keys, defaults }, results.map((r) => [r.path, r.uses.reexports]));
+  const F = asked.size ? followOf(scripts, project, { byName, byBase, keys, defaults }, results.map((r) => [r.path, r.uses.reexports])) : null;
   const tell = (rel, uses) => {
     const file = rel.slice(rel.lastIndexOf("/") + 1);
     const tests = isTestFile(rel) || RE_NOT_COMPONENT_FILE.test(file); // (a story or a test may CALL a component: never a helper's sign — review 1)
@@ -2700,7 +2704,8 @@ function settle(results, scripts, markups, read, places) {
     // (an object's member read settles a PART alone: `UI.Badge.displayName` is a component's static — review 1)
     for (const n of uses.members) for (const [path, name] of resolve(n)) if (name.includes(".")) note(path, name, "member");
   };
-  for (const r of results) tell(r.path, r.uses);
+  if (asked.size) for (const r of results) tell(r.path, r.uses);
+  if (watch) for (const r of results) watch.result(r.path, r.uses);
   // the other scripts — a file that writes none of the names asked (nor a default export's) tells nothing: never viewed
   const wanted = new Set(defaults.values());
   for (const name of byName.keys()) { const dot = name.indexOf("."); wanted.add(dot === -1 ? name : name.slice(0, dot)); }
@@ -2724,12 +2729,14 @@ function settle(results, scripts, markups, read, places) {
   let files = 0, chars = 0;
   try {
     for (const [s, uses] of queue) {
-      if (files >= DS_USAGE_FILES || chars >= DS_USAGE_CHARS) break;
+      if (files >= DS_USAGE_FILES || chars >= DS_USAGE_CHARS) { if (watch) watch.cut(queue.slice(files).map(([x]) => x.rel), files); break; }
       const text = heads.next();
       files++;
       if (text == null) continue;
       chars += text.length;
-      if (names(text)) tell(s.rel, uses(text, s.rel));
+      const u = asked.size && names(text) ? uses(text, s.rel) : null;
+      if (u) tell(s.rel, u);
+      if (watch) watch.see(s.rel, text, u, uses);
     }
   } finally {
     heads.stop();
