@@ -3126,8 +3126,9 @@ function rawValuesIn(lines, kinds, cut) {
 // (RE_TW_UNIT) by the property it sets.
 // 1.39 (1.38.0 review 1's T2): RE_TW_UNIT is the units table's OWN pattern — RE_TW_SIZE's utilities in any unit (`text-[2vw]`,
 // `py-[3pt]`, `rounded-[50%]`), negative ones too (`-mt-[12px]`, `md:-mx-[8px]`, `mt-[-12px]`): m[1] the utility, m[2] its
-// value. RE_TW_SIZE stays the raw values' (px / rem / em, what a size token replaces): never one predicate for two rules.
-const RE_TW_UNIT = /(?<![\w-])(?:[a-z0-9-]{1,24}:){0,4}-?(p[trblxyse]?|m[trblxyse]?|gap(?:-[xy])?|space-[xy]|text|rounded(?:-[a-z]{1,2})?|leading|tracking)-\[(-?(?:\d+(?:\.\d+)?|\.\d+)(?:[a-z]{1,6}|%))\]/g;
+// value — a unit of at most 5 letters (CSS Values 4's longest: `svmin`, `dvmax`, `cqmin`; `text-[3inches]` is none).
+// RE_TW_SIZE stays the raw values' (px / rem / em, what a size token replaces): never one predicate for two rules.
+const RE_TW_UNIT = /(?<![\w-])(?:[a-z0-9-]{1,24}:){0,4}-?(p[trblxyse]?|m[trblxyse]?|gap(?:-[xy])?|space-[xy]|text|rounded(?:-[a-z]{1,2})?|leading|tracking)-\[(-?(?:\d+(?:\.\d+)?|\.\d+)(?:[a-z]{1,5}|%))\]/g;
 function unitsOf(lines, rowOf, room) {
   const list = [], byProperty = {};
   // (every finding counted by its property; its text made only for one listed)

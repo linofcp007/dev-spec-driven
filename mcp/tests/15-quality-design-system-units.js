@@ -132,19 +132,20 @@ exports.run = async ({ all, S, tmp, require, __dirname }) => {
     const r = feature(REG(T), {
       "src/checkout/c.css": lines(".a {", "  margin: 0 -16px;", "  margin: -1px !important;", "  margin-top: -.5em;", "  background-position: 0 0,-8px 0;", "  margin: $gap-8px;",
         "  margin: calc(-8px + 1rem);", "  margin: 0 8px;", "}"),
-      "src/checkout/C.tsx": lines("export const C = () => <div className=\"-ml-[3px] md:-mx-[8px] mt-[-12px] py-[3pt] text-[11vw] leading-[100%] rounded-[50%] py-[2vmin] scroll-mt-[12px] leading-[1.5] text-[#fff] text-[1rem] p-[13px]\" />;"),
+      "src/checkout/C.tsx": lines("export const C = () => <div className=\"-ml-[3px] md:-mx-[8px] mt-[-12px] py-[3pt] text-[11vw] leading-[100%] rounded-[50%] py-[2vmin] scroll-mt-[12px] leading-[1.5] text-[#fff] text-[1rem] p-[13px]\" />;",
+        "export const D = () => <div className=\"pt-[2svmin] text-[3inches]\" />;"),
     });
     const got = { units: r.units && r.units.findings.map((x) => x.file.slice(13) + ":" + x.line + " " + x.value + "=" + x.property + " (" + x.unit + ")"), total: r.units && r.units.total,
       raw: r.raw.filter((x) => x.kind === "size").map((x) => x.file.slice(13) + ":" + x.line + " " + x.value) };
     // (1.38.0's raw sizes of these two files, the oracle's run: no negative length, no unit outside px / rem / em)
     const RAW138 = ["C.tsx:1 text-[1rem]", "C.tsx:1 p-[13px]", "c.css:8 margin: 0 8px"];
-    all("1.39 units, T2: the feature report lists a stylesheet's negative lengths (`margin: 0 -16px`, `-1px !important`, `-.5em`, `0 0,-8px 0`) and Tailwind's sizes in any unit, negative ones too (`-ml-[3px]`, `md:-mx-[8px]`, `mt-[-12px]`, `py-[3pt]`, `text-[11vw]`, `leading-[100%]`, `rounded-[50%]`, `py-[2vmin]`), each by the property it sets; never `$gap-8px`, calc(), `scroll-mt-[12px]`, `leading-[1.5]`, `text-[#fff]`, `text-[1rem]`; the raw sizes stay RE_TW_SIZE's (got " + js(got) + ")", {
+    all("1.39 units, T2: the feature report lists a stylesheet's negative lengths (`margin: 0 -16px`, `-1px !important`, `-.5em`, `0 0,-8px 0`) and Tailwind's sizes in any unit, negative ones too (`-ml-[3px]`, `md:-mx-[8px]`, `mt-[-12px]`, `py-[3pt]`, `text-[11vw]`, `leading-[100%]`, `rounded-[50%]`, `py-[2vmin]`, CSS's longest unit `pt-[2svmin]`), each by the property it sets; never `$gap-8px`, calc(), `scroll-mt-[12px]`, `leading-[1.5]`, `text-[#fff]`, `text-[1rem]`, a word of 6 letters (`text-[3inches]`); the raw sizes stay RE_TW_SIZE's (got " + js(got) + ")", {
       css: () => js(got.units.filter((x) => x.startsWith("c.css"))) === js(["c.css:2 margin: 0 -16px=margin (px)", "c.css:3 margin: -1px !important=margin (px)", "c.css:4 margin-top: -.5em=margin-top (em)",
         "c.css:5 background-position: 0 0,-8px 0=background-position (px)", "c.css:8 margin: 0 8px=margin (px)"]),
       tailwind: () => js(got.units.filter((x) => x.startsWith("C.tsx"))) === js(["C.tsx:1 -ml-[3px]=margin-left (px)", "C.tsx:1 md:-mx-[8px]=margin-inline (px)", "C.tsx:1 mt-[-12px]=margin-top (px)",
         "C.tsx:1 py-[3pt]=padding-block (pt)", "C.tsx:1 text-[11vw]=font-size (vw)", "C.tsx:1 leading-[100%]=line-height (%)", "C.tsx:1 rounded-[50%]=border-radius (%)", "C.tsx:1 py-[2vmin]=padding-block (vmin)",
-        "C.tsx:1 p-[13px]=padding (px)"]),
-      total: () => got.total === 14,
+        "C.tsx:1 p-[13px]=padding (px)", "C.tsx:2 pt-[2svmin]=padding-top (svmin)"]),
+      total: () => got.total === 15,
       raw: () => js(got.raw) === js(RAW138),
     });
   }
