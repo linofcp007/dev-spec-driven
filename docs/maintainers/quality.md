@@ -635,11 +635,19 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   over lines, its last DS_PRELUDE characters, `#{…}` as written), `on.statement({ text, block, line, from })` (`from`, 1.37: the line its text
   starts on) when a `;` OUTSIDE
   parentheses or a `}` ends one (the walker's pending text and the piece — its lines joined by a blank; never blank, never
-  a prelude), `on.close({ id, line })` when a `}` closes a block (a stray one closes none). Each handler is optional and is
+  a prelude), `on.close({ id, line })` when a `}` closes a block (a stray one closes none), and (1.39, the Sass map reader)
+  `on.open({ name, value, block, line })` when a token declaration's LINE leaves it open — no `;` / `}` ended it there (a
+  multi-line map, a value below its name, each override of `@use … with (`): its name, what the line holds after the colon
+  (flags kept, its FIRST DS_PRELUDE characters), its block; built only when `on.open` exists, never in an indented .sass (a
+  line's end ends a declaration there). Each handler is optional and is
   given a fresh object of plain values: nothing it does reaches the tokens. The events read the walker's state, they never
   steer it — so they inherit its view: a `;` inside parentheses (a Less mixin's parameters, an unquoted `data:` URL) ends no
   statement and what stands before it is not kept; after a token declaration left open at its line's end the next statement
-  starts below it; an indented .sass file has no block. Behaviour-preserving when it came: the tokens of 2,493 real
+  starts below it — its rest is the VERY NEXT event when that is a statement of the same block, and is lost when any other
+  event comes first: in `@use … with (` mode every override is a declaration of its own and resets the walker's pending
+  text, so a map another override follows is never delivered (CRIT_3 §1 — Dashticz's loader.scss yields `)` alone, and with
+  `$container-max-widths` last its `sm: 540px, md: 720px ) )` would have read as breakpoints); a reader of `open` voids it then
+  (breakpoints.js: one unread); an indented .sass file has no block. Behaviour-preserving when it came: the tokens of 2,493 real
   stylesheets byte-identical to 1.36's, with and without an observer; an observer costs ~1.3–1.6× the walk
   (mcp/tests/15-quality-design-system-walks.js pins the events on one sheet and that a handler writing into what it is
   given changes no token).

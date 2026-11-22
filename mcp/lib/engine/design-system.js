@@ -1738,7 +1738,12 @@ const unmaskInterpolation = (s) => (s.includes(INTERPOLATION[0]) || s.includes(I
 //     not kept (the walker keeps none); after a token declaration left open at its line's end, the next statement starts
 //     below it (the walker lists that declaration by its name).
 //   on.close({ id, line }) — a `}` closed block `id` (a stray `}` closes none).
-// An indented .sass file has no braces: no block, and a statement only at a `;`.
+//   on.open({ name, value, block, line }) (1.39) — a token declaration its line left open (no `;` / `}` ended it there — a
+//     multi-line Sass map); value: what the line holds after the colon, flags kept, its first DS_PRELUDE characters; block:
+//     the innermost open block. Its rest is the NEXT event when that is a statement of the same block — any other event
+//     first means the walker dropped it: each override of `@use … with (…)` is a declaration of its own, and the text the
+//     walker held before one is gone (a reader voids the open then). Built only when on.open exists.
+// An indented .sass file has no braces: no block, no open declaration (a line's end ends one), and a statement only at a `;`.
 function styleTokens(text, rel, on) {
   const plainCss = /\.css$/i.test(rel), indented = RE_INDENTED_EXT.test(rel), less = /\.less$/i.test(rel);
   const decl = less ? RE_TOKEN_DECL_LESS : RE_TOKEN_DECL;
@@ -1776,12 +1781,14 @@ function styleTokens(text, rel, on) {
     const m = decl.exec(piece);
     if (!m) return null;
     let value = unmaskInterpolation(piece.slice(m[0].length)).trim();
+    const written = value; // (the open event's: flags kept)
     for (const flag of SASS_FLAGS) if (value.endsWith(flag)) value = value.slice(0, -flag.length).trim();
     const whole = value !== "" && !value.endsWith(","); // (of an open declaration: what its line holds may be all of it)
     const block = blocks.length ? blocks[blocks.length - 1] : null;
     const entry = { name: m[1], value: (closed || (indented && whole)) && designValue(value, true) ? value : "", global: block != null && block.global, block: block ? block.id : 0 };
     out.push(entry);
     if (!closed && whole) last = { entry, value };
+    if (!closed && !indented && on && on.open) on.open({ name: m[1], value: written.slice(0, DS_PRELUDE), block: entry.block, line: ln });
     return entry;
   };
   for (const raw of text.split(/\r?\n/)) {
@@ -3561,4 +3568,4 @@ function designSystemFinish(projectDir, slug, opts = {}) {
     unregistered: pending.map((c) => c.name).filter((n) => !registered.includes(n)) };
 }
 
-module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, rawValuesIn, styleTokens, opensString, quoteEnd, RE_STYLE_EXT, uiProject, __link };
+module.exports = { designSystemReport, designSystemSeed, designSystemFinish, viewLines, rawValuesOf, rawValuesIn, styleTokens, DS_PRELUDE, opensString, quoteEnd, RE_STYLE_EXT, uiProject, __link };
