@@ -1125,7 +1125,7 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     text holding `@theme` (else the walk builds no event). The last declaration of a name is kept; `--breakpoint-<name>:
     initial` drops it; `--breakpoint-*: initial` / `--*: initial` drop the file's earlier ones and set `reset`. `partial` = a
     length read and no reset anywhere: Tailwind keeps its own five, which the engine never holds (stale data) — the default
-    set joins them. A value other than `0` or a px / rem / em length, or wider than 3840 → `unread` {name, value, at} (the
+    set fills the places the theme's widths leave (below). A value other than `0` or a px / rem / em length, or wider than 3840 → `unread` {name, value, at} (the
     first 5, `unreadTotal` — of the sources asked: never the code's beside a deciding ui.md; `cliOutput.bpUnread` points to
     ui.md's line, never "rewrite the value" — must-fix 6). What it inherits from the walk: the sheets the token scan reads —
     a token file by name, a global sheet by name (`sheetRank`) up to `DS_TOKEN_READS`, where that search ends without a word
