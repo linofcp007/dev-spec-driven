@@ -5,7 +5,8 @@
  * true}'s `breakpoints` (the project's report and a feature's alike — never spec_finish's part, never the seed). The first source
  * that gives a width wins:
  *   ui.md   — .specs/steering/ui.md's `- Breakpoints:` line (every +ui stub holds it, under that label in EN / PT / ES): its value
- *             up to the first `·` no length follows, a `[…]` slot left unread — the team's standard, fingerprinted into the approvals;
+ *             up to the first `·` no length follows, a `[…]` slot left unread (1.39, BS-6: but a closed one opening the value whose
+ *             text is no template's) — the team's standard, fingerprinted into the approvals;
  *   code    — Tailwind 4's `--breakpoint-<name>` in a top-level `@theme` block of a stylesheet the token scan reads, through the
  *             observer that walk carries (never a second walk); `partial` when no `--breakpoint-*: initial` / `--*: initial`
  *             reset them — Tailwind keeps its own then, which the engine never assumes (stale data): the default set fills
@@ -20,8 +21,8 @@
  */
 const path = require("path");
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
-let codeBlockLines, commentLines, readIfExists, specsRoot, steeringFrontMatter, toPosix;
-function __link(E) { ({ codeBlockLines, commentLines, readIfExists, specsRoot, steeringFrontMatter, toPosix } = E); }
+let codeBlockLines, commentLines, isTemplatePlaceholder, readIfExists, specsRoot, steeringFrontMatter, toPosix;
+function __link(E) { ({ codeBlockLines, commentLines, isTemplatePlaceholder, readIfExists, specsRoot, steeringFrontMatter, toPosix } = E); }
 
 const BP_DEFAULT = [320, 390, 768, 1024, 1440]; // the review's default set
 // (1.39, BS-2) under `partial`, the default set fills the places the theme's own widths leave, in this order: tablet, laptop,
@@ -45,6 +46,11 @@ const RE_UI_LINE = /^[ \t]*[-*+][ \t]+[*_]{0,2}breakpoints[*_]{0,2}[ \t]*:(.*)$/
 // (RTL · locale formats) ends it
 const RE_UI_END = /·(?![ \t\u00a0\u202f]*\.?\d)/;
 const RE_UI_SLOT = /\[[^\]]*(?:\]|$)/g; // the stub's `[360 / 768 / 1280 px]` — what a `[` opens, closed or not
+// (1.39, BS-6) the slot's own place: a CLOSED `[…]` that opens the value — after the label's closing emphasis marks and blanks —
+// whose text is no template's (isTemplatePlaceholder, the placeholder gate's own predicate: the stub's `[360 / 768 / 1280 px]` is
+// one, in every language) is the team's filled value, its lengths read; every other `[…]` stays the slot, closed or not (an aside,
+// `480 / 960 px [1200 in print]`, is never a width)
+const RE_UI_FILLED = /^[*_]{0,2}[ \t]*\[([^\]]*)\]/;
 // a length: a thousands group (`1.280`, `1,440`, `2 560` with a no-break space — one digit before it, a width being ≤ 3840, three
 // after; never a plain blank: `360 768 1280` is a list) or a number — then px / rem / em, or none
 const RE_UI_LENGTH = /(?:(\d)[.,\u00a0\u202f](\d{3})(?!\d)|(\d+(?:\.\d+)?|\.\d+))(?:[ \t]*(px|rem|em))?/gi;
@@ -84,7 +90,9 @@ function uiBreakpoints(root) {
     const cut = value.length > BP_LINE;
     if (cut) { const on = /[\w.,]/.test(value[BP_LINE]); value = value.slice(0, BP_LINE); if (on) value = value.replace(RE_CUT_TOKEN, ""); }
     const widths = [], unread = [];
-    for (const x of uiLengths(value.replace(RE_UI_SLOT, " "))) {
+    const filled = RE_UI_FILLED.exec(value);
+    const read = filled && !isTemplatePlaceholder(filled[1]) ? filled[1] + " " + value.slice(filled[0].length).replace(RE_UI_SLOT, " ") : value.replace(RE_UI_SLOT, " ");
+    for (const x of uiLengths(read)) {
       if (x.px > BP_CEIL) unread.push({ name: "Breakpoints", value: x.text, at });
       else if (x.px >= BP_FLOOR) widths.push(x.px);
     }

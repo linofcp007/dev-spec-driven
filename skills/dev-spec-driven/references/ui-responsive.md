@@ -32,8 +32,8 @@ from the first of these that gives a width of 320 px or more:
    expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width
    ends the list: write `640 (sm) · 768 (md)`, not `sm 640 · md 768` (640 alone); px, or rem / em at 16 px; a bare
    number takes the unit written after it, `360 / 768 / 1280 px`; `1,440` is one width), its first 200 characters;
-   a `[…]` is the stub's slot and never read — write the widths without the brackets —, so an untouched stub falls
-   through;
+   the stub's own `[…]` slot is never read, so an untouched stub falls through — your widths written inside its
+   brackets are, and any other bracket is an aside, never a width (`480 / 960 px [1200 in print]` is 480 and 960);
 2. a top-level Tailwind 4 `@theme` block's `--breakpoint-*` in a stylesheet the code scan reads (unless the sheets reset
    them — `--breakpoint-*: initial` or `--*: initial` —, Tailwind keeps its own five too, which are not read: the default
    set fills the places the theme's widths leave — list them all in ui.md to choose);

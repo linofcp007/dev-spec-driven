@@ -1105,8 +1105,12 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     a number reads as more widths and a name before a width ends the list — `sm 640 · md 768` is 640:
     ui-responsive.md says to start a note with a word and to write `640 (sm) · 768 (md)`) and is read up to `BP_LINE` (200)
     characters — past them `breakpoint-line` {read, at}, and a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot,
-    closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — and so does a filled value
-    kept in brackets (`[576 / 768 px]`: ui-responsive.md says to write the widths without them). A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
+    closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — but (1.39, BS-6 as CRIT_3
+    must-fix 5 narrowed it) a CLOSED one at the slot's own place, opening the value after the label's closing emphasis marks
+    and blanks (`RE_UI_FILLED`), whose text is no template's (`isTemplatePlaceholder` — the placeholder gate's own predicate,
+    under the project's template scope: the stub's slot is one in every language) is the team's filled value: its lengths are
+    read with the rest of the value (`[576 / 768 px] · text` → 576, 768); every other bracket keeps the rule, so an aside after
+    the widths (`480 / 960 px [1200 in print]`, `[see Figma frame 1440]`) is never a width. A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
     size), a bare number in the unit written NEXT (`360 / 768 / 1280 px`, `30 / 48 / 80 rem`) else px; a thousands group
     (`1.280`, `1,440`, a no-break space — one digit before it: a width is ≤ 3840) before px or none is an integer, before rem /
     em a decimal (`1.250rem`); a plain blank is never a group (`360 768 1280` is a list), so `1 280` reads as 1 and 280. A width
@@ -2745,7 +2749,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   U+202F (the ones `RE_UI_LENGTH`'s thousands group takes — French typography puts the narrow one before and after `·`),
   written as escapes; `\s` would take U+2009 and line ends too (the fixture's thin space ends the list). R2-BS-2's
   number-led note stays prose (ui-responsive.md item 1): telling `· 1200 px max content width` from `360 phone · 768 tablet`
-  is meaning, not syntax, and a lengths-only narrowing would end `640 (sm) · 768 (md)`, the form the docs recommend.
+  is meaning, not syntax, and a lengths-only narrowing would end `640 (sm) · 768 (md)`, the form the docs recommend. BS-6
+  (1.38.0 review 1's LOW, prose until now): the design read every closed bracket whose text is no template's; CRIT_3's
+  probe (bs6.js) showed it misreading asides — `480 / 960 px [1200 in print]` +1200, `640 / 1024 px [see Figma frame 1440]`
+  +1440 — so it reads only the slot's own place (must-fix 5): the replay's ui.md lines differ in the filled brackets alone
+  (`[576 / 768 / 992 / 1200 / 1400 px] · text`, its bold-label twin, `[576 / 768 px] 1200 px [1600 in print]` → 576 and 768
+  joining 1200); the stub in EN / PT / ES / pt-BR, `[TBD]`, the asides and an unclosed `[` unchanged.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four

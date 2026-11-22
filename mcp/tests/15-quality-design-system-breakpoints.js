@@ -103,6 +103,26 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // BP-ui-bracket (1.39, BS-6 — U3, U4, B2, B3, B4; U2 and B1 are BP-ui-slot's stubs and aside): a CLOSED `[…]` at the slot's
+    // own place — opening the value, after the label's closing emphasis marks and blanks — whose text is no template's is the
+    // team's filled value, read; the stub's own slot (the template's text) is not, an unclosed one is not, nor a bracket anywhere
+    // else (the rest of the value after the filled one is read as ever, its own brackets left out); the template test asks the
+    // bracket's text, never the whole value
+    const filled = report("- Breakpoints: [576 / 768 / 992 / 1200 / 1400 px] · text expansion +30–40 % · RTL: [yes / no]\n");
+    const unclosed = report("- Breakpoints: [576 / 768 px · text\n"), bold = report("- **Breakpoints:** [576 / 768 px]\n");
+    const rest = report("- Breakpoints: [576 / 768 px] 1200 px [1600 in print]\n"), stubThen = report("- Breakpoints: [360 / 768 / 1280 px] 600 px\n");
+    const later = report("- Breakpoints: 600 px [640 / 960 px]\n");
+    all("1.39 breakpoints (ui.md — BS-6): a closed `[…]` opening the value whose text is no template's is read (`from: \"ui.md\"`), with the rest of the value; the stub's own slot, an unclosed `[`, a bracket elsewhere are not (got " +
+      js({ filled: [filled.from, filled.widths], unclosed: unclosed.widths, bold: bold.widths, rest: rest.widths, stubThen: stubThen.widths, later: later.widths }) + ")", {
+      filled: () => filled.from === "ui.md" && widths(filled) === js([320, 576, 768, 992, 1200, 1400]) && filled.at === UI + ":1" && filled.unreadTotal === 0,
+      unclosed: () => unclosed.from === "default" && js(unclosed.widths) === js(DEFAULT),
+      bold: () => bold.from === "ui.md" && widths(bold) === js([320, 576, 768]),
+      rest: () => widths(rest) === js([320, 576, 768, 1200]),
+      stubThen: () => widths(stubThen) === js([320, 600]),
+      later: () => widths(later) === js([320, 600]),
+    });
+  }
+
   { // BP-ui-nbsp (1.39, R2-BS-3 — N1a, N1b, N2): a no-break space after the `·` (U+00A0, or U+202F, the narrow one French
     // typography puts there) continues the list like a blank — the two a thousands group already takes; a word after it still ends
     // the value, and so does a line break's absence of any (the class holds blanks, never `\s`'s line ends or any character)
