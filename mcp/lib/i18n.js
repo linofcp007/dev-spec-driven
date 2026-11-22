@@ -163,7 +163,10 @@ function renderBrief(d, lang) {
     if (s.omitted) push(t.designSystemOmitted(s.omitted));
     if (!s.rows) push("", t.designSystemNoRows(s.file));
     if (s.unknown.length) push("", t.designSystemUnknown(s.unknown.join(", ")));
-    if (s.tokens || s.sources.length) push("", t.designSystemTokens(s.tokens, s.sources.map((p) => "`" + p + "`").join(", ")));
+    const tokens = s.tokens || s.sources.length;
+    if (tokens) push("", t.designSystemTokens(s.tokens, s.sources.map((p) => "`" + p + "`").join(", ")));
+    // 1.39: the units table's rows the engine quotes (its own bound: quality.js DS_BRIEF_UNITS), and how many it did not
+    if (s.units) push(...(tokens ? [] : [""]), t.designSystemUnits(s.units.rows.map((r) => r.props.join(", ") + ": " + r.units.join(", ")).join(" · "), s.units.more));
     if (s.libraries.length) push(t.designSystemLibraries(s.libraries.join(", ")));
   }
   const verify = d.verify || [];

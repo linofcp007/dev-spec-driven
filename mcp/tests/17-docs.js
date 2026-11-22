@@ -1632,24 +1632,20 @@ exports.run = async ({
           && /`#3b82f6` against `hsl\(217 91% 60%\)`, `16px` against `1rem` are not compared, nor a name the code declares with two values or more \(a theme, a twin sheet\)\./.test(scale)
           && T.tokenDrift("#3b82f6", "hsl(217 91% 60%)") === null && T.tokenDrift("16px", "1rem") === null && T.tokenDrift("150ms", "0.2s") === "quantity"],
       ["gone, and neither changes inSync", () => /`gone` lists the `_Token sources:_` files that no longer exist\. Neither changes `inSync`: it compares names\./.test(scale)],
-      ["units table: the headers the registry reads (RE_DS_PROPERTY_HEAD, RE_DS_COL.units) in EN / PT / ES; a props table is none", () => {
-        // (1.38.0 review 1, T3: the header STARTS with the word — `Allowed units` is none)
-        const heads = (scale.match(/first header cell is `Property` \(`([^`]+)`, `([^`]+)`\) and with a column whose header starts with `Units` \(`([^`]+)`, `([^`]+)`; `([^`]+)` is none\)/) || []).slice(1);
-        const prop = regexOf(QY, "RE_DS_PROPERTY_HEAD"), unit = new RegExp(((QY.match(/units: \/(.*)\/i,/) || [])[1] || "(?!)"), "i");
-        return heads.length === 5 && [ "Property", heads[0], heads[1]].every((h) => prop.test(h)) && ["Units", heads[2], heads[3]].every((h) => unit.test(h))
-          && !unit.test(heads[4]) && unit.test(heads[4].split(" ").pop()) && /a props table, `\| Property \| Type \| Default \|`, is none/.test(scale);
-      }],
-      ["units: the feature report's findings and their keys, the first 50; never a negative length, a Tailwind size in px / rem / em alone (offUnit, RE_TW_SIZE)", () => {
-        // (1.38.0 review 1, T2: what the units table does not judge, as the engine reads it)
-        const tw = new RegExp(regexOf(DS, "RE_TW_SIZE").source);
+      // (1.39, chain E: the table's shape moved to steering-templates.md — its row below reads the headers against the engine)
+      ["units table: its shape and an example — a pointer to steering-templates.md", () =>
+        scale.includes("**The units table** — the team's convention of which units each property takes, in design-system.md (its shape and an example: [steering-templates.md](steering-templates.md) → design-system.md).")],
+      ["units: the feature report's findings and their keys, the first 50; a negative length counts, a Tailwind size in any unit (offUnit, RE_TW_UNIT — RE_TW_SIZE stays the raw values')", () => {
+        // (1.39, 1.38.0 review 1's T2: what the units table judges, as the engine reads it)
+        const tw = new RegExp(regexOf(DS, "RE_TW_UNIT").source), raw = new RegExp(regexOf(DS, "RE_TW_SIZE").source);
         return scale.includes("{`findings` — the first " + B.list + ": `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}")
-          && /lists each declaration whose value takes, outside parentheses, a unit its row does not give \(never `0`, a unitless number or a negative length: `-8px`\), and a Tailwind arbitrary size in px, rem or em \(`p-\[10px\]`; never `-mt-\[12px\]`, `text-\[2vw\]`\) by the property it sets/.test(scale)
-          && T.offUnit("0 -8px", ["rem"]) === null && T.offUnit("0 8px", ["rem"]) === "px"
-          && tw.test("p-[10px]") && !tw.test("-mt-[12px]") && !tw.test("text-[2vw]");
+          && /lists each declaration whose value takes, outside parentheses, a unit its row does not give \(never `0` or a unitless number; a negative length counts: `-8px`\), and a Tailwind arbitrary size in any unit \(`p-\[10px\]`, `-mt-\[12px\]`, `text-\[2vw\]`\) by the property it sets/.test(scale)
+          && T.offUnit("0 -8px", ["rem"]) === "px" && T.offUnit("0 8px", ["rem"]) === "px" && T.offUnit("0", ["rem"]) === null && T.offUnit("1.5", ["rem"]) === null
+          && ["p-[10px]", "-mt-[12px]", "text-[2vw]"].every((u) => tw.test(u)) && raw.test("p-[10px]") && !raw.test("-mt-[12px]") && !raw.test("text-[2vw]");
       }],
-      ["units: the project's unitsTable and its rows bound; a report only, no default", () =>
+      ["units: the project's unitsTable and its rows bound; a report, never finish or doctor; the brief's own bound (DS_BRIEF_UNITS); no default", () =>
         scale.includes("The project report's `unitsTable` {`rows`, `unread`, `past` — rows past the first " + B.unitRows + "}.")
-          && /A report only — never finish, doctor or the brief — and no default: without the table both are null\./.test(scale)],
+          && scale.includes("A report — never finish or doctor; a UI task's brief quotes its rows (their first " + n(num(QY, "DS_BRIEF_UNITS")) + " characters) — and no default: without the table both are null.")],
       ["DESIGN.md: not read; its own CLI's export to a token file", () =>
         /\*\*DESIGN\.md\*\* is not read; its own CLI writes a file that is: `npx @google\/design\.md export --format css-tailwind DESIGN\.md > theme\.css` \(a token file by its name\)\./.test(scale)],
       ["breakpoints: both reports, where they come from, every limit code breakpoints.js gives, never truncated", () =>
@@ -1673,8 +1669,17 @@ exports.run = async ({
         const all3 = ["| Property | Units |", "| Propriedade | Unidades |", "| Propiedad | Unidad |"].map(read);
         return all3.every((u) => u && u.rows.length === 3 && !u.unread.length && u.rows.every((r) => r.props.length && r.units.length))
           && /- A \*\*units table\*\* \(below\) is optional — the team's convention of which units each property takes: a report, never a default \(none is written for you\)\./.test(ST)
-          && /`spec_scan \{designSystem: true, name\}` lists a feature's declarations off it \(`units`\), `spec_scan \{designSystem: true\}` the rows it could not read \(`unitsTable`\); never finish, doctor or the brief\./.test(ST)
+          && ST.includes("`spec_scan {designSystem: true, name}` lists a feature's declarations off it (`units`), `spec_scan {designSystem: true}` the rows it could not read (`unitsTable`), and a UI task's brief quotes its rows (their first " + n(num(QY, "DS_BRIEF_UNITS")) + " characters); never finish or doctor.")
           && /`margin-\*` covers `margin` and `margin-top`; a component's props table \(`\| Property \| Type \| Default \|`\) is none\./.test(ST);
+      }],
+      // (1.39, chain E — 1.38.0 review 1's T3): the headers the registry reads, as the engine reads them — the 1.38 tier (a header
+      // that STARTS with Units / Unidades / Unidad), the word's (RE_DS_UNITS_WORD), no polarity (a column of units to avoid)
+      ["steering-templates: the units table's headers (RE_DS_PROPERTY_HEAD, RE_DS_COL.units, RE_DS_UNITS_WORD) in EN / PT / ES; the units ALLOWED", () => {
+        const heads = (ST.match(/Its first header cell is `Property` \(`([^`]+)`, `([^`]+)`\); its units column's header starts with `Units` \(`([^`]+)`, `([^`]+)`\) — else holds the word \(`([^`]+)`\) — and its cells list CSS units: the units each property is ALLOWED \(a column of units to avoid would read as allowed ones\)\./) || []).slice(1);
+        const prop = regexOf(QY, "RE_DS_PROPERTY_HEAD"), unit = new RegExp(((QY.match(/units: \/(.*)\/i,/) || [])[1] || "(?!)"), "i"), word = regexOf(QY, "RE_DS_UNITS_WORD");
+        const read = (head) => { const u = regOf("units-head-" + head.replace(/\W/g, ""), "| Property | " + head + " |\n|---|---|\n| gap | px |\n").units; return u && u.rows.map((r) => r.units.join()).join(); };
+        return heads.length === 5 && ["Property", heads[0], heads[1]].every((h) => prop.test(h)) && ["Units", heads[2], heads[3]].every((h) => unit.test(h))
+          && !unit.test(heads[4]) && word.test(heads[4]) && read(heads[4]) === "px" && read("Units to avoid") === "px";
       }],
       ["steering-templates: the marker's example line is applied (uiOff); counted never listed, finish silent; an entry not applied is said", () => {
         const line = (ST.match(/- `(_UI checks off: [^`]*_)`/) || [])[1] || "";

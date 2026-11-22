@@ -3630,6 +3630,9 @@ const brief = {
     designSystemUnknown: (list) => `Fuera del registro — pregunta antes de construirlos (NEEDS_CONTEXT): ${list}`,
     designSystemNoRows: (file) => `El diseño no tiene ninguna fila de componente — lee \`${file}\` y reutiliza lo que enumera antes de crear nada.`,
     designSystemTokens: (n, sources) => `Tokens: ${n} en el registro${sources ? ` — definidos en ${sources}` : ""}.`,
+    designSystemUnits: (list, more) => "Unidades — la tabla del registro, la convención del equipo: " + (list
+      ? list + "." + (more ? ` (${more} ${more === 1 ? "fila" : "filas"} más en el registro)` : "")
+      : `${more} ${more === 1 ? "fila" : "filas"} en el registro, demasiado ${more === 1 ? "larga para citarla" : "largas para citarlas"} aquí.`),
     designSystemLibraries: (list) => `Bibliotecas de componentes sobre las que se apoya el proyecto: ${list}.`,
     design: "## Contexto de diseño",
     designToc: (p) => `Diseño completo: \`${p}\` — secciones:`,
