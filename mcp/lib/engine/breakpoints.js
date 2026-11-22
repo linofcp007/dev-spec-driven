@@ -232,8 +232,9 @@ function breakpointWatch() {
   };
   return { on, found };
 }
-// What the walk saw → { widths (px, in [BP_FLOOR, BP_CEIL]), unread, at (the first declaration KEPT with a length, in the walk's
-// order — files, then lines; file:line), partial (a Tailwind width read and no reset anywhere — never a Sass map's) }
+// What the walk saw → { widths (px, in [BP_FLOOR, BP_CEIL]), unread, at (the first declaration KEPT with a length, file:line — the
+// files in the walk's order, a file's Tailwind declarations before its Sass maps: no sheet holds both), partial (a Tailwind width
+// read and no reset anywhere — never a Sass map's) }
 function codeBreakpoints(found) {
   const widths = [], unread = [];
   const files = found ? found.files : [];
@@ -241,22 +242,22 @@ function codeBreakpoints(found) {
   const mapsOf = (f) => (f.open ? [...f.maps, sassUnread(f.open.name, f.open.value, f.open.line)] : f.maps);
   const plain = new Set(); // per name, a plain or `with` assignment sets aside the `!default` ones, read or not (CRIT_3 must-fix 2)
   for (const f of files) for (const m of mapsOf(f)) if (!m.def) plain.add(m.name);
-  let at = null, first = null, tailwind = false;
-  files.forEach((f, i) => {
-    const kept = (line) => { if (first == null || i < first[0] || (i === first[0] && line < first[1])) { first = [i, line]; at = f.rel + ":" + line; } };
+  let at = null, tailwind = false;
+  for (const f of files) {
     for (const [name, d] of f.decls) {
       const px = lengthPx(d.value), where = f.rel + ":" + d.line;
       if (px == null || px > BP_CEIL) { unread.push({ name: "--breakpoint-" + name, value: d.value, at: where }); continue; }
-      kept(d.line);
+      if (at == null) at = where;
       if (px >= BP_FLOOR) { widths.push(px); tailwind = true; }
     }
     for (const m of mapsOf(f)) {
       if (m.def && plain.has(m.name)) continue;
-      for (const b of m.bad) unread.push({ name: b.name, value: b.value, at: f.rel + ":" + m.line });
-      if (m.px.length) kept(m.line);
+      const where = f.rel + ":" + m.line;
+      for (const b of m.bad) unread.push({ name: b.name, value: b.value, at: where });
+      if (m.px.length && at == null) at = where;
       for (const px of m.px) if (px >= BP_FLOOR) widths.push(px);
     }
-  });
+  }
   return { widths, unread, at, partial: tailwind && !found.reset }; // (asked only when a width was read)
 }
 

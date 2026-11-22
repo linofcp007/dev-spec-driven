@@ -1157,8 +1157,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     is one the walk may have cut → one unread, never misread; a one-line map that long loses its name to the walk's tail cut
     and is silent. Precedence (`codeBreakpoints`): per name, a plain or `with` assignment sets aside the `!default` ones,
     read or not (a plain `map-merge` leaves the default set and its unread line); otherwise all count; names unite; `at` = the
-    first KEPT declaration with a length, in the walk's order (files, then lines — must-fix 3: a vendored `_variables.scss`
-    walks first). A map is whole: `partial` stays Tailwind's (a Tailwind width read), so no default width fills a map.
+    first KEPT declaration with a length (must-fix 3: a vendored `_variables.scss` walks first and is set aside) — the files
+    in the walk's order, a file's Tailwind declarations before its maps (no sheet holds both). A map is whole: `partial`
+    stays Tailwind's (a Tailwind width read), so no default width fills a map.
     Not read: a map in a file the walk does not open by name (`_config.scss`, `_settings.scss`, `_vars.scss`, `core.scss`,
     `mixins.scss` — 14 of the designer's 26 sampled assignments; ui-responsive.md: paste the line), a .sass file, a .css one.
   - `default` — `[320, 390, 768, 1024, 1440]`.

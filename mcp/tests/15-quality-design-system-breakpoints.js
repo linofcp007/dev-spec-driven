@@ -286,6 +286,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const entries = report(null, lines("$breakpoints: (xs: 0, \"sm\": 600px, md: $tablet, 'lg': 750, xl: 5000px, xxl: 80em);"), "src/main.scss");
     const bulma = report(null, lines("$breakpoints: (", "  \"mobile\": (", "    \"until\": $tablet,", "  ),", "  \"tablet\": (", "    \"from\": $tablet,", "  ),", ") !default;"), "sass/utilities/_variables.scss");
     const list = report(null, lines("$show-breakpoints: (mobile, tablet, desktop);", "$x-breakpoints: \"a\" \"b\";", "$y-breakpoints: ();"), "src/main.scss");
+    const quoted = report(null, lines("$q-breakpoints: (sm: 600px, note: \"a, b)\", md: 900px);"), "src/main.scss"); // (a quoted `,` / `)` cuts nothing)
     all("1.39 breakpoints (a Sass map): a top-level `$…breakpoints` literal map's 0 / px / rem / em entries are min edges — Bootstrap 6's over lines (a comment inside), at its `$` line; `$spacers` / `$grid-breakpoints-custom` / a block's own map are not read; a non-length entry is unread `$name.key`; a nested map and a list give nothing; never partial (got " +
       js({ bs6, named: named.widths, local: local.widths, entries, bulma: [bulma.widths, bulma.unreadTotal], list: [list.widths, list.unreadTotal] }) + ")", {
       bs6: () => widths(bs6) === js([320, 576, 768, 1024, 1280, 1536]) && bs6.from === "code" && bs6.at === "scss/_config.scss:6" && bs6.partial === false && bs6.unreadTotal === 0 && js(bs6.limits) === js([]),
@@ -295,6 +296,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
         names(entries) === js([["$breakpoints.md", "$tablet", "src/main.scss:1"], ["$breakpoints.lg", "750", "src/main.scss:1"], ["$breakpoints.xl", "5000px", "src/main.scss:1"]]),
       bulma: () => bulma.from === "default" && bulma.unreadTotal === 0,
       list: () => list.from === "default" && list.unreadTotal === 0,
+      quoted: () => widths(quoted) === js([320, 600, 900]) && names(quoted) === js([["$q-breakpoints.note", "\"a, b)\"", "src/main.scss:1"]]),
     });
   }
 
