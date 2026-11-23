@@ -116,8 +116,11 @@ function parseColor(s0) {
     hsl = { h, s: sat * 100, l: light * 100, paint, half: [hueOf({ v: halfDigit(parts[0]), u: a[0].u }), halfDigit(parts[1]), halfDigit(parts[2])] };
   } else {
     // (1.40) its channels as written (oklch's hue in degrees), half a unit of each one's last written digit in the channel's
-    // own scale (a % one's: 100% is 1 for L, 0.4 for a / b / C; the hue's in degrees), and the pixel it paints (paint8)
-    const half = (i, full) => (a[i].u === "%" ? (halfDigit(parts[i]) / 100) * full : halfDigit(parts[i]));
+    // own scale (a % one's: 100% is 1 for L, 0.4 for a / b / C; the hue's in degrees), and the pixel it paints (paint8). A
+    // channel written as zero, at most at L's half (1.40.0 review 1): `0` / `none` tell no precision — `0.000` prints `0` —,
+    // and a colour is written at one, so `oklch(0.205 0 0)` is not a tinted grey's (its integer half, 0.5, met any chroma)
+    const digit = (i, full) => (a[i].u === "%" ? (halfDigit(parts[i]) / 100) * full : halfDigit(parts[i]));
+    const half = (i, full) => (a[i].v === 0 ? Math.min(digit(i, full), digit(0, 1)) : digit(i, full));
     if (n === "oklab") {
       ok = [pct(a[0], 1), pct(a[1], 0.4), pct(a[2], 0.4)];
       box = { c: ok, half: [half(0, 1), half(1, 0.4), half(2, 0.4)] };
