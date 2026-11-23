@@ -103,6 +103,23 @@ exports.run = async ({ all, S, tmp, require, __dirname }) => {
     });
   }
 
+  { // (1.40.0 review 2, R2-DEP-3) 1.39's two trims around that strip are not dead: an entry the marker reader stores with a
+    // leading backtick and blank ("` ` w0 … w18 src/theme/old.css" → "` w0 … old.css") — stripped, then the words split from
+    // the TRIMMED text: an untrimmed leading blank spends one of DS_PATH_WORDS and the path, the 20th word, goes unread —; a
+    // component path cell over DS_CELL_MAX whose cut ends in "` " (a 198-character path with a blank) — the strip after a trim
+    const W19 = Array.from({ length: 19 }, (_, i) => "w" + i).join(" ");
+    const long = "src/a b/" + "x".repeat(198 - "src/a b/".length - 4) + ".tsx";
+    const p = project({ "src/components/Card.tsx": "export function Card() { return <div />; }\n", "src/a b/keep.tsx": "export function K() { return <div />; }\n", "src/theme/keep.css": "\n" },
+      "# Design System\n\n_Token sources: ` ` " + W19 + " src/theme/old.css, `src/theme/old2.css`_\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n" +
+      "| Card | src/components/Card.tsx |  |  |\n| Long | `" + long + "` and more words after the cut |  |  |\n");
+    const r = S.designSystemReport(p);
+    all("1.40.0 review 2 gone / stale (R2-DEP-3): 1.39.0's answers — an entry stored with a leading backtick and blank, its path the 20th word, gone; a component path cell cut at DS_CELL_MAX to end in \"` \", its 198-character path gone, stale; `src/theme/old2.css` gone (got " +
+      js({ gone: r.gone, stale: r.stale.map((x) => x.name), long: long.length }) + ")", {
+      entry: () => js(r.gone) === js(["` " + W19 + " src/theme/old.css", "src/theme/old2.css"]),
+      row: () => long.length === 198 && js(r.stale.map((x) => x.name)) === js(["Long"]),
+    });
+  }
+
   { // no registry: no drift, nothing gone, no units table — and the 1.37 keys unchanged
     const p = project({ "src/styles/tokens.css": ":root { --a: 1px; }\n" }, null);
     const r = S.designSystemReport(p);

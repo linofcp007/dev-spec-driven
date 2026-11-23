@@ -957,6 +957,57 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
     });
   }
   {
+    // 1.40.0 review 2 (R2-DEP-1) — an export whose OWN name in its file is a live row's name is that row's component, no index
+    // passing it on: cal.com's packages/platform/atoms (`export { AppleConnect as AppleCalendar } from "./apple/AppleConnect"`,
+    // a wrapper importing `{ AppleConnect }` from its file, AppleConnect.tsx the live row), a compat folder's `Button as
+    // OldButton` of ui/button.tsx, an index's `export *` beside `Tab as OldTab` — the alias's own importers alone (1.39.0's).
+    // Still (b)'s: a named export no row has (`{ GcalConnect }` for GoogleCalendar), one whose row is marked too (`{
+    // OldConnect }` for LegacyCal), and a DEFAULT export — its local name is the importer's — beside a live row named
+    // `Default` (Nuxt's layouts/default.vue)
+    const vue = (imp, tag) => L(["<script setup lang=\"ts\">", imp, "</script>", "<template><" + tag + " /></template>"]);
+    const P = "packages/platform/atoms/", C = "src/components/";
+    const files = {
+      "package.json": js({ name: "own-name", dependencies: { react: "^19" } }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
+      [P + "connect/index.ts"]: L(["export { GcalConnect as GoogleCalendar } from \"./google/GcalConnect\";", "export { AppleConnect as AppleCalendar } from \"./apple/AppleConnect\";"]),
+      [P + "connect/apple/AppleConnect.tsx"]: L(["import type { FC } from \"react\";", "export const AppleConnect: FC = () => { return <button />; };"]),
+      [P + "connect/google/GcalConnect.tsx"]: L(["export const GcalConnect = () => { return <button />; };"]),
+      [P + "selected-calendars/wrappers/Wrapper.tsx"]: L(["import { AppleConnect } from \"../../connect/apple/AppleConnect\";", "export const W = () => <AppleConnect />;"]),
+      [P + "examples/Old.tsx"]: L(["import { AppleCalendar } from \"../connect\";", "export const O = () => <AppleCalendar />;"]),
+      [P + "examples/Gcal.tsx"]: L(["import { GcalConnect } from \"../connect/google/GcalConnect\";", "export const G = () => <GcalConnect />;"]),
+      [C + "ui/button.tsx"]: L(["export function Button() { return <button />; }", "export const buttonVariants = {};"]),
+      [C + "legacy/index.ts"]: L(["export { Button as OldButton } from '../ui/button';"]),
+      "src/pages/new-direct.tsx": L(["import { Button } from '@/components/ui/button';", "export default () => <Button />;"]),
+      "src/pages/new-rel.tsx": L(["import { Button } from '../components/ui/button';", "export default () => <Button />;"]),
+      "src/pages/old-named.tsx": L(["import { OldButton } from '@/components/legacy';", "export default () => <OldButton />;"]),
+      [C + "sb/tab.tsx"]: L(["export function Tab() { return <div />; }"]), [C + "sb/index.ts"]: L(["export * from './tab';", "export { Tab as OldTab } from './tab';"]),
+      "src/pages/tab-direct.tsx": L(["import { Tab } from '../components/sb/tab';", "export default () => <Tab />;"]),
+      "src/pages/tab-via.tsx": L(["import { Tab } from '../components/sb';", "export default () => <Tab />;"]),
+      "src/pages/old-tab.tsx": L(["import { OldTab } from '../components/sb';", "export default () => <OldTab />;"]),
+      [C + "conn/OldConnect.tsx"]: L(["export function OldConnect() { return <div />; }"]), [C + "conn/index.ts"]: L(["export { OldConnect as LegacyCal } from './OldConnect';"]),
+      "src/pages/old-connect.tsx": L(["import { OldConnect } from '../components/conn/OldConnect';", "export default () => <OldConnect />;"]),
+      "src/layouts/default.vue": L(["<template><slot /></template>"]),
+      [C + "tip/tip.vue"]: L(["<template><span /></template>"]), [C + "tip/index.ts"]: L(["export { default as VbenTip } from './tip.vue';"]),
+      "src/views/tip-direct.vue": vue("import Tip from '../components/tip/tip.vue';", "Tip"),
+    };
+    const rows = (mark) => ["| AppleCalendar | " + P + "connect/index.ts |  | " + mark("use AppleConnect") + " |", "| AppleConnect | " + P + "connect/apple/AppleConnect.tsx |  |  |",
+      "| GoogleCalendar | " + P + "connect/index.ts |  | " + mark() + " |", "| Button | " + C + "ui/button.tsx |  |  |", "| OldButton | " + C + "legacy/index.ts |  | " + mark("use Button") + " |",
+      "| Tab | " + C + "sb/tab.tsx |  |  |", "| OldTab | " + C + "sb/index.ts |  | " + mark("use Tab") + " |", "| OldConnect | " + C + "conn/OldConnect.tsx |  | " + mark() + " |",
+      "| LegacyCal | " + C + "conn/index.ts |  | " + mark() + " |", "| Default | src/layouts/default.vue |  |  |", "| VbenTip | " + C + "tip/index.ts |  | " + mark() + " |"];
+    const p = depProject("own-name", rows(MARK), files);
+    const r = S.designSystemReport(p), d = usesOf(r), diff = differential(p, rows);
+    all("1.40.0 review 2 deprecatedUses (R2-DEP-1): an export whose own name in its file is a live row's is that row's component — cal.com's `{ AppleConnect }` of `AppleConnect as AppleCalendar`, a compat index's `Button as OldButton`, `export *` beside `Tab as OldTab`: the alias's own importers alone (1.39.0's); a named export no row has, one whose row is marked too, and a default export (a live `Default` row) keep (b)'s direct imports; every other key the same with no marker (got " +
+      js({ rows: d.rows.map((x) => [x.name, x.filesTotal, x.files]), unlocated: d.unlocated, same: diff.same }) + ")", {
+      cal: () => js(uses(r, "AppleCalendar")) === js([1, [P + "examples/Old.tsx"]]),
+      compat: () => js(uses(r, "OldButton")) === js([1, ["src/pages/old-named.tsx"]]),
+      star: () => js(uses(r, "OldTab")) === js([1, ["src/pages/old-tab.tsx"]]),
+      noRow: () => js(uses(r, "GoogleCalendar")) === js([1, [P + "examples/Gcal.tsx"]]),
+      marked: () => js(uses(r, "LegacyCal")) === js([1, ["src/pages/old-connect.tsx"]]) && js(uses(r, "OldConnect")) === js([1, ["src/pages/old-connect.tsx"]]),
+      byDefault: () => js(uses(r, "VbenTip")) === js([1, ["src/views/tip-direct.vue"]]),
+      located: () => js(d.unlocated) === js([]) && d.rowsTotal === 7 && js(d.limits) === js([]),
+      differential: () => diff.same === true,
+    });
+  }
+  {
     // …its cost, counted (CRIT_2's hostile shape, scaled; no clock): three component folders' barrels each rename the same 20
     // files under the 20 marked rows' names (one file a name: every barrel locates its row — `renamed` holds each row once),
     // 30 pages import two of the files directly, 10 import another file: the watch parses exactly the pages that name a renamed
