@@ -3511,11 +3511,12 @@ const RE_DOC_EXT = /\.(?:md|mdx|markdown|txt|rst|adoc|pdf|png|jpe?g|gif|webp|svg
 const DS_PATH_WORDS = 20; // words of a path cell read
 // (1.40) a path cell's readings, ONE reader for stalePath and the deprecated uses' watch (the index the row's path names): the
 // whole cell first, then its first DS_PATH_WORDS words (a cost guard: ×1.55 a report on 500 rows of 33 words), a link
-// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's: DS_CELL_MAX
-// characters at most, its ends' backticks stripped (dsCell, the markers' entries) — 1.39's own 400-character cut and
-// backtick strip were dead (no cell reaches them: the mutation pass of 1.40)
+// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's, DS_CELL_MAX
+// characters at most (1.39's own 400-character cut is dead); 1.39's strip of its ends' backticks stays: dsCell strips a
+// component cell's, but the marker reader cuts a `_Token sources:_` entry's note after its own strip — "`src/my
+// styles/tokens.css` (generated)" comes here as "src/my styles/tokens.css`" (DEP-2 of 1.40 review 1)
 function pathWords(cell) {
-  const text = String(cell || "").trim();
+  const text = stripEnds(String(cell || "").trim(), unitIn("`")).trim();
   if (!text) return [];
   return [text].concat(text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS).map((w) => stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`"))));
 }
