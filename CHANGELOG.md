@@ -3,6 +3,102 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.39.0] — 2026-11-23
+
+The +ui track's third round over the code: the files that still import a deprecated component, a Sass breakpoints map,
+the units table read more widely and quoted in the task brief, and fewer false findings (a Vue dynamic component, a
+reduced-motion mention in a script). Nothing 1.38.0 judged right is silenced and nothing it passed is refused — this
+release adds no refusal. No new tool, command, hook or dependency; the MCP tool list and SKILL.md are unchanged.
+
+### Added
+- **The files that still import a deprecated component.** `spec_scan {designSystem: true}` / `dev-spec design-system` (no
+  feature): while design-system.md marks a row `_Deprecated:_`, the report adds `deprecatedUses` — for each such row the
+  code holds a component file for, the files that still import it (the first 3 by path, all counted), its replacement as
+  doctor names it, its component files (a namesake's importers count too) and the .mdx / .vue files that render it with no
+  import (an auto-import, a global registration, an MDX provider: counted apart, never resolved). A row named by its file
+  is its module — any import of the file counts: renamed, default, type-only, `require`, a non-component export
+  (`buttonVariants`), a namespace's member, a Vue file with or without its extension, `X/index.vue` by its folder — and its
+  components are followed through `export *` and a component folder's barrel; a component a file exports beside its own
+  (`CardHeader` in `card.tsx`) counts by its name. A row with no .tsx / .jsx / .js / .vue / .svelte / .astro component
+  file is listed as `unlocated` (a library's, an Angular `*.component.ts` — its importers are `.ts` files the scan does
+  not read —, a Blade one). A localized `note` says what is not seen — a `.ts` file, a dynamic `import()`, a module only a
+  bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a
+  non-component export or a type through a barrel: no import found is not unused. Its own bounds are in its own `limits`
+  (`usage-files`, `deprecated-follow`), never the report's `limits`, `truncated` or "in sync". The CLI prints it after the
+  stale rows. The feature report, `finish`, doctor and the task brief are unchanged by it.
+- **A Sass breakpoints map.** A top-level Sass map whose name ends in `breakpoints` (`$grid-breakpoints`, `$breakpoints`,
+  an override in `@use … with (…)`) in a `.scss` sheet the scan reads now gives the widths the visual review captures
+  (`from: code`) when ui.md's line gives none — a plain assignment over a `!default` one; a `map-merge`, a variable, an
+  entry that is no length, or a `with` map another override follows is listed as a value not read, with its place. A map
+  in a file the scan does not open by name (`_config.scss`, `_settings.scss`) is still not read: paste the line into
+  ui.md.
+- **The task brief quotes the units table.** A UI task's Design system part quotes design-system.md's units table — its
+  first rows within 400 characters, then how many more; a registry holding only the table gets the part too.
+  `spec_task_brief`'s result gains `designSystem.units` {rows, more}, only when the registry has a units table.
+
+### Changed
+- **The units table judges a negative length and a Tailwind size in any unit** — `margin: 0 -8px`, `margin-top: -.5em`,
+  `-mt-[12px]`, `mt-[-12px]`, `text-[2vw]`, `py-[3pt]`, `rounded-[50%]`, which 1.38 skipped. Measured with
+  steering-templates.md's example table over 52 public checkouts: additions only, no finding of 1.38 left (codecaine +278,
+  mostly container and viewport units; pico +119; outline +66). Raw values against the scale are unchanged.
+- **A units column is also found by a word of its header** (`| Property | Allowed units |`) when no header starts with
+  Units / Unidades / Unidad — every 1.38 table reads the same. steering-templates.md says the column lists the units each
+  property is ALLOWED (a column of units to avoid would read as allowed ones).
+- **Breakpoints under a Tailwind 4 theme that keeps Tailwind's own widths** (`partial`): the theme's declared widths come
+  first, and the default set fills the places left in the order 768 · 1024 · 1440 · 390 — shadcn v4, cal.com,
+  shadcn-svelte and magicui now capture 320 · 768 · 1024 · 1440 · 1600 · 2000 (1.38 kept 390 and left 1600 out, said);
+  `breakpoint-widths` counts and names only the theme's own widths. The CLI's partial line says so.
+- **ui.md's Breakpoints line**: a no-break space (U+00A0 / U+202F) after a `·` continues the list as a blank does; widths
+  written inside the stub's slot brackets (`[576 / 768 px] · text expansion`) are now read — the stub's own slot and any
+  other bracket (an aside, `480 / 960 px [1200 in print]`) still are not.
+- **doctor `ui-states`** looks for the matrix's `Announced · focus` cell in a header's first 64 cells; past them the table
+  is no matrix and the detail says the bound (a 200,000-cell header now costs ~0.3× the section reader, 1.38's 2–2.8×).
+- **The references**: ui-code-scan.md ends in "Deprecated components the code still imports"; ui-responsive.md names the
+  Sass map and the partial fill; steering-templates.md the units column's header and the brief; tooling-reference.md names
+  `deprecatedUses`, `motion-scripts` and `designSystem.units`. The READMEs (EN / PT / ES) name `deprecatedUses`.
+
+### Fixed
+- **Vue's `<component :is>` is a component.** A bound `:is` / `v-bind:is` is no longer judged as an element — its own
+  click handler and style attribute are not judged: vben's alert.vue loses two false click-no-keyboard findings, and they
+  leave `finish`'s UI warning too (finish's VALUES move through this change alone). A static `is="div"` is judged as that
+  element, `is="button"` is focusable. A `<div @click>` around a bound `<component :is>` still warns, as in 1.38.
+- **The fact `no-reduced-motion`** is no longer said when one of the project's other scripts mentions reduced motion — a
+  `.ts` hook, a styled-components global style, a test setup (`jest.setup.js`, `playwright.config.ts`'s `reducedMotion`):
+  they are read only where the fact would be said, the shorter path first, to the first mention or 2,000 scripts / 8 MB;
+  a mention takes the fact back, never adds one (outline's false fact goes). A new inventory limit, `motion-scripts`, says
+  which bound ended the search or which scripts were read only in part — never the report's `limits`, `truncated` or "in
+  sync". The CLI's fact line reads "view files and scripts".
+- **`_UI checks off:_` accepts an id in a code span** (`` _UI checks off: `img-no-alt` (decorative)_ ``) — the docs' own
+  spelling read `unreadable` in 1.38; a lone or doubled backtick still does.
+- **ui-responsive.md's `100vw` note** said the visual review measures the sideways scroll; its captures hide scrollbars
+  (`--hide-scrollbars`), so nothing measures it — the note now says to check an in-flow `100vw` box by hand, at a desktop
+  size with scrollbars shown.
+
+Designed for this release and cut, each with what it would have cost (the next backlog): size families for raw sizes
+(`token` / `off` / nearest — no judgment on the six common shapes measured, nearly all from one app), DESIGN.md as a token
+source (its spec is alpha and changed again this month: export it to a token file as before), motion off / nearest,
+`@custom-media` (an alias list, not a set of widths: a lone `--md` would capture fewer widths than 1.38), Tailwind 3's
+`screens`, BS-3 (a matrix of `TBD` / dashes read as template — it would have been the release's one new refusal), BS-4
+(tables with the same views read as one matrix — it hides a real gap), a markup file's template and `<style>` judged as
+one file for `font-size-viewport` (it hid three true findings), Astro's `define:vars`, `:is()` / `:where()` focus
+selectors and a skipped stylesheet's focus styles (no case on real code), keeping scrollbars in the visual review's zoom
+capture, `width-viewport` as a rule.
+
+**Cost.** The project report with the UI pass against 1.38.0, on 20 public repositories, no registry (one process,
+interleaved, median of 5): shadcn-ui 1.05× (+107 ms) · mantine 0.98× · cal.com 0.96× · outline 1.21× (+249 ms, where the
+reduced-motion script search runs) · vben 0.93× · nuxt/ui 0.96× · shadcn-svelte 0.97× · Bootstrap 0.96× · tailwindcss.com
+1.04× · taxonomy 1.12× (+17 ms) · motion-primitives 0.91× · sakai-vue 1.13× (+6 ms) · Breeze 1.02× · Starlight 1.05× ·
+Bulma 1.05× · Foundation 1.06× · open-props 1.03× · pico 0.94× · magicui 0.97× · astro-paper 1.06×; small trees' increments
+are at the measurement's noise. With a `_Deprecated:_` row marked, the deprecated uses' read adds 1.00–1.19× on trees of
+700 view files or more and +2 to +108 ms on smaller ones (Starlight +108 ms, where the scan otherwise reads no script for
+its components); a marked row no file holds reads nothing. The feature report's and `finish`'s cost are unchanged.
+
+### Tests
+- `node mcp/test.js` 2977 assertions, `node cli/test-cli.js` 703 (was 2911 / 698). Each mutation list was written before
+  its fixtures: the deprecated uses 78 of 85 (an equivalent memory guard, the walk-cap repeat checked in a scratch run — its
+  fixture needs 20,001 files —, five cost guards timed with and without); the UI checks 56 of 56; breakpoints and states
+  75 of 75; the units table 49 of 49; the docs pass 28 of 28 (each new prose clause dropped in a copy fails its row).
+
 ## [1.38.0] — 2026-11-22
 
 The +ui track's second round over the code: the project's own UI checks beside each feature's, a raw value read against the
