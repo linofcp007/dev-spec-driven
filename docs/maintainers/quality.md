@@ -399,8 +399,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   so, review 1 of 1.38), the project's switch for a UI check (UI checks →
   The marker). Its entries cut by `dsEntries` (at `,` / `;` outside parentheses): `<id> (<reason>)` (`RE_DS_OFF_ENTRY`, any
   case — the id folded) → `{id, reason}`, the reason what the outer parentheses hold, commas and nested parentheses kept,
-  trimmed, cut at `DS_CELL_MAX` ("" for none, `()` or `( )`); any other shape (`transition-all: kit code`, `outline-removed —
-  modality`, an id in a code span — the user docs say "bare") → `{entry}`, as written, cut; past `DS_MARKER_ENTRIES` (50) ONE more `{entry, past, read}` and no further one (a
+  trimmed, cut at `DS_CELL_MAX` ("" for none, `()` or `( )`) — an id in ONE balanced code span reads as bare (1.39, UP-7); any
+  other shape (`transition-all: kit code`, `outline-removed — modality`, a lone or doubled backtick) → `{entry}`, as written,
+  cut; past `DS_MARKER_ENTRIES` (50) ONE more `{entry, past, read}` and no further one (a
   later marker line too). The registry's `checksOff`. quality.js names NO rule id: engine/ui-checks.js `uiOff` validates them.
 - **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
@@ -1806,12 +1807,16 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   scripts' — are ONE loop, `readHeads(list, files, chars, take)` (design-system.js: read ahead, each file's head and `over`,
   the bounds, `cut: null | files | chars`; CRIT_2 must-fix 7: a second copy trips 16-conventions-duplication). Said less,
   never wrongly: a test SETUP is no test by name (`jest.setup.js`, `vitest.setup.ts`, `playwright.config.ts`'s `use:
-  { reducedMotion }`, `setupTests.ts`), so its mention takes the fact back (ui-code-scan.md: "a test setup's included"); so does
-  a vendored script (Bulma's fontawesome `all.js`). Measured (CRIT_2 §5, warm, median of 3): the fact is said on 4 of the 18
-  clones in 1.38 (motion-primitives, sakai-vue, taxonomy — true; outline — false, its reset in a styled-components
-  `shared/styles/globals.ts`); the search adds +1 to +27 ms there (it stops at outline's 216th script), ≤ 1.12× those
-  inventories; at the bound, cal.com's first 2,000 scripts 171–405 ms (≤ 1.3×; cal.com itself never searches — its views
-  mention); the 8 MB bound is reached on no clone (cal.com's first 2,000: 4.9 MB). What the bound hides: a mention past the
+  { reducedMotion }` — it only EMULATES the preference for the tests, so a true fact can go with it —, `setupTests.ts`), so
+  its mention takes the fact back, outside a test folder (`src/test/setup.ts` is a test file, never read; ui-code-scan.md: "a
+  test setup's outside a test folder included"); so does a comment or a vendored script outside `vendor/`
+  (`assets/fontawesome/js/all.js` — the walk skips `vendor/`). The fact is said on 4 of the 18 clones in 1.38
+  (motion-primitives, sakai-vue, taxonomy — true; outline — false, its reset in a styled-components
+  `shared/styles/globals.ts`). Measured on the implementation (review 1 of 1.39, one process, interleaved): the search stops at
+  outline's 207th script (+174 ms, loaded); taxonomy +11 ms, motion-primitives +1, sakai-vue ≈ 0; a search that reads every
+  script or reaches its bound ~1.2× (outline with its mention edited out ×1.20, +280 ms; a 158-view tree with 3,400 scripts
+  ×1.23, +112 ms) — CRIT_2's prototype said +1 to +27 ms; cal.com itself never searches — its views mention; the 8 MB bound is
+  reached on no clone (cal.com's first 2,000: 4.9 MB). What the bound hides: a mention past the
   2,000th script or 8 MB (cal.com's first sits at its 1,002nd).
 - **The marker `_UI checks off: <rule-id> (reason)_`** (1.38 — the registry's `checksOff`, Design-system registry above) —
   `uiOff(reg)` → {off: Map(id → reason), ignored: [{entry, why, read?}]}: an entry is APPLIED only when its id is a rule's
