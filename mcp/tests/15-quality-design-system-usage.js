@@ -622,4 +622,19 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       feature: () => fms[1] * 2 < fms[0],
     });
   }
+
+  // --- 1.39: the follow, lifted (followOf) — a name's place is asked once a FOLDER, a module and a name ---------------------------
+  {
+    // two apps each keep a kit.tsx whose MotionBox one file cannot settle; the first app's page only calls it, the second's renders
+    // it — the same relative import from two folders is two places: the second kit's MotionBox is the component (a cache keyed
+    // without the folder gave the first page's answer to the second: the first kit's)
+    const p = project("lift-folder", { "package.json": deps(["react", "framer-motion"]) });
+    for (const app of ["a", "b"]) write(p, "src/" + app + "/components/kit.tsx", L(["import { motion } from \"framer-motion\";", "export const MotionBox = motion(Box);"]));
+    write(p, "src/a/page.tsx", L(["import { MotionBox } from \"./components/kit\";", "export const p = MotionBox(1);"]));
+    write(p, "src/b/page.tsx", L(["import { MotionBox } from \"./components/kit\";", "export const P = () => <MotionBox />;"]));
+    const rows = S.designSystemReport(p).missing.filter((m) => m.name === "MotionBox").map((m) => m.path);
+    all("1.39 (the lift): the follow asks where a module is once a folder, a module and a name — the same `./components/kit` from two apps' pages is two kits: the one whose page renders MotionBox holds the row (got " + js(rows) + ")", {
+      folder: () => js(rows) === js(["src/b/components/kit.tsx"]),
+    });
+  }
 };

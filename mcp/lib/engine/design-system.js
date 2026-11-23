@@ -31,9 +31,11 @@ let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, desi
   isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
   stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep,
   uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass, uiOff, breakpointWatch, breakpointsReport;
+// (1.39) quality.js's: a deprecated row's replacement as the registry writes it (doctor's ui-deprecated prints the same)
+let dsReplacement;
 // (1.38) engine/design-values.js's: a raw value against the scale, a registry token's value against the code's, the units table
 let easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP;
-function __link(E) { ({ easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP,
+function __link(E) { ({ dsReplacement, easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP,
   activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
   isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
@@ -2514,37 +2516,14 @@ function projectPlaces(manifests, roots, configs, absRoot, realRoot) {
   };
   return { roots, packageOf, aliasKeys, exported };
 }
-function settle(results, scripts, markups, read, places) {
-  const dropped = new Set(), rendered = new Set();
-  const asked = new Map(), byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map(), exportsOf = new Map(), localsOf = new Map();
-  const ask = (path, name, local, kind) => {
-    if (!asked.has(path)) asked.set(path, new Map());
-    asked.get(path).set(name, { local, kind, rendered: false, called: false, context: false, member: false });
-    if (!byName.has(name)) byName.set(name, []);
-    byName.get(name).push(path);
-  };
-  for (const r of results) {
-    for (const name of r.found.weak) ask(r.path, name, r.found.locals.get(name), r.barrel ? "unproven" : "weak");
-    for (const c of r.found.candidates) ask(r.path, c.name, c.local, "candidate");
-    if (r.found.defaultName != null) defaults.set(r.path, r.found.defaultName);
-  }
-  if (!asked.size) return { dropped, rendered };
-  const project = places();
-  for (const r of results) {
-    // (every name the file gives, a component's or not, and the locals they stand for: a provider's tag may be a part of one)
-    exportsOf.set(r.path, new Set(r.found.names.concat(r.found.candidates.map((c) => c.name))));
-    localsOf.set(r.path, new Set([...r.found.locals.values()].concat(r.found.candidates.map((c) => c.local))));
-  }
-  for (const path of asked.keys()) {
-    const key = moduleKey(path), segs = key.split("/");
-    keys.set(path, key);
-    const base = segs[segs.length - 1] === "index" && segs.length > 1 ? segs[segs.length - 2] : segs[segs.length - 1];
-    if (!byBase.has(base)) byBase.set(base, []);
-    byBase.get(base).push(path);
-  }
-  const note = (path, name, what) => { const e = asked.has(path) ? asked.get(path).get(name) : null; if (e) e[what] = true; };
-  // a provider's tag: the part it names when the file gives one so (`Tooltip.Provider`), else its root used as a context
-  const provide = (path, name) => { if (exportsOf.has(path) && exportsOf.get(path).has(name)) note(path, name, "rendered"); else note(path, name.slice(0, name.lastIndexOf(".")), "context"); };
+// Settle's follow (1.39: lifted out of settle, a function of its own — the project report's deprecated uses run a SECOND
+// instance of it, with their own index, caches and budget, so that no verdict of settle's depends on what they ask). From a
+// written name to the files that declare it: where the module may be (placeOf over `project`), the files it is, and on through
+// what they pass on. index: { byName (a name → the paths that give it), byBase (a base name → the paths), keys (a path → its
+// moduleKey), defaults (a path → its default export's name) }, read at call time; prefill: the [path, what it passes on] of
+// the files read before the search (never read again). → { resolve(rel, imports, written), placed(spec, from), spent }
+function followOf(scripts, project, index, prefill) {
+  const { byName, byBase, keys, defaults } = index;
   const placesOf = new Map(), targets = new Map();
   // (where a module may be, once a folder and a spec: placeOf)
   const placed = (spec, from) => { const pk = from.slice(0, from.lastIndexOf("/") + 1) + "\n" + spec; if (!placesOf.has(pk)) placesOf.set(pk, placeOf(spec, from, project)); return placesOf.get(pk); };
@@ -2590,8 +2569,10 @@ function settle(results, scripts, markups, read, places) {
     for (const k of at.mains || []) for (const s of byModule.get(k) || []) out.push(s);
     return (at.files = out);
   };
-  const passes = new Map(), closures = new Map(), passed = new Map(), spent = { files: 0, chars: 0, steps: 0 };
-  for (const r of results) passes.set(r.path, r.uses.reexports);
+  // (spent.cut, 1.39: a bound refused a read or a step — settle's own cut stays silent; the deprecated uses say theirs)
+  const passes = new Map(), closures = new Map(), passed = new Map(), spent = { files: 0, chars: 0, steps: 0, cut: false };
+  for (const [rel, reexports] of prefill) passes.set(rel, reexports);
+  const refuse = () => { spent.cut = true; return false; };
   const passesOf = (s) => {
     if (passes.has(s.rel)) return passes.get(s.rel);
     let e = null;
@@ -2599,15 +2580,15 @@ function settle(results, scripts, markups, read, places) {
       const text = readFileHead(s.full, DS_READ_CHARS);
       spent.files++;
       if (text != null) { spent.chars += text.length; e = usesOf(scriptView(text, true)).reexports; }
-    }
+    } else refuse();
     passes.set(s.rel, e);
     return e;
   };
   // (every operation of the follow is charged to the one bound: a star or a link looked at — one of no project's module
   // too: walked free in every closure that reached it, 83 s, review 1 of 1.35.4 —, a module it reaches — 1, its keys,
   // its files —, a name a file passes on, once a closure it is in, and the candidates a lookup compares)
-  const step = () => ++spent.steps <= DS_PASS_STEPS;
-  const reach = (at) => { spent.steps += 1 + at.keys.size + filesOf(at).length; return spent.steps <= DS_PASS_STEPS; };
+  const step = () => ++spent.steps <= DS_PASS_STEPS || refuse();
+  const reach = (at) => { spent.steps += 1 + at.keys.size + filesOf(at).length; return spent.steps <= DS_PASS_STEPS || refuse(); };
   // (a [path, name] once: a name passed on by many links to one place gave as many copies, each copied again into every
   // importing folder's answer — memory out, review 1 of 1.35.4)
   const once = (pairs) => { const seen = new Set(), out = []; for (const p of pairs) { const k = p[0] + "\n" + p[1]; if (!seen.has(k)) { seen.add(k); out.push(p); } } return out; };
@@ -2658,6 +2639,61 @@ function settle(results, scripts, markups, read, places) {
     passed.set(root, uniq);
     return uniq;
   };
+  // → the [path, name] a name written in `rel` stands for, through the file's import (`imports`: usesOf's) — once a folder, a
+  // module and a name
+  const resolve = (rel, imports, written) => {
+    const dot = written.indexOf(".");
+    const imp = imports.get(dot === -1 ? written : written.slice(0, dot));
+    if (!imp) return [];
+    const rest = dot === -1 ? "" : written.slice(dot);
+    const tk = rel.slice(0, rel.lastIndexOf("/") + 1) + "\n" + imp.spec + "\n" + imp.name + "\n" + rest;
+    if (targets.has(tk)) return targets.get(tk);
+    const at = placed(imp.spec, rel), out = [];
+    if (at) { lookup(at, imp.name, rest, out); for (const f of filesOf(at)) for (const x of through(f, imp.name, rest)) out.push(x); }
+    const uniq = once(out);
+    targets.set(tk, uniq);
+    return uniq;
+  };
+  return { resolve, placed, spent };
+}
+// (1.39) watch: the deprecated uses' watch (deprecatedWatch) or null — it sees what settle reads and never what settle asks:
+// every component file read for its exports (whatever settle asks), then each file of settle's queue as it is read (the
+// uses settle parsed, or its text), and where settle's bound stopped the read. With a watch and nothing asked, the queue is
+// read for the watch alone (settle's order and bound; nothing told, no `.ts` file) — never for an idle one: no row located,
+// nothing it could count (+51 to +117 ms read for nothing on trees where the row's component is a library's).
+function settle(results, scripts, markups, read, places, watch) {
+  if (watch && watch.idle) watch = null;
+  const dropped = new Set(), rendered = new Set();
+  const asked = new Map(), byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map(), exportsOf = new Map(), localsOf = new Map();
+  const ask = (path, name, local, kind) => {
+    if (!asked.has(path)) asked.set(path, new Map());
+    asked.get(path).set(name, { local, kind, rendered: false, called: false, context: false, member: false });
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(path);
+  };
+  for (const r of results) {
+    for (const name of r.found.weak) ask(r.path, name, r.found.locals.get(name), r.barrel ? "unproven" : "weak");
+    for (const c of r.found.candidates) ask(r.path, c.name, c.local, "candidate");
+    if (r.found.defaultName != null) defaults.set(r.path, r.found.defaultName);
+  }
+  if (!asked.size && !watch) return { dropped, rendered };
+  const project = asked.size ? places() : null;
+  for (const r of results) {
+    // (every name the file gives, a component's or not, and the locals they stand for: a provider's tag may be a part of one)
+    exportsOf.set(r.path, new Set(r.found.names.concat(r.found.candidates.map((c) => c.name))));
+    localsOf.set(r.path, new Set([...r.found.locals.values()].concat(r.found.candidates.map((c) => c.local))));
+  }
+  for (const path of asked.keys()) {
+    const key = moduleKey(path), segs = key.split("/");
+    keys.set(path, key);
+    const base = segs[segs.length - 1] === "index" && segs.length > 1 ? segs[segs.length - 2] : segs[segs.length - 1];
+    if (!byBase.has(base)) byBase.set(base, []);
+    byBase.get(base).push(path);
+  }
+  const note = (path, name, what) => { const e = asked.has(path) ? asked.get(path).get(name) : null; if (e) e[what] = true; };
+  // a provider's tag: the part it names when the file gives one so (`Tooltip.Provider`), else its root used as a context
+  const provide = (path, name) => { if (exportsOf.has(path) && exportsOf.get(path).has(name)) note(path, name, "rendered"); else note(path, name.slice(0, name.lastIndexOf(".")), "context"); };
+  const F = asked.size ? followOf(scripts, project, { byName, byBase, keys, defaults }, results.map((r) => [r.path, r.uses.reexports])) : null;
   const tell = (rel, uses) => {
     const file = rel.slice(rel.lastIndexOf("/") + 1);
     const tests = isTestFile(rel) || RE_NOT_COMPONENT_FILE.test(file); // (a story or a test may CALL a component: never a helper's sign — review 1)
@@ -2675,21 +2711,7 @@ function settle(results, scripts, markups, read, places) {
       for (const [name, e] of mine) if (part ? e.local === p || name === p : e.local === root) e[part ? "rendered" : "context"] = true;
     }
     if (!uses.imports.size) return;
-    const dir = rel.slice(0, rel.lastIndexOf("/") + 1);
-    // → the [path, name] a written name stands for, through the file's import — once a folder, a module and a name
-    const resolve = (written) => {
-      const dot = written.indexOf(".");
-      const imp = uses.imports.get(dot === -1 ? written : written.slice(0, dot));
-      if (!imp) return [];
-      const rest = dot === -1 ? "" : written.slice(dot);
-      const tk = dir + "\n" + imp.spec + "\n" + imp.name + "\n" + rest;
-      if (targets.has(tk)) return targets.get(tk);
-      const at = placed(imp.spec, rel), out = [];
-      if (at) { lookup(at, imp.name, rest, out); for (const f of filesOf(at)) for (const x of through(f, imp.name, rest)) out.push(x); }
-      const uniq = once(out);
-      targets.set(tk, uniq);
-      return uniq;
-    };
+    const resolve = (written) => F.resolve(rel, uses.imports, written);
     for (const n of uses.rendered) for (const [path, name] of resolve(n)) note(path, name, "rendered");
     if (!tests) for (const n of uses.called) for (const [path, name] of resolve(n)) note(path, name, "called");
     for (const n of uses.contexts) for (const [path, name] of resolve(n)) note(path, name, "context");
@@ -2697,7 +2719,8 @@ function settle(results, scripts, markups, read, places) {
     // (an object's member read settles a PART alone: `UI.Badge.displayName` is a component's static — review 1)
     for (const n of uses.members) for (const [path, name] of resolve(n)) if (name.includes(".")) note(path, name, "member");
   };
-  for (const r of results) tell(r.path, r.uses);
+  if (asked.size) for (const r of results) tell(r.path, r.uses);
+  if (watch) for (const r of results) watch.result(r.path, r.uses);
   // the other scripts — a file that writes none of the names asked (nor a default export's) tells nothing: never viewed
   const wanted = new Set(defaults.values());
   for (const name of byName.keys()) { const dot = name.indexOf("."); wanted.add(dot === -1 ? name : name.slice(0, dot)); }
@@ -2721,12 +2744,14 @@ function settle(results, scripts, markups, read, places) {
   let files = 0, chars = 0;
   try {
     for (const [s, uses] of queue) {
-      if (files >= DS_USAGE_FILES || chars >= DS_USAGE_CHARS) break;
+      if (files >= DS_USAGE_FILES || chars >= DS_USAGE_CHARS) { if (watch) watch.cut(queue.slice(files).map(([x]) => x.rel), files); break; }
       const text = heads.next();
       files++;
       if (text == null) continue;
       chars += text.length;
-      if (names(text)) tell(s.rel, uses(text, s.rel));
+      const u = asked.size && names(text) ? uses(text, s.rel) : null;
+      if (u) tell(s.rel, u);
+      if (watch) watch.see(s.rel, text, u, uses);
     }
   } finally {
     heads.stop();
@@ -2736,7 +2761,169 @@ function settle(results, scripts, markups, read, places) {
   }
   return { dropped, rendered };
 }
-function scanCode(root, withComponents = true, withBreakpoints = false) {
+// --- deprecated uses: the files that still import a `_Deprecated:_` component (1.39) -------------------------------------------
+// The project report's watch on settle's read (spec_scan {designSystem: true} with no name, while the registry marks a row
+// `_Deprecated:_`): for each such row the code holds a file for, the files that still import it. A SECOND instance of settle's
+// follow (followOf) with an index of its own, its own caches and budget and its own projectPlaces (a lazy manifest walk and a
+// config budget of its own): settle never sees what it asks, and its verdicts are a scan's with no row. Two rules, two
+// predicates:
+//   - a row named by its FILE (`table.tsx`, `Table.vue` — every namesake: deprecated is a property of the name, 1.37) is its
+//     MODULE: any import of that file counts (`{ Toaster }` from `…/sonner`, `buttonVariants`, a type) — the module an import
+//     names IS the file: its key exactly (a folder only for its index: a folder import is not every file under it; an SFC's
+//     key without its extension too, Vue CLI's `@/components/Table`, and `X/index.vue` by its folder — webpack's resolution,
+//     over-approximated as `./x` → x.ts and x/index.ts already is) —, and through what the project's files pass on, the
+//     components it exports (the follow: a barrel's `export *`, a renamed re-export, an SFC's default);
+//   - a component a file exports beside its own (`CardHeader` in `card.tsx`) counts by its NAME, through the same follow.
+// Only a component file whose importers the scan reads is a row's file (RE_JSX_FILE ∪ RE_MARKUP_FILE: an Angular
+// `*.component.ts` is imported by `.ts` files and rendered by templates — its row is `unlocated`, as a Blade one, a library's
+// and a dropped one are). The names a component folder's barrel gives a row's file or a watched name (`export { default as
+// VbenButton } from './button.vue'`, `import Root from './table.svelte'; export { Root as Table }`) are watched names too,
+// DS_ALIAS_PASSES deep (a rename of a rename; a relative module only). An .mdx / .vue tag no import binds, whose key is a
+// located row's — an auto-import, a global registration, an MDX provider — is counted apart (`unbound`), never resolved.
+// Read: the component files read for what they export, then settle's queue (the JSX scripts and the markup files, settle's
+// order and bound), tests, stories and mocks aside; a text that names no watched name (RE_CAPITAL_WORD — a .vue file's kebab
+// tags too) and no row file's base (a path segment) is not parsed, and a binding that names neither is not followed: the cost
+// guard — it hides an import whose binding and module name neither (`export { Table as Grid }` outside a component folder's
+// barrel, a `#ui` alias straight to `table.tsx`). A report, never a verdict (no import found is not unused: its `note`, the
+// report's, says what is not seen), and never the report's `limits`, `truncated` or `inSync`.
+const DS_DEP_SHOWN = 3; // the files listed of a row, and its component files — the first by path, every one counted
+const RE_UNBOUND_FILE = /\.(?:mdx|vue)$/i; // where a tag may stand with no import (an MDX provider, a Vue global or auto-import)
+const RE_PATH_SEGMENT = /\/([A-Za-z0-9_.$-]+)/g;
+const TWIN = "\n"; // (an SFC's twin entry in the follow's index — its key without the extension: no path holds a line break)
+function deprecatedWatch(reg, files, results, scripts, project) {
+  const dep = reg.deprecated, rowName = new Map(reg.components.map((c) => [c.key, c.name]));
+  const byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map();
+  const moduleOf = new Map(); // a module row's file (and its twin) → [the row's key, the file's path]
+  const nameRow = new Map(); // a name row: "path\nname" → the row's key
+  const byKey = new Map(); // a module key that IS a row's file → [[the row's key, the file's path]] (indexed: no loop of the rows a binding)
+  const located = new Map(); // a row's key → the paths of its files
+  const names = new Set(), bases = new Set();
+  const push = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
+  const give = (p, name) => { push(byName, name, p); names.add(name); }; // (a pair given twice is answered once: the follow's `once`)
+  const locate = (k, p) => { if (!located.has(k)) located.set(k, new Set()); located.get(k).add(p); };
+  const exportsOf = new Map(results.filter((r) => !r.barrel).map((r) => [r.path, r]));
+  for (const c of files) {
+    if (!dep.has(c.key) || !(RE_JSX_FILE.test(c.path) || RE_MARKUP_FILE.test(c.path))) continue;
+    locate(c.key, c.path);
+    const key = moduleKey(c.path), sfc = !RE_MODULE_EXT.test(c.path);
+    for (const [p, k] of [[c.path, key]].concat(sfc ? [[TWIN + c.path, key.replace(/\.[a-z0-9]+$/, "").replace(RE_PLATFORM_INFIX, "")]] : [])) {
+      keys.set(p, k);
+      const b = keyBase(k);
+      push(byBase, b, p);
+      bases.add(b);
+      defaults.set(p, c.name); // (an SFC's default IS its component)
+      moduleOf.set(p, [c.key, c.path]);
+      push(byKey, k, [c.key, c.path]);
+      if (k.endsWith("/index")) push(byKey, k.slice(0, -6), [c.key, c.path]);
+      give(p, c.name);
+      const r = exportsOf.get(c.path);
+      if (r) for (const n of r.found.names) give(p, n);
+    }
+  }
+  // (its file's own component too, when deprecated: that file is a module row as well — a result is a component file)
+  for (const r of exportsOf.values()) {
+    for (const n of r.found.names.concat(r.found.candidates.map((x) => x.name))) {
+      const k = dsKey(n);
+      if (!dep.has(k)) continue;
+      nameRow.set(r.path + "\n" + n, k);
+      keys.set(r.path, moduleKey(r.path));
+      give(r.path, n);
+      locate(k, r.path);
+    }
+  }
+  // (the names a component folder's barrel gives a row's file or a watched name — read before the search)
+  const rowFile = (spec, from) => { const at = spec[0] === "." ? placeOf(spec, from, null) : null; return !!at && [...at.keys].some((k) => byKey.has(k)); };
+  for (let pass = 0, grew = true; grew && pass < DS_ALIAS_PASSES; pass++) {
+    grew = false;
+    for (const r of results) if (r.barrel && r.uses.reexports) for (const [exported, via] of r.uses.reexports.named) {
+      if (names.has(exported) || !(names.has(via.name) || rowFile(via.spec, r.path))) continue;
+      names.add(exported);
+      grew = true;
+    }
+  }
+  const F = followOf(scripts, project, { byName, byBase, keys, defaults }, results.map((r) => [r.path, r.uses.reexports]));
+  const stats = new Map(), unbound = new Map(); // a row's key → { files: the first DS_DEP_SHOWN by path, total } · { total, at }
+  let read = 0, cut = null;
+  const baseOf = (spec) => keyBase(moduleKey(spec));
+  const inScope = (rel) => (RE_JSX_FILE.test(rel) || RE_MARKUP_FILE.test(rel)) && !isTestFile(rel) && !RE_NOT_COMPONENT_FILE.test(rel.slice(rel.lastIndexOf("/") + 1));
+  const seeUses = (rel, u) => {
+    const hit = new Set(); // (the rows this file uses: one count a file and a row)
+    const pair = (p, n) => {
+      const m = moduleOf.get(p);
+      if (m && m[1] !== rel) hit.add(m[0]);
+      const k = nameRow.get(p + "\n" + n);
+      if (k != null && p !== rel) hit.add(k);
+    };
+    for (const [local, imp] of u.imports) {
+      if (!names.has(imp.name) && !bases.has(baseOf(imp.spec))) continue; // (the binding filter: a cost guard, timed)
+      const at = F.placed(imp.spec, rel);
+      if (at) for (const k of at.keys) for (const [key, p] of byKey.get(k) || []) if (p !== rel) hit.add(key);
+      if (imp.name !== "*") for (const [p, n] of F.resolve(rel, u.imports, local)) pair(p, n);
+    }
+    // (a namespace's members, each by its first part: `<UI.Table.Row>` is UI.Table's)
+    for (const set of [u.rendered, u.members, u.providers]) for (const w of set) {
+      const d = w.indexOf(".");
+      if (d <= 0) continue;
+      const imp = u.imports.get(w.slice(0, d));
+      if (!imp || imp.name !== "*") continue;
+      const e = w.indexOf(".", d + 1), member = w.slice(d + 1, e === -1 ? w.length : e);
+      if (!names.has(member) && !bases.has(baseOf(imp.spec))) continue;
+      for (const [p, n] of F.resolve(rel, u.imports, e === -1 ? w : w.slice(0, e))) pair(p, n);
+    }
+    if (RE_UNBOUND_FILE.test(rel)) for (const t of u.rendered) {
+      if (t.includes(".") || u.imports.has(t)) continue;
+      const k = dsKey(t);
+      if (!located.has(k)) continue;
+      if (!unbound.has(k)) unbound.set(k, { total: 0, at: rel });
+      const x = unbound.get(k);
+      x.total++;
+      if (rel < x.at) x.at = rel;
+    }
+    for (const k of hit) {
+      if (!stats.has(k)) stats.set(k, { files: [], total: 0 });
+      const st = stats.get(k);
+      st.total++;
+      if (st.files.length < DS_DEP_SHOWN || rel < st.files[DS_DEP_SHOWN - 1]) { st.files.push(rel); st.files.sort(); st.files.length = Math.min(st.files.length, DS_DEP_SHOWN); }
+    }
+  };
+  // (the cost guard: a text that names no watched name — nor, a .vue file, as a kebab tag — and no row file's base is not parsed)
+  const wants = (text, rel) => {
+    RE_CAPITAL_WORD.lastIndex = 0;
+    for (let m = RE_CAPITAL_WORD.exec(text); m; m = RE_CAPITAL_WORD.exec(text)) if (names.has(m[0])) return true;
+    RE_PATH_SEGMENT.lastIndex = 0;
+    for (let m = RE_PATH_SEGMENT.exec(text); m; m = RE_PATH_SEGMENT.exec(text)) if (bases.has(m[1].toLowerCase().replace(RE_MODULE_EXT, ""))) return true;
+    if (!/\.vue$/i.test(rel)) return false;
+    RE_KEBAB_TAG.lastIndex = 0;
+    for (let m = RE_KEBAB_TAG.exec(text); m; m = RE_KEBAB_TAG.exec(text)) if (names.has(pascalOf(m[1]))) return true;
+    return false;
+  };
+  return {
+    idle: !located.size, // (no row the code holds a file for: nothing to look for — settle reads nothing for it, `read` 0)
+    // a component file read for what it exports (settle's `results`): its uses as that read gave them
+    result: (rel, u) => { if (inScope(rel)) { read++; seeUses(rel, u); } },
+    // a file of settle's queue: the uses settle parsed (u), else its own parse of the text — when it names what is watched
+    see: (rel, text, u, usesFn) => { if (!inScope(rel)) return; read++; if (u || wants(text, rel)) seeUses(rel, u || usesFn(text, rel)); },
+    // settle's read stopped at its bound (DS_USAGE_FILES / DS_USAGE_CHARS): the queue's rest, the files read
+    cut: (rest, n) => { if (rest.some(inScope)) cut = n; },
+    // → the report's deprecatedUses, its `note` aside (localized: the report's). repeat: the cuts of the walk and of the
+    // exports loop, as the report's limits say them (a file the walk left, a name row the exports loop did not read)
+    report: (repeat) => {
+      const rows = [], unlocated = [];
+      for (const k of dep.keys()) {
+        const name = rowName.get(k);
+        if (!located.has(k)) { unlocated.push(name); continue; }
+        const paths = [...located.get(k)].sort(), st = stats.get(k) || { files: [], total: 0 }, ub = unbound.get(k);
+        rows.push(Object.assign({ name, use: dsReplacement(reg, k, rowName), paths: paths.slice(0, DS_DEP_SHOWN), pathsTotal: paths.length, files: st.files, filesTotal: st.total,
+          unbound: ub ? ub.total : 0 }, ub ? { unboundAt: ub.at } : {}));
+      }
+      const limits = repeat.filter(Boolean);
+      if (cut != null) limits.push({ code: "usage-files", read: cut });
+      if (F.spent.cut) limits.push({ code: "deprecated-follow", read: DS_PASS_FILES, chars: DS_PASS_CHARS, count: DS_PASS_STEPS });
+      return { rows: rows.slice(0, DS_LIST), rowsTotal: rows.length, unlocated: unlocated.slice(0, DS_LIST), unlocatedTotal: unlocated.length, read, limits };
+    },
+  };
+}
+function scanCode(root, withComponents = true, withBreakpoints = false, deprecated = null) {
   const realRoot = realRootOf(root);
   const byKey = new Map(), views = [], tokenFiles = [], sheets = [], found = [], routerRoots = new Set(), pageDirs = new Set(), nextConfigs = new Set();
   const fullOf = new Map(); // a component file's full path, by its relative one
@@ -2840,7 +3027,10 @@ function scanCode(root, withComponents = true, withBreakpoints = false) {
   // dropped when the project calls it as a function or gives it to `useContext`, never rendering it; a CANDIDATE — a name
   // exported that the rules took for none — is one when the project renders it.
   let placed = null;
-  const verdict = settle(results, scripts, markups, readPaths, () => placed || (placed = projectPlaces(packageFiles, roots, configs, path.resolve(root), realRoot)));
+  // (1.39, deprecated: the registry, when the project report's registry marks a row `_Deprecated:_` — the watch on settle's
+  // read, with places of its own)
+  const watch = withComponents && deprecated && deprecated.deprecated.size ? deprecatedWatch(deprecated, files, results, scripts, projectPlaces(packageFiles, roots, configs, path.resolve(root), realRoot)) : null;
+  const verdict = settle(results, scripts, markups, readPaths, () => placed || (placed = projectPlaces(packageFiles, roots, configs, path.resolve(root), realRoot)), watch);
   // (every file's names before any candidate: a barrel's re-export takes no row's path from the file that declares it —
   // review 1 of 1.35.3, `export { default as FiltersToggle } from "./toggle"`)
   const add = (r, name) => { const key = dsKey(name); if (key && !byKey.has(key)) byKey.set(key, { name, key, path: r.path, index: false, route: false }); };
@@ -2961,7 +3151,8 @@ function scanCode(root, withComponents = true, withBreakpoints = false) {
   capped.workspaces = packages.cut;
   capped.manifests = packages.read;
   return { components, tokens, sources, twins, libraries: packages.libraries, views, scripts, files: walk.files, truncated: walk.truncated, capped, realRoot, multi,
-    breakpoints: bp ? bp.found : null };
+    breakpoints: bp ? bp.found : null,
+    ...(watch ? { deprecatedUses: watch.report([walk.truncated ? { code: "files", read: walk.files } : null, capped.exports ? { code: "component-files", read: capped.exports } : null]) } : {}) };
 }
 
 // --- raw values: what a feature's view files hard-code ------------------------------------------------------------------------
@@ -3347,7 +3538,9 @@ function designSystemReport(projectDir, opts = {}) {
   const f = named ? existingFeature(projectDir, opts.name) : null;
   if (f && !f.ok) return { ok: false, error: f.error, code: f.code };
   const reg = designSystemRegistry(specsRoot(projectDir));
-  const scan = scanCode(root, !f, true); // (a feature's report reads no component's name: neither what files export nor what the others tell)
+  // (a feature's report reads no component's name: neither what files export nor what the others tell; 1.39: the project's
+  // report watches the deprecated rows' uses while the registry marks one)
+  const scan = scanCode(root, !f, true, reg);
   // (1.38: the breakpoints — both shapes, the same; here, never in featureReport: finish calls that too)
   if (f) return Object.assign(featureReport(projectDir, root, f, reg, scan), { breakpoints: breakpointsReport(projectDir, scan.breakpoints) });
   const listed = reg ? reg.keys : new Set();
@@ -3376,6 +3569,8 @@ function designSystemReport(projectDir, opts = {}) {
     stale: stale.slice(0, DS_LIST), staleTotal: stale.length,
     newTokens: newTokens.slice(0, DS_LIST), newTokensTotal: newTokens.length, newSources, newLibraries,
     drift: drift.slice(0, DS_LIST), driftTotal: drift.length, gone, unitsTable: reg && reg.units ? { rows: reg.units.rows.length, unread: reg.units.unread, past: reg.units.past } : null,
+    // (1.39: a report — what is not seen is its note; never `limits`, `truncated` or `inSync`)
+    ...(scan.deprecatedUses ? { deprecatedUses: Object.assign(scan.deprecatedUses, { note: i18n.msg(lang).quality.dsDepUsesNote }) } : {}),
     inSync: !!reg && !limits.length && !missing.length && !stale.length && !newTokens.length && !newSources.length && !newLibraries.length,
     ...(opts.uiPass ? { uiChecks: uiProject(scan, reg) } : {}), // (1.38: the operation's opt-in — the engine's default reads no view file)
     scanned: { files: scan.files }, limits, truncated: limits.length > 0,

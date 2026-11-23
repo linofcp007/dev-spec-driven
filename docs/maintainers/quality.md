@@ -1002,6 +1002,35 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   first, or a method beside an element, whose JSX is an element handed over (`t("hint", …)`, React's element cloner
   given a component first); a call given an object with a `render`, or curried around an import; a class that renders
   JSX and that the project never constructs.
+- **Deprecated uses** (1.39 — `deprecatedWatch`, design-system.js; the project report's `deprecatedUses`) — while the registry
+  marks a row `_Deprecated:_` (`reg.deprecated`; scanCode's 4th argument, the project report's alone: a feature's report, the
+  seed and finish pass none — finish's `scanCode(root, false)` builds no watch), the files that still import each row the
+  code holds a component file for. Settle's follow is a function of its own, `followOf(scripts, project, index, prefill)` →
+  {`resolve`, `placed`, `spent`} (lifted out of settle, byte-identical scans against 1.38.0); the watch runs a SECOND instance
+  with its own index, caches and budget and its OWN `projectPlaces` (its config reads spend none of settle's DS_TS_CONFIGS),
+  so settle's verdicts are a scan's with no row. `settle(…, watch)`: with a watch it never returns early — its follow, its
+  places and its tells run only when it asks; the watch sees every component file read for its exports (`result`, whatever
+  settle asks), then each file of settle's queue as read (`see`: the uses settle parsed, or its own parse of the text — the
+  queue, order and bound are settle's: with nothing asked, the JSX scripts and the markup files), and where the bound stopped
+  (`cut`) — unless it is `idle` (no row located: settle reads nothing for it, `read` 0). Two rules, two predicates: a row named by its FILE — every namesake, RE_JSX_FILE ∪ RE_MARKUP_FILE only (an Angular
+  `*.component.ts` is imported by `.ts` files: `unlocated`) — is its MODULE: a binding whose module IS the file counts
+  (`byKey`, indexed: the key exactly, an index's folder, an SFC's key without its extension — the `TWIN` entry, its platform
+  infix dropped as moduleKey drops it —, `X/index.vue` by its folder; never `pointsTo`'s prefix: a folder import is not every
+  file under it), and through the follow its components (`byName`, the SFC's `defaults`); a component a file exports — its
+  own too, a result IS a component file — counts by its NAME (`nameRow`). The names a component folder's barrel gives a
+  row's file or a watched name (a relative module) are watched too, DS_ALIAS_PASSES deep. A namespace's member resolves by
+  its first part (`<UI.Table.Row>` is UI.Table's). A file is never its own importer. An .mdx / .vue tag with no dot that no
+  import binds, whose key is a LOCATED row's, is `unbound` (`unboundAt`: the first by path). The cost guard: a text naming
+  no watched name (RE_CAPITAL_WORD; a .vue file's kebab tags) and no row file's base (RE_PATH_SEGMENT) is not parsed, a
+  binding naming neither is not followed — it hides an import whose binding and module name neither (`export { Table as
+  Grid }` outside a component folder's barrel, a `#ui` alias straight to `table.tsx`). The report: rows in the registry's
+  order (DS_LIST, `rowsTotal`), `use` = `dsReplacement` (quality.js — doctor's `ui-deprecated` prints the same, ONE
+  expression), DS_DEP_SHOWN files and paths by path, `unlocated`, `read` (the in-scope files seen), `limits` — the walk's
+  `files` and the exports loop's `component-files` repeated, `usage-files` (settle's read stopped with a file the watch
+  reads left), `deprecated-follow` (the follow's `spent.cut`: a refused read or step; settle's own cut stays silent) —, and
+  the report's localized `note` (what is not seen; no import found is not unused). Never the report's `limits`,
+  `truncated` or `inSync`. Not counted: a `.ts` file, a dynamic `import()`, tests / stories / mocks, a tag in a .tsx /
+  .svelte / .astro file with no binding.
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),
@@ -2914,6 +2943,34 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   47 sampled files 10 define one width (median 2), so a single `--md` would capture [320, 768] where 1.38 captured five;
   PostCSS / Lightning only; its seven mutants the largest block. Tailwind 3's `screens` stays cut (41 of 104 sampled keys are
   `container.screens`, a max width).
+- **1.39.0** (item 1, "deprecated uses", chain A — CRIT_1's must-fixes 1–10) — 1.38 had kept the files that still import a
+  deprecated component for later (they need settle's read). Lifted first, its own commit: settle's follow, `followOf`, moved
+  verbatim (CRIT_1 must-fix 8: the prototype COPIED it, so its A/B said nothing of a lift) — proved against the 1.38.0 oracle
+  (92c44e0a, extracted): the full scanCode JSON, settle's verdict included, byte-identical on 21 clones (the design's 9 —
+  cal.com, h5bp, shadcn-svelte, Breeze, nuxt/ui, shadcn-ui, Bootstrap, vben, Starlight — and 12 more) and on every scanCode
+  call the area-15 suite makes (1,036, the DS_PASS_* / DS_PACKAGE_NAMES / DS_TS_CONFIGS fixtures among them); its mutation
+  replay found one survivor — the resolve cache keyed without the FOLDER (no fixture had two apps importing the same
+  `./components/kit`): a fixture now (15-quality-design-system-usage.js). Then the watch (`deprecatedWatch`, above): the
+  differential — each clone's first 60 components marked, every other key and settle's verdict byte-identical on the 8
+  clones that hold components; the CRIT_1 shapes each a fixture (Vue CLI's extensionless SFC and `index.vue`, an Angular row
+  unlocated, the note in EN / PT / ES, results seen with nothing asked, `.ts` files crowding a `.vue` past DS_USAGE_FILES,
+  the namesake over-count with a kit's `chart.tsx`, the follow's three bounds). Cut or not built: a `.ts` file's
+  registration (`app.component`), a dynamic `import()`, a bundler's alias, a barrel's non-component export (the index holds
+  components only), the walk's `files` repeat's fixture (20,001 files: 13 s to write, 6 s to remove — checked in a scratch
+  run, not in the suite), the UI pass's read shared (CRIT_1: +63–108 ms where settle asks nothing does not pay for 1.38's D4
+  coupling). The cost, chain A alone against 1.38.0 (scanCode + the UI pass, one row marked, interleaved medians of 5):
+  trees of 700 view files or more 1.00–1.19× (shadcn-ui 1.06 · cal.com 1.04 · vben 1.19 · shadcn-svelte 1.09 · nuxt/ui 1.04 ·
+  outline 1.00 · mantine 1.18), smaller ones +2 to +108 ms where a row is located (Bootstrap +2, taxonomy +37, Breeze +89,
+  motion-primitives +95, Starlight +108 — the watch's read where settle asks nothing); a row no file holds read +51 / +117 ms
+  for nothing until the watch went `idle`; finish's scan 0.81–1.15× (the same code path). The mutation pass (85 mutants: the
+  lift's 8, the watch's 77): 78 killed — 17 of them by fixtures the first pass showed missing (a namesake's non-component
+  export, a folder's index, a candidate's name row, two name rows in a file, a renamed import by its imported name, a
+  member's part, a .js-written module, four namesakes out of path order, 51 unlocated, a cut in `reach`, the follow's own
+  budget, an .mdx part tag, the idle watch) and the cost guards sharpened (G2q: 500 rows over pages that name none ≤ 1.25×
+  one — the `includes` prefilter 2.49×; a feature's report 2.95× with a watch built); the 7 left: an equivalent memory guard
+  (`unbound` for located rows only), the walk-cap repeat (scratch-checked) and five cost guards timed with and without on
+  shadcn-ui / cal.com / Starlight — the binding filter 1.43–1.46×, the text prefilter 1.01–1.13×, the module check's index,
+  the namespace-binding and member filters within noise (0.93–1.07×).
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four

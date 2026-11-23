@@ -405,4 +405,342 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       read: () => t.h === 500 && t.c === 500,
     });
   }
+
+  // --- 1.39: the files that still import a deprecated component — the project report's `deprecatedUses` --------------------------
+  // (each fixture answers a mutant of the list written before the code: a row named by its file is its MODULE — any import of
+  // the file —, a component a file exports beside its own counts by its NAME; settle's follow, a second instance of it)
+  const L = (lines) => lines.join("\n") + "\n";
+  const depProject = (tag, rows, files, lang) => {
+    const p = project("uses-" + tag, lang);
+    write(p, REG, "# Design System\n\n" + HEAD + rows.join("\n") + "\n");
+    for (const [rel, text] of Object.entries(files)) write(p, rel, text);
+    return p;
+  };
+  const usesOf = (r) => r.deprecatedUses || { rows: [], unlocated: [], limits: [] };
+  const rowOf = (r, name) => usesOf(r).rows.find((x) => x.name === name) || { files: [], paths: [] };
+  const uses = (r, name) => [rowOf(r, name).filesTotal, rowOf(r, name).files];
+  const KIT = "src/components/ui/";
+  const compFile = (name, more) => L(["export function " + name + "() { return <div />; }"].concat(more || []));
+  const kitFiles = {
+    "package.json": js({ name: "kit", dependencies: { react: "^19" } }),
+    "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
+    [KIT + "table.tsx"]: compFile("Table", ["export function TableRow() { return <tr />; }", "export const tableVariants = 1;"]),
+    [KIT + "data-grid.tsx"]: compFile("DataGrid"),
+    [KIT + "card.tsx"]: compFile("Card", ["export function CardHeader() { return <div />; }", "export function CardFooter() { return <div />; }"]),
+    [KIT + "sonner.tsx"]: L(["export function Toaster() { return <div />; }", "export const toast = (m) => m;"]),
+    [KIT + "index.ts"]: L(["export * from \"./sonner\";", "export * from \"./menu\";"]),
+    [KIT + "toast.tsx"]: compFile("Toast"), [KIT + "chart.tsx"]: L(["export function ChartContainer() { return <div />; }"]),
+    [KIT + "avatar.tsx"]: compFile("Avatar"), [KIT + "panel.tsx"]: L(["export default function Panel() { return <div />; }"]),
+    [KIT + "field.tsx"]: compFile("Field", ["export type FieldProps = { name: string };"]), [KIT + "chip.tsx"]: compFile("Chip"), [KIT + "drawer.tsx"]: compFile("Drawer"),
+    [KIT + "menu.tsx"]: compFile("Menu"), [KIT + "button.tsx"]: compFile("Button"),
+    // (a folder's index file is a module named by its folder: `@/components/ui/select` is select/index.tsx)
+    [KIT + "select/index.tsx"]: compFile("Select", ["export const selectVariants = 1;"]),
+    "src/app/users/select.tsx": L(["import { selectVariants } from \"@/components/ui/select\";", "export const v = selectVariants;"]),
+    // (a file importing its own deprecated part: never its own importer)
+    [KIT + "tree.tsx"]: L(["import { TreeNode } from \"./tree\";", "export function Tree() { return <TreeNode />; }", "export function TreeNode() { return <li />; }"]),
+    "src/components/callout.tsx": compFile("Callout"),
+    // (a component file — read for what it exports — is an importer too, whatever settle asks)
+    "src/components/badge.tsx": compFile("Badge"),
+    "src/components/badge-list.tsx": L(["import { Badge } from \"@/components/badge\";", "export function BadgeList() { return <Badge />; }"]),
+    // (a non-component export of a namesake file: the module check alone sees it, whichever namesake the walk met first)
+    "src/app/users/variants.tsx": L(["import { tableVariants } from \"@/components/ui/table\";", "export const v = tableVariants;"]),
+    "src/app/users/named.tsx": L(["import { Table, TableRow } from \"@/components/ui/table\";", "export const P = () => <Table><TableRow /></Table>;"]),
+    "src/app/users/both.tsx": L(["import { Table } from \"@/components/ui/table\";", "import * as K from \"@/components/ui/table\";", "export const P = () => <Table><K.TableRow /></Table>;"]),
+    "src/app/users/renamed.tsx": L(["import { Avatar as A } from \"../../components/ui/avatar\";", "export const P = () => <A />;"]),
+    "src/app/users/renamed-folder.tsx": L(["import { Avatar as Av } from \"@/components/ui\";", "export const P = () => <Av />;"]),
+    "src/app/users/default.tsx": L(["import Box from \"@/components/ui/panel\";", "export const P = () => <Box />;"]),
+    // (the module written with its .js extension, NodeNext's way: the base the prefilter asks is the path's, its extension dropped)
+    "src/app/users/default-js.tsx": L(["import Pane from \"@/components/ui/panel.js\";", "export const P = () => <Pane />;"]),
+    "src/app/users/types.tsx": L(["import type { FieldProps } from \"@/components/ui/field\";", "export const p = (x: FieldProps) => x.name;"]),
+    "src/app/users/require.js": L(["const { Chip } = require(\"../../components/ui/chip\");", "module.exports = () => Chip;"]),
+    "src/app/users/dynamic.tsx": L(["import { lazy } from \"react\";", "const D = lazy(() => import(\"@/components/ui/drawer\"));", "export const P = () => <D />;"]),
+    "src/app/users/namespace.tsx": L(["import * as UI from \"@/components/ui\";", "export const P = () => <UI.Menu />;"]),
+    "src/app/users/ns-part.tsx": L(["import * as UI2 from \"@/components/ui\";", "export const P = () => <UI2.Menu.Item />;"]),
+    "src/app/users/ns-button.tsx": L(["import * as UI from \"@/components/ui\";", "export const P = () => <UI.Button />;"]),
+    "src/app/users/header.tsx": L(["import { CardHeader } from \"@/components/ui/card\";", "export const P = () => <CardHeader />;"]),
+    "src/app/users/footer.tsx": L(["import { CardFooter } from \"@/components/ui/card\";", "export const P = () => <CardFooter />;"]),
+    "src/app/users/card-only.tsx": L(["import { Card } from \"@/components/ui/card\";", "export const P = () => <Card />;"]),
+    "src/app/users/toast-fn.tsx": L(["import { toast } from \"@/components/ui/sonner\";", "export const P = () => toast(1);"]),
+    "src/app/users/folder.tsx": L(["import { Toaster } from \"@/components/ui\";", "export const P = () => <Toaster />;"]),
+    "src/app/users/chart.tsx": L(["import { ChartContainer } from \"@/components/ui/chart\";", "export const P = () => <ChartContainer />;"]),
+    "src/app/users/table.test.tsx": L(["import { Table } from \"@/components/ui/table\";", "test(\"t\", () => <Table />);"]),
+    "src/app/users/table.stories.tsx": L(["import { Table } from \"@/components/ui/table\";", "export default { component: Table };"]),
+    "src/__mocks__/table.tsx": L(["import { Table } from \"@/components/ui/table\";", "export const X = () => <Table />;"]),
+    "src/app/local.tsx": L(["function Table() { return null; }", "export const P = () => <Table />;"]),
+    // a namesake: another folder's table.tsx (exporting BillingTable) is a Table file too — its importers count (CRIT_1 s2)
+    "src/billing/components/table.tsx": L(["export function BillingTable() { return <table />; }"]),
+    "src/billing/page.tsx": L(["import { BillingTable } from \"./components/table\";", "export const P = () => <BillingTable />;"]),
+    "docs/guide.mdx": L(["# Guide", "", "<Callout>hi</Callout>"]),
+    "docs/parts.mdx": L(["The CardHeader is retired: use the part.", "", "<Card.Header />"]), // (a part's tag is no unbound CardHeader: a tag with a dot is never one)
+    "docs/zz.mdx": L(["<Callout />"]), // (read before guide.mdx — the shorter path —, never named before it: the first by path)
+    "docs/bound.mdx": L(["import { Callout } from \"../src/components/callout\";", "", "<Callout>hi</Callout>"]),
+  };
+  const KIT_ROWS = (mark) => ["| Table | src/components/ui/table.tsx |  | " + mark("use data-grid") + " |", "| DataGrid | src/components/ui/data-grid.tsx |  |  |",
+    "| Card | src/components/ui/card.tsx |  |  |", "| CardHeader | src/components/ui/card.tsx |  | " + mark("use Card") + " |", "| Sonner | src/components/ui/sonner.tsx |  | " + mark() + " |",
+    "| Toast | src/components/ui/toast.tsx |  | " + mark("use Sonner") + " |", "| Modal |  |  | " + mark() + " |", "| Chart | src/components/ui/chart.tsx |  | " + mark() + " |",
+    "| Callout | src/components/callout.tsx |  | " + mark() + " |", "| Avatar | src/components/ui/avatar.tsx |  | " + mark() + " |", "| Panel | src/components/ui/panel.tsx |  | " + mark() + " |",
+    "| Field | src/components/ui/field.tsx |  | " + mark() + " |", "| Chip | src/components/ui/chip.tsx |  | " + mark() + " |", "| Drawer | src/components/ui/drawer.tsx |  | " + mark() + " |",
+    "| Menu | src/components/ui/menu.tsx |  | " + mark() + " |", "| Badge | src/components/badge.tsx |  | " + mark() + " |", "| Button | src/components/ui/button.tsx |  |  |",
+    "| Tree | src/components/ui/tree.tsx |  |  |", "| TreeNode | src/components/ui/tree.tsx |  | " + mark() + " |",
+    "| Select | src/components/ui/select/index.tsx |  | " + mark() + " |", "| CardFooter | src/components/ui/card.tsx |  | " + mark() + " |"];
+  const MARK = (use) => "_Deprecated" + (use ? ": " + use : "") + "_", NONE = () => "";
+  // the report with the markers against the same report with none — every key but `deprecatedUses` byte-identical (settle's
+  // verdicts are a scan's with no row: the watch is its own instance)
+  const differential = (p, rows) => {
+    write(p, REG, "# Design System\n\n" + HEAD + rows(NONE).join("\n") + "\n");
+    const off = S.designSystemReport(p);
+    write(p, REG, "# Design System\n\n" + HEAD + rows(MARK).join("\n") + "\n");
+    const on = S.designSystemReport(p);
+    const strip = (r) => { const o = Object.assign({}, r); delete o.deprecatedUses; delete o.registry; return js(o); };
+    return { on, same: strip(off) === strip(on), off: "deprecatedUses" in off };
+  };
+  {
+    const kit = depProject("kit", KIT_ROWS(MARK), kitFiles);
+    const r = S.designSystemReport(kit), d = usesOf(r);
+    const diff = differential(kit, KIT_ROWS);
+    // the replacement is doctor's: a design reusing Table warns `'Table' (use DataGrid)` (ONE expression, dsReplacement)
+    const g = mk("uses-doctor", { registry: "# Design System\n\n" + HEAD + KIT_ROWS(MARK).join("\n") + "\n", rows: ["| Reuse | Table | the list |"] });
+    const doc = checkOf(g);
+    all("1.39 deprecatedUses (a React kit, settle asking nothing): for each `_Deprecated:_` row the code holds a component file for, in the registry's order, the files that still import it — its replacement as doctor names it; a row named by its file is its MODULE: a named, renamed, default (its local name is no watched name: the module's base), type-only or `require` import of the file, a non-component export of it (`toast`), a namespace member, the components it exports through a folder's barrel (`{ Toaster }`), every namesake's importers (`billing/components/table.tsx`); a component a file exports beside its own counts by its NAME (`CardHeader`, never `{ Card }`); one count a file; a component file read for its exports is an importer too; never a dynamic import(), a test, a story, a mock, a folder import of another member, a file's own local `<Table />`; an .mdx tag no import binds counted apart; a located row with no importer listed with 0, an unlocated one named; never the report's limits or inSync; the same report with no marker holds every other key the same (got " +
+      js({ rows: d.rows, unlocated: d.unlocated, read: d.read, limits: d.limits, same: diff.same, doc }) + ")", {
+      order: () => js(d.rows.map((x) => x.name)) === js(["Table", "CardHeader", "Sonner", "Toast", "Chart", "Callout", "Avatar", "Panel", "Field", "Chip", "Drawer", "Menu", "Badge", "TreeNode", "Select", "CardFooter"]) && d.rowsTotal === 16,
+      indexFolder: () => js(uses(r, "Select")) === js([1, ["src/app/users/select.tsx"]]),
+      ownFile: () => js(uses(r, "TreeNode")) === js([0, []]) && js(rowOf(r, "TreeNode").paths) === js(["src/components/ui/tree.tsx"]),
+      use: () => rowOf(r, "Table").use === "DataGrid" && rowOf(r, "CardHeader").use === "Card" && rowOf(r, "Toast").use === "" && doc && doc.detail === Q().dsDeprecated(1, Q().dsDeprecatedItem("Table", "DataGrid")),
+      namesakes: () => js(rowOf(r, "Table").paths) === js(["src/billing/components/table.tsx", "src/components/ui/table.tsx"]) && rowOf(r, "Table").pathsTotal === 2,
+      module: () => js(uses(r, "Table")) === js([4, ["src/app/users/both.tsx", "src/app/users/named.tsx", "src/app/users/variants.tsx"]]),
+      renamed: () => js(uses(r, "Avatar")) === js([2, ["src/app/users/renamed-folder.tsx", "src/app/users/renamed.tsx"]]),
+      defaultBase: () => js(uses(r, "Panel")) === js([2, ["src/app/users/default-js.tsx", "src/app/users/default.tsx"]]),
+      typeOnly: () => js(uses(r, "Field")) === js([1, ["src/app/users/types.tsx"]]),
+      require: () => js(uses(r, "Chip")) === js([1, ["src/app/users/require.js"]]),
+      dynamic: () => js(uses(r, "Drawer")) === js([0, []]),
+      namespace: () => js(uses(r, "Menu")) === js([2, ["src/app/users/namespace.tsx", "src/app/users/ns-part.tsx"]]),
+      name: () => js(uses(r, "CardHeader")) === js([1, ["src/app/users/header.tsx"]]) && rowOf(r, "CardHeader").unbound === 0 && js(uses(r, "CardFooter")) === js([1, ["src/app/users/footer.tsx"]]),
+      moduleExport: () => js(uses(r, "Sonner")) === js([2, ["src/app/users/folder.tsx", "src/app/users/toast-fn.tsx"]]),
+      kitParts: () => js(uses(r, "Chart")) === js([1, ["src/app/users/chart.tsx"]]) && rowOf(r, "Chart").pathsTotal === 1,
+      result: () => js(uses(r, "Badge")) === js([1, ["src/components/badge-list.tsx"]]),
+      unbound: () => js(uses(r, "Callout")) === js([1, ["docs/bound.mdx"]]) && rowOf(r, "Callout").unbound === 2 && rowOf(r, "Callout").unboundAt === "docs/guide.mdx" && rowOf(r, "Table").unbound === 0 && !("unboundAt" in rowOf(r, "Table")),
+      none: () => js(uses(r, "Toast")) === js([0, []]) && rowOf(r, "Toast").pathsTotal === 1,
+      unlocated: () => js(d.unlocated) === js(["Modal"]) && d.unlocatedTotal === 1,
+      // (in scope: the 19 component files, the 22 pages and the 4 .mdx — never the test, the story, the mock)
+      read: () => d.read === 45 && js(d.limits) === js([]) && d.note === Q().dsDepUsesNote,
+      report: () => js(r.limits) === js([]) && r.truncated === false,
+      differential: () => diff.same === true && diff.off === false,
+    });
+  }
+  {
+    // five importers: the first three by path, all counted; past DS_LIST (50) located rows: 50 listed, every one counted; a row
+    // with no marker is no row; the key only while a row is marked, never in a feature's report; never in inSync
+    const many = {};
+    for (let i = 0; i < 5; i++) many["src/app/p" + (4 - i) + "/page.tsx"] = L(["import { Table } from \"../../components/Table\";", "export const P = () => <Table />;"]);
+    for (const d of ["B", "C", "D"]) many["src/components/" + d + "/Table.tsx"] = compFile("Table");
+    const five = depProject("five", ["| Table | src/components/Table.tsx |  | _Deprecated_ |"], Object.assign({ "src/components/Table.tsx": compFile("Table") }, many));
+    const r5 = S.designSystemReport(five);
+    const big = {};
+    for (let i = 0; i < 51; i++) big["src/components/C" + String(i).padStart(2, "0") + ".tsx"] = compFile("C" + String(i).padStart(2, "0"));
+    const fifty = depProject("fifty", Array.from({ length: 51 }, (_, i) => "| C" + String(i).padStart(2, "0") + " | src/components/C" + String(i).padStart(2, "0") + ".tsx |  | _Deprecated_ |"), big);
+    const r51 = usesOf(S.designSystemReport(fifty));
+    const u51 = usesOf(S.designSystemReport(depProject("unlocated", Array.from({ length: 51 }, (_, i) => "| U" + String(i).padStart(2, "0") + " |  |  | _Deprecated_ |"), {})));
+    // (no row located — the marked component is a library's: nothing to look for, nothing read for it)
+    const idle = usesOf(S.designSystemReport(depProject("idle", ["| Modal |  |  | _Deprecated_ |"], { "src/components/Table.tsx": compFile("Table"),
+      "src/app/page.tsx": L(["import { Table } from \"../components/Table\";", "export const P = () => <Table />;"]) })));
+    const sync = depProject("sync", ["| Table | src/components/Table.tsx |  | _Deprecated_ |"], { "package.json": js({ name: "s" }), "src/components/Table.tsx": compFile("Table"),
+      "src/app/page.tsx": L(["import { Table } from \"../components/Table\";", "export const P = () => <Table />;"]) });
+    const rs = S.designSystemReport(sync);
+    const plain = depProject("plain", ["| Table | src/components/Table.tsx |  |  |"], { "src/components/Table.tsx": compFile("Table") });
+    const f = S.createFeature(sync, { name: "Orders", tracks: ["ui"], summary: "x" });
+    const feat = S.designSystemReport(sync, { name: f.slug });
+    all("1.39 deprecatedUses: a row lists its first 3 importers by path and counts them all; the rows past the first 50 are counted (`rowsTotal`); the key is there only while the registry marks a row (none with no marker, none in a feature's report); a used deprecated row never touches the report's `inSync` or `limits` (got " +
+      js({ five: rowOf(r5, "Table"), fifty: [r51.rows.length, r51.rowsTotal], sync: [rs.inSync, rs.limits, rowOf(rs, "Table").filesTotal], plain: "deprecatedUses" in S.designSystemReport(plain), feat: "deprecatedUses" in feat }) + ")", {
+      first3: () => js(uses(r5, "Table")) === js([5, ["src/app/p0/page.tsx", "src/app/p1/page.tsx", "src/app/p2/page.tsx"]]),
+      paths3: () => js(rowOf(r5, "Table").paths) === js(["src/components/B/Table.tsx", "src/components/C/Table.tsx", "src/components/D/Table.tsx"]) && rowOf(r5, "Table").pathsTotal === 4,
+      unlocated50: () => u51.unlocated.length === 50 && u51.unlocatedTotal === 51 && u51.unlocated[49] === "U49",
+      idle: () => js([idle.rows, idle.unlocated, idle.read]) === js([[], ["Modal"], 0]),
+      fifty: () => r51.rows.length === 50 && r51.rowsTotal === 51 && r51.rows[49].name === "C49",
+      inSync: () => rs.inSync === true && js(rs.limits) === js([]) && rowOf(rs, "Table").filesTotal === 1,
+      absent: () => !("deprecatedUses" in S.designSystemReport(plain)) && !("deprecatedUses" in feat),
+    });
+  }
+  {
+    // Vue, Svelte, Astro, a workspace package's barrels, an Angular row — settle asking a weak name (it reads `.ts` files then)
+    const vue = {
+      "package.json": js({ name: "app", private: true, workspaces: ["packages/*"], dependencies: { vue: "^3", react: "^19" } }),
+      "jsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"], "$lib/*": ["./src/lib/*"] } } }),
+      "src/components/Table.vue": L(["<template><table /></template>"]),
+      "src/components/Pagination/index.vue": L(["<template><nav /></template>"]),
+      "src/components/DataTable.vue": L(["<template><table /></template>"]),
+      "src/components/Tree.vue": L(["<script>", "import Tree from './Tree.vue'", "export default { name: 'Tree', components: { Tree } }", "</script>", "<template><Tree /></template>"]),
+      "src/components/Badge.svelte": L(["<span />"]),
+      "src/components/Hero.astro": L(["---", "---", "<header />"]),
+      "src/app/components/grid/grid.component.ts": L(["export class GridComponent {}"]),
+      // (a weak name asked: settle reads the `.ts` files too — the watch's scope stays the same)
+      "src/components/kit.tsx": L(["export const MotionBox = motion(Box);", "export const Shown = observer(() => <div />);"]),
+      "src/main.ts": L(["import T from './components/Table.vue'", "app.component('Table', T)"]),
+      // Vue CLI / webpack: an SFC imported with no extension, a folder's index.vue by its folder
+      "src/views/list.vue": L(["<script>", "import Table from '@/components/Table'", "import Pagination from '@/components/Pagination'", "export default { components: { Table, Pagination } }", "</script>",
+        "<template><Table /><pagination /></template>"]),
+      "src/views/motion.vue": L(["<script setup>", "import { MotionBox } from '@/components/kit'", "</script>", "<template><MotionBox /></template>"]),
+      "src/views/with-ext.vue": L(["<script setup>", "import Table from '@/components/Table.vue'", "</script>", "<template><Table /></template>"]),
+      // (a platform infix, as an import names the module: `@/components/Chart.client` is Chart.client.vue)
+      "src/components/Chart.client.vue": L(["<template><canvas /></template>"]),
+      "src/views/chart.vue": L(["<script setup>", "import Chart from '@/components/Chart.client'", "</script>", "<template><Chart /></template>"]),
+      "src/views/kebab.vue": L(["<template><data-table /></template>"]),
+      "src/views/bound.vue": L(["<script setup>", "import DataTable from '../components/DataTable.vue'", "</script>", "<template><data-table /></template>"]),
+      "src/views/s.svelte": L(["<script>", "  import Badge from '../components/Badge.svelte';", "</script>", "<Badge />"]),
+      "src/views/u.svelte": L(["<Badge />"]),
+      "src/pages/index.astro": L(["---", "import Hero from '../components/Hero.astro';", "---", "<Hero />"]),
+      // vben: a workspace package, a component folder's barrel naming the SFC's default, a second barrel renaming that name
+      "packages/ui/package.json": js({ name: "@acme/ui" }),
+      "packages/ui/src/index.ts": L(["export * from './components/button';", "export * from './components/kit';"]),
+      "packages/ui/src/components/button/index.ts": L(["export { default as VbenButton } from './button.vue';"]),
+      "packages/ui/src/components/button/button.vue": L(["<template><button /></template>"]),
+      "packages/ui/src/components/kit/index.ts": L(["export { VbenButton as VBtn } from '../button';"]),
+      "src/views/vben.vue": L(["<script setup>", "import { VbenButton } from '@acme/ui'", "</script>", "<template><VbenButton /></template>"]),
+      "src/views/vbtn.vue": L(["<script setup>", "import { VBtn } from '@acme/ui'", "</script>", "<template><VBtn /></template>"]),
+      // shadcn-svelte: a namespace over a folder whose index is no component folder's barrel (a .js one) — its base is asked
+      "src/lib/components/ui/sheet/sheet.svelte": L(["<div />"]),
+      "src/lib/components/ui/sheet/index.js": L(["import Root from './sheet.svelte';", "export { Root };"]),
+      "src/routes/+page.svelte": L(["<script>", "  import * as Sheet from '$lib/components/ui/sheet/index.js';", "</script>", "<Sheet.Root />"]),
+    };
+    const VUE_ROWS = (mark) => ["| Table | src/components/Table.vue |  | " + mark() + " |", "| Pagination | src/components/Pagination/index.vue |  | " + mark() + " |",
+      "| Button | packages/ui/src/components/button/button.vue |  | " + mark() + " |", "| DataTable | src/components/DataTable.vue |  | " + mark() + " |",
+      "| Tree | src/components/Tree.vue |  | " + mark() + " |", "| Grid | src/app/components/grid/grid.component.ts |  | " + mark() + " |",
+      "| Badge | src/components/Badge.svelte |  | " + mark() + " |", "| Hero | src/components/Hero.astro |  | " + mark() + " |",
+      "| Sheet | src/lib/components/ui/sheet/sheet.svelte |  | " + mark() + " |", "| Chart | src/components/Chart.client.vue |  | " + mark() + " |",
+      "| MotionBox | src/components/kit.tsx |  | " + mark() + " |"];
+    const p = depProject("sfc", VUE_ROWS(MARK), vue);
+    const r = S.designSystemReport(p), d = usesOf(r);
+    const diff = differential(p, VUE_ROWS);
+    all("1.39 deprecatedUses (SFCs): an SFC imported with its extension or without (Vue CLI's `@/components/Table`), a folder's `index.vue` by its folder, a .svelte / .astro default import; a workspace package's barrel naming an SFC's default (`{ VbenButton }`) and a second barrel renaming it (`{ VBtn }`); a namespace over a folder whose index is a .js file — by the namespace's base; a .vue kebab tag no import binds counted apart, never a bound one, never a .svelte tag; a recursive SFC's own import never counted; an Angular `*.component.ts` is no row's file (its importers are `.ts` files): unlocated; the `.ts` files settle reads for a weak name stay out of the watch (`app.component('Table', T)`); every other key the same with no marker (got " +
+      js({ rows: d.rows.map((x) => [x.name, x.filesTotal, x.files, x.unbound, x.unboundAt]), unlocated: d.unlocated, same: diff.same }) + ")", {
+      extensionless: () => js(uses(r, "Table")) === js([2, ["src/views/list.vue", "src/views/with-ext.vue"]]) && js(uses(r, "Chart")) === js([1, ["src/views/chart.vue"]]),
+      indexVue: () => js(uses(r, "Pagination")) === js([1, ["src/views/list.vue"]]),
+      barrels: () => js(uses(r, "Button")) === js([2, ["src/views/vben.vue", "src/views/vbtn.vue"]]),
+      kebab: () => js(uses(r, "DataTable")) === js([1, ["src/views/bound.vue"]]) && rowOf(r, "DataTable").unbound === 1 && rowOf(r, "DataTable").unboundAt === "src/views/kebab.vue",
+      ownFile: () => js(uses(r, "Tree")) === js([0, []]),
+      svelte: () => js(uses(r, "Badge")) === js([1, ["src/views/s.svelte"]]) && rowOf(r, "Badge").unbound === 0,
+      astro: () => js(uses(r, "Hero")) === js([1, ["src/pages/index.astro"]]),
+      namespaceBase: () => js(uses(r, "Sheet")) === js([2, ["src/lib/components/ui/sheet/index.js", "src/routes/+page.svelte"]]),
+      angular: () => js(d.unlocated) === js(["Grid"]) && !d.rows.some((x) => x.name === "Grid"),
+      candidate: () => js(uses(r, "MotionBox")) === js([1, ["src/views/motion.vue"]]),
+      differential: () => diff.same === true,
+    });
+  }
+  {
+    // the barrel names, DS_ALIAS_PASSES (8) deep: a rename of a rename, each barrel read before the one it renames (one level a
+    // pass) — the 8th rename's name is watched, the 9th's is not (a cost bound: its importer is not counted)
+    const files = { "package.json": js({ name: "deep" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }), [KIT + "button.tsx"]: compFile("Button") };
+    for (let k = 1; k <= 9; k++) files["src/components/r" + k + "/index.ts"] = L([k === 9 ? "export { Button as N9 } from \"../ui/button\";" : "export { N" + (k + 1) + " as N" + k + " } from \"../r" + (k + 1) + "\";"]);
+    files["src/app/n2.tsx"] = L(["import { N2 } from \"@/components/r2\";", "export const P = () => <N2 />;"]);
+    files["src/app/n1.tsx"] = L(["import { N1 } from \"@/components/r1\";", "export const P = () => <N1 />;"]);
+    const r = S.designSystemReport(depProject("passes", ["| Button | src/components/ui/button.tsx |  | _Deprecated_ |"], files));
+    all("1.39 deprecatedUses: a component folder's barrel renaming a watched name makes its name watched — DS_ALIAS_PASSES (8) renames deep, the 9th not (got " + js(rowOf(r, "Button")) + ")", {
+      passes: () => js(uses(r, "Button")) === js([1, ["src/app/n2.tsx"]]),
+    });
+  }
+  {
+    // the language: the note in the project's language (pt-BR derived), the codes English
+    const loc = {};
+    for (const l of ["pt", "es", "pt-BR"]) loc[l] = usesOf(S.designSystemReport(depProject("lang-" + l, ["| Table | src/components/Table.tsx |  | _Deprecated_ |"], { "src/components/Table.tsx": compFile("Table") }, l))).note;
+    all("1.39 deprecatedUses: its `note` — what the search does not see, and that no import found is not unused — in the project's language (got " + js(loc) + ")", {
+      langs: () => ["pt", "es", "pt-BR"].every((l) => loc[l] === Q(l).dsDepUsesNote) && loc.pt !== loc["pt-BR"] && loc.es !== Q().dsDepUsesNote && /import\(\)/.test(Q().dsDepUsesNote),
+    });
+  }
+
+  // --- 1.39: the bounds — each said in `deprecatedUses.limits` when it cut, never in the report's ---------------------------------
+  {
+    const TROW = ["| Table | src/components/Table.tsx |  | _Deprecated_ |"];
+    const TFILE = { "package.json": js({ name: "b" }), "src/components/Table.tsx": compFile("Table") };
+    const limitsOf = (p) => { const r = S.designSystemReport(p); return { codes: usesOf(r).limits, top: r.limits.map((l) => l.code), table: uses(r, "Table") }; };
+    // the follow's own bounds (a second instance of settle's: DS_PASS_FILES 2,000 files, DS_PASS_CHARS 8 MB, DS_PASS_STEPS
+    // 100,000): a chain of 2,001 `export *` barrels to Table, then of 2,000; 33 barrels of 256K characters; a barrel of 11 stars
+    // whose 10 first pass on 10,000 names each, the 11th the one to Table
+    const chain = depProject("follow-files", TROW, Object.assign({ "src/app/page.tsx": L(["import { Table } from \"../chain/b0000\";", "export const P = () => <Table />;"]) }, TFILE));
+    for (let i = 0; i <= 2000; i++) write(chain, "src/chain/b" + String(i).padStart(4, "0") + ".ts", i === 2000 ? "export * from \"../components/Table\";\n" : "export * from \"./b" + String(i + 1).padStart(4, "0") + "\";\n");
+    const files2001 = limitsOf(chain);
+    write(chain, "src/chain/b0000.ts", "export * from \"./b0002\";\n");
+    const files2000 = limitsOf(chain);
+    const fat = depProject("follow-chars", TROW, Object.assign({ "src/app/page.tsx": L(["import { Table } from \"../fat/f00\";", "export const P = () => <Table />;"]) }, TFILE));
+    for (let i = 0; i <= 32; i++) write(fat, "src/fat/f" + String(i).padStart(2, "0") + ".ts", (i === 32 ? "export * from \"../components/Table\";\n" : "export * from \"./f" + String(i + 1).padStart(2, "0") + "\";\n") + "// " + "x".repeat(256 * 1024) + "\n");
+    const chars = limitsOf(fat);
+    const hub = depProject("follow-steps", TROW, Object.assign({ "src/app/page.tsx": L(["import { Table } from \"../hub\";", "export const P = () => <Table />;"]),
+      "src/hub.ts": L(Array.from({ length: 11 }, (_, k) => "export * from \"./n/n" + String(k + 1).padStart(2, "0") + "\";")) }, TFILE));
+    const names = (k) => L(Array.from({ length: 100 }, (_, j) => "export { " + Array.from({ length: 100 }, (_, i) => "a" + k + "_" + (j * 100 + i)).join(", ") + " } from \"./x\";"));
+    for (let k = 1; k <= 10; k++) write(hub, "src/n/n" + String(k).padStart(2, "0") + ".ts", names(k));
+    write(hub, "src/n/n11.ts", "export * from \"../components/Table\";\n");
+    const steps = limitsOf(hub);
+    // (n10 cut to 9,900 names and a last list of n: at 9,954 the last operation is refused in `reach`, at 9,952 it fits)
+    const tail = (n) => names(10).split("\n").slice(0, 99).join("\n") + "\nexport { " + Array.from({ length: n }, (_, i) => "a10_" + (9900 + i)).join(", ") + " } from \"./x\";\n";
+    write(hub, "src/n/n10.ts", tail(54));
+    const reachCut = limitsOf(hub);
+    write(hub, "src/n/n10.ts", tail(52));
+    const reachFits = limitsOf(hub);
+    const FOLLOW = { code: "deprecated-follow", read: 2000, chars: 8 * 1024 * 1024, count: 100000 };
+    // settle's read (DS_USAGE_FILES 5,000 files): a weak name asked, so 5,001 `.ts` files go before the markup files — a .vue
+    // importing Table past the bound is said; with only `.ts` files past it, nothing is (no file the watch reads was left)
+    const crowd = depProject("usage-files", TROW, Object.assign({ "src/components/kit.tsx": L(["export const Shown = observer(() => <div />);"]),
+      "jsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }) }, TFILE));
+    for (let i = 0; i <= 5000; i++) write(crowd, "src/lib/u" + String(i).padStart(4, "0") + ".ts", "export const x = 1;\n");
+    const tsOnly = limitsOf(crowd);
+    write(crowd, "src/views/list.vue", L(["<script setup>", "import Table from '@/components/Table'", "</script>", "<template><Table /></template>"]));
+    const past = limitsOf(crowd);
+    // the exports loop's bound (1,000 component files read for what they export): a name row past it is not located — said
+    const kit = depProject("exports-cut", TROW, Object.assign(Object.fromEntries(Array.from({ length: 1001 }, (_, i) => ["src/components/c" + String(i).padStart(4, "0") + ".tsx", compFile("C" + i)])), TFILE));
+    const cut = limitsOf(kit);
+    all("1.39 deprecatedUses: its own bounds are said in its `limits` — the follow's (`deprecated-follow`: a chain of 2,001 barrels, 33 of 256K characters, 100,000 steps; a chain of 2,000 is followed, Table's importer counted), settle's read (`usage-files`: the files read, when a file the watch reads was left past DS_USAGE_FILES — 5,001 `.ts` files before a .vue — never when only `.ts` files were), the exports loop's (`component-files`, as the report says it) — and none reaches the report's own `limits` but the exports loop's (got " +
+      js({ files2001, files2000, chars, steps, reachCut, reachFits, tsOnly, past, cut }) + ")", {
+      followFiles: () => js(files2001.codes) === js([FOLLOW]) && files2001.table[0] === 0 && js(files2001.top) === js([]),
+      followAtBound: () => js(files2000.codes) === js([]) && files2000.table[0] === 1,
+      followChars: () => js(chars.codes) === js([FOLLOW]) && chars.table[0] === 0,
+      followSteps: () => js(steps.codes) === js([FOLLOW]) && steps.table[0] === 0,
+      followReach: () => js(reachCut.codes) === js([FOLLOW]) && reachCut.table[0] === 0 && js(reachFits.codes) === js([]) && reachFits.table[0] === 1,
+      usageQuiet: () => js(tsOnly.codes) === js([]) && js(tsOnly.top) === js([]),
+      usage: () => js(past.codes) === js([{ code: "usage-files", read: 5000 }]) && past.table[0] === 0 && js(past.top) === js([]),
+      exports: () => js(cut.codes) === js([{ code: "component-files", read: 1000 }]) && js(cut.top) === js(["component-files"]),
+    });
+  }
+  {
+    // the watch's places are its own (projectPlaces — the lazy manifest walk and the config budget, DS_TS_CONFIGS 100): 100 apps
+    // whose pages import the deprecated Button through their own tsconfig.json's `paths` — read by the watch alone (no page names
+    // what settle asks) — then the app whose page renders MotionBox, a candidate settle asks through ITS config: settle's
+    // verdict is the scan's with no marker (shared places spent the 100 config reads and lost MotionBox)
+    const files = { "package.json": js({ name: "ws" }), "packages/ui/components/kit.tsx": L(["export const MotionBox = motion(Box);", "export function Button() { return <button />; }"]) };
+    const cfg = js({ compilerOptions: { paths: { "@ui/*": ["../../packages/ui/*"] } } });
+    for (let i = 0; i < 100; i++) {
+      const app = "apps/a" + String(i).padStart(3, "0") + "/";
+      files[app + "tsconfig.json"] = cfg;
+      files[app + "page.tsx"] = L(["import { Button } from \"@ui/components/kit\";", "export const P = () => <Button />;"]);
+    }
+    files["apps/zzzzzzzz/tsconfig.json"] = cfg;
+    files["apps/zzzzzzzz/page.tsx"] = L(["import { MotionBox } from \"@ui/components/kit\";", "export const P = () => <MotionBox />;"]);
+    const rows = (mark) => ["| Button | packages/ui/components/kit.tsx |  | " + mark() + " |"];
+    const p = depProject("own-places", rows(MARK), files);
+    const diff = differential(p, rows);
+    const motion = diff.on.missing.filter((m) => m.name === "MotionBox").map((m) => m.path);
+    all("1.39 deprecatedUses: the watch's places are its own — 100 configs it reads for its importers spend none of settle's DS_TS_CONFIGS: settle still settles MotionBox through the 101st app's config, every key the scan's with no marker (got " +
+      js({ same: diff.same, motion, button: uses(diff.on, "Button") }) + ")", {
+      own: () => diff.same === true && js(motion) === js(["packages/ui/components/kit.tsx"]) && uses(diff.on, "Button")[0] === 100,
+    });
+  }
+  {
+    // …and its follow's budget is its own (DS_PASS_STEPS 100,000): the first page's Table goes through a hub of 60,000 names the
+    // watch alone follows (no page names what settle asks there), the second page's Moving — the candidate settle asks — through
+    // another of 60,000: settle still settles it (a budget shared with the watch's ran out before it), every key the same
+    const hubFiles = (dir, to) => {
+      const out = { ["src/" + dir + "/index.ts"]: L(Array.from({ length: 7 }, (_, k) => "export * from \"./h" + (k + 1) + "\";")) };
+      for (let k = 1; k <= 6; k++) out["src/" + dir + "/h" + k + ".ts"] = L(Array.from({ length: 100 }, (_, j) => "export { " + Array.from({ length: 100 }, (_, i) => dir + k + "_" + (j * 100 + i)).join(", ") + " } from \"./x\";"));
+      out["src/" + dir + "/h7.ts"] = "export * from \"" + to + "\";\n";
+      return out;
+    };
+    const files = Object.assign({ "package.json": js({ name: "budget" }), "src/components/Table.tsx": compFile("Table"), "src/components/ui/kit.tsx": L(["export const Moving = motion(Box);"]),
+      "src/app/a.tsx": L(["import { Table } from \"../hubA\";", "export const P = () => <Table />;"]), "src/app/b.tsx": L(["import { Moving } from \"../hubB\";", "export const P = () => <Moving />;"]) },
+    hubFiles("hubA", "../components/Table"), hubFiles("hubB", "../components/ui/kit"));
+    const rows = (mark) => ["| Table | src/components/Table.tsx |  | " + mark() + " |"];
+    const diff = differential(depProject("own-budget", rows(MARK), files), rows);
+    const moving = diff.on.missing.filter((m) => m.name === "Moving").map((m) => m.path);
+    all("1.39 deprecatedUses: the watch's follow has a budget of its own — 60,000 steps it spends for its importer leave settle's 100,000 whole: settle still settles Moving through another 60,000, every key the scan's with no marker (got " +
+      js({ same: diff.same, moving, table: uses(diff.on, "Table") }) + ")", {
+      own: () => diff.same === true && js(moving) === js(["src/components/ui/kit.tsx"]) && uses(diff.on, "Table")[0] === 1,
+    });
+  }
 };

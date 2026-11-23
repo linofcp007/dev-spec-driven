@@ -1578,6 +1578,12 @@ const msg = {
       },
       dsMissingHead: (n) => `  no código, fora do registo (${n}) — uma linha por cada:`,
       dsStaleHead: (n) => `  no registo, mas o caminho não indica nenhum ficheiro (${n}):`,
+      // 1.39: os ficheiros que ainda importam um componente `_Deprecated:_` (o `deprecatedUses` do relatório do projeto — um relatório)
+      dsDepUsesHead: (n, total) => `  componentes obsoletos que o código ainda importa (${n} ${total === 1 ? "da linha" : `das ${total} linhas`} _Deprecated:_ com um ficheiro no código) — migra cada um:`,
+      dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "ficheiro" : "ficheiros"}: ${list}${at ? `  (${at} ficheiros de componente com esse nome)` : ""}`,
+      dsDepUsesNone: (name, use, read) => `    ${name}${use ? " → " + use : ""} — nenhuma importação dele ${read === 1 ? "no ficheiro lido" : `nos ${read} ficheiros lidos`}: não prova que não é usado (o que não é lido está abaixo)`,
+      dsDepUsesUnbound: (n, name, at) => `      ${n} ${n === 1 ? "ficheiro .mdx / .vue mostra" : "ficheiros .mdx / .vue mostram"} <${name}> sem importação — uma importação automática, um registo global ou um provider de MDX, não resolvidos; o primeiro: ${at}`,
+      dsDepUsesUnlocated: (list) => `  (nenhum ficheiro de componente .tsx / .jsx / .js / .vue / .svelte / .astro com esse nome, por isso não se procurou quem o importa — o de uma biblioteca, um componente Angular ou Blade, ou um que o código deixou: ${list})`,
       dsSourcesNew: (list) => `  ficheiros de tokens que o registo não indica (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  bibliotecas de UI no package.json que o registo não indica (_Libraries:_): ${list}`,
       dsDriftHead: (n) => `  valores de tokens que o código tem diferentes do registo (${n}) — a linha como o código a tem:`,
@@ -1612,6 +1618,9 @@ const msg = {
         "motion-scripts": (n, file, count, bound) => `  (procurou-se uma menção a movimento reduzido ${bound ? `nos primeiros ${n} scripts do projeto, o caminho mais curto primeiro — um limite ${bound === "chars" ? "dos seus caracteres" : "do seu número"}` : `${n === 1 ? "no script" : `nos ${n} scripts`} do projeto`}${count ? ` — ${count} ${count === 1 ? "lido" : "lidos"} só em parte, o primeiro: ${file}` : ""}: uma menção para lá do que foi lido não é vista)`,
         "component-files": (n) => `  (foram lidos ${n} ficheiros de componentes à procura dos outros componentes que exportam, e foi atingido um limite — os ficheiros ou caracteres lidos, ou os nomes guardados de um ficheiro: o resto não é comparado)`,
         "workspace-manifests": (n) => `  (foi atingido um limite dos padrões de workspace — lidos ${n} dos ficheiros package.json dos pacotes do workspace: as bibliotecas dos restantes não são comparadas)`,
+        // (1.39: os limites próprios dos usos obsoletos — `deprecatedUses.limits`, nunca os do relatório)
+        "usage-files": (n) => `  (os usos dos componentes obsoletos foram procurados nos primeiros ${n} ficheiros que a análise lê — um limite de ficheiros ou de caracteres: o resto não é contado)`,
+        "deprecated-follow": (n, chars, steps) => `  (as reexportações seguidas para os usos dos componentes obsoletos atingiram um limite — ${n} ficheiros, ${chars / 1048576} MB ou ${steps} passos: uma importação através do resto não é contada)`,
         "font-values": (n, file) => `  (só as primeiras ${n} pilhas de fontes de um ficheiro são lidas — o primeiro ficheiro que passou disso: ${file})`,
         "motion-values": (n, file) => `  (só os primeiros ${n} valores de movimento de um ficheiro são lidos — o primeiro ficheiro que passou disso: ${file})`,
       },
@@ -3509,6 +3518,8 @@ const quality = {
     dsDeprecatedNone: "a secção Uso do Design System não reutiliza nenhum componente que o registo marca como obsoleto",
     dsDeprecated: (n, list) => `a secção Uso do Design System reutiliza ou estende ${n} ${n === 1 ? "componente que o registo (.specs/steering/design-system.md) marca como obsoleto" : "componentes que o registo (.specs/steering/design-system.md) marca como obsoletos"} — ${list}: passar para o que o marcador indica, ou nomear esse componente nas notas da linha para dizer a razão de este ficar`,
     dsDeprecatedItem: (name, use) => (use ? `'${name}' (usar ${use})` : `'${name}'`),
+    // 1.39: a nota de deprecatedUses no relatório do projeto — o que a procura não vê
+    dsDepUsesNote: "Lido: os ficheiros .tsx / .jsx / .js e .mdx / .vue / .svelte / .astro do projeto, exceto testes e stories. Não visto: um ficheiro .ts (um registo, uma tabela de rotas, as importações de um componente Angular), um import() dinâmico, um módulo que só um alias do bundler ou um módulo virtual nomeia, uma reexportação com outro nome fora do index de uma pasta de componentes, uma exportação que não é um componente ou um tipo através de um barrel. Nenhuma importação encontrada não quer dizer que não é usado: verifica o que não é lido antes de remover um ficheiro.",
     // 1.38 a matriz de estados do +ui: o rótulo de cada estado pelo seu id (estável, em inglês) e as células do cabeçalho
     // (UI_STATES — a tabela do modelo é construída com os mesmos valores)
     uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,
