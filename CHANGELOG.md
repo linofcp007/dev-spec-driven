@@ -23,12 +23,15 @@ tool, command, hook or dependency; the MCP tool list and SKILL.md are unchanged.
   is its module — any import of the file counts: renamed, default, type-only, `require`, a non-component export
   (`buttonVariants`), a namespace's member, a Vue file with or without its extension, `X/index.vue` by its folder — and its
   components are followed through `export *` and a component folder's barrel; a component a file exports beside its own
-  (`CardHeader` in `card.tsx`) counts by its name, and by a default import when it is the file's default export; a row a
-  component folder's index names (`export { default as VbenButton } from './button.vue'`, as the seed writes it) is
-  located by that index; `import type { … }` from a folder binds no default. A row whose name no component file the scan
-  reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index — is listed as
-  `unlocated` (a library's, an Angular `*.component.ts` — its importers are `.ts` files the scan does not read —, a Blade
-  one). A localized `note` says what is not seen — a `.ts` file, a dynamic `import()`, a module only a bundler's alias or
+  (`CardHeader` in `card.tsx`) counts by its name, and by a default import when it is the file's default export; a row
+  whose name no component file gives is located by the component folders' indexes that give it (`export { default as
+  VbenButton } from './button.vue'`, as the seed writes it) — when they give it to different files, a kit's parts
+  (shadcn-svelte's `Content` in 31 indexes), only by the index the row's path names; a file importing the file an index
+  renames (`import VbenButton from './button.vue'`) is not counted; `import type { … }` from a folder (`import type{ … }`
+  too) binds no default. A row whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte /
+  .astro file or a component folder's index, the one the row's path names when several give it to different files — is
+  listed as `unlocated` (a library's, an Angular `*.component.ts` — its importers are `.ts` files the scan does not read
+  —, a Blade one). A localized `note` says what is not seen — a `.ts` file, a dynamic `import()`, a module only a bundler's alias or
   a virtual module names, a re-export under another name outside a component folder's index, a tag an auto-import names by
   its folder (Nuxt's `<BaseCard>`), a non-component export or a type through a barrel: no import found is not unused. Its
   own bounds are in its own `limits` (`usage-files`, `deprecated-follow`), never the report's `limits`, `truncated` or "in
@@ -119,7 +122,8 @@ report's and `finish`'s cost are unchanged.
   fixture needs 20,001 files —, four cost guards timed with and without); the UI checks 56 of 56; breakpoints and states
   75 of 75; the units table 49 of 49; the docs pass 28 of 28 (each new prose clause dropped in a copy fails its row); every
   list replayed on the merged tree, each mutant killed as on its own branch. Review 1's fixes: the deprecated uses 37 of
-  37, breakpoints and units 28 of 28.
+  37, breakpoints and units 28 of 28. Review 2's: the deprecated uses 16 of 18 (two equivalents — the indexes' loop
+  bounds).
 
 ## [1.38.0] — 2026-11-22
 
