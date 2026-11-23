@@ -1141,14 +1141,17 @@ const DS_USAGE_CELL = 4000; // a usage row's component cell read: several compon
 const DS_SINCE = "1.35"; // the release the check came with: a design approved before (no `designSystem` stamp) is never flagged
 const DS_BRIEF_MAX = 12; // components the brief quotes…
 const DS_BRIEF_CHARS = 1500; // …and their size
+const DS_BRIEF_UNITS = 400; // (1.39) the units table's rows the brief quotes, their characters — a bound of its own
 const DS_NAME_MAX = 40; // a longer name is compared with none (no component is called that)
 const DS_NEAR_ROWS = 30; // usage rows that pay a name comparison against the registry (past them: the exact name only)
 // (1.38) The units table — the team's convention of the units each property takes (a report, never a default): its first
 // header cell names properties (RE_DS_PROPERTY_HEAD), a column whose header STARTS with Units holds CSS units (RE_DS_COL.units
-// — by its header ONLY, never by place; `Allowed units` is none). A table so headed whose cells hold no CSS unit is not one (a
-// component's props table: `| Property |
+// — by its header ONLY, never by place), else (1.39, 1.38.0 review 1's T3) the first whose header holds the WORD
+// (RE_DS_UNITS_WORD: `Allowed units`; never `Community`, `Unitless`, PT `Valor unitário`). A table so headed whose cells hold
+// no CSS unit is not one (a component's props table: `| Property |
 // Type | Default |`). CSS_UNITS: the CSS Values 4 lengths, `%` and `fr` — a closed list; another word of a units cell is dropped
-// (`rems`), and a row left with none is not read (`unread`, by its first cell).
+// (`rems`), and a row left with none is not read (`unread`, by its first cell). Either header is read as the ALLOWED units
+// (`Avoid units` too — no polarity: steering-templates.md says the column lists the allowed ones).
 const RE_DS_PROPERTY_HEAD = /^(?:propert(?:y|ies)|propriedades?|propiedad(?:es)?)$/i;
 const CSS_UNITS = new Set(["px", "cm", "mm", "q", "in", "pt", "pc", "em", "rem", "ex", "rex", "cap", "rcap", "ch", "rch", "ic", "ric", "lh", "rlh",
   "vw", "vh", "vi", "vb", "vmin", "vmax", "svw", "svh", "svi", "svb", "svmin", "svmax", "lvw", "lvh", "lvi", "lvb", "lvmin", "lvmax",
@@ -1167,6 +1170,9 @@ const RE_DS_COL = {
   use: /^(?:use|usage|uso|utiliza|para)/i,
   units: /^(?:units?|unidad(?:es?)?)\b/i, // (1.38: the units table's — EN / PT / ES)
 };
+// (1.39) …the units column's second tier: the word anywhere in its header, a whole word — its edges no letter, digit or `_`
+// of any script (`\b` is ASCII: `unitário` would end at its `á`)
+const RE_DS_UNITS_WORD = /(?<![\p{L}\p{N}_])(?:units?|unidad(?:es?)?)(?![\p{L}\p{N}_])/iu;
 // `_Token sources: a, b_` / `_Libraries: a, b_` — a line of its own, English-stable like the glossary's _Avoid:_; the value runs
 // to the line's end (a path may hold an underscore or a blank), its closing "_" dropped. (1.38) `_UI checks off: <rule-id>
 // (<reason>), …_` — the UI checks the project switches off (dsChecksOff).
@@ -1177,14 +1183,16 @@ const DS_MARKER_ENTRIES = 50; // …and the entries kept of each kind
 // { id (folded to lower case), reason (what the outer parentheses hold, commas too, trimmed, cut at DS_CELL_MAX — "" when
 // none or empty) }; an entry of another shape → { entry (as written, cut) }; past DS_MARKER_ENTRIES entries ONE more →
 // { entry, past: true, read } and no further one. This file names no rule id: engine/ui-checks.js uiOff validates them.
-const RE_DS_OFF_ENTRY = /^([a-z]+(?:-[a-z]+)*)\s*(?:\((.*)\))?$/i;
+// (1.39, UP-7) the id bare or in ONE balanced code span — `` `img-no-alt` (decorative) ``, as the docs write ids; a lone or a
+// doubled backtick is another shape
+const RE_DS_OFF_ENTRY = /^(?:`([a-z]+(?:-[a-z]+)*)`|([a-z]+(?:-[a-z]+)*))\s*(?:\((.*)\))?$/i;
 function dsChecksOff(value, out) {
   for (const w0 of dsEntries(value)) {
     const w = w0.trim();
     if (!w || out.some((e) => e.past)) continue;
     if (out.length >= DS_MARKER_ENTRIES) { out.push({ entry: w.slice(0, DS_CELL_MAX), past: true, read: DS_MARKER_ENTRIES }); continue; }
     const e = RE_DS_OFF_ENTRY.exec(w);
-    out.push(e ? { id: e[1].toLowerCase(), reason: (e[2] || "").trim().slice(0, DS_CELL_MAX) } : { entry: w.slice(0, DS_CELL_MAX) });
+    out.push(e ? { id: (e[1] || e[2]).toLowerCase(), reason: (e[3] || "").trim().slice(0, DS_CELL_MAX) } : { entry: w.slice(0, DS_CELL_MAX) });
   }
 }
 // A LIBRARY entry that names nothing, by its FIRST word (EN / PT / ES): "none", "none yet", "nenhuma ainda", "sin
@@ -1427,7 +1435,10 @@ function designSystemRegistry(root) {
 // cell of each row read with no CSS unit or no property), past (rows past DS_UNIT_ROWS: counted, not read) }. Several tables
 // add up.
 function dsUnitsTable(t, into) {
-  const at = t.header.findIndex((h, k) => k > 0 && RE_DS_COL.units.test(dsCell(h))); // (none: -1 — no row reads a unit, no table)
+  // (the 1.38 header first — every 1.38 table reads the same —, else the word's; none: -1 — no row reads a unit, no table)
+  const col = (re) => t.header.findIndex((h, k) => k > 0 && re.test(dsCell(h)));
+  let at = col(RE_DS_COL.units);
+  if (at < 0) at = col(RE_DS_UNITS_WORD);
   const rows = [], unread = [];
   for (const r of t.rows) {
     if (dsSlot(r[0] || "")) continue;
@@ -2099,6 +2110,10 @@ function designSystemCheck(design, lang, opts = {}) {
 // (its letters and digits as written, case and accents kept — in one Unicode form: review 2, an NFD `á` in the notes is the
 // registry's NFC `á`)
 const dsLetters = (s) => String(s).normalize("NFC").replace(/[^\p{L}\p{N}]+/gu, "");
+// A deprecated row's replacement as the registry writes it — the replacement's row name, else the marker's text, else "" (1.37
+// review 2: the name doctor's warn prints is the one that silences it; 1.39: the project report's `deprecatedUses` names it so
+// too — ONE expression). names: the registry's key → row name (built once by a caller asking many keys).
+const dsReplacement = (reg, key, names = new Map(reg.components.map((c) => [c.key, c.name]))) => names.get(dsKey(reg.deprecated.get(key))) || reg.deprecated.get(key) || "";
 function designSystemDeprecatedCheck(design, lang, opts = {}) {
   const Q = i18n.msg(lang).quality, id = "ui-deprecated";
   const dep = opts.registry && opts.registry.deprecated && opts.registry.deprecated.size ? opts.registry.deprecated : null;
@@ -2107,7 +2122,7 @@ function designSystemDeprecatedCheck(design, lang, opts = {}) {
   const items = [], seen = new Set();
   for (const r of usage ? usage.rows : []) {
     if (r.kind === "new" || !dep.has(r.key) || seen.has(r.key)) continue;
-    const use = names.get(dsKey(dep.get(r.key))) || dep.get(r.key), as = dsLetters(use);
+    const use = dsReplacement(opts.registry, r.key, names), as = dsLetters(use);
     if (dsNameIn(r.why, Infinity, (x, t) => dsLetters(t) === as)) continue;
     seen.add(r.key);
     items.push(Q.dsDeprecatedItem(r.name, use));
@@ -2124,12 +2139,14 @@ function designSystemDeprecatedCheck(design, lang, opts = {}) {
 // views are the columns strictly between the first (the state) and that cell — one whose header holds no letter or digit, or is
 // a slot or a generic word, is none —; the a11y column and every column after it are never judged (the critic and the reviewer
 // judge what they say). Only the section ui-sections reads (extractSection), its tables outside comments and fences (mdTables).
-// Bounded: US_TABLES tables, US_ROWS rows each, US_VIEWS view columns, every cell cut to US_CELL before any regex — a bound that
-// drops input says so (usTruncated).
+// Bounded: US_TABLES tables, US_ROWS rows each, US_VIEWS view columns, the anchor looked for in a header's first US_HEADER cells
+// (1.39), every cell cut to US_CELL before any regex — a bound that drops input says so (usTruncated).
 const UI_STATES_CHECK = "ui-states";
 const US_TABLES = 10;
 const US_ROWS = 60;
 const US_VIEWS = 12;
+const US_HEADER = 64; // (1.39, BS-5) a header's cells read for the anchor — past them, with none found, said (`truncated.views`;
+// usTruncated names this bound too — 1.39.0 review 1, BU-5)
 const US_CELL = 400;
 const US_SHOWN = 5; // states named per view (or per no-row item), the rest counted
 // a text's words as the matrix compares them: accents folded, lower case, letters and digits
@@ -2178,7 +2195,8 @@ function uiStateMatrix(design, ids) {
   const truncated = { tables: found.length > US_TABLES, rows: false, views: false };
   const tables = [];
   found.slice(0, US_TABLES).forEach((t, i) => {
-    const a = t.header.findIndex((h) => vocab.a11y.has(usWords(h).join(" ")));
+    const a = t.header.slice(0, US_HEADER).findIndex((h) => vocab.a11y.has(usWords(h).join(" ")));
+    if (a < 0 && t.header.length > US_HEADER) truncated.views = true; // (the anchor may sit past the cells read: said)
     let cols = [];
     for (let k = 1; k < a; k++) if (!dsSlot(t.header[k])) cols.push(k);
     if (!cols.length) return;
@@ -2219,7 +2237,7 @@ function uiStatesCheck(design, lang, opts = {}) {
   if (st === "na") return out("pass", Q.usNa, "na");
   const ids = Object.keys(Q.uiStateLabels);
   const m = uiStateMatrix(design, ids);
-  const cut = m && (m.truncated.tables || m.truncated.rows || m.truncated.views) ? "; " + Q.usTruncated(US_TABLES, US_ROWS, US_VIEWS) : "";
+  const cut = m && (m.truncated.tables || m.truncated.rows || m.truncated.views) ? "; " + Q.usTruncated(US_TABLES, US_ROWS, US_VIEWS, US_HEADER) : "";
   if (!m || !m.tables.length) return out("pass", Q.usNone + cut, "no-matrix");
   const named = (labels) => labels.slice(0, US_SHOWN).concat(labels.length > US_SHOWN ? [Q.xacMore(labels.length - US_SHOWN)] : []).join(", ");
   const items = [];
@@ -2243,10 +2261,11 @@ function uiStatesCheck(design, lang, opts = {}) {
 // The task brief's "Design system" part, for a task that builds what the user sees (tasks.js uiTask) → null (no registry, or it
 // lists nothing) | { file (the registry, as given), components: [{ kind, name, path, variants, notes, why }] (the design's rows
 // with their registry entry, bounded), omitted, unknown (names the registry doesn't list), sources, libraries, tokens (how
-// many the registry holds), rows (the design's usage rows — 0: the brief says to read the registry itself) }.
+// many the registry holds), rows (the design's usage rows — 0: the brief says to read the registry itself), units (1.39: the
+// units table's rows quoted { rows: [{ props, units }], more } | null — a registry holding only a units table opens the part) }.
 function briefDesignSystem(root, design) {
   const reg = designSystemRegistry(root);
-  if (!reg || (!reg.keys.size && !reg.tokens.length && !reg.libraries.length)) return null;
+  if (!reg || (!reg.keys.size && !reg.tokens.length && !reg.libraries.length && !reg.units)) return null;
   const usage = design == null ? null : designSystemUsage(design);
   const rows = usage ? usage.rows : [];
   const byKey = new Map(reg.components.map((c) => [c.key, c]));
@@ -2263,7 +2282,21 @@ function briefDesignSystem(root, design) {
     const size = e.name.length + e.path.length + e.variants.length + e.notes.length + e.why.length + 20;
     if (components.length < DS_BRIEF_MAX && size <= budget) { components.push(e); budget -= size; } else omitted++;
   }
-  return { file: reg.file, components, omitted, unknown, sources: reg.sources, libraries: reg.libraries, tokens: reg.total.tokens, rows: rows.length };
+  // (1.39) the units table's first rows whose text (`a, b: rem, %` and its ` · `) fits DS_BRIEF_UNITS, a bound of its own (the
+  // components' budget untouched); `more`: the rows not quoted — past the bound, and the table's `past`
+  let units = null;
+  if (reg.units) {
+    let left = DS_BRIEF_UNITS;
+    units = { rows: [], more: 0 };
+    for (const r of reg.units.rows) {
+      const size = r.props.join(", ").length + r.units.join(", ").length + 5; // (`: ` and ` · `)
+      if (size > left) break;
+      units.rows.push({ props: r.props, units: r.units });
+      left -= size;
+    }
+    units.more = reg.units.rows.length - units.rows.length + reg.units.past;
+  }
+  return { file: reg.file, components, omitted, unknown, sources: reg.sources, libraries: reg.libraries, tokens: reg.total.tokens, rows: rows.length, units };
 }
 
 // ---------------------------------------------------------------------------
@@ -3130,5 +3163,5 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  designSystemDeprecatedCheck, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,
+  designSystemDeprecatedCheck, dsReplacement, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,
   UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, __link };

@@ -40,7 +40,7 @@ In the report alone: `transition-all` (kits ship it), what a bound cut. Silence 
 `ui-check-off: <rule-id> <why>` on its line (a declaration's, a class's) or the line above — `//`, `/* */`, `<!-- -->`,
 not Blade's or Twig's: counted, never listed; only this comment silences (a linter's is not read) — an `<a>` a parent gives its
 href (Next's `legacyBehavior`) is one to silence. A doubt is never judged: a named paste handler, a click whose content
-holds a control, a component (an icon or a text component too) or a slot, or no text (an icon or an image alone), a
+holds a control, a component (an icon or a text component too; a bound Vue `<component :is>` in it is none) or a slot, or no text (an icon or an image alone), a
 spread (`{...props}`), a tag in an attribute or a one-line template literal, Pug, a tag past 100 attributes or 30 lines.
 
 ### The project's UI checks
@@ -61,21 +61,20 @@ get it, or silence it.
 
 The fact `no-reduced-motion` (WCAG 2.3.3, AAA): the view files declare motion — an animation, a transform's transition,
 smooth scrolling — and none of the files read mentions reduced motion (`prefers-reduced-motion`, `motion-safe:` /
-`motion-reduce:`, `useReducedMotion`). Said only when no read was cut (the walk, `ui-files`, a file's 256K); a mention
-only in a script (a `.ts` hook) is not seen.
+`motion-reduce:`, `useReducedMotion`). Said only when no view read was cut (the walk, `ui-files`, a file's 256K); a
+script's mention counts too — a test setup's outside a test folder included (2,000 by shorter path, 8 MB: `motion-scripts`).
 
-**Off for the project.** `_UI checks off: <rule-id> (reason)_` — a line of its own in design-system.md (a list item or a
-bold line is not read), the marker in English, each id bare (one in a code span is not applied), entries separated by
-commas (`_UI checks off: transition-all (the kit animates on purpose)_`) — switches a UI check
-or a project fact off everywhere: the inventory, every feature report (`off`: the rule, its reason, the findings it hid)
-and so finish — counted, never listed (an inline-silenced finding stays `silenced`). An entry with no reason in
-parentheses, an id that is no check or fact, another shape or one past the first 50 entries is not applied, and the report
-says why (`offIgnored`, `why`: `no-reason`, `unknown-rule`, `unreadable`, `past-bound`). Creating design-system.md for the
-marker alone enrols the project in the registry: a written finish adds the feature's New components to it, and from its
-first component doctor's `ui-design-system` checks every design's rows against it (a refusal at size m / l) — without a
-registry, use the inline comment. A what-input modality rule (`[data-whatintent='mouse'] *:focus { outline: none }`) is
-judged as written: silence it with an inline `ui-check-off: outline-removed` on that rule — the marker would switch off
-every removal of the project.
+**Off for the project.** `_UI checks off: <rule-id> (reason)_` — a line of its own in design-system.md (never a list item
+or bold), the marker in English, ids bare or in a code span, entries separated by commas
+(`_UI checks off: transition-all (kit code)_`) — switches a UI check or a project fact off everywhere: the inventory, every
+feature report (`off`: the rule, its reason, the findings it hid) and so finish — counted, never listed (an inline-silenced
+finding stays `silenced`). An entry with no reason in parentheses, an id that is no check or fact, another shape or one
+past the first 50 entries is not applied, and the report says why (`offIgnored`, `why`: `no-reason`, `unknown-rule`,
+`unreadable`, `past-bound`). Creating design-system.md for the marker alone enrols the project in the registry: a written
+finish adds the feature's New components to it, and from its first component doctor's `ui-design-system` checks every
+design's rows against it (a refusal at size m / l) — without a registry, use the inline comment. A what-input modality
+rule (`[data-whatintent='mouse'] *:focus { outline: none }`) is judged as written: silence it with an inline
+`ui-check-off: outline-removed` on that rule — the marker would switch off every removal of the project.
 
 ### Raw values against the project's scale
 
@@ -105,15 +104,13 @@ another value IN THE SAME NOTATION — one colour each, or one number each with 
 `hsl(217 91% 60%)`, `16px` against `1rem` are not compared, nor a name the code declares with two values or more (a theme,
 a twin sheet). `gone` lists the `_Token sources:_` files that no longer exist. Neither changes `inSync`: it compares names.
 
-**The units table.** In design-system.md, a table whose first header cell is `Property` (`Propriedade`, `Propiedad`) and with
-a column whose header starts with `Units` (`Unidades`, `Unidad`; `Allowed units` is none) holding CSS units is the team's
-convention — which units each property takes (`margin-*` covers `margin` and `margin-top`; a props table,
-`| Property | Type | Default |`, is none). A feature report's `units` lists each declaration whose value takes, outside
-parentheses, a unit its row does not give (never `0`, a unitless number or a negative length: `-8px`), and a Tailwind
-arbitrary size in px, rem or em (`p-[10px]`; never `-mt-[12px]`, `text-[2vw]`) by the property it sets: {`findings` — the
-first 50: `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}. The project report's
-`unitsTable` {`rows`, `unread`, `past` — rows past the first 50}. A report only — never finish, doctor or the brief — and no
-default: without the table both are null. An example: [steering-templates.md](steering-templates.md) → design-system.md.
+**The units table** — the team's convention of which units each property takes, in design-system.md (its shape and an
+example: [steering-templates.md](steering-templates.md) → design-system.md). A feature report's `units` lists each
+declaration whose value takes, outside parentheses, a unit its row does not give (never `0` or a unitless number; a negative
+length counts: `-8px`), and a Tailwind arbitrary size in any unit (`p-[10px]`, `-mt-[12px]`, `text-[2vw]`) by the property it
+sets: {`findings` — the first 50: `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}. The
+project report's `unitsTable` {`rows`, `unread`, `past` — rows past the first 50}. A report — never finish or doctor; a UI
+task's brief quotes its rows (their first 400 characters) — and no default: without the table both are null.
 
 **DESIGN.md** is not read; its own CLI writes a file that is:
 `npx @google/design.md export --format css-tailwind DESIGN.md > theme.css` (a token file by its name). **Breakpoints:** both
@@ -121,3 +118,22 @@ reports end in `breakpoints`, the widths the visual review captures ([ui-respons
 breakpoints) — its own limits (`breakpoint-widths`, `breakpoint-line`) never make a report truncated. **Doctor's
 `ui-states`** reads the design's state matrix, not the code ([ui-design-patterns.md](ui-design-patterns.md) → The states
 every view needs).
+
+### Deprecated components the code still imports
+
+While the registry marks a row `_Deprecated:_`, the project report adds `deprecatedUses`: for each such row the code holds a
+component file for — the rows still imported first —, the files that still import it (`files`, the first 3 by path;
+`filesTotal`), its replacement as doctor names it (`use`) and its component files (`paths` — a namesake's importers count
+too); `unlocated`: rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro
+file or a component folder's index (a library's, an Angular or a Blade one). An index locates a row only when no component
+file gives its name; when several indexes give it to different files (a kit's parts: `Content` — the files their relative
+imports name), only the one the row's path names (one reference). A row named by its file is its **module** — any import
+of it counts (renamed, default, type-only but `import type X from`, `require`, a
+non-component export, a namespace's member, an SFC with or without its extension) — and its components, followed through
+`export *` and a component folder's barrel; a component a file exports beside its own counts by its **name** (a default
+import too, when it is the file's default). An .mdx / .vue tag no import binds is counted apart (`unbound`). Not seen (its
+`note`): a `.ts` file, a dynamic `import()`, a module only a bundler's alias or a virtual module names, a re-export under
+another name outside a component folder's index, a tag an auto-import names by its folder, a non-component export or a type
+through a barrel. Nuxt's `<BaseCard>` is such a tag (`components/base/Card.vue`), `import type { X }` from a component folder
+such a type. **No import found is not unused.**
+Its `limits` (`usage-files`, `deprecated-follow`) never touch the report's `limits` or `inSync`.

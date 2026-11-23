@@ -263,8 +263,9 @@ function tokenDrift(reg0, code0) {
 // --- the units table -------------------------------------------------------------------------------------------------------------
 // A value's FIRST top-level literal with a unit the row does not allow → that unit, lower-cased | null. Top-level: outside
 // parentheses (`calc()`, `clamp()`, `var()` are a doubt — an unclosed one holds the rest); never 0, a unitless number, a hex
-// colour's digits, a word's, a negative length's (a digit after `-`: `margin: 0 -8px` — said, 1.38.0 review 1's T2).
-const RE_UNIT_LITERAL = /(?<![\w.#-])(\d+(?:\.\d+)?|\.\d+)([a-z]+|%)(?![\w-])/gi;
+// colour's digits, a word's (`a-12px`, `$gap-8px`, `--12px`). 1.39 (1.38.0 review 1's T2): a negative length is one — a minus
+// at the value's start or after a blank or a comma signs it (`margin: 0 -8px`, `margin-top: -.5em`).
+const RE_UNIT_LITERAL = /(?:(?<![\w.#-])|(?<=(?:^|[\s,])-))(\d+(?:\.\d+)?|\.\d+)([a-z]+|%)(?![\w-])/gi;
 function offUnit(v0, allowed) {
   const v = String(v0);
   let top = v;
@@ -286,7 +287,8 @@ function offUnit(v0, allowed) {
   }
   return null;
 }
-// The property a Tailwind size utility sets (RE_TW_SIZE's: p* / m* / gap / space-* / text / rounded* / leading / tracking)
+// The property a Tailwind size utility sets (RE_TW_SIZE's and RE_TW_UNIT's: p* / m* / gap / space-* / text / rounded* /
+// leading / tracking)
 const TW_SIDES = { t: "top", r: "right", b: "bottom", l: "left", x: "inline", y: "block", s: "inline-start", e: "inline-end" };
 function twProperty(u) {
   if (/^[pm][trblxyse]?$/.test(u)) return (u[0] === "p" ? "padding" : "margin") + (u[1] ? "-" + TW_SIDES[u[1]] : "");

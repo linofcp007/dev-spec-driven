@@ -134,6 +134,41 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // 1.39 (D4): Vue's `<component>` renders what its `is` names — a BOUND one (`:is`, `v-bind:is`) is a component: no click
+    // candidate (vben's alert.vue, the corpus's two click-no-keyboard findings on it), its own style not judged — and in a click
+    // body still no control, as 1.38 read it (the oracle replay: vben's preset tiles, a `<div @click>` holding an icon's
+    // `<component :is>` and the tile's name, are true findings a doubt would silence); a static one is that element
+    // (focusable, void as usual); no `is`, an `is` on another tag (a customized built-in), img-no-alt and paste read the tag as
+    // written (as 1.38)
+    const alert = lines("<template>", "  <AlertDialogCancel v-if=\"showCancel\" as-child>", "    <component", "      :is=\"components.DefaultButton || VbenButton\"", "      :disabled=\"loading\"",
+      "      variant=\"outline\"", "      @click=\"handleCancel\"", "    >", "      {{ cancelText || $t('common.cancel') }}", "    </component>", "  </AlertDialogCancel>", "  <AlertDialogAction as-child>",
+      "    <component v-bind:is=\"components.PrimaryButton || VbenButton\" :loading=\"loading\" @click=\"handleConfirm\">", "      {{ confirmText || $t('common.confirm') }}", "    </component>", "  </AlertDialogAction>", "</template>");
+    const shapes = lines("<template>", "  <component is=\"div\" @click=\"go\">Open</component>", // 2: FINDING (a static div, as 1.38)
+      "  <component is=\"button\" @click=\"go\">Go</component>", // 3: a static button is focusable
+      "  <div is=\"x-panel\" @click=\"go\">Open</div>", // 4: FINDING (a customized built-in is the tag as written)
+      "  <div @click=\"go\"><component :is=\"Btn\">Go</component></div>", // 5: FINDING (a bound one is no control in a body: as 1.38)
+      "  <component :is=\"H\" style=\"font-size: 5vw\">x</component>", // 6: a component's style is not judged
+      "  <component is=\"div\" style=\"font-size: 5vw\">x</component>", // 7: FINDING (an element's own style)
+      "  <component @click=\"go\">Open</component>", // 8: FINDING (no `is`: the tag as written, as 1.38)
+      "  <component is=\"MyCard\" @click=\"go\">Open</component>", // 9: a static component name (RE_ELEMENT on the literal as written)
+      "  <component :is=\"Field\" @paste.prevent />", // 10: FINDING (paste: any tag)
+      "  <component is=\"img\" src=\"/a.png\" />", // 11: img-no-alt reads the tag as written (no widening)
+      "  <component is=img @click=\"go\">x</component>", // 12: an unquoted static void element: no body, no candidate
+      "  <div @click=\"go\"><component is=\"button\">Go</component></div>", // 13: a static button is a control in the body
+      "</template>");
+    // (vben's preset tile, packages/effects/layouts/src/widgets/preferences/blocks/theme/theme.vue — a true finding, kept)
+    const tile = lines("<template>", "  <div class=\"flex w-full flex-wrap justify-between\">", "    <template v-for=\"theme in THEME_PRESET\" :key=\"theme.name\">", "      <div",
+      "        class=\"flex cursor-pointer flex-col\"", "        @click=\"modelValue = theme.name\"", "      >", "        <div :class=\"activeClass(theme.name)\" class=\"outline-box flex-center py-4\">",
+      "          <component :is=\"theme.icon\" class=\"mx-9 size-5\" />", "        </div>", "        <div class=\"mt-2 text-center text-xs text-muted-foreground\">", "          {{ nameView(theme.name) }}", "        </div>",
+      "      </div>", "    </template>", "  </div>", "</template>");
+    const vben = got(alert, "packages/@core/ui-kit/popup-ui/src/alert/alert.vue"), S4 = got(shapes, "src/views/Shapes.vue"), T4 = got(tile, "src/widgets/theme.vue");
+    all("1.39 (D4): Vue's `<component :is>` / `v-bind:is` is a component — vben's alert.vue is silent (1.38: two click-no-keyboard), its style is not judged, and in a click body it is no control (vben's tile still warns, as 1.38); a static `is` is that element (`div` judged, `button` focusable — a control in a body too —, `img` void, `MyCard` a component); no `is`, an `is` on a `<div>`, paste and img-no-alt read the tag as written (got " + js({ vben, S4, T4 }) + ")", {
+      vben: () => js(vben) === "[]",
+      shapes: () => js(S4) === js(["click-no-keyboard@2", "click-no-keyboard@4", "click-no-keyboard@5", "font-size-viewport@7", "click-no-keyboard@8", "paste-blocked@10"]),
+      tile: () => js(T4) === js(["click-no-keyboard@4"]),
+    });
+  }
+
   { // click-no-keyboard by its body (review 1 of 1.37, Laravel's starter kits): a click candidate is judged only when its body —
     // read to its matching close tag within 30 lines / 4,000 characters — holds content a user reads (text, an expression that is
     // no slot outlet) and nothing that is or may render a control (focusable by default, a component / custom element, <slot>,

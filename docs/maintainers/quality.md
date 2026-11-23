@@ -399,8 +399,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   so, review 1 of 1.38), the project's switch for a UI check (UI checks →
   The marker). Its entries cut by `dsEntries` (at `,` / `;` outside parentheses): `<id> (<reason>)` (`RE_DS_OFF_ENTRY`, any
   case — the id folded) → `{id, reason}`, the reason what the outer parentheses hold, commas and nested parentheses kept,
-  trimmed, cut at `DS_CELL_MAX` ("" for none, `()` or `( )`); any other shape (`transition-all: kit code`, `outline-removed —
-  modality`, an id in a code span — the user docs say "bare") → `{entry}`, as written, cut; past `DS_MARKER_ENTRIES` (50) ONE more `{entry, past, read}` and no further one (a
+  trimmed, cut at `DS_CELL_MAX` ("" for none, `()` or `( )`) — an id in ONE balanced code span reads as bare (1.39, UP-7); any
+  other shape (`transition-all: kit code`, `outline-removed — modality`, a lone or doubled backtick) → `{entry}`, as written,
+  cut; past `DS_MARKER_ENTRIES` (50) ONE more `{entry, past, read}` and no further one (a
   later marker line too). The registry's `checksOff`. quality.js names NO rule id: engine/ui-checks.js `uiOff` validates them.
 - **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
@@ -479,7 +480,13 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   deprecated component's entry carries its `_Deprecated: use X_` marker whole, first among its notes (1.37) — the rows
   doctor's `ui-deprecated` reads, no more (past the 500-row cap neither marks a component).
   `renderBrief` writes it after Reuse; the result's `designSystem` holds identifiers (`write: true`: `refs.designSystem`, the
-  names).
+  names). 1.39: the registry's units table (The units table, below) after the token line — its first rows whose text
+  (`props: units` and the ` · ` between) fits `DS_BRIEF_UNITS`, 400 characters, a bound of its own (the components' 1,500
+  untouched; a prefix: the first row that does not fit ends the quote, never cut; a FIRST row too long is said as the first —
+  "the first row is too long to quote here — N rows in the registry: read them there", 1.39.0 review 1, BU-4: it had said
+  all N were too long), `more` the
+  rows left out plus the table's `past`; the null gate counts `reg.units` (a registry holding only the table opens the
+  part); the result's `designSystem.units` {rows, more}, only with a table (1.38's JSON otherwise).
 - **The code** (engine/design-system.js, LAZY — entries `designSystemReport`, `designSystemSeed`, `designSystemFinish`) —
   `scanCode`: ONE walk (`walkProject` + `gitignoreRules`, 20,000 counted files; a file read up to 256K characters; a view
   file's line read for raw values up to 2,000, a token file's line whole). A component (`componentOf`) = a view file (.tsx /
@@ -635,11 +642,19 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   over lines, its last DS_PRELUDE characters, `#{…}` as written), `on.statement({ text, block, line, from })` (`from`, 1.37: the line its text
   starts on) when a `;` OUTSIDE
   parentheses or a `}` ends one (the walker's pending text and the piece — its lines joined by a blank; never blank, never
-  a prelude), `on.close({ id, line })` when a `}` closes a block (a stray one closes none). Each handler is optional and is
+  a prelude), `on.close({ id, line })` when a `}` closes a block (a stray one closes none), and (1.39, the Sass map reader)
+  `on.open({ name, value, block, line })` when a token declaration's LINE leaves it open — no `;` / `}` ended it there (a
+  multi-line map, a value below its name, each override of `@use … with (`): its name, what the line holds after the colon
+  (flags kept, its FIRST DS_PRELUDE characters), its block; built only when `on.open` exists, never in an indented .sass (a
+  line's end ends a declaration there). Each handler is optional and is
   given a fresh object of plain values: nothing it does reaches the tokens. The events read the walker's state, they never
   steer it — so they inherit its view: a `;` inside parentheses (a Less mixin's parameters, an unquoted `data:` URL) ends no
   statement and what stands before it is not kept; after a token declaration left open at its line's end the next statement
-  starts below it; an indented .sass file has no block. Behaviour-preserving when it came: the tokens of 2,493 real
+  starts below it — its rest is the VERY NEXT event when that is a statement of the same block, and is lost when any other
+  event comes first: in `@use … with (` mode every override is a declaration of its own and resets the walker's pending
+  text, so a map another override follows is never delivered (CRIT_3 §1 — Dashticz's loader.scss yields `)` alone, and with
+  `$container-max-widths` last its `sm: 540px, md: 720px ) )` would have read as breakpoints); a reader of `open` voids it then
+  (breakpoints.js: one unread); an indented .sass file has no block. Behaviour-preserving when it came: the tokens of 2,493 real
   stylesheets byte-identical to 1.36's, with and without an observer; an observer costs ~1.3–1.6× the walk
   (mcp/tests/15-quality-design-system-walks.js pins the events on one sheet and that a handler writing into what it is
   given changes no token).
@@ -794,7 +809,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   undeclared parts (`looseOf`: settled once an owner, the cost guard against parts × names), its re-exports under a name
   of its own or a package's (`reexported`) —, DS_EXPORT_NAMES of them, past it `more`; and its `defaultName`. `usesOf`
   reads a view: its imports (`importClause`: a default, `* as NS`, `{ a as b }`, over lines — a `type` one needs no
-  skip: what only a type names is neither rendered nor called —;
+  skip for settle: what only a type names is neither rendered nor called; TypeScript's modifier before `{` or `*` is
+  dropped (`RE_TYPE_MODIFIER`, 1.39 review 1: read as a default binding, `import type { X } from "./button"` was an import
+  of the folder's Button for the deprecated uses), `import type X from` stays unbound —;
   a `require` — `RE_REQUIRE_DECL` —, a whole one as a namespace), the tags it RENDERS (`RE_TAG_NAME`: a capitalised
   name or a member, `<a.b`, where an expression may start — never after a name, a `)` or a `]`, unless `return` /
   `yield`… (`RE_TAG_KEYWORD`) or the tag closes itself (`RE_SELF_CLOSED`: JSX text's `Press <Kbd />`) — nor a type
@@ -990,6 +1007,55 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   first, or a method beside an element, whose JSX is an element handed over (`t("hint", …)`, React's element cloner
   given a component first); a call given an object with a `render`, or curried around an import; a class that renders
   JSX and that the project never constructs.
+- **Deprecated uses** (1.39 — `deprecatedWatch`, design-system.js; the project report's `deprecatedUses`) — while the registry
+  marks a row `_Deprecated:_` (`reg.deprecated`; scanCode's 4th argument — a watch only with `withComponents`, so the
+  project report's alone: a feature's report passes the registry with `withComponents` false, the seed and finish pass
+  none — finish's `scanCode(root, false)` builds no watch), the files that still import each row the code holds a
+  component file for. Settle's follow is a function of its own, `followOf(scripts, project, index, prefill)` →
+  {`resolve`, `placed`, `spent`} (lifted out of settle, byte-identical scans against 1.38.0); the watch runs a SECOND instance
+  with its own index, caches and budget and its OWN `projectPlaces` (its config reads spend none of settle's DS_TS_CONFIGS),
+  so settle's verdicts are a scan's with no row. `settle(…, watch)`: with a watch it never returns early — its follow, its
+  places and its tells run only when it asks; the watch sees every component file read for its exports (`result`, whatever
+  settle asks), then each file of settle's queue as read (`see`: the uses settle parsed, or its own parse of the text — the
+  queue, order and bound are settle's: with nothing asked, the JSX scripts and the markup files), and where the bound stopped
+  (`cut`) — unless it is `idle` (no row located: settle reads nothing for it, `read` 0). Two rules, two predicates: a row named by its FILE — every namesake, RE_JSX_FILE ∪ RE_MARKUP_FILE only (an Angular
+  `*.component.ts` is imported by `.ts` files: `unlocated`) — is its MODULE: a binding whose module IS the file counts
+  (`byKey`, indexed: the key exactly, an index's folder, an SFC's key without its extension — the `TWIN` entry, its platform
+  infix dropped as moduleKey drops it, none when a script of the project has that key (`scriptHas`, 1.39 review 1: `./sheet`
+  is sheet.ts beside Sheet.vue in every resolver) —, `X/index.vue` by its folder; never `pointsTo`'s prefix: a folder import
+  is not every file under it), and through the follow its components (`byName`, the SFC's `defaults`); a component a file
+  exports — its own too, a result IS a component file — counts by its NAME (`nameRow`), and by a default import when it is
+  the file's default export (`defaults`, `byBase`, `bases` as a module row's file: List/Item.tsx's `export default
+  ListItem` — 1.39 review 1). A row NO component file locates is located by the component folders' barrels that give its
+  name (`nameRows(r, keep)`, the barrels after the files: vben's `export { default as VbenButton } from './button.vue'` —
+  the row the seed writes with the barrel's path —, outline's `List/index.ts` default; 1.39 review 1) — never a row a file
+  locates (input-group's `export { Button }`, its own button, is no namesake of the kit's: located rows' importers are
+  1.39's) —, each a namesake as files are while the barrels give the name to ONE file. To more than one (`givenTo`, of the
+  names `nameRows` reads: a relative re-export's module, the barrel itself when it declares the name — `const Trigger =
+  Primitive.Trigger` —, no file for another package's re-export — vben's common-ui `export { VbenButton } from
+  '@vben-core/shadcn-ui'`), only the barrel the row's path names locates it (`rowAt`: the path read as an `_Implements:_`
+  reference is, `implementsRel`, then `moduleKey` — the barrel's key or its folder's; 1.39 review 2: a kit's parts,
+  shadcn-svelte's `Content` in 31 barrels, 13 of its 889 importers the picker's). The names a component folder's barrel
+  gives a row's file or a watched name (a relative module) are watched too, DS_ALIAS_PASSES deep. A namespace's member resolves by
+  its first part (`<UI.Table.Row>` is UI.Table's). A file is never its own importer. An .mdx / .vue tag with no dot that no
+  import binds, whose key is a LOCATED row's, is `unbound` (`unboundAt`: the first by path). The cost guard: a text naming
+  no watched name (RE_CAPITAL_WORD; a .vue file's kebab tags) and no row file's base (RE_PATH_SEGMENT) is not parsed, a
+  binding naming neither is not followed — it hides an import whose binding and module name neither (`export { Table as
+  Grid }` outside a component folder's barrel, a `#ui` alias straight to `table.tsx`). The report: the rows still imported
+  first, each group in the registry's order, then the DS_LIST cut (`rowsTotal`; 1.39 review 1: past 50 rows a used one was
+  cut), `use` = `dsReplacement` (quality.js — doctor's `ui-deprecated` prints the same, ONE
+  expression), DS_DEP_SHOWN files and paths by path, `unlocated`, `read` (the in-scope files seen), `limits` — the walk's
+  `files` and the exports loop's `component-files` repeated, `usage-files` (settle's read stopped with a file the watch
+  reads left), `deprecated-follow` (the follow's `spent.cut`: a refused read or step; settle's own cut stays silent) —, and
+  the report's localized `note` (what is not seen; no import found is not unused). Never the report's `limits`,
+  `truncated` or `inSync`. Not counted: a `.ts` file, a dynamic `import()`, tests / stories / mocks, a tag in a .tsx /
+  .svelte / .astro file with no binding. The CLI (`dev-spec design-system`, no feature) prints it after the stale rows:
+  `cliOutput.dsDepUsesHead` (the rows listed that are imported, of `rowsTotal` — "at least" when every listed row is
+  imported and some are not listed), a row each (`dsDepUsesRow` — the files, `… +N` past the listed —, `dsDepUsesNone` with
+  the files read: no import found is no proof), `dsDepUsesUnbound`, `dsDepUsesUnlocated` (no component file the scan reads —
+  a component folder's index among them, the one the row's path names when several give the name to different files — gives
+  the name), the note, then its limits the report's own do not already say
+  (`dsLimit`).
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),
@@ -1099,13 +1165,18 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   - `ui.md` — `.specs/steering/ui.md`'s FIRST `- Breakpoints:` line: a list item (`-`, `*`, `+`), the label in any case, `**` /
     `_` around it; outside the front matter, fenced / indented code and HTML comments — read line for line (`commentLines`,
     then `codeBlockLines` over what it leaves), so `at` is the file's own line. Its value runs to the first `·` that no length
-    follows (`RE_UI_END`: blanks skipped, then a digit or `.` and a digit — `320 · 390 · 768 px`, the widths as the CLI prints
-    them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it; so a note led by a number reads as more
-    widths and a name before a width ends the list — `sm 640 · md 768` is 640 —, as a no-break space after the `·` does:
+    follows (`RE_UI_END`: blanks skipped — a space, a tab and, 1.39 (R2-BS-3), the two no-break spaces a thousands group
+    takes, U+00A0 / U+202F; never another space character —, then a digit or `.` and a digit — `320 · 390 · 768 px`, the
+    widths as the CLI prints them, is a list; the stub goes on: ` · text expansion · RTL · locale` ends it; so a note led by
+    a number reads as more widths and a name before a width ends the list — `sm 640 · md 768` is 640:
     ui-responsive.md says to start a note with a word and to write `640 (sm) · 768 (md)`) and is read up to `BP_LINE` (200)
     characters — past them `breakpoint-line` {read, at}, and a number the cut halves is dropped (`12800` is never `1280`) —; a `[…]` slot,
-    closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — and so does a filled value
-    kept in brackets (`[576 / 768 px]`: ui-responsive.md says to write the widths without them). A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
+    closed or not, is not read: the +ui stub's own `[360 / 768 / 1280 px]` gives the default set — but (1.39, BS-6 as CRIT_3
+    must-fix 5 narrowed it) a CLOSED one at the slot's own place, opening the value after the label's closing emphasis marks
+    and blanks (`RE_UI_FILLED`), whose text is no template's (`isTemplatePlaceholder` — the placeholder gate's own predicate,
+    under the project's template scope: the stub's slot is one in every language) is the team's filled value: its lengths are
+    read with the rest of the value (`[576 / 768 px] · text` → 576, 768); every other bracket keeps the rule, so an aside after
+    the widths (`480 / 960 px [1200 in print]`, `[see Figma frame 1440]`) is never a width. A length: px, rem / em × 16 (`BP_EM` — a media query's em is the initial font
     size), a bare number in the unit written NEXT (`360 / 768 / 1280 px`, `30 / 48 / 80 rem`) else px; a thousands group
     (`1.280`, `1,440`, a no-break space — one digit before it: a width is ≤ 3840) before px or none is an integer, before rem /
     em a decimal (`1.250rem`); a plain blank is never a group (`360 768 1280` is a list), so `1 280` reads as 1 and 280. A width
@@ -1117,26 +1188,64 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     and its options (`RE_THEME`: inline, static, reference, default; a nested @theme is not read — Tailwind 4 declares its theme at the top level), read through the
     observer the token walk already carries (the token loop and the global-sheet loop, in their order: token files, then the
     sheet candidates; a sheet that is no source counts too) — never a second walk (CRIT_3 must-fix 5); an observer only for a
-    text holding `@theme` (else the walk builds no event). The last declaration of a name is kept; `--breakpoint-<name>:
-    initial` drops it; `--breakpoint-*: initial` / `--*: initial` drop the file's earlier ones and set `reset`. `partial` = a
-    length read and no reset anywhere: Tailwind keeps its own five, which the engine never holds (stale data) — the default
-    set joins them. A value other than `0` or a px / rem / em length, or wider than 3840 → `unread` {name, value, at} (the
+    text holding `@theme` or (1.39) a .scss one holding `breakpoints` — below — (else the walk builds no event). The last
+    declaration of a name is kept; `--breakpoint-<name>: initial` drops it; `--breakpoint-*: initial` / `--*: initial` drop
+    the file's earlier ones and set `reset`. `partial` = a Tailwind width read (320 or more) and no reset anywhere: Tailwind
+    keeps its own five, which the engine never holds (stale data) — the default set fills the places the theme's widths
+    leave (below). A value other than `0` or a px / rem / em length, or wider than 3840 → `unread` {name, value, at} (the
     first 5, `unreadTotal` — of the sources asked: never the code's beside a deciding ui.md; `cliOutput.bpUnread` points to
-    ui.md's line, never "rewrite the value" — must-fix 6). What it inherits from the walk: the sheets the token scan reads —
+    ui.md's line, never "rewrite the value" — must-fix 6). Counted, never all kept (1.39.0 review 1, BU-1): `codeBreakpoints`
+    keeps the first `BP_UNREAD` and the count, a Sass record its own first `BP_UNREAD` and `badTotal` (no entry past a
+    record's first five can be among the report's), and `breakpointsReport` joins each source's one by one — never a spread
+    (`push(...list)`: V8's arguments end near 125,000, and a hostile tree holds more — RangeError, the whole report lost).
+    What is kept grows with the assignments and declarations the walk reads, one record each (as 1.38's `decls`), and
+    with a map's LENGTHS, one number each — never with its unread entries past five (review 2 of 1.39, R2-BU-2: 100
+    hostile sheets of one-line maps of 230 lengths keep 3.2M numbers, +67 MB, 4.8× their twin; 1.40 backlog with the
+    records cap). What it inherits from the walk: the sheets the token scan reads —
     a token file by name, a global sheet by name (`sheetRank`) up to `DS_TOKEN_READS`, where that search ends without a word
     (its own rule, review 5); a Tailwind 4 project's `@theme` is in its entry sheet (globals / app / index / tailwind.css),
-    which ranks first.
+    which ranks first. And (1.39, the Sass map reader) a TOP-LEVEL assignment, in a .scss sheet the same walk reads (the
+    observer's pre-test: `.scss` ∧ the text holds `breakpoints`, lower case as the name rule reads it), of a variable whose LAST `-` /
+    `_` word is `breakpoints` (`RE_SASS_NAME` — a convention, not a name list: `$grid-breakpoints`, Bootstrap 6's and sass-mq's
+    `$breakpoints`, `$mq-breakpoints`; never `$spacers`, a 0-led map of lengths a value property would take, nor
+    `$grid-breakpoints-custom`): plain, `!default`, or an override of `@use … with (…)` / `@forward … with (…)` (on one
+    statement: the `with` group's entries; over lines: each override is the walk's own `open`). Its value (`sassValue`): a
+    literal map, to its own `)` (`parenGroup`: one pass, depth-1 commas, quotes skipped; one that never closes — a stray `}`
+    ended its statement — one unread) — each `0` / px / rem / em entry a min
+    edge, any other entry (`md: $tablet`, a unitless `750`, `5000px`) `unread` as `$name.key` (a quoted key unquoted); an entry
+    that opens a map (Bulma's `"mobile": ("until": $tablet)`) makes it no breakpoints at all (nothing, nothing unread); a list
+    (`$show-breakpoints: (mobile, tablet)` — no key in its first entry; `"a" "b"`) nothing; anything else holding `$` or `(` (a
+    variable, `map-merge(…)`, `map.merge(…)`) one `unread`, as the Tailwind reader's (CRIT_3 must-fix 2 — "nothing" was a
+    silent drop). Over lines (the walk's `open` — its contract in The code, the walk's EVENTS above): a map its line closes is read at once (an
+    override's `(…),`); otherwise it is PENDING, completed only by the very next event when that is a top-level statement —
+    any other event first (another open, a block; a close or a nested statement always follows a block event, which voided it
+    first — no close handler is built) or the file's end voids it: one `unread` `{name, value: "( …"}` at its line (CRIT_3
+    must-fix 1: Dashticz's `with (` map then `$container-max-widths` — never 540 / 720 read). A part of DS_PRELUDE characters
+    is one the walk may have cut → one unread, never misread; a one-line map that long loses its name to the walk's tail cut
+    and is silent. Precedence (`codeBreakpoints`): per name, a plain or `with` assignment sets aside the `!default` ones,
+    read or not (a plain `map-merge` leaves the default set and its unread line); otherwise all count; names unite; `at` = the
+    first KEPT declaration with a length (must-fix 3: a vendored `_variables.scss` walks first and is set aside) — the files
+    in the walk's order, a file's Tailwind declarations before its maps (no sheet holds both). A map is whole: `partial`
+    stays Tailwind's (a Tailwind width read), so no default width fills a map. ui-responsive.md says the two silent shapes
+    (1.39.0 review 1, BU-2 / BU-3 — prose): a map of maps (Bulma's, a hand-written `'small': (min-width: 767px)`) is
+    neither read nor listed, and two `!default` maps of one name (a library copy beside the theme's own) both count — the
+    widths go into ui.md's line then.
+    Not read: a map in a file the walk does not open by name (`_config.scss`, `_settings.scss`, `_vars.scss`, `core.scss`,
+    `mixins.scss` — 14 of the designer's 26 sampled assignments; ui-responsive.md: paste the line), a .sass file, a .css one.
   - `default` — `[320, 390, 768, 1024, 1440]`.
   The widths: 320 first (WCAG 1.4.10's reflow width — 1280 at 400 %; a narrower edge is the floor's), ascending, once each,
   `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —, past it the narrowest 5 and the widest of
-  them all, whatever their source (under `partial` the code's and the default set's together: a declared width may be one
-  left out — ui-responsive.md says so, and to list the widths in ui.md's line to choose them); `breakpoint-widths` {read,
-  count, first — the narrowest left out, the sixth} (`cliOutput.bpLimit` names the count and that width, never the rule).
-  Which widths should stand for Tailwind's live layouts under `partial` — a declared one over a default one, 768 / 1024 /
-  1440 over 390 — is 1.39's to weigh (History → 1.38.0 review 2).
+  the SOURCE's own widths; `breakpoint-widths` {read, count, first — the narrowest left out, the sixth} counts and names
+  only those (`cliOutput.bpLimit` names the count and that width, never the rule). Then, under `partial` alone, the default
+  set FILLS the places left (1.39, BS-2 — `BP_FILL`): 768, 1024, 1440, 390 in that order, each not already there, up to
+  six — a theme's declared width is never one left out for a default one, and a default width the fill had no room for is
+  never said (shadcn v4's 1600 / 2000 → [320, 768, 1024, 1440, 1600, 2000], no limit; Tailwind's five restated →
+  [320, 640, 768, 1024, 1280, 1536]; 1920 alone → [320, 390, 768, 1024, 1440, 1920], 1.38's). The order: under any
+  Tailwind theme 390 is the floor's own layout (Tailwind's narrowest is 640), so it fills last; tablet / laptop / desktop
+  before it (History → 1.39.0, the table of 308 real themes). Not partial (ui.md, a reset theme): no fill.
   `breakpoints.limits` never feed the report's `limits`, `truncated` or `inSync`
   (they bound the widths, not the registry's comparison — CRIT_X D5d; a fixture: an in-sync project whose ui.md line is cut
-  stays in sync). Not read (1.39, or never): a Sass map, `@custom-media`, a file named for breakpoints, a JS config
+  stays in sync). Not read (or never): `@custom-media` (cut in 1.39 — History), a file named for breakpoints, a JS config
   (Tailwind 3's `screens` — and `container.screens`, a max width, the trap), `@container`. CLI: `cliOutput.bp*` (`bpHead`,
   `bpFrom` per source and partial, `bpUnread`, `bpLimit`), after the project's counts (`dsFound`) and after a feature's UI
   checks.
@@ -1262,28 +1371,36 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   CLI prints a drifted token as the row the code has, then the registry's value and the file.
 - **The units table** (1.38 — the team's convention, a report, never a default) — in design-system.md, found by its header
   wherever it stands: the first cell Property / Propriedade / Propiedad (`RE_DS_PROPERTY_HEAD`), a column whose header
-  STARTS with Units / Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place; a table headed
-  `| Property | Allowed units |` is none and nothing says so: 1.38.0 review 1's T3, said in ui-code-scan.md, the reader for
-  1.39's backlog) holding at least one CSS unit (`CSS_UNITS`: the
+  STARTS with Units / Unidades / Unidad (`RE_DS_COL.units` — by its header only, never by place), else (1.39, 1.38.0 review
+  1's T3) the first whose header holds the WORD (`RE_DS_UNITS_WORD`: `Allowed units`; its edges any script's letters,
+  digits or `_` — never `Community`, `Unitless`, PT `Valor unitário`, which `\b`, ASCII, would end at its `á`) — the 1.38
+  tier first, so every 1.38 table reads the same; no polarity (`Units to avoid`, `Avoid units` read as the allowed ones:
+  steering-templates.md says the column lists the ALLOWED units, CRIT_4 must-fix 11) — holding at least one CSS unit
+  (`CSS_UNITS`: the
   CSS Values 4 lengths, `%`, `fr` — a closed list in quality.js, the eager reader's) — a component's props table
   (`| Property | Type | Default |`) is none (CRIT_2). `dsUnitsTable` → the registry's `units` {rows: [{props (a property or `prefix-*`;
   never `--x`), units}], unread (a row with no CSS unit or no property, by its first cell), past (rows past `DS_UNIT_ROWS`,
   50: a count)}, several tables adding up; null without one. The feature report's `units` {findings (50), total,
-  byProperty} — null without a table; never finish, doctor or the brief: `unitsOf` over the file's ONE walk — a declaration
+  byProperty} — null without a table; never finish or doctor (the brief quotes the rows: The brief, above): `unitsOf` over
+  the file's ONE walk — a declaration
   whose property has a row (`unitRows`: the exact row, else the LONGEST `prefix-*`; `margin-*` covers `margin`), its FIRST
   top-level length the row does not allow (`offUnit`: never inside calc() / clamp() / var() — an unclosed one holds the
-  rest —, never 0, a unitless number, a hex colour's digits, a negative length — `RE_UNIT_LITERAL`'s lookbehind: a digit
-  after `-` is no literal, so `margin: 0 -8px` is not judged (1.38.0 review 1's T2: said in ui-code-scan.md, 1.39's
-  backlog) —; one finding a declaration; a custom property or a Sass variable has no row), and a Tailwind arbitrary size in
-  px / rem / em (1.37's `RE_TW_SIZE`: `text-[2vw]` and a negative `-mt-[12px]` are not read — T2 again, said) by the
-  property it sets (`twProperty`); every finding counted, the first 50
+  rest —, never 0, a unitless number, a hex colour's digits, a word's — `a-12px`, `$gap-8px`, `--12px`; 1.39, T2: a
+  negative length IS one, `RE_UNIT_LITERAL`'s second lookbehind — a minus at the value's start or after a blank or a comma
+  signs it: `margin: 0 -8px`, `-.5em` —; one finding a declaration; a custom property or a Sass variable has no row), and
+  a Tailwind arbitrary size in any unit, negative ones too, by the property it sets (`twProperty`) — 1.39's `RE_TW_UNIT`,
+  the table's own pattern (`-mt-[12px]`, `md:-mx-[8px]`, `mt-[-12px]`, `text-[2vw]`, `py-[3pt]`, `rounded-[50%]`: m[1]
+  the utility, m[2] its value; a unit of at most 5 letters, CSS's longest — `text-[3inches]` is none); 1.37's `RE_TW_SIZE`
+  stays the raw values' (px / rem / em, what a size token replaces):
+  never one predicate for two rules; every finding counted, the first 50
   made into rows. The third reader of the one walk measured 0.9–1.0× the report without a table on the real corpora,
   1.0–1.4× on 60 component sheets and ≤ 1.5× when every declaration is a finding (mcp/tests/15-quality-design-system-cost.js:
   ≤ 1.5× and ≤ 3×); a digit and a "names a property of the table" prefilter measured no gain (1.2× either way) and went.
   The project report's `unitsTable` {rows, unread, past} | null —
   never in `inSync`. On the real corpora with a rem / px table: shadcn's typeset.css `em` paddings, Bootstrap's
   `border-radius: 50%`, Breeze's `rounded-[10px]` — each true to the convention it was given (why it is a report).
-- **DESIGN.md: deferred again** (1.38) — the spec is `version: alpha` and changed after 1.37's design (a `motion` group,
+- **DESIGN.md: deferred again** (1.38, and 1.39 — DECISIONS, CRIT_4: it changed again on 2026-11-17, and read as the
+  registry's it renamed tokens 1.38 reports) — the spec is `version: alpha` and changed after 1.37's design (a `motion` group,
   nested colour groups, dimensions px / em / rem only); a YAML subset reader is a review series of its own. Its own CLI
   exports what is read today: `npx @google/design.md export --format css-tailwind DESIGN.md > theme.css` (a token file by
   name) or DTCG JSON.
@@ -1444,11 +1561,18 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   sizes are decided over its `@apply` statements by the same const (their variant size drops the `@apply` sizes, never the
   sheet's declarations), a markup file's class lines and its `<style>` block apart (as before). A conditional `@apply`
   holding ANY `text-` utility still sets (2)'s `condSize` (`RE_TW_TEXT_ANY`, F0c's — a colour in a `@media` drops the sheet's
-  sizes: 1.39 backlog). An element's own `style` is
+  sizes: designed in 1.39 as D1 and cut — 1.40 backlog, History → UI checks, 1.39.0). An element's own `style` is
   decided on its tag, never deferred. Never: the `font` shorthand, a custom property
   (`--font-size-fluid-3`), a CSS-in-JS template line of a script. The walker keeps a statement's last 2,000 characters, so a
   longer declaration's property is not seen (a hostile shape only). `width-viewport` (`100vw` / `w-screen`) was cut to prose
-  (ui-responsive.md): 1 real defect in 16 corpus hits — fixed overlays, compiled utilities, clipped decorations.
+  (ui-responsive.md): 1 real defect in 16 corpus hits — fixed overlays, compiled utilities, clipped decorations. (1.39) That
+  prose said "the visual review measures the sideways scroll instead" — false: its captures hide scrollbars (ui-review.md's
+  `--hide-scrollbars`, Playwright's every headless launch — ITEM_2 measured Chrome's scroll width 1258 over a client width
+  of 1243 with them, 1258 / 1258 without), so a `100vw` box scrolls nothing there; it now says nothing measures it — check
+  an in-flow one by hand at a desktop size, scrollbars shown (a 17-docs row pins the capture line's flag, the reason).
+  Keeping the scrollbars in `floor-zoom` was cut (CRIT_2 cut 3: scrollbars shrink the client width, "the width got"
+  undefined), and
+  `width-viewport` stays prose (ITEM_2: 22 boxes in 18 clones, 15 left after the best property, 1 likely defect).
 - **One file** — `uiChecksOf(lines, rel, over)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
   `DS_LINE_MAX`, its comments out, `cut` when it was longer; `over`, review 1 of 1.38: the file is longer than the text read —
   featureReport's two calls and the inventory's `feed` pass it) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
@@ -1507,7 +1631,19 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `{{ $x }}` or `{!! $x !!}`: review 2 of 1.37), a line cut at `DS_LINE_MAX`: a doubt, clearing every candidate open (the control is in each body). An
   empty body or one of elements alone (an overlay layer, an icon `<svg>`) is a doubt too. Nested candidates each get the
   text seen while they are open (`textMark`); a close tag pops the elements opened since to its own name, an unmatched one
-  costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below).
+  costs nothing (a count by name); each character read once (hostile bodies ≤ 3×, below). (1.39, D4) Vue's `<component>`
+  — no HTML element has that name — is judged as what its `is` names (`judgeTag`'s `name`): a BOUND `is` (`:is`,
+  `v-bind:is` — any `boundName` form; `bound`) is a component — no click candidate, its own `style` not judged (vben's
+  alert.vue, `<component :is="… || VbenButton" @click>`: 2 of the corpus's 25 click-no-keyboard findings, both false) —
+  yet in a click body it stays what 1.38 read (no CONTROL: `kind` undefined): ITEM_2's design made it a control there, and
+  the oracle replay found that silencing two TRUE findings the design had not counted — vben's preset tiles
+  (`blocks/layout/content.vue`, `blocks/theme/theme.vue`: a `<div @click>` holding a preview's or an icon's
+  `<component :is>` and the tile's name); the narrower reading keeps them, and a `<div @click>` whose `<component :is>` IS
+  a button warns as in 1.38 (a fixture); a STATIC `is` is the element its literal names (`RE_ELEMENT` on the value as
+  written, its quotes off — `is="MyCard"` is a component, a control in a body as any component; `is="button"` focusable, a
+  control in a body too; `is="img"` void); with no `is`, and an `is` on any other tag (a customized
+  built-in, `<div is="x-panel">`), the tag as written; img-no-alt (`<img` as written) and paste-blocked (any tag) never read
+  it (no widening: `<component is="img">` is no img-no-alt).
 - **paste-blocked** — any tag (a component passes it down): an inline handler that cancels (`preventDefault`, `return false`)
   and reads no clipboard (`RE_READS_CLIPBOARD`, the API — `clipboardData`, `navigator.clipboard`, `getData` —, never the
   word: review 2 of 1.37, a handler's own "Pasting from the clipboard is disabled" excused it), or a bare `.prevent` /
@@ -1564,8 +1700,8 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   named the tag); a SECOND block's first prelude carries the first's `</style>` line before its own tag — stripped with it
   (review 1 of 1.38: Vue's documented global + scoped pair, `@media print` / a condition / keyframes there). Not Astro's
   `<style define:vars={{…}}>`: the walker opens blocks on its braces and the next prelude reads `> @media …` (the user docs
-  say to silence it; 1.39 backlog — viewLines yielding a `<style>` line's text after its tag's end only would let
-  `RE_STYLE_TAG` go).
+  say to silence it; designed in 1.39 as D2 and cut, 1.40 backlog — viewLines yielding a `<style>` line's text after its
+  tag's end only would let `RE_STYLE_TAG` go).
   The statement events' `from` (the line a statement's text starts on) places a finding at a declaration's first line.
 - **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
   (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
@@ -1647,7 +1783,7 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   a sheet), never parsed — its rules, focus styles and motion unseen: a removal elsewhere only its focus styles would have
   excused stands, where a feature report may excuse it (its focus search reads a sheet whole up to `DS_FOCUS_CHARS`; none
   on the clones: Bulma's and cal.com's other files hold focus styles; ui-code-scan.md says it — review 2 of 1.38, R2-UP-2;
-  1.39 backlog). A feature report and finish keep 1.37's read of its first `DS_READ_CHARS` (a fixture). `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
+  designed in 1.39 as D5 and cut, 1.40 backlog). A feature report and finish keep 1.37's read of its first `DS_READ_CHARS` (a fixture). `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
   and keeps counts — its memory bounded by the rules, never the files: per rule its count (past a file's `DS_CHECK_PER_FILE`
   too — CRIT_1 must-fix 7), the FILES holding one (never the findings), its first place by file then line (a place past a
   file's cap has no line and is named only when no listed place exists — the feature report's unjudged rule); an
@@ -1660,10 +1796,12 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `focus-visible:ring-2`) excuses a removal in the inventory, never in that feature report or its finish (review 1 of 1.38,
   UP-6 — kept: a class-list search project-wide reads every view file; ui-code-scan.md says it). `limits`, its own — never the report's `limits`,
   `truncated` or `inSync`: `ui-files` {read, count?, file?, line?: the removals it left unjudged}, `view-size`, `line-length`,
-  `tag-length` {read, count, file: the smallest path} (the pass builds them; featureReport builds the feature's). The CLI
+  `tag-length` {read, count, file: the smallest path}, (1.39) `motion-scripts` (the fact's script search, below) (the pass
+  builds them; featureReport builds the feature's). The CLI
   prints it after the registry part (`uiProjectHead`, `uiProjectRule` a rule — `uiReportTag` for a report-level one —,
   `uiProjectNone`, `uiSilenced`, the off lines, the fact, its limits; never "nothing" beside a `ui-files` count). `uiProject`
-  is exported for one fixture (a truncated walk takes 20,001 view files: a scan of the same files marked truncated).
+  is exported for its fixtures (a truncated walk takes 20,001 view files: a scan of the same files marked truncated; 1.39: the
+  script search's bounds and order over scans built in the test — `{views, scripts, truncated}`).
 - **Motion and the fact `no-reduced-motion`** (1.38, `UI_FACTS`) — `uiChecksOf`'s `motion` {count: the LINES declaring
   motion, line: the first}, never a finding, from its OWN predicate (CRIT_X D5b: never transitionAll's, never item 2's
   `RE_MOTION_PROP` — the properties that hold times): `@keyframes` (a vendor prefix; `RE_KEYFRAMES`, anchored, on the
@@ -1677,10 +1815,40 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `scroll-behavior` too — an `animation: 1s` value never reads as transition-all). The FACT, the inventory's alone (never a
   feature report's or finish's; WCAG 2.3.3 is AAA): the files read declare motion and NONE of the texts read mentions
   reduced motion — `RE_REDUCED_ASK` on each WHOLE text as read, never its lines cut at `DS_LINE_MAX` (a minified sheet's
-  media query sits past the cut) — and NO read was cut (CRIT_1 must-fix 6: the walk, `ui-files`, a file's `view-size` — a
-  mention may sit in what was not read). `facts: [{code, count, file, line}]`; the CLI's `uiFact[code]`. No script search
-  (cut — CRIT_1: it never changed the answer on 9 repos): a mention only in a `.ts` hook is not seen, so the line says "the
-  view files read"; framer-motion props (`animate={{x}}`) are not motion — the fact is said less, never wrongly.
+  media query sits past the cut) — and NO view read was cut (CRIT_1 must-fix 6: the walk, `ui-files`, a file's `view-size`
+  — a mention may sit in what was not read). `facts: [{code, count, file, line}]`; the CLI's `uiFact[code]` ("none of the
+  project's view files and scripts read mentions"). framer-motion props (`animate={{x}}`) are not motion — the fact is said
+  less, never wrongly. (1.39, D6 — CRIT_2 must-fixes 5–7) THE SCRIPT SEARCH: only where the fact is about to be said —
+  `uiProjectPass`'s `wouldSay(cut, truncated)` is THE `said` predicate, named and asked twice (by `uiProject` before `done`, by
+  `done`), so a view's mention, no motion, a cut view pass, a truncated walk or a view-size cut read no script (a spy
+  fixture on each entry's `full`) — `uiProject` reads `scan.scripts` (scanCode's every-script list, the one settle reads,
+  returned as a key since 1.39 — no read shared with settle: CRIT_X D4) that are no view file (each file read once), no test
+  (`isTestFile`: an `e2e/` helper), no story / mock / declaration (`RE_NOT_COMPONENT_FILE`), the shorter path first then by
+  path, each to `DS_READ_CHARS`, and hands each text to `pass.mention(text)` (`RE_REDUCED_ASK` again — the views' own
+  predicate, never a second one) until the first mention (the read ends there: a cost guard, timed — 400 scripts whose first
+  mentions ≤ 0.5× the same 400 with none) or `DS_MOTION_SCRIPTS` (2,000) files / `DS_MOTION_CHARS` (8 MB) characters, the
+  next past either unread. A mention takes the fact back; it can never add one. A search a bound ended, or that read a script
+  only in part (past 256K), keeps the fact, and the inventory's `limits` gain `motion-scripts` {read, bound? (files · chars:
+  WHICH bound ended it — CRIT_2 must-fix 5), count?, file? (the scripts read only in part, the first by path — not the first
+  read)} beside the fact or its off count (an off fact is searched too: its `off` count is the fact as it would have been
+  said); a search that read every candidate whole says nothing. Never the report's `limits`, `truncated` or `inSync` (1.38
+  D5d). The CLI line (`dsLimit["motion-scripts"](read, file, count, bound)` — the inventory's limit loop passes `l.bound` as
+  its 4th argument) says "the first N, the shorter path first" only when a bound ended it. The two reads — the views', the
+  scripts' — are ONE loop, `readHeads(list, files, chars, take)` (design-system.js: read ahead, each file's head and `over`,
+  the bounds, `cut: null | files | chars`; CRIT_2 must-fix 7: a second copy trips 16-conventions-duplication). Said less,
+  never wrongly: a test SETUP is no test by name (`jest.setup.js`, `vitest.setup.ts`, `playwright.config.ts`'s `use:
+  { reducedMotion }` — it only EMULATES the preference for the tests, so a true fact can go with it —, `setupTests.ts`), so
+  its mention takes the fact back, outside a test folder (`src/test/setup.ts` is a test file, never read; ui-code-scan.md: "a
+  test setup's outside a test folder included"); so does a comment or a vendored script outside `vendor/`
+  (`assets/fontawesome/js/all.js` — the walk skips `vendor/`). The fact is said on 4 of the 18 clones in 1.38
+  (motion-primitives, sakai-vue, taxonomy — true; outline — false, its reset in a styled-components
+  `shared/styles/globals.ts`). Measured on the implementation (review 1 of 1.39, one process, interleaved): the search stops at
+  outline's 207th script (+174 ms, loaded); taxonomy +11 ms, motion-primitives +1, sakai-vue ≈ 0; a search that reads every
+  script or reaches its bound ~1.2× (outline with its mention edited out ×1.20, +280 ms; a 158-view tree with 3,400 scripts
+  ×1.23 quiet, ×1.5–1.7 / +240–350 ms re-measured by review 2 — accepted as said) — CRIT_2's prototype said +1 to +27 ms;
+  cal.com itself never searches — its views mention; the 8 MB bound is
+  reached on no clone (cal.com's first 2,000: 4.9 MB). What the bound hides: a mention past the
+  2,000th script or 8 MB (cal.com's first sits at its 1,002nd).
 - **The marker `_UI checks off: <rule-id> (reason)_`** (1.38 — the registry's `checksOff`, Design-system registry above) —
   `uiOff(reg)` → {off: Map(id → reason), ignored: [{entry, why, read?}]}: an entry is APPLIED only when its id is a rule's
   or a project fact's (`UI_RULES` ∪ `UI_FACTS`, at call time — F0c's font-size-viewport is one: CRIT_X D7.4) and it gives a
@@ -1693,7 +1861,10 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   outline-removed) and so finish, which reads that report. `off` / `offIgnored` appear only when the marker holds an entry (a
   project without one keeps the 1.37 shape). Its spellings, in the user docs (review 1 of 1.38, UP-7 — prose alone): a line
   of its own, as `_Token sources:_` (`RE_DS_MARKER`, anchored: a list item or a bold `**UI checks off:**` is no marker — read
-  as nothing, said nowhere), each id bare (one in a code span — the docs write ids so — reads `unreadable`). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
+  as nothing, said nowhere), each id bare or in ONE balanced code span (1.39, UP-7 — `RE_DS_OFF_ENTRY`'s two branches: the
+  docs write ids in one, so the 1.38 docs' own spelling read `unreadable`; a lone backtick on either side or a doubled pair
+  is another shape — `unreadable`; the list item and the bold line stay unread: the anchor is `_Token sources:_`' and
+  `_Libraries:_`' too). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
   and each entry not applied (`uiOffIgnored[why]`) after the silenced count. A design-system.md written only for the marker
   enrols the project in the registry (`ui-design-system`, finish's New-component append — the user docs say so, CRIT_X D3);
   what-input's modality removals (`[data-whatintent='mouse'] { *:focus { outline: none } }`: no syntax tells a modality
@@ -1722,10 +1893,16 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   project report with the pass is NOT bounded against 1.37's: it opens and parses every view and style file the pass reads,
   so its ratio is high where 1.37's report read almost nothing (a small CSS / Vue tree) — the measured spread per clone is
   in History (1.38.0 review 1, the cost).
-- **Not in 1.37 nor 1.38** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the `motion`
-  raw kind (item 2's), the `addEventListener` paste form, a `hint` level; 1.38's cuts — deprecated uses (1.39), sharing
-  settle's reads, the `:is` / `v-bind:is` narrowing (backlog), the reduced-motion script search, the 5,000 / 32 MB focus bound
-  in the feature report and finish, `DS_FOCUS_*` printed in MB.
+- **Not in 1.37, 1.38 nor 1.39** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the
+  `motion` raw kind (item 2's), the `addEventListener` paste form, a `hint` level; 1.38's cuts — deprecated uses (1.39),
+  sharing settle's reads, the 5,000 / 32 MB focus bound in the feature report and finish, `DS_FOCUS_*` printed in MB (Vue's
+  `:is` / `v-bind:is` and the reduced-motion script search came in 1.39: D4, D6); 1.39's cuts (the 1.40 backlog — History
+  → UI checks, 1.39.0) — D1 (a markup file's template and `<style>` decided as one file for font-size-viewport: it hid
+  three true findings 1.38 caught; R3-UI-1, `RE_TW_TEXT_ANY`, A2 stay as written above), D2 (Astro's `define:vars` in the
+  shared line walk: no real effect, a bug in its in-tag state), D3 (`:is()` / `:where()` focus selectors: 0 of 661
+  candidates), D5 (a skipped sheet's focus styles: 0 cases), the floor-zoom capture keeping scrollbars, `width-viewport` as a
+  rule, S12 (harness folders as test files: 0 findings), S9 and UP-6 (prose: a modality-scoped rule — 0 in 18 clones —, a
+  feature report's focus search over every view file).
 
 ## UI state matrix (1.38)
 +ui's `[UI] UI States` scaffold ends in a state matrix (the template — markdown-and-trace.md → Readers, tracks.md): `State` ·
@@ -1764,13 +1941,16 @@ view needs (the detail points there), tooling-reference.md's id.
 - **No gate, no stamp** — never a fail, not `warnsOnly`, not in `GATES`, not in the save hook, finish or the brief. No stamp:
   no design approved before 1.38 can hold the anchored header (gates-and-approvals.md → Gates). spec_upgrade lists it as
   ADVISORY — `UI_STATES_CHECK` beside `DESIGN_WEIGH_IDS` / `CRITICAL_FLOW_IDS` in upgrade.js: no `warnings` attention.
-- **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns; every cell cut to `US_CELL`
-  (400) before any regex; a bound that drops input appends `usTruncated` to the detail (`usNone` too). Linear: the section
-  reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the same text (a 5 MB cell, 200K rows, 20K tables,
-  a 1M-word label); 1 MB cells cost what a same-size prose section does (15-quality-ui-states.js, a ratio). The one shape
-  past it: a header row of 1,000,000 view cells (8 MB on one line) costs ~2.1× `sectionState` (2.1–2.6 s against 1.0–1.2 s)
-  — each header cell's words are read for the anchor before `US_VIEWS` applies; linear, and no gate waits on it (a 1.39
-  bound: compare a cell with the anchor only when its length could hold one).
+- **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns, the anchor looked for in a
+  header's first `US_HEADER` (64) cells (1.39, BS-5 — past them, none found, the table is none and `truncated.views` says a
+  bound cut: no new flag, CRIT_3 must-fix 6; found within them, the cells after it are never read, nothing said); every
+  cell cut to `US_CELL` (400) before any regex; a bound that drops input appends `usTruncated(US_TABLES, US_ROWS, US_VIEWS,
+  US_HEADER)` to the detail (`usNone` too): it names every bound — the tables, the rows, the view columns and (1.39.0 review
+  1, BU-5) a header's first 64 cells, so an anchor past them is said by its own bound, not by the view columns'. Linear:
+  the section reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the
+  same text (a 5 MB cell, 200K rows, 20K tables, a 1M-word label, and since US_HEADER a header of 200,000 cells, the anchor
+  last: ~0.3×, 1.38's 2.1–2.8× — each header cell's words were read for the anchor before `US_VIEWS` applied); 1 MB cells
+  cost what a same-size prose section does (15-quality-ui-states.js, ratios).
 - **Every language, from the corpus** — the labels and the anchor cells of EN / PT / ES / pt-BR come from the corpus key
   `uiStateNames` (markdown.js `uiStateNames()` / `renderUiStateNames()`: `<id>\t<label>` lines, `UI_STATE_A11Y` — `a11y` — as
   the anchor's id; architecture.md → The build): an English doctor loads no pt.js / es.js (a child-process fixture). The
@@ -2725,6 +2905,287 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   now taken at 8 bits (`Math.round`), a hex unchanged (the reviewer's corpora — every integer HSL token, cal.com, Radix,
   shadcn's pairs — identical). R3-T2: no fixture pinned the painted check's blue channel (`#eeeff3` → near now). Fixtures
   `paint.decimals` / `paint.blue`; the old window and a blue-blind check each fail them.
+- **1.39.0** (item 4 of the 1.39 round, "the scale, round 2" — chain E, as DECISIONS cut it: T2, T3 and the brief's units
+  line; the size families — `token` / `off` / nearest / a whole scale / the package scope: 0 judgments on the six common shapes, 282 of 291
+  from one app —, DESIGN.md's reader, motion off / nearest and R2-T2 cut — DECISIONS, CRIT_X's cut list) — T2: a negative
+  length is one (`RE_UNIT_LITERAL`'s second lookbehind: a minus at the value's start or after a blank or a comma; a word's,
+  `$gap-8px`'s, `--12px`'s never), and the units table reads Tailwind's sizes through its OWN `RE_TW_UNIT` (any unit of at
+  most 5 letters — CSS Values 4's longest, `svmin`; the designed `{1,6}` was an equivalent mutant, `text-[3inches]` now
+  none —, a leading or bracketed minus — m[1] the utility, m[2] its value), `RE_TW_SIZE` left the raw values' (the raw list is 1.38's
+  on every fixture, the oracle's run pinned). Re-measured with the DESIGNED regex (CRIT_4 must-fix 10 — the designer's
+  `[\s(,]` reads the same: `offUnit` takes a value's parentheses out first) over the clones of dsd-139d-1 / -2 / -4 (52
+  checkouts) under steering-templates' example table, against the 1.38.0 oracle: ADDITIONS ONLY, 0 findings dropped —
+  codecaine +278 (165 `…-[…cqw]` in its device mocks, 41 `vw`, 32 `vh`, 23 `svh`, 16 Tailwind negatives — `-mb-[0.22em]`,
+  `lg:-mr-[12vw]` —, 1 stylesheet negative), pico +119 (its themed copies' `margin-top: -0.125em`), outline +66, bulma +40,
+  cal.com +21, mantine +20 (`margin-left: -1px`), Bootstrap +4 (d4) / +7 (d1, d2: `_visually-hidden.scss:12`'s `-1px
+  !important`, the examples' `-25px`, `-.5em`), vben +3, Starlight +2 / +3, magicui +2 (`leading-[100%]`, `text-[40pt]`),
+  runwithbee +2 (`text-[11vw]`), sinhong +2 (`-ml-[3px]`), nuxt/ui +2, podman +1 (`py-[3pt]`), hyper-tube +1
+  (`-ml-[8.5px]`), open-props, contai, skill-deck, tailwindcss.com +1 each; shadcn v4 / svelte, Breeze, Sakai, Foundation,
+  motion-primitives, taxonomy, astro-paper and the other apps identical — each addition true to the convention it was given
+  (a report). T3: a units column by a WORD of its header (`RE_DS_UNITS_WORD`) when no header STARTS with it — the 1.38 tier
+  first, so every 1.38 table reads the same (a fixture of its four shapes); its edges any script's letters (a deviation
+  from the designed `\b`, which is ASCII: PT `Valor unitário` would end at its `á` — the narrower reading); no polarity,
+  said (steering-templates.md: the column lists the ALLOWED units; a 17-docs row runs `Units to avoid` through the reader —
+  CRIT_4 must-fix 11). The brief: the table's first rows within `DS_BRIEF_UNITS` (400, its own bound — a prefix; one row
+  too long alone is said, never cut), `more` the rows left out plus the table's `past`; the null gate counts `reg.units`
+  (CRIT_4 must-fix 7: a units-only registry got nothing); the result's `designSystem.units` {rows, more} — a NEW JSON field
+  (CRIT_X D6), only with a table: the oracle's brief, text and JSON, byte-identical without one, and with one only the
+  line and the field added. The table's shape moved from ui-code-scan.md to steering-templates.md (ui-code-scan.md 29,871 →
+  29,634 B); 17-docs re-pointed (the T2 clause against offUnit / RE_TW_UNIT / RE_TW_SIZE, the headers against
+  RE_DS_PROPERTY_HEAD / RE_DS_COL.units / RE_DS_UNITS_WORD, "never finish or doctor" and the brief's 400 in both files —
+  CRIT_4 must-fix 8). Cost, the feature report with a table, 1.39 against the oracle in one process, interleaved, medians of
+  9 (60 files × 300 lines, ≥ 1.1 s a call): Tailwind sizes as written 0.94×, every utility a finding (143,940 against 0)
+  1.12×, hostile lines (`-mt-[` never closed, `md:` chains) 1.00×, stylesheets whose every declaration is negative (19,800
+  against 0) 1.11× — no suite guard added: `RE_TW_UNIT` is `RE_TW_SIZE`'s linear shape, K2 guards the reader. The
+  mutation list came before the fixtures (%TEMP%/dsd-139-e/MUTATIONS.md): 49 of 49 killed in a copy — 17 on T2's two
+  patterns and unitsOf (the raw reader reading `RE_TW_UNIT` among them), 8 on T3, 15 on the brief (the bound at 4,000, a
+  `>=` for `>` — a 20-row table of exactly 400 —, the separators left out of the size, `continue` for `break`, `past` left
+  out of `more`, the components' budget charged), 9 prose clauses; one survivor of the first pass, the unit's designed
+  `{1,6}`, was equivalent on every CSS unit — the bound became `{1,5}` with a fixture each way (`pt-[2svmin]`,
+  `text-[3inches]`), the 52 checkouts identical under it.
+- **1.39.0** (item 3 of the 1.39 round, "Breakpoints and states, round 2" — chain B, as CRIT_3 and the DECISIONS cut it) —
+  BS-2, the fill under `partial` (Breakpoints, above): the theme's own widths first, capped and said as any source's, then
+  `BP_FILL` = 768 · 1024 · 1440 · 390 where room is left; `breakpoint-widths` counts and names only the theme's own widths
+  (CRIT_3 must-fix 4 — the design's "the narrowest left out" named 390 on shadcn, a width not the project's). The order, on
+  308 real Tailwind 4 partial themes (a width's layout = the widest live breakpoint ≤ it, Tailwind's five counted unless
+  overridden — oracle data in the designer's probe, never in the engine): 1.38's cap captured 1,493 live layouts, review 1's
+  ascending fill 1,570, a widest-first fill 1,632, this order 1,645 (11 themes with no tablet layout, 19 with no laptop);
+  dropping 390 altogether captures the same 1,645 — it fills last so that an uncapped theme keeps 1.38's widths byte for
+  byte; the 36 themes still losing a declared width declare six or more of 320 px and up. Oracle replay against 1.38.0 (36
+  clone reports, 670 sampled sheets through the observer): only `partial` shapes differ — the clones with an adding theme
+  (shadcn v4, cal.com coss-ui, shadcn-svelte, magicui) [320, 768, 1024, 1440, 1600, 2000] where 1.38 had 390 and said 1600,
+  and 161 of the theme sample's sheets, each 390 out; the rest of every report identical. `cliOutput.bpFrom.partial` reworded
+  (the declared widths first, then the default set where room is left). R2-BS-3: `RE_UI_END`'s blank class takes U+00A0 and
+  U+202F (the ones `RE_UI_LENGTH`'s thousands group takes — French typography puts the narrow one before and after `·`),
+  written as escapes; `\s` would take U+2009 and line ends too (the fixture's thin space ends the list). R2-BS-2's
+  number-led note stays prose (ui-responsive.md item 1): telling `· 1200 px max content width` from `360 phone · 768 tablet`
+  is meaning, not syntax, and a lengths-only narrowing would end `640 (sm) · 768 (md)`, the form the docs recommend. BS-6
+  (1.38.0 review 1's LOW, prose until now): the design read every closed bracket whose text is no template's; CRIT_3's
+  probe (bs6.js) showed it misreading asides — `480 / 960 px [1200 in print]` +1200, `640 / 1024 px [see Figma frame 1440]`
+  +1440 — so it reads only the slot's own place (must-fix 5): the replay's ui.md lines differ in the filled brackets alone
+  (`[576 / 768 / 992 / 1200 / 1400 px] · text`, its bold-label twin, `[576 / 768 px] 1200 px [1600 in print]` → 576 and 768
+  joining 1200); the stub in EN / PT / ES / pt-BR, `[TBD]`, the asides and an unclosed `[` unchanged.
+  The Sass map reader (the chain's LAST commits, droppable — DECISIONS): first the walk's `open` event alone
+  (design-system.js: built only when `on.open` exists, never in a .sass; the F0c sheet's events and every token
+  byte-identical with an open handler — mcp/tests/15-quality-design-system-walks.js), then the reader. The design read "open
+  + the next top-level statement"; CRIT_3 showed it false in `@use … with (` mode — each override resets the walker's pending
+  text, so Dashticz's loader.scss delivers `)` alone and, with `$container-max-widths` last, `sm: 540px, md: 720px ) )` as
+  the map's rest (540 / 720 read as breakpoints; the designer's sass.js had filed it "nested-or-fn"): the void rule
+  (must-fix 1), "nothing" for a variable or `map-merge` made `unread` (must-fix 2), `at` the first KEPT (must-fix 3). The
+  shapes on the designer's 100-file sample (repos/sass): 23 sheets now give widths (Bootstrap 5 overrides and copies —
+  multi-line, a trailing comma, `!default`, one-line), 5 give an unread
+  line and the default set (Dashticz's voided `with` map; `$breakpoints: $grid-breakpoints` ×3, a variable; matise-gryd's
+  unitless `750` entries), every other sheet unchanged, every token list identical; of the clones only sass-mq moves —
+  its `examples/custom/custom.scss` (`@use '../../mq' as responsive with ($breakpoints: (…))`, an app's override shape) →
+  [320, 640, 800, 1024, 1600]; Bootstrap 6's `_config.scss`, Bulma's nested map, sass-mq's `_mq.scss` are no files the walk
+  opens by name — the libraries, rightly. Mutants CRIT_3 §8 added (V1 / V2 / P1 / P2 / A1 / L1 / B1 / N1) each have their
+  fixture; K5 went with BS-3. Two handlers were left out as provably dead: a `close` one, and the pending path's "a nested
+  statement voids" — after a top-level open, any nested event follows a block event, which voided it. Cost (K3c, medians of
+  5 interleaved, ratios against the `breakpointz` twins the pre-test skips, with other chains' suites running): 100
+  Bootstrap-sized sheets with a map 0.96–1.35×; 256K hostile sheets — an open per line 1.0–1.17× (the first opens a
+  parenthesis the walk never sees closed: the rest are map keys, one unread), a one-line map per line 1.67–2.3× (the first
+  `sassValue` built its parts through `map` / `filter`: 2.7×; one loop now), a voiding list per line 1.35–2.2×. The project
+  report against 1.38.0 (both engines in one process, interleaved, medians of 5 — the whole chain: the fill, the line
+  rules, the reader): shadcn-ui 0.98×, mantine 1.05×, cal.com 1.03×, vben 1.09×, bootstrap 1.08×, starlight 1.11×,
+  bulma 1.05×, breeze 1.05×, taxonomy 1.25× (+44 ms on 178 — no sheet the reader observes: noise of the loaded machine),
+  sass-mq 0.80× — within the DECISIONS bar (≤ 1.25× at ≥ 700 views, ≤ +150 ms below). `@custom-media` CUT (CRIT_3 / CRIT_X cut 3): an alias list, not a set — of
+  47 sampled files 10 define one width (median 2), so a single `--md` would capture [320, 768] where 1.38 captured five;
+  PostCSS / Lightning only; its seven mutants the largest block. Tailwind 3's `screens` stays cut (41 of 104 sampled keys are
+  `container.screens`, a max width).
+- **1.39.0** (item 1 of the 1.39 round, "deprecated uses" — chain A, with CRIT_1's must-fixes 1–10) — 1.38 had kept the
+  files that still import a deprecated component for later (they need settle's read). Lifted first, its own commit: settle's follow, `followOf`, moved
+  verbatim (CRIT_1 must-fix 8: the prototype COPIED it, so its A/B said nothing of a lift) — proved against the 1.38.0 oracle
+  (92c44e0a, extracted): the full scanCode JSON, settle's verdict included, byte-identical on 21 clones (the design's 9 —
+  cal.com, h5bp, shadcn-svelte, Breeze, nuxt/ui, shadcn-ui, Bootstrap, vben, Starlight — and 12 more) and on every scanCode
+  call the area-15 suite makes (1,036, the DS_PASS_* / DS_PACKAGE_NAMES / DS_TS_CONFIGS fixtures among them); its mutation
+  replay found one survivor — the resolve cache keyed without the FOLDER (no fixture had two apps importing the same
+  `./components/kit`): a fixture now (15-quality-design-system-usage.js). Then the watch (`deprecatedWatch`, above): the
+  differential — each clone's first 60 components marked, every other key and settle's verdict byte-identical on the 8
+  clones that hold components; the CRIT_1 shapes each a fixture (Vue CLI's extensionless SFC and `index.vue`, an Angular row
+  unlocated, the note in EN / PT / ES, results seen with nothing asked, `.ts` files crowding a `.vue` past DS_USAGE_FILES,
+  the namesake over-count with a kit's `chart.tsx`, the follow's three bounds). Cut or not built: a `.ts` file's
+  registration (`app.component`), a dynamic `import()`, a bundler's alias, a barrel's non-component export (the index holds
+  components only), the walk's `files` repeat's fixture (20,001 files: 13 s to write, 6 s to remove — checked in a scratch
+  run, not in the suite), the UI pass's read shared (CRIT_1: +63–108 ms where settle asks nothing does not pay for 1.38's D4
+  coupling). The cost, chain A alone against 1.38.0 (scanCode + the UI pass, one row marked, interleaved medians of 5):
+  trees of 700 view files or more 1.00–1.19× (shadcn-ui 1.06 · cal.com 1.04 · vben 1.19 · shadcn-svelte 1.09 · nuxt/ui 1.04 ·
+  outline 1.00 · mantine 1.18), smaller ones +2 to +108 ms where a row is located (Bootstrap +2, taxonomy +37, Breeze +89,
+  motion-primitives +95, Starlight +108 — the watch's read where settle asks nothing); a row no file holds read +51 / +117 ms
+  for nothing until the watch went `idle`; finish's scan 0.81–1.15× (the same code path). The mutation pass (85 mutants: the
+  lift's 8, the watch's 77): 78 killed — 17 of them by fixtures the first pass showed missing (a namesake's non-component
+  export, a folder's index, a candidate's name row, two name rows in a file, a renamed import by its imported name, a
+  member's part, a .js-written module, four namesakes out of path order, 51 unlocated, a cut in `reach`, the follow's own
+  budget, an .mdx part tag, the idle watch) and the cost guards sharpened (G2q: 500 rows over pages that name none ≤ 1.25×
+  one — the `includes` prefilter 2.49×; a feature's report 2.95× with a watch built); the 7 left: an equivalent memory guard
+  (`unbound` for located rows only), the walk-cap repeat (scratch-checked) and five cost guards timed with and without on
+  shadcn-ui / cal.com / Starlight — the binding filter 1.43–1.46×, the text prefilter 1.01–1.13×, the module check's index,
+  the namespace-binding and member filters within noise (0.93–1.07×).
+- **1.39.0 review 1** (the deprecated uses, fix round 1 — R1-DEP-1…8, R1-DOC-1) — each MEDIUM fixed by the property its
+  reviewer named, from the reviewer's fix copies re-derived and checked against b5e95372 and 92c44e0a both ways. R1-DEP-1: a
+  row the seed writes with a component folder's barrel (`| VbenButton | …/button/index.ts |`, `export { default as
+  VbenButton } from './button.vue'`) was `unlocated` — vben 55 of its 349 rows, cal.com 8, shadcn-svelte 6, outline 2 — and
+  the reason printed was false. The reviewer's fix made EVERY result a source of name rows; checked both ways it also made a
+  barrel's part a namesake of a LOCATED row (input-group's `export { Button }` of its own button, select's `Item`):
+  shadcn-svelte +2,367 pairs on rows 1.39 had located (Item +348, Label +239, Input +117, Button +30) — wider than the
+  finding, the 1.38 lesson. Cut to the rows NO file locates (`nameRows(r, byFile)`, the barrels after the files): every gain
+  is on a newly located row (shadcn-svelte +1,412 on its 6 — Content, Group, List…, each a name many barrels give, all in
+  `paths`: the namesake rule), no located row moves; vben's VbenButton 45 importers of the 46 grep finds. The unlocated
+  line says only the property (no component file the scan reads — a component folder's index among them — gives the name),
+  ui-code-scan.md and tooling-reference the same. R1-DEP-2: a file whose DEFAULT export is the row's name binds its default
+  importers (`defaults` / `byBase` / `bases`, as a module row's file) — outline ListItem +19, LoadingError +2,
+  NavLinkWithChildrenFunc +2, PdfViewer +1, Separator +2; cal.com DisableTwoFactorAuthModal +2, BookingListItemWithProvider
+  +1; motion-primitives GitHubIcon / XIcon +2 each — each read in its clone. R1-DEP-3: `RE_TYPE_MODIFIER` — 6 pairs leave
+  (vben PaginationItem.vue, ToggleGroup.vue; cal.com's two app-store KeyInput.tsx and DisconnectIntegration.tsx; outline
+  Collaborators.tsx — those two render another component and import only a type through the folder: the note's "a type
+  through a barrel"), and `import type * as` the row's own file now counts (the module rule); importClause is settle's: the
+  scanCode JSON with no registry is byte-identical to 1.38.0 (settle's keys) and to b5e95372 (all of it) on 21 clones, and
+  every row marked against none too. R1-DEP-6 (a subtraction): `scriptHas` — vben's SheetContent.vue leaves; of the
+  reviewer's 51 shapes two move, both to their stated want (`vue-twin-ts`, `vue-index-vue-and-ts`: 0). R1-DEP-4: the rows
+  still imported first, the CLI head's total `rowsTotal` — and, past the brief, "at least" when every listed row is imported
+  and some are not (else 50 is said where 70 are). R1-DEP-7 (prose): the note's sixth "not seen", a tag an auto-import names
+  by its folder (Nuxt's `<BaseCard>`). Every row of the 16 component clones marked, the release against the fix: 7 pairs
+  leave (the six types, the twin), the gains above, nothing else. Left for 1.40: a file importing the file a barrel renames
+  (vben icon-button.vue's `import VbenButton from './button.vue'` — the 46th), the CLI row line calling a barrel-located
+  row's barrels "component files", a row used only through `unbound` tags ordered with the unused. R1-DEP-5 / R1-DOC-1, the
+  watch's cost re-measured (cost139.js: 1.38.0's report and the fixed engine's in one process, interleaved, median of 7; the
+  increment = the fixed scanCode with the row less without): ONE used row on trees of 700 view files or more 1.00–1.18×
+  1.38.0 (cal.com 1.00, mantine 1.01, vben 1.04, nuxt/ui 1.06, shadcn-ui 1.13 +236 ms, outline 1.15, shadcn-svelte 1.18);
+  every row marked (≤ 500) 1.04–1.43× (cal.com / mantine 1.04, vben 1.06, nuxt/ui 1.25, shadcn-ui 1.26 +482 ms,
+  shadcn-svelte 1.35, outline 1.43 +429 ms); on the smaller trees, where the scan otherwise reads no script for its
+  components, +27 to +144 ms — up to 2× a report of 30–250 ms (sakai-vue 44 → 86 ms 1.97×, astro-paper 1.89×, Starlight
+  122 → 222 ms 1.83×, magicui 1.78× +144 ms, motion-primitives 1.61×, taxonomy 1.38×, tailwindcss.com 1.36×, Breeze 1.24×,
+  Bootstrap and Bulma at noise); the reviewers' loaded runs of the same shape gave Starlight +141 to +239 ms (2.4–2.8×),
+  magicui / tailwindcss.com 1.6–1.8×, and chain A's own two runs +2 to +108 ms and up to +374 ms: the small-tree range is
+  +25 to +240 ms, up to ~2.8×. Foundation, open-props, pico hold no component (idle, nothing read). The no-registry report
+  at the same moment 0.78–1.15× (outline 1.08×; review 2 measured outline 1.05–1.11× with the script search on and
+  0.97–0.99× with it off — its ~+90–110 ms IS outline's increment, the 1.21× the noise around it). The fix
+  against the release as reviewed 0.93–1.03× (shadcn-svelte's 1.11 / 1.14 re-measured alone: 71 → 62 ms, 130 → 137 ms).
+  R1-DEP-8 (tests): ONE tree for the count bounds (6,012 files, two reports — every cut, then every bound; 8,004 files and
+  five reports before), each folder made once, G2q on 50 pages (the `includes` mutant 1.42–1.47×, 2.2–2.6× on 200: a
+  linearity ratio). Each file alone, 1.38.0 · the release · the fix interleaved, 2 rounds: the deprecated file 6.7–6.8 ·
+  17.2 · 15.5–16.9 s (2.3–2.5×; the count bounds' tree is ~7 s of it — 2,001 + 3,010 + 1,001 files are the bounds' floor, read
+  twice), the cost file 14.5–16.0 · 38.0–38.9 · 35.8–36.2 s (2.2–2.5×: G1–G3's trees), the CLI's 15-quality-design-system
+  2.6 · 3.6 · 3.8 s — about a tenth less than the release, not the 2× the finding asked: a smaller count bound needs the
+  bounds injectable (an engine change: 1.40). Mutation pass: 37 mutants, 37 killed (one re-formed: dropping `filesOf(at)` crashed before the
+  fixture ran); M3d equivalent, M6b not applicable.
+- **1.39.0 review 2** (the deprecated uses, fix round 2 — R2-DEP-1 MEDIUM, made by round 1's fix of R1-DEP-1; R2-DEP-2 and
+  R2-DEP-3 LOW) — R2-DEP-1: round 1 located a row no component file locates by EVERY component folder's barrel that gives its
+  name, so a kit's part names counted every other component's parts: shadcn-svelte's `Content` (the picker's, as the seed
+  writes it) 889 importers, 13 of them the picker's; `Group` 399 / 13; `List` 114 / 1 — 1,375 false pairs, the CLI saying
+  "migrate each". The owner's ruling, a narrowing by a property: how many FILES the barrels give the name to (`givenTo`) —
+  more than one, only the barrel the row's path names (`rowAt`); one, every barrel, as before. From the reviewer's prototype
+  (relative re-exports only, every entry of the barrels' re-export maps), re-derived: the names `nameRows` reads, so a
+  same-name `export { X } from './x'` — which locates nothing — counts nothing; a name the barrel declares is the barrel's own
+  file (bits-ui's older `const Trigger = Primitive.Trigger`: 0 pairs on the clones, the property's own case); another
+  package's re-export places no file (vben's common-ui `export { VbenButton } from '@vben-core/shadcn-ui'` — counted as a
+  file, it narrowed VbenButton to that barrel); the path read as `_Implements:_` is, then `moduleKey`, the barrel's key or
+  its folder's (`./…/picker`). The unlocated line names the path's index (EN / PT / ES), as ui-code-scan.md and
+  tooling-reference do. Every row marked (cmp.js: 490 rows a clone, in slices of 50), against c63bcfcb: shadcn-svelte
+  −1,375 (Content 876, Group 386, List 113; Picker.Content 13, Picker.Group 13, DocTabs.List 1 left — the reviewer's
+  prototype pair for pair), vben, cal.com, outline and the 17 others 0 (VbenButton 45 importers); against b5e95372 round 1's
+  deltas unchanged (vben −3 / +243, cal.com −3 / +12, outline −1 / +48, motion-primitives +4), shadcn-svelte +37 on its six
+  newly located rows (was +1,412). The 889 need `$lib` resolved: the clone's copy without `docs/.svelte-kit/tsconfig.json`
+  (no `svelte-kit sync`) moves 0. R2-DEP-3 (a subtraction): `RE_TYPE_MODIFIER` takes the modifier with no blank after it,
+  `import type{ X }`; settle-diff on 21 clones (+ that second copy): settle's keys = 1.38.0, the scanCode JSON with no
+  registry = b5e95372 = c63bcfcb, every row marked = none; four constructed shapes (`import type{` before `type(…)` among
+  them) as 1.38.0. The comment had said the brace list's names are bound "as an inline `{ type X }` is": that entry binds a
+  local named `type` and X is never followed — the comment says so now (prose; the behaviour kept). R2-DEP-2 (prose):
+  ui-code-scan.md says an index locates a row only when no component file gives its name, and only the path's index when
+  several give it to different files. The fixture (15-quality-design-system-deprecated.js, "review 2"): the reviewer's
+  parts shape (card / dialog / picker barrels) — Content, Group (two files, the folder spelling), Trigger (declared twice),
+  Footer (a path naming none: unlocated), VbenButton (one file, two barrels and a package's), VbenTooltip (packages'
+  re-exports alone), `import type{` / `import type  {` / `import type X from` the row's file; with the fix reverted five
+  of its eight checks fail. Mutation pass: 18 mutants, 16 killed; the two left are equivalent — `givenTo`'s guards (a
+  located row's count and a name no row marks are never asked: they bound the loop's work). The cost, against c63bcfcb (one
+  process, interleaved, median of 7, a loaded machine): one used row 0.91–1.15×, every row marked 0.91–1.15× (shadcn-svelte
+  0.91: fewer name rows), within the noise the same run shows (cal.com's increments came out negative); the hostile tree
+  (1,000 barrels × 500 marked names, every name narrowed) 2.47–2.69 s against 2.46–2.71 s, heap 107–119 MB against
+  113–136 MB. Review 1's 51 shapes and 13 hostile files: no difference. Left for 1.40 (with round 1's three): a file
+  importing the file an index renames (vben's icon-button.vue), and a located row's namesake through a package's index
+  (cal.com's atoms/index.ts, which re-exports its BookerPlatformWrapper as Booker: 1 pair) — the docs say an index
+  locates a row only when no file does.
+- **1.39.0, the Linux run** (the release's Docker run, four images — a test's yardstick, no engine change) — G1's `asks`
+  check (15-quality-design-system-cost.js) failed on all four Linux images at 1.69–1.83× while Windows gave 1.02×: its
+  yardstick was the same report with no row marked, where settle parses its 50 pages alone, so the ratio was the watch's
+  300 parsed pages against a report the reads dominate — on Windows they weigh (~155 ms a report), on Linux they are cheap
+  (~45 ms) and the parse IS the report: a read-speed ratio, +19–24 ms, the small-tree increment the CHANGELOG states.
+  The yardstick now parses the same pages: the report with none where every page the watch reads also names settle's
+  candidate — 1.01× Windows, 1.06–1.07× Linux (node 22 / 24), under the same 1.5× bound. What it hides, measured with a
+  stand-in (every Button page naming Table: 600 parsed for 300): a watch that parses pages naming no marked row, 1.05×
+  Windows, 1.30× Linux — the bound catches a second read of the tree, never that (nor did the old yardstick on Windows,
+  1.06×). The mutants the cost guards kill (M38's prefilter, the feature report's `withComponents`) are the `prefilter`
+  and `feature` checks', unchanged.
+- **1.39.0, the release as merged** (the docs pass, after the four chains merged E → B → C → A; this summary is the 1.39
+  round's for every area — the UI checks' and the state matrix's own entries below) — the ruling (DECISIONS) built ~15 of
+  the ~29 mechanisms the four designs held (A 5, B 4–6, C 3, E 3; 1.38 shipped ~17 and needed three review rounds), to one
+  bar: nothing 1.38.0 judged right is silenced, nothing it passed is refused — 1.39 adds no refusal. CUT, each with the
+  number that cut it (the 1.40 backlog): the size families — `token` / `off` / nearest / a whole scale / the package scope
+  (0 judgments on the six common shapes, 282 of 291 from one app of 12; the sole reason for an observer fan-out, a scanCode
+  rename and two scan keys); DESIGN.md as a token source (an alpha spec that changed again on 2026-11-17; read as the
+  registry's it would rename tokens 1.38 reports); motion off / nearest; R2-T2 (an oklch / oklab value against an HSL token
+  by the written precision: `token` lost on 21–82 % of real same-source pairs — 1.38's 0.011 sentence stands);
+  `@custom-media` (an alias list: 10 of 47 sampled files define one width, so a lone `--md` would capture [320, 768] where
+  1.38 captured five); Tailwind 3's `screens` (41 of 104 sampled keys are `container.screens`, a max width); BS-3 (a
+  `TBD` / dash matrix read as template: 1.39's only new refusal, at size s where 1.38 only noted, through
+  `sectionLineKey`, which every track's and pack's tables share); BS-4 (tables with the same views one matrix in parts:
+  it would silence a desktop / mobile pair where one lacks `Offline`); R2-BS-2's engine change (a number-led note is
+  meaning, not syntax); the `uiStates` stamp (nothing in 1.39 makes ui-states warn on a design 1.38 passed —
+  gates-and-approvals.md → History); D1 (a markup file's template and `<style>` decided as one file for
+  font-size-viewport: it hid three true findings 1.38 caught — R3-UI-1, `RE_TW_TEXT_ANY` and A2 stay documented); D2
+  (Astro's `define:vars` in THE shared line walk: no real effect, a bug in its in-tag state); D3 (`:is()` / `:where()`
+  focus selectors: 0 of 661 candidates); D5 (a skipped sheet's focus styles: parses one sheet, 0 cases); the floor-zoom
+  capture keeping scrollbars (they shrink the client width: "the width got" undefined — ui-responsive.md's `100vw`
+  sentence was made true instead); `width-viewport` as a rule (22 boxes in 18 clones, 1 likely defect); S12 (harness
+  folders as test files: 0 findings, and it moves the guard, protected tests, coverage, trace and the duplicate detector);
+  S9, UP-6 and the list-item / bold marker spellings (prose, as 1.38 left them). Budgets: ui-code-scan.md's cap 30,000 →
+  32,000 (F0: its pinned table is 64 % of it; 30,918 B at the end), ui-design-patterns.md 44,379 / 48,000,
+  ui-responsive.md 11,210 / 12,000, SKILL.md, tools/list, ui-review.md and spec-ui-reviewer.md +0. THE MERGED TREE'S
+  COST (CRIT_X D3's re-run, all four merged): 1.39 against 1.38.0, the project report with the UI pass and NO
+  registry (so the deprecated watch idle: its own cost, one row marked, is chain A's entry above), both engines in one
+  process, interleaved, median of 5 — shadcn-ui 1.05× (+107 ms) · mantine 0.98× · cal.com 0.96× · outline 1.21× (+249 ms:
+  the fact's script search runs there) · vben 0.93× · nuxt/ui 0.96× · shadcn-svelte 0.97× · Bootstrap 0.96× ·
+  tailwindcss.com 1.04× · taxonomy 1.12× (+17 ms) · motion-primitives 0.91× · sakai-vue 1.13× (+6 ms) · Breeze 1.02× ·
+  Starlight 1.05× · Bulma 1.05× · Foundation 1.06× · open-props 1.03× · pico 0.94× · magicui 0.97× · astro-paper 1.06× —
+  within DECISIONS 6's bar (≤ 1.25× at 700 view files or more, ≤ +150 ms below; outline's +249 ms is at 791 views, 1.21×).
+  The chains' own figures above were each measured alone on a machine the others loaded; where they differ (taxonomy 1.25×
+  in B's run, outline 1.03× in C's) this table stands, and a re-run by the docs pass on a loaded machine (absolute times
+  ~2× these) moved the same trees between 0.92× and 1.46× (taxonomy +72 to +123 ms, outline −192 to +216 ms): the
+  small-tree increments are at the noise's size. The feature report's and finish's cost are unchanged (finish's
+  `scanCode(root, false)` builds no observer, no watch and reads no script); finish's VALUES move through D4 alone (vben's
+  alert.vue: its two false click-no-keyboard warnings leave). Merged, before the docs pass: MCP 2957, CLI 703.
+- **1.39.0 review 1** (area breakpoints-units: BU-1 HIGH; BU-2 / BU-3 / BU-4 LOW — prose and wording; BU-5 is the state
+  matrix's, below) — BU-1: `breakpointsReport` spread each source's unread into `push(...)`, and since the Sass reader a
+  `$…breakpoints` map's every non-length entry is one — two 256K sheets of one-line maps of 480 unitless entries (each
+  line under DS_PRELUDE) are ~129,600, past V8's ~125,000 arguments: RangeError, and `spec_scan {designSystem}` /
+  `dev-spec design-system` lost the whole report, both shapes (1.38.0 threw at the same statement on 14 hostile Tailwind
+  sheets, ~147,000 distinct `--breakpoint-*`; the Sass route needs two). The reviewer's one-line fix (a loop for the
+  spread) left every record kept; re-derived: the memory sat in the records, not the copy — 100 such sheets (the walk's
+  `DS_TOKEN_READS`) held 6.48M bad entries, +778 MB of heap with the spread gone (1.38: +37 MB). So the count plus the
+  first `BP_UNREAD`, at both levels: `codeBreakpoints` keeps five and counts (`unreadTotal`), a Sass record its own first
+  five and `badTotal` (an entry past them is never among the report's first — the record's five precede it), and
+  `breakpointsReport` joins one by one. Measured (both engines in one process): the crash shapes return the report
+  (crash2: 129,600 counted, +6 MB; the 14 Tailwind sheets 147,084, +33 MB; 100 wide sheets 6,480,000, +47 MB); what
+  stays linear is one record per assignment — 100 sheets of one-line single-entry maps (933,100 records) +479 MB against
+  1.38's +65 MB (no Sass reader), the same class as 1.38's `decls` per Tailwind declaration: a cap on the records kept
+  goes to the 1.40 backlog (a new limit, not a fix). Cost at the engine, the walk with the observer against its twin the
+  pre-test skips, interleaved medians of 7: the Sass shape (three sheets) 24 ms against 5 (+19 ms; 1.38 reads no Sass
+  map — its time is the twin's), the Tailwind one (200,000) 437 against 258 ms, 1.70× (1.38: 1.49× to its throw). The
+  oracle replay (the reviewer's bp.js on 67 clone trees, the 100-file Sass sample, the 36 fx-sass shapes, fx2, 528
+  Tailwind themes): breakpoints and tokens byte-identical to b5e95372 on every one; against 92c44e0a the differences are
+  exactly b5e95372's (15 clone trees: the partial fill and the Sass map). `codeBreakpoints` is exported for its own
+  fixture (BP-crash, 15-quality-design-system-breakpoints.js: the Sass shape with ui.md's unread first, 1.38's Tailwind
+  shape, the record bound, a set-aside hostile `!default` map counting nothing, the scan, MCP and both shapes, a cost
+  ratio each ≤ 3× + 50 ms; the CLI's in cli/tests/15-quality-design-system.js — exit 0, the count, `… +N`). BU-2 / BU-3
+  (prose): ui-responsive.md says a map of maps is neither read nor listed and two `!default` maps of one name both count
+  — ui.md's line chooses (a 17-docs row runs both through the scan). BU-4 / R1-DOC-3 (wording): a FIRST row past the
+  brief's 400 said "N rows … too long to quote here" — now "the first row is too long to quote here — N rows in the
+  registry: read them there" (EN / PT / ES — the colon a clause start, so pt-BR derives `leia-as`; the prefix rule
+  unchanged). The mutation list came before the fixtures (%TEMP%/dsd-139f1-B/MUTATIONS.md): 28 of 28 killed in a copy —
+  15 on the bound (1.39's own spread back, 1.38's Tailwind path unbounded, every record kept, the count of the kept only,
+  six kept, ui.md's unread dropped or after the code's, ui.md's path spread — first listed as equivalent, it is not
+  without the final slice: a fixture of six ui.md unread —, the record bound off, `badTotal` ignored or counted for a
+  set-aside map, a single-entry record's `badTotal` left 0 — two fixtures gained `unreadTotal`), 9 on the two wordings
+  (EN / PT / ES each, the header bound's argument, the plural, the pt-BR clause start), 4 prose clauses and pins.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
@@ -3011,6 +3472,41 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   node:24-alpine (4.7) and passed alone 3×; 1.37.0 and 1.38.0 measured in one process inside that image: medians 1.75 and
   1.69 (node:22 1.60 and 1.79), both spiking to 3–4× — a ~1.3 ms denominator (120 files) a GC pause moves. The check now
   reads 1,200 files (a ~13 ms denominator), its bound unchanged.
+- **1.39.0** (chain C — item 2 of the owner's 1.39 list as CRIT_X and the DECISIONS cut it: ~29 mechanisms designed across
+  the release, D1 · D2 · D3 · D5 and the floor-zoom capture change cut, ITEM_2's other six kept) — D4: Vue's
+  `<component :is>` is a component (its click and style unjudged); the design also made it a CONTROL inside a click body,
+  and the oracle replay (`uiChecksOf` of the 27 clone checkouts' view / style files, this tree against 92c44e0a) showed the
+  design's count wrong — 4 findings left, not 2: alert.vue's two (false) and vben's preset tiles (`content.vue:40`,
+  `theme.vue:71`, true — a mouse-only tile around an icon's `<component :is>`); the narrower reading (CHAIN-BRIEF) keeps
+  1.38's body rule, so 2 leave, 2 stay. UP-7: `RE_DS_OFF_ENTRY`'s code-span branch (the 1.38 docs' own spelling read
+  `unreadable`). D6: the script search (Motion and the fact, above) with CRIT_2's must-fixes 5–7 — the limit says WHICH
+  bound (`bound`), the CLI says "the first N" only then, ONE read loop (`readHeads`, the views' and the scripts'), the
+  `.stories.ts` / `e2e/` / 8 MB fixtures, the prose that a test setup's mention counts. The `100vw` sentence of
+  ui-responsive.md made true (width-viewport, above). Oracle, both corpora (`%TEMP%/dsd-139d-2/clones`,
+  `%TEMP%/dsd-139d-1/repos`): the project report without the pass byte-identical on all 27 (scanCode's new `scripts` key
+  never reaches it); the inventory differs on three — outline's fact withdrawn (1.38's was false), sakai-vue's gains
+  `motion-scripts` {read: 10, count: 1, file: `src/service/CustomerService.js`} beside its true fact, vben's
+  click-no-keyboard 9 → 7 (alert.vue's two; the same in both corpora's copy of it); every other finding, fact and limit
+  identical. ui-code-scan.md −15 bytes net (CRIT_2 must-fix 8: the fact's sentence +39, its example and two spellings
+  shorter); ui-responsive.md +151. Mutation pass, the list written before the fixtures (%TEMP%/dsd-139-c/MUTATIONS.md):
+  56 / 56 killed, each by its rule's fixture — D4's twelve (the bound / static split, each predicate's `name` vs the written
+  tag, the quotes, the case), UP-7's five, D6's 29 (the gate's inputs by the spy, the three filters, the sort and its
+  tiebreak, each bound and its off-by-one, the limit's three conditions, the off fact, the shared loop's `over` and `cut`,
+  both constants through the prose; the stop at the first mention a cost guard, killed by its timed ratio), the CLI's four,
+  the prose's six (a test setup read as a test among them). Cost, this tree ÷ 92c44e0a, one process, the two engines side
+  by side, interleaved in alternating order, median of 7, on a machine three other chains loaded (%TEMP%/dsd-139-c/cost.js):
+  the project report with the pass — mantine (4,340 views) 1.00, outline (791, the fact said: the search runs) 1.03 (+56
+  ms), vben (729) 1.01; motion-primitives +15 ms, sakai-vue +3, taxonomy +71 (all 35 scripts read), breeze −21 (no search:
+  noise) — within DECISIONS 6's bar (≤ 1.25× at 700 views or more, ≤ +150 ms below); `uiChecksOf` over the same clones'
+  view files (the feature report's and finish's per-file part, D4) 0.89–1.03.
+- **1.39.0 reviews 1 and 2** (the UI checks' prose; no engine change) — review 1: the registry's marker bullet still listed a
+  code-spanned id as "another shape" (UC-2: an id in ONE balanced code span reads as bare since UP-7); THE SCRIPT SEARCH's
+  current rule quoted CRIT_2's prototype cost and a vendored example under `vendor/`, which the walk skips (UC-3); "a test
+  setup's included" was true only outside a test folder (UC-4 — `src/test/setup.ts` is a test file, never read); the doubt
+  sentence of ui-code-scan.md now says a bound `<component :is>` in a click body is none (R1-DOC-4 — the D4 narrowing that
+  keeps vben's true tiles). Review 2 re-measured the search at its 2,000-file bound on a small UI (158 views beside 3,381
+  scripts): ×1.5–1.7 (+240–350 ms; CPU ×2.05) — past DECISIONS 6's +150 ms for small trees; the owner ACCEPTED it as said
+  (the CHANGELOG states it), as the deprecated uses' watch; a smaller `DS_MOTION_SCRIPTS` is 1.40's question.
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table
@@ -3045,3 +3541,25 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and this tree alike: the engine unchanged, in EN / PT / ES). ui-design-patterns.md and the verdict bullet above say so;
   17-docs runs a written line over the untouched matrix (filled, `ui-states` warns) and over the scaffold with its TODO
   (unfilled).
+- **1.39.0** (item 3 of the 1.39 round — chain B; BS-5 alone of the matrix's three) — `US_HEADER` (64): the anchor looked
+  for in a header's first 64 cells, `t.header.slice(0, US_HEADER)`, the cut folded into `truncated.views` (CRIT_3 must-fix
+  6: no fourth `usTruncated` argument, so the three languages and 1.38's bound fixture stay as they were). The design's
+  length pre-test did not fix the measured shape — 1,000,000 cells of 4–8 characters each pass "≤ the longest label" —,
+  and a `dsSlot` pass over the columns before the anchor costs as much as the word read. Measured: 200,000 cells, the anchor
+  last, 0.29× `sectionState` (1.38: 2.1–2.8× over the recorded runs — 2.25–2.84× the designer's header.js re-run by the
+  critic, 2.1–2.75× the chain's own). Lost: an anchor past cell
+  64 — no real header has one; said when it happens. BS-3 (a row keyed by its answering cells, so a matrix of `TBD` /
+  dashes / ticks reads as template and the gate refuses it) is CUT (CRIT_X cut 4: 1.39's only new refusal, at size s where
+  1.38 only noted, through `sectionLineKey`, which every track's and pack's tables share, and four approved-design
+  surfaces — spec_upgrade's attention, the roadmap's list, status' `filled`, the save hook): 1.38's prose stands. BS-4
+  (tables with the same views one matrix in parts, its detail prefixed "tables 1 + 3 ›") is CUT (CRIT_3: a narrowing that hides a real gap —
+  desktop / mobile matrices with the same views, one lacking `Offline`, would go silent): 1.38's prose — a row per state in
+  each table — stands. The `uiStates` stamp stays cut: nothing in 1.39 makes `ui-states` warn on a design 1.38 passed.
+- **1.39.0 review 1** (BU-5 / R1-DOC-5 — LOW, wording) — an anchor past a header's first 64 cells gave `usNone` and the cut
+  in the view bound's words ("only the first 10 tables, 60 rows each and 12 view columns were read"): a user looked for a
+  view-column problem. `usTruncated` takes a fourth argument, `US_HEADER`, and its EN / PT / ES text a fourth clause — a
+  header's first 64 cells (the number from the constant, not written into the three languages); the status, the state and
+  `truncated` unchanged (CRIT_3 must-fix 6 had kept the text to spare its 1.38 fixture: both `cut()` helpers of
+  15-quality-ui-states.js now pass 64, and the BS-5 fixture asserts the clause in PT and ES too). One 1.38 range for the old
+  header cost, 2.1–2.8× (the CHANGELOG, the current rule above, the test's comment); re-measured with the fix (h1.js, the
+  H1 shape, medians of 5, three runs): 1.38 2.59–2.75×, the fix 0.26–0.28×.

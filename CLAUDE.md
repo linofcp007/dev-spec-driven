@@ -53,10 +53,11 @@ file states the CURRENT rules first; its `## History` at the end keeps how they 
 - **`docs/maintainers/quality.md`** — before changing steering amendments, cross-feature criteria, the glossary, the
   design's trade-offs / risks / reuse checks (the m / l Reuse gate), the constraint nudge, the critical flows (their nudge,
   doctor warns and everyday-sense cues), the brief's Reuse section, the duplicate-code detector or the design-system registry
-  (`.specs/steering/design-system.md`, doctor's `ui-design-system` / `ui-deprecated`, spec_scan {designSystem}; raw values
-  against the scale, token drift and the units table — engine/design-values.js —, the breakpoints — engine/breakpoints.js),
-  the UI checks (engine/ui-checks.js — the project UI inventory, the `_UI checks off:_` marker) or the UI state matrix
-  (doctor's `ui-states`): Spec quality · Design trade-offs and risks · Reuse & Integration and clean code · Duplicate-code
+  (`.specs/steering/design-system.md`, doctor's `ui-design-system` / `ui-deprecated`, spec_scan {designSystem}; the
+  deprecated uses — the files that still import a `_Deprecated:_` component, settle's follow —; raw values against the
+  scale, token drift and the units table — engine/design-values.js —, the breakpoints — engine/breakpoints.js, a Sass
+  `…breakpoints` map too), the UI checks (engine/ui-checks.js — the project UI inventory and its reduced-motion script
+  search, the `_UI checks off:_` marker) or the UI state matrix (doctor's `ui-states`): Spec quality · Design trade-offs and risks · Reuse & Integration and clean code · Duplicate-code
   detector · Design-system registry · UI checks · UI state matrix.
 - **`docs/maintainers/claude-code-integration.md`** — before changing a hook, a command name, guard mode, the approval
   guard, the status line, user defaults, the dev-spec project probe or the plan-mode bridge: Hooks and commands · Guard
@@ -168,9 +169,9 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(2911 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(2983 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 698 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 705 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its
 AREA: `mcp/tests/NN-<area>.js` / `cli/tests/NN-<area>-<topic>.js` (NN is the area, the same in both; `--list` says what
 each holds; `--only <file|area|NN>` runs a part, plus the files it needs — testing.md → The suites). Keep

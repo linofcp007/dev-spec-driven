@@ -1971,6 +1971,24 @@ const COMMANDS = [
             r.stale.forEach((m) => log("    " + m.name + " — " + m.path));
             more(r.staleTotal, r.stale.length);
           }
+          // 1.39: the files that still import a `_Deprecated:_` component — a report (its note says what is not seen; its own
+          // bounds the lines below it, those the report's limits say aside)
+          const dep = r.deprecatedUses;
+          if (dep) {
+            const plus = (shown, total) => shown.join(", ") + (total > shown.length ? " … +" + (total - shown.length) : "");
+            // (the rows still imported come first: of the rows the code holds a file for, those listed imported — every one, unless
+            // each listed row is imported and some are not listed: then at least that many)
+            const used = dep.rows.filter((x) => x.filesTotal).length;
+            if (dep.rows.length) log(T.dsDepUsesHead(used, dep.rowsTotal, used === dep.rows.length && dep.rowsTotal > dep.rows.length));
+            dep.rows.forEach((x) => {
+              log(x.filesTotal ? T.dsDepUsesRow(x.name, x.use, x.filesTotal, plus(x.files, x.filesTotal), x.pathsTotal > 1 ? x.pathsTotal : 0) : T.dsDepUsesNone(x.name, x.use, dep.read));
+              if (x.unbound) log(T.dsDepUsesUnbound(x.unbound, x.name, x.unboundAt));
+            });
+            more(dep.rowsTotal, dep.rows.length);
+            if (dep.unlocatedTotal) log(T.dsDepUsesUnlocated(plus(dep.unlocated, dep.unlocatedTotal)));
+            log("  (" + dep.note + ")");
+            dep.limits.filter((l) => !r.limits.some((x) => x.code === l.code)).forEach((l) => log(T.dsLimit[l.code](l.read, l.chars, l.count)));
+          }
           if (r.registry.exists && r.newTokensTotal) {
             log(T.dsTokensNew(r.newTokensTotal));
             r.newTokens.forEach((t) => log("    | " + cell(t.name) + " | " + cell(t.value) + " |  |")); // a row to paste into the registry
@@ -2001,7 +2019,8 @@ const COMMANDS = [
             if (u.silenced) log(T.uiSilenced(u.silenced));
             offLines(u);
             u.facts.forEach((x) => log(T.uiFact[x.code](x.count, x.file + ":" + x.line)));
-            u.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count)));
+            // (1.39: motion-scripts' `bound` — which bound ended the script search — its 4th argument)
+            u.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.line ? l.file + ":" + l.line : l.file, l.count, l.bound)));
           }
         }
         r.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.file)));

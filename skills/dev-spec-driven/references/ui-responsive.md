@@ -32,20 +32,26 @@ from the first of these that gives a width of 320 px or more:
    expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width
    ends the list: write `640 (sm) · 768 (md)`, not `sm 640 · md 768` (640 alone); px, or rem / em at 16 px; a bare
    number takes the unit written after it, `360 / 768 / 1280 px`; `1,440` is one width), its first 200 characters;
-   a `[…]` is the stub's slot and never read — write the widths without the brackets —, so an untouched stub falls
-   through;
+   the stub's own `[…]` slot is never read, so an untouched stub falls through — your widths written inside its
+   brackets are, and any other bracket is an aside, never a width (`480 / 960 px [1200 in print]` is 480 and 960);
 2. a top-level Tailwind 4 `@theme` block's `--breakpoint-*` in a stylesheet the code scan reads (unless the sheets reset
    them — `--breakpoint-*: initial` or `--*: initial` —, Tailwind keeps its own five too, which are not read: the default
-   set joins the theme's — list them all in ui.md to choose);
+   set fills the places the theme's widths leave — list them all in ui.md to choose), and a top-level Sass map whose
+   name ends in `breakpoints` (`$grid-breakpoints`, `$breakpoints`, an override in `@use … with (…)`) in a .scss sheet
+   the scan reads — a plain assignment over a `!default` one;
 3. the default set: 320 · 390 · 768 · 1024 · 1440 px.
 
 At most six widths, 320 first (the reflow width) — past six, the narrowest five and the widest, the rest said; where
-the default set joins a theme's, a declared width may be one left out — list the widths in ui.md's line to choose them.
+the default set fills a theme's places, it comes in the order 768, 1024, 1440, 390, and only where room is left — list
+the widths in ui.md's line to choose them.
 `dev-spec design-system <feature>` prints them and where they came from (without a feature too, and
 `spec_scan {designSystem: true}` in both shapes), and lists a value it could not read (`calc()`, `var()`, wider than
-3840 px) with its place — write the widths in ui.md's line then. A framework's own defaults (in its package), Tailwind
-3's `screens` (a JS config) and a Sass map are never read: paste the line into ui.md instead, keeping the rest of it
-(`- Breakpoints: 640 / 768 / … px · text expansion …`):
+3840 px, `map-merge(…)`) with its place — write the widths in ui.md's line then. A map of maps (Bulma's
+`"mobile": ("until": $tablet)`, a hand-written `'small': (min-width: 767px)`) is neither read nor listed: paste its
+widths into ui.md's line. Two `!default` maps of one name (a library copy beside your own) both count: list the widths
+in ui.md's line to choose them. A framework's own defaults (in its package), Tailwind 3's `screens` (a JS config) and a
+map in a file the scan does not open by name (`_config.scss`, `_settings.scss`) are never read: paste the line into
+ui.md instead, keeping the rest of it (`- Breakpoints: 640 / 768 / … px · text expansion …`):
 - Tailwind's defaults: `- Breakpoints: 640 / 768 / 1024 / 1280 / 1536 px`
 - Bootstrap 5: `- Breakpoints: 576 / 768 / 992 / 1200 / 1400 px`
 
@@ -88,9 +94,10 @@ font size. Write the team's choice in `design-system.md`'s units table, which th
 
 - **`100vw` counts the classic scrollbar** (Windows, most Linux desktops, macOS set to always show scrollbars): an
   in-flow box at `width: 100vw` is a scrollbar wider than the page — a sideways scroll. Use `100%` there. A fixed overlay
-  (`position: fixed; inset: 0`) or a decoration its parent clips is fine, so no check flags `100vw`: the visual review
-  measures the sideways scroll instead. Chrome 145 subtracts the scrollbar from `vw` only where the root reserves its
-  room (`scrollbar-gutter: stable`, `overflow-y: scroll`) — Bramus Van Damme, bram.us, 2026.
+  (`position: fixed; inset: 0`) or a decoration its parent clips is fine, so no check flags `100vw` — and the visual
+  review's captures hide scrollbars (`--hide-scrollbars`, Playwright's headless default), so nothing measures it: check an
+  in-flow `100vw` box yourself at a desktop size, scrollbars shown. Chrome 145 subtracts the scrollbar from `vw` only
+  where the root reserves its room (`scrollbar-gutter: stable`, `overflow-y: scroll`) — Bramus Van Damme, bram.us, 2026.
 - **`100vh` on a phone is the tallest viewport**, its toolbars hidden: a `height: 100vh` box's bottom sits under them
   while they show. `svh` is the smallest viewport, `dvh` follows the toolbars (relaid out as they move), `lvh` the
   largest. A full-height app shell: `height: 100vh; height: 100dvh;` (the second line where it is understood); a hero

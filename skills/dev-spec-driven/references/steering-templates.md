@@ -647,18 +647,23 @@ _Libraries: @mui/material_
   retired itself, the text names — by its name alone (`use Dialog`, not `Dialog/Sheet`, `Dialog.Root` or a path) —
   silent when the row's notes name that one, alone too, as this file writes it (`DataGrid`, not "the data grid"): a
   capitalised word reads as the name — to keep a component on purpose, write the name in a code span or a tag. It
-  retires the WHOLE component: write a retired variant or prop without the marker.
+  retires the WHOLE component: write a retired variant or prop without the marker. `dev-spec design-system` lists the
+  files that still import it.
 - A **units table** (below) is optional — the team's convention of which units each property takes: a report, never a
-  default (none is written for you). `spec_scan {designSystem: true, name}` lists a feature's declarations off it
-  (`units`), `spec_scan {designSystem: true}` the rows it could not read (`unitsTable`); never finish, doctor or the
-  brief. `margin-*` covers `margin` and `margin-top`; a component's props table (`| Property | Type | Default |`) is none.
+  default (none is written for you). Its first header cell is `Property` (`Propriedade`, `Propiedad`); its units column's
+  header starts with `Units` (`Unidades`, `Unidad`) — else holds the word (`Allowed units`) — and its cells list CSS units:
+  the units each property is ALLOWED (a column of units to avoid would read as allowed ones).
+  `spec_scan {designSystem: true, name}` lists a feature's declarations off it (`units`), `spec_scan {designSystem: true}`
+  the rows it could not read (`unitsTable`), and a UI task's brief quotes its rows (their first 400 characters); never
+  finish or doctor. `margin-*` covers `margin` and `margin-top`; a component's props table (`| Property | Type | Default |`)
+  is none.
 - `_UI checks off: transition-all (our kit animates colours on purpose)_` — a line of its own, as `_Token sources:_` is
-  (in a list item or bold it is not read), each id bare (in a code span it is not applied), entries separated by
-  commas — switches a UI check off for the whole project: the project's report and every feature's count what it hides,
-  never list it, and finish never warns about it. An entry without its reason in parentheses, or naming no check or
-  project fact, is not applied — the report says why. A design-system.md written only for this line enrols the project in
-  the registry (doctor's `ui-design-system`, finish's New components); without one, silence a single finding with the
-  inline `ui-check-off:` comment (`references/ui-code-scan.md`).
+  (in a list item or bold it is not read), each id bare or in a code span, entries separated by commas — switches a UI
+  check off for the whole project: the project's report and every feature's count what it hides, never list it, and
+  finish never warns about it. An entry without its reason in parentheses, or naming no check or project fact, is not
+  applied — the report says why. A design-system.md written only for this line enrols the project in the registry
+  (doctor's `ui-design-system`, finish's New components); without one, silence a single finding with the inline
+  `ui-check-off:` comment (`references/ui-code-scan.md`).
 - A feature's design lists what it uses in `[UI] Design System Usage` (`Kind | Component | Why / notes`);
   `spec_doctor`'s `ui-design-system` checks those rows against this file, the task brief quotes the entries a UI task
   needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds

@@ -540,6 +540,10 @@ here. "r5 review" is 1.23's fifth review.
   key, never built) and passed a design approved without it as legacy; once the critique anchored the matrix to the scaffold's 1.38 a11y header
   cell, no design approved before could be flagged, and the stamp, its history record and the legacy branch were cut
   (CRIT_4). Its `applies` is ui-deprecated's without the registry: `uiDesigned`, no finish recorded.
+- **1.39.0** — the `uiStates` stamp stays cut, confirmed (DECISIONS, CRIT_3): ui-states' one 1.39 change, the header bound
+  (`US_HEADER`, 64 cells — past them the table is no matrix, a pass that says the bound), only takes warns away, and BS-3,
+  the one design that would have refused what 1.38 passed (a `TBD` / dash matrix read as template), was cut (quality.md →
+  History → UI state matrix). No new warn on an approved artifact, so no new stamp key.
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

@@ -214,7 +214,8 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
   }
 
   { // the FACT no-reduced-motion (UI_FACTS): the files read declare motion and none of the texts read mentions reduced motion —
-    // tested on each WHOLE text as read (never its cut lines), no script search; never in a feature report
+    // tested on each WHOLE text as read (never its cut lines); (1.39, D6) the project's other scripts are read for a mention
+    // too; never in a feature report
     const DIALOG = "export const O = () => <div className=\"data-[state=open]:animate-in fixed inset-0\" />;\n";
     const POP = lines("<template>", "  <p class=\"pop\">hi</p>", "</template>", "<style scoped>", "@keyframes pop {", "  from { transform: scale(.9) }", "}", "</style>");
     // (a stylesheet is read first: its keyframes never take the first place from a smaller path)
@@ -230,17 +231,17 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       // (a minified sheet: its media query past the 2,000 characters a line is read to — the WHOLE text is tested)
       minified: fact("minified", { "src/styles/vendor.min.css": ".a{color:red}".repeat(3900) + "@media (prefers-reduced-motion:reduce){*{animation:none}}\n" }),
     };
-    // (no script search: a mention in a .ts hook alone is not read — the fact is worded "the view files read")
+    // (1.39, D6: a mention in a .ts hook alone takes the fact back — 1.38 said it, the hook unread)
     const script = fact("script", { "src/hooks/use-motion.ts": "export const useMotion = () => matchMedia(\"(prefers-reduced-motion: reduce)\");\n" });
     const still = inv(project("fact-none", { "src/Ok.tsx": "export const Ok = () => <i className=\"transition-opacity\" />;\n" })).facts;
     const p = project("fact-feature", base);
     const slug = feature(p, ["src/components/ui/dialog.tsx", "src/b/Pop.vue"]);
     const fr = S.designSystemReport(p, { name: slug }).uiChecks;
-    all("1.38 project UI checks: no-reduced-motion — motion declared (a shadcn dialog's animate-in, a Vue keyframes) and no text read mentioning reduced motion: the fact, its count of lines and its first place by file then line; a mention anywhere read (a motion-reduce: / motion-safe: variant, a media query, useReducedMotion, past a minified line's 2,000 characters) or no motion: none; a .ts hook is not read; never in a feature report (got " +
+    all("1.38 project UI checks: no-reduced-motion — motion declared (a shadcn dialog's animate-in, a Vue keyframes) and no text read mentioning reduced motion: the fact, its count of lines and its first place by file then line; a mention anywhere read (a motion-reduce: / motion-safe: variant, a media query, useReducedMotion, past a minified line's 2,000 characters) or no motion: none; (1.39) a .ts hook's mention takes it back; never in a feature report (got " +
       js({ said, mentions, script, still, fr: Object.keys(fr) }) + ")", {
       said: () => js(said) === js([{ code: "no-reduced-motion", count: 3, file: "src/b/Pop.vue", line: 5 }]),
       mentions: () => Object.values(mentions).every((f) => js(f) === "[]"),
-      script: () => script.length === 1,
+      script: () => js(script) === "[]",
       noMotion: () => js(still) === "[]",
       feature: () => !("facts" in fr),
     });
@@ -258,12 +259,118 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const files = inv(project("cut-files", heavy));
     const q = project("cut-walk", MOTION);
     const views = [{ rel: "src/a.css", full: path.join(q, "src/a.css") }];
-    const walk = { open: T.uiProject({ views, truncated: false }).facts, cut: T.uiProject({ views, truncated: true }).facts };
+    const walk = { open: T.uiProject({ views, scripts: [], truncated: false }).facts, cut: T.uiProject({ views, scripts: [], truncated: true }).facts };
     all("1.38 project UI checks: the fact is never said when a read was cut — a file past its 256K, the pass's bound, a truncated walk — a mention may sit in what was not read (got " + js({ control: control.facts, size: [size.facts, size.limits], files: files.limits, walk }) + ")", {
       control: () => control.facts.length === 1 && walk.open.length === 1,
       size: () => js(size.facts) === "[]" && size.limits.some((l) => l.code === "view-size"),
       files: () => js(files.facts) === "[]" && js(files.limits.map((l) => l.code)) === js(["ui-files"]),
       walk: () => js(walk.cut) === "[]",
+    });
+  }
+
+  { // 1.39 (D6): the reduced-motion script search — run where the fact would be said, over the project's OTHER scripts (no
+    // view file, test, story, mock or declaration), the shorter path first, each to its 256K: a mention takes the fact back
+    // (outline's: the reset sits in a styled-components `globals.ts` — 1.38's fact there was false), never adds one; a script
+    // read only in part keeps the fact and `motion-scripts` names it ({read, count, file: the first by path}); a test setup's
+    // mention counts (`jest.setup.js` is no test by name: said less, never wrongly); never the report's limits / truncated
+    const COLLAPSIBLE = lines("import styled from \"styled-components\";", "export function Collapsible({ label, children }) {", "  return (", "    <RadixCollapsible.Root>",
+      "      <StyledTrigger>", "        <StyledExpandedIcon aria-hidden=\"true\" />", "        {label}", "      </StyledTrigger>", "      <CollapsibleContent>{children}</CollapsibleContent>", "    </RadixCollapsible.Root>", "  );", "}",
+      "const StyledExpandedIcon = styled(ExpandedIcon)`", "  flex-shrink: 0;", "  transition: transform 150ms ease-out;", "  margin-left: -4px;", "`;");
+    const GLOBALS = lines("import { createGlobalStyle } from \"styled-components\";", "export default createGlobalStyle`", "  @media (prefers-reduced-motion: reduce) {",
+      "    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }", "  }", "`;");
+    const MENTION = "export const reduce = () => matchMedia(\"(prefers-reduced-motion: reduce)\").matches;\n";
+    const base = { "app/components/Collapsible.tsx": COLLAPSIBLE, "shared/styles/index.ts": "export const s = (k) => (p) => p.theme[k];\n" };
+    const run = (tag, extra, marker) => {
+      const p = project("motion-" + tag, Object.assign({}, base, extra, marker ? { ".specs/steering/design-system.md": "# Design System\n\n" + marker + "\n" } : {}));
+      const r = S.designSystemReport(p, { uiPass: true });
+      return { facts: r.uiChecks.facts, limits: r.uiChecks.limits, off: r.uiChecks.off, top: [r.limits, r.truncated] };
+    };
+    const FACT = [{ code: "no-reduced-motion", count: 1, file: "app/components/Collapsible.tsx", line: 15 }];
+    const big = (tail) => "export const customers = [\n" + ("  { id: 1000, name: \"James Butt\", country: { name: \"Algeria\", code: \"dz\" } },\n").repeat(3800) + "];\n" + tail;
+    const R = {
+      outline: run("outline", { "shared/styles/globals.ts": GLOBALS }),
+      control: run("control", {}),
+      e2e: run("e2e", { "e2e/helpers.ts": MENTION }),
+      story: run("story", { "src/Button.stories.ts": MENTION }),
+      test: run("test", { "src/motion.test.ts": MENTION }),
+      mock: run("mock", { "src/api.mock.ts": MENTION }),
+      setup: run("setup", { "jest.setup.js": "window.matchMedia = (q) => ({ matches: q === \"(prefers-reduced-motion: reduce)\" });\n" }),
+      part: run("part", { "src/service/CustomerService.js": big("export const reduced = matchMedia(\"(prefers-reduced-motion: reduce)\");\n") }),
+      two: run("two", { "zz/a.js": big(""), "aaa/bb.js": big("") }),
+      offMention: run("off-mention", { "shared/styles/globals.ts": GLOBALS }, "_UI checks off: no-reduced-motion (our own setting)_"),
+      offPart: run("off-part", { "zz/a.js": big("") }, "_UI checks off: no-reduced-motion (our own setting)_"),
+    };
+    all("1.39 project UI checks (D6): the script search — outline's reset in `shared/styles/globals.ts` takes the fact back (1.38: said); an e2e/ helper, a story, a test, a mock are never read (the fact stands); a test setup's mention counts; a script read only in part keeps the fact and `motion-scripts` names it (count, the first by path — not the first read); a search that read everything says no limit; an off fact is searched too (its off count 0 after a mention, 1 with its limit); never the report's limits / truncated (got " + js(R) + ")", {
+      outline: () => js(R.outline.facts) === "[]" && js(R.outline.limits) === "[]",
+      control: () => js(R.control.facts) === js(FACT) && js(R.control.limits) === "[]",
+      filters: () => ["e2e", "story", "test", "mock"].every((k) => js(R[k].facts) === js(FACT) && js(R[k].limits) === "[]"),
+      setup: () => js(R.setup.facts) === "[]",
+      part: () => js(R.part.facts) === js(FACT) && js(R.part.limits) === js([{ code: "motion-scripts", read: 2, count: 1, file: "src/service/CustomerService.js" }]),
+      two: () => js(R.two.limits) === js([{ code: "motion-scripts", read: 3, count: 2, file: "aaa/bb.js" }]),
+      off: () => js(R.offMention.off) === js([{ rule: "no-reduced-motion", reason: "our own setting", count: 0 }]) && js(R.offMention.limits) === "[]"
+        && js(R.offPart.off) === js([{ rule: "no-reduced-motion", reason: "our own setting", count: 1 }]) && js(R.offPart.limits) === js([{ code: "motion-scripts", read: 2, count: 1, file: "zz/a.js" }]),
+      top: () => Object.values(R).every((x) => js(x.top) === js([[], false])),
+    });
+  }
+
+  { // 1.39 (D6): the search's bounds and order, on scans built here (uiProject over a scan's lists — the files real, their
+    // paths the list's): DS_MOTION_SCRIPTS (2,000) files, DS_MOTION_CHARS (8 MB) characters — the next past either is not
+    // read, the fact stays and `motion-scripts` says which bound (`bound`); the shorter path first, then by path; never run
+    // where the fact would not be said (a view's mention, no motion, a truncated walk, a view read in part, a view pass its
+    // bound cut) and never over a
+    // view file, a test or a story (a spy on each entry's `full`)
+    const d = project("motion-bounds", { "src/a.css": "@keyframes pop { to { opacity: 1 } }\n", "src/m.css": "@media (prefers-reduced-motion: reduce) { * { animation: none; } }\n", "src/plain.css": ".a { color: red; }\n",
+      "src/big.html": "<!--\n" + ("y".repeat(99) + "\n").repeat(2700) + "-->\n", "lib/p.ts": "export const p = 1;\n", "lib/m.ts": "export const r = matchMedia(\"(prefers-reduced-motion: reduce)\");\n",
+      "lib/b.ts": "y".repeat(256 * 1024), "src/p.html": "<!--\n" + "y".repeat(256 * 1024 - 9) + "-->\n" });
+    const F = (rel) => path.join(d, rel), P = F("lib/p.ts"), M = F("lib/m.ts"), B = F("lib/b.ts");
+    const view = (rel) => ({ rel, full: F(rel) });
+    const motion = [view("src/a.css")];
+    const sc = (scripts, views = motion, truncated = false) => { const u = T.uiProject({ views, scripts, truncated }, null); return { facts: u.facts.length, limits: u.limits }; };
+    const pad = (i) => String(i).padStart(4, "0");
+    const plain = (n, dir = "s/f") => Array.from({ length: n }, (_, i) => ({ rel: dir + pad(i) + ".ts", full: P }));
+    const S1 = {
+      last2000: sc(plain(1999).concat([{ rel: "s/f1999.ts", full: M }])),
+      past2000: sc(plain(2000).concat([{ rel: "s/f2000.ts", full: M }])),
+      shorter: sc(plain(2000).concat([{ rel: "z/m.ts", full: M }])),
+      byPath: sc(plain(2000).concat([{ rel: "a/f0000.ts", full: M }])),
+      chars: sc(Array.from({ length: 32 }, (_, i) => ({ rel: "c/b" + pad(i) + ".ts", full: B })).concat([{ rel: "c/b0032.ts", full: M }])),
+      charsIn: sc(Array.from({ length: 31 }, (_, i) => ({ rel: "c/b" + pad(i) + ".ts", full: B })).concat([{ rel: "c/b0031.ts", full: M }])),
+    };
+    const F1 = [{ code: "motion-scripts", read: 2000, bound: "files" }], F2 = [{ code: "motion-scripts", read: 32, bound: "chars" }];
+    // (the spy: an entry whose `full` is asked for is one the search reads)
+    const asked = [];
+    const spy = (rel) => ({ rel, get full() { asked.push(rel); return P; } });
+    const spies = () => ["src/App.tsx", "src/components/Card.js", "e2e/helpers.ts", "src/a.test.ts", "src/b.stories.ts", "src/c.mock.ts", "src/hooks/use-motion.ts"].map(spy);
+    const runs = {};
+    // (a view pass its 32 MB bound cut: the keyframes sheet, then 129 pages of exactly 256K — the 129th unread)
+    const pages = [view("src/a.css")].concat(Array.from({ length: 129 }, (_, i) => ({ rel: "src/p/p" + String(i).padStart(3, "0") + ".html", full: F("src/p.html") })));
+    for (const [k, views, truncated] of [["mention", [view("src/a.css"), view("src/m.css")], false], ["still", [view("src/plain.css")], false], ["truncated", motion, true],
+      ["part", [view("src/a.css"), view("src/big.html")], false], ["cut", pages, false], ["open", motion, false]]) {
+      asked.length = 0;
+      sc(spies(), views, truncated);
+      runs[k] = asked.slice();
+    }
+    all("1.39 project UI checks (D6): the search ends at 2,000 scripts (the 2,000th read, the 2,001st not: the fact stays, `bound: files`) or 8 MB (32 of 256K read, the 33rd not: `bound: chars`; 31 then the mention: read); the shorter path first, then by path; never run where the fact would not be said, never over a view file, a test, a story or a mock (got " + js({ S1, runs }) + ")", {
+      files: () => S1.last2000.facts === 0 && S1.past2000.facts === 1 && js(S1.past2000.limits) === js(F1),
+      order: () => S1.shorter.facts === 0 && S1.byPath.facts === 0,
+      chars: () => S1.chars.facts === 1 && js(S1.chars.limits) === js(F2) && S1.charsIn.facts === 0,
+      notRun: () => ["mention", "still", "truncated", "part", "cut"].every((k) => js(runs[k]) === "[]"),
+      onlyScripts: () => js(runs.open) === js(["src/hooks/use-motion.ts"]),
+    });
+    // (a cost guard — the search ends at the first mention: 400 scripts whose first mentions cost at most half the same 400 with
+    // none; measured at the same moment)
+    const first = [{ rel: "s/a.ts", full: M }].concat(plain(399)), none = plain(400);
+    const med = (xs) => xs.slice().sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const ms = (f) => { const t0 = process.hrtime.bigint(); f(); return Number(process.hrtime.bigint() - t0) / 1e6; };
+    sc(first); sc(none); // (warm)
+    const sample = remeasure(() => {
+      const xs = { first: [], none: [] };
+      for (let k = 0; k < 5; k++) { xs.first.push(ms(() => sc(first))); xs.none.push(ms(() => sc(none))); }
+      const m = { first: Math.round(med(xs.first) * 10) / 10, none: Math.round(med(xs.none) * 10) / 10 };
+      return Object.assign(m, { ratio: Math.round(m.first / m.none * 100) / 100 });
+    }, (s) => s.ratio <= 0.5);
+    all("1.39 project UI checks (D6): the search stops at the first mention — 400 scripts whose first mentions cost at most 0.5× the same 400 with none (got " + js(sample) + ")", {
+      ratio: () => sample.ratio <= 0.5,
     });
   }
 
@@ -289,6 +396,17 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       hidden: () => js(u.byRule) === js({ "zoom-disabled": 1, "img-no-alt": 1, "click-no-keyboard": 1, "paste-blocked": 1 }) && u.total === 4 && js(u.facts) === "[]",
       control: () => js(control.byRule) === js({ "zoom-disabled": 1, "img-no-alt": 1, "outline-removed": 1, "click-no-keyboard": 1, "paste-blocked": 1, "font-size-viewport": 1 }) && control.facts.length === 1,
       noMarker: () => !("off" in control) && !("offIgnored" in control) && reg.exists === true,
+    });
+  }
+
+  { // 1.39 (UP-7): an id in ONE balanced code span is applied — the docs write ids so —, its reason the parentheses'; a code
+    // span around a name that is no rule is unknown-rule; a lone backtick (either side) or a doubled pair is another shape
+    const MARKER = "# Design System\n\n_UI checks off: `img-no-alt` (decorative art), `foo` (x), `click-no-keyboard (x), paste-blocked` (x), ``zoom-disabled`` (x), transition-all (kit code)_\n";
+    const u = inv(project("marker-code", { ".specs/steering/design-system.md": MARKER, "src/A.tsx": "export const A = () => <div className=\"transition-all\"><img src=\"/a.png\" /></div>;\n" }));
+    all("1.39 project UI checks: `_UI checks off:_` — an id in one code span applied with its reason (as a bare one), a code span naming no rule unknown-rule, a lone or a doubled backtick unreadable (got " + js({ off: u.off, ignored: u.offIgnored }) + ")", {
+      off: () => js(u.off) === js([{ rule: "img-no-alt", reason: "decorative art", count: 1 }, { rule: "transition-all", reason: "kit code", count: 1 }]) && u.total === 0,
+      ignored: () => js(u.offIgnored) === js([{ entry: "foo", why: "unknown-rule" }, { entry: "`click-no-keyboard (x)", why: "unreadable" }, { entry: "paste-blocked` (x)", why: "unreadable" },
+        { entry: "``zoom-disabled`` (x)", why: "unreadable" }]),
     });
   }
 
@@ -347,7 +465,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const ms = (f) => { const t0 = process.hrtime.bigint(); f(); return Number(process.hrtime.bigint() - t0) / 1e6; };
     // (the pass itself — uiProject over the walk's files, as the report runs it — never a difference of two reports: the scan's
     // own time would be the noise; the report runs it: the opted-in report holds the same inventory)
-    const scan = { views: list, truncated: false };
+    const scan = { views: list, scripts: [], truncated: false };
     const pass = () => T.uiProject(scan, null);
     const same = js(pass()) === js(S.designSystemReport(p, { uiPass: true }).uiChecks);
     bare(); parse(); // (warm)

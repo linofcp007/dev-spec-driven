@@ -1629,7 +1629,7 @@ const msg = {
       bpFrom: {
         "ui.md": (at) => `the Breakpoints line of ${at}`,
         code: (at) => `declared in ${at}`,
-        partial: (at) => `the review's default set, and what ${at} adds to its framework's own — to choose, list them all in .specs/steering/ui.md's Breakpoints line`,
+        partial: (at) => `what ${at} adds to its framework's own, then the review's default set where room is left — to choose, list them all in .specs/steering/ui.md's Breakpoints line`,
         default: () => "none declared — the review's default set: list yours in .specs/steering/ui.md's Breakpoints line",
       },
       bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint" : "breakpoints"} whose width was not read — ${list}: write the project's widths (320–3840 px) in .specs/steering/ui.md's Breakpoints line`,
@@ -1639,6 +1639,12 @@ const msg = {
       },
       dsMissingHead: (n) => `  in the code, not in the registry (${n}) — a row each:`,
       dsStaleHead: (n) => `  in the registry, but their path names no file (${n}):`,
+      // 1.39: the files that still import a `_Deprecated:_` component (the project report's `deprecatedUses` — a report, never "in sync")
+      dsDepUsesHead: (n, total, atLeast) => `  deprecated components the code still imports (${atLeast ? "at least " : ""}${n} of the ${total} _Deprecated:_ ${total === 1 ? "row" : "rows"} the code holds a file for) — migrate each:`,
+      dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "file" : "files"}: ${list}${at ? `  (${at} component files of that name)` : ""}`,
+      dsDepUsesNone: (name, use, read) => `    ${name}${use ? " → " + use : ""} — no import of it in the ${read} ${read === 1 ? "file" : "files"} read: not proof it is unused (what is not read is below)`,
+      dsDepUsesUnbound: (n, name, at) => `      ${n} .mdx / .vue ${n === 1 ? "file renders" : "files render"} <${name}> with no import — an auto-import, a global registration or an MDX provider, not resolved; the first: ${at}`,
+      dsDepUsesUnlocated: (list) => `  (no component file the scan reads gives that name — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index; when several indexes give it to different files, the index the row's path names —, so its importers were not looked for: ${list})`,
       dsSourcesNew: (list) => `  token files the registry doesn't name (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  UI libraries in package.json the registry doesn't name (_Libraries:_): ${list}`,
       // 1.38: a registry token's value against the code's (`drift` — never part of "in sync"), the token files gone, the units table
@@ -1670,8 +1676,14 @@ const msg = {
         "file-findings": (n, file, count) => `  (${count} more UI ${count === 1 ? "finding" : "findings"} past a file's ${n} — the first in ${file}: counted, not listed)`,
         // (1.38: the project's UI checks — n: the view files read; at / count: the outline removals the cut left unjudged, if any)
         "ui-files": (n, at, count) => `  (the UI checks read the project's first ${n} view ${n === 1 ? "file" : "files"}, a bound: the rest is not counted${count ? ` — ${count} outline ${count === 1 ? "removal" : "removals"} not judged, the first: ${at}` : ""})`,
+        // (1.39: the fact's script search — n: the scripts read; bound: files | chars, the bound that ended it (none: every
+        // script was read; one ends it past 32 scripts at least); count / file: the scripts read only in part, the first by path)
+        "motion-scripts": (n, file, count, bound) => `  (a mention of reduced motion was looked for in ${bound ? `the project's first ${n} scripts, the shorter path first — a bound of their ${bound === "chars" ? "characters" : "number"}` : `the project's ${n} ${n === 1 ? "script" : "scripts"}`}${count ? ` — ${count} read only in part, the first: ${file}` : ""}: one past what was read is not seen)`,
         "component-files": (n) => `  (${n} component files were read for the further components they export, and a bound was reached — the files or characters read, or the names kept of one file: the rest is not compared)`,
         "workspace-manifests": (n) => `  (a bound of the workspace patterns was reached — ${n} of the workspace packages' package.json files read: the libraries of the rest are not compared)`,
+        // (1.39: the deprecated uses' own bounds — `deprecatedUses.limits`, never the report's)
+        "usage-files": (n) => `  (the deprecated components' uses were looked for in the first ${n} files the scan reads — a bound of files or characters: the rest is not counted)`,
+        "deprecated-follow": (n, chars, steps) => `  (the re-exports followed for the deprecated components' uses reached a bound — ${n} files, ${chars / 1048576} MB or ${steps} steps: an import through the rest is not counted)`,
         // (1.38: the new kinds' own bound a file — file: the first it cut)
         "font-values": (n, file) => `  (only a file's first ${n} font stacks are read — the first file past it: ${file})`,
         "motion-values": (n, file) => `  (only a file's first ${n} motion values are read — the first file past it: ${file})`,
@@ -1713,7 +1725,7 @@ const msg = {
       uiProjectNone: (files) => `  UI checks: nothing in the project's ${files} view ${files === 1 ? "file" : "files"}`,
       // (the project's facts by code — at: the first place, file:line)
       uiFact: {
-        "no-reduced-motion": (n, at) => `  ▲ the code declares motion — an animation, a transform's transition or smooth scrolling (${n} ${n === 1 ? "place" : "places"}, the first: ${at}) — and none of the project's view files read mentions reduced motion: offer a reduced variant — @media (prefers-reduced-motion: reduce), Tailwind's motion-reduce: / motion-safe: (WCAG 2.3.3, AAA)`,
+        "no-reduced-motion": (n, at) => `  ▲ the code declares motion — an animation, a transform's transition or smooth scrolling (${n} ${n === 1 ? "place" : "places"}, the first: ${at}) — and none of the project's view files and scripts read mentions reduced motion: offer a reduced variant — @media (prefers-reduced-motion: reduce), Tailwind's motion-reduce: / motion-safe: (WCAG 2.3.3, AAA)`,
       },
       // (the project's `_UI checks off:_` marker in design-system.md — list: `<rule> <count hidden> — <reason>`, `; `-joined; e: an entry
       // not applied, as the report names it; n: the entries read)
@@ -3752,6 +3764,8 @@ const quality = {
     dsDeprecatedNone: "Design System Usage reuses no component the registry marks deprecated",
     dsDeprecated: (n, list) => `Design System Usage reuses or extends ${n} ${n === 1 ? "component" : "components"} the registry (.specs/steering/design-system.md) marks deprecated — ${list}: move to what its marker names, or name that component in the row's notes to say why this one stays`,
     dsDeprecatedItem: (name, use) => (use ? `'${name}' (use ${use})` : `'${name}'`),
+    // 1.39: the project report's deprecatedUses.note — what the search does not see (CRIT_1 must-fix 1: the JSON says it too)
+    dsDepUsesNote: "Read: the project's .tsx / .jsx / .js and .mdx / .vue / .svelte / .astro files, tests and stories aside. Not seen: a .ts file (a registration, a route table, an Angular component's imports), a dynamic import(), a module only a bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a tag an auto-import names by its folder (Nuxt's <BaseCard> for components/base/Card.vue), a non-component export or a type reached through a barrel. No import found is not unused: check what is not read before removing a file.",
     // 1.38 +ui's state matrix: each state's label by its English-stable id and the header's cells (UI_STATES — the template's
     // table is built from the same values)
     uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,
@@ -3765,7 +3779,7 @@ const quality = {
     usView: (view, labels) => `${view}: ${labels}`,
     usTable: (n, item) => `table ${n} › ${item}`,
     usSmall: (d) => `at size s the matrix is the author's call — ${d}`,
-    usTruncated: (t, r, v) => `only the first ${t} tables, ${r} rows each and ${v} view columns were read`,
+    usTruncated: (t, r, v, h) => `only the first ${t} tables, ${r} rows each, ${v} view columns and a header's first ${h} cells were read`,
     dsUnfilled: "Design System Usage is not written yet — checked against the registry once it is",
     dsNoRegistry: `no design-system registry yet (.specs/steering/design-system.md) — the one inventory of components and tokens every +ui feature builds from. Create it from the code: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `the design-system registry (.specs/steering/design-system.md) lists no component yet — add the existing ones (spec_scan {designSystem: true} · ${DEV_SPEC} design-system lists what the code holds)`,
@@ -3878,6 +3892,12 @@ const brief = {
     designSystemUnknown: (list) => `Not in the registry — ask before building them (NEEDS_CONTEXT): ${list}`,
     designSystemNoRows: (file) => `The design names no component row — read \`${file}\` and reuse what it lists before creating anything.`,
     designSystemTokens: (n, sources) => `Tokens: ${n} in the registry${sources ? ` — defined in ${sources}` : ""}.`,
+    // 1.39: the units table's rows the brief quotes (`list`: "font-size: rem · margin-*: rem, %") and `more`, the rows it left
+    // out — none quoted: the FIRST row is longer than the brief's bound (the rows after it are not quoted either: 1.39.0 review 1,
+    // BU-4 — the line says so)
+    designSystemUnits: (list, more) => "Units — the registry's table, the team's convention: " + (list
+      ? list + "." + (more ? ` (+${more} more ${more === 1 ? "row" : "rows"} in the registry)` : "")
+      : `the first row is too long to quote here — ${more} ${more === 1 ? "row" : "rows"} in the registry: read ${more === 1 ? "it" : "them"} there.`),
     designSystemLibraries: (list) => `Component libraries the project builds on: ${list}.`,
     design: "## Design context",
     designToc: (p) => `Full design: \`${p}\` — sections:`,

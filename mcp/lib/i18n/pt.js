@@ -1568,7 +1568,7 @@ const msg = {
       bpFrom: {
         "ui.md": (at) => `a linha Breakpoints de ${at}`,
         code: (at) => `declaradas em ${at}`,
-        partial: (at) => `o conjunto por omissão da revisão, e o que ${at} acrescenta às da sua framework — para escolher, lista-as todas na linha Breakpoints de .specs/steering/ui.md`,
+        partial: (at) => `o que ${at} acrescenta às da sua framework, e depois o conjunto por omissão da revisão onde houver lugar — para escolher, lista-as todas na linha Breakpoints de .specs/steering/ui.md`,
         default: () => "nenhuma declarada — o conjunto por omissão da revisão: lista as tuas na linha Breakpoints de .specs/steering/ui.md",
       },
       bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint cuja largura não foi lida" : "breakpoints cuja largura não foi lida"} — ${list}: escreve as larguras do projeto (320–3840 px) na linha Breakpoints de .specs/steering/ui.md`,
@@ -1578,6 +1578,12 @@ const msg = {
       },
       dsMissingHead: (n) => `  no código, fora do registo (${n}) — uma linha por cada:`,
       dsStaleHead: (n) => `  no registo, mas o caminho não indica nenhum ficheiro (${n}):`,
+      // 1.39: os ficheiros que ainda importam um componente `_Deprecated:_` (o `deprecatedUses` do relatório do projeto — um relatório)
+      dsDepUsesHead: (n, total, atLeast) => `  componentes obsoletos que o código ainda importa (${atLeast ? "pelo menos " : ""}${n} ${total === 1 ? "da linha" : `das ${total} linhas`} _Deprecated:_ com um ficheiro no código) — migra cada um:`,
+      dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "ficheiro" : "ficheiros"}: ${list}${at ? `  (${at} ficheiros de componente com esse nome)` : ""}`,
+      dsDepUsesNone: (name, use, read) => `    ${name}${use ? " → " + use : ""} — nenhuma importação dele ${read === 1 ? "no ficheiro lido" : `nos ${read} ficheiros lidos`}: não prova que não é usado (o que não é lido está abaixo)`,
+      dsDepUsesUnbound: (n, name, at) => `      ${n} ${n === 1 ? "ficheiro .mdx / .vue mostra" : "ficheiros .mdx / .vue mostram"} <${name}> sem importação — uma importação automática, um registo global ou um provider de MDX, não resolvidos; o primeiro: ${at}`,
+      dsDepUsesUnlocated: (list) => `  (nenhum ficheiro de componente que a análise lê dá esse nome — um ficheiro .tsx / .jsx / .js / .vue / .svelte / .astro ou o index de uma pasta de componentes; quando vários index o dão a ficheiros diferentes, o index que o caminho da linha nomeia —, por isso não se procurou quem o importa: ${list})`,
       dsSourcesNew: (list) => `  ficheiros de tokens que o registo não indica (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  bibliotecas de UI no package.json que o registo não indica (_Libraries:_): ${list}`,
       dsDriftHead: (n) => `  valores de tokens que o código tem diferentes do registo (${n}) — a linha como o código a tem:`,
@@ -1606,8 +1612,15 @@ const msg = {
         "file-findings": (n, file, count) => `  (mais ${count} ${count === 1 ? "achado de interface" : "achados de interface"} além dos ${n} de um ficheiro — o primeiro em ${file}: contados, não listados)`,
         // (1.38: as verificações de interface do projeto — n: os ficheiros de vista lidos; at / count: as remoções do contorno não avaliadas)
         "ui-files": (n, at, count) => `  (as verificações de interface leram ${n === 1 ? "o primeiro ficheiro de vista" : `os primeiros ${n} ficheiros de vista`} do projeto, um limite: o resto não é contado${count ? ` — ${count} ${count === 1 ? "remoção do contorno não avaliada" : "remoções do contorno não avaliadas"}, a primeira: ${at}` : ""})`,
+        // (1.39: a procura nos scripts do facto — n: os scripts lidos; bound: files | chars, o limite que a terminou (nenhum:
+        // todos foram lidos; um limite termina-a depois de 32 scripts pelo menos); count / file: os scripts lidos só em parte, o
+        // primeiro pelo caminho)
+        "motion-scripts": (n, file, count, bound) => `  (procurou-se uma menção a movimento reduzido ${bound ? `nos primeiros ${n} scripts do projeto, o caminho mais curto primeiro — um limite ${bound === "chars" ? "dos seus caracteres" : "do seu número"}` : `${n === 1 ? "no script" : `nos ${n} scripts`} do projeto`}${count ? ` — ${count} ${count === 1 ? "lido" : "lidos"} só em parte, o primeiro: ${file}` : ""}: uma menção para lá do que foi lido não é vista)`,
         "component-files": (n) => `  (foram lidos ${n} ficheiros de componentes à procura dos outros componentes que exportam, e foi atingido um limite — os ficheiros ou caracteres lidos, ou os nomes guardados de um ficheiro: o resto não é comparado)`,
         "workspace-manifests": (n) => `  (foi atingido um limite dos padrões de workspace — lidos ${n} dos ficheiros package.json dos pacotes do workspace: as bibliotecas dos restantes não são comparadas)`,
+        // (1.39: os limites próprios dos usos obsoletos — `deprecatedUses.limits`, nunca os do relatório)
+        "usage-files": (n) => `  (os usos dos componentes obsoletos foram procurados nos primeiros ${n} ficheiros que a análise lê — um limite de ficheiros ou de caracteres: o resto não é contado)`,
+        "deprecated-follow": (n, chars, steps) => `  (as reexportações seguidas para os usos dos componentes obsoletos atingiram um limite — ${n} ficheiros, ${chars / 1048576} MB ou ${steps} passos: uma importação através do resto não é contada)`,
         "font-values": (n, file) => `  (só as primeiras ${n} pilhas de fontes de um ficheiro são lidas — o primeiro ficheiro que passou disso: ${file})`,
         "motion-values": (n, file) => `  (só os primeiros ${n} valores de movimento de um ficheiro são lidos — o primeiro ficheiro que passou disso: ${file})`,
       },
@@ -1647,7 +1660,7 @@ const msg = {
       uiProjectNone: (files) => `  Verificações de interface: nada ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`} do projeto`,
       // (os factos do projeto por código — at: o primeiro local, ficheiro:linha)
       uiFact: {
-        "no-reduced-motion": (n, at) => `  ▲ o código declara movimento — uma animação, uma transição de transform ou um scroll suave (${n} ${n === 1 ? "local" : "locais"}, o primeiro: ${at}) — e nenhum dos ficheiros de vista do projeto lidos menciona movimento reduzido: oferecer uma variante reduzida — @media (prefers-reduced-motion: reduce), o motion-reduce: / motion-safe: do Tailwind (WCAG 2.3.3, AAA)`,
+        "no-reduced-motion": (n, at) => `  ▲ o código declara movimento — uma animação, uma transição de transform ou um scroll suave (${n} ${n === 1 ? "local" : "locais"}, o primeiro: ${at}) — e nenhum dos ficheiros de vista e scripts do projeto lidos menciona movimento reduzido: oferecer uma variante reduzida — @media (prefers-reduced-motion: reduce), o motion-reduce: / motion-safe: do Tailwind (WCAG 2.3.3, AAA)`,
       },
       // (o marcador `_UI checks off:_` do projeto em design-system.md — list: `<regra> <quantas escondeu> — <motivo>`, unidas por `; `;
       // e: uma entrada não aplicada, como o relatório a nomeia; n: as entradas lidas)
@@ -3505,6 +3518,8 @@ const quality = {
     dsDeprecatedNone: "a secção Uso do Design System não reutiliza nenhum componente que o registo marca como obsoleto",
     dsDeprecated: (n, list) => `a secção Uso do Design System reutiliza ou estende ${n} ${n === 1 ? "componente que o registo (.specs/steering/design-system.md) marca como obsoleto" : "componentes que o registo (.specs/steering/design-system.md) marca como obsoletos"} — ${list}: passar para o que o marcador indica, ou nomear esse componente nas notas da linha para dizer a razão de este ficar`,
     dsDeprecatedItem: (name, use) => (use ? `'${name}' (usar ${use})` : `'${name}'`),
+    // 1.39: a nota de deprecatedUses no relatório do projeto — o que a procura não vê
+    dsDepUsesNote: "Lido: os ficheiros .tsx / .jsx / .js e .mdx / .vue / .svelte / .astro do projeto, exceto testes e stories. Não visto: um ficheiro .ts (um registo, uma tabela de rotas, as importações de um componente Angular), um import() dinâmico, um módulo que só um alias do bundler ou um módulo virtual nomeia, uma reexportação com outro nome fora do index de uma pasta de componentes, uma tag que uma importação automática nomeia pela sua pasta (o <BaseCard> do Nuxt para components/base/Card.vue), uma exportação que não é um componente ou um tipo através de um barrel. Nenhuma importação encontrada não quer dizer que não é usado: verifica o que não é lido antes de remover um ficheiro.",
     // 1.38 a matriz de estados do +ui: o rótulo de cada estado pelo seu id (estável, em inglês) e as células do cabeçalho
     // (UI_STATES — a tabela do modelo é construída com os mesmos valores)
     uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,
@@ -3518,7 +3533,7 @@ const quality = {
     usView: (view, labels) => `${view}: ${labels}`,
     usTable: (n, item) => `tabela ${n} › ${item}`,
     usSmall: (d) => `no tamanho s, a matriz fica ao critério do autor — ${d}`,
-    usTruncated: (t, r, v) => `só foram lidas as primeiras ${t} tabelas, ${r} linhas de cada uma e ${v} colunas de vista`,
+    usTruncated: (t, r, v, h) => `só foram lidas as primeiras ${t} tabelas, ${r} linhas de cada uma, ${v} colunas de vista e as primeiras ${h} células de um cabeçalho`,
     dsUnfilled: "a secção Uso do Design System ainda não está escrita — é verificada contra o registo quando estiver",
     dsNoRegistry: `ainda não há registo do design system (.specs/steering/design-system.md) — o inventário único de componentes e tokens a partir do qual todas as features +ui constroem. Cria-o a partir do código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `o registo do design system (.specs/steering/design-system.md) ainda não lista nenhum componente — falta acrescentar os que já existem (spec_scan {designSystem: true} · ${DEV_SPEC} design-system mostra o que o código tem)`,
@@ -3631,6 +3646,9 @@ const brief = {
     designSystemUnknown: (list) => `Fora do registo — pede contexto antes de construir qualquer um (NEEDS_CONTEXT): ${list}`,
     designSystemNoRows: (file) => `O design não tem nenhuma linha de componente — o que \`${file}\` lista é para reutilizar antes de criar algo novo.`,
     designSystemTokens: (n, sources) => `Tokens: ${n} no registo${sources ? ` — definidos em ${sources}` : ""}.`,
+    designSystemUnits: (list, more) => "Unidades — a tabela do registo, a convenção da equipa: " + (list
+      ? list + "." + (more ? ` (mais ${more} ${more === 1 ? "linha" : "linhas"} no registo)` : "")
+      : `a primeira linha é longa demais para citar aqui — ${more} ${more === 1 ? "linha" : "linhas"} no registo: lê-${more === 1 ? "a" : "as"} lá.`),
     designSystemLibraries: (list) => `Bibliotecas de componentes em que o projeto assenta: ${list}.`,
     design: "## Contexto de design",
     designToc: (p) => `Design completo: \`${p}\` — secções:`,

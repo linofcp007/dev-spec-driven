@@ -1088,10 +1088,12 @@ exports.run = async ({
       // code and comments, its slot unread, a bare number's unit, thousands, 200 characters; a top-level @theme, `partial` as
       // the resets say; past six; who prints them; the values not read — each example below run through breakpointsReport)
       ["responsive: where the widths come from — the first source with a width ≥ 320: ui.md's first line, a top-level Tailwind 4 @theme, else the default set; ≤ 6, 320 first; who prints them, what is not read — as breakpoints.js reads them", RS,
-        /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` that no length follows \(`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width ends the list: write `640 \(sm\) · 768 \(md\)`, not `sm 640 · md 768` \(640 alone\); px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; a `\[…\]` is the stub's slot and never read — write the widths without the brackets —, so an untouched stub falls through;/,
-        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set joins the theme's — list them all in ui\.md to choose\); 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
-        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set joins a theme's, a declared width may be one left out — list the widths in ui\.md's line to choose them\./,
-        /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px\) with its place — write the widths in ui\.md's line then\./,
+        /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` that no length follows \(`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width ends the list: write `640 \(sm\) · 768 \(md\)`, not `sm 640 · md 768` \(640 alone\); px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; the stub's own `\[…\]` slot is never read, so an untouched stub falls through — your widths written inside its brackets are, and any other bracket is an aside, never a width \(`480 \/ 960 px \[1200 in print\]` is 480 and 960\);/,
+        // (1.39, BS-2: under partial the theme's own widths first, the default set fills the places left in its order)
+        // (1.39: + the Sass map)
+        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set fills the places the theme's widths leave — list them all in ui\.md to choose\), and a top-level Sass map whose name ends in `breakpoints` \(`\$grid-breakpoints`, `\$breakpoints`, an override in `@use … with \(…\)`\) in a \.scss sheet the scan reads — a plain assignment over a `!default` one; 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
+        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set fills a theme's places, it comes in the order 768, 1024, 1440, 390, and only where room is left — list the widths in ui\.md's line to choose them\./,
+        /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px, `map-merge\(…\)`\) with its place — write the widths in ui\.md's line then\./,
         () => {
           const got = (line) => { const r = bpOf(line); return [r.from, r.widths.join(" "), r.unread.map((u) => u.value).join("|"), r.limits.map((l) => l.code).join(",")].join(" / "); };
           // (1.38.0 review 1: the printed list read whole, a filled bracket unread; review 2: a theme's declared 1600 the one left out
@@ -1104,18 +1106,40 @@ exports.run = async ({
             && got("- Breakpoints: 360 / 768 / 1280 px · max width 1200 px") === "ui.md / 320 360 768 1280 /  / "
             && got("- Breakpoints: 360 / 768 / 1280 px · 1200 px max width") === "ui.md / 320 360 768 1200 1280 /  / "
             && got("- Breakpoints: 640 (sm) · 768 (md)") === "ui.md / 320 640 768 /  / " && got("- Breakpoints: sm 640 · md 768") === "ui.md / 320 640 /  / "
-            && got("- Breakpoints: [576 / 768 / 992 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
-            && theme.widths.join(" ") === "320 390 768 1024 1440 2000" && theme.limits[0].first === 1600
+            && got("- Breakpoints: [576 / 768 / 992 px] · text expansion") === "ui.md / 320 576 768 992 /  / " // (1.39, BS-6)
+            && got("- Breakpoints: 480 / 960 px [1200 in print]") === "ui.md / 320 480 960 /  / "
+            && theme.widths.join(" ") === "320 768 1024 1440 1600 2000" && theme.limits.length === 0 // (1.39, BS-2)
             && got("- Breakpoints: [360 / 768 / 1280 px] · text expansion") === "default / 320 390 768 1024 1440 /  / "
             && got("- Breakpoints: 240 / 300 px") === "default / 320 390 768 1024 1440 /  / "
             && got("- Breakpoints: 30 / 48 / 80 rem") === "ui.md / 320 480 768 1280 /  / "
             && got("- Breakpoints: 400 / 500 / 600 / 700 / 800 / 900 / 1000 px") === "ui.md / 320 400 500 600 700 1000 /  / breakpoint-widths"
             && got("- Breakpoints: 360 / 768 / 5000 px") === "ui.md / 320 360 768 / 5000 px / "
             && got("```\n- Breakpoints: 500 px\n```\n<!-- - Breakpoints: 550 px -->\n- Breakpoints: 600 px") === "ui.md / 320 600 /  / ";
+        },
+        () => { // (1.39) the Sass map's claims, through the scan: a plain map over the vendored `!default` one (custom.scss, a sheet
+          // the scan opens by name), a `with` override, `map-merge(…)` listed unread, `_config.scss` (no name the scan opens) not read
+          const proj = (tag, files) => { const d = path.join(tmp, "z139-bp-" + tag); for (const [rel, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(d, rel)), { recursive: true }); fs.writeFileSync(path.join(d, rel), text); } return S.designSystemReport(d).breakpoints; };
+          const vars = "$grid-breakpoints: (\n  xs: 0,\n  sm: 576px,\n  md: 768px\n) !default;\n";
+          const plain = proj("plain", { "scss/_variables.scss": vars, "scss/custom.scss": "$grid-breakpoints: (xs: 0, sm: 600px, md: 900px);\n", "scss/_config.scss": "$breakpoints: (tv: 3000px);\n" });
+          const withIt = proj("with", { "scss/custom.scss": "@use 'bootstrap' with (\n  $grid-breakpoints: (\n    xs: 0,\n    md: 900px\n  )\n);\n" });
+          const merge = proj("merge", { "scss/_variables.scss": vars, "scss/custom.scss": "$grid-breakpoints: map-merge($grid-breakpoints, (xxl: 1600px));\n" });
+          return plain.from === "code" && plain.widths.join(" ") === "320 600 900" && withIt.widths.join(" ") === "320 900"
+            && merge.from === "default" && merge.unread.map((u) => u.value).join("|") === "map-merge($grid-breakpoints, (xxl: 1600px))";
         }],
       ["responsive: what is never read, and the lines to paste into ui.md (Tailwind's defaults, Bootstrap 5)", RS,
-        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a Sass map are never read: paste the line into ui\.md instead/,
+        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a map in a file the scan does not open by name \(`_config\.scss`, `_settings\.scss`\) are never read: paste the line into ui\.md instead/,
         /- Tailwind's defaults: `- Breakpoints: 640 \/ 768 \/ 1024 \/ 1280 \/ 1536 px`/, /- Bootstrap 5: `- Breakpoints: 576 \/ 768 \/ 992 \/ 1200 \/ 1400 px`/],
+      // (1.39.0 review 1, BU-2 / BU-3 — prose, D1 / D2: the two Sass shapes the reader reads as designed but the prose did not say —
+      // each claim run through the scan: a map of maps gives the default set and nothing unread; two `!default` maps of one name unite)
+      ["responsive: a map of maps is neither read nor listed; two `!default` maps of one name both count — ui.md's line chooses", RS,
+        /A map of maps \(Bulma's `"mobile": \("until": \$tablet\)`, a hand-written `'small': \(min-width: 767px\)`\) is neither read nor listed: paste its widths into ui\.md's line\./,
+        /Two `!default` maps of one name \(a library copy beside your own\) both count: list the widths in ui\.md's line to choose them\./,
+        () => {
+          const proj = (tag, files) => { const d = path.join(tmp, "z139r1-bp-" + tag); for (const [rel, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(d, rel)), { recursive: true }); fs.writeFileSync(path.join(d, rel), text); } return S.designSystemReport(d).breakpoints; };
+          const nested = proj("nested", { "src/styles/custom.scss": "$breakpoints: (\n  'small': (min-width: 767px),\n  'large': (min-width: 1200px)\n) !default;\n" });
+          const twice = proj("twice", { "public/lib/bootstrap/scss/_variables.scss": "$grid-breakpoints: (xs: 0, sm: 576px, md: 768px) !default;\n", "src/scss/_variables.scss": "$grid-breakpoints: (xs: 0, sm: 600px, md: 960px) !default;\n" });
+          return nested.from === "default" && nested.unreadTotal === 0 && twice.from === "code" && twice.widths.join(" ") === "320 576 600 768 960";
+        }],
       ["responsive: editing the line re-flags approved designs — doctor's steering check, by its engine id", RS,
         /editing the line makes doctor warn `steering-changed-since-approval` on approved designs — on purpose/,
         () => doctorSrc.includes('"steering-changed-since-approval"')],
@@ -1131,9 +1155,12 @@ exports.run = async ({
         /\| Text, and the space that grows with it \| `rem` \(`em` inside a component\) \| follows the user's font size and zoom \|/, /\| Borders, hairlines, shadows \| `px` \| stays crisp \|/,
         /A convention, not a WCAG rule: px-only text still zooms in every current browser — it only ignores the user's default font size\./,
         /Write the team's choice in `design-system\.md`'s units table, which the code scan compares the code with \(\[ui-code-scan\.md\]\(ui-code-scan\.md\)\)\./],
-      ["responsive: 100vw and the classic scrollbar — 100 % in flow, a fixed overlay fine, no check; Chrome 145's condition", RS,
+      // (1.39: "the visual review measures the sideways scroll instead" was false — its captures hide scrollbars, as
+      // ui-review.md's capture line still writes: nothing measures it, the reader checks one by hand)
+      ["responsive: 100vw and the classic scrollbar — 100 % in flow, a fixed overlay fine, no check and nothing measures it (the captures hide scrollbars); Chrome 145's condition", RS,
         /an in-flow box at `width: 100vw` is a scrollbar wider than the page — a sideways scroll\. Use `100%` there\./,
-        /A fixed overlay \(`position: fixed; inset: 0`\) or a decoration its parent clips is fine, so no check flags `100vw`: the visual review measures the sideways scroll instead\./,
+        /A fixed overlay \(`position: fixed; inset: 0`\) or a decoration its parent clips is fine, so no check flags `100vw` — and the visual review's captures hide scrollbars \(`--hide-scrollbars`, Playwright's headless default\), so nothing measures it: check an in-flow `100vw` box yourself at a desktop size, scrollbars shown\./,
+        { not: /measures the sideways scroll instead/ }, () => /`chrome --headless=new --hide-scrollbars/.test(R),
         /Chrome 145 subtracts the scrollbar from `vw` only where the root reserves its room \(`scrollbar-gutter: stable`, `overflow-y: scroll`\) — Bramus Van Damme, bram\.us, 2026\./],
       ["responsive: 100vh on a phone — svh / dvh / lvh, the 100vh; 100dvh pair, min-height harmless", RS,
         /`svh` is the smallest viewport, `dvh` follows the toolbars \(relaid out as they move\), `lvh` the largest\./,
@@ -1362,7 +1389,7 @@ exports.run = async ({
       // engine's, and what a bound cut in the report alone — R2-E1, R2-E2)
       ["ui-code-scan: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
         () => /a comment `ui-check-off: <rule-id> <why>` on its line \(a declaration's, a class's\) or the line above — `\/\/`, `\/\* \*\/`, `<!-- -->`, not Blade's or Twig's: counted, never listed; only this comment silences \(a linter's is not read\) — an `<a>` a parent gives its href \(Next's `legacyBehavior`\) is one to silence/.test(checks)],
-      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
+      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too; a bound Vue `<component :is>` in it is none\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
         && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")
         && checks.includes("the project's first " + num("DS_FOCUS_SHEETS") + " stylesheets — past them, named unjudged — 2.4.7")
         && /In the report alone: `transition-all` \(kits ship it\), what a bound cut\./.test(checks)],
@@ -1437,11 +1464,49 @@ exports.run = async ({
         && /\(what is never "gone": \[ui-code-scan\.md\]\(ui-code-scan\.md\)\)/.test(registry) && !/\(below\)|: below\)|the table below\)/.test(registry),
       responsivePointer: () => resp.split("\n").length === 2 && /\[ui-responsive\.md\]\(ui-responsive\.md\)\.$/.test(resp) && /^## Responsiveness$/m.test(R),
       backLinks: () => /\[ui-design-patterns\.md\]\(ui-design-patterns\.md\)/.test(C) && /\[ui-design-patterns\.md\]\(ui-design-patterns\.md\)/.test(R),
-      caps: () => bytes("ui-code-scan.md") <= 30000 && bytes("ui-responsive.md") <= 12000,
+      // (1.39.0: ui-code-scan.md's cap 30,000 → 32,000 — the pinned "What the code scan reads" table is 64 % of it, and the file
+      // is read on demand from index.md's +ui line alone; 1.39's scan prose — deprecated uses, the script search — needs the room)
+      caps: () => bytes("ui-code-scan.md") <= 32000 && bytes("ui-responsive.md") <= 12000,
       index: () => /`references\/ui-code-scan\.md`/.test(uiLine) && /`references\/ui-responsive\.md`/.test(uiLine)
         && /component contracts, UI states and the worst case, forms and interaction details, motion/.test(uiLine),
       tooling: () => /What the scan reads and what it doesn't: `references\/ui-code-scan\.md`/.test(tool),
     });
+  }
+
+  { // 1.39.0 A — deprecated uses' prose (DECISIONS A 5 / Shared 1, CRIT_X D1): ui-code-scan.md's LAST section says what the project
+    // report's `deprecatedUses` reads and what it does not (CRIT_1 must-fix 6: a namesake's importers count, a non-component export
+    // or a type through a barrel is not seen); ui-design-patterns.md's Later row and steering-templates.md's `_Deprecated:_` bullet
+    // point to it. A bound or a code a clause names is read from the engine's source. ONE assertion per clause.
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const ref = (f) => ws(raw("skills", "dev-spec-driven", "references", f));
+    const C = ref("ui-code-scan.md"), DP = ref("ui-design-patterns.md"), ST = ref("steering-templates.md");
+    const DS = raw("mcp", "lib", "engine", "design-system.js"), EN = require(path.join(root, "mcp", "lib", "i18n.js")).msg("en").quality.dsDepUsesNote;
+    const head = "### Deprecated components the code still imports", section = C.slice(C.indexOf(head));
+    const shown = (DS.match(/const DS_DEP_SHOWN = (\d+);/) || [])[1];
+    // (the note's "Not seen" list, as the engine words it — the docs' list is the same, in the same order)
+    const unseen = ((EN.match(/Not seen: (.*?)\. No import found/) || [])[1] || "").split(/, (?![^(]*\))/).map((x) => x.replace(/ \(.*\)$/, "").replace(/ reached /, " ").replace(/import\(\)/, "`import()`").replace(/\.ts file/, "`.ts` file"));
+    const rows = [
+      ["ui-code-scan: the deprecated uses are the file's last section", () => C.indexOf(head) > 0 && !section.slice(head.length).includes("### ")],
+      ["ui-code-scan: the files that still import a row — the first DS_DEP_SHOWN by path, all counted", () => shown && section.includes("(`files`, the first " + shown + " by path; `filesTotal`)")],
+      ["ui-code-scan: the replacement as doctor names it (dsReplacement, one expression)", () => section.includes("its replacement as doctor names it (`use`)") && /use: dsReplacement\(/.test(DS) && /dsReplacement\(opts\.registry, r\.key, names\)/.test(raw("mcp", "lib", "engine", "quality.js"))],
+      ["ui-code-scan: a namesake's importers count (CRIT_1 must-fix 6)", () => section.includes("its component files (`paths` — a namesake's importers count too)")],
+      // (review 1 of 1.39: a row a component folder's index names is located — the wording says what is true, as the CLI's does)
+      ["ui-code-scan: unlocated — no component file whose importers the scan reads (CRIT_1 must-fix 4)", () => section.includes("`unlocated`: rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index (a library's, an Angular or a Blade one)")],
+      ["ui-code-scan: the rows still imported first (review 1 of 1.39)", () => section.includes("for each such row the code holds a component file for — the rows still imported first —,")],
+      ["ui-code-scan: a row named by its file is its module — any import of it", () => section.includes("A row named by its file is its **module** — any import of it counts (renamed, default, type-only but `import type X from`, `require`, a non-component export, a namespace's member, an SFC with or without its extension)")],
+      ["ui-code-scan: …and its components through `export *` and a component folder's barrel", () => section.includes("and its components, followed through `export *` and a component folder's barrel")],
+      ["ui-code-scan: a component a file exports beside its own counts by its name", () => section.includes("a component a file exports beside its own counts by its **name**")],
+      ["ui-code-scan: an .mdx / .vue tag no import binds counted apart (RE_UNBOUND_FILE)", () => section.includes("An .mdx / .vue tag no import binds is counted apart (`unbound`)") && DS.includes("const RE_UNBOUND_FILE = /\\.(?:mdx|vue)$/i;")],
+      // (review 1 of 1.39: the list's sixth, a tag an auto-import names by its folder — Nuxt's <BaseCard>)
+      ["ui-code-scan: what is not seen — the note's list (CRIT_1 must-fixes 1, 6)", () => unseen.length === 6 && section.includes("Not seen (its `note`): " + unseen.join(", ") + ".") && section.includes("Nuxt's `<BaseCard>` is such a tag")],
+      ["ui-code-scan: no import found is not unused", () => section.includes("**No import found is not unused.**")],
+      ["ui-code-scan: its limits never the report's (usage-files, deprecated-follow)", () => section.includes("Its `limits` (`usage-files`, `deprecated-follow`) never touch the report's `limits` or `inSync`.")
+        && DS.includes("code: \"usage-files\"") && DS.includes("code: \"deprecated-follow\"")],
+      ["ui-design-patterns: the Later row — per `_Deprecated:_` row, the files that still import it", () => DP.includes("Per `_Deprecated:_` row, it lists the files that still import it ([ui-code-scan.md](ui-code-scan.md)). |")],
+      ["steering-templates: the `_Deprecated:_` bullet — the project report lists the files that still import it", () => ST.includes("write a retired variant or prop without the marker. `dev-spec design-system` lists the files that still import it.")],
+    ];
+    for (const [label, check] of rows) all("1.39.0 A docs — " + label + (label.includes("not seen") ? " (got " + JSON.stringify(unseen) + ")" : ""), { holds: check });
   }
 
   { // 1.38.0 F0c — font-size-viewport's prose: its criterion and failure (CRIT_3 §7), the three narrowings (CRIT_3 must-fix 1–3)
@@ -1497,7 +1562,8 @@ exports.run = async ({
     const bpCodes = [...BP.matchAll(/code: "([a-z-]+)"/g)].map((m) => m[1]);
     const B = { files: num(DS, "DS_UI_FILES"), chars: num(DS, "DS_UI_CHARS"), read: num(DS, "DS_READ_CHARS"), line: num(DS, "DS_LINE_MAX"), tag: num(UC, "DS_TAG_LINES"),
       sheets: num(UC, "DS_FOCUS_SHEETS"), entries: num(QY, "DS_MARKER_ENTRIES"), unitRows: num(QY, "DS_UNIT_ROWS"), perFile: num(DS, "DS_RAW_PER_FILE"), list: num(DS, "DS_LIST"),
-      jnd: num(DV, "DS_JND"), hsl: num(DV, "DS_SAME_HSL"), cross: num(DV, "DS_SAME_CROSS"), alpha: num(DV, "DS_ALPHA") };
+      jnd: num(DV, "DS_JND"), hsl: num(DV, "DS_SAME_HSL"), cross: num(DV, "DS_SAME_CROSS"), alpha: num(DV, "DS_ALPHA"),
+      motionFiles: num(DS, "DS_MOTION_SCRIPTS"), motionChars: num(DS, "DS_MOTION_CHARS") };
     const scanRaw = raw("skills", "dev-spec-driven", "references", "ui-code-scan.md"), scanLines = scanRaw.split("\n");
     const section = (head) => { const at = scanLines.findIndex((l) => l === head), end = scanLines.findIndex((l, i) => i > at && /^#+ /.test(l)); return at < 0 ? "" : ws(scanLines.slice(at, end < 0 ? scanLines.length : end).join("\n")); };
     const proj = section("### The project's UI checks"), scale = section("### Raw values against the project's scale");
@@ -1546,9 +1612,9 @@ exports.run = async ({
       return { keys: [...keys], missed: [...keys].filter((k) => !toolRow.includes("`" + k + "`")), sane };
     };
     const rows = [
-      ["intro: what the file says — the scale, the units table, the project's checks, switching one off; the file ≤ 30,000 bytes", () =>
+      ["intro: what the file says — the scale, the units table, the project's checks, switching one off; the file ≤ 32,000 bytes (1.39.0's cap, the F0a row's)", () =>
         /what a raw value is against the project's own scale, the units table, and the UI checks it runs on a feature's view and style files and on the project's — and how a team switches one off\./.test(ws(scanRaw))
-          && Buffer.byteLength(scanRaw, "utf8") <= 30000],
+          && Buffer.byteLength(scanRaw, "utf8") <= 32000],
       ["inventory: both surfaces, the keys; counts, never a list, never finish", () =>
         /`spec_scan \{designSystem: true\}` \/ `dev-spec design-system` \(no feature\) also run the UI checks over the project's view and style files — an inventory, `uiChecks`: `read`, `total`, `silenced`, `byRule` and `rules` \(per rule its level, the files holding one, the first place\), `facts`, `limits`\./.test(proj)
           && /Counts, never a list, never a finish warning: each feature's report lists its own\./.test(proj)],
@@ -1556,7 +1622,7 @@ exports.run = async ({
         /The tool and the CLI ask for it; the engine's own default runs none\./.test(proj) && /S\.designSystemReport\(dir, \{ name: o\.name, uiPass: true \}\)/.test(raw("mcp", "lib", "operations.js"))
           && /\.\.\.\(opts\.uiPass \? \{ uiChecks: uiProject\(scan, reg\) \} : \{\}\)/.test(DS)],
       ["bounds: the inventory's files / characters, a file's and a line's read, a tag's — every code uiProjectPass emits, its own limits", () =>
-        passCodes.length === 4 && passCodes.every((c) => proj.includes(tick(c)))
+        passCodes.length === 5 && passCodes.every((c) => proj.includes(tick(c)))
           && proj.includes("at most " + n(B.files) + " files and " + B.chars / 1048576 + " MB (`" + passCodes[0] + "`, naming the outline removals it left unjudged)")
           && proj.includes("each file's first " + B.read / 1024 + "K and a line's first " + n(B.line) + " characters (`view-size`, `line-length`; a tag past " + B.tag + " lines, `tag-length` — each with a count and the first file)")
           && proj.includes("its own limits, never the report's `limits` or `truncated`")],
@@ -1579,8 +1645,13 @@ exports.run = async ({
         const re = regexOf(UC, "RE_REDUCED_ASK");
         return said.length >= 4 && said.every((w) => re.test(w.slice(1, -1)));
       }],
-      ["fact: said only when no read was cut — the inventory's bound by its code; a script's mention not seen", () =>
-        proj.includes("Said only when no read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); a mention only in a script (a `.ts` hook) is not seen.")],
+      // (1.39, D6: the scripts are searched — the bounds from the source, the order and the filter the engine's: a test setup is
+      // no test by name, so its mention counts)
+      ["fact: said only when no view read was cut — the inventory's bound by its code; the scripts searched, a test setup's outside a test folder too (review 1 of 1.39, UC-4), their bounds and code", () =>
+        proj.includes("Said only when no view read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); a script's mention counts too — a test setup's outside a test folder included (" + n(B.motionFiles) + " by shorter path, " + B.motionChars / 1048576 + " MB: `" + passCodes[1] + "`).")
+          && require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier().isTestFile("src/test/setup.ts")
+          && passCodes[1] === "motion-scripts" && /const more = scan\.scripts\.filter\(\(x\) => !isViewFile\(x\.rel\) && !isTestFile\(x\.rel\) && !RE_NOT_COMPONENT_FILE\.test\(x\.rel\)\)\.sort\(\(a, b\) => a\.rel\.length - b\.rel\.length \|\| order\(a, b\)\)/.test(DS)
+          && ["jest.setup.js", "vitest.setup.ts", "playwright.config.ts", "src/setupTests.ts"].every((f) => !require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier().isTestFile(f))],
       ["marker: `_UI checks off: <rule-id> (reason)_` — the label the registry reads (RE_DS_MARKER), an example entry a rule; off everywhere, counted never listed", () =>
         /\|UI checks off\)/.test((QY.match(/const RE_DS_MARKER = [^\n]*/) || [""])[0]) && offPara.includes("`_UI checks off: <rule-id> (reason)_`")
           && rules.includes(((offPara.match(/`_UI checks off: ([a-z-]+) \(/) || [])[1]))
@@ -1630,24 +1701,20 @@ exports.run = async ({
           && /`#3b82f6` against `hsl\(217 91% 60%\)`, `16px` against `1rem` are not compared, nor a name the code declares with two values or more \(a theme, a twin sheet\)\./.test(scale)
           && T.tokenDrift("#3b82f6", "hsl(217 91% 60%)") === null && T.tokenDrift("16px", "1rem") === null && T.tokenDrift("150ms", "0.2s") === "quantity"],
       ["gone, and neither changes inSync", () => /`gone` lists the `_Token sources:_` files that no longer exist\. Neither changes `inSync`: it compares names\./.test(scale)],
-      ["units table: the headers the registry reads (RE_DS_PROPERTY_HEAD, RE_DS_COL.units) in EN / PT / ES; a props table is none", () => {
-        // (1.38.0 review 1, T3: the header STARTS with the word — `Allowed units` is none)
-        const heads = (scale.match(/first header cell is `Property` \(`([^`]+)`, `([^`]+)`\) and with a column whose header starts with `Units` \(`([^`]+)`, `([^`]+)`; `([^`]+)` is none\)/) || []).slice(1);
-        const prop = regexOf(QY, "RE_DS_PROPERTY_HEAD"), unit = new RegExp(((QY.match(/units: \/(.*)\/i,/) || [])[1] || "(?!)"), "i");
-        return heads.length === 5 && [ "Property", heads[0], heads[1]].every((h) => prop.test(h)) && ["Units", heads[2], heads[3]].every((h) => unit.test(h))
-          && !unit.test(heads[4]) && unit.test(heads[4].split(" ").pop()) && /a props table, `\| Property \| Type \| Default \|`, is none/.test(scale);
-      }],
-      ["units: the feature report's findings and their keys, the first 50; never a negative length, a Tailwind size in px / rem / em alone (offUnit, RE_TW_SIZE)", () => {
-        // (1.38.0 review 1, T2: what the units table does not judge, as the engine reads it)
-        const tw = new RegExp(regexOf(DS, "RE_TW_SIZE").source);
+      // (1.39, chain E: the table's shape moved to steering-templates.md — its row below reads the headers against the engine)
+      ["units table: its shape and an example — a pointer to steering-templates.md", () =>
+        scale.includes("**The units table** — the team's convention of which units each property takes, in design-system.md (its shape and an example: [steering-templates.md](steering-templates.md) → design-system.md).")],
+      ["units: the feature report's findings and their keys, the first 50; a negative length counts, a Tailwind size in any unit (offUnit, RE_TW_UNIT — RE_TW_SIZE stays the raw values')", () => {
+        // (1.39, 1.38.0 review 1's T2: what the units table judges, as the engine reads it)
+        const tw = new RegExp(regexOf(DS, "RE_TW_UNIT").source), raw = new RegExp(regexOf(DS, "RE_TW_SIZE").source);
         return scale.includes("{`findings` — the first " + B.list + ": `file`, `line`, `property`, `value`, `unit`, `allowed` —, `total`, `byProperty`}")
-          && /lists each declaration whose value takes, outside parentheses, a unit its row does not give \(never `0`, a unitless number or a negative length: `-8px`\), and a Tailwind arbitrary size in px, rem or em \(`p-\[10px\]`; never `-mt-\[12px\]`, `text-\[2vw\]`\) by the property it sets/.test(scale)
-          && T.offUnit("0 -8px", ["rem"]) === null && T.offUnit("0 8px", ["rem"]) === "px"
-          && tw.test("p-[10px]") && !tw.test("-mt-[12px]") && !tw.test("text-[2vw]");
+          && /lists each declaration whose value takes, outside parentheses, a unit its row does not give \(never `0` or a unitless number; a negative length counts: `-8px`\), and a Tailwind arbitrary size in any unit \(`p-\[10px\]`, `-mt-\[12px\]`, `text-\[2vw\]`\) by the property it sets/.test(scale)
+          && T.offUnit("0 -8px", ["rem"]) === "px" && T.offUnit("0 8px", ["rem"]) === "px" && T.offUnit("0", ["rem"]) === null && T.offUnit("1.5", ["rem"]) === null
+          && ["p-[10px]", "-mt-[12px]", "text-[2vw]"].every((u) => tw.test(u)) && raw.test("p-[10px]") && !raw.test("-mt-[12px]") && !raw.test("text-[2vw]");
       }],
-      ["units: the project's unitsTable and its rows bound; a report only, no default", () =>
+      ["units: the project's unitsTable and its rows bound; a report, never finish or doctor; the brief's own bound (DS_BRIEF_UNITS); no default", () =>
         scale.includes("The project report's `unitsTable` {`rows`, `unread`, `past` — rows past the first " + B.unitRows + "}.")
-          && /A report only — never finish, doctor or the brief — and no default: without the table both are null\./.test(scale)],
+          && scale.includes("A report — never finish or doctor; a UI task's brief quotes its rows (their first " + n(num(QY, "DS_BRIEF_UNITS")) + " characters) — and no default: without the table both are null.")],
       ["DESIGN.md: not read; its own CLI's export to a token file", () =>
         /\*\*DESIGN\.md\*\* is not read; its own CLI writes a file that is: `npx @google\/design\.md export --format css-tailwind DESIGN\.md > theme\.css` \(a token file by its name\)\./.test(scale)],
       ["breakpoints: both reports, where they come from, every limit code breakpoints.js gives, never truncated", () =>
@@ -1671,8 +1738,17 @@ exports.run = async ({
         const all3 = ["| Property | Units |", "| Propriedade | Unidades |", "| Propiedad | Unidad |"].map(read);
         return all3.every((u) => u && u.rows.length === 3 && !u.unread.length && u.rows.every((r) => r.props.length && r.units.length))
           && /- A \*\*units table\*\* \(below\) is optional — the team's convention of which units each property takes: a report, never a default \(none is written for you\)\./.test(ST)
-          && /`spec_scan \{designSystem: true, name\}` lists a feature's declarations off it \(`units`\), `spec_scan \{designSystem: true\}` the rows it could not read \(`unitsTable`\); never finish, doctor or the brief\./.test(ST)
+          && ST.includes("`spec_scan {designSystem: true, name}` lists a feature's declarations off it (`units`), `spec_scan {designSystem: true}` the rows it could not read (`unitsTable`), and a UI task's brief quotes its rows (their first " + n(num(QY, "DS_BRIEF_UNITS")) + " characters); never finish or doctor.")
           && /`margin-\*` covers `margin` and `margin-top`; a component's props table \(`\| Property \| Type \| Default \|`\) is none\./.test(ST);
+      }],
+      // (1.39, chain E — 1.38.0 review 1's T3): the headers the registry reads, as the engine reads them — the 1.38 tier (a header
+      // that STARTS with Units / Unidades / Unidad), the word's (RE_DS_UNITS_WORD), no polarity (a column of units to avoid)
+      ["steering-templates: the units table's headers (RE_DS_PROPERTY_HEAD, RE_DS_COL.units, RE_DS_UNITS_WORD) in EN / PT / ES; the units ALLOWED", () => {
+        const heads = (ST.match(/Its first header cell is `Property` \(`([^`]+)`, `([^`]+)`\); its units column's header starts with `Units` \(`([^`]+)`, `([^`]+)`\) — else holds the word \(`([^`]+)`\) — and its cells list CSS units: the units each property is ALLOWED \(a column of units to avoid would read as allowed ones\)\./) || []).slice(1);
+        const prop = regexOf(QY, "RE_DS_PROPERTY_HEAD"), unit = new RegExp(((QY.match(/units: \/(.*)\/i,/) || [])[1] || "(?!)"), "i"), word = regexOf(QY, "RE_DS_UNITS_WORD");
+        const read = (head) => { const u = regOf("units-head-" + head.replace(/\W/g, ""), "| Property | " + head + " |\n|---|---|\n| gap | px |\n").units; return u && u.rows.map((r) => r.units.join()).join(); };
+        return heads.length === 5 && ["Property", heads[0], heads[1]].every((h) => prop.test(h)) && ["Units", heads[2], heads[3]].every((h) => unit.test(h))
+          && !unit.test(heads[4]) && word.test(heads[4]) && read(heads[4]) === "px" && read("Units to avoid") === "px";
       }],
       ["steering-templates: the marker's example line is applied (uiOff); counted never listed, finish silent; an entry not applied is said", () => {
         const line = (ST.match(/- `(_UI checks off: [^`]*_)`/) || [])[1] || "";
@@ -1693,7 +1769,8 @@ exports.run = async ({
       // (item 5's reach: chain S's doctor entry, corrected to uiStateMatrix as ui-design-patterns.md is — the D block runs the examples)
       ["tooling-reference: doctor's ui-states — the anchor in any language, every anchored table, an n/a alone among a row's view cells, the a11y column and after unjudged", () => {
         const doc = ws(raw("skills", "dev-spec-driven", "references", "tooling-reference.md"));
-        return /recognised by its `Announced · focus` header cell in any language, every such table of the section:/.test(doc)
+        // (1.39: the header bound's clause between — the 1.39 Z block's row reads it)
+        return /recognised by its `Announced · focus` header cell in any language(?: \([^)]*\))?, every such table of the section:/.test(doc)
           && /\(an n\/a alone among a row's view cells answers its row\); the a11y column and the ones after it are not judged, a matrix in prose is not checked\./.test(doc);
       }],
       // item 2's one-liners (DECISIONS "T"): the checklist, the reviewer, the implementer
@@ -1724,8 +1801,8 @@ exports.run = async ({
     const DS = raw("mcp", "lib", "engine", "design-system.js");
     const C = ws(raw("skills", "dev-spec-driven", "references", "ui-code-scan.md")), ST = ws(raw("skills", "dev-spec-driven", "references", "steering-templates.md"));
     const read = num(DS, "DS_READ_CHARS") / 1024, line = num(DS, "DS_LINE_MAX").toLocaleString("en-US");
-    // (the spellings the prose names, through the registry's reader and uiOff: a list item, a bold line — no entry at all —,
-    // an id in a code span — not applied; the bare line applied)
+    // (the spellings the prose names, through the registry's reader and uiOff: a list item, a bold line — no entry at all —;
+    // the bare line applied; 1.39 UP-7: an id in ONE code span applied too, a lone or a doubled backtick `unreadable`)
     const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
     const offOf = (name, text) => {
       const d = path.join(tmp, "r138-marker-" + name, ".specs");
@@ -1735,8 +1812,9 @@ exports.run = async ({
       return [o.off.size, o.ignored.map((x) => x.why)];
     };
     const spell = { bare: offOf("bare", "_UI checks off: img-no-alt (decorative)_"), item: offOf("item", "- _UI checks off: img-no-alt (decorative)_"),
-      bold: offOf("bold", "**UI checks off:** img-no-alt (decorative)"), code: offOf("code", "_UI checks off: `img-no-alt` (decorative)_") };
-    const spelled = js(spell) === js({ bare: [1, []], item: [0, []], bold: [0, []], code: [0, ["unreadable"]] });
+      bold: offOf("bold", "**UI checks off:** img-no-alt (decorative)"), code: offOf("code", "_UI checks off: `img-no-alt` (decorative)_"),
+      lone: offOf("lone", "_UI checks off: `img-no-alt (decorative)_"), double: offOf("double", "_UI checks off: ``img-no-alt`` (decorative)_") };
+    const spelled = js(spell) === js({ bare: [1, []], item: [0, []], bold: [0, []], code: [1, []], lone: [0, ["unreadable"]], double: [0, ["unreadable"]] });
     const R1 = [
       ["ui-code-scan: a file read in part judges neither per-file font size (the read and the line bounds, design-system.js)", () =>
         C.includes("Neither the stylesheet's nor the bare one is judged in a file read in part (past " + read + "K, a line past " + line + " characters).")],
@@ -1744,12 +1822,168 @@ exports.run = async ({
         /An Astro `<style define:vars>` block's first at-rule reads as a selector: silence what it gives\./.test(C)],
       ["ui-code-scan: a feature report's focus search is narrower than the inventory's — it may warn where the inventory does not", () =>
         /A feature report looks for a focus style in its own files and the project's stylesheets alone, so it may warn of a removal the inventory excuses by one in another view file: check that the removal's elements get it, or silence it\./.test(C)],
-      ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare (the engine agrees)", () => spelled
-        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(a list item or a bold line is not read\), the marker in English, each id bare \(one in a code span is not applied\)/.test(C)],
-      ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare (the engine agrees)", () => spelled
-        && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare \(in a code span it is not applied\), entries separated by commas/.test(ST)],
+      ["ui-code-scan: the marker's spellings — a list item or bold not read, an id bare or in a code span (the engine agrees)", () => spelled
+        && /`_UI checks off: <rule-id> \(reason\)_` — a line of its own in design-system\.md \(never a list item or bold\), the marker in English, ids bare or in a code span, entries separated by commas/.test(C)],
+      ["steering-templates: the marker's spellings — a line of its own as `_Token sources:_`, never a list item or bold; ids bare or in a code span (the engine agrees)", () => spelled
+        && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare or in a code span, entries separated by commas/.test(ST)],
     ];
     for (const [label, check] of R1) all("1.38.0 review 1 docs — " + label + (label.includes("spellings") ? " (got " + js(spell) + ")" : ""), { holds: check });
+  }
+
+  { // 1.39.0 Z — the docs pass: tooling-reference.md written once for 1.39 (spec_scan {designSystem}'s `deprecatedUses`, the
+    // inventory's `motion-scripts`, the breakpoints' Sass map, partial fill and ui.md line, the units table's 1.39 reads;
+    // spec_task_brief's `designSystem.units`; doctor's ui-states header bound), the READMEs' deprecated-uses sentence and
+    // CLAUDE.md's topic map. Every key a clause names is read from a report the engine returns, every code and bound from
+    // mcp/lib/engine/*.js — never a hand list; each example runs through the engine. ONE assertion per prose clause: the docs
+    // pass's mutation pass drops each clause in a copy and its row fails (%TEMP%/dsd-139-z-mut).
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const js = (v) => JSON.stringify(v);
+    const eng = (f) => raw("mcp", "lib", "engine", f);
+    const DS = eng("design-system.js"), UC = eng("ui-checks.js"), BP = eng("breakpoints.js"), QY = eng("quality.js"), TK = eng("tasks.js"), DV = eng("design-values.js");
+    // a constant's value as the source writes it — alone (`const X = 5000;`) or in a list (`const A = 1, X = 8 * 1024 * 1024, …;`)
+    const num = (src, name) => { const m = src.match(new RegExp("\\b" + name + " = ([0-9.e* ]+)[,;]")); return m ? m[1].split("*").reduce((a, x) => a * Number(x.trim()), 1) : NaN; };
+    const n = (v) => v.toLocaleString("en-US");
+    const fnBody = (src, name) => { const at = src.indexOf("function " + name + "("); return at < 0 ? "" : src.slice(at, src.indexOf("\n}\n", at)); };
+    const regexOf = (src, name) => { const m = src.match(new RegExp("const " + name + " = /(.*)/([a-z]*);")); return m ? new RegExp(m[1], m[2]) : /(?!)/; };
+    const codesIn = (text) => [...text.matchAll(/code: "([a-z-]+)"/g)].map((m) => m[1]);
+    const tick = (id) => "`" + id + "`";
+    const TR = raw("skills", "dev-spec-driven", "references", "tooling-reference.md");
+    const rowOf = (head) => TR.split("\n").find((l) => l.startsWith(head)) || "";
+    const scanRow = rowOf("| `spec_scan {designSystem: true}` |"), briefRow = rowOf("| `spec_task_brief` |");
+    // (a clause of the row: from its opening words to the next top-level key of its shape)
+    const between = (text, from, to) => { const a = text.indexOf(from), b = a < 0 ? -1 : text.indexOf(to, a + from.length); return a < 0 || b < 0 ? "" : text.slice(a, b); };
+    const depClause = between(scanRow, "`deprecatedUses` (1.39", ". With `name`:");
+    const bpClause = between(scanRow, "both end in `breakpoints` (1.38", ". What the scan reads");
+    const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
+    const put = (p, rel, text) => { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), text); };
+    const project = (tag) => { const p = path.join(tmp, "z139-" + tag); S.initProject(p, ["ui"], "en"); return p; };
+    // the deprecated uses on a project that fills each key: a located row with an importer and an .mdx tag no import binds, an
+    // unlocated row (no file) — the keys the report returns, each of which the clause must name in a code span
+    const dep = (() => {
+      const p = project("dep");
+      put(p, ".specs/steering/design-system.md", "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n"
+        + "| Callout | src/components/callout.tsx |  | _Deprecated: use Box_ |\n| Box | src/components/box.tsx |  |  |\n| Modal |  |  | _Deprecated_ |\n");
+      put(p, "package.json", js({ name: "kit", dependencies: { react: "^19" } }));
+      put(p, "src/components/callout.tsx", "export function Callout() { return <div />; }\n");
+      put(p, "src/components/box.tsx", "export function Box() { return <div />; }\n");
+      put(p, "src/app/page.tsx", "import { Callout } from \"../components/callout\";\nexport const P = () => <Callout />;\n");
+      put(p, "docs/guide.mdx", "# Guide\n\n<Callout>hi</Callout>\n");
+      const r = S.designSystemReport(p), d = r.deprecatedUses || { rows: [] }, row = d.rows[0] || {};
+      const keys = [...Object.keys(d), ...Object.keys(row)];
+      const sane = row.name === "Callout" && row.use === "Box" && row.filesTotal === 1 && row.unbound === 1 && d.unlocatedTotal === 1 && d.unlocated[0] === "Modal"
+        && !r.limits.length && !r.truncated;
+      return { r, d, keys, sane };
+    })();
+    // the limit codes the watch builds (deprecatedWatch) and the report's cuts it repeats (scanCode's `watch.report([…])`)
+    const depCodes = codesIn(fnBody(DS, "deprecatedWatch")).concat(codesIn((DS.match(/deprecatedUses: watch\.report\(\[[^\n]*/) || [""])[0]));
+    const usage = { files: num(DS, "DS_USAGE_FILES"), chars: num(DS, "DS_USAGE_CHARS") }, follow = { files: num(DS, "DS_PASS_FILES"), chars: num(DS, "DS_PASS_CHARS"), steps: num(DS, "DS_PASS_STEPS") };
+    // the inventory's motion-scripts limit as uiProjectPass builds it — its keys — and the bounds readHeads may name
+    const msLine = (UC.match(/code: "motion-scripts"[^\n]*/) || [""])[0];
+    const msKeys = [...msLine.matchAll(/([a-z]+): scripts\./g)].map((m) => m[1]);
+    const cutNames = [...fnBody(DS, "readHeads").matchAll(/cut = "([a-z]+)"/g)].map((m) => m[1]);
+    // the breakpoints through the engine: ui.md's line (a no-break space, the slot's brackets, an aside), a Sass map, a partial theme
+    const ui = (() => {
+      const p = project("ui");
+      const at = (line) => { put(p, ".specs/steering/ui.md", "# UI\n\n" + line + "\n"); return T.breakpointsReport(p, null).widths.join(","); };
+      const nb = String.fromCharCode(0xa0), dot = String.fromCharCode(0xb7);
+      return { nbsp: at("- Breakpoints: 360 " + dot + nb + "768 px " + dot + " text expansion"), thin: at("- Breakpoints: 360 " + dot + String.fromCharCode(0x2009) + "768 px " + dot + " text expansion"),
+        slot: at("- Breakpoints: [576 / 768 px] " + dot + " text expansion"), aside: at("- Breakpoints: 480 / 960 px [1200 in print]"), stub: at("- Breakpoints: [360 / 768 / 1280 px] " + dot + " text expansion") };
+    })();
+    const sass = (() => {
+      const p = project("sass"), q = project("sass-merge");
+      put(p, "scss/_variables.scss", "$grid-breakpoints: (xs: 0, sm: 576px, md: 768px) !default;\n$spacers: (0: 0, 1: 400px);\n");
+      put(p, "scss/custom.scss", "$grid-breakpoints: (xs: 0, sm: 600px, md: 900px);\n");
+      put(q, "scss/_variables.scss", "$grid-breakpoints: (xs: 0, sm: 576px) !default;\n");
+      put(q, "scss/custom.scss", "$grid-breakpoints: map-merge($grid-breakpoints, (xxl: 1600px));\n");
+      const a = S.designSystemReport(p).breakpoints, b = S.designSystemReport(q).breakpoints;
+      return { plain: a.from + ":" + a.widths.join(","), merge: b.from + ":" + b.unread.map((x) => x.name).join(",") };
+    })();
+    const partial = (() => {
+      const p = project("partial");
+      put(p, "src/app/globals.css", "@import \"tailwindcss\";\n@theme {\n  --breakpoint-3xl: 1600px;\n  --breakpoint-4xl: 2000px;\n  --color-a: #fff;\n  --color-b: #000;\n  --color-c: #111;\n}\n");
+      const b = S.designSystemReport(p).breakpoints;
+      return b.partial + ":" + b.widths.join(",");
+    })();
+    const fill = (((BP.match(/const BP_FILL = \[([^\]]*)\]/) || [])[1] || "").match(/\d+/g) || []).join(" · ");
+    const readmeDep = { "README.md": "`dev-spec design-system` lists the files that still import it (`deprecatedUses`).",
+      "README.pt.md": "O `dev-spec design-system` lista os ficheiros que ainda o importam (`deprecatedUses`).",
+      "README.es.md": "`dev-spec design-system` enumera los ficheros que aún lo importan (`deprecatedUses`)." };
+    const qmap = ws(((raw("CLAUDE.md").split(/\n## Topic map\n/)[1] || "").match(/- \*\*`docs\/maintainers\/quality\.md`\*\*[\s\S]*?(?=\n- \*\*)/) || [""])[0]);
+    const rows = [
+      // spec_scan {designSystem} — the project shape's deprecatedUses (item 1)
+      ["tooling-reference: spec_scan's deprecatedUses — only while a row is marked, every key the report returns (rows and a row's), in its clause", () =>
+        dep.sane && dep.keys.length === 15 && dep.keys.every((k) => depClause.includes(tick(k)))
+          && depClause.startsWith("`deprecatedUses` (1.39 — only while the registry marks a row `_Deprecated:_`, a report:")],
+      ["tooling-reference: deprecatedUses' rows — the files and component files listed by their first DS_DEP_SHOWN", () => {
+        const shown = num(DS, "DS_DEP_SHOWN");
+        return shown === 3 && depClause.includes("`paths` (its component files, the first " + shown + " — a namesake's too)") && depClause.includes("`files` (the files that still import it, the first " + shown + " by path)");
+      }],
+      ["tooling-reference: deprecatedUses' unlocated — no component file whose importers the scan reads (RE_JSX_FILE ∪ RE_MARKUP_FILE)", () => {
+        const exts = [regexOf(DS, "RE_JSX_FILE"), regexOf(DS, "RE_MARKUP_FILE")];
+        const said = ["tsx", "jsx", "js", "vue", "svelte", "astro"];
+        // (review 1 of 1.39: a component folder's index that gives the name locates the row too; the rows still imported first;
+        // review 2: the index the row's path names, when several give the name to different files)
+        return depClause.includes("`unlocated` (the rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index, the one the row's path names when several give it to different files: a library's, an Angular or a Blade one)")
+          && said.every((x) => exts.some((re) => re.test("a." + x))) && !exts.some((re) => re.test("a.component.ts"))
+          && depClause.includes("`rows` — each row the code holds a component file for, the rows still imported first, each group in the registry's order:");
+      }],
+      ["tooling-reference: deprecatedUses' limits — every code the watch builds or repeats, the usage read's and the follow's bounds (design-system.js)", () =>
+        depCodes.length === 4 && depCodes.every((c) => depClause.includes(tick(c)))
+          && depClause.includes("`usage-files` (the project's files read for what they import, " + n(usage.files) + " / " + usage.chars / 1048576 + " MB: `read`)")
+          && depClause.includes("`deprecated-follow` (the re-exports followed, " + n(follow.files) + " files / " + follow.chars / 1048576 + " MB / " + n(follow.steps) + " steps: `read`, `chars`, `count`)")],
+      ["tooling-reference: deprecatedUses — its note, localized: no import found is not unused; never the report's limits, truncated or inSync", () =>
+        dep.d.note === require(path.join(root, "mcp", "lib", "i18n.js")).msg("en").quality.dsDepUsesNote && /No import found is not unused/.test(dep.d.note)
+          && depClause.includes("`note` (localized: what it does not see — no import found is not unused); never the report's `limits`, `truncated` or `inSync`")],
+      // the inventory's motion-scripts (item 2)
+      ["tooling-reference: uiChecks' motion-scripts — its bounds (DS_MOTION_*), every key uiProjectPass gives it, the bounds readHeads names", () =>
+        js(msKeys) === js(["read", "bound", "count", "file"]) && js(cutNames) === js(["files", "chars"])
+          && scanRow.includes("`motion-scripts` (1.39 — the fact's script search, " + n(num(DS, "DS_MOTION_SCRIPTS")) + " scripts / " + num(DS, "DS_MOTION_CHARS") / 1048576 + " MB: `read`, `bound` " + cutNames.join(" · ") + " when one ended it, `count` and the first `file` of the scripts read only in part)")],
+      ["tooling-reference: the fact no-reduced-motion — taken back by a script's mention", () => /said only when no view read was cut, taken back by a script's mention \(1\.39\)/.test(scanRow)],
+      // the breakpoints (item 3)
+      ["tooling-reference: breakpoints' ui.md line — a no-break space after the `·` continues the list (RE_UI_END; a thin space ends it)", () =>
+        ui.nbsp === "320,360,768" && ui.thin === "320,360"
+          && bpClause.includes("1.39: a no-break space after the `·` continues the list as a blank does")],
+      ["tooling-reference: breakpoints' ui.md line — the stub's slot unread, widths written in the brackets opening the value read, another bracket an aside", () =>
+        ui.slot === "320,576,768" && ui.aside === "320,480,960" && ui.stub === "320,390,768,1024,1440"
+          && bpClause.includes("the stub's `[…]` slot is not read, but widths written inside the brackets that open the value are, and any other bracket is an aside")],
+      ["tooling-reference: breakpoints' code — a top-level Sass …breakpoints map (RE_SASS_NAME), a plain assignment over a `!default` one, map-merge unread", () => {
+        const name = regexOf(BP, "RE_SASS_NAME");
+        return sass.plain === "code:320,600,900" && sass.merge === "default:$grid-breakpoints" && name.test("$grid-breakpoints") && name.test("$breakpoints") && !name.test("$spacers")
+          && bpClause.includes("— 1.39 — a top-level Sass map whose name ends in `breakpoints`, `$grid-breakpoints`, in a .scss sheet the scan reads, a plain assignment over a `!default` one, `map-merge` or a variable unread");
+      }],
+      ["tooling-reference: breakpoints' partial — the theme's widths first, then the default set fills the places left in BP_FILL's order", () =>
+        partial === "true:320,768,1024,1440,1600,2000" && fill === "768 · 1024 · 1440 · 390"
+          && bpClause.includes("`partial` — a Tailwind 4 theme that keeps Tailwind's own five: the theme's widths first, then (1.39) the default set fills the places left, " + fill + " —")],
+      ["tooling-reference: breakpoints' breakpoint-widths — the source's own widths past BP_WIDTHS, never a default one", () =>
+        bpClause.includes("`breakpoint-widths` (the source's own widths past " + num(BP, "BP_WIDTHS") + " — never a default one)")],
+      // the units table (item 4)
+      ["tooling-reference: units — a negative length and a Tailwind size in any unit judged (offUnit, RE_TW_UNIT)", () =>
+        T.offUnit("0 -8px", ["rem"]) === "px" && new RegExp(regexOf(DS, "RE_TW_UNIT").source).test("text-[2vw]")
+          && scanRow.includes("`units` — the declarations off the registry's units table (1.39: a negative length too, `-8px`, and a Tailwind arbitrary size in any unit, `text-[2vw]`):")],
+      ["tooling-reference: unitsTable — the units column by its header's start, else the first holding the word (RE_DS_UNITS_WORD)", () =>
+        regexOf(QY, "RE_DS_UNITS_WORD").test("Allowed units") && !/^units/i.test("Allowed units")
+          && scanRow.includes("its units column is the one whose header starts with Units, else — 1.39 — the first holding the word, `Allowed units`")],
+      // spec_task_brief (item 4) and doctor's ui-states (item 3)
+      ["tooling-reference: spec_task_brief — the units table's rows within DS_BRIEF_UNITS, a units-only registry too, `designSystem.units` {rows, more} as briefDesignSystem builds it", () => {
+        const body = fnBody(QY, "briefDesignSystem");
+        return /units = \{ rows: \[\], more: 0 \}/.test(body) && /units\.rows\.push\(\{ props: r\.props, units: r\.units \}\)/.test(body) && /!reg\.units\)\) return null/.test(body)
+          && /if \(ds\.units\) res\.designSystem\.units = ds\.units;/.test(TK)
+          && briefRow.includes("and (1.39) the registry's units table, its first rows within " + num(QY, "DS_BRIEF_UNITS") + " characters, then how many more (a registry holding only the table gets the part too)")
+          && briefRow.includes("and with a units table `units` {`rows` [{props, units}], `more`} (1.39)}");
+      }],
+      // (1.39.0 review 1, BU-5 / R1-DOC-5: the detail names that bound — usTruncated is handed US_HEADER)
+      ["tooling-reference: doctor's ui-states — the anchor looked for in a header's first US_HEADER cells, past them no matrix, the detail naming that bound", () =>
+        /t\.header\.slice\(0, US_HEADER\)/.test(QY) && /if \(a < 0 && t\.header\.length > US_HEADER\) truncated\.views = true;/.test(QY)
+          && /Q\.usTruncated\(US_TABLES, US_ROWS, US_VIEWS, US_HEADER\)/.test(QY)
+          && ws(TR).includes("header cell in any language (looked for in a header's first " + num(QY, "US_HEADER") + " cells — 1.39: past them the table is none, the detail naming that bound)")],
+      // the READMEs (EN / PT / ES) and CLAUDE.md's topic map
+      ...Object.entries(readmeDep).map(([f, s]) => [f + ": the +ui paragraph — the files that still import a deprecated component (`deprecatedUses`)", () => ws(raw(f)).includes(s)]),
+      ["CLAUDE.md: the topic map's quality.md line — the deprecated uses, the Sass breakpoints map, the reduced-motion script search", () =>
+        qmap.includes("the deprecated uses — the files that still import a `_Deprecated:_` component, settle's follow —") && qmap.includes("a Sass `…breakpoints` map too")
+          && qmap.includes("the project UI inventory and its reduced-motion script search")],
+    ];
+    for (const [label, check] of rows) all("1.39.0 Z docs — " + label + (label.includes("every key the report returns") ? " (got " + js({ keys: dep.keys, sane: dep.sane, missed: dep.keys.filter((k) => !depClause.includes(tick(k))) }) + ")" : ""), { holds: check });
   }
 
   // Release hygiene: the three version fields agree.

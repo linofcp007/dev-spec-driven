@@ -1930,8 +1930,12 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (gloss.items.length) res.glossary = gloss.items.map((g) => ({ term: g.term, definition: g.definition, avoid: g.avoid })); // 1.16 Q3
   if (gloss.omitted.length) res.glossaryOmitted = gloss.omitted;
   if (reuseShown) res.reuse = reuse; // {state, total, entries, omitted, files, more}
-  // 1.35: {file, components: [{kind, name, path}], unknown, tokens} — the registry entries the brief quotes (identifiers only)
-  if (ds) res.designSystem = { file: ds.file, components: ds.components.map((c) => ({ kind: c.kind, name: c.name, path: c.path })), unknown: ds.unknown, tokens: ds.tokens };
+  // 1.35: {file, components: [{kind, name, path}], unknown, tokens} — the registry entries the brief quotes (identifiers only);
+  // 1.39: units {rows: [{props, units}], more} — the units table's rows it quotes, only when the registry holds one
+  if (ds) {
+    res.designSystem = { file: ds.file, components: ds.components.map((c) => ({ kind: c.kind, name: c.name, path: c.path })), unknown: ds.unknown, tokens: ds.tokens };
+    if (ds.units) res.designSystem.units = ds.units;
+  }
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   else if (write) {

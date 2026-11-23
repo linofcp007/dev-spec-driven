@@ -98,4 +98,29 @@ exports.run = async ({ all, remeasure, require, __dirname }) => {
       from: () => js(st) === js([["transition: opacity .2s, all .3s", 2, 5], ["outline: 0", 6, 6], ["color: red", 6, 7], ["a: 1", 8, 8]]),
     });
   }
+
+  { // 1.39 (the Sass map reader — O1, O2, O3, W1): styleTokens' open events — a token declaration its line left open (a
+    // multi-line map, a value below its name, each override of `@use … with (`): its name, what its line holds after the colon
+    // (flags kept, its first DS_PRELUDE characters), its block and line; never one a `;` closed on its line, never in an indented
+    // .sass; the other events and the tokens the same with and without an open handler
+    const P = T.DS_PRELUDE, long = "(" + "a: 1px, ".repeat(400);
+    const sheet = ["// Breakpoints", "$breakpoints: (", "  xs: 0,", "  // a comment", "  sm: 576px", ") !default;", "$closed: (xs: 0) !default;",
+      "$grid-breakpoints: (xs: 0, !default", "  sm: 600px);", ".x {", "  --gap:", "    4px;", "}", "@use \"b\" with (", "  $a: (", "    k: 1px", "  ),", "  $b: red", ");", "$long: " + long, ");"].join("\n");
+    const rec = (withOpen, rel = "src/_settings.scss") => {
+      const ev = { block: [], statement: [], close: [], open: [] };
+      const on = { block: (e) => ev.block.push(e), statement: (e) => ev.statement.push(e), close: (e) => ev.close.push(e) };
+      if (withOpen) on.open = (e) => ev.open.push([e.name, e.value, e.block, e.line]);
+      return { ev, tokens: T.styleTokens(sheet, rel, on) };
+    };
+    const a = rec(true), b = rec(false), plain = T.styleTokens(sheet, "src/_settings.scss"), sass = rec(true, "src/_settings.sass");
+    all("1.39 styleTokens' open events: a declaration its line left open — name, the line's text after the colon (flags kept, its first DS_PRELUDE characters), block, line; none for one closed on its line, none in a .sass; block / statement / close events and the tokens unchanged by an open handler (got " +
+      js({ open: a.ev.open.map((o) => [o[0], o[1].slice(0, 20), o[1].length, o[2], o[3]]), sass: sass.ev.open.length }) + ")", {
+      opens: () => js(a.ev.open.map((o) => [o[0], o[1].length > 40 ? o[1].length : o[1], o[2], o[3]])) ===
+        js([["$breakpoints", "(", 0, 2], ["$grid-breakpoints", "(xs: 0, !default", 0, 8], ["--gap", "", 1, 11], ["$a", "(", 0, 15], ["$b", "red", 0, 18], ["$long", P, 0, 20]]),
+      head: () => a.ev.open[5][1] === ("$long: " + long).slice(7, 7 + P) && P === 2000,
+      sass: () => sass.ev.open.length === 0,
+      same: () => js(a.ev.block) === js(b.ev.block) && js(a.ev.statement) === js(b.ev.statement) && js(a.ev.close) === js(b.ev.close) && a.ev.statement.length > 0,
+      tokens: () => js(a.tokens) === js(plain) && js(b.tokens) === js(plain),
+    });
+  }
 };

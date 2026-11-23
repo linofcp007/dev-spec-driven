@@ -325,6 +325,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   prototype, checked on 1,320 section states) was set aside: the owner chose prose — the untouched matrix (a column added or
   deleted, reformatted) is template, a `TBD` / dash one is written and doctor's `ui-states` warns about each such cell, as
   the Template bullet above and ui-design-patterns.md now say (a 17-docs row runs both through `sectionState`). 1.39 backlog.
+- **1.39.0** — BS-3's key of the answering cells was designed again and CUT (CRIT_X cut 4: 1.39's only new refusal, at size
+  s, through `sectionLineKey`, which every track's and pack's tables share): the row key and 1.38's prose stand (quality.md →
+  History → UI state matrix, 1.39.0).
 
 ### Requirements traceability matrix
 - **1.14 F5** — the matrix: `trace_check {matrix: true}`, `trace --matrix` / `--csv`, the export's section and `.rtm.csv`.

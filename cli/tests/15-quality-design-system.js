@@ -249,7 +249,8 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     };
     const uiAt = (d) => UI + ":" + (fs.readFileSync(path.join(d, UI), "utf8").split("\n").findIndex((l) => l.startsWith("- Breakpoints:")) + 1);
     const at = (out, line) => out.split("\n").indexOf(line);
-    // partial: an @theme that only adds (shadcn v4's 3xl / 4xl) — the default set joins, the 7th width said
+    // partial: an @theme that only adds (shadcn v4's 3xl / 4xl) — its widths, then the default set where room is left (1.39, BS-2:
+    // 768 · 1024 · 1440; 390 had no room, and a default width is never said)
     const partial = bp("partial", "en", "@import \"tailwindcss\";\n@theme inline {\n  --breakpoint-3xl: 1600px;\n  --breakpoint-4xl: 2000px;\n}\n");
     const pOut = runIn(["design-system", "--project", partial]);
     const pJson = jsonOf(runIn(["design-system", "--project", partial, "--json"]));
@@ -272,9 +273,9 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     const DEF = "320 · 390 · 768 · 1024 · 1440";
     all("1.38 design-system (CLI): the breakpoints line — the widths and where they come from (ui.md's line, the code's @theme, partial: the default set and what the code adds, none: the default set), the unread ones, its own bounds (the 7th width, ui.md's 200 characters); right after the project's counts, after a feature's UI checks; PT; --json is the engine's, both shapes (got " +
       js([pOut.out, cOut.out, lOut.out, nOut.out, fOut.out, ptOut.out]) + ")", {
-      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 390 · 768 · 1024 · 1440 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
-        pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1600)),
-      json: () => js(pJson.breakpoints) === js(SR.designSystemReport(partial).breakpoints) && pJson.breakpoints.partial === true,
+      partial: () => pOut.code === 0 && at(pOut.out, T.bpHead("320 · 768 · 1024 · 1440 · 1600 · 2000", T.bpFrom.partial("src/app.css:3"))) === at(pOut.out, T.dsFound(0, 0, 0)) + 1 &&
+        !pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 1600)) && !pOut.out.includes(T.bpLimit["breakpoint-widths"](6, 1, 390)),
+      json: () => js(pJson.breakpoints) === js(SR.designSystemReport(partial).breakpoints) && pJson.breakpoints.partial === true && pJson.breakpoints.limits.length === 0,
       code: () => cOut.out.includes(T.bpHead("320 · 800", T.bpFrom.code("src/app.css:4"))) &&
         cOut.out.includes(T.bpUnread(6, "--breakpoint-x calc(40rem + 1px) (src/app.css:3), --breakpoint-u0 var(--w) (src/app.css:5), --breakpoint-u1 auto (src/app.css:6), --breakpoint-u2 40vw (src/app.css:7), --breakpoint-u3 250rem (src/app.css:8) … +1")),
       line: () => lOut.out.includes(T.bpHead("320 · 600 · 1200", T.bpFrom["ui.md"](uiAt(line)))) && lOut.out.includes(T.bpLimit["breakpoint-line"](200, undefined, undefined, uiAt(line))),
@@ -296,6 +297,35 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     all("1.38.0 review 1 design-system (CLI): the default widths as printed (`320 · 390 · 768 · 1024 · 1440`), pasted into ui.md's Breakpoints line, read back whole from the line — EN / PT / ES (got " + js(pasted) + ")", {
       printed: () => pasted.every((x) => x.printed === DEF),
       read: () => pasted.every((x) => x.ok),
+    });
+
+    // 1.39: a Bootstrap 5 app's Sass map (scss/custom.scss, a sheet candidate) — the code's widths and where they are declared, and
+    // a map another override follows (unread, listed) — EN / PT / ES; --json is the engine's
+    const sass = ["en", "pt", "es"].map((lang) => {
+      const d = bp("sass-" + lang, lang, null, null), X = MSG(lang).cliOutput;
+      write(d, "scss/custom.scss", "$grid-breakpoints: (\n  xs: 0,\n  sm: 600px,\n  md: 900px\n);\n@use 'x' with (\n  $breakpoints: (\n    a: 1px\n  ),\n  $primary: red\n);\n");
+      const out = runIn(["design-system", "--project", d]), json = jsonOf(runIn(["design-system", "--project", d, "--json"]));
+      return { lang, out: out.out.split("\n").filter((l) => /breakpoint/i.test(l)), ok: out.code === 0 && out.out.includes(X.bpHead("320 · 600 · 900", X.bpFrom.code("scss/custom.scss:1"))) &&
+        out.out.includes(X.bpUnread(1, "$breakpoints ( … (scss/custom.scss:7)")), json: js(json.breakpoints) === js(SR.designSystemReport(d).breakpoints) };
+    });
+    all("1.39 design-system (CLI): a Sass `$grid-breakpoints` map's widths, declared in its file:line, and a `with` override the walk did not deliver whole listed unread — EN / PT / ES; --json = the engine (got " + js(sass) + ")", {
+      line: () => sass.every((x) => x.ok),
+      json: () => sass.every((x) => x.json),
+    });
+
+    // 1.39.0 review 1 (BU-1): the reviewer's crash shape — three sheet candidates (256K each) of one-line maps of 480 unitless
+    // entries, ~193K unread — prints the report (exit 0: 1.39 as reviewed said "Maximum call stack size exceeded", exit 1), the
+    // first five listed and the rest counted; --json = the engine
+    const wide = "$a-breakpoints: (" + Array(480).fill("a:1").join(",") + ");\n", sheet = wide.repeat(Math.floor(256 * 1024 / wide.length));
+    const crash = bp("crash", "en", null, null);
+    for (const k of [0, 1, 2]) write(crash, "p" + k + "/custom.scss", sheet);
+    const total = 3 * Math.floor(256 * 1024 / wide.length) * 480;
+    const cr = runIn(["design-system", "--project", crash]), crJson = jsonOf(runIn(["design-system", "--project", crash, "--json"]));
+    const crLine = cr.out.split("\n").find((l) => l.includes("⚠")) || "";
+    all("1.39.0 review 1 design-system (CLI — BU-1): ~193K unread Sass entries print the report — the default set, `⚠ " + total + " breakpoints…` with the first five and `… +" + (total - 5) + "`, exit 0; --json = the engine (got " +
+      js({ code: cr.code, err: String(cr.err || "").slice(0, 200), line: crLine.slice(0, 300), unreadTotal: crJson.breakpoints && crJson.breakpoints.unreadTotal }) + ")", {
+      line: () => cr.code === 0 && cr.out.includes(T.bpHead("320 · 390 · 768 · 1024 · 1440", T.bpFrom.default())) && crLine.startsWith(T.bpUnread(total, "$a-breakpoints.a 1 (").split(" — ")[0]) && crLine.includes(" … +" + (total - 5) + ":"),
+      json: () => crJson.breakpoints && crJson.breakpoints.unreadTotal === total && crJson.breakpoints.unread.length === 5 && js(crJson.breakpoints) === js(SR.designSystemReport(crash).breakpoints),
     });
   }
 
@@ -332,6 +362,93 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       pt: () => ptOut.code === 0 && ptOut.out.includes("    src/checkout/c.css:1  #18181b  " + P.dsRawNear("--primary")) && ptOut.out.includes(P.dsUnitsHead(1)) && ptOut.out.includes(P.dsRawGroupsHead),
       past: () => ptProject.out.includes(P.dsUnitsPast(12, 50)) && !pr.out.includes(T.dsUnitsPast(0, 2).slice(0, 20)),
       help: () => /the raw values and the UI checks/.test(help.out) && !/raw colours/.test(help.out),
+    });
+  }
+
+  // --- 1.39: the task brief quotes the units table (its own bound); a negative length and a Tailwind size in any unit -----------
+  {
+    const mk = (lang) => {
+      const dir = path.join(tmp, "p139-units-" + lang);
+      SR.initProject(dir, ["ui"], lang);
+      write(dir, REG, "# Design System\n\n## Units\n| Property | Allowed units |\n|---|---|\n| font-size | rem |\n| margin-* | rem, % |\n");
+      const f = SR.createFeature(dir, { name: "Checkout", tracks: ["ui"], summary: "x", lang });
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the page\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/checkout/Page.tsx, src/checkout/c.css_\n");
+      write(dir, "src/checkout/Page.tsx", "export const Page = () => <p className=\"-mt-[12px] text-[2vw]\" />;\n");
+      write(dir, "src/checkout/c.css", ".a { margin: 0 -8px; }\n");
+      return { dir, slug: f.slug };
+    };
+    const en = mk("en"), pt = mk("pt");
+    const b = runIn(["brief", en.slug, "1", "--project", en.dir]), bJson = runIn(["brief", en.slug, "1", "--project", en.dir, "--json"]);
+    const bPt = runIn(["brief", pt.slug, "1", "--project", pt.dir]);
+    const fr = runIn(["design-system", en.slug, "--project", en.dir]);
+    const T = MSG("en").cliOutput;
+    all("1.39 brief / design-system (CLI): a UI task's brief prints the units table's rows (`| Property | Allowed units |`: a units column by a word of its header), --json carries designSystem.units as spec_task_brief does; the feature report lists a negative length and a Tailwind size in any unit; PT (got " +
+      js([b.out.slice(b.out.indexOf("## Design system")), bPt.out.slice(bPt.out.indexOf("## Design system")), fr.out]) + ")", {
+      line: () => b.code === 0 && b.out.includes("\n\nUnits — the registry's table, the team's convention: font-size: rem · margin-*: rem, %.\n"),
+      json: () => js(jsonOf(bJson).designSystem) === js(SR.taskBrief(en.dir, en.slug, 1).designSystem) && js(jsonOf(bJson).designSystem.units) === js({ rows: [{ props: ["font-size"], units: ["rem"] }, { props: ["margin-*"], units: ["rem", "%"] }], more: 0 }),
+      pt: () => bPt.code === 0 && bPt.out.includes("Unidades — a tabela do registo, a convenção da equipa: font-size: rem · margin-*: rem, %."),
+      units: () => fr.code === 0 && fr.out.includes(T.dsUnitsHead(3)) && fr.out.includes("    src/checkout/c.css:1  margin: 0 -8px  " + T.dsUnitsLine("px", "rem, %"))
+        && fr.out.includes("    src/checkout/Page.tsx:1  -mt-[12px]  " + T.dsUnitsLine("px", "rem, %")) && fr.out.includes("    src/checkout/Page.tsx:1  text-[2vw]  " + T.dsUnitsLine("vw", "rem")),
+    });
+  }
+
+  // --- 1.39: the files that still import a deprecated component — the project report's `deprecatedUses` on the CLI ----------------
+  {
+    const L = (lines) => lines.join("\n") + "\n";
+    const mk = (lang) => {
+      const dir = path.join(tmp, "p139-ds-uses-" + lang);
+      SR.initProject(dir, ["ui"], lang);
+      write(dir, REG, "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| Table | src/components/ui/table.tsx |  | _Deprecated: use data-grid_ |\n" +
+        "| DataGrid | src/components/ui/data-grid.tsx |  |  |\n| Toast | src/components/ui/toast.tsx |  | _Deprecated_ |\n| Callout | src/components/callout.tsx |  | _Deprecated_ |\n| Modal |  |  | _Deprecated_ |\n");
+      for (const [rel, name] of [["src/components/ui/table.tsx", "Table"], ["src/components/ui/data-grid.tsx", "DataGrid"], ["src/components/ui/toast.tsx", "Toast"], ["src/components/callout.tsx", "Callout"]]) {
+        write(dir, rel, "export function " + name + "() { return <div />; }\n");
+      }
+      write(dir, "src/billing/components/table.tsx", "export function BillingTable() { return <table />; }\n"); // (a namesake: a Table file too)
+      for (let i = 1; i <= 5; i++) write(dir, "src/app/p" + i + "/page.tsx", L(["import { Table } from \"../../components/ui/table\";", "export const P = () => <Table />;"]));
+      write(dir, "docs/guide.mdx", L(["# Guide", "", "<Callout>hi</Callout>"]));
+      // (a barrel of 11 stars whose first ten pass on 10,000 names each: the follow's steps bound, said below the rows)
+      write(dir, "src/hub.ts", L(Array.from({ length: 11 }, (_, k) => "export * from \"./n/n" + String(k + 1).padStart(2, "0") + "\";")));
+      for (let k = 1; k <= 10; k++) write(dir, "src/n/n" + String(k).padStart(2, "0") + ".ts", L(Array.from({ length: 100 }, (_, j) => "export { " + Array.from({ length: 100 }, (_, i) => "a" + k + "_" + (j * 100 + i)).join(", ") + " } from \"./x\";")));
+      write(dir, "src/n/n11.ts", "export * from \"../components/ui/toast\";\n");
+      write(dir, "src/app/hub.tsx", L(["import { Toast } from \"../hub\";", "export const P = () => <Toast />;"]));
+      return dir;
+    };
+    const en = mk("en"), pt = mk("pt");
+    const out = runIn(["design-system", "--project", en]), asJson = runIn(["design-system", "--project", en, "--json"]);
+    const ptOut = runIn(["design-system", "--project", pt]);
+    const d = jsonOf(asJson).deprecatedUses || {};
+    const P = MSG("pt").cliOutput, Q = MSG("en").quality;
+    const lines = (M, q) => [M.dsDepUsesHead(1, 3), M.dsDepUsesRow("Table", "DataGrid", 5, "src/app/p1/page.tsx, src/app/p2/page.tsx, src/app/p3/page.tsx … +2", 2),
+      M.dsDepUsesNone("Toast", "", d.read), M.dsDepUsesNone("Callout", "", d.read), M.dsDepUsesUnbound(1, "Callout", "docs/guide.mdx"), M.dsDepUsesUnlocated("Modal"),
+      "  (" + q.dsDepUsesNote + ")", M.dsLimit["deprecated-follow"](2000, 8 * 1024 * 1024, 100000)];
+    const at = (text, list) => { let k = -1; return list.every((l) => { const n = text.indexOf(l + "\n", k + 1); if (n <= k) return false; k = n; return true; }); };
+    all("1.39 design-system (CLI): the deprecated components the code still imports — a head, a row each (its replacement, its importers' count and the first three, its namesakes), \"no import found\" said with what is not read, the .mdx tags no import binds, the rows with no component file, the note, the watch's own bounds — in that order, in the project's language; --json IS the report (got " +
+      js([out.out, ptOut.out]) + ")", {
+      en: () => out.code === 0 && at(out.out, lines(T, Q)) && d.read > 0,
+      json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.designSystemReport(en, { uiPass: true })),
+      pt: () => ptOut.code === 0 && at(ptOut.out, lines(P, MSG("pt").quality)),
+    });
+  }
+  {
+    // review 1 of 1.39: past the 50 rows listed, the rows still imported come first (the registry's order within each group) and
+    // the head counts the rows the code holds a file for (rowsTotal) — "at least" when every listed row is imported and some are
+    // not listed (51 located rows: C50 and C10 imported, then all 51)
+    const L = (lines) => lines.join("\n") + "\n";
+    const names = Array.from({ length: 51 }, (_, i) => "C" + String(i).padStart(2, "0"));
+    const mk = (tag, used) => {
+      const dir = path.join(tmp, "p139-ds-uses-cut-" + tag);
+      SR.initProject(dir, ["ui"], "en");
+      for (const n of names) write(dir, "src/components/" + n + ".tsx", "export function " + n + "() { return <div />; }\n");
+      write(dir, REG, "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n" + names.map((n) => "| " + n + " | src/components/" + n + ".tsx |  | _Deprecated_ |").join("\n") + "\n");
+      write(dir, "src/app/page.tsx", L(used.map((n) => "import { " + n + " } from \"../components/" + n + "\";").concat(["export const P = () => <>" + used.map((n) => "<" + n + " />").join("") + "</>;"])));
+      return dir;
+    };
+    const two = runIn(["design-system", "--project", mk("two", ["C50", "C10"])]), every = runIn(["design-system", "--project", mk("every", names)]);
+    all("1.39 design-system (CLI, review 1): past the 50 rows listed, the rows still imported first and the head's total every row the code holds a file for — \"at least\" when every listed row is imported and some are not listed (got " + js([two.out, every.out]) + ")", {
+      order: () => two.code === 0 && two.out.includes(T.dsDepUsesHead(2, 51, false) + "\n" + T.dsDepUsesRow("C10", "", 1, "src/app/page.tsx", 0) + "\n" + T.dsDepUsesRow("C50", "", 1, "src/app/page.tsx", 0) + "\n" + T.dsDepUsesNone("C00", "", 52) + "\n")
+        && T.dsDepUsesHead(2, 51, false).includes("(2 of the 51 _Deprecated:_ rows"),
+      atLeast: () => every.code === 0 && every.out.includes(T.dsDepUsesHead(50, 51, true) + "\n") && T.dsDepUsesHead(50, 51, true).includes("(at least 50 of the 51 ")
+        && MSG("pt").cliOutput.dsDepUsesHead(50, 51, true).includes("(pelo menos 50 ") && MSG("es").cliOutput.dsDepUsesHead(50, 51, true).includes("(al menos 50 "),
     });
   }
 };
