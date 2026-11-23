@@ -129,7 +129,7 @@ a namesake's importers count too); `unlocated`: rows whose name no component fil
 a row only when no component file gives its name; when indexes give it to different files (a kit's parts: `Content` — the
 files their relative imports name), only one the row's path names (any word); a direct import of a file it renames counts
 for each such row (`import VbenButton from './button.vue'`). A row named by its file is its **module** — any import
-of it counts (renamed, default, type-only but `import type X from`, `require`, a
+of it counts (renamed, default, type-only, `require`, a
 non-component export, a namespace's member, an SFC with or without its extension) — and its components, followed through
 `export *` and a component folder's barrel; a component a file exports beside its own counts by its **name** (a default
 import too, when it is the file's default). An .mdx / .vue tag no import binds is counted apart (`unbound`). Not seen (its

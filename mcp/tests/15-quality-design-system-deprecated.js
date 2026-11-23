@@ -661,8 +661,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
     // `export default ListItem`, ToolbarSeparator.tsx's Separator) — never a default import of a file whose default is another
     // (card.tsx's Card beside the deprecated CardHeader); a barrel is among `paths` only when no component file is; TypeScript's
     // `import type { … }` names no default (a folder's types are not its component) while `import type * as` the row's own file
-    // is an import of it, and `import type X from` stays unbound; an SFC's extensionless twin is no module a script of that key
-    // holds (Sheet.vue beside sheet.ts)
+    // is an import of it, and `import type X from` its folder stays unbound (1.40: of the file, counted); an SFC's extensionless
+    // twin is no module a script of that key holds (Sheet.vue beside sheet.ts)
     const files = {
       "package.json": js({ name: "r1", private: true, workspaces: ["packages/*"], dependencies: { react: "^19", vue: "^3" } }),
       "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
@@ -714,7 +714,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
     const p = depProject("review1", rows(MARK), files);
     const r = S.designSystemReport(p), d = usesOf(r);
     const diff = differential(p, rows);
-    all("1.39 deprecatedUses (review 1): a row named through a component folder's barrel is located and its importers counted; a barrel's default export and a file's default export under the row's name bind their default importers, never a default import of another default; a barrel is a row's path only when no component file is; `import type { … }` from a folder names no default, `import type * as` the row's file is its import, `import type X from` binds nothing; an SFC's extensionless twin is no module a script of that key holds; every other key the same with no marker (got " +
+    all("1.39 deprecatedUses (review 1): a row named through a component folder's barrel is located and its importers counted; a barrel's default export and a file's default export under the row's name bind their default importers, never a default import of another default; a barrel is a row's path only when no component file is; `import type { … }` from a folder names no default, `import type * as` the row's file is its import, `import type X from` its folder binds nothing; an SFC's extensionless twin is no module a script of that key holds; every other key the same with no marker (got " +
       js({ rows: d.rows.map((x) => [x.name, x.filesTotal, x.files, x.paths, x.pathsTotal]), unlocated: d.unlocated, same: diff.same }) + ")", {
       barrel: () => js(uses(r, "VbenButton")) === js([2, ["apps/web/src/views/v1.vue", "apps/web/src/views/v2.vue"]]) && js(rowOf(r, "VbenButton").paths) === js(["packages/ui/src/components/button/index.ts"]) && rowOf(r, "VbenButton").use === "VbenIconButton",
       barrelDefault: () => js(uses(r, "List")) === js([2, ["src/app/list-a.tsx", "src/app/list-b.tsx"]]) && js(rowOf(r, "List").paths) === js(["src/components/List/index.ts"]),
@@ -780,7 +780,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
     const diff = differential(p, rows);
     const PICKER = "src/routes/picker/+page.svelte", AT = [C + "picker/index.ts"];
     const clause = { en: "the index the row's path names", pt: "o index que o caminho da linha nomeia", es: "el index que nombra la ruta de la fila" };
-    all("1.39 deprecatedUses (review 2): when the component folders' indexes give a row's name to more than one file — a kit's parts, a name an index declares its own —, only the index the row's path names (its key or its folder's) locates it; given to one file, every index; another package's re-export places no file; a path naming none of them leaves the row unlocated, the line saying why (EN / PT / ES); `import type{ X }` and `import type  { X }` bind no default, `import type X from` the row's file binds nothing; every other key the same with no marker (got " +
+    all("1.39 deprecatedUses (review 2): when the component folders' indexes give a row's name to more than one file — a kit's parts, a name an index declares its own —, only the index the row's path names (its key or its folder's) locates it; given to one file, every index; another package's re-export places no file; a path naming none of them leaves the row unlocated, the line saying why (EN / PT / ES); `import type{ X }` and `import type  { X }` bind no default, `import type X from` the row's file counts (1.40); every other key the same with no marker (got " +
       js({ rows: d.rows.map((x) => [x.name, x.filesTotal, x.files, x.paths, x.pathsTotal]), unlocated: d.unlocated, same: diff.same }) + ")", {
       parts: () => js(uses(r, "Content")) === js([1, [PICKER]]) && js(rowOf(r, "Content").paths) === js(AT) && rowOf(r, "Content").pathsTotal === 1,
       twoFiles: () => js(uses(r, "Group")) === js([1, [PICKER]]) && js(rowOf(r, "Group").paths) === js(AT),
@@ -788,7 +788,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
       oneFile: () => js(uses(r, "VbenButton")) === js([2, ["apps/web/src/v1.vue", "packages/ui/src/views/legacy.vue"]]),
       noFile: () => js(uses(r, "VbenTooltip")) === js([1, ["packages/extras/src/views/tip.vue"]]),
       unlocated: () => js(d.unlocated) === js(["Footer"]) && d.unlocatedTotal === 1 && ["en", "pt", "es"].every((l) => i18n.msg(l).cliOutput.dsDepUsesUnlocated("X").includes(clause[l])),
-      typeTight: () => js(uses(r, "Toggle")) === js([1, ["src/app/toggle.tsx"]]),
+      // (1.40, R3-DEP-4: `import type ToggleT from` the row's own file is an import of it — counted; through its folder, below, never)
+      typeTight: () => js(uses(r, "Toggle")) === js([2, ["src/app/toggle.tsx", "src/app/type-file.tsx"]]),
       differential: () => diff.same === true,
     });
   }
@@ -933,6 +934,42 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
     all("1.40 deprecatedUses (R2-DEP-2 d): the rows still imported first, then those only rendered with no import, then the rest — the registry's order within each group (got " +
       js(r.rows.map((x) => [x.name, x.filesTotal, x.unbound])) + ")", {
       order: () => js(r.rows.map((x) => x.name)) === js(["Eee", "Ccc", "Ddd", "Aaa", "Bbb"]) && r.rows[1].unbound === 1 && r.rows[3].unbound === 0 && r.rowsTotal === 5,
+    });
+  }
+  {
+    // 1.40 (R3-DEP-4) — `import type X from` the row's FILE is an import of it (shadcn-svelte's `import type Calendar from
+    // "./calendar.svelte"` for `ComponentProps<typeof Calendar>`): counted by the module check alone — never through its folder
+    // (toggle/index.ts, a barrel), never followed; `type from from` is a type named `from`; filtered as a default import is
+    // (by its module's base), so through an alias whose last segment is not the file's base it counts where the value import
+    // does — nowhere. Kept apart from the imports settle reads: a weak default called under a type-only default import stays a
+    // component, under a value one it is dropped. Still 1.39's: `import type { P }` from the file counts
+    const T = "src/components/ui/toggle/";
+    const files = {
+      "package.json": js({ name: "typed" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"], "#toggle": ["./" + T + "toggle.tsx"] } } }),
+      [T + "toggle.tsx"]: L(["export function Toggle() { return <button />; }", "export type ToggleProps = { on: boolean };", "export default Toggle;"]),
+      [T + "index.ts"]: L(["export { Toggle } from './toggle';", "export type { ToggleProps } from './toggle';"]),
+      "src/components/DataTable.vue": L(["<template><table /></template>"]), "src/components/Calendar.svelte": L(["<div />"]),
+      "src/app/file.tsx": L(["import type ToggleT from '@/components/ui/toggle/toggle';", "export const A = (p: { t: ToggleT }) => <div />;"]),
+      "src/app/folder.tsx": L(["import type ToggleT from '@/components/ui/toggle';", "export const F = (p: { t: ToggleT }) => <div />;"]),
+      "src/app/named.tsx": L(["import type { ToggleProps } from '@/components/ui/toggle/toggle';", "export const N = (p: ToggleProps) => <div />;"]),
+      "src/app/e.vue": L(["<script setup lang=\"ts\">", "import type DataTable from '@/components/DataTable.vue';", "const r = ref<InstanceType<typeof DataTable>>();", "</script>", "<template><div /></template>"]),
+      "src/app/from.svelte": L(["<script lang=\"ts\">", "import type from from '../components/Calendar.svelte';", "</script>", "<div />"]),
+      "src/app/alias-value.tsx": L(["import ToggleV from '#toggle';", "export const V = () => <div>{String(ToggleV)}</div>; // a Toggle"]),
+      "src/app/alias-type.tsx": L(["import type ToggleW from '#toggle';", "export const W = (p: { t: ToggleW }) => <div />; // a Toggle"]),
+    };
+    const rows = ["| Toggle | " + T + "toggle.tsx |  | _Deprecated_ |", "| DataTable | src/components/DataTable.vue |  | _Deprecated_ |", "| Calendar | src/components/Calendar.svelte |  | _Deprecated_ |"];
+    const r = S.designSystemReport(depProject("typed", rows, files));
+    // (settle's side: a weak default — a PascalCase function that renders nothing — CALLED under a type-only default import
+    // stays a component; under a value one it is dropped, a helper)
+    const settleOf = (tag, clause) => S.designSystemReport(depProject("typed-settle-" + tag, ["| Table | src/components/Table.tsx |  | _Deprecated_ |"], {
+      "package.json": js({ name: "ts" }), "src/components/Table.tsx": compFile("Table"), "src/components/Price.tsx": L(["export default function FormatPrice(v) { return String(v); }"]),
+      "src/app/page.tsx": L(["import " + clause + " from '../components/Price';", "export const P = () => <div>{FormatPrice(1)}</div>;"]) })).missing.some((m) => m.name === "FormatPrice");
+    const typeOnly = settleOf("type", "type FormatPrice"), value = settleOf("value", "FormatPrice");
+    all("1.40 deprecatedUses (R3-DEP-4): `import type X from` the row's file counts (a .tsx, a .vue, a .svelte; `type from from`), never through its folder's barrel, never through an alias the value import is not counted through; settle never reads it (a weak default called under it stays a component) (got " +
+      js({ rows: usesOf(r).rows.map((x) => [x.name, x.filesTotal, x.files]), typeOnly, value }) + ")", {
+      file: () => js(uses(r, "Toggle")) === js([2, ["src/app/file.tsx", "src/app/named.tsx"]]),
+      sfc: () => js(uses(r, "DataTable")) === js([1, ["src/app/e.vue"]]) && js(uses(r, "Calendar")) === js([1, ["src/app/from.svelte"]]),
+      settle: () => typeOnly === true && value === false,
     });
   }
 

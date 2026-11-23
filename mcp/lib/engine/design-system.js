@@ -1194,7 +1194,8 @@ function exportedComponents(text) {
 // `<Card.Header>`), a helper is CALLED (`FormatPrice(value)` — scriptView's `called`), a context is given to `useContext(X)`
 // or provides (`<X.Provider>`), and a part that is an enum's member is read as an object (`Button.Sizes.Large`).
 // usesOf(view) → { rendered, called, contexts, members — the names as the file writes them (`Card.Header`, `UI.Button`) —,
-// imports: local name → { spec (the module), name: the name it has there ("default", "*" for a namespace) },
+// imports: local name → { spec (the module), name: the name it has there ("default", "*" for a namespace) }, typed (1.40):
+// a type-only default import's local name → { spec } (`import type X from` — read by the deprecated uses' watch alone),
 // reexports (1.35.4): what the file passes on — { named: exported name → { spec, name it has there }, stars: [spec] } | null }.
 // A tag is `<Name` (capitalised) or `<a.b` (a member: `<motion.div`, `<UI.Button`) where an expression may start — never
 // after a name or a `)` / `]` (`a < B`, `useState<Item>(`, `Array<Card>`), never a type's parameter (`<T,>`,
@@ -1221,6 +1222,7 @@ const RE_REQUIRE_DECL = /^(?:export\s+)?(?:const|let|var)\s+(?:([\p{L}_$][\p{L}\
 const RE_NAMESPACE_IMPORT = /^\*\s*as\s+([\p{L}_$][\p{L}\p{N}_$]*)$/u;
 const RE_FROM_END = /(?:^|\s)from$/;
 const RE_TYPE_MODIFIER = /^type\s*(?=[{*])/; // (an import clause's TypeScript modifier before `{` or `*`, a blank after it or none)
+const RE_TYPE_DEFAULT = /^type\s+([\p{L}_$][\p{L}\p{N}_$]*)$/u; // (a type-only DEFAULT import's clause: `import type X from` — 1.40)
 // A call that renders a name — what a tag compiles to (1.35.4): React's `createElement(X, …)` (the classic runtime's, and
 // what React gives for writing without JSX), Preact's `h(X)` / `createElement(X)`, Vue's `h(X)` (its render functions) and
 // `createVNode(X)` (its JSX plugin's), the automatic runtime's `jsx` / `jsxs` / `jsxDEV` (each library's `/jsx-runtime`,
@@ -1237,16 +1239,22 @@ const RE_FACTORY_CALL = /(?<![\p{L}\p{N}_$.])([\p{L}_$][\p{L}\p{N}_$]*)(?:\.([\p
 // string "button", `createElement(icon)` a variable), type arguments aside (`h(Table<Row>, …)`), then a `,`, a `)` or the
 // line's end (group 2 undefined: the next line with text must go on with a `,` or a `)` — usesOf)
 const RE_FIRST_ARG = /^\s*([\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)*)(?:\s*<[^<>()]*>)?\s*(?:([,)])|$)/u;
-// an `import` clause (what stands between `import` and the module's quote) → its names, into `into`
-function importClause(text, spec, into) {
+// an `import` clause (what stands between `import` and the module's quote) → its names, into `into` — a type-only default
+// import's into `typed`
+function importClause(text, spec, into, typed) {
   let t = text.trim();
   if (RE_FROM_END.test(t)) t = t.slice(0, -4).trim();
   if (t === "") return; // (`import type …` needs no skip for settle: a name only a type is can be neither rendered nor called)
+  // (`import type X from` binds nothing settle or the follow reads — stripped, it gained a false pair, 1.39 —: kept APART,
+  // `typed`, where the deprecated uses' watch counts it by the module alone, the module rule's exact key — `import type
+  // Calendar from "./calendar.svelte"` for `ComponentProps<typeof Calendar>` is an import of that file; `type from from` is
+  // a type named `from` — 1.40, R3-DEP-4)
+  const td = RE_TYPE_DEFAULT.exec(t);
+  if (td) { typed.set(td[1], { spec }); return; }
   // (TypeScript's `type` modifier before a brace list or a namespace — `import type{ X }` too, review 2 of 1.39 — binds
   // nothing: read as a default binding, `import type { ButtonVariants } from "./button"` was an import of the folder's Button
   // for the deprecated uses — review 1 of 1.39. The names it lists are bound as `import { X }` binds them; an inline
-  // `{ type X }` entry is not: it binds a local named `type`, and X is never followed. `import type X from` stays unbound:
-  // stripped, it gained a false pair)
+  // `{ type X }` entry is not: it binds a local named `type`, and X is never followed)
   t = t.replace(RE_TYPE_MODIFIER, "");
   const open = t.indexOf("{");
   for (const h of (open === -1 ? t : t.slice(0, open)).split(",")) {
@@ -1295,7 +1303,7 @@ const RE_FROM_SPEC = /^\s*from\s*["']([^"']+)["']/;
 const DS_PASS_FILES = 2000, DS_PASS_CHARS = 8 * 1024 * 1024, DS_PASS_STEPS = 100000;
 function usesOf(view) {
   const { code, plain, tpl } = view;
-  const rendered = new Set(), contexts = new Set(), providers = new Set(), members = new Set(), imports = new Map();
+  const rendered = new Set(), contexts = new Set(), providers = new Set(), members = new Set(), imports = new Map(), typed = new Map();
   let named = null, stars = null;
   const starSeen = new Set(); // (a file's identical stars kept once — a Set: a list's `includes` was quadratic in them, review 1 of 1.35.4)
   const locals = [], pass = (exported, spec, name) => { if (!named) named = new Map(); named.set(exported, { spec, name }); };
@@ -1314,7 +1322,7 @@ function usesOf(view) {
       }
       if (q !== -1 && isQuote(clause[q])) {
         const e = clause.indexOf(clause[q], q + 1);
-        if (e !== -1) importClause(clause.slice(6, q), clause.slice(q + 1, e), imports);
+        if (e !== -1) importClause(clause.slice(6, q), clause.slice(q + 1, e), imports, typed);
       }
       i = k;
       continue;
@@ -1389,7 +1397,7 @@ function usesOf(view) {
   }
   // (a name it imports, exported again — the import's own name kept: "default", "*", the identifier)
   for (const [exported, local] of locals) if (imports.has(local)) pass(exported, imports.get(local).spec, imports.get(local).name);
-  return { rendered, called: view.called, contexts, providers, members, imports, reexports: named || stars ? { named: named || new Map(), stars: stars || [] } : null };
+  return { rendered, called: view.called, contexts, providers, members, imports, typed, reexports: named || stars ? { named: named || new Map(), stars: stars || [] } : null };
 }
 // A token file by its name AND its place (tokenFileKind):
 //   style — a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss, theme.css): anywhere;
@@ -2935,16 +2943,25 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       const k = nameRow.get(p + "\n" + n);
       if (k != null && p !== rel) hit.add(k);
     };
-    for (const [local, imp] of u.imports) {
-      if (!names.has(imp.name) && !bases.has(baseOf(imp.spec))) continue; // (the binding filter: a cost guard, timed)
-      const at = F.placed(imp.spec, rel);
+    // (the module check: a binding whose module IS a row's file — its key exactly —, and the file a row's barrel renames
+    // imported under the name it has there — never followed)
+    const moduleHit = (spec, name) => {
+      const at = F.placed(spec, rel);
       if (at) for (const k of at.keys) {
         for (const [key, p] of byKey.get(k) || []) if (p !== rel) hit.add(key);
-        const rn = renamed.get(k); // (the file a barrel renames, under the name it has there — never followed)
-        if (rn && rn.path !== rel && rn.by.has(imp.name)) for (const key of rn.by.get(imp.name)) hit.add(key);
+        const rn = name == null ? null : renamed.get(k);
+        if (rn && rn.path !== rel && rn.by.has(name)) for (const key of rn.by.get(name)) hit.add(key);
       }
+    };
+    for (const [local, imp] of u.imports) {
+      if (!names.has(imp.name) && !bases.has(baseOf(imp.spec))) continue; // (the binding filter: a cost guard, timed)
+      moduleHit(imp.spec, imp.name);
       if (imp.name !== "*") for (const [p, n] of F.resolve(rel, u.imports, local)) pair(p, n);
     }
+    // (a type-only default import — `import type Calendar from "./calendar.svelte"`: the row's file, an index FILE by its
+    // folder — by the module check alone, its row file's key: never followed, never the file a barrel renames; filtered as a
+    // default import is, by its module's base — R3-DEP-4 of 1.40)
+    for (const imp of u.typed.values()) if (bases.has(baseOf(imp.spec))) moduleHit(imp.spec, null);
     // (a namespace's members, each by its first part: `<UI.Table.Row>` is UI.Table's)
     for (const set of [u.rendered, u.members, u.providers]) for (const w of set) {
       const d = w.indexOf(".");
