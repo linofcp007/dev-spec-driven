@@ -38,8 +38,8 @@ tool, command, hook or dependency; the MCP tool list and SKILL.md are unchanged.
   bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a tag an
   auto-import names by its folder (Nuxt's `<BaseCard>`), a non-component export or a type through a barrel: no import
   found is not unused. Its own bounds are in its own `limits` (`usage-files`, `deprecated-follow`), never the report's
-  `limits`, `truncated` or "in sync". The CLI prints it after the stale rows; its head counts every row the code holds a file for. The feature report,
-  `finish`, doctor and the task brief are unchanged by it.
+  `limits`, `truncated` or "in sync". The CLI prints it after the stale rows; its head counts every row the code holds a
+  file for. The feature report, `finish`, doctor and the task brief are unchanged by it.
 - **A Sass breakpoints map.** A top-level Sass map whose name ends in `breakpoints` (`$grid-breakpoints`, `$breakpoints`,
   an override in `@use … with (…)`) in a `.scss` sheet the scan reads now gives the widths the visual review captures
   (`from: code`) when ui.md's line gives none — a plain assignment over a `!default` one; a `map-merge`, a variable, an
