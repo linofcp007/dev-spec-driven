@@ -462,6 +462,77 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  { // BP-crash (1.39.0 review 1, BU-1 — mutants B1–B11): no input overflows the stack, and what is kept stays bounded —
+    // codeBreakpoints keeps the unread COUNT and the first BP_UNREAD (a Sass record its own first BP_UNREAD, all counted: no entry
+    // past them can be among the report's first), breakpointsReport joins each source's one by one, never a spread (V8's
+    // arguments end near 125K). The reviewer's Sass shape — one-line maps of 480 unitless entries (a line of ~1,930 characters,
+    // under DS_PRELUDE: every entry read, each one unread) in three 256K sheets, 192,960 unread — and 1.38's own Tailwind one —
+    // 200,000 distinct `--breakpoint-aN: x` in 256K `@theme` sheets (1.38.0 threw there too) — each return the report: the
+    // default set, the first five in the walk's order (ui.md's own first: its line's 5000 px is no width), unreadTotal exact; a
+    // hostile `!default` map a plain one sets aside counts nothing; through the scan and MCP alike, both shapes; the cost ≤ 3×
+    // (+ 50 ms) each shape's twin the pre-test skips (medians of 5 interleaved rounds; the Tailwind leg on its first 50,000:
+    // the walk dominates both sides — the observer's share is what the ratio reads)
+    const fill = (unit) => unit.repeat(Math.floor(256 * 1024 / unit.length));
+    const wide = "$a-breakpoints: (" + ["b0:1", "b1:1", "b2:1", "b3:1", "b4:1", ...Array(475).fill("a:1")].join(",") + ");\n";
+    const sheet = fill(wide), perSheet = sheet.split("\n").length - 1, SASS_TOTAL = 3 * perSheet * 480;
+    const twSheets = (n) => {
+      const out = [];
+      let cur = "";
+      for (let i = 0; i < n; i++) {
+        const l = "  --breakpoint-a" + i + ": x;\n";
+        if (cur.length + l.length > 256 * 1024 - 12) { out.push("@theme {\n" + cur + "}\n"); cur = ""; }
+        cur += l;
+      }
+      return [...out, "@theme {\n" + cur + "}\n"];
+    };
+    const watch = (files) => { const w = T.breakpointWatch(); for (const [rel, text] of files) T.styleTokens(text, rel, w.on(rel, text)); return w.found; };
+    const sassFiles = [0, 1, 2].map((k) => ["src/s" + k + ".scss", sheet]), twFiles = twSheets(200000).map((t, k) => ["src/t" + k + ".css", t]);
+    const dUi = path.join(tmp, "bp-crash-ui"), dNone = path.join(tmp, "bp-crash");
+    write(dUi, UI, "- Breakpoints: 5000 px\n");
+    fs.mkdirSync(dNone, { recursive: true });
+    const sFound = watch(sassFiles), tFound = watch(twFiles);
+    const run = (d, found) => { try { return T.breakpointsReport(d, found); } catch (e) { return { threw: e.name + ": " + e.message }; } };
+    const s = run(dUi, sFound), t = run(dNone, tFound), cb = T.codeBreakpoints(tFound), records = sFound.files.flatMap((x) => x.maps), r0 = records[0] || { bad: [] };
+    const aside = run(dNone, watch([["src/v.scss", wide.replace(");", ") !default;")], ["src/c.scss", lines("$a-breakpoints: (sm: 600px);")]]));
+    // through the scan (three sheet candidates by name), project and feature shapes, and MCP
+    const p = path.join(tmp, "proj-bp-crash");
+    S.initProject(p, ["ui"], "en");
+    for (const k of [0, 1, 2]) write(p, "p" + k + "/custom.scss", sheet);
+    const f = S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" });
+    const safe = (fn) => { try { return fn().breakpoints; } catch (e) { return { threw: e.name + ": " + e.message, unread: [] }; } };
+    const pb = safe(() => S.designSystemReport(p)), fb = safe(() => S.designSystemReport(p, { name: f.slug }));
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_scan", arguments: { projectDir: p, designSystem: true } }));
+    const featMcp = payload(await rpc("tools/call", { name: "spec_scan", arguments: { projectDir: p, designSystem: true, name: f.slug } }));
+    const u = (name, value, at) => ({ name, value, at });
+    all("1.39.0 review 1 breakpoints (BU-1): ~193K Sass unread (480 a line, three 256K sheets) and 200,000 Tailwind ones (1.38's own crash) return the report — the default set, the first five in the walk's order (ui.md's first), unreadTotal exact; codeBreakpoints and each Sass record keep five and count all; a set-aside hostile map counts nothing; the scan and MCP alike, both shapes (got " +
+      js({ s, t: [t.from, t.unreadTotal, t.unread && t.unread.map((x) => x.name), t.threw], cb: [cb.unread.length, cb.unreadTotal], record: [r0.bad.length, r0.badTotal, records.length], aside: [aside.widths, aside.unreadTotal, aside.threw],
+        proj: [pb.unreadTotal, pb.unread[0], pb.threw], mcp: [viaMcp.breakpoints ? viaMcp.breakpoints.unreadTotal : viaMcp, featMcp.breakpoints ? featMcp.breakpoints.unreadTotal : featMcp] }) + ")", {
+      sass: () => s.from === "default" && widths(s) === js(DEFAULT) && s.unreadTotal === 1 + SASS_TOTAL && SASS_TOTAL > 150000 &&
+        js(s.unread) === js([u("Breakpoints", "5000 px", UI + ":1"), ...["b0", "b1", "b2", "b3"].map((k) => u("$a-breakpoints." + k, "1", "src/s0.scss:1"))]),
+      tailwind: () => t.from === "default" && t.unreadTotal === 200000 && js(t.unread) === js([0, 1, 2, 3, 4].map((i) => u("--breakpoint-a" + i, "x", "src/t0.css:" + (i + 2)))),
+      code: () => cb.unread.length === 5 && cb.unreadTotal === 200000 && js(cb.unread) === js(t.unread),
+      records: () => records.length === 3 * perSheet && records.every((m) => m.bad.length <= 5) && r0.bad.length === 5 && r0.badTotal === 480,
+      aside: () => widths(aside) === js([320, 600]) && aside.unreadTotal === 0 && aside.at === "src/c.scss:1",
+      scan: () => pb.from === "default" && pb.unreadTotal === SASS_TOTAL && pb.unread.length === 5 &&
+        pb.unread[0].name === "$a-breakpoints.b0" && /^p\d\/custom\.scss:1$/.test(pb.unread[0].at) && js(fb) === js(pb),
+      mcp: () => js(viaMcp.breakpoints) === js(pb) && js(featMcp.breakpoints) === js(fb),
+    });
+    // the cost: each shape walked with the observer and reported against its twin (no observer: `breakpointz`, `@themx`)
+    const twin = (files, a, b) => files.map(([rel, text]) => [rel, text.split(a).join(b)]);
+    const twSmall = twSheets(50000).map((x, k) => ["src/t" + k + ".css", x]);
+    const sassTwin = twin(sassFiles, "breakpoints", "breakpointz"), twTwin = twin(twSmall, "@theme {", "@themx {");
+    const runs = [() => run(dNone, watch(sassFiles)), () => run(dNone, watch(sassTwin)), () => run(dNone, watch(twSmall)), () => run(dNone, watch(twTwin))];
+    const time = (fn) => { const t0 = process.hrtime.bigint(); fn(); return Number(process.hrtime.bigint() - t0) / 1e6; };
+    runs.forEach((fn) => fn()); // warm
+    const ok3 = (x) => x[0] <= 3 * x[1] + 50 && x[2] <= 3 * x[3] + 50;
+    const k = remeasure(() => { const x = runs.map(() => []); for (let r = 0; r < 5; r++) runs.forEach((fn, i) => x[i].push(time(fn))); return x.map((xs) => xs.sort((a, b) => a - b)[2]); }, ok3, 3);
+    all("1.39.0 review 1 breakpoints (BU-1, cost): the Sass crash shape (three 256K sheets) and the Tailwind one (50,000 unread) each ≤ 3× (+ 50 ms) their twins the pre-test skips — medians of 5 interleaved rounds (got [sass, twin, tailwind, twin] ms " +
+      js(k.map((x) => Math.round(x))) + ")", {
+      sass: () => k[0] <= 3 * k[1] + 50,
+      tailwind: () => k[2] <= 3 * k[3] + 50 && run(dNone, watch(twSmall)).unreadTotal === 50000,
+    });
+  }
+
   { // BP-never (U19, C15): computed on spec_scan {designSystem}'s path only — V8 coverage of a child: spec_finish's part
     // (designSystemFinish) and the seed (designSystemSeed) run NO function of breakpoints.js, though the project holds a ui.md line,
     // a Tailwind @theme and a feature; the project report and the feature report do
