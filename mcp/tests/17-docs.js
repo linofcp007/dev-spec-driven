@@ -1129,6 +1129,17 @@ exports.run = async ({
       ["responsive: what is never read, and the lines to paste into ui.md (Tailwind's defaults, Bootstrap 5)", RS,
         /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a map in a file the scan does not open by name \(`_config\.scss`, `_settings\.scss`\) are never read: paste the line into ui\.md instead/,
         /- Tailwind's defaults: `- Breakpoints: 640 \/ 768 \/ 1024 \/ 1280 \/ 1536 px`/, /- Bootstrap 5: `- Breakpoints: 576 \/ 768 \/ 992 \/ 1200 \/ 1400 px`/],
+      // (1.39.0 review 1, BU-2 / BU-3 — prose, D1 / D2: the two Sass shapes the reader reads as designed but the prose did not say —
+      // each claim run through the scan: a map of maps gives the default set and nothing unread; two `!default` maps of one name unite)
+      ["responsive: a map of maps is neither read nor listed; two `!default` maps of one name both count — ui.md's line chooses", RS,
+        /A map of maps \(Bulma's `"mobile": \("until": \$tablet\)`, a hand-written `'small': \(min-width: 767px\)`\) is neither read nor listed: paste its widths into ui\.md's line\./,
+        /Two `!default` maps of one name \(a library copy beside your own\) both count: list the widths in ui\.md's line to choose them\./,
+        () => {
+          const proj = (tag, files) => { const d = path.join(tmp, "z139r1-bp-" + tag); for (const [rel, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(d, rel)), { recursive: true }); fs.writeFileSync(path.join(d, rel), text); } return S.designSystemReport(d).breakpoints; };
+          const nested = proj("nested", { "src/styles/custom.scss": "$breakpoints: (\n  'small': (min-width: 767px),\n  'large': (min-width: 1200px)\n) !default;\n" });
+          const twice = proj("twice", { "public/lib/bootstrap/scss/_variables.scss": "$grid-breakpoints: (xs: 0, sm: 576px, md: 768px) !default;\n", "src/scss/_variables.scss": "$grid-breakpoints: (xs: 0, sm: 600px, md: 960px) !default;\n" });
+          return nested.from === "default" && nested.unreadTotal === 0 && twice.from === "code" && twice.widths.join(" ") === "320 576 600 768 960";
+        }],
       ["responsive: editing the line re-flags approved designs — doctor's steering check, by its engine id", RS,
         /editing the line makes doctor warn `steering-changed-since-approval` on approved designs — on purpose/,
         () => doctorSrc.includes('"steering-changed-since-approval"')],
@@ -1954,9 +1965,11 @@ exports.run = async ({
           && briefRow.includes("and (1.39) the registry's units table, its first rows within " + num(QY, "DS_BRIEF_UNITS") + " characters, then how many more (a registry holding only the table gets the part too)")
           && briefRow.includes("and with a units table `units` {`rows` [{props, units}], `more`} (1.39)}");
       }],
-      ["tooling-reference: doctor's ui-states — the anchor looked for in a header's first US_HEADER cells, past them no matrix, the bound said", () =>
+      // (1.39.0 review 1, BU-5 / R1-DOC-5: the detail names that bound — usTruncated is handed US_HEADER)
+      ["tooling-reference: doctor's ui-states — the anchor looked for in a header's first US_HEADER cells, past them no matrix, the detail naming that bound", () =>
         /t\.header\.slice\(0, US_HEADER\)/.test(QY) && /if \(a < 0 && t\.header\.length > US_HEADER\) truncated\.views = true;/.test(QY)
-          && ws(TR).includes("header cell in any language (looked for in a header's first " + num(QY, "US_HEADER") + " cells — 1.39: past them the table is none, the bound said)")],
+          && /Q\.usTruncated\(US_TABLES, US_ROWS, US_VIEWS, US_HEADER\)/.test(QY)
+          && ws(TR).includes("header cell in any language (looked for in a header's first " + num(QY, "US_HEADER") + " cells — 1.39: past them the table is none, the detail naming that bound)")],
       // the READMEs (EN / PT / ES) and CLAUDE.md's topic map
       ...Object.entries(readmeDep).map(([f, s]) => [f + ": the +ui paragraph — the files that still import a deprecated component (`deprecatedUses`)", () => ws(raw(f)).includes(s)]),
       ["CLAUDE.md: the topic map's quality.md line — the deprecated uses, the Sass breakpoints map, the reduced-motion script search", () =>

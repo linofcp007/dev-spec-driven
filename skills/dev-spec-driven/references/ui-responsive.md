@@ -46,10 +46,12 @@ the default set fills a theme's places, it comes in the order 768, 1024, 1440, 3
 the widths in ui.md's line to choose them.
 `dev-spec design-system <feature>` prints them and where they came from (without a feature too, and
 `spec_scan {designSystem: true}` in both shapes), and lists a value it could not read (`calc()`, `var()`, wider than
-3840 px, `map-merge(…)`) with its place — write the widths in ui.md's line then. A framework's own defaults (in its
-package), Tailwind 3's `screens` (a JS config) and a map in a file the scan does not open by name (`_config.scss`,
-`_settings.scss`) are never read: paste the line into ui.md instead, keeping the rest of it
-(`- Breakpoints: 640 / 768 / … px · text expansion …`):
+3840 px, `map-merge(…)`) with its place — write the widths in ui.md's line then. A map of maps (Bulma's
+`"mobile": ("until": $tablet)`, a hand-written `'small': (min-width: 767px)`) is neither read nor listed: paste its
+widths into ui.md's line. Two `!default` maps of one name (a library copy beside your own) both count: list the widths
+in ui.md's line to choose them. A framework's own defaults (in its package), Tailwind 3's `screens` (a JS config) and a
+map in a file the scan does not open by name (`_config.scss`, `_settings.scss`) are never read: paste the line into
+ui.md instead, keeping the rest of it (`- Breakpoints: 640 / 768 / … px · text expansion …`):
 - Tailwind's defaults: `- Breakpoints: 640 / 768 / 1024 / 1280 / 1536 px`
 - Bootstrap 5: `- Breakpoints: 576 / 768 / 992 / 1200 / 1400 px`
 

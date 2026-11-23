@@ -123,7 +123,7 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   warn only — never a fail, never an approval check —, run while the registry holds such a row and never on a finished
   feature; `spec_upgrade` lists it) ·
   `ui-states` (1.38 — a +ui feature's `[UI] UI States` matrix, the scaffold's table recognised by its `Announced · focus`
-  header cell in any language (looked for in a header's first 64 cells — 1.39: past them the table is none, the bound said), every such table of the section: a listed state with no row, or a view column — between `State` and that cell — whose cell says neither what the
+  header cell in any language (looked for in a header's first 64 cells — 1.39: past them the table is none, the detail naming that bound), every such table of the section: a listed state with no row, or a view column — between `State` and that cell — whose cell says neither what the
   user sees nor `n/a — <why, 4+ words>` (an n/a alone among a row's view cells answers its row); the a11y column and the
   ones after it are not judged, a matrix in prose is not checked. A warn at size m / l and with no size, a note at s — never a fail, never an approval check, never on a finished
   feature; `spec_upgrade` lists it, an advisory warn) ·

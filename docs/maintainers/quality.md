@@ -481,7 +481,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `renderBrief` writes it after Reuse; the result's `designSystem` holds identifiers (`write: true`: `refs.designSystem`, the
   names). 1.39: the registry's units table (The units table, below) after the token line — its first rows whose text
   (`props: units` and the ` · ` between) fits `DS_BRIEF_UNITS`, 400 characters, a bound of its own (the components' 1,500
-  untouched; a prefix: the first row that does not fit ends the quote, one too long alone is said, never cut), `more` the
+  untouched; a prefix: the first row that does not fit ends the quote, never cut; a FIRST row too long is said as the first —
+  "the first row is too long to quote here — N rows in the registry: read them there", 1.39.0 review 1, BU-4: it had said
+  all N were too long), `more` the
   rows left out plus the table's `past`; the null gate counts `reg.units` (a registry holding only the table opens the
   part); the result's `designSystem.units` {rows, more}, only with a table (1.38's JSON otherwise).
 - **The code** (engine/design-system.js, LAZY — entries `designSystemReport`, `designSystemSeed`, `designSystemFinish`) —
@@ -1173,7 +1175,12 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     keeps its own five, which the engine never holds (stale data) — the default set fills the places the theme's widths
     leave (below). A value other than `0` or a px / rem / em length, or wider than 3840 → `unread` {name, value, at} (the
     first 5, `unreadTotal` — of the sources asked: never the code's beside a deciding ui.md; `cliOutput.bpUnread` points to
-    ui.md's line, never "rewrite the value" — must-fix 6). What it inherits from the walk: the sheets the token scan reads —
+    ui.md's line, never "rewrite the value" — must-fix 6). Counted, never all kept (1.39.0 review 1, BU-1): `codeBreakpoints`
+    keeps the first `BP_UNREAD` and the count, a Sass record its own first `BP_UNREAD` and `badTotal` (no entry past a
+    record's first five can be among the report's), and `breakpointsReport` joins each source's one by one — never a spread
+    (`push(...list)`: V8's arguments end near 125,000, and a hostile tree holds more — RangeError, the whole report lost).
+    What is kept grows with the assignments and declarations the walk reads, one record each (as 1.38's `decls`), never
+    with a map's entries. What it inherits from the walk: the sheets the token scan reads —
     a token file by name, a global sheet by name (`sheetRank`) up to `DS_TOKEN_READS`, where that search ends without a word
     (its own rule, review 5); a Tailwind 4 project's `@theme` is in its entry sheet (globals / app / index / tailwind.css),
     which ranks first. And (1.39, the Sass map reader) a TOP-LEVEL assignment, in a .scss sheet the same walk reads (the
@@ -1198,7 +1205,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     read or not (a plain `map-merge` leaves the default set and its unread line); otherwise all count; names unite; `at` = the
     first KEPT declaration with a length (must-fix 3: a vendored `_variables.scss` walks first and is set aside) — the files
     in the walk's order, a file's Tailwind declarations before its maps (no sheet holds both). A map is whole: `partial`
-    stays Tailwind's (a Tailwind width read), so no default width fills a map.
+    stays Tailwind's (a Tailwind width read), so no default width fills a map. ui-responsive.md says the two silent shapes
+    (1.39.0 review 1, BU-2 / BU-3 — prose): a map of maps (Bulma's, a hand-written `'small': (min-width: 767px)`) is
+    neither read nor listed, and two `!default` maps of one name (a library copy beside the theme's own) both count — the
+    widths go into ui.md's line then.
     Not read: a map in a file the walk does not open by name (`_config.scss`, `_settings.scss`, `_vars.scss`, `core.scss`,
     `mixins.scss` — 14 of the designer's 26 sampled assignments; ui-responsive.md: paste the line), a .sass file, a .css one.
   - `default` — `[320, 390, 768, 1024, 1440]`.
@@ -1907,11 +1917,13 @@ view needs (the detail points there), tooling-reference.md's id.
   ADVISORY — `UI_STATES_CHECK` beside `DESIGN_WEIGH_IDS` / `CRITICAL_FLOW_IDS` in upgrade.js: no `warnings` attention.
 - **Bounded** — `US_TABLES` (10) tables, `US_ROWS` (60) rows each, `US_VIEWS` (12) view columns, the anchor looked for in a
   header's first `US_HEADER` (64) cells (1.39, BS-5 — past them, none found, the table is none and `truncated.views` says a
-  bound cut: the view bound's words, no new argument, CRIT_3 must-fix 6; found within them, the cells after it are never
-  read, nothing said); every cell cut to `US_CELL` (400) before any regex; a bound that drops input appends `usTruncated` to
-  the detail (`usNone` too). Linear: the section reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the
+  bound cut: no new flag, CRIT_3 must-fix 6; found within them, the cells after it are never read, nothing said); every
+  cell cut to `US_CELL` (400) before any regex; a bound that drops input appends `usTruncated(US_TABLES, US_ROWS, US_VIEWS,
+  US_HEADER)` to the detail (`usNone` too): it names every bound — the tables, the rows, the view columns and (1.39.0 review
+  1, BU-5) a header's first 64 cells, so an anchor past them is said by its own bound, not by the view columns'. Linear:
+  the section reader dominates — `uiStateMatrix` costs ~0.1–0.35× `sectionState` on the
   same text (a 5 MB cell, 200K rows, 20K tables, a 1M-word label, and since US_HEADER a header of 200,000 cells, the anchor
-  last: ~0.3×, 1.38's 2.1–2.75× — each header cell's words were read for the anchor before `US_VIEWS` applied); 1 MB cells
+  last: ~0.3×, 1.38's 2.1–2.8× — each header cell's words were read for the anchor before `US_VIEWS` applied); 1 MB cells
   cost what a same-size prose section does (15-quality-ui-states.js, ratios).
 - **Every language, from the corpus** — the labels and the anchor cells of EN / PT / ES / pt-BR come from the corpus key
   `uiStateNames` (markdown.js `uiStateNames()` / `renderUiStateNames()`: `<id>\t<label>` lines, `UI_STATE_A11Y` — `a11y` — as
@@ -3020,6 +3032,39 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   small-tree increments are at the noise's size. The feature report's and finish's cost are unchanged (finish's
   `scanCode(root, false)` builds no observer, no watch and reads no script); finish's VALUES move through D4 alone (vben's
   alert.vue: its two false click-no-keyboard warnings leave). Merged, before the docs pass: MCP 2957, CLI 703.
+- **1.39.0 review 1** (area breakpoints-units: BU-1 HIGH; BU-2 / BU-3 / BU-4 LOW — prose and wording; BU-5 is the state
+  matrix's, below) — BU-1: `breakpointsReport` spread each source's unread into `push(...)`, and since the Sass reader a
+  `$…breakpoints` map's every non-length entry is one — two 256K sheets of one-line maps of 480 unitless entries (each
+  line under DS_PRELUDE) are ~129,600, past V8's ~125,000 arguments: RangeError, and `spec_scan {designSystem}` /
+  `dev-spec design-system` lost the whole report, both shapes (1.38.0 threw at the same statement on 14 hostile Tailwind
+  sheets, ~147,000 distinct `--breakpoint-*`; the Sass route needs two). The reviewer's one-line fix (a loop for the
+  spread) left every record kept; re-derived: the memory sat in the records, not the copy — 100 such sheets (the walk's
+  `DS_TOKEN_READS`) held 6.48M bad entries, +778 MB of heap with the spread gone (1.38: +37 MB). So the count plus the
+  first `BP_UNREAD`, at both levels: `codeBreakpoints` keeps five and counts (`unreadTotal`), a Sass record its own first
+  five and `badTotal` (an entry past them is never among the report's first — the record's five precede it), and
+  `breakpointsReport` joins one by one. Measured (both engines in one process): the crash shapes return the report
+  (crash2: 129,600 counted, +6 MB; the 14 Tailwind sheets 147,084, +33 MB; 100 wide sheets 6,480,000, +47 MB); what
+  stays linear is one record per assignment — 100 sheets of one-line single-entry maps (933,100 records) +479 MB against
+  1.38's +65 MB (no Sass reader), the same class as 1.38's `decls` per Tailwind declaration: a cap on the records kept
+  goes to the 1.40 backlog (a new limit, not a fix). Cost at the engine, the walk with the observer against its twin the
+  pre-test skips, interleaved medians of 7: the Sass shape (three sheets) 24 ms against 5 (+19 ms; 1.38 reads no Sass
+  map — its time is the twin's), the Tailwind one (200,000) 437 against 258 ms, 1.70× (1.38: 1.49× to its throw). The
+  oracle replay (the reviewer's bp.js on 67 clone trees, the 100-file Sass sample, the 36 fx-sass shapes, fx2, 528
+  Tailwind themes): breakpoints and tokens byte-identical to b5e95372 on every one; against 92c44e0a the differences are
+  exactly b5e95372's (15 clone trees: the partial fill and the Sass map). `codeBreakpoints` is exported for its own
+  fixture (BP-crash, 15-quality-design-system-breakpoints.js: the Sass shape with ui.md's unread first, 1.38's Tailwind
+  shape, the record bound, a set-aside hostile `!default` map counting nothing, the scan, MCP and both shapes, a cost
+  ratio each ≤ 3× + 50 ms; the CLI's in cli/tests/15-quality-design-system.js — exit 0, the count, `… +N`). BU-2 / BU-3
+  (prose): ui-responsive.md says a map of maps is neither read nor listed and two `!default` maps of one name both count
+  — ui.md's line chooses (a 17-docs row runs both through the scan). BU-4 / R1-DOC-3 (wording): a FIRST row past the
+  brief's 400 said "N rows … too long to quote here" — now "the first row is too long to quote here — N rows in the
+  registry: read them there" (EN / PT / ES — the colon a clause start, so pt-BR derives `leia-as`; the prefix rule
+  unchanged). The mutation list came before the fixtures (%TEMP%/dsd-139f1-B/MUTATIONS.md): 28 of 28 killed in a copy —
+  15 on the bound (1.39's own spread back, 1.38's Tailwind path unbounded, every record kept, the count of the kept only,
+  six kept, ui.md's unread dropped or after the code's, ui.md's path spread — first listed as equivalent, it is not
+  without the final slice: a fixture of six ui.md unread —, the record bound off, `badTotal` ignored or counted for a
+  set-aside map, a single-entry record's `badTotal` left 0 — two fixtures gained `unreadTotal`), 9 on the two wordings
+  (EN / PT / ES each, the header bound's argument, the plural, the pt-BR clause start), 4 prose clauses and pins.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
@@ -3372,7 +3417,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   6: no fourth `usTruncated` argument, so the three languages and 1.38's bound fixture stay as they were). The design's
   length pre-test did not fix the measured shape — 1,000,000 cells of 4–8 characters each pass "≤ the longest label" —,
   and a `dsSlot` pass over the columns before the anchor costs as much as the word read. Measured: 200,000 cells, the anchor
-  last, 0.29× `sectionState` (1.38: 2.25–2.84×, the designer's header.js re-run by the critic). Lost: an anchor past cell
+  last, 0.29× `sectionState` (1.38: 2.1–2.8× over the recorded runs — 2.25–2.84× the designer's header.js re-run by the
+  critic, 2.1–2.75× the chain's own). Lost: an anchor past cell
   64 — no real header has one; said when it happens. BS-3 (a row keyed by its answering cells, so a matrix of `TBD` /
   dashes / ticks reads as template and the gate refuses it) is CUT (CRIT_X cut 4: 1.39's only new refusal, at size s where
   1.38 only noted, through `sectionLineKey`, which every track's and pack's tables share, and four approved-design
@@ -3380,3 +3426,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (tables with the same views one matrix in parts, its detail prefixed "tables 1 + 3 ›") is CUT (CRIT_3: a narrowing that hides a real gap —
   desktop / mobile matrices with the same views, one lacking `Offline`, would go silent): 1.38's prose — a row per state in
   each table — stands. The `uiStates` stamp stays cut: nothing in 1.39 makes `ui-states` warn on a design 1.38 passed.
+- **1.39.0 review 1** (BU-5 / R1-DOC-5 — LOW, wording) — an anchor past a header's first 64 cells gave `usNone` and the cut
+  in the view bound's words ("only the first 10 tables, 60 rows each and 12 view columns were read"): a user looked for a
+  view-column problem. `usTruncated` takes a fourth argument, `US_HEADER`, and its EN / PT / ES text a fourth clause — a
+  header's first 64 cells (the number from the constant, not written into the three languages); the status, the state and
+  `truncated` unchanged (CRIT_3 must-fix 6 had kept the text to spare its 1.38 fixture: both `cut()` helpers of
+  15-quality-ui-states.js now pass 64, and the BS-5 fixture asserts the clause in PT and ES too). One 1.38 range for the old
+  header cost, 2.1–2.8× (the CHANGELOG, the current rule above, the test's comment); re-measured with the fix (h1.js, the
+  H1 shape, medians of 5, three runs): 1.38 2.59–2.75×, the fix 0.26–0.28×.
