@@ -35,8 +35,8 @@ tool, command, hook or dependency; the MCP tool list and SKILL.md are unchanged.
   .astro file or a component folder's index, the one the row's path names when several give it to different files — is
   listed as `unlocated` (a library's, an Angular `*.component.ts` — its importers are `.ts` files the scan does not read
   —, a Blade one). A localized `note` says what is not seen — a `.ts` file, a dynamic `import()`, a module only a
-  bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a tag an auto-import names by
-  its folder (Nuxt's `<BaseCard>`), a non-component export or a type through a barrel: no import found is not unused. Its
+  bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a tag an
+  auto-import names by its folder (Nuxt's `<BaseCard>`), a non-component export or a type through a barrel: no import found is not unused. Its
   own bounds are in its own `limits` (`usage-files`, `deprecated-follow`), never the report's `limits`, `truncated` or "in
   sync". The CLI prints it after the stale rows; its head counts every row the code holds a file for. The feature report,
   `finish`, doctor and the task brief are unchanged by it.
