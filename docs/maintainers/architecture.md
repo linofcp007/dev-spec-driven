@@ -68,8 +68,9 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
                                +ui feature's anti-patterns — the feature report's `uiChecks`, finish's warning; the project inventory
                                (design-system.js uiProject reads, the opt-in pass), the `_UI checks off:_` marker — LAZY (quality.md → UI checks)
   breakpoints.js               1.38: the widths the visual review captures (breakpointWatch — the token walk's observer —,
-                               breakpointsReport): ui.md's line, Tailwind 4's `@theme`, the default set; spec_scan {designSystem}'s
-                               report alone — LAZY (quality.md → Design-system registry, Breakpoints)
+                               breakpointsReport): ui.md's line, Tailwind 4's `@theme` and a Sass map (1.39), else `@custom-media`
+                               (1.40), the default set; spec_scan {designSystem}'s report alone — LAZY (quality.md → Design-system
+                               registry, Breakpoints)
   import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering —
                                LAZY (the tool lists IMPORT_TOOLS / STEERING_IMPORT_TOOLS: scaffold.js)
 mcp/lib/i18n.js · i18n/        the localized content: the facade (the tables, LAYOUTS — the structure every language shares)
@@ -290,6 +291,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   finish or the seed — a concern of its own (~150 lines: ui.md's line, Tailwind 4's `@theme` through the token walk's
   observer, the report). The load-cost line above names it; the Layout tree and CLAUDE.md's LAZY list are the release's docs
   pass (written there, with design-values.js — below).
+- **1.40.0** (chain B) — no module: the `@custom-media` reader (`mediaEdges`, its statement record, the fallback in
+  `codeBreakpoints`) stays in breakpoints.js, through the same observer — the walk's own `statement` events, no second walk.
 - **1.38.0** (chain T) — engine/design-values.js, what a raw value is against the project's own scale and a registry token's
   value against the code's (quality.md → Design-system registry, Raw values against the scale, Token values): LAZY before
   design-system.js, its one caller; pure — no fs, no require, nothing linked —: the colour maths (OKLab), font stacks,

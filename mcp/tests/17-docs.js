@@ -1091,8 +1091,9 @@ exports.run = async ({
         /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` that no length follows \(`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width ends the list: write `640 \(sm\) · 768 \(md\)`, not `sm 640 · md 768` \(640 alone\); px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; the stub's own `\[…\]` slot is never read, so an untouched stub falls through — your widths written inside its brackets are, and any other bracket is an aside, never a width \(`480 \/ 960 px \[1200 in print\]` is 480 and 960\);/,
         // (1.39, BS-2: under partial the theme's own widths first, the default set fills the places left in its order)
         // (1.39: + the Sass map)
-        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set fills the places the theme's widths leave — list them all in ui\.md to choose\), and a top-level Sass map whose name ends in `breakpoints` \(`\$grid-breakpoints`, `\$breakpoints`, an override in `@use … with \(…\)`\) in a \.scss sheet the scan reads — a plain assignment over a `!default` one; 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
-        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set fills a theme's places, it comes in the order 768, 1024, 1440, 390, and only where room is left — list the widths in ui\.md's line to choose them\./,
+        // (1.40: + the `@custom-media` alias list, a source of its own after them — read only when they give no width)
+        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set fills the places the theme's widths leave — list them all in ui\.md to choose\), and a top-level Sass map whose name ends in `breakpoints` \(`\$grid-breakpoints`, `\$breakpoints`, an override in `@use … with \(…\)`\) in a \.scss sheet the scan reads — a plain assignment over a `!default` one; 3\. the width edges of the top-level `@custom-media` rules in a stylesheet the scan reads — `\(min-width: 48rem\)` is 768, `\(max-width: 767px\)` too, a `width` range either way round: an alias list is never the whole set, so the default set fills its places as a theme's; 4\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
+        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set fills a theme's or an alias list's places, it comes in the order 768, 1024, 1440, 390, and only where room is left — list the widths in ui\.md's line to choose them\./,
         /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px, `map-merge\(…\)`\) with its place — write the widths in ui\.md's line then\./,
         () => {
           const got = (line) => { const r = bpOf(line); return [r.from, r.widths.join(" "), r.unread.map((u) => u.value).join("|"), r.limits.map((l) => l.code).join(",")].join(" / "); };
@@ -1125,9 +1126,22 @@ exports.run = async ({
           const merge = proj("merge", { "scss/_variables.scss": vars, "scss/custom.scss": "$grid-breakpoints: map-merge($grid-breakpoints, (xxl: 1600px));\n" });
           return plain.from === "code" && plain.widths.join(" ") === "320 600 900" && withIt.widths.join(" ") === "320 900"
             && merge.from === "default" && merge.unread.map((u) => u.value).join("|") === "map-merge($grid-breakpoints, (xxl: 1600px))";
+        },
+        () => { // (1.40) the `@custom-media` claims, through the scan: `(min-width: 48rem)` and `(max-width: 767px)` are 768, a range
+          // either way round; a lone alias is no whole set — the default set fills, from code; beside a theme the rules are not
+          // read (the theme's widths alone); in `media.css` (no name the scan opens) not read
+          const proj = (tag, files) => { const d = path.join(tmp, "z140-bp-" + tag); for (const [rel, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(d, rel)), { recursive: true }); fs.writeFileSync(path.join(d, rel), text); } return S.designSystemReport(d).breakpoints; };
+          const cm = (...r) => r.map((x) => "@custom-media " + x + ";\n").join("");
+          const edges = ["(min-width: 48rem)", "(max-width: 767px)", "(width >= 48rem)", "(767px < width)"].map((q) => Eng.loadLazyTier().mediaEdges(q).px.join(""));
+          const lone = proj("lone", { "src/index.css": cm("--md (min-width: 48rem)") });
+          const beside = proj("beside", { "src/index.css": cm("--sm (min-width: 600px)") + "@import \"tailwindcss\";\n@theme {\n  --breakpoint-*: initial;\n  --breakpoint-md: 50rem;\n}\n" });
+          const file = proj("file", { "src/media.css": cm("--sm (min-width: 600px)"), "src/index.css": "body { margin: 0; }\n" });
+          return edges.every((e) => e === "768") && lone.from === "code" && lone.partial === true && lone.widths.join(" ") === "320 390 768 1024 1440"
+            && beside.from === "code" && beside.widths.join(" ") === "320 800" && beside.partial === false && file.from === "default";
         }],
       ["responsive: what is never read, and the lines to paste into ui.md (Tailwind's defaults, Bootstrap 5)", RS,
-        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a map in a file the scan does not open by name \(`_config\.scss`, `_settings\.scss`\) are never read: paste the line into ui\.md instead/,
+        // (1.40: + an `@custom-media` rule in a file the scan does not open by name)
+        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a map or an `@custom-media` rule in a file the scan does not open by name \(`_config\.scss`, `_settings\.scss`, `media\.css`\) are never read: paste the line into ui\.md instead/,
         /- Tailwind's defaults: `- Breakpoints: 640 \/ 768 \/ 1024 \/ 1280 \/ 1536 px`/, /- Bootstrap 5: `- Breakpoints: 576 \/ 768 \/ 992 \/ 1200 \/ 1400 px`/],
       // (1.39.0 review 1, BU-2 / BU-3 — prose, D1 / D2: the two Sass shapes the reader reads as designed but the prose did not say —
       // each claim run through the scan: a map of maps gives the default set and nothing unread; two `!default` maps of one name unite)
@@ -1912,6 +1926,14 @@ exports.run = async ({
       return b.partial + ":" + b.widths.join(",");
     })();
     const fill = (((BP.match(/const BP_FILL = \[([^\]]*)\]/) || [])[1] || "").match(/\d+/g) || []).join(" · ");
+    // (1.40) an `@custom-media` alias list: alone (its edge, partial, a rule it cannot read unread) and beside a theme (not read)
+    const media = (() => {
+      const p = project("media"), q = project("media-beside");
+      put(p, "src/index.css", "@custom-media --md (max-width: 767px);\n@custom-media --x (min-width: 30ch);\n");
+      put(q, "src/index.css", "@custom-media --sm (min-width: 600px);\n@import \"tailwindcss\";\n@theme {\n  --breakpoint-3xl: 1600px;\n}\n");
+      const a = S.designSystemReport(p).breakpoints, b = S.designSystemReport(q).breakpoints;
+      return { alone: [a.from, a.partial, a.widths.join(","), a.unread.map((u) => u.name).join(",")].join(":"), beside: b.widths.join(",") };
+    })();
     const readmeDep = { "README.md": "`dev-spec design-system` lists the files that still import it (`deprecatedUses`).",
       "README.pt.md": "O `dev-spec design-system` lista os ficheiros que ainda o importam (`deprecatedUses`).",
       "README.es.md": "`dev-spec design-system` enumera los ficheros que aún lo importan (`deprecatedUses`)." };
@@ -1958,9 +1980,12 @@ exports.run = async ({
         return sass.plain === "code:320,600,900" && sass.merge === "default:$grid-breakpoints" && name.test("$grid-breakpoints") && name.test("$breakpoints") && !name.test("$spacers")
           && bpClause.includes("— 1.39 — a top-level Sass map whose name ends in `breakpoints`, `$grid-breakpoints`, in a .scss sheet the scan reads, a plain assignment over a `!default` one, `map-merge` or a variable unread");
       }],
-      ["tooling-reference: breakpoints' partial — the theme's widths first, then the default set fills the places left in BP_FILL's order", () =>
-        partial === "true:320,768,1024,1440,1600,2000" && fill === "768 · 1024 · 1440 · 390"
-          && bpClause.includes("`partial` — a Tailwind 4 theme that keeps Tailwind's own five: the theme's widths first, then (1.39) the default set fills the places left, " + fill + " —")],
+      ["tooling-reference: breakpoints' code — (1.40) an @custom-media rule's width edges, only when no theme and no map gives a width, a rule it cannot read unread", () =>
+        media.alone === "code:true:320,390,768,1024,1440:--x" && media.beside === "320,390,768,1024,1440,1600"
+          && bpClause.includes("; and — 1.40 — only when neither gives a width, the width edges of a top-level `@custom-media` rule, `(max-width: 767px)` is 768, a rule it cannot read unread)")],
+      ["tooling-reference: breakpoints' partial — a theme's or (1.40) an alias list's widths first, then the default set fills the places left in BP_FILL's order", () =>
+        partial === "true:320,768,1024,1440,1600,2000" && fill === "768 · 1024 · 1440 · 390" && media.alone.startsWith("code:true:")
+          && bpClause.includes("`partial` — a Tailwind 4 theme that keeps Tailwind's own five, or (1.40) an `@custom-media` alias list: the source's widths first, then (1.39) the default set fills the places left, " + fill + " —")],
       ["tooling-reference: breakpoints' breakpoint-widths — the source's own widths past BP_WIDTHS, never a default one", () =>
         bpClause.includes("`breakpoint-widths` (the source's own widths past " + num(BP, "BP_WIDTHS") + " — never a default one)")],
       // the units table (item 4)

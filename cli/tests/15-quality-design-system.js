@@ -313,6 +313,27 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       json: () => sass.every((x) => x.json),
     });
 
+    // 1.40: an `@custom-media` alias list (src/index.css, a sheet the scan opens by name, no theme, no map) — its edges, then the
+    // default set where room is left: the reworded partial phrase (a theme's and an alias list's — neither is the whole set), and
+    // a rule it cannot read listed unread — EN / PT / ES; --json = the engine
+    const media = ["en", "pt", "es"].map((lang) => {
+      const d = bp("media-" + lang, lang, null, null), X = MSG(lang).cliOutput;
+      write(d, "src/index.css", "@custom-media --sm (min-width: 40em);\n@custom-media --print-wide (min-width: 30ch);\n@custom-media --narrow (max-width: 599px);\n");
+      const out = runIn(["design-system", "--project", d]), json = jsonOf(runIn(["design-system", "--project", d, "--json"]));
+      return { lang, out: out.out.split("\n").filter((l) => /breakpoint/i.test(l)), ok: out.code === 0 && out.out.includes(X.bpHead("320 · 600 · 640 · 768 · 1024 · 1440", X.bpFrom.partial("src/index.css:1"))) &&
+        out.out.includes(X.bpUnread(1, "--print-wide (min-width: 30ch) (src/index.css:2)")), json: js(json.breakpoints) === js(SR.designSystemReport(d).breakpoints) && json.breakpoints.partial === true };
+    });
+    const ptBr = MSG("pt-BR").cliOutput.bpFrom.partial("a.css:1");
+    all("1.40 design-system (CLI): an `@custom-media` alias list's edges (`(max-width: 599px)` is 600), then the default set where room is left — the partial phrase, reworded (declared in, the project's other widths not read) — and a rule it cannot read listed unread; EN / PT / ES, pt-BR derived; --json = the engine (got " +
+      js({ media, ptBr }) + ")", {
+      line: () => media.every((x) => x.ok),
+      json: () => media.every((x) => x.json),
+      // (the reword as a property, in every language: the partial phrase opens with the `code` one — where the widths are declared,
+      // never "what it adds to its framework's own", false of an alias list — and says the media queries are not read)
+      reworded: () => ["en", "pt", "es", "pt-BR"].every((l) => { const X = MSG(l).cliOutput, p = X.bpFrom.partial("a.css:1"); return p.startsWith(X.bpFrom.code("a.css:1") + ", ") && p.includes("media query"); }) &&
+        ptBr.includes("por padrão") && ptBr.includes("liste-as todas"),
+    });
+
     // 1.39.0 review 1 (BU-1): the reviewer's crash shape — three sheet candidates (256K each) of one-line maps of 480 unitless
     // entries, ~193K unread — prints the report (exit 0: 1.39 as reviewed said "Maximum call stack size exceeded", exit 1), the
     // first five listed and the rest counted; --json = the engine
