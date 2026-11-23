@@ -1413,14 +1413,16 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   (`boxMeets`: oklab's L, a, b; oklch's L, chroma and hue, the hue asked only where neither side can be achromatic — a
   chroma within DS_EXACT, a written chroma whose half reaches 0 —, within the span plus the hue's half; parseColor keeps
   an oklab / oklch's `box`: its channels as written, each one's half in its own scale, a % one's too, the hue in degrees —
-  a channel written as zero, `0` or `none`, at most at its L's half (1.40.0 review 1: a zero's text tells no precision,
-  `0.000` prints `0`, and a colour is written at one; its integer's 0.5 met any chroma); or (2) one paints the other at 8
+  a channel written as zero — `0`, `0.0`, `0.00`, `0%` or `none`, whatever its decimals — at most at its L's half (1.40.0
+  review 1: a `0` or a `none` tells no precision, `0.000` prints `0`, and a colour is written at one; its integer's 0.5 met
+  any chroma. A `0.00` does tell one, but every zero is read alike: review 2, R2-COL-1); or (2) one paints the other at 8
   bits: the oklab / oklch's pixel (`rgbFromOk`, then `paint8`: clamped, 8 bits a channel) round-trips the HSL (1.38's
   `roundTrip`), or its box holds the HSL's own pixel. So Tailwind 4's zinc-900 `oklch(21% 0.006 285.885)` is no longer
   shadcn's `hsl(0 0% 9%)` neutral (0.0082 apart, a bluish grey against a neutral one — as far as zinc's hex, which the
   round trip keeps `near` too): `near`, as shadcn's legacy zinc `hsl(240 5.9% 10%)` is against shadcn v4's `oklch(0.205 0
   0)` neutral (its zero read at 0.0005) — an L written at 2 dp reads its zero at 0.005, so `oklch(0.97 0 0)` stays zinc-100
-  `hsl(240 4.8% 95.9%)`'s token, as written —; the neutral's own `oklch(20.5% 0 0)` is its token, zinc's own hex's HSL
+  `hsl(240 4.8% 95.9%)`'s token, as written, and an integer L, shadcn v4's `oklch(1 0 0)`, at 0.5: a tint within 0.011 of
+  white stays its token —; the neutral's own `oklch(20.5% 0 0)` is its token, zinc's own hex's HSL
   `hsl(240 5.9% 10%)` is zinc-900's, and 1.38's `#eeeff2` written as `oklch(0.952 0.004 271.369)` is `hsl(220 14% 94%)`.
   The 0.011 stays the ceiling, so a `token` can only become `near`, or a farther token's (History → 1.40.0: 0 of 240,000
   same-source pairs lost; 9 rows move on 104 real projects): said, ui-code-scan.md. `near`
@@ -3373,7 +3375,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   300 configs hold `screens`, 145 only `container.screens`, 157 container keys; a key path separates the trap, but it costs
   a new read, a JS tokenizer that gives up on a `/`, the value forms and a version gate — 4 of 105 configs sit in Tailwind
   4 projects — for 35 % of the configs; the pasted line stays the remedy); BS-3 (`TBD` / `—` / `✓` / `?` / `N/A` cells read
-  `filled`, and ui-states already warns `open` on each: the warn the principle asks for exists, a refusal adds only
+  `filled`, and ui-states already warns `open` on each at size m / l, a note at s: the warn the principle asks for exists, a refusal adds only
   `--force`; its key would reach 45 of the corpus's 56 row keys); BS-4 (a `Data` 8 + `Interaction` 8 split and a desktop-8
   / mobile-other-8 pair are the same bytes to the engine: a grouping that silences one silences the other); R2-BS-2's
   engine change (1.39 misreads one shape — S8's `· 1200 px max content width` —, each syntactic narrowing 4, 2 or 1 others);
@@ -3495,7 +3497,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (the 104's 9; the corpus's 4 — cal.com's `hsla(37, 86%, 92%, 1)` in two clones, MindOS's legacy zinc ×2 against its v4
   neutral tokens), nothing more; same-source as 1.39. Not covered, named: a writer that rounds a NONZERO chroma coarser
   than its L (C at 2 dp, L at 3) and prints its zero `0` — the zero reads finer than it was rounded, so its own HSL can
-  lose `token` (the grid: 76–84 % of that writer's zero pairs); no such writer in the 104 clones or the corpus (11,634
+  lose `token` (the grid: 76–84 % of that writer's zero pairs) — or keeps its zero's decimals (`0.00` beside a 3-dp L:
+  10,239 of 10,239 low-chroma pairs lose `token`, review 2's R2-COL-1; the code fix, a narrowing, not taken); no such writer in the 104 clones or the corpus (11,634
   zero channels, 8,438 read narrower; the 87 whose file writes a chroma coarser are achromatic as written — daisyUI 4's
   greys, compiled blacks, shadcn's docs beside 2-dp examples, a hand-written `oklch(17.5% 0 0)`). The suite pin that flips:
   slate-50 against `oklch(98.5% 0 none)` (now `zero`'s, `near`); E11's kill re-pointed to slate-50 against `oklch(0.98 0

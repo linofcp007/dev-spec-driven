@@ -53,8 +53,10 @@ SKILL.md are unchanged.
   colour only where their written roundings meet, or one paints the other at 8 bits (both ways) — 1.39 kept the 0.011
   ΔEOK alone for it, so Tailwind 4's zinc-900 `oklch(21% 0.006 285.885)`, a bluish grey, was shadcn's `hsl(0 0% 9%)`
   neutral; it is now `near`, and its own hex's HSL, `hsl(240 5.9% 10%)`, is still its token. Both ways: a channel written
-  as zero (`0`, `none`) is read at the precision of its L, so shadcn v4's neutral `oklch(0.205 0 0)` is no longer shadcn's
-  legacy zinc `hsl(240 5.9% 10%)` (an L written at 2 decimals, `oklch(0.97 0 0)`, reads its zero at 0.005, as written).
+  as zero (`0`, `0.00`, `0%`, `none` — whatever its decimals) is read at most at the precision of its L, so shadcn v4's
+  neutral `oklch(0.205 0 0)` is no longer shadcn's legacy zinc `hsl(240 5.9% 10%)` (an L written at 2 decimals,
+  `oklch(0.97 0 0)`, reads its zero at 0.005, as written; an integer L, `oklch(1 0 0)`, at 0.5: a tint within 0.011 of
+  white stays its token).
   A `token` can only become `near` or a farther token's (0 of 240,000 same-source pairs lost); on 104 real projects 9
   rows move.
 
@@ -99,10 +101,11 @@ ones holding those findings. The `hsl()` / `oklch()` rule: +20–75 ms a feature
   folder: the fast check's planned walk, the protected-tests cap, a glob target below level tests, a feature report over
   400 pages, and the deprecated uses' own parses (`deprecatedUses.parsed`, in-process only — never in a result); every
   ratio the audit rewrote (the scale's, the deprecated uses', each hostile UI input) is one interleaved pair under its
-  own retry — twelve older timing assertions stay outside it —, and the slowest cost file is split by topic. Each mutation
+  own retry — older timing assertions stay outside it —, and the slowest cost file is split by topic. Each mutation
   list was written before its fixtures: the font size 41 of 41; the colours 37 of 37 (1.38's and 1.39's colour mutants
   replayed: 78 of 80 — one equivalent, one line deleted as dead); `@custom-media` 45 of 45; the deprecated uses 29 of 32
-  (two lines dead and deleted, one cost guard timed with and without — counted since); the docs pass 21 of 21 (each new
+  (one line dead and deleted; one, 1.39's whole-cell strip, put back once review found it reachable; one cost guard timed
+  with and without — counted since); the docs pass 21 of 21 (each new
   prose clause dropped in a copy fails its row, and so does each engine fact or counted check a row reads, mutated); every
   list replayed on the merged tree, 273 of 276 (each survivor also one on its own branch). Review 1's fixes: the
   deprecated uses 9 of 9, the colours 6 of 6, the counted checks' re-read and feature-report mutants killed.

@@ -181,9 +181,11 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       // (1.40.0 review 1, BUC-1) a channel written as zero — `0`, `none`, `0.0` — is read at most at its colour's L's half, never
       // its integer's 0.5: shadcn's legacy zinc-900 against shadcn v4's / Tailwind 4's neutral (F1; `none`, `0.0` — F5), oklab's
       // a / b, slate-50 against Tailwind 4's neutral-50; a zero written finer than its L keeps its own half (F2). Still the token:
-      // a NONZERO channel coarser than its L keeps its own half (F4: C at 2 dp, L at 3), the neutral's own oklch as shadcn writes it
+      // a NONZERO channel coarser than its L keeps its own half (F4: C at 2 dp, L at 3), the neutral's own oklch as shadcn writes it.
+      // Review 2 (R2-COL-2): oklab with ONE channel zero, b (M11) and a (M12), and a zero written `0%` (M9)
       zero: [both("hsl(240 5.9% 10%)", "oklch(0.205 0 0)"), both("hsl(240 5.9% 10%)", "oklch(20.5% none none)"), both("hsl(240 5.9% 10%)", "oklch(20.5% 0.0 0)"),
-        both("hsl(240 5.9% 10%)", "oklab(0.205 0 0)"), both("hsl(210 40% 98%)", "oklch(98.5% 0 none)"), both("hsl(240 4.8% 95.9%)", "oklch(0.97 0.000 0)")],
+        both("hsl(240 5.9% 10%)", "oklab(0.205 0 0)"), both("hsl(210 40% 98%)", "oklch(98.5% 0 none)"), both("hsl(240 4.8% 95.9%)", "oklch(0.97 0.000 0)"),
+        both("hsl(240 5.9% 10%)", "oklab(0.21 0.002 0)"), both("hsl(0 12% 10%)", "oklab(0.21 0 0.003)"), both("hsl(60 9.1% 97.8%)", "oklch(98.5% 0% 0)")],
       zeroKept: [both("hsl(230 35% 79%)", "oklch(0.804 0.04 276.7)"), both("hsl(0 0% 9%)", "oklch(0.205 0 0)")],
       // shadcn's legacy pairs, one colour written twice: by the box alone (E4; its l axis — E14c), the hue's half (E13c), its s
       // axis (E14b), the hue's distance a turn's (E12b)

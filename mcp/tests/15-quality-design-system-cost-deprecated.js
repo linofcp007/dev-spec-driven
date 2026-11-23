@@ -21,10 +21,12 @@ exports.run = async ({ all, remeasure, fsCalls, S, tmp }) => {
     // (1.40: `asks` is COUNTED, no clock — timed in 1.39 against a yardstick of the same pages parsed, it still missed both tries
     // on node:24-alpine under load (1.63, 1.64; ~1.2 typical) while the property is two counts: the watch parses the Table pages
     // settle did not (300 − the 25 of settle's 50: 275 — `deprecatedUses.parsed`, which also sees what that clock could not: a
-    // watch parsing pages that name no marked row, 610), and reads nothing itself — every fs call under the tree's view folders,
-    // `src/` and `docs/`, the same as the identical tree with no marker (the project root holds the follow's own tsconfig read,
-    // one or two opens by platform). `nothing` keeps its clock (0.67–1.29× measured, loaded) and counts its 300. A feature's
-    // report is counted too: with a row marked as with none it makes no call under the pages — it builds no watch)
+    // watch parsing pages that name no marked row, 610), and reads nothing itself — every fs call under `src/`, `docs/` and
+    // `.specs/` the SAME as the identical tree with no marker (review 2, DT2-1: a bound of 2 a kind under the root left a read
+    // once a row inside it on Windows, where the follow's config reads count one open, not two), and under the project root at
+    // most 2 more a kind (the follow's own package.json / tsconfig reads, one or two by platform — a re-read once a page is
+    // hundreds). `nothing` keeps its clock (0.67–1.29× measured, loaded) and counts its 300. A feature's report is counted too:
+    // with a row marked as with none it makes no call under the pages — it builds no watch)
     const app = (shape, marked) => {
       const files = { "package.json": js({ name: "g1" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
         "src/components/ui/kit.tsx": kitOf(shape !== "nothing"), "src/components/ui/table.tsx": L(["export function Table() { return <table />; }"]) };
@@ -96,8 +98,11 @@ exports.run = async ({ all, remeasure, fsCalls, S, tmp }) => {
     const within = (a, b, bound) => remeasure(() => pair(a, b), (x) => x.ratio <= bound);
     const under = (p, dir) => path.join(p, dir) + path.sep;
     const asksCalls = { on: fsCalls(G1.asksOn + path.sep, rep(G1.asksOn)), off: fsCalls(G1.asksOff + path.sep, rep(G1.asksOff)) };
-    // (the marked tree's only own reads: the follow's tsconfig, one or two opens / realpaths by platform — never one a page)
+    // (under the root, the marked tree's only own reads are the follow's config files, one or two by platform — never one a page)
     const added = Object.keys(asksCalls.on).map((k) => asksCalls.on[k] - (asksCalls.off[k] || 0));
+    // (under the folders that hold the pages, the views, the MDX and the registry: no call more, of any kind)
+    const DIRS = ["src", "docs", ".specs"];
+    const dirCalls = Object.fromEntries(DIRS.map((d) => [d, { on: fsCalls(under(G1.asksOn, d), rep(G1.asksOn)), off: fsCalls(under(G1.asksOff, d), rep(G1.asksOff)) }]));
     const featCalls = { on: fsCalls(under(G1.nothingOn, "src"), F.on), off: fsCalls(under(nothingOff, "src"), F.off),
       project: fsCalls(under(G1.nothingOn, "src"), rep(G1.nothingOn)) };
     const parsedOf = (p) => (S.designSystemReport(p).deprecatedUses || {}).parsed;
@@ -107,10 +112,11 @@ exports.run = async ({ all, remeasure, fsCalls, S, tmp }) => {
     const tries = Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v.tries]));
     const got = { asks: (S.designSystemReport(G1.asksOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal, nothing: (S.designSystemReport(G1.nothingOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal,
       rows500: ((d) => [d.rowsTotal, d.rows.every((r) => r.filesTotal === 2)])(S.designSystemReport(G2.on).deprecatedUses || { rows: [] }) };
-    all("1.39 cost: the deprecated uses' watch reads and parses no more than settle would — a real-shaped app (600 pages, 40 SFCs, 20 MDX) with a row while settle asks a candidate: the watch parses only the pages naming the row that settle did not (counted, 1.40) and reads nothing itself (every fs call under the view folders, src/ and docs/, the same with no marker); with no candidate it parses the row's pages alone, ≤ 1.5× settle parsing every page; 500 located rows over 2,000 pages (half naming none) ≤ 1.5× settle parsing them all; the hostile `export *` web ≤ 1.5× settle's own follow through it; a feature's report with a row marked makes no fs call under src/ — as with none: it builds no watch (counted, 1.40); 500 rows marked over pages that name none ≤ 1.25× one (got " +
-      js({ s, tries, got, counted, asksCalls, featCalls }) + ")", {
+    all("1.39 cost: the deprecated uses' watch reads and parses no more than settle would — a real-shaped app (600 pages, 40 SFCs, 20 MDX) with a row while settle asks a candidate: the watch parses only the pages naming the row that settle did not (counted, 1.40) and reads nothing itself (every fs call under src/, docs/ and .specs/ the same with no marker, under the project root at most the follow's config reads); with no candidate it parses the row's pages alone, ≤ 1.5× settle parsing every page; 500 located rows over 2,000 pages (half naming none) ≤ 1.5× settle parsing them all; the hostile `export *` web ≤ 1.5× settle's own follow through it; a feature's report with a row marked makes no fs call under src/ — as with none: it builds no watch (counted, 1.40); 500 rows marked over pages that name none ≤ 1.25× one (got " +
+      js({ s, tries, got, counted, asksCalls, dirCalls, featCalls }) + ")", {
       asks: () => counted.asks === counted.table - counted.settled && got.asks === counted.table,
       asksReads: () => (asksCalls.off.openSync || 0) >= 660 && Object.keys(asksCalls.off).every((k) => k in asksCalls.on) && added.every((n) => n >= 0 && n <= 2),
+      asksDirs: () => DIRS.every((d) => Object.keys(dirCalls[d].off).length > 0 && js(dirCalls[d].on) === js(dirCalls[d].off)),
       nothing: () => s.nothing.ratio <= 1.5 && got.nothing === counted.table && counted.nothing === counted.table,
       rows500: () => s.rows500.ratio <= 1.5 && js(got.rows500) === js([500, true]),
       web: () => s.web.ratio <= 1.5,
