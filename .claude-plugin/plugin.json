@@ -2,7 +2,7 @@
   "name": "dev-spec-driven",
   "displayName": "Dev Spec-Driven",
   "description": "Unified, track-based spec-driven development: EARS requirements, technical design, traceable tasks, and approval-gated execution. Composes optional TDD, SaaS-scale, AI-eval, security, privacy (GDPR), distributed-data-consistency, API-contract, UI (a design-system registry, static UI checks and a visual review), observability, data-pipeline and port (port first, improve later) tracks per feature, with opt-in protected tests, a fast check after each change and a review panel on several models. Ships a fully local, zero-dependency MCP server (tools, prompts and specs:// resources) for spec scaffolding, classification, EARS linting, traceability, evidence-gated task tracking, change impact, metrics, a living spec catalog, drift checks, project templates, stakeholder export, release notes, a decision log, roadmap forecasts, and import from Kiro / spec-kit / OpenSpec / plans / ExecPlans / BMAD / fluidplan. No cloud, no CI, no cost.",
-  "version": "1.38.0",
+  "version": "1.39.0",
   "author": {
     "name": "Carlos Pereira",
     "email": "carlospereira@prodigitalkey.com"
