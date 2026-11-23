@@ -410,7 +410,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       ["(min-device-width: 768px)", ""], ["(width: 600px)", ""], ["(width = 600px)", ""], ["(1px < width < 2px < 3px)", ""],
       ["(min-width: 30ch)", "bad "], ["(min-width: calc(1px + 2px))", "bad "], ["(calc(1px) < width)", "bad "], ["(min-width: var(--x))", "bad "], // (M10)
       ["(min-width: 1280)", "bad "], ["(min-width: 600px) and (max-width: 30ch)", "bad 600"], ["(min-width: 40em (print))", "bad "], // (a group's text never its parent's)
-      ["((min-width: 40em) and (max-width: 52em))", "640 833"], ["(min-width: 40rem)", "640"], ["(MIN-WIDTH: 40REM)", "640"], // (M11, M12)
+      ["((min-width: 40em) and (max-width: 52em))", "640 833"], ["(min-width: 40rem)", "640"], ["(MIN-WIDTH: 40REM)", "640"], ["(WIDTH >= 64REM)", "1024"], // (M11, M12)
       ["screen and (min-width: 600px), print and (max-width: 899px)", "600 900"], ["(max-width: 5000px)", "5001"],
       ["(min-width: 768px", "bad "], ["(min-width: 600px) and (max-width: 900px", "bad "], ["(min-width: 600px))", "bad "], // (W4)
     ];

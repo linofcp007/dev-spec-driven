@@ -328,7 +328,9 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       js({ media, ptBr }) + ")", {
       line: () => media.every((x) => x.ok),
       json: () => media.every((x) => x.json),
-      reworded: () => T.bpFrom.partial("a.css:1").startsWith("declared in a.css:1, then the review's default set") && T.bpFrom.partial("a.css:1").includes("a plain media query's, are not read") &&
+      // (the reword as a property, in every language: the partial phrase opens with the `code` one — where the widths are declared,
+      // never "what it adds to its framework's own", false of an alias list — and says the media queries are not read)
+      reworded: () => ["en", "pt", "es", "pt-BR"].every((l) => { const X = MSG(l).cliOutput, p = X.bpFrom.partial("a.css:1"); return p.startsWith(X.bpFrom.code("a.css:1") + ", ") && p.includes("media query"); }) &&
         ptBr.includes("por padrão") && ptBr.includes("liste-as todas"),
     });
 
