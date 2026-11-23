@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, __dirname }) => {
+exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, fsCalls, __dirname }) => {
   const js = JSON.stringify;
   const call = async (name, args) => payload(await rpc("tools/call", { name, arguments: args }));
   const FC = S.msg("en").fastCheck;
@@ -306,8 +306,15 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, __d
   }
 
   { // 1.36 review 2 (FC2-3): the task's own files are dated from the planned walk's result (its files known: no second realpath check, no second
-    // date) — on a big-glob task the brief and next_task cost stays within ×1.3 of the same call without the fast check plus the planned walk
-    // and its dates alone (a ratio; a second walk of the same glob doubled it)
+    // date) — COUNTED (1.40): on a big-glob task the brief and next_task with the fast check make, under the project root, the fs calls of the
+    // same call without it plus the planned walk's own, and one open more (the observed log's). A second realpath check of the own files
+    // (+500 realpathSync.native), a second date (+500 statSync) or the log read again per planned file (+500 openSync — outside src/: why the
+    // root) is a count. The time is a backstop only: four calls a side (each side ≥ 100 ms in a Linux container), the call with the fast
+    // check against the call without it plus the walk in ONE interval, each side's median of 5, the rounds interleaved, one ratio a
+    // remeasure, ≤ 2.5× — it hides anything under 2.5×: a quadratic over the planned set that makes no fs call (the known set rebuilt
+    // per own file: 1.6–2.2× on node 22, 1.1–1.2× on Windows) passes. The 1.39 bound (≤ 1.3, one call a side) missed on Linux under load
+    // (1.73 / 1.78 node:24-alpine); at ≤ 1.5 the four calls crossed 1.5 in 7 of 36 base samples on node 22 (max 1.94) and 3 of 36 on
+    // node:24-alpine (1.75), the MCP suite running beside; one call a side (~40 ms) crossed even 2.5 (testing.md → Adding a test)
     const E = require(path.join(__dirname, "lib", "engine", "index.js"));
     const p = path.join(tmp, "proj-fc-cost");
     S.initProject(p, ["core"], "en", { checks: { tc: TC }, fastCheck: "tc" });
@@ -320,32 +327,37 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, __d
     fs.writeFileSync(path.join(f.dir, "tasks.md"), text);
     writeLog(p, [[TC, 0, Date.now() + 1000]]);
     const planned = () => S.withReadCache(() => E.baselineFiles(p, text).files.forEach((r) => { try { fs.statSync(path.join(p, r)); } catch { /* none */ } }));
-    // interleaved rounds (a load spike hits every side alike), the first a warm-up, each side's median
-    const sample = () => {
-      const T = { brief: [], next: [], briefOff: [], nextOff: [], walk: [] };
-      const time = (k, fn) => { const t0 = process.hrtime.bigint(); fn(); T[k].push(Number(process.hrtime.bigint() - t0) / 1e6); };
+    const brief = () => S.taskBrief(p, f.slug, 1), next = () => S.nextTask(p, f.slug);
+    // the counts: (the call with the fast check − the call without it) − the planned walk's, per fs function, under the project root
+    const root = p + path.sep;
+    const minus = (a, b) => { const o = {}; for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { const d = (a[k] || 0) - (b[k] || 0); if (d) o[k] = d; } return o; };
+    const extra = (call) => { setMeta(p, { fastCheck: undefined }); const off = fsCalls(root, call); setMeta(p, { fastCheck: "tc" }); return minus(fsCalls(root, call), off); };
+    const walk = fsCalls(root, planned);
+    const counted = { brief: minus(extra(brief), walk), next: minus(extra(next), walk) };
+    // the backstop: per round four calls with the fast check, then four of the call without it and the walk, each side in one interval;
+    // 6 rounds, the first a warm-up, each side's median of 5
+    const backstop = (call) => remeasure(() => {
+      const on = [], off = [];
+      const time = (into, fn) => { const t0 = process.hrtime.bigint(); for (let k = 0; k < 4; k++) fn(); into.push(Number(process.hrtime.bigint() - t0) / 1e6); };
       for (let i = 0; i < 6; i++) {
         setMeta(p, { fastCheck: "tc" });
-        time("brief", () => S.taskBrief(p, f.slug, 1)); time("next", () => S.nextTask(p, f.slug));
+        time(on, call);
         setMeta(p, { fastCheck: undefined });
-        time("briefOff", () => S.taskBrief(p, f.slug, 1)); time("nextOff", () => S.nextTask(p, f.slug)); time("walk", planned);
+        time(off, () => { call(); planned(); });
       }
-      const m = Object.fromEntries(Object.entries(T).map(([k, a]) => [k, a.slice(1).sort((x, y) => x - y)[2]]));
-      return { ...m, rb: m.brief / (m.briefOff + m.walk), rn: m.next / (m.nextOff + m.walk) };
-    };
-    const s = remeasure(sample, (x) => x.rb <= 1.3 && x.rn <= 1.3);
-    // each file is dated once: the brief's stat calls under src/ grow by the planned set (500) with the fast check on — a second date
-    // of the own files the planned walk already dated was +20% of the brief (a cost guard, counted rather than timed)
-    const srcDir = path.join(p, "src") + path.sep, realStat = fs.statSync; // (a file under it — the glob's own folder stat aside)
-    const stats = () => { let n = 0; fs.statSync = function (file, ...rest) { if (String(file).startsWith(srcDir)) n++; return realStat.call(this, file, ...rest); };
-      try { S.taskBrief(p, f.slug, 1); } finally { fs.statSync = realStat; } return n; };
-    const statsOff = stats();
+      const med = (a) => a.slice(1).sort((x, y) => x - y)[2];
+      return { on: Math.round(med(on)), off: Math.round(med(off)), ratio: Math.round(med(on) / med(off) * 100) / 100 };
+    }, (x) => x.ratio <= 2.5);
+    const s = { brief: backstop(brief), next: backstop(next) };
     setMeta(p, { fastCheck: "tc" });
-    const statsOn = stats();
     const st = S.taskBrief(p, f.slug, 1).fastCheck;
-    ok(s.rb <= 1.3 && s.rn <= 1.3 && st && st.status === "clean" && st.partial === true && statsOn - statsOff === 500,
-      "1.36 review 2 (FC2-3): a big-glob task's brief and next_task with the fast check cost at most ×1.3 the call without it plus the planned walk and its dates alone, each file dated once (got " +
-      js(Object.fromEntries(Object.entries(s).map(([k, v]) => [k, Math.round(v * 100) / 100]))) + ", tries " + s.tries + ", stats " + statsOff + " → " + statsOn + ", " + js(st) + ")");
+    all("1.36 review 2 (FC2-3): a big-glob task's brief and next_task with the fast check make, under the project root, the fs calls of the call without it plus the planned walk's and ONE open more (the observed log's) — each file realpath-checked and dated once —, and four of them cost at most ×2.5 four of the call without it plus the walk (a backstop) (got " +
+      js({ counted, walk, s, tries: [s.brief.tries, s.next.tries], st }) + ")", {
+      counted: () => js(counted) === js({ brief: { openSync: 1 }, next: { openSync: 1 } }),
+      walkSeen: () => walk.statSync > 0 && walk["realpathSync.native"] > 0, // (a spy that saw nothing would make every difference 0)
+      backstop: () => s.brief.ratio <= 2.5 && s.next.ratio <= 2.5,
+      status: () => st && st.status === "clean" && st.partial === true,
+    });
   }
 
   { // 1.36 review 1 (FC-6): the PowerShell tool through the observe hook — its failure is logged (marked tool: PowerShell), a later pass
