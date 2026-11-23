@@ -792,6 +792,39 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
       differential: () => diff.same === true,
     });
   }
+  {
+    // 1.40 (R3-DEP-3) — the row's path cell is read as stalePath reads it (ONE reader, pathWords): the whole cell, then each
+    // word, a link unwrapped — the index the row's path names may stand beside another path, backticked, or as a link; a cell
+    // naming two indexes locates the row by both; a folder with a blank is named by the whole cell alone. Still 1.39's: one
+    // path, the picker's index alone (its parts' importers aside)
+    const kitsIn = (dir) => {
+      const out = {};
+      for (const c of ["card", "dialog", "picker"]) {
+        out[dir + c + "/" + c + ".svelte"] = L(["<div><slot /></div>"]);
+        out[dir + c + "/" + c + "-content.svelte"] = L(["<div><slot /></div>"]);
+        out[dir + c + "/index.ts"] = L(["import Root from \"./" + c + ".svelte\";", "import Content from \"./" + c + "-content.svelte\";", "export { Root, Content };"]);
+      }
+      return out;
+    };
+    const page = (dir, c) => L(["<script lang=\"ts\">", "  import * as " + c + " from '../../lib/components/" + dir + c.toLowerCase() + "';", "</script>", "<" + c + ".Content />"]);
+    const kitFilesOf = (dir) => Object.assign({ "package.json": js({ name: "cells" }), "src/routes/r0/+page.svelte": page(dir, "Card"), "src/routes/r1/+page.svelte": page(dir, "Dialog"),
+      "src/routes/picker/+page.svelte": page(dir, "Picker") }, kitsIn("src/lib/components/" + dir));
+    const K = "src/lib/components/ui/", PICKER = "src/routes/picker/+page.svelte";
+    const cell = (tag, text, dir) => S.designSystemReport(depProject("cell-" + tag, ["| Content | " + text + " |  | _Deprecated_ |"], kitFilesOf(dir || "ui/")));
+    const one = cell("one", K + "picker/index.ts"), two = cell("two", "`" + K + "picker/index.ts`, `" + K + "picker/picker-content.svelte`");
+    const link = cell("link", "[picker](" + K + "picker/index.ts)"), both = cell("both", K + "picker/index.ts " + K + "card/index.ts");
+    const blank = cell("blank", "src/lib/components/ui kit/picker/index.ts", "ui kit/");
+    const at = (r) => [rowOf(r, "Content").filesTotal, rowOf(r, "Content").files, rowOf(r, "Content").paths, usesOf(r).unlocated];
+    const ONE = [1, [PICKER], [K + "picker/index.ts"], []];
+    all("1.40 deprecatedUses (R3-DEP-3): the row's path cell read as stalePath reads it — the whole cell, then each word, a link unwrapped: the index the row's path names beside another path, backticked, or as a link; two indexes named, both locate it; a folder with a blank, the whole cell; one path as 1.39 read it (got " +
+      js({ one: at(one), two: at(two), link: at(link), both: at(both), blank: at(blank) }) + ")", {
+      one: () => js(at(one)) === js(ONE),
+      two: () => js(at(two)) === js(ONE),
+      link: () => js(at(link)) === js(ONE),
+      both: () => js(at(both)) === js([2, [PICKER, "src/routes/r0/+page.svelte"], [K + "card/index.ts", K + "picker/index.ts"], []]),
+      blank: () => js(at(blank)) === js([1, [PICKER], ["src/lib/components/ui kit/picker/index.ts"], []]),
+    });
+  }
 
   // --- 1.40: the pages the watch parses itself — a count, not a clock ------------------------------------------------------------
   {

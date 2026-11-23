@@ -2867,8 +2867,11 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     if (!givenTo.has(k)) givenTo.set(k, new Set());
     for (const f of at.keys) givenTo.get(k).add(f);
   }
-  const rowAt = new Map(reg.components.map((c) => [c.key, moduleKey(implementsRel(c.path))]));
-  const named = (r, k) => { const at = rowAt.get(k), key = moduleKey(r.path); return at === key || at + "/index" === key; };
+  // (the row's path cell read as stalePath reads it — pathWords: the whole cell, then each word, a link unwrapped —, each
+  // reading an `_Implements:_` reference: `picker/index.ts, picker-content.svelte` and `[picker](…/picker/index.ts)` name the
+  // picker's index — R3-DEP-3 of 1.40, one reader for one cell)
+  const rowAt = new Map(reg.components.map((c) => [c.key, new Set(pathWords(c.path).map((w) => moduleKey(implementsRel(w))))]));
+  const named = (r, k) => { const at = rowAt.get(k), key = moduleKey(r.path); return !!at && (at.has(key) || (key.endsWith("/index") && at.has(key.slice(0, -6)))); };
   const oneFile = (k) => !givenTo.has(k) || givenTo.get(k).size <= 1;
   for (const r of results) if (r.barrel) nameRows(r, (k) => !byFile.has(k) && (oneFile(k) || named(r, k)));
   // (the names a component folder's barrel gives a row's file or a watched name — read before the search)
@@ -3437,9 +3440,17 @@ function onDisk(root, rel) {
 const RE_FILE_EXT = /\.[A-Za-z][A-Za-z0-9]{0,9}$/;
 const RE_DOC_EXT = /\.(?:md|mdx|markdown|txt|rst|adoc|pdf|png|jpe?g|gif|webp|svg|fig|sketch)$/i;
 const DS_PATH_WORDS = 20; // words of a path cell read
-function stalePath(root, cell) {
+// (1.40) a path cell's readings, ONE reader for stalePath and the deprecated uses' watch (the index the row's path names): the
+// whole cell first (its first 400 characters, its backticks stripped), then its first DS_PATH_WORDS words, a link unwrapped
+// (`[Card](src/components/Card.tsx)`) — [] for an empty cell
+function pathWords(cell) {
   const text = stripEnds(String(cell || "").slice(0, 400).trim(), unitIn("`")).trim();
-  if (!text) return false;
+  if (!text) return [];
+  return [text].concat(text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS).map((w) => stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`"))));
+}
+function stalePath(root, cell) {
+  const [text, ...words] = pathWords(cell);
+  if (text == null) return false;
   // a reading → null (it names no code file of the project) | true (the file is there) | false (it is gone)
   const there = (w) => {
     const rel = projectPath(root, w);
@@ -3449,8 +3460,8 @@ function stalePath(root, cell) {
   const whole = projectPath(root, text);
   if (whole != null && onDisk(root, whole)) return false;
   let gone = false;
-  for (const w of text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS)) {
-    const t = there(stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`")));
+  for (const w of words) {
+    const t = there(w);
     if (t === true) return false;
     if (t === false) gone = true;
   }
