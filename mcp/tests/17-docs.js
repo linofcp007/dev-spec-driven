@@ -2082,16 +2082,18 @@ exports.run = async ({
         QM.includes("so `(max-width: 767px)` and `767.98px` are 768") && QM.includes("`partial` (so a lone `--md (min-width: 768px)` captures the default set itself)")
           && js(T.mediaEdges("(max-width: 767px)").px) === "[768]" && js(T.mediaEdges("(max-width: 767.98px)").px) === "[768]"
           && bp("lone", "@custom-media --md (min-width: 768px);\n") === "code:true:" + DEF + ":0"],
-      ["quality.md: what @custom-media is not read — an alias of an alias (no edge, nothing unread), upper case, a rule whose `(` its line leaves open (silent)", () =>
-        QM.includes("an alias of an alias (`(--a)`: no edge, nothing unread), upper-case `@CUSTOM-MEDIA`, and, silent, a rule longer than DS_PRELUDE (it arrives without its head, as a one-line Sass map) or one whose `(` its line leaves open")
+      ["quality.md: what @custom-media is not read — an alias of an alias (no edge, nothing unread), upper case, a rule whose `(` no `)` closes before its `;` (silent); one wrapped over lines whose groups close is read", () =>
+        QM.includes("an alias of an alias (`(--a)`: no edge, nothing unread), upper-case `@CUSTOM-MEDIA`, and, silent, a rule longer than DS_PRELUDE (it arrives without its head, as a one-line Sass map) or one whose `(` no `)` closes before its `;` (a rule wrapped over lines whose groups close is read)")
           && js(T.mediaEdges("(--a)")) === js({ px: [], bad: false }) && bp("upper", "@CUSTOM-MEDIA --md (min-width: 600px);\n") === "default:false:" + DEF + ":0"
-          && bp("open", "@custom-media --md (min-width: 600px;\n") === "default:false:" + DEF + ":0"],
+          && bp("open", "@custom-media --md (min-width: 600px;\n") === "default:false:" + DEF + ":0"
+          && bp("wrapped", "@custom-media --md (\n  min-width: 768px\n);\n").startsWith("code:true:")],
       ["quality.md: the deprecated uses' `parsed` — not enumerable (in-process only), the pages the watch parsed itself", () =>
         QM.includes("the report's `parsed`, NOT enumerable (as classify's `tiers`) — MCP, `--json` and a spread drop it")
           && typeof parsed.n === "number" && !parsed.enumerable && !parsed.inJson && parsed.files === 1],
-      ["testing.md: rule 1 — the engine's own count, `deprecatedUses.parsed`, so G1's asks is counted (no clock)", () =>
-        TM.includes("the deprecated uses' watch counts the pages it parses itself, `deprecatedUses.parsed` (not enumerable: in-process only, never in a result's JSON), so G1's `asks` asserts that count and the fs calls under the pages, no clock")
-          && /asks: \(\) => counted\.asks === counted\.table - counted\.settled/.test(G1) && /asksReads: \(\) =>/.test(G1) && !/within\(rep\(G1\.asksOn\)/.test(G1)],
+      ["testing.md: rule 1 — the engine's own count, `deprecatedUses.parsed`, so G1's asks is counted (no clock), its reads under the project root", () =>
+        TM.includes("the deprecated uses' watch counts the pages it parses itself, `deprecatedUses.parsed` (not enumerable: in-process only, never in a result's JSON), so G1's `asks` asserts that count and the fs calls under the project root, no clock")
+          && /asks: \(\) => counted\.asks === counted\.table - counted\.settled/.test(G1) && /asksReads: \(\) =>/.test(G1) && !/within\(rep\(G1\.asksOn\)/.test(G1)
+          && /fsCalls\(G1\.asksOn \+ path\.sep/.test(G1)],
       ["tasks-and-evidence.md: the fast check's planned-walk reuse — counted under the project root (09-evidence-fast-check), a 2.5× backstop", () =>
         TE.includes("`09-evidence-fast-check` COUNTS it since 1.40 — the brief and next_task with the fast check make, under the project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's; a 2.5× timed backstop beside")
           && /counted: \(\) => js\(counted\) === js\(\{ brief: \{ openSync: 1 \}, next: \{ openSync: 1 \} \}\)/.test(FC) && /\(x\) => x\.ratio <= 2\.5\)/.test(FC)],

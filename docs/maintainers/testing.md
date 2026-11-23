@@ -179,8 +179,11 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   difference with a non-zero side, never a pinned total (the totals differ by platform), and count under the project root, not
   one folder of it (FC2-3's log read again per planned file sits outside `src/`); what the engine does is a count where it
   keeps one — the deprecated uses' watch counts the pages it parses itself, `deprecatedUses.parsed` (not enumerable:
-  in-process only, never in a result's JSON), so G1's `asks` asserts that count and the fs calls under the pages, no clock
-  (15-quality-design-system-cost-deprecated.js). It times only what has no count, and its
+  in-process only, never in a result's JSON), so G1's `asks` asserts that count and the fs calls under the project root, no
+  clock — the marked tree's own reads are the follow's tsconfig, one or two by platform, a bound of 2 a kind
+  (15-quality-design-system-cost-deprecated.js); `fsCalls` counts a path as the engine spells it, so a call made through the
+  realpath of an aliased folder (Windows' 8.3 `ADMINI~1`) is not under it — assert no pinned difference that depends on one. It
+  times only what has no count, and its
   comment says what the bound hides (FC2-3's 2.5× backstop passes a 2× quadratic over the planned set that makes no fs call);
   (2) does **the same work on both sides** (1.39's G1 yardstick skipped the watch's parse: 1.02× Windows, 1.7–1.8× Linux);
   (3) **interleaves the sides** — a, b, a, b, …, each side's median of 5 (`pair`, 15-quality-design-system-cost.js) —, never a
@@ -373,5 +376,10 @@ How the rules above came to be — grep a release here.
   the property is two counts, so once the merged tree gave the report `deprecatedUses.parsed` it is COUNTED, no clock (the
   owner, after the merges): with settle asking a candidate on 50 pages, the watch parses the 275 Table pages settle did not
   (300 − 25), and every fs call under the pages equals the identical tree's with no marker (600 / 600); a watch parsing every
-  page — the case the 1.39 clock saw at 1.05× on Windows — fails both (610, 660). `nothing` keeps its clock (0.67–0.79×
-  everywhere) and counts its 300.
+  page — the case the 1.39 clock saw at 1.05× on Windows — fails both (610, 660). `nothing` keeps its clock (0.67–1.29×
+  measured, loaded) and counts its 300. Review 1 (DOC-2, T-1, T-3; the replay's S3): the pages folder hid a re-read outside it
+  (the registry, the views, the MDX once a page) — the reads are counted under the project root, the follow's tsconfig the one
+  difference (+1 open, +1 realpath on Windows; bound 2 a kind), and both mutants fail; the feature report's 1.25× clock (40–59 ms
+  sides on Linux) is a count — with a row marked as with none it makes the same calls under `src/` and opens no page (the
+  project report 642), and a watch built for it fails; DS_PATH_WORDS, a cost guard only timed (1.48–1.55×), is counted — a
+  path cell of 33 absent files makes the calls of its first 20 (without the bound 38 lstats against 28).
