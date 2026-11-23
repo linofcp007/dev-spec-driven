@@ -10,9 +10,11 @@
  *     rounding of the pair as written (0.011 with an HSL side — integer HSL's rounding —, 0.001 otherwise — a hex written as
  *     3-decimal oklch is within 0.0007: Tailwind's zinc is NOT shadcn's neutral, 0.003–0.008 apart); an HSL side against a
  *     hex / rgb one also by the pair's rounding both ways (roundTrip: the hex in HSL rounds to the HSL as written, or the HSL
- *     paints the hex at 8 bits — zinc's #18181b is not hsl(0 0% 9%), 0.0083 apart; #eeeff2 is hsl(220 14% 94%)); `near`, a
- *     hint: the nearest token within the just-noticeable difference (0.02 ΔEOK). hwb / lab / lch / color() / a named colour
- *     are not parsed: the same TEXT names the token (1.37's rule, colorKey);
+ *     paints the hex at 8 bits — zinc's #18181b is not hsl(0 0% 9%), 0.0083 apart; #eeeff2 is hsl(220 14% 94%)); against an
+ *     oklch / oklab one (1.40, meets) when their written roundings meet or one paints the other at 8 bits — Tailwind 4's
+ *     oklch(21% 0.006 285.885) zinc is not hsl(0 0% 9%), oklch(20.5% 0 0) is; `near`, a hint: the nearest token within the
+ *     just-noticeable difference (0.02 ΔEOK). hwb / lab / lch / color() / a named colour are not parsed: the same TEXT names
+ *     the token (1.37's rule, colorKey);
  *   - fonts: a `font-family` stack (its last family a generic one, one family that is not) by its primary family, against
  *     the font tokens of the REGISTRY's rows (a code token's stack is never read: designValue drops it);
  *   - motion: the literal times (above 1 ms) and easing functions of a transition / animation declaration or a Tailwind
@@ -26,7 +28,7 @@
 
 const DS_EXACT = 1e-4; // ΔEOK within one notation: float noise, a hue that is powerless at chroma 0
 const DS_SAME_HSL = 0.011; // …across two notations, one of them HSL (integer HSL's rounding: #05787d = hsl(183 92% 25%), 0.0106 —
-// against a hex / rgb, the pair's round trip narrows it: sameAt)
+// against a hex / rgb, the pair's round trip narrows it, against an oklch / oklab the written roundings: sameAt)
 const DS_SAME_CROSS = 0.001; // …across any other two (a hex as 3-decimal oklch: within 0.0007)
 const DS_JND = 0.02; // `near`: the just-noticeable difference
 const DS_ALPHA = 0.01; // alphas that differ by more are never the same colour, nor near
@@ -46,9 +48,10 @@ const hueOf = (x) => (x.u === "" || x.u === "deg" ? x.v : x.u === "turn" ? x.v *
 const halfDigit = (t) => { const m = /^[+-]?\d*(?:\.(\d+))?(?:e([+-]?\d+))?/i.exec(t); return 0.5 * 10 ** (Number(m[2] || 0) - (m[1] || "").length); };
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-// sRGB (0..1, gamma-encoded) → OKLab (Björn Ottosson's matrices)
+// sRGB (0..1, gamma-encoded) → OKLab (Björn Ottosson's matrices). Every parsed colour's triple is clamped already; only an HSL
+// image's points past s / l 0–100 fall outside, and extrapolate (1.40: a clamp here or there never changed a verdict — measured)
 function okFromRgb(r0, g0, b0) {
-  const r = toLinear(clamp01(r0)), g = toLinear(clamp01(g0)), b = toLinear(clamp01(b0));
+  const r = toLinear(r0), g = toLinear(g0), b = toLinear(b0);
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
@@ -60,8 +63,17 @@ function rgbFromHsl(h0, s, l) {
   const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
   return [r + m, g + m, b + m];
 }
-// A colour as written → { n (its notation: hex · rgb · hsl · oklab · oklch), ok ([L, a, b]), alpha } | null. (Linear: both
-// patterns are anchored, the arguments split once — a raw colour is ≤ 60 characters inside, a registry cell ≤ 200.)
+// (1.40) OKLab → sRGB (gamma-encoded; out of gamut past 0..1) — and the pixel an sRGB triple paints: clamped, 8 bits a channel
+const toGamma = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+function rgbFromOk([L, a, b]) {
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3, s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s].map(toGamma);
+}
+const paint8 = (rgb) => rgb.map((c) => Math.round(clamp01(c) * 255) / 255);
+// A colour as written → { n (its notation: hex · rgb · hsl · oklab · oklch), ok ([L, a, b]), alpha, and its notation's own:
+// rgb (a hex / rgb()'s triple), hsl, box (an oklab / oklch's) } | null. (Linear: both patterns are anchored, the arguments split
+// once — a raw colour is ≤ 60 characters inside, a registry cell ≤ 200.)
 function parseColor(s0) {
   const s = String(s0 == null ? "" : s0).trim();
   const hex = RE_HEX_COLOR.exec(s);
@@ -91,7 +103,7 @@ function parseColor(s0) {
     alpha = clamp01(x.u === "%" ? x.v / 100 : x.v);
   }
   const pct = (x, full) => (x.u === "%" ? (x.v / 100) * full : x.u === "" ? x.v : NaN);
-  let ok, rgb, hsl;
+  let ok, rgb, hsl, box;
   if (n === "rgb") {
     rgb = a.map((x) => clamp01(x.u === "%" ? x.v / 100 : x.u === "" ? x.v / 255 : NaN));
     ok = okFromRgb(rgb[0], rgb[1], rgb[2]);
@@ -102,12 +114,21 @@ function parseColor(s0) {
     // (its numbers as written, half a unit of each one's last written digit — the hue's in degrees: `.5turn` 18 —, and the
     // sRGB triple it paints)
     hsl = { h, s: sat * 100, l: light * 100, paint, half: [hueOf({ v: halfDigit(parts[0]), u: a[0].u }), halfDigit(parts[1]), halfDigit(parts[2])] };
-  } else if (n === "oklab") ok = [pct(a[0], 1), pct(a[1], 0.4), pct(a[2], 0.4)];
-  else {
-    const L = pct(a[0], 1), C = pct(a[1], 0.4), h = (hueOf(a[2]) * Math.PI) / 180;
-    ok = [L, C * Math.cos(h), C * Math.sin(h)];
+  } else {
+    // (1.40) its channels as written (oklch's hue in degrees), half a unit of each one's last written digit in the channel's
+    // own scale (a % one's: 100% is 1 for L, 0.4 for a / b / C; the hue's in degrees), and the pixel it paints (paint8)
+    const half = (i, full) => (a[i].u === "%" ? (halfDigit(parts[i]) / 100) * full : halfDigit(parts[i]));
+    if (n === "oklab") {
+      ok = [pct(a[0], 1), pct(a[1], 0.4), pct(a[2], 0.4)];
+      box = { c: ok, half: [half(0, 1), half(1, 0.4), half(2, 0.4)] };
+    } else {
+      const L = pct(a[0], 1), C = pct(a[1], 0.4), hd = hueOf(a[2]), h = (hd * Math.PI) / 180;
+      ok = [L, C * Math.cos(h), C * Math.sin(h)];
+      box = { c: [L, C, hd], half: [half(0, 1), half(1, 0.4), hueOf({ v: halfDigit(parts[2]), u: a[2].u })] };
+    }
+    box.paint = paint8(rgbFromOk(ok));
   }
-  return ok.every(Number.isFinite) ? { n, ok, alpha, rgb, hsl } : null;
+  return ok.every(Number.isFinite) ? { n, ok, alpha, rgb, hsl, box } : null;
 }
 const deltaE = (p, q) => Math.hypot(p.ok[0] - q.ok[0], p.ok[1] - q.ok[1], p.ok[2] - q.ok[2]);
 // Two parsed colours are the same colour: within the tolerance of their notations' pair, alphas alike. (sameColor is drift's,
@@ -133,11 +154,51 @@ function roundsTo(hsl, [r, g, b]) {
 // whose own HSL (225 13.3% 94.1%) does not round to it. The triple is taken as the 8-bit colour it paints (review 3: an rgb()
 // with decimals — rgb(237.1 239 242) paints #edeff2, never #eeeff2; a hex is exact either way).
 const roundTrip = (hsl, rgb) => hsl.paint.every((c, i) => Math.abs(c * 255 - Math.round(rgb[i] * 255)) <= 0.5 + 1e-9) || roundsTo(hsl, rgb);
+// (1.40, R2-T2) An OKLab point set's ranges: L, a, b's lowest and highest, the chroma's, the first point's hue (OKLCh, degrees)
+// and the farthest of the others' from it, round the circle (span)
+const hueDist = (x, y) => { const d = Math.abs(x - y) % 360; return Math.min(d, 360 - d); };
+const okHue = (ok) => (Math.atan2(ok[2], ok[1]) * 180) / Math.PI;
+function okRange(points) {
+  const r = { lo: points[0].slice(), hi: points[0].slice(), c0: Infinity, c1: -Infinity, h: okHue(points[0]), span: 0 };
+  for (const p of points) {
+    for (let i = 0; i < 3; i++) { r.lo[i] = Math.min(r.lo[i], p[i]); r.hi[i] = Math.max(r.hi[i], p[i]); }
+    const c = Math.hypot(p[1], p[2]);
+    r.c0 = Math.min(r.c0, c); r.c1 = Math.max(r.c1, c); r.span = Math.max(r.span, hueDist(okHue(p), r.h));
+  }
+  return r;
+}
+// An HSL colour's image, built ONCE a parsed colour (a scale's token keeps it across the report's rows): its written box —
+// h, s and l each at as written / −half / +half: 27 points painted to OKLab, the centre first (a point past s / l 0–100 is not
+// clamped as CSS would: never a verdict apart, measured) —, and the pixel it paints (8 bits a channel), a point
+function hslImage(hsl) {
+  if (!hsl.img) {
+    const pts = [];
+    for (const i of [0, -1, 1]) for (const j of [0, -1, 1]) for (const k of [0, -1, 1])
+      pts.push(okFromRgb(...rgbFromHsl(hsl.h + i * hsl.half[0], (hsl.s + j * hsl.half[1]) / 100, (hsl.l + k * hsl.half[2]) / 100)));
+    hsl.img = { box: okRange(pts), px: okRange([okFromRgb(...paint8(hsl.paint))]) };
+  }
+  return hsl.img;
+}
+// An oklab / oklch box as written meets an OKLab range, channel by channel: oklab's L, a and b; oklch's L, its chroma and its
+// hue — the hue asked only where neither side can be achromatic (a chroma within DS_EXACT; a written chroma whose half
+// reaches 0), within the range's span plus the hue's half
+function boxMeets(q, r) {
+  const b = q.box, meet = (lo, hi, i) => lo <= b.c[i] + b.half[i] && b.c[i] - b.half[i] <= hi;
+  if (q.n === "oklab") return meet(r.lo[0], r.hi[0], 0) && meet(r.lo[1], r.hi[1], 1) && meet(r.lo[2], r.hi[2], 2);
+  return meet(r.lo[0], r.hi[0], 0) && meet(r.c0, r.c1, 1)
+    && (r.c0 <= DS_EXACT || b.c[1] - b.half[1] <= 0 || hueDist(r.h, b.c[2]) <= r.span + b.half[2]);
+}
+// (1.40, R2-T2) An HSL colour p and an oklab / oklch one q: the same colour when their written roundings meet (the HSL's box
+// image against q's box), or one paints the other at 8 bits — q's pixel round-trips the HSL (roundTrip: the HSL paints it, or
+// it rounds to the HSL's numbers), or q's box holds the HSL's pixel. Asked both orders (sameAt). 1.39 kept the 0.011 alone,
+// so Tailwind 4's oklch(21% 0.006 285.885) zinc was hsl(0 0% 9%) — 0.0082 apart, a bluish grey against a neutral one.
+const meets = (p, q) => boxMeets(q, hslImage(p.hsl).box) || roundTrip(p.hsl, q.box.paint) || boxMeets(q, hslImage(p.hsl).px);
 // Two parsed colours (alphas alike) at ΔEOK d are the same colour: within their pair's tolerance — and an HSL one against a
-// hex / rgb one round-trips. (The tolerance stays the ceiling, the round trip only narrows it: 479 of the 16.7M hexes are
-// farther than 0.011 from their own integer HSL — near black, #020200 = hsl(60 100% 0%) at 0.084; saturated yellows to 0.013
-// — and are not its token, as in 1.38.)
-const sameAt = (p, q, d) => d <= sameTolerance(p, q) && (p.hsl && q.rgb ? roundTrip(p.hsl, q.rgb) : q.hsl && p.rgb ? roundTrip(q.hsl, p.rgb) : true);
+// hex / rgb one round-trips, against an oklab / oklch one meets. (The tolerance stays the ceiling, the round trip only narrows
+// it: 479 of the 16.7M hexes are farther than 0.011 from their own integer HSL — near black, #020200 = hsl(60 100% 0%) at
+// 0.084; saturated yellows to 0.013 — and are not its token, as in 1.38.)
+const sameAt = (p, q, d) => d <= sameTolerance(p, q) && (p.hsl && q.rgb ? roundTrip(p.hsl, q.rgb) : q.hsl && p.rgb ? roundTrip(q.hsl, p.rgb)
+  : p.hsl && q.box ? meets(p, q) : q.hsl && p.box ? meets(q, p) : true);
 // A colour as text is compared (1.37's rule — for what is not parsed: hwb / lab / lch / color() / a name): lower-cased, blanks
 // out. (1.37 also wrote a 3 / 4-digit hex out: a hex is always parsed now.)
 const colorKey = (v) => String(v).trim().toLowerCase().replace(/\s+/g, "");

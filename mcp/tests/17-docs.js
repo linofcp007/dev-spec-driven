@@ -1672,15 +1672,21 @@ exports.run = async ({
       ["colours: an HSL side against a hex / rgb by the rounding both ways — the examples (judgeRaw); the nearest of several", () => {
         const j = (value, ...tok) => T.judgeRaw({ kind: "color", value }, T.tokenScale(tok.map(([name, v]) => ({ name, value: v })), []));
         return scale.includes("`token` names the token the value IS (the nearest of several), in any notation")
-          && scale.includes("an HSL side against a hex or `rgb()` also both ways: the other in HSL rounds to its numbers or the HSL paints it, 8 bits a channel — `#05787d` is `hsl(183 92% 25%)`, `#eeeff2` `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`)")
+          && scale.includes("an HSL side against a hex or `rgb()` also both ways: the other in HSL rounds to its numbers or the HSL paints it, 8 bits a channel — `#05787d` is `hsl(183 92% 25%)`, `#eeeff2` `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`;")
           && j("#05787d", ["--a", "hsl(183 92% 25%)"]).token === "--a" && j("#eeeff2", ["--a", "hsl(220 14% 94%)"]).token === "--a"
           && !j("#18181b", ["--a", "hsl(0 0% 9%)"]).token && j("#18181b", ["--a", "hsl(240 5.9% 10%)"], ["--b", "#18181b"]).token === "--b";
       }],
-      // (review 2, R2-T2) zinc's hexes are not the neutral in either notation; its oklch() is the hsl() one (an HSL side's 0.011)
-      ["colours: `near` — the nearest within the JND, a hint; zinc's hexes against the neutral, its oklch() against the hsl() one; what is not parsed matches by text", () => {
+      // (review 2, R2-T2) zinc's hexes are not the neutral in either notation — (1.40, R2-T2) nor its oklch() the hsl() one: an
+      // HSL side against oklch / oklab by the written roundings, or one painting the other at 8 bits, both orders (the neutral's
+      // own oklch is hsl(0 0% 9%); 1.38 review 2's #eeeff2 written as oklch is hsl(220 14% 94%))
+      ["colours: an HSL side against oklch() / oklab() — the written roundings meet or one paints the other (meets), both orders; `near` — the nearest within the JND, a hint; zinc's hexes against the neutral, nor its oklch() the hsl() one; what is not parsed matches by text", () => {
         const j = (value, tok) => T.judgeRaw({ kind: "color", value }, T.tokenScale([{ name: "--a", value: tok }], []));
-        return scale.includes("`near` {`token`, `delta`} the nearest within " + B.jnd + " ΔEOK — a hint, never the token's colour (Tailwind's zinc hexes are not shadcn's neutral; its `oklch()` zinc is the `hsl()` one, within " + B.hsl + ")")
-          && !j("#18181b", "hsl(0 0% 9%)").token && !j("#18181b", "oklch(0.205 0 0)").token && j("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)").token === "--a"
+        const both = (x, y) => JSON.stringify([j(x, y).token, j(y, x).token]);
+        return scale.includes("`#18181b` is not `hsl(0 0% 9%)`; against `oklch()` / `oklab()` the written roundings meet, or one paints the other at 8 bits), alphas within " + B.alpha)
+          && scale.includes("`near` {`token`, `delta`} the nearest within " + B.jnd + " ΔEOK — a hint, never the token's colour (Tailwind's zinc hexes are not shadcn's neutral, nor its `oklch()` zinc the `hsl()` one)")
+          && !j("#18181b", "hsl(0 0% 9%)").token && !j("#18181b", "oklch(0.205 0 0)").token
+          && both("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)") === "[null,null]" && j("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)").near.token === "--a"
+          && both("oklch(20.5% 0 0)", "hsl(0 0% 9%)") === "[\"--a\",\"--a\"]" && both("oklch(0.952 0.004 271.369)", "hsl(220 14% 94%)") === "[\"--a\",\"--a\"]"
           && /`hwb\(\)`, `lab\(\)`, `lch\(\)`, `color\(\)` and a named colour match by text alone\./.test(scale);
       }],
       ["fonts: a stack by its first family, against the registry rows' font tokens only", () =>
