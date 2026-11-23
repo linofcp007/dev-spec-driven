@@ -3104,6 +3104,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   importing the file an index renames (vben's icon-button.vue), and a located row's namesake through a package's index
   (cal.com's atoms/index.ts, which re-exports its BookerPlatformWrapper as Booker: 1 pair) — the docs say an index
   locates a row only when no file does.
+- **1.39.0, the Linux run** (the release's Docker run, four images — a test's yardstick, no engine change) — G1's `asks`
+  check (15-quality-design-system-cost.js) failed on all four Linux images at 1.69–1.83× while Windows gave 1.02×: its
+  yardstick was the same report with no row marked, where settle parses its 50 pages alone, so the ratio was the watch's
+  300 parsed pages against a report the reads dominate — on Windows they weigh (~155 ms a report), on Linux they are cheap
+  (~45 ms) and the parse IS the report: a read-speed ratio, +19–24 ms, the small-tree increment the CHANGELOG states.
+  The yardstick now parses the same pages: the report with none where every page the watch reads also names settle's
+  candidate — 1.01× Windows, 1.06–1.07× Linux (node 22 / 24), under the same 1.5× bound. What it hides, measured with a
+  stand-in (every Button page naming Table: 600 parsed for 300): a watch that parses pages naming no marked row, 1.05×
+  Windows, 1.30× Linux — the bound catches a second read of the tree, never that (nor did the old yardstick on Windows,
+  1.06×). The mutants the cost guards kill (M38's prefilter, the feature report's `withComponents`) are the `prefilter`
+  and `feature` checks', unchanged.
 - **1.39.0, the release as merged** (the docs pass, after the four chains merged E → B → C → A; this summary is the 1.39
   round's for every area — the UI checks' and the state matrix's own entries below) — the ruling (DECISIONS) built ~15 of
   the ~29 mechanisms the four designs held (A 5, B 4–6, C 3, E 3; 1.38 shipped ~17 and needed three review rounds), to one

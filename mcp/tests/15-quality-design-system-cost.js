@@ -106,21 +106,27 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
     const HEAD = "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n";
     const kitOf = (moving) => L(["export function Table() { return <table />; }", "export function Button() { return <button />; }"].concat(moving ? ["export const Moving = motion(Box);"] : []));
     // G1: a real-shaped app — 600 TSX pages (300 render Table, 300 Button), 40 Vue SFCs, 20 MDX; `asks`: settle asks a candidate 50
-    // pages render; `nothing`: it asks none (the watch reads alone); `all`: every page names the candidate (settle parses them all)
+    // pages render; `same`: the same, and every Table page also names the candidate (settle parses the pages the watch would);
+    // `nothing`: it asks none (the watch reads alone); `all`: every page names the candidate (settle parses them all).
+    // (`asks` against `same`, never against the report with none: there settle parses its 50 pages alone, and the watch's 300
+    // are a parse the CHANGELOG states — 1.02× on Windows, where the reads weigh, and 1.69–1.83× on all four Linux images, where
+    // they are cheap and the parse is the report: a read-speed ratio, +19–24 ms. Against `same`: 1.01× Windows, 1.06–1.07× Linux.
+    // What the bound hides: a watch that parses pages naming no marked row — every Button page naming Table, 600 parsed for
+    // 300: 1.05× Windows, 1.30× Linux; it catches a second read of the tree, never that. 1.39 Docker)
     const app = (shape, marked) => {
       const files = { "package.json": js({ name: "g1" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
         "src/components/ui/kit.tsx": kitOf(shape !== "nothing"), "src/components/ui/table.tsx": L(["export function Table() { return <table />; }"]) };
       for (let i = 0; i < 600; i++) {
-        const t = i % 2 === 0, m = shape === "all" || (shape === "asks" && i < 50);
-        files["src/app/p" + i + "/page.tsx"] = L([t ? "import { Table } from \"@/components/ui/table\";" : "import { Button } from \"@/components/ui/kit\";"].concat(m ? ["import { Moving } from \"@/components/ui/kit\";", "// Moving"] : [],
-          ["export const P = () => <section>" + (t ? "<Table />" : "<Button />") + (m && shape === "asks" ? "<Moving />" : "") + "</section>;"], Array.from({ length: 40 }, (_, k) => "const v" + k + " = \"" + "x".repeat(60) + "\";")));
+        const t = i % 2 === 0, m = shape === "all" || ((shape === "asks" || shape === "same") && i < 50);
+        files["src/app/p" + i + "/page.tsx"] = L([t ? "import { Table } from \"@/components/ui/table\";" : "import { Button } from \"@/components/ui/kit\";"].concat(m ? ["import { Moving } from \"@/components/ui/kit\";", "// Moving"] : shape === "same" && t ? ["// Moving"] : [],
+          ["export const P = () => <section>" + (t ? "<Table />" : "<Button />") + (m && shape !== "all" ? "<Moving />" : "") + "</section>;"], Array.from({ length: 40 }, (_, k) => "const v" + k + " = \"" + "x".repeat(60) + "\";")));
       }
       for (let i = 0; i < 40; i++) files["src/views/v" + i + ".vue"] = L(["<script setup>", "import Button from '@/components/ui/button.vue'", "</script>", "<template><Button />" + (shape === "all" ? "<!-- Moving -->" : "") + "</template>"]);
       for (let i = 0; i < 20; i++) files["docs/d" + i + ".mdx"] = L(["# Doc " + i, "", "Some text." + (shape === "all" ? " Moving" : ""), "", "<Callout>x</Callout>"]);
       files[".specs/steering/design-system.md"] = HEAD + "| Table | src/components/ui/table.tsx |  | " + (marked ? "_Deprecated_" : "") + " |\n| Button | src/components/ui/kit.tsx |  |  |\n";
       return project(null, files);
     };
-    const G1 = { asksOn: app("asks", true), asksOff: app("asks", false), nothingOn: app("nothing", true), all: app("all", false) };
+    const G1 = { asksOn: app("asks", true), same: app("same", false), nothingOn: app("nothing", true), all: app("all", false) };
     // G2: 500 LOCATED rows (500 component files, every one marked), 1,000 pages each importing one and 1,000 pages of 16 KB that
     // name none — the module check indexed by key; and the prefilter two linear passes, whatever the rows: on 50 pages of 64 KB
     // that name none, 500 rows marked ≤ 1.25× one (`includes` × the names scanned a text whole once a name: 1.42–1.47× on 50
@@ -175,12 +181,12 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
     for (const g of [G1, G2, G2q, G3]) for (const p of Object.values(g)) S.designSystemReport(p);
     F.on(); F.off();
     const s = remeasure(() => ({
-      asks: r2(ratio(rep(G1.asksOn), rep(G1.asksOff))), nothing: r2(ratio(rep(G1.nothingOn), rep(G1.all))),
+      asks: r2(ratio(rep(G1.asksOn), rep(G1.same))), nothing: r2(ratio(rep(G1.nothingOn), rep(G1.all))),
       rows500: r2(ratio(rep(G2.on), rep(G2.all))), web: r2(ratio(rep(G3.watch), rep(G3.settle))), feature: r2(ratio(F.on, F.off)), prefilter: r2(ratio(rep(G2q.q500), rep(G2q.q1))),
     }), (x) => x.asks <= 1.5 && x.nothing <= 1.5 && x.rows500 <= 1.5 && x.web <= 1.5 && x.feature <= 1.25 && x.prefilter <= 1.25);
     const got = { asks: (S.designSystemReport(G1.asksOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal, nothing: (S.designSystemReport(G1.nothingOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal,
       rows500: ((d) => [d.rowsTotal, d.rows.every((r) => r.filesTotal === 2)])(S.designSystemReport(G2.on).deprecatedUses || { rows: [] }) };
-    all("1.39 cost: the deprecated uses' watch reads and parses no more than settle would — a real-shaped app (600 pages, 40 SFCs, 20 MDX) with a row ≤ 1.5× the same report with none while settle asks a candidate, and ≤ 1.5× settle parsing every page when it asks none; 500 located rows over 2,000 pages (half naming none) ≤ 1.5× settle parsing them all; the hostile `export *` web ≤ 1.5× settle's own follow through it; a feature's report with a row marked ≤ 1.25× with none (it builds no watch); 500 rows marked over pages that name none ≤ 1.25× one (got " +
+    all("1.39 cost: the deprecated uses' watch reads and parses no more than settle would — a real-shaped app (600 pages, 40 SFCs, 20 MDX) with a row while settle asks a candidate ≤ 1.5× the same report with none where settle parses the pages the watch reads, and ≤ 1.5× settle parsing every page when it asks none; 500 located rows over 2,000 pages (half naming none) ≤ 1.5× settle parsing them all; the hostile `export *` web ≤ 1.5× settle's own follow through it; a feature's report with a row marked ≤ 1.25× with none (it builds no watch); 500 rows marked over pages that name none ≤ 1.25× one (got " +
       js({ s, got }) + ")", {
       asks: () => s.asks <= 1.5 && got.asks === 300,
       nothing: () => s.nothing <= 1.5 && got.nothing === 300,
