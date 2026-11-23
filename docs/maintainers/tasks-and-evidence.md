@@ -433,7 +433,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   > 5 min ahead ignored) plus the task's OWN `_Implements:_` files, always (`baselineFiles` takes an array of references — read as
   `implementsRefs` reads them: backticks off), past `BASELINE_CAP` — the planned walk's files passed as `known` (no second
   realpath check) and dated once, its glob and folder listings the call's memoized ones (1.36.0 review 2: a second walk doubled a
-  big glob's brief; `09-evidence-fast-check`'s ratio) → `clean` · `stale` (run older than an edit) · `failed` ·
+  big glob's brief; `09-evidence-fast-check` COUNTS it since 1.40 — the brief and next_task with the fast check make, under the
+  project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's; a 2.5×
+  timed backstop beside, testing.md → Adding a test) → `clean` · `stale` (run older than an edit) · `failed` ·
   `missing` · `unknown` (`observedAny` false: no harness log — no note); `partial: true` when the planned set stopped at its cap
   (no other status, no note). A file date is never a blocker (gates-and-approvals.md), so this only ever warns. The log line's
   `tool` (the observe hook passes it for a PowerShell run only) gives `pwsh`: the latest run came from the PowerShell tool, whose
@@ -667,7 +669,9 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   mark** (`snapshotted`: via "approval"), never `at` — a `feature protect` or a lift before the approval sets `at` too, and the
   approval then recorded nothing; a re-approval or a revoke + approve keeps the marked list (another process's too, taken while
   this one walked). The result: `protectedTests {count, at, truncated?}` + a note. Cost: linear (2,000 vs 200 test files ≈ 10×,
-  held ≤ 25× by a ratio test). `feature protect <f>` walks the same way (its own feature first).
+  held ≤ 25× by a ratio test); past the cap the walk stops — COUNTED since 1.40 under the project root (10-guards-protected-tests:
+  4,000 test files open and stat what 2,000 do and list strictly fewer folders; the timed ≤ 1.5× it replaced flaked by one
+  call's noise). `feature protect <f>` walks the same way (its own feature first).
 - **The tick record** — `completeTask` (under the feature lock, a TICK at level tests — `protectOnTick`, called BEFORE the tick
   stamps `ticks[n]`): at the task's FIRST tick each test file it names EXACTLY in `_Implements:_` is re-baselined (its content
   now is the authorised one: a planned change); a task with a tick record (`tickRecorded`: `ticks[n]` — a box unchecked by hand

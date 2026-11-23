@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, tmp, __dirname }) => {
+exports.run = ({ ok, all, fsCalls, tmp, __dirname }) => {
   const js = JSON.stringify;
   const RUNNER = path.join(__dirname, "..", "scripts", "test-runner.js");
   // A fake suite built under tmp: its entry, a harness shaped like the real ones (ok, counts, fail, end → the total line and
@@ -322,6 +322,42 @@ exports.run = async ({ ok }) => {
       outerUntouched: () => before[0] === "outer" && js(outerState()) === js(before),
       regex: () => listed.length >= 10 && listed.every((k) => R.RE_GIT_ENV.test(k)) &&
         ["GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_AUTHOR_NAME", "GIT_TERMINAL_PROMPT", "GIT_DIRX"].every((k) => !R.RE_GIT_ENV.test(k)),
+    });
+  }
+
+  // 1.40 — fsCalls(under, fn): a count-bound check's counts — the fs.*Sync calls (and fs.realpathSync.native, which the engine
+  // calls) a SYNCHRONOUS fn makes on a string path under a folder; the read-ahead pool off while it runs; everything restored
+  // after, a throw included; a fn that returns a promise throws (it would count nothing).
+  {
+    const base = path.join(tmp, "fscalls") + path.sep, file = path.join(base, "a.txt"), outside = path.join(tmp, "fscalls-out.txt");
+    fs.mkdirSync(path.join(base, "d"), { recursive: true });
+    fs.writeFileSync(file, "a");
+    fs.writeFileSync(outside, "o");
+    const orig = { stat: fs.statSync, real: fs.realpathSync, native: fs.realpathSync.native }, aheadBefore = process.env.DEV_SPEC_TEST_AHEAD;
+    const seen = {};
+    const c = fsCalls(base, () => {
+      fs.statSync(file);
+      fs.statSync(outside);
+      fs.readdirSync(path.join(base, "d"));
+      seen.native = fs.realpathSync.native(file);
+      fs.realpathSync(file);
+      fs.readFileSync(Buffer.from(file));
+      seen.ahead = process.env.DEV_SPEC_TEST_AHEAD;
+    });
+    const restored = () => fs.statSync === orig.stat && fs.realpathSync === orig.real && fs.realpathSync.native === orig.native && process.env.DEV_SPEC_TEST_AHEAD === aheadBefore;
+    const after = restored();
+    let threw = null, thrown = null, asyncErr = null, asyncRestored = null;
+    try { fsCalls(base, () => { fs.statSync(file); throw new Error("boom"); }); } catch (e) { threw = e.message; thrown = restored(); }
+    try { fsCalls(base, async () => { fs.statSync(file); }); } catch (e) { asyncErr = e.message; asyncRestored = restored(); }
+    all("1.40: fsCalls(under, fn) counts the fs.*Sync calls a synchronous fn makes on a string path under a folder — fs.realpathSync.native as its own name, never a path outside it or a Buffer one —, runs fn with the read-ahead pool off, restores every function and the variable after (a throw too) and throws on a fn that returns a promise (got " +
+      js({ c, seen, after, threw, thrown, asyncErr, asyncRestored }) + ")", {
+      counted: () => c.statSync === 1 && c.readdirSync === 1 && c["realpathSync.native"] === 1 && c.realpathSync >= 1,
+      notCounted: () => !("readFileSync" in c) && !("openSync" in c),
+      nativeWorks: () => typeof seen.native === "string" && seen.native.length > 0,
+      aheadOff: () => seen.ahead === "off",
+      restored: () => after,
+      onThrow: () => threw === "boom" && thrown === true,
+      onPromise: () => /must be synchronous/.test(asyncErr || "") && asyncRestored === true,
     });
   }
 };

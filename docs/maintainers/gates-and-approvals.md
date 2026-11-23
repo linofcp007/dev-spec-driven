@@ -544,6 +544,11 @@ here. "r5 review" is 1.23's fifth review.
   (`US_HEADER`, 64 cells — past them the table is no matrix, a pass that says the bound), only takes warns away, and BS-3,
   the one design that would have refused what 1.38 passed (a `TBD` / dash matrix read as template), was cut (quality.md →
   History → UI state matrix). No new warn on an approved artifact, so no new stamp key.
+- **1.40.0** — the `uiStates` stamp cut a third time (ITEM_5 §2f, CRIT_5): it would protect one shape alone — a design
+  approved under 1.39 whose matrix holds `TBD` / dashes / ticks, once BS-3 turned it into four approved-design warns — and
+  BS-3 is cut again (those cells read `filled`, and ui-states already warns `open` on each at size m / l, a note at s); no 1.40 chain touched what
+  ui-states reads (the corpus's `sectionLines` and `uiStateNames` byte-identical to 1.39.0's at every merge), so no new warn
+  on an approved artifact and no stamp key (quality.md → History → Design-system registry, 1.40.0).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

@@ -1091,8 +1091,9 @@ exports.run = async ({
         /from the first of these that gives a width of 320 px or more: 1\. `\.specs\/steering\/ui\.md`'s first `- Breakpoints:` line outside code and comments — the lengths before its first ` · ` that no length follows \(`320 · 390 · 768 px`, as `dev-spec design-system` prints them, is one list; ` · text expansion` ends it — a note after the widths starts with a word, ` · max width 1200 px`, and a name before a width ends the list: write `640 \(sm\) · 768 \(md\)`, not `sm 640 · md 768` \(640 alone\); px, or rem \/ em at 16 px; a bare number takes the unit written after it, `360 \/ 768 \/ 1280 px`; `1,440` is one width\), its first 200 characters; the stub's own `\[…\]` slot is never read, so an untouched stub falls through — your widths written inside its brackets are, and any other bracket is an aside, never a width \(`480 \/ 960 px \[1200 in print\]` is 480 and 960\);/,
         // (1.39, BS-2: under partial the theme's own widths first, the default set fills the places left in its order)
         // (1.39: + the Sass map)
-        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set fills the places the theme's widths leave — list them all in ui\.md to choose\), and a top-level Sass map whose name ends in `breakpoints` \(`\$grid-breakpoints`, `\$breakpoints`, an override in `@use … with \(…\)`\) in a \.scss sheet the scan reads — a plain assignment over a `!default` one; 3\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
-        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set fills a theme's places, it comes in the order 768, 1024, 1440, 390, and only where room is left — list the widths in ui\.md's line to choose them\./,
+        // (1.40: + the `@custom-media` alias list, a source of its own after them — read only when they give no width)
+        /2\. a top-level Tailwind 4 `@theme` block's `--breakpoint-\*` in a stylesheet the code scan reads \(unless the sheets reset them — `--breakpoint-\*: initial` or `--\*: initial` —, Tailwind keeps its own five too, which are not read: the default set fills the places the theme's widths leave — list them all in ui\.md to choose\), and a top-level Sass map whose name ends in `breakpoints` \(`\$grid-breakpoints`, `\$breakpoints`, an override in `@use … with \(…\)`\) in a \.scss sheet the scan reads — a plain assignment over a `!default` one; 3\. the width edges of the top-level `@custom-media` rules in a stylesheet the scan reads — `\(min-width: 48rem\)` is 768, `\(max-width: 767px\)` too, a `width` range either way round: an alias list is never the whole set, so the default set fills its places as a theme's; 4\. the default set: 320 · 390 · 768 · 1024 · 1440 px\./,
+        /At most six widths, 320 first \(the reflow width\) — past six, the narrowest five and the widest, the rest said; where the default set fills a theme's or an alias list's places, it comes in the order 768, 1024, 1440, 390, and only where room is left — list the widths in ui\.md's line to choose them\./,
         /`dev-spec design-system <feature>` prints them and where they came from \(without a feature too, and `spec_scan \{designSystem: true\}` in both shapes\), and lists a value it could not read \(`calc\(\)`, `var\(\)`, wider than 3840 px, `map-merge\(…\)`\) with its place — write the widths in ui\.md's line then\./,
         () => {
           const got = (line) => { const r = bpOf(line); return [r.from, r.widths.join(" "), r.unread.map((u) => u.value).join("|"), r.limits.map((l) => l.code).join(",")].join(" / "); };
@@ -1125,9 +1126,22 @@ exports.run = async ({
           const merge = proj("merge", { "scss/_variables.scss": vars, "scss/custom.scss": "$grid-breakpoints: map-merge($grid-breakpoints, (xxl: 1600px));\n" });
           return plain.from === "code" && plain.widths.join(" ") === "320 600 900" && withIt.widths.join(" ") === "320 900"
             && merge.from === "default" && merge.unread.map((u) => u.value).join("|") === "map-merge($grid-breakpoints, (xxl: 1600px))";
+        },
+        () => { // (1.40) the `@custom-media` claims, through the scan: `(min-width: 48rem)` and `(max-width: 767px)` are 768, a range
+          // either way round; a lone alias is no whole set — the default set fills, from code; beside a theme the rules are not
+          // read (the theme's widths alone); in `media.css` (no name the scan opens) not read
+          const proj = (tag, files) => { const d = path.join(tmp, "z140-bp-" + tag); for (const [rel, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(d, rel)), { recursive: true }); fs.writeFileSync(path.join(d, rel), text); } return S.designSystemReport(d).breakpoints; };
+          const cm = (...r) => r.map((x) => "@custom-media " + x + ";\n").join("");
+          const edges = ["(min-width: 48rem)", "(max-width: 767px)", "(width >= 48rem)", "(767px < width)"].map((q) => Eng.loadLazyTier().mediaEdges(q).px.join(""));
+          const lone = proj("lone", { "src/index.css": cm("--md (min-width: 48rem)") });
+          const beside = proj("beside", { "src/index.css": cm("--sm (min-width: 600px)") + "@import \"tailwindcss\";\n@theme {\n  --breakpoint-*: initial;\n  --breakpoint-md: 50rem;\n}\n" });
+          const file = proj("file", { "src/media.css": cm("--sm (min-width: 600px)"), "src/index.css": "body { margin: 0; }\n" });
+          return edges.every((e) => e === "768") && lone.from === "code" && lone.partial === true && lone.widths.join(" ") === "320 390 768 1024 1440"
+            && beside.from === "code" && beside.widths.join(" ") === "320 800" && beside.partial === false && file.from === "default";
         }],
       ["responsive: what is never read, and the lines to paste into ui.md (Tailwind's defaults, Bootstrap 5)", RS,
-        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a map in a file the scan does not open by name \(`_config\.scss`, `_settings\.scss`\) are never read: paste the line into ui\.md instead/,
+        // (1.40: + an `@custom-media` rule in a file the scan does not open by name)
+        /A framework's own defaults \(in its package\), Tailwind 3's `screens` \(a JS config\) and a map or an `@custom-media` rule in a file the scan does not open by name \(`_config\.scss`, `_settings\.scss`, `media\.css`\) are never read: paste the line into ui\.md instead/,
         /- Tailwind's defaults: `- Breakpoints: 640 \/ 768 \/ 1024 \/ 1280 \/ 1536 px`/, /- Bootstrap 5: `- Breakpoints: 576 \/ 768 \/ 992 \/ 1200 \/ 1400 px`/],
       // (1.39.0 review 1, BU-2 / BU-3 — prose, D1 / D2: the two Sass shapes the reader reads as designed but the prose did not say —
       // each claim run through the scan: a map of maps gives the default set and nothing unread; two `!default` maps of one name unite)
@@ -1493,8 +1507,10 @@ exports.run = async ({
       ["ui-code-scan: a namesake's importers count (CRIT_1 must-fix 6)", () => section.includes("its component files (`paths` — a namesake's importers count too)")],
       // (review 1 of 1.39: a row a component folder's index names is located — the wording says what is true, as the CLI's does)
       ["ui-code-scan: unlocated — no component file whose importers the scan reads (CRIT_1 must-fix 4)", () => section.includes("`unlocated`: rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index (a library's, an Angular or a Blade one)")],
-      ["ui-code-scan: the rows still imported first (review 1 of 1.39)", () => section.includes("for each such row the code holds a component file for — the rows still imported first —,")],
-      ["ui-code-scan: a row named by its file is its module — any import of it", () => section.includes("A row named by its file is its **module** — any import of it counts (renamed, default, type-only but `import type X from`, `require`, a non-component export, a namespace's member, an SFC with or without its extension)")],
+      // (1.40: then the rows only rendered with no import — `unbound` —, before the rest: R2-DEP-2 d)
+      ["ui-code-scan: the rows still imported first, then those only rendered (review 1 of 1.39, 1.40)", () => section.includes("for each such row the code holds a component file for — the rows still imported first, then those only rendered —,")],
+      // (1.40, R3-DEP-4: `import type X from` the row's file counts too — the exception is gone)
+      ["ui-code-scan: a row named by its file is its module — any import of it, type-only too", () => section.includes("A row named by its file is its **module** — any import of it counts (renamed, default, type-only, `require`, a non-component export, a namespace's member, an SFC with or without its extension)")],
       ["ui-code-scan: …and its components through `export *` and a component folder's barrel", () => section.includes("and its components, followed through `export *` and a component folder's barrel")],
       ["ui-code-scan: a component a file exports beside its own counts by its name", () => section.includes("a component a file exports beside its own counts by its **name**")],
       ["ui-code-scan: an .mdx / .vue tag no import binds counted apart (RE_UNBOUND_FILE)", () => section.includes("An .mdx / .vue tag no import binds is counted apart (`unbound`)") && DS.includes("const RE_UNBOUND_FILE = /\\.(?:mdx|vue)$/i;")],
@@ -1672,15 +1688,21 @@ exports.run = async ({
       ["colours: an HSL side against a hex / rgb by the rounding both ways — the examples (judgeRaw); the nearest of several", () => {
         const j = (value, ...tok) => T.judgeRaw({ kind: "color", value }, T.tokenScale(tok.map(([name, v]) => ({ name, value: v })), []));
         return scale.includes("`token` names the token the value IS (the nearest of several), in any notation")
-          && scale.includes("an HSL side against a hex or `rgb()` also both ways: the other in HSL rounds to its numbers or the HSL paints it, 8 bits a channel — `#05787d` is `hsl(183 92% 25%)`, `#eeeff2` `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`)")
+          && scale.includes("an HSL side against a hex or `rgb()` also both ways: the other in HSL rounds to its numbers or the HSL paints it, 8 bits a channel — `#05787d` is `hsl(183 92% 25%)`, `#eeeff2` `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`;")
           && j("#05787d", ["--a", "hsl(183 92% 25%)"]).token === "--a" && j("#eeeff2", ["--a", "hsl(220 14% 94%)"]).token === "--a"
           && !j("#18181b", ["--a", "hsl(0 0% 9%)"]).token && j("#18181b", ["--a", "hsl(240 5.9% 10%)"], ["--b", "#18181b"]).token === "--b";
       }],
-      // (review 2, R2-T2) zinc's hexes are not the neutral in either notation; its oklch() is the hsl() one (an HSL side's 0.011)
-      ["colours: `near` — the nearest within the JND, a hint; zinc's hexes against the neutral, its oklch() against the hsl() one; what is not parsed matches by text", () => {
+      // (review 2, R2-T2) zinc's hexes are not the neutral in either notation — (1.40, R2-T2) nor its oklch() the hsl() one: an
+      // HSL side against oklch / oklab by the written roundings, or one painting the other at 8 bits, both orders (the neutral's
+      // own oklch is hsl(0 0% 9%); 1.38 review 2's #eeeff2 written as oklch is hsl(220 14% 94%))
+      ["colours: an HSL side against oklch() / oklab() — the written roundings meet or one paints the other (meets), both orders; `near` — the nearest within the JND, a hint; zinc's hexes against the neutral, nor its oklch() the hsl() one; what is not parsed matches by text", () => {
         const j = (value, tok) => T.judgeRaw({ kind: "color", value }, T.tokenScale([{ name: "--a", value: tok }], []));
-        return scale.includes("`near` {`token`, `delta`} the nearest within " + B.jnd + " ΔEOK — a hint, never the token's colour (Tailwind's zinc hexes are not shadcn's neutral; its `oklch()` zinc is the `hsl()` one, within " + B.hsl + ")")
-          && !j("#18181b", "hsl(0 0% 9%)").token && !j("#18181b", "oklch(0.205 0 0)").token && j("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)").token === "--a"
+        const both = (x, y) => JSON.stringify([j(x, y).token, j(y, x).token]);
+        return scale.includes("`#18181b` is not `hsl(0 0% 9%)`; against `oklch()` / `oklab()` the written roundings meet, or one paints the other at 8 bits), alphas within " + B.alpha)
+          && scale.includes("`near` {`token`, `delta`} the nearest within " + B.jnd + " ΔEOK — a hint, never the token's colour (Tailwind's zinc hexes are not shadcn's neutral, nor its `oklch()` zinc the `hsl()` one)")
+          && !j("#18181b", "hsl(0 0% 9%)").token && !j("#18181b", "oklch(0.205 0 0)").token
+          && both("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)") === "[null,null]" && j("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)").near.token === "--a"
+          && both("oklch(20.5% 0 0)", "hsl(0 0% 9%)") === "[\"--a\",\"--a\"]" && both("oklch(0.952 0.004 271.369)", "hsl(220 14% 94%)") === "[\"--a\",\"--a\"]"
           && /`hwb\(\)`, `lab\(\)`, `lch\(\)`, `color\(\)` and a named colour match by text alone\./.test(scale);
       }],
       ["fonts: a stack by its first family, against the registry rows' font tokens only", () =>
@@ -1906,6 +1928,14 @@ exports.run = async ({
       return b.partial + ":" + b.widths.join(",");
     })();
     const fill = (((BP.match(/const BP_FILL = \[([^\]]*)\]/) || [])[1] || "").match(/\d+/g) || []).join(" · ");
+    // (1.40) an `@custom-media` alias list: alone (its edge, partial, a rule it cannot read unread) and beside a theme (not read)
+    const media = (() => {
+      const p = project("media"), q = project("media-beside");
+      put(p, "src/index.css", "@custom-media --md (max-width: 767px);\n@custom-media --x (min-width: 30ch);\n");
+      put(q, "src/index.css", "@custom-media --sm (min-width: 600px);\n@import \"tailwindcss\";\n@theme {\n  --breakpoint-3xl: 1600px;\n}\n");
+      const a = S.designSystemReport(p).breakpoints, b = S.designSystemReport(q).breakpoints;
+      return { alone: [a.from, a.partial, a.widths.join(","), a.unread.map((u) => u.name).join(",")].join(":"), beside: b.widths.join(",") };
+    })();
     const readmeDep = { "README.md": "`dev-spec design-system` lists the files that still import it (`deprecatedUses`).",
       "README.pt.md": "O `dev-spec design-system` lista os ficheiros que ainda o importam (`deprecatedUses`).",
       "README.es.md": "`dev-spec design-system` enumera los ficheros que aún lo importan (`deprecatedUses`)." };
@@ -1926,7 +1956,7 @@ exports.run = async ({
         // review 2: the index the row's path names, when several give the name to different files)
         return depClause.includes("`unlocated` (the rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index, the one the row's path names when several give it to different files: a library's, an Angular or a Blade one)")
           && said.every((x) => exts.some((re) => re.test("a." + x))) && !exts.some((re) => re.test("a.component.ts"))
-          && depClause.includes("`rows` — each row the code holds a component file for, the rows still imported first, each group in the registry's order:");
+          && depClause.includes("`rows` — each row the code holds a component file for, the rows still imported first, then those only rendered with no import, each group in the registry's order:");
       }],
       ["tooling-reference: deprecatedUses' limits — every code the watch builds or repeats, the usage read's and the follow's bounds (design-system.js)", () =>
         depCodes.length === 4 && depCodes.every((c) => depClause.includes(tick(c)))
@@ -1952,9 +1982,12 @@ exports.run = async ({
         return sass.plain === "code:320,600,900" && sass.merge === "default:$grid-breakpoints" && name.test("$grid-breakpoints") && name.test("$breakpoints") && !name.test("$spacers")
           && bpClause.includes("— 1.39 — a top-level Sass map whose name ends in `breakpoints`, `$grid-breakpoints`, in a .scss sheet the scan reads, a plain assignment over a `!default` one, `map-merge` or a variable unread");
       }],
-      ["tooling-reference: breakpoints' partial — the theme's widths first, then the default set fills the places left in BP_FILL's order", () =>
-        partial === "true:320,768,1024,1440,1600,2000" && fill === "768 · 1024 · 1440 · 390"
-          && bpClause.includes("`partial` — a Tailwind 4 theme that keeps Tailwind's own five: the theme's widths first, then (1.39) the default set fills the places left, " + fill + " —")],
+      ["tooling-reference: breakpoints' code — (1.40) an @custom-media rule's width edges, only when no theme and no map gives a width, a rule it cannot read unread", () =>
+        media.alone === "code:true:320,390,768,1024,1440:--x" && media.beside === "320,390,768,1024,1440,1600"
+          && bpClause.includes("; and — 1.40 — only when neither gives a width, the width edges of a top-level `@custom-media` rule, `(max-width: 767px)` is 768, a rule it cannot read unread)")],
+      ["tooling-reference: breakpoints' partial — a theme's or (1.40) an alias list's widths first, then the default set fills the places left in BP_FILL's order", () =>
+        partial === "true:320,768,1024,1440,1600,2000" && fill === "768 · 1024 · 1440 · 390" && media.alone.startsWith("code:true:")
+          && bpClause.includes("`partial` — a Tailwind 4 theme that keeps Tailwind's own five, or (1.40) an `@custom-media` alias list: the source's widths first, then (1.39) the default set fills the places left, " + fill + " —")],
       ["tooling-reference: breakpoints' breakpoint-widths — the source's own widths past BP_WIDTHS, never a default one", () =>
         bpClause.includes("`breakpoint-widths` (the source's own widths past " + num(BP, "BP_WIDTHS") + " — never a default one)")],
       // the units table (item 4)
@@ -1984,6 +2017,93 @@ exports.run = async ({
           && qmap.includes("the project UI inventory and its reduced-motion script search")],
     ];
     for (const [label, check] of rows) all("1.39.0 Z docs — " + label + (label.includes("every key the report returns") ? " (got " + js({ keys: dep.keys, sane: dep.sane, missed: dep.keys.filter((k) => !depClause.includes(tick(k))) }) + ")" : ""), { holds: check });
+  }
+
+  { // 1.40.0 Z — the docs pass: the clauses it wrote or made true over the merged chains — ui-code-scan.md's index sentence
+    // (R3-DEP-3's any word, R2-DEP-2 b's renamed file), quality.md's current rules (R2-T2's examples, the `@custom-media` edges
+    // and what is not read, the non-enumerable `parsed`), testing.md's rule 1, tasks-and-evidence.md's two counted checks and
+    // gates-and-approvals.md's stamp line. Each example runs through the engine; each counted check is read from its test's
+    // source. ONE assertion per clause: the docs pass's mutation pass drops each in a copy and its row fails (%TEMP%/dsd-140-z-mut).
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const js = (v) => JSON.stringify(v);
+    const note = (f) => ws(raw("docs", "maintainers", f));
+    const QM = note("quality.md"), TM = note("testing.md"), TE = note("tasks-and-evidence.md"), GA = note("gates-and-approvals.md");
+    const UCS = ws(raw("skills", "dev-spec-driven", "references", "ui-code-scan.md"));
+    const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
+    const put = (p, rel, text) => { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), text); };
+    const project = (tag, files) => { const p = path.join(tmp, "z140-" + tag); S.initProject(p, ["ui"], "en"); for (const [rel, text] of Object.entries(files)) put(p, rel, text); return p; };
+    const L = (lines) => lines.join("\n") + "\n";
+    const REG = (rows) => ({ ".specs/steering/design-system.md": "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n" + rows.join("\n") + "\n" });
+    const usesOf = (p) => S.designSystemReport(p).deprecatedUses || { rows: [] };
+    const rowOf = (d, name) => d.rows.find((x) => x.name === name) || { files: [], filesTotal: 0 };
+    // a kit of two component folders whose indexes give `Content` to different files, a page importing each kit as a namespace
+    const K = "src/lib/components/ui/";
+    const kit = {};
+    for (const c of ["card", "picker"]) {
+      kit[K + c + "/" + c + "-content.svelte"] = L(["<div><slot /></div>"]);
+      kit[K + c + "/index.ts"] = L(["import Content from \"./" + c + "-content.svelte\";", "export { Content };"]);
+      kit["src/routes/" + c + "/+page.svelte"] = L(["<script lang=\"ts\">", "  import * as Kit from '../../lib/components/ui/" + c + "';", "</script>", "<Kit.Content />"]);
+    }
+    kit["package.json"] = js({ name: "z140-kit" });
+    const cell = (tag, text) => rowOf(usesOf(project("cell-" + tag, Object.assign(REG(["| Content | " + text + " |  | _Deprecated_ |"]), kit))), "Content");
+    const words = cell("words", "`" + K + "picker/index.ts`, `" + K + "picker/picker-content.svelte`"), two = cell("two", K + "picker/index.ts " + K + "card/index.ts");
+    // vben's shape: a component folder's index renames button.vue; icon-button.vue imports that file directly
+    const B = "src/components/button/";
+    const renamed = rowOf(usesOf(project("renamed", Object.assign(REG(["| VbenButton | " + B + "index.ts |  | _Deprecated_ |"]), {
+      "package.json": js({ name: "z140-renamed" }), [B + "button.vue"]: L(["<template><button /></template>"]),
+      [B + "index.ts"]: L(["export { default as VbenButton } from './button.vue';"]),
+      [B + "icon-button.vue"]: L(["<script setup lang=\"ts\">", "import VbenButton from './button.vue';", "</script>", "<template><VbenButton /></template>"]) }))), "VbenButton");
+    const judge = (value, tok) => { const r = T.judgeRaw({ kind: "color", value }, T.tokenScale([{ name: "--a", value: tok }], [])); return r.token ? "token" : r.near ? "near" : "none"; };
+    const both = (x, y) => judge(x, y) + "|" + judge(y, x);
+    const bp = (tag, css) => { const b = S.designSystemReport(project("bp-" + tag, { "src/index.css": css })).breakpoints; return [b.from, b.partial, b.widths.join(","), b.unreadTotal].join(":"); };
+    const DEF = "320,390,768,1024,1440";
+    const parsed = (() => {
+      const d = usesOf(project("parsed", Object.assign(REG(["| Table | src/components/table.tsx |  | _Deprecated_ |"]), {
+        "package.json": js({ name: "z140-parsed" }), "src/components/table.tsx": "export function Table() { return <table />; }\n",
+        "src/app/page.tsx": "import { Table } from \"../components/table\";\nexport const P = () => <Table />;\n" })));
+      return { n: d.parsed, enumerable: Object.keys(d).includes("parsed"), inJson: js(d).includes("parsed"), files: rowOf(d, "Table").filesTotal };
+    })();
+    const testSrc = (f) => raw("mcp", "tests", f);
+    const G1 = testSrc("15-quality-design-system-cost-deprecated.js"), FC = testSrc("09-evidence-fast-check.js"), PT = testSrc("10-guards-protected-tests.js");
+    const rows = [
+      ["ui-code-scan: an index sentence — when several give the name to different files, only those the row's path names (any word: one backticked beside another path; two named, both locate it)", () =>
+        UCS.includes("when several give it to different files (a kit's parts: `Content` — the files their relative imports name), only those the row's path names (any word)")
+          && words.filesTotal === 1 && js(words.files) === js(["src/routes/picker/+page.svelte"]) && two.filesTotal === 2],
+      ["ui-code-scan: a direct import of a file an index renames counts for each such row (vben's icon-button.vue)", () =>
+        UCS.includes("a direct import of a file it renames counts for each such row (`import VbenButton from './button.vue'`)")
+          && renamed.filesTotal === 1 && js(renamed.files) === js([B + "icon-button.vue"])],
+      ["quality.md: R2-T2's examples — zinc-900's oklch() is not the hsl() neutral, the neutral's own oklch() and zinc's hex's HSL are, #eeeff2 as oklch() is hsl(220 14% 94%), both orders", () =>
+        QM.includes("So Tailwind 4's zinc-900 `oklch(21% 0.006 285.885)` is no longer shadcn's `hsl(0 0% 9%)` neutral")
+          && QM.includes("the neutral's own `oklch(20.5% 0 0)` is its token, zinc's own hex's HSL `hsl(240 5.9% 10%)` is zinc-900's, and 1.38's `#eeeff2` written as `oklch(0.952 0.004 271.369)` is `hsl(220 14% 94%)`")
+          && both("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)") === "near|near" && both("oklch(20.5% 0 0)", "hsl(0 0% 9%)") === "token|token"
+          && both("oklch(21% 0.006 285.885)", "hsl(240 5.9% 10%)") === "token|token" && both("oklch(0.952 0.004 271.369)", "hsl(220 14% 94%)") === "token|token"],
+      ["quality.md: the @custom-media edges — a max-width one past its value, a lone `--md` the default set itself, from code and partial", () =>
+        QM.includes("so `(max-width: 767px)` and `767.98px` are 768") && QM.includes("`partial` (so a lone `--md (min-width: 768px)` captures the default set itself)")
+          && js(T.mediaEdges("(max-width: 767px)").px) === "[768]" && js(T.mediaEdges("(max-width: 767.98px)").px) === "[768]"
+          && bp("lone", "@custom-media --md (min-width: 768px);\n") === "code:true:" + DEF + ":0"],
+      ["quality.md: what @custom-media is not read — an alias of an alias (no edge, nothing unread), upper case, a rule whose `(` no `)` closes before its `;` (silent); one wrapped over lines whose groups close is read", () =>
+        QM.includes("an alias of an alias (`(--a)`: no edge, nothing unread), upper-case `@CUSTOM-MEDIA`, and, silent, a rule longer than DS_PRELUDE (it arrives without its head, as a one-line Sass map) or one whose `(` no `)` closes before its `;` (a rule wrapped over lines whose groups close is read)")
+          && js(T.mediaEdges("(--a)")) === js({ px: [], bad: false }) && bp("upper", "@CUSTOM-MEDIA --md (min-width: 600px);\n") === "default:false:" + DEF + ":0"
+          && bp("open", "@custom-media --md (min-width: 600px;\n") === "default:false:" + DEF + ":0"
+          && bp("wrapped", "@custom-media --md (\n  min-width: 768px\n);\n").startsWith("code:true:")],
+      ["quality.md: the deprecated uses' `parsed` — not enumerable (in-process only), the pages the watch parsed itself", () =>
+        QM.includes("the report's `parsed`, NOT enumerable (as classify's `tiers`) — MCP, `--json` and a spread drop it")
+          && typeof parsed.n === "number" && !parsed.enumerable && !parsed.inJson && parsed.files === 1],
+      ["testing.md: rule 1 — the engine's own count, `deprecatedUses.parsed`, so G1's asks is counted (no clock), its reads under the project root", () =>
+        TM.includes("the deprecated uses' watch counts the pages it parses itself, `deprecatedUses.parsed` (not enumerable: in-process only, never in a result's JSON), so G1's `asks` asserts that count and the fs calls under the project root, no clock")
+          && /asks: \(\) => counted\.asks === counted\.table - counted\.settled/.test(G1) && /asksReads: \(\) =>/.test(G1) && !/within\(rep\(G1\.asksOn\)/.test(G1)
+          && /fsCalls\(G1\.asksOn \+ path\.sep/.test(G1)],
+      ["tasks-and-evidence.md: the fast check's planned-walk reuse — counted under the project root (09-evidence-fast-check), a 2.5× backstop", () =>
+        TE.includes("`09-evidence-fast-check` COUNTS it since 1.40 — the brief and next_task with the fast check make, under the project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's; a 2.5× timed backstop beside")
+          && /counted: \(\) => js\(counted\) === js\(\{ brief: \{ openSync: 1 \}, next: \{ openSync: 1 \} \}\)/.test(FC) && /\(x\) => x\.ratio <= 2\.5\)/.test(FC)],
+      ["tasks-and-evidence.md: the protected-tests walk stops at its cap — counted under the project root (10-guards-protected-tests)", () =>
+        TE.includes("past the cap the walk stops — COUNTED since 1.40 under the project root (10-guards-protected-tests: 4,000 test files open and stat what 2,000 do and list strictly fewer folders")
+          && /stops: \(\) => fewer\(over\.a\.k, over\.b\.k\)/.test(PT) && /a\.readdirSync < b\.readdirSync/.test(PT)],
+      ["gates-and-approvals.md: the uiStates stamp cut a third time — no stamp key in the engine", () =>
+        GA.includes("- **1.40.0** — the `uiStates` stamp cut a third time") && !libSources().some((f) => /\buiStates\b/.test(fs.readFileSync(f, "utf8")))],
+    ];
+    for (const [label, check] of rows) all("1.40.0 Z docs — " + label, { holds: check });
   }
 
   // Release hygiene: the three version fields agree.

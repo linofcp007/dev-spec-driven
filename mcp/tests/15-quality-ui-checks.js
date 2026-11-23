@@ -562,6 +562,14 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     for (const [k, v] of Object.entries({ xs: "sm:text-xs", sm: "sm:text-sm", base: "lg:text-base", lg: "md:text-lg/7", bang: "md:text-6xl!", rem: "md:text-[2rem]",
       dot: "md:text-[.875rem]", hint: "lg:text-[length:var(--h)]", paren: "md:text-(length:--h)", calc: "md:text-[calc(1rem_+_2vw)]",
       clamp: "md:text-[clamp(2rem,6vw,5rem)]", min: "md:text-[min(6vw,5rem)]", max: "md:text-[max(2rem,6vw)]" })) S3[k] = sized(v);
+    // (1.40.0, R3-UI-1: what Tailwind's `text-[…]` itself types a font size — a `percentage:` / `size:` / `absolute-size:` /
+    // `relative-size:` hint, in `[…]` and Tailwind 4's `(…)`; each keyword of CSS's closed <absolute-size> / <relative-size>
+    // lists, whole to its `]` — SkillANA's real `lg:text-[small]` / `sm:text-[large]`; a sheet's @apply reads the same const)
+    for (const [k, v] of Object.entries({ pct: "md:text-[percentage:120%]", sizeHint: "md:text-[size:2rem]", abs: "md:text-[absolute-size:var(--k)]",
+      rel: "md:text-[relative-size:var(--k)]", pctParen: "md:text-(percentage:--h)", kwXs: "md:text-[x-small]", kwXxs: "sm:text-[xx-small]",
+      kwSmall: "lg:text-[small]", kwLarge: "sm:text-[large]", kwXl: "md:text-[x-large]", kwXxl: "md:text-[xx-large]", kwXxxl: "lg:text-[xxx-large]",
+      kwMedium: "md:text-[medium]", kwLarger: "md:text-[larger]", kwSmaller: "md:text-[smaller]" })) S3[k] = sized(v);
+    S3.applyKw = ["src/applykw.css", lines("h1 { @apply text-[5vw]; }", ".lead { @apply md:text-[x-large]; }")];
     const W3 = {
       html: ["public/404.html", lines("<p class=\"text-[5vw] font-bold\">404</p>", "<p class=\"text-red-500\">x</p>")],
       styleBeside: ["src/S.tsx", lines("export const A = () => <h1 className=\"md:text-6xl\" style={{ fontSize: \"5vw\" }}>a</h1>;")],
@@ -582,12 +590,20 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       daisy: ["src/Z.tsx", lines("export const B = () => <p className=\"text-[5vw] hover:text-base-content\">b</p>;")],
       ownKey: ["src/K.tsx", lines("export const B = () => <p className=\"text-[5vw] md:text-hero\">b</p>;")],
       applyColour: ["src/applyc.css", lines("h1 { @apply text-[5vw]; }", ".btn { @apply hover:text-white; }")],
+      // (1.40.0, R3-UI-1: a keyword is read whole to its `]` — a word that starts like one, a glued `xlarge`, a CSS named colour
+      // `mediumseagreen`, `smallish` are none —; a `color:` hint is a colour; a keyword with no variant is no condition; a
+      // keyword-size @apply drops the sheet's @apply sizes, never its declarations — D1's change, cut)
+      kwWord: sized("md:text-[large-blue]"), kwTail: sized("md:text-[x-large2]"), kwGlued: sized("md:text-[xlarge]"),
+      seagreen: sized("md:text-[mediumseagreen]"), smallish: sized("md:text-[smallish]"), colorHint: sized("md:text-[color:var(--x)]"),
+      bareKw: sized("text-[x-large]"),
+      declKw: ["src/declkw.css", lines("h1 { font-size: 5vw; }", ".lead { @apply md:text-[x-large]; }")],
     };
     const g3 = (o) => Object.fromEntries(Object.entries(o).map(([k, [rel, t]]) => [k, got(t, rel).filter((f) => /font-size-viewport/.test(f))]));
     const silent = g3(S3), warns = g3(W3);
-    const warnAt = { html: 1, styleBeside: 1, declColour: 1, dark: 1, hover: 4, darkP: 3, group: 3, align: 3, wrap: 1, hex: 1, cssVar: 1, daisy: 1, ownKey: 1, applyColour: 1 };
-    all("1.38.0 review 1 / 2: a bare `text-[…vw]` is decided per FILE — silent when any class list of the file holds a SIZE under a variant (cn() / cva / clsx() / a wrapped class attribute in JSX and Vue, the variant above or below, `lg:!text-7xl`, each type-scale step and arbitrary length; a sheet's @apply in another rule); a lone one, one beside a colour / alignment / wrap / own-key variant (`dark:text-white`, `hover:text-gray-900`, `hover:text-[#111]`, `md:text-center`, `md:text-hero`), an element's own style beside a variant, a sheet's declaration or @apply beside a colour-variant @apply still warn (got " + js({ silent, warns }) + ")", {
-      silent: () => Object.keys(silent).length === 21 && Object.values(silent).every((x) => js(x) === "[]"),
+    const warnAt = { html: 1, styleBeside: 1, declColour: 1, dark: 1, hover: 4, darkP: 3, group: 3, align: 3, wrap: 1, hex: 1, cssVar: 1, daisy: 1, ownKey: 1, applyColour: 1,
+      kwWord: 1, kwTail: 1, kwGlued: 1, seagreen: 1, smallish: 1, colorHint: 1, bareKw: 1, declKw: 1 };
+    all("1.38.0 review 1 / 2, 1.40.0 R3-UI-1: a bare `text-[…vw]` is decided per FILE — silent when any class list of the file holds a SIZE under a variant (cn() / cva / clsx() / a wrapped class attribute in JSX and Vue, the variant above or below, `lg:!text-7xl`, each type-scale step and arbitrary length, each size hint Tailwind types and each CSS size keyword — `md:text-[x-large]`, `lg:text-[small]`, `md:text-[percentage:120%]`; a sheet's @apply in another rule); a lone one, one beside a colour / alignment / wrap / own-key variant (`dark:text-white`, `hover:text-gray-900`, `hover:text-[#111]`, `md:text-center`, `md:text-hero`, `md:text-[mediumseagreen]`, `md:text-[color:…]`), a keyword with no variant, an element's own style beside a variant, a sheet's declaration or @apply beside a colour-variant @apply, a declaration beside a keyword-size @apply still warn (got " + js({ silent, warns }) + ")", {
+      silent: () => Object.keys(silent).length === 37 && Object.values(silent).every((x) => js(x) === "[]"),
       warns: () => js(warns) === js(Object.fromEntries(Object.entries(warnAt).map(([k, n]) => [k, ["font-size-viewport@" + n]]))),
     });
   }
@@ -1180,27 +1196,29 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       motionSheet: ["a { transition:\n" + fill("  transform 1s,\n") + "}\n", "x.css"], keyframesRun: [fill("@keyframes k { }\n"), "x.css"],
       animStyle: [fill("const s = { animation: \"" + "spin 1s, ".repeat(100) + "\" };\n"), "x.tsx"],
     };
-    const time = (f) => { const ts = []; for (let k = 0; k < 5; k++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
     // (a stylesheet is read through the ONE CSS walk the registry's token reader already makes — styleTokens —: its ratio is to
     // the larger of plain JSX and that walk of the same text with an observer that does nothing, so it measures what the
     // checks add; on Node 18's V8 the walk of a sheet of nothing but `{` is itself ~3× plain JSX — the 1.37 Docker run, the
     // same at 457d3da. `raw` ≤ 10× plain JSX still catches a walk that stopped being linear.)
+    // Each input is timed beside its own plain JSX (and walk) — the calls interleaved, input, plain, [walk], input, …, each side's
+    // median of 5 — under a remeasure of its own, so a miss measures that input again, alone (1.40: one plain JSX timed before all
+    // 23 inputs, their 46 ratios one sample — `clickNest` 3.06 missed a first try on Windows). What it cannot steady: `clickNest` and
+    // `clickControl` cost 2–2.6× plain JSX themselves, so with the suite running beside they reach 3 now and then — `clickNest`
+    // interleaved in 1 of 12 Windows samples, 5 of 32 on node 22, 2 of 32 on node:24-alpine (blocked, as before: 5 of 12 on
+    // Windows); three calls a side (each ≥ 100 ms in a container) made them no steadier. The plain JSX side is ~40–80 ms there.
+    const medians = (fns) => { const ts = fns.map(() => []); for (let k = 0; k < 5; k++) fns.forEach((f, i) => { const t0 = process.hrtime.bigint(); f(); ts[i].push(Number(process.hrtime.bigint() - t0) / 1e6); }); return ts.map((t) => t.sort((a, b) => a - b)[2]); };
     const noop = { block() {}, statement() {}, close() {} };
     const round = (x) => Math.round(x * 100) / 100;
     run(plain, "x.tsx");
-    const sample = remeasure(() => {
-      const base = time(() => run(plain, "x.tsx"));
-      const ratios = {}, raw = {};
-      for (const [k, [text, rel]] of Object.entries(hostile)) {
-        run(text, rel);
-        const t = time(() => run(text, rel)), walk = /\.css$/.test(rel) ? time(() => T.styleTokens(text, rel, noop)) : 0;
-        ratios[k] = round(t / Math.max(base, walk));
-        raw[k] = round(t / base);
-      }
-      return { base: Math.round(base * 10) / 10, ratios, raw };
-    }, (s) => Object.keys(s.ratios).every((k) => s.ratios[k] <= 3 && s.raw[k] <= 10));
-    all("1.37 UI checks: every hostile 256K input costs at most 3× plain JSX of the same size — a stylesheet 3× the CSS walk it shares, and 10× plain JSX —, measured at the same moment (got " + js(sample) + ")",
-      Object.fromEntries(Object.keys(hostile).map((k) => [k, () => sample.ratios[k] <= 3 && sample.raw[k] <= 10])));
+    const sample = {};
+    for (const [k, [text, rel]] of Object.entries(hostile)) {
+      run(text, rel);
+      const sides = [() => run(text, rel), () => run(plain, "x.tsx")].concat(/\.css$/.test(rel) ? [() => T.styleTokens(text, rel, noop)] : []);
+      sample[k] = remeasure(() => { const [t, base, walk] = medians(sides); return { ratio: round(t / Math.max(base, walk || 0)), raw: round(t / base) }; }, (s) => s.ratio <= 3 && s.raw <= 10);
+    }
+    all("1.37 UI checks: every hostile 256K input costs at most 3× plain JSX of the same size — a stylesheet 3× the CSS walk it shares, and 10× plain JSX —, measured at the same moment (got " +
+      js(Object.fromEntries(Object.entries(sample).map(([k, s]) => [k, [s.ratio, s.raw, s.tries]]))) + ")",
+      Object.fromEntries(Object.keys(hostile).map((k) => [k, () => sample[k].ratio <= 3 && sample[k].raw <= 10])));
   }
 
   { // the checks against the read they share a text with: uiChecksOf over real-shaped files costs at most 3× rawValuesOf over the

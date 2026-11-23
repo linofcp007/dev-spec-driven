@@ -1568,7 +1568,7 @@ const msg = {
       bpFrom: {
         "ui.md": (at) => `a linha Breakpoints de ${at}`,
         code: (at) => `declaradas em ${at}`,
-        partial: (at) => `o que ${at} acrescenta às da sua framework, e depois o conjunto por omissão da revisão onde houver lugar — para escolher, lista-as todas na linha Breakpoints de .specs/steering/ui.md`,
+        partial: (at) => `declaradas em ${at}, e depois o conjunto por omissão da revisão onde houver lugar — as outras larguras do projeto, as da sua framework ou as de uma media query simples, não são lidas — para escolher, lista-as todas na linha Breakpoints de .specs/steering/ui.md`,
         default: () => "nenhuma declarada — o conjunto por omissão da revisão: lista as tuas na linha Breakpoints de .specs/steering/ui.md",
       },
       bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint cuja largura não foi lida" : "breakpoints cuja largura não foi lida"} — ${list}: escreve as larguras do projeto (320–3840 px) na linha Breakpoints de .specs/steering/ui.md`,
@@ -1580,7 +1580,7 @@ const msg = {
       dsStaleHead: (n) => `  no registo, mas o caminho não indica nenhum ficheiro (${n}):`,
       // 1.39: os ficheiros que ainda importam um componente `_Deprecated:_` (o `deprecatedUses` do relatório do projeto — um relatório)
       dsDepUsesHead: (n, total, atLeast) => `  componentes obsoletos que o código ainda importa (${atLeast ? "pelo menos " : ""}${n} ${total === 1 ? "da linha" : `das ${total} linhas`} _Deprecated:_ com um ficheiro no código) — migra cada um:`,
-      dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "ficheiro" : "ficheiros"}: ${list}${at ? `  (${at} ficheiros de componente com esse nome)` : ""}`,
+      dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "ficheiro" : "ficheiros"}: ${list}${at ? `  (${at} ficheiros dão esse nome)` : ""}`,
       dsDepUsesNone: (name, use, read) => `    ${name}${use ? " → " + use : ""} — nenhuma importação dele ${read === 1 ? "no ficheiro lido" : `nos ${read} ficheiros lidos`}: não prova que não é usado (o que não é lido está abaixo)`,
       dsDepUsesUnbound: (n, name, at) => `      ${n} ${n === 1 ? "ficheiro .mdx / .vue mostra" : "ficheiros .mdx / .vue mostram"} <${name}> sem importação — uma importação automática, um registo global ou um provider de MDX, não resolvidos; o primeiro: ${at}`,
       dsDepUsesUnlocated: (list) => `  (nenhum ficheiro de componente que a análise lê dá esse nome — um ficheiro .tsx / .jsx / .js / .vue / .svelte / .astro ou o index de uma pasta de componentes; quando vários index o dão a ficheiros diferentes, o index que o caminho da linha nomeia —, por isso não se procurou quem o importa: ${list})`,

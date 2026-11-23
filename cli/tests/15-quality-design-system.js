@@ -313,6 +313,27 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       json: () => sass.every((x) => x.json),
     });
 
+    // 1.40: an `@custom-media` alias list (src/index.css, a sheet the scan opens by name, no theme, no map) — its edges, then the
+    // default set where room is left: the reworded partial phrase (a theme's and an alias list's — neither is the whole set), and
+    // a rule it cannot read listed unread — EN / PT / ES; --json = the engine
+    const media = ["en", "pt", "es"].map((lang) => {
+      const d = bp("media-" + lang, lang, null, null), X = MSG(lang).cliOutput;
+      write(d, "src/index.css", "@custom-media --sm (min-width: 40em);\n@custom-media --print-wide (min-width: 30ch);\n@custom-media --narrow (max-width: 599px);\n");
+      const out = runIn(["design-system", "--project", d]), json = jsonOf(runIn(["design-system", "--project", d, "--json"]));
+      return { lang, out: out.out.split("\n").filter((l) => /breakpoint/i.test(l)), ok: out.code === 0 && out.out.includes(X.bpHead("320 · 600 · 640 · 768 · 1024 · 1440", X.bpFrom.partial("src/index.css:1"))) &&
+        out.out.includes(X.bpUnread(1, "--print-wide (min-width: 30ch) (src/index.css:2)")), json: js(json.breakpoints) === js(SR.designSystemReport(d).breakpoints) && json.breakpoints.partial === true };
+    });
+    const ptBr = MSG("pt-BR").cliOutput.bpFrom.partial("a.css:1");
+    all("1.40 design-system (CLI): an `@custom-media` alias list's edges (`(max-width: 599px)` is 600), then the default set where room is left — the partial phrase, reworded (declared in, the project's other widths not read) — and a rule it cannot read listed unread; EN / PT / ES, pt-BR derived; --json = the engine (got " +
+      js({ media, ptBr }) + ")", {
+      line: () => media.every((x) => x.ok),
+      json: () => media.every((x) => x.json),
+      // (the reword as a property, in every language: the partial phrase opens with the `code` one — where the widths are declared,
+      // never "what it adds to its framework's own", false of an alias list — and says the media queries are not read)
+      reworded: () => ["en", "pt", "es", "pt-BR"].every((l) => { const X = MSG(l).cliOutput, p = X.bpFrom.partial("a.css:1"); return p.startsWith(X.bpFrom.code("a.css:1") + ", ") && p.includes("media query"); }) &&
+        ptBr.includes("por padrão") && ptBr.includes("liste-as todas"),
+    });
+
     // 1.39.0 review 1 (BU-1): the reviewer's crash shape — three sheet candidates (256K each) of one-line maps of 480 unitless
     // entries, ~193K unread — prints the report (exit 0: 1.39 as reviewed said "Maximum call stack size exceeded", exit 1), the
     // first five listed and the rest counted; --json = the engine
@@ -419,14 +440,18 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     const d = jsonOf(asJson).deprecatedUses || {};
     const P = MSG("pt").cliOutput, Q = MSG("en").quality;
     const lines = (M, q) => [M.dsDepUsesHead(1, 3), M.dsDepUsesRow("Table", "DataGrid", 5, "src/app/p1/page.tsx, src/app/p2/page.tsx, src/app/p3/page.tsx … +2", 2),
-      M.dsDepUsesNone("Toast", "", d.read), M.dsDepUsesNone("Callout", "", d.read), M.dsDepUsesUnbound(1, "Callout", "docs/guide.mdx"), M.dsDepUsesUnlocated("Modal"),
+      M.dsDepUsesNone("Callout", "", d.read), M.dsDepUsesUnbound(1, "Callout", "docs/guide.mdx"), M.dsDepUsesNone("Toast", "", d.read), M.dsDepUsesUnlocated("Modal"),
       "  (" + q.dsDepUsesNote + ")", M.dsLimit["deprecated-follow"](2000, 8 * 1024 * 1024, 100000)];
     const at = (text, list) => { let k = -1; return list.every((l) => { const n = text.indexOf(l + "\n", k + 1); if (n <= k) return false; k = n; return true; }); };
-    all("1.39 design-system (CLI): the deprecated components the code still imports — a head, a row each (its replacement, its importers' count and the first three, its namesakes), \"no import found\" said with what is not read, the .mdx tags no import binds, the rows with no component file, the note, the watch's own bounds — in that order, in the project's language; --json IS the report (got " +
+    all("1.39 design-system (CLI): the deprecated components the code still imports — a head, a row each (its replacement, its importers' count and the first three, its namesakes: 1.40, \"N files give that name\"), \"no import found\" said with what is not read, the .mdx tags no import binds (1.40: a row only rendered so before the rest), the rows with no component file, the note, the watch's own bounds — in that order, in the project's language; --json IS the report (got " +
       js([out.out, ptOut.out]) + ")", {
       en: () => out.code === 0 && at(out.out, lines(T, Q)) && d.read > 0,
       json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.designSystemReport(en, { uiPass: true })),
       pt: () => ptOut.code === 0 && at(ptOut.out, lines(P, MSG("pt").quality)),
+      // (1.40, R2-DEP-2 c: what every row's paths are — component files of the name or the component folders' indexes that give
+      // it — said alike: "N files give that name", never "component files")
+      wording: () => out.out.includes("(2 files give that name)") && ptOut.out.includes("(2 ficheiros dão esse nome)") && MSG("es").cliOutput.dsDepUsesRow("T", "", 3, "a", 2).endsWith("(2 ficheros dan ese nombre)")
+        && ["en", "pt", "es"].every((l) => !/component|componente/.test(MSG(l).cliOutput.dsDepUsesRow("T", "", 3, "a", 2))),
     });
   }
   {

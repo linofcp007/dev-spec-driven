@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, require, __dirname }) => {
+exports.run = async ({ ok, all, eq, remeasure, fsCalls, rpc, payload, S, tmp, hookIn, require, __dirname }) => {
   const E = require("./lib/engine/index.js"); // engine internals: readyTasks, protectWalkFirst, approvePhase without the facade
   const M = (l) => S.msg(l || "en").protectedTests;
   const js = JSON.stringify;
@@ -456,21 +456,29 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
       return { p, f };
     };
     const c2000 = big(2000, "2000"), c200 = big(200, "200"), c4000 = big(4000, "4000");
+    const reset = (c) => { S.approvePhase(c.p, "cost", "tasks", "me", { revoke: true }); const st = stateOf(c.f); delete st.protectedTests; fs.writeFileSync(path.join(c.f.dir, ".state.json"), JSON.stringify(st)); };
     const time = (c) => { const t0 = process.hrtime.bigint(); const r = S.approvePhase(c.p, "cost", "tasks", "me", { force: true }); const ms = Number(process.hrtime.bigint() - t0) / 1e6;
-      S.approvePhase(c.p, "cost", "tasks", "me", { revoke: true }); const st = stateOf(c.f); delete st.protectedTests; fs.writeFileSync(path.join(c.f.dir, ".state.json"), JSON.stringify(st)); return { ms, count: r.protectedTests && r.protectedTests.count }; };
+      reset(c); return { ms, count: r.protectedTests && r.protectedTests.count }; };
     const sample = remeasure(() => { const a = time(c2000), b = time(c200); return { a, b, ratio: a.ms / Math.max(1, b.ms) }; }, (s) => s.ratio <= 25);
-    // past the cap the walk STOPS: 4,000 test files cost what 2,000 do (it neither lists nor hashes the rest)
-    const over = remeasure(() => { const a = time(c4000), b = time(c2000); return { a, b, ratio: a.ms / Math.max(1, b.ms) }; }, (s) => s.ratio <= 1.5);
+    // past the cap the walk STOPS — counted under the project root (1.40: one timed call a side at ≤ 1.5× flaked by one call's noise,
+    // 1.65 on node 22): 4,000 test files open and stat what 2,000 do and list STRICTLY fewer folders (it stops in the tenth) — a walk
+    // that lists the rest shows (equal listings), one that hashes them too (4,000 opens), a read past the cap outside test/ too. What a
+    // count cannot see: a cost past the cap that touches no file (sorting 4,000 names) — the single call at 1.5× never told it from noise
+    // (each side counted after an approval of its own: the first one makes the feature's folders — one stat and mkdir more)
+    const counted = (c) => { let r; const k = fsCalls(c.p + path.sep, () => { r = S.approvePhase(c.p, "cost", "tasks", "me", { force: true }); }); reset(c); return { k, count: r.protectedTests && r.protectedTests.count }; };
+    time(c4000);
+    const over = { a: counted(c4000), b: counted(c2000) };
+    const fewer = (a, b) => a.openSync > 0 && a.openSync === b.openSync && a.statSync === b.statSync && a.readdirSync > 0 && a.readdirSync < b.readdirSync;
     // past the cap: truncated, and protect (a new file sorting first) never grows the capped list
     const capped = S.approvePhase(c4000.p, "cost", "tasks", "me", { force: true });
     w(c4000.p, "test/a-first.test.js", "first\n");
     const prot = S.manageFeature(c4000.p, "protect", "cost", undefined, {});
     const dTrunc = (S.specDoctor(c4000.p, "cost").checks || []).find((c) => c.id === "protected-tests");
-    all("1.36 guard tests: doctor protected-tests warns at level tests on approved, open tasks — no snapshot (the runnable feature protect), the approval guard off, a truncated snapshot — never below level tests; the snapshot stops at 2,000 files (truncated; 4,000 test files cost what 2,000 do, ≤ 1.5×) and protect never grows past it; its cost is linear — 2,000 vs 200 test files ≤ 25× (got " +
-      js([dMissing, dBoth && dBoth.detail.length, dScope, capped.protectedTests, prot.protectedTests, { ratio: sample.ratio, a: sample.a.ms, b: sample.b.ms, tries: sample.tries }, { ratio: over.ratio, a: over.a.ms, b: over.b.ms, tries: over.tries }]) + ")", {
+    all("1.36 guard tests: doctor protected-tests warns at level tests on approved, open tasks — no snapshot (the runnable feature protect), the approval guard off, a truncated snapshot — never below level tests; the snapshot stops at 2,000 files (truncated; counted under the project: 4,000 test files open and stat what 2,000 do and list fewer folders) and protect never grows past it; its cost is linear — 2,000 vs 200 test files ≤ 25× (got " +
+      js([dMissing, dBoth && dBoth.detail.length, dScope, capped.protectedTests, prot.protectedTests, { ratio: sample.ratio, a: sample.a.ms, b: sample.b.ms, tries: sample.tries }, over]) + ")", {
       missing: () => dMissing && dMissing.status === "warn" && dMissing.detail === M().doctorMissing("doc"),
       unguarded: () => dBoth && dBoth.detail === M().doctorMissing("doc") + " " + M().unguarded, scope: () => dScope === undefined,
-      counts: () => sample.a.count === 2000 && sample.b.count === 200 && over.a.count === 2000, linear: () => sample.ratio <= 25, stops: () => over.ratio <= 1.5,
+      counts: () => sample.a.count === 2000 && sample.b.count === 200 && over.a.count === 2000 && over.b.count === 2000, linear: () => sample.ratio <= 25, stops: () => fewer(over.a.k, over.b.k),
       capped: () => capped.protectedTests.count === 2000 && capped.protectedTests.truncated === true && capped.note.includes(M().snapshotNote(2000, 2000)),
       protectCapped: () => prot.protectedTests.count === 2000 && prot.protectedTests.added === 0 && prot.protectedTests.truncated === true,
       doctorTruncated: () => dTrunc && dTrunc.detail === M().truncated(2000),
@@ -900,18 +908,20 @@ exports.run = async ({ ok, all, eq, remeasure, rpc, payload, S, tmp, hookIn, req
     const shell = { tesQ: hs("rm -rf tes?/unit"), star: hs("rm -rf */unit"), pkgs: hs("rm -rf packages/*/test"), mv: hs("mv packages/*/test /tmp/x"),
       ps: hs("Remove-Item -Recurse -Force tes?/unit", "PowerShell"), docs: hs("rm -rf doc?/a/old") };
     const gDocs = g(pU, "doc?/a/old"), gPkgs = g(pU, "packages/*/test");
-    // below level tests a non-code glob still takes the early not-code allow — no feature read (a cost: 60 features, ×150 per target)
+    // below level tests a non-code glob still takes the early not-code allow — no feature read (a cost: 60 features, ×150 per target):
+    // counted (1.40 — a per-call mean of 20 sub-ms calls at ≤ 4× missed both tries on Linux): the glob target's calls under .specs/ are the
+    // plain target's
     const pV = project("glob-scope-cost", { guard: "scope" });
     w(pV, "docs/a/x.md", "x\n");
     for (let i = 0; i < 25; i++) tasks(S.createFeature(pV, "Feat " + i, ["core"], "", undefined, "en"), Array.from({ length: 20 }, (_, k) => "- [ ] " + (k + 1) + ". T\n  - _Implements: src/f" + i + "_" + k + ".js_\n").join(""));
-    const per = (t) => { const t0 = process.hrtime.bigint(); for (let i = 0; i < 20; i++) g(pV, t); return Number(process.hrtime.bigint() - t0) / 1e6 / 20; };
-    const cost = remeasure(() => { const glob = per("doc?/a/x.md"), plain = per("docs/a/x.md"); return { glob, plain, ratio: glob / Math.max(0.05, plain) }; }, (s) => s.ratio <= 4);
+    const specsOf = path.join(pV, ".specs") + path.sep, sorted = (c) => js(Object.entries(c).sort());
+    const cost = { glob: fsCalls(specsOf, () => g(pV, "doc?/a/x.md")), plain: fsCalls(specsOf, () => g(pV, "docs/a/x.md")) };
     const gScope = g(pV, "doc?/a/x.md");
-    all("1.36 guard tests: a folder target with a glob above its last segment is refused at deny when it holds a protected test — rm -rf tes?/unit, */unit, packages/*/test, mv packages/*/test, Remove-Item -Recurse tes?/unit; a non-code glob holding none stays not-code; below level tests a non-code glob costs what a plain non-code target does (≤ 4×, 25 features) (got " +
-      js([shell, gDocs.why, gPkgs.why, gScope.why, { ratio: cost.ratio, glob: cost.glob, plain: cost.plain, tries: cost.tries }]) + ")", {
+    all("1.36 guard tests: a folder target with a glob above its last segment is refused at deny when it holds a protected test — rm -rf tes?/unit, */unit, packages/*/test, mv packages/*/test, Remove-Item -Recurse tes?/unit; a non-code glob holding none stays not-code; below level tests a non-code glob reads what a plain non-code target does (counted under .specs/, 25 features) (got " +
+      js([shell, gDocs.why, gPkgs.why, gScope.why, cost]) + ")", {
       shell: () => ["tesQ", "star", "pkgs", "mv", "ps"].every((k) => shell[k] === "deny"), engine: () => gPkgs.decision === "deny" && gPkgs.why === "protected-test",
       notCode: () => shell.docs === "silent" && gDocs.decision === "allow" && gDocs.why === "not-code",
-      scopeCost: () => gScope.why === "not-code" && cost.ratio <= 4,
+      scopeCost: () => gScope.why === "not-code" && sorted(cost.glob) === sorted(cost.plain) && Object.values(cost.plain).some((n) => n > 0),
     });
   }
 

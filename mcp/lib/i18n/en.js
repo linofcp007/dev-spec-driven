@@ -1629,7 +1629,7 @@ const msg = {
       bpFrom: {
         "ui.md": (at) => `the Breakpoints line of ${at}`,
         code: (at) => `declared in ${at}`,
-        partial: (at) => `what ${at} adds to its framework's own, then the review's default set where room is left — to choose, list them all in .specs/steering/ui.md's Breakpoints line`,
+        partial: (at) => `declared in ${at}, then the review's default set where room is left — the project's other widths, its framework's own or a plain media query's, are not read — to choose, list them all in .specs/steering/ui.md's Breakpoints line`,
         default: () => "none declared — the review's default set: list yours in .specs/steering/ui.md's Breakpoints line",
       },
       bpUnread: (n, list) => `  ⚠ ${n} ${n === 1 ? "breakpoint" : "breakpoints"} whose width was not read — ${list}: write the project's widths (320–3840 px) in .specs/steering/ui.md's Breakpoints line`,
@@ -1641,7 +1641,7 @@ const msg = {
       dsStaleHead: (n) => `  in the registry, but their path names no file (${n}):`,
       // 1.39: the files that still import a `_Deprecated:_` component (the project report's `deprecatedUses` — a report, never "in sync")
       dsDepUsesHead: (n, total, atLeast) => `  deprecated components the code still imports (${atLeast ? "at least " : ""}${n} of the ${total} _Deprecated:_ ${total === 1 ? "row" : "rows"} the code holds a file for) — migrate each:`,
-      dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "file" : "files"}: ${list}${at ? `  (${at} component files of that name)` : ""}`,
+      dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "file" : "files"}: ${list}${at ? `  (${at} files give that name)` : ""}`,
       dsDepUsesNone: (name, use, read) => `    ${name}${use ? " → " + use : ""} — no import of it in the ${read} ${read === 1 ? "file" : "files"} read: not proof it is unused (what is not read is below)`,
       dsDepUsesUnbound: (n, name, at) => `      ${n} .mdx / .vue ${n === 1 ? "file renders" : "files render"} <${name}> with no import — an auto-import, a global registration or an MDX provider, not resolved; the first: ${at}`,
       dsDepUsesUnlocated: (list) => `  (no component file the scan reads gives that name — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index; when several indexes give it to different files, the index the row's path names —, so its importers were not looked for: ${list})`,

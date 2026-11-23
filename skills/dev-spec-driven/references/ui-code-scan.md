@@ -84,9 +84,10 @@ the code's tokens the registry does not list:
   nearest of several), in any notation — exact within one notation, across two within the rounding of the pair as written
   (0.011 ΔEOK with an HSL side, 0.001 otherwise; an HSL side against a hex or `rgb()` also both ways: the other in HSL
   rounds to its numbers or the HSL paints it, 8 bits a channel — `#05787d` is `hsl(183 92% 25%)`, `#eeeff2`
-  `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`), alphas within 0.01; `near` {`token`, `delta`} the nearest within
-  0.02 ΔEOK — a hint, never the token's colour (Tailwind's zinc hexes are not shadcn's neutral; its `oklch()` zinc is the
-  `hsl()` one, within 0.011). `hwb()`, `lab()`, `lch()`, `color()` and a named colour match by text alone.
+  `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`; against `oklch()` / `oklab()` the written roundings meet, or one
+  paints the other at 8 bits), alphas within 0.01; `near` {`token`, `delta`} the nearest within 0.02 ΔEOK — a hint,
+  never the token's colour (Tailwind's zinc hexes are not shadcn's neutral, nor its `oklch()` zinc the `hsl()` one).
+  `hwb()`, `lab()`, `lch()`, `color()` and a named colour match by text alone.
 - **Fonts** — a `font-family` stack ending in a generic family, by its first family, against the registry rows' font tokens
   only (a code token's stack is never read; one ending in a named emoji font is no stack). Read when the registry holds one.
 - **Motion** — a `transition` / `animation` declaration's literal times above 1 ms and easing functions (`cubic-bezier()`,
@@ -122,16 +123,18 @@ every view needs).
 ### Deprecated components the code still imports
 
 While the registry marks a row `_Deprecated:_`, the project report adds `deprecatedUses`: for each such row the code holds a
-component file for — the rows still imported first —, the files that still import it (`files`, the first 3 by path;
-`filesTotal`), its replacement as doctor names it (`use`) and its component files (`paths` — a namesake's importers count
-too); `unlocated`: rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro
-file or a component folder's index (a library's, an Angular or a Blade one). An index locates a row only when no component
-file gives its name; when several indexes give it to different files (a kit's parts: `Content` — the files their relative
-imports name), only the one the row's path names (one reference). A row named by its file is its **module** — any import
-of it counts (renamed, default, type-only but `import type X from`, `require`, a
-non-component export, a namespace's member, an SFC with or without its extension) — and its components, followed through
-`export *` and a component folder's barrel; a component a file exports beside its own counts by its **name** (a default
-import too, when it is the file's default). An .mdx / .vue tag no import binds is counted apart (`unbound`). Not seen (its
+component file for — the rows still imported first, then those only rendered —, the files that still import it
+(`files`, the first 3 by path; `filesTotal`), its replacement as doctor names it (`use`) and its component files (`paths` —
+a namesake's importers count too); `unlocated`: rows whose name no component file the scan reads gives — a .tsx / .jsx /
+.js / .vue / .svelte / .astro file or a component folder's index (a library's, an Angular or a Blade one). An index locates
+a row only when no component file gives its name; when several give it to different files (a kit's parts: `Content` — the
+files their relative imports name), only those the row's path names (any word); a direct import of a file it renames
+counts for each such row (`import VbenButton from './button.vue'`) unless that export also has an unmarked row's name —
+its own as a named export (`{ AppleConnect }` of `AppleConnect as AppleCalendar`) or an index's. A row named by its file is its **module** — any
+import of it counts (renamed, default, type-only, `require`, a non-component export, a namespace's member, an SFC with or
+without its extension) — and its components, followed through `export *` and a component folder's barrel; a component a
+file exports beside its own counts by its **name** (a default import too, when it is the file's default). An .mdx / .vue
+tag no import binds is counted apart (`unbound`). Not seen (its
 `note`): a `.ts` file, a dynamic `import()`, a module only a bundler's alias or a virtual module names, a re-export under
 another name outside a component folder's index, a tag an auto-import names by its folder, a non-component export or a type
 through a barrel. Nuxt's `<BaseCard>` is such a tag (`components/base/Card.vue`), `import type { X }` from a component folder

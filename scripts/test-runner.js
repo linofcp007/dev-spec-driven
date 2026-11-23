@@ -459,6 +459,7 @@ async function settle() {
 //   eq(actual, expected, label)   deep equality through JSON (as `js(a) === js(b)` — key order counts); a FAIL is followed by
 //                       the FIRST difference: its path ($.features[2].name), what was found and what was expected.
 //   remeasure(measure, holds)   no assertion: a timing-bound check's sample, measured once more on a miss (below).
+//   fsCalls(under, fn)  no assertion: the fs calls fn() makes under a folder, counted — for a count-bound check (below).
 // Prefer all() over `ok(a && b && …)` beyond ~4 conditions (docs/maintainers/testing.md → Adding a test).
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 const thunkSource = (fn) => String(fn).replace(/^\s*(?:async\s*)?\(\s*\)\s*=>\s*/, "").replace(/\s+/g, " ").trim();
@@ -512,7 +513,41 @@ function assertHelpers(ok) {
     ok(!d, d ? `${label}\n      ${d}` : label);
     return !d;
   };
-  return { all, eq, remeasure };
+  return { all, eq, remeasure, fsCalls };
+}
+// fsCalls(under, fn) — for a COUNT-bound check (1.40: the same work on both sides is a count, never a time — a ratio of two
+// timings flaked under load where the count is exact): runs fn() with every fs.*Sync function and fs.realpathSync.native
+// wrapped (the engine calls `.native` — a wrap without it leaves the engine none: its walk throws and counts nothing) and
+// DEV_SPEC_TEST_AHEAD=off (the read-ahead pool's workers read unseen — with it on, 32 of 400 opens showed), restores all of
+// them, and returns { <name>: n } — the calls whose first argument is a string path starting with `under` as the engine
+// passes it (a folder with its trailing separator — a call the engine makes through the realpath of an aliased folder, Windows'
+// 8.3 `ADMINI~1`, is not under it: never pin a difference that depends on one). fn must be SYNCHRONOUS: one that returns a promise throws (restored at
+// its first await, it would count nothing). In-process calls only — never the MCP server's (another process), a spawned CLI's
+// or a hook's; a Buffer / URL / fd argument is not counted (readSync(fd): its openSync is). Assert equalities or differences
+// with a non-zero side, never a pinned total (the totals differ by platform).
+function fsCalls(under, fn) {
+  const counts = {}, saved = [], ahead = process.env.DEV_SPEC_TEST_AHEAD;
+  const spy = (orig, name) => function (p, ...rest) {
+    if (typeof p === "string" && p.startsWith(under)) counts[name] = (counts[name] || 0) + 1;
+    return orig.call(this, p, ...rest);
+  };
+  try {
+    for (const key of Object.keys(fs)) {
+      const orig = fs[key];
+      if (!/Sync$/.test(key) || typeof orig !== "function") continue;
+      const w = spy(orig, key);
+      if (typeof orig.native === "function") w.native = spy(orig.native, key + ".native");
+      saved.push([key, orig]);
+      fs[key] = w;
+    }
+    process.env.DEV_SPEC_TEST_AHEAD = "off";
+    const r = fn();
+    if (r && typeof r.then === "function") throw new Error("fsCalls: fn returned a promise — it must be synchronous (an async fn counts nothing)");
+    return counts;
+  } finally {
+    for (const [key, orig] of saved) fs[key] = orig;
+    if (ahead === undefined) delete process.env.DEV_SPEC_TEST_AHEAD; else process.env.DEV_SPEC_TEST_AHEAD = ahead;
+  }
 }
 // remeasure(measure, holds, tries = 2) — for a timing-bound check (not an assertion): measure() → a sample (the times and
 // whatever the check reads), holds(sample) → whether its time bound holds. On a miss it measures again (up to `tries` samples)

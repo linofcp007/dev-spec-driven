@@ -1240,10 +1240,14 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     put(big, ".specs/lin/tasks.md", "# Tasks\n\n## Phase" + sp(N) + "1\n\n- [ ] 1." + sp(N) + "a" + LS + "b\n- [ ] 2. do _Requirements: US-1.AC-1_ _Verify:" + sp(N) + "_\n" +
       "  _Implements: src/a.js" + ":1".repeat(N / 4) + "x_\n```" + "~".repeat(10) + "\n" + "~".repeat(N / 4) + "\r\n");
     put(big, ".specs/lin/decisions.md", "# Decisions\n\n## D-1 — Title" + sp(N) + "##\n- _Kind:" + sp(N) + "discovery_\n\n**Context:** c\n");
-    const bigRuns = reads(big).map((f) => timed(f));
-    const bigMs = bigRuns.reduce((a, x) => a + x.ms, 0);
-    ok(bigRuns.every((x) => !x.r.threw) && bigMs < bound,
-      "1.17 linear headings: status / doctor / trace (+ matrix) / EARS / clarify / next action / brief / export / catalog on a feature whose headings, task lines, markers, fences and table rows hold 100,000-character runs (and line terminators after them) run within 10 × the small feature's time + 6 s — the task scanner's heading pattern alone took minutes (got " + js({ base, big: bigMs, each: bigRuns.map((x) => x.ms), threw: bigRuns.filter((x) => x.r.threw).map((x) => x.r.error) }) + ")");
+    // (1.40: under remeasure — a miss measures the small feature and the big one again: the bound failed once on node:24-alpine
+    // under load, outside any remeasure)
+    const lin = remeasure(() => {
+      const b = reads(small).map((f) => timed(f).ms).reduce((a, x) => a + x, 0), runs = reads(big).map((f) => timed(f));
+      return { base: b, bound: 10 * Math.max(b, 100) + 6000, runs, ms: runs.reduce((a, x) => a + x.ms, 0) };
+    }, (s) => s.ms < s.bound);
+    ok(lin.runs.every((x) => !x.r.threw) && lin.ms < lin.bound,
+      "1.17 linear headings: status / doctor / trace (+ matrix) / EARS / clarify / next action / brief / export / catalog on a feature whose headings, task lines, markers, fences and table rows hold 100,000-character runs (and line terminators after them) run within 10 × the small feature's time + 6 s — the task scanner's heading pattern alone took minutes (got " + js({ base: lin.base, big: lin.ms, each: lin.runs.map((x) => x.ms), threw: lin.runs.filter((x) => x.r.threw).map((x) => x.r.error), tries: lin.tries }) + ")");
     const tb = S.taskBlocks("## Phase" + sp(N) + "one  \n\n- [ ] 1. a\n- [ ] 2. b" + LS + "c\n");
     const dl = S.decisionLog("## D-1 — Title" + sp(N) + "##\n- _Kind:" + sp(N) + "discovery_\n");
     // (1.24 r6 D3: a U+2028 inside a task's text is an ordinary character — the task is read; 1.17 H kept the regex's "no task")

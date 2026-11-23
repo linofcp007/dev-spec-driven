@@ -87,6 +87,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   them cost each chain ~0.25 s MCP / ~0.1 s CLI); the MCP harness starts its server before it loads the engine (the two starts
   overlap). **Split a file that alone sets the critical path** (`--times`, the default `--jobs` = one per CPU) by topic, mechanically
   — the blocks move verbatim, a shared fixture is exported by the main file (16-conventions-completion.js `fixture`), never copied.
+  (1.40: 15-quality-design-system-cost.js's G1–G3 → 15-quality-design-system-cost-deprecated.js, which takes `trees` — its
+  projects under a prefix of its own, `proj-costdep-` — and `pair` from the main file.)
   At `--jobs 4` the wall time is the files' sum / 4: there only less work (fewer process starts) makes it shorter.
 - **Hermetic chains (1.26).** A chain never sees the shell the suite was started from: the runner spawns it with a fresh,
   empty temp folder as its working folder (`<temp base>/<spec-test-|cli-test->XXXXXX`, removed once it closed — The temp base) and an
@@ -170,6 +172,31 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   09-evidence.js, 10-guards.js, 10-guards-stop-gate.js, 13-imports.js and 15-quality.js (bounds unchanged; 1.32.1: 13-imports-scan.js's
   two budgets too); and on one non-timing miss seen only under load — 16-conventions.js asks git `check-ignore` once more when it
   answers nothing.
+- **Cost guards — the method (1.40).** A ratio of two timings flaked under load where the property it guarded was a count, and
+  a yardstick that skipped work the measured side does measured that work's speed instead. A new or changed cost check:
+  (1) **counts before it times** — what the regression does to the file system is a count: `fsCalls(under, fn)` (every file
+  receives it — scripts/test-runner.js) returns the fs calls a synchronous `fn` makes under a folder; assert an equality or a
+  difference with a non-zero side, never a pinned total (the totals differ by platform), and count under the project root, not
+  one folder of it (FC2-3's log read again per planned file sits outside `src/`); what the engine does is a count where it
+  keeps one — the deprecated uses' watch counts the pages it parses itself, `deprecatedUses.parsed` (not enumerable:
+  in-process only, never in a result's JSON), so G1's `asks` asserts that count and the fs calls under the project root, no
+  clock — the marked tree's own reads are the follow's config files (package.json, tsconfig), one or two by platform, a
+  bound of 2 a kind — and, under every folder that holds what it reads (`src/`, `docs/`, `.specs/`), the SAME calls: a bound
+  is a slack, and a slack holds a regression of its size (review 2, DT2-1: a read once a row fit the root's on Windows; what
+  the root's bound still holds, review 3: a root file stat'ed once a row anywhere, a root config read once a row on Windows)
+  (15-quality-design-system-cost-deprecated.js); `fsCalls` counts a path as the engine spells it, so a call made through the
+  realpath of an aliased folder (Windows' 8.3 `ADMINI~1`) is not under it — assert no pinned difference that depends on one. It
+  times only what has no count, and its
+  comment says what the bound hides (FC2-3's 2.5× backstop passes a 2× quadratic over the planned set that makes no fs call);
+  (2) does **the same work on both sides** (1.39's G1 yardstick skipped the watch's parse: 1.02× Windows, 1.7–1.8× Linux);
+  (3) **interleaves the sides** — a, b, a, b, …, each side's median of 5 (`pair`, 15-quality-design-system-cost.js) —, never a
+  block of one side, then the other; (4) has **one ratio per `remeasure`** (a bundle misses whenever any one of its ratios meets a
+  spike); (5) gives **each side ≥ ~100 ms in a Linux container** — repeat the call inside one interval (FC2-3's four calls a
+  side) — or counts (a ~40 ms median wanders ±40 % with one GC pause); (6) adds **no absolute slack that can hide the
+  mechanism** (`+ 1 s` beside a 2 s stall hides it once the twin takes 2 s); (7) puts **every timing assertion under
+  `remeasure`** — a check of child processes runs them with `spawnSync`, so a retry can measure again; (8) is measured
+  **before review** on Windows, node:22-bookworm-slim and node:24-alpine, alone and with the MCP suite running beside it at the
+  default `--jobs` (the pre-push's setting), its numbers in its comment.
 - **The source guards follow the layout:** the U+FEFF guard reads mcp/test.js, scripts/test-runner.js and every file of
   mcp/tests/. The engine guards (U+FEFF, backslash-stripped regex literals) also read scripts/build.js — a bundle's
   registry comes from it — and `libSources()` leaves a user-built `mcp/lib/spec.bundle.js` out (the sources verbatim: it
@@ -326,3 +353,41 @@ How the rules above came to be — grep a release here.
 - **1.32.2** — the pre-push gate's first real run failed 17-docs.js's A8 check (no tool description runs two sentences
   together): spec_complete_task's description carries the runnable CLI line with the plugin's path, and the gate's temp
   worktree `dev-spec-pre-push.DFT…` read as "h.DFT". The check reads the prose with that quoted path taken out.
+- **1.40.0** — the cost-guard method (Adding a test) and `fsCalls`, from an audit of every `remeasure(` (104 sites in 44 files —
+  23 absolute bounds, 14 ratios of different work, 8 inverse; six instrumented full suites and two cost-file runs at `--jobs 4`,
+  then one Windows run at the default `--jobs` and one per Linux image, after the changes: none of the rewritten checks missed a
+  first try on Windows). Counted: FC2-3 (`on − off − planned` = one open under the project root; under `src/` the log read
+  again per planned file was blind), the protected-tests cap (opens and stats equal, listings 24 < 33 — `≤` passed a walk listing
+  past the cap: 20 = 20 under `test/`), :908's glob target (its `.specs/` calls = the plain target's; its 4× per-call mean, which
+  missed both tries on Linux, went) and a feature's report over 400 pages (no call under them). Resampled: K1 / K3 / K4 and
+  G1–G3 one interleaved pair a remeasure (K1 blocked crossed 1.5 in 3 of 64 samples, interleaved in none of 64), each hostile UI
+  input beside its own plain JSX; under `remeasure`: the 1.17 linear headings (it failed once on alpine, outside any) and the
+  read-ahead's refused read (run with `spawnSync`, and its workers' errors counted). FC2-3's yardstick was decided by its base
+  samples: four calls a side at ≤ 1.5 crossed 1.5 in 7 of 36 on node 22 (max 1.94) and 3 of 36 on alpine (1.75) with the MCP
+  suite running beside — 0 of 36 on Windows (max 1.40) —, so it is a 2.5 backstop that says what it hides (the known set
+  rebuilt per own file, no fs call: 1.6–2.2× on node 22, 0.8–1.5× on Windows); one call a side (~40 ms) crossed even 2.5
+  (2.76, 1 of 36 alpine). Left as found, their numbers for 1.41: `clickNest` / `clickControl` cost 2–2.6× plain JSX themselves
+  and still reach the 3× bound under load (both tries 3.06 / 3.14 once on node 22 with two containers at once; more calls a side
+  did not steady them); timing assertions outside `remeasure`; the three
+  different-work checks (reexports :434, usage :513, aliases :490), which passed every Linux run (a first try missed on
+  node:24-alpine for two of them, the retry held); the read-ahead pool's start against a read in sequence (+600 ms: the start
+  took 650–1,330 ms in two containers at once; it held one container at a time). The cost file split by topic (The suites): its two halves took 133 and
+  174 s in the default-jobs Windows run — one file, it was the critical path; that run's wall was 317 s, its slowest chains
+  15-quality-design-system-usage (209 s) and 10-guards-protected-tests (194 s). The injectable bounds table was cut again (−11 to
+  −12 s Windows, −2 to −3 s Linux, off the critical path). G1's `asks`, resampled on 1.39's yardstick (~1.2× typical), still
+  missed both tries once on node:24-alpine (1.63 / 1.64 — 1 of 16 probe samples over 1.5, the 1.39 sampling 0 of 16) while
+  the property is two counts, so once the merged tree gave the report `deprecatedUses.parsed` it is COUNTED, no clock (the
+  owner, after the merges): with settle asking a candidate on 50 pages, the watch parses the 275 Table pages settle did not
+  (300 − 25), and every fs call under the pages equals the identical tree's with no marker (600 / 600); a watch parsing every
+  page — the case the 1.39 clock saw at 1.05× on Windows — fails both (610, 660). `nothing` keeps its clock (0.67–1.29×
+  measured, loaded) and counts its 300. Review 1 (DOC-2, T-1, T-3; the replay's S3): the pages folder hid a re-read outside it
+  (the registry, the views, the MDX once a page) — the reads are counted under the project root, the follow's config reads
+  the one difference (+1 open, +1 realpath on Windows — package.json's open; tsconfig's goes through the 8.3 TEMP's realpath,
+  uncounted —, +2 opens on Linux; bound 2 a kind), and both mutants fail. Review 2 (DT2-1): that bound held a read once a
+  row on Windows (one spare open; a stat two spare everywhere) — beside it, every fs call under `src/`, `docs/` and `.specs/`
+  is now the same with and without the marker ({} apart on Windows, node 22 and node 24-alpine), which kills the reviewer's
+  once-a-row mutants (all six on Windows — a row's file opened, read or stat'ed, the registry read again, a row's first
+  importer read again, the tsconfig once a page; the stat and the open checked on node 22 and node 24-alpine too); the feature report's 1.25× clock (40–59 ms
+  sides on Linux) is a count — with a row marked as with none it makes the same calls under `src/` and opens no page (the
+  project report 642), and a watch built for it fails; DS_PATH_WORDS, a cost guard only timed (1.48–1.55×), is counted — a
+  path cell of 33 absent files makes the calls of its first 20 (without the bound 38 lstats against 28).

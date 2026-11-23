@@ -8,7 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
+exports.run = async ({ all, S, tmp, remeasure, fsCalls, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const E = require(path.join(__dirname, "lib", "engine", "index.js"));
   const write = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
@@ -598,13 +598,16 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     // (relative imports alone beside the misses: an alias asks the packages too)
     const uh = boundCost("external", true), usoft = boundCost("own", false);
     const ums = remeasure(() => { const t0 = Date.now(); S.designSystemReport(uh); const t1 = Date.now(); S.designSystemReport(usoft); return [t1 - t0, Date.now() - t1]; }, (s) => s[0] < 1.7 * s[1] + 60);
-    // a feature's report on a project of many pages reads none of them for what they render
+    // a feature's report on a project of many pages reads none of them for what they render — counted under the pages' folder (1.40:
+    // timed, half the project report's time at most, its 10–33 ms sides on Linux missed a first try): the feature's report makes no
+    // call there, the project report opens every page
     const p = project("cost-feature", { "package.json": deps(["react"]) });
     write(p, UI + "kit.tsx", L(["export const Moving = motion(Box);"]));
     for (let i = 0; i < 400; i++) write(p, "src/app/p" + i + ".tsx", L(["import { Moving } from \"@/components/ui/kit\";", "export const P" + i + " = () => <Moving />;"]));
     S.createFeature(p, { name: "Price Tag", tracks: ["ui"], summary: "x" });
-    const fms = remeasure(() => { const t0 = Date.now(); S.designSystemReport(p); const t1 = Date.now(); S.designSystemReport(p, { name: "price-tag" }); return [t1 - t0, Date.now() - t1]; }, (s) => s[1] * 2 < s[0]);
-    all("1.35.3: the usage reader gives up in linear time — runs of tags, closing tags and members, a `useContext(` of 1,900 brackets, an import clause that never closes, lines of `(/` with a backtick (a regex that never closes is looked for once a line) — no slower than the same files spelled out of reach; and a feature's report reads none of the project's pages for what they render — half the project report's time at most on 400 of them; 2,000 parts that are calls under 2,090 exported names are settled once an owner, 500 candidates kept and said; a page that writes none of the names asked is never parsed. Review 1 of 1.35.3: 20,000 negations of ten packages (each ten alternatives) against 900 folders cost no more than the same entries spelled as paths — 200 alternatives kept, said; one name exported by 1,000 kits and rendered through 100 namespaces by 300 pages is settled once a folder, a module and a name; four lines of `(/[/` and a backtick look for one regex a line; a barrel's 500 re-exports of the project's own file ask nothing; six files of 10,000 CommonJS entries the file calls ask each statement once; 500 top-level aliases of an import ask nothing; review 2: a page thirty roots deep costs no more than one under none, 500 instances ask nothing; review 3: aliases × parts no name could take ask nothing, 4,000 external modules against 1,500 manifests cost no more than the project's own, and 200 against 5,000 read a bounded number of them (got " + js({ ms, pms, qms, nms, bms, rms, ems, cms, ams, dms, wms, kms, xms, ums, fms }) + ")", {
+    const appDir = path.join(p, "src", "app") + path.sep;
+    const fms = { project: fsCalls(appDir, () => S.designSystemReport(p)), feature: fsCalls(appDir, () => S.designSystemReport(p, { name: "price-tag" })) };
+    all("1.35.3: the usage reader gives up in linear time — runs of tags, closing tags and members, a `useContext(` of 1,900 brackets, an import clause that never closes, lines of `(/` with a backtick (a regex that never closes is looked for once a line) — no slower than the same files spelled out of reach; and a feature's report reads none of the project's pages for what they render — no call under their folder, where the project report opens all 400; 2,000 parts that are calls under 2,090 exported names are settled once an owner, 500 candidates kept and said; a page that writes none of the names asked is never parsed. Review 1 of 1.35.3: 20,000 negations of ten packages (each ten alternatives) against 900 folders cost no more than the same entries spelled as paths — 200 alternatives kept, said; one name exported by 1,000 kits and rendered through 100 namespaces by 300 pages is settled once a folder, a module and a name; four lines of `(/[/` and a backtick look for one regex a line; a barrel's 500 re-exports of the project's own file ask nothing; six files of 10,000 CommonJS entries the file calls ask each statement once; 500 top-level aliases of an import ask nothing; review 2: a page thirty roots deep costs no more than one under none, 500 instances ask nothing; review 3: aliases × parts no name could take ask nothing, 4,000 external modules against 1,500 manifests cost no more than the project's own, and 200 against 5,000 read a bounded number of them (got " + js({ ms, pms, qms, nms, bms, rms, ems, cms, ams, dms, wms, kms, xms, ums, fms }) + ")", {
       chain: () => kms[0] < 2.5 * kms[1] + 150,
       misses: () => xms[0] < 2.5 * xms[1] + 150,
       bounds: () => ums[0] < 1.7 * ums[1] + 60,
@@ -619,7 +622,7 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       reexports: () => ems[0] * 1.5 < ems[1],
       unparsed: () => qms[0] * 1.5 < qms[1],
       parts: () => pms[0] < 2.5 * pms[1] + 100 && /"component-files"/.test(pms[2]),
-      feature: () => fms[1] * 2 < fms[0],
+      feature: () => Object.keys(fms.feature).length === 0 && fms.project.openSync >= 400,
     });
   }
 

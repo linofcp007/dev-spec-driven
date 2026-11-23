@@ -3,6 +3,115 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.40.0] — 2026-11-23
+
+The +ui track's fourth round over the code — every item 1.39 cut or left was designed again on fresh measurements, and the
+few that held came in: `@custom-media` alias lists as a breakpoint source, more of a deprecated component's imports
+counted, an `hsl()` value told from an `oklch()` / `oklab()` one of another colour, and a font size under a variant read as
+Tailwind types it. Nothing 1.39.0 passed is refused — this release adds no refusal, no new limit code, marker or doctor
+check — and what it judged stays judged but in two places, a colour pair now `near` and a viewport font size a keyword
+size silences, where `finish`'s values move too (below). No new tool, command, hook or dependency; the MCP tool list and
+SKILL.md are unchanged.
+
+### Added
+- **`@custom-media` alias lists give the breakpoints.** When no Tailwind 4 theme and no Sass map gives a width, the width
+  edges of the top-level `@custom-media` rules in a stylesheet the scan reads become the widths the visual review captures
+  (`from: code`): `min-width` gives its value, `max-width` one px past it (`(max-width: 767px)` is 768), a `width` range
+  either way round, rem / em at 16 px. An alias list is never the whole set, so it is `partial` and the default set fills
+  the places left — a lone `--md (min-width: 768px)` captures the default set itself. A rule it cannot read is listed as a
+  value not read (`30ch`, `calc()`, an edge past 3840 px, a `)` with no `(`). Beside a theme or a map that gives a width the
+  rules are never read, so every 1.39 result stands. A rule in a file the scan does not open by name (`media.css`), in a
+  `<style>` block or a CSS module, a nested one or one written in upper case is not read; a rule whose `(` no `)` closes
+  before its `;` is skipped. On 160 sampled stylesheets no set captures fewer layouts than 1.39's by count, but 20 lose one its
+  default set hit (past six widths the narrowest five are kept), and most aliases are used nowhere — choose the widths in
+  ui.md's Breakpoints line.
+
+### Changed
+- **The files that still import a deprecated component** (`deprecatedUses`) count more: a direct import of the file a
+  component folder's index renames, for every row whose index renames it (`import VbenButton from './button.vue'`, which
+  1.39 said it did not count) — unless that export also has a live row's name, its own or one an index gives it: the
+  usual deprecation of a rename (`export { default as Button, default as OldButton }`) or cal.com's `export {
+  AppleConnect as AppleCalendar }` while `AppleConnect` is a live row — a file that imports the export by the live name
+  is not counted for the alias (by name: a legacy file of a live row's name is taken for that row);
+  `import type X from` the row's own file (through a folder's index it still does not count);
+  the row's path cell read as the stale-row check reads it — the index it names may stand beside another path, in
+  backticks or as a link, and a cell naming two indexes locates the row by both. On 21 public repositories with every
+  component marked: 7 more imports found, none lost. The rows only rendered with no import (`unbound`) now come after
+  the imported ones and before the unused (Bootstrap lists all 20 within the first 50 rows, 15 before). The CLI's row says
+  "(N files give that name)" (EN / PT / ES) — 1.39's "component files of that name" was false of an index's row.
+- **A font size under a variant** now includes what Tailwind's own `text-[…]` types as a font size — a `percentage:` /
+  `size:` / `absolute-size:` / `relative-size:` hint, or a CSS size keyword (`md:text-[x-large]`, `lg:text-[small]`,
+  `md:text-[percentage:120%]`): like `md:text-lg`, it silences the file's bare `text-[…vw]` (`font-size-viewport`); a named
+  colour (`[mediumseagreen]`) is none. Across 50,043 real view and style files of 722 repositories no finding moves.
+- **The CLI's partial breakpoints line** (EN / PT / ES): "declared in X, then the review's default set where room is left
+  — the project's other widths, its framework's own or a plain media query's, are not read"; 1.39's "what X adds to its
+  framework's own" was false of an alias list.
+- **The references**: ui-responsive.md names `@custom-media` (a source of its own, its places filled, the files never
+  read); ui-code-scan.md the colour rule, the renamed file's direct import, the type-only default import and the row
+  order; tooling-reference.md the `@custom-media` source, its `partial`, and `deprecatedUses`' row order.
+
+### Fixed
+- **An `hsl()` token is no longer the token of an `oklch()` / `oklab()` value of another colour.** The pair is the same
+  colour only where their written roundings meet, or one paints the other at 8 bits (both ways) — 1.39 kept the 0.011
+  ΔEOK alone for it, so Tailwind 4's zinc-900 `oklch(21% 0.006 285.885)`, a bluish grey, was shadcn's `hsl(0 0% 9%)`
+  neutral; it is now `near`, and its own hex's HSL, `hsl(240 5.9% 10%)`, is still its token. Both ways: a channel written
+  as zero (`0`, `0.00`, `0%`, `none` — whatever its decimals) is read at most at the precision of its L, so shadcn v4's
+  neutral `oklch(0.205 0 0)` is no longer shadcn's legacy zinc `hsl(240 5.9% 10%)` (an L written at 2 decimals,
+  `oklch(0.97 0 0)`, reads its zero at 0.005, as written; an integer L, `oklch(1 0 0)`, at 0.5: a tint within 0.011 of
+  white stays its token).
+  A `token` can only become `near` or a farther token's (0 of 240,000 same-source pairs lost); on 104 real projects 9
+  rows move.
+
+**`finish`'s values move twice**: its raw top rows carry the colour judgment above (`token` → `near` for such a pair), and
+its UI warning loses a bare `text-[…vw]` in a file that also sizes text by a keyword or a hint under a variant (no real
+file measured holds both).
+
+Designed again for this release and cut again, each by what it would have cost (the next backlog): size families for raw
+sizes (`token` alone — no judgment on the six common kits, nearly all from two apps, and a fifth of its rows name a token
+another package of the monorepo declares), DESIGN.md as a token source (still alpha, with an open change to per-mode
+values; read as the registry it would rename 1.39's tokens on 23 of 24 projects — export it to a token file as before),
+motion off / nearest (108 of the 273 rows off a scale are a loop's period), Tailwind 3's `screens` (four new mechanisms for
+a third of the configs — paste the line into ui.md), BS-3 (a `TBD` / dash matrix: ui-states already warns on each open
+cell at size m / l), BS-4 (a split matrix and the gap it would hide are the same bytes), the Breakpoints line's notes (each
+narrowing drops widths 1.39 reads), a markup file's template and `<style>` judged as one file for `font-size-viewport` (it hid
+144 true findings in one real repository), Astro's `define:vars` (no verdict changes in 103 real blocks), `:is()` /
+`:where()` / `:not()` / `:has()` focus selectors (1 of 4,026 candidates), a skipped stylesheet's focus styles (no case in
+15 repositories), a feature report's focus search over every view file (it would hide true removals), a modality-scoped
+focus removal (only one library's attribute name tells it from a page's: the inline `ui-check-off` stays the answer),
+keeping scrollbars in the zoom capture, `width-viewport` as a rule (no syntax decides it), harness folders as test folders
+(298 code files would become tests), a bound `:is` holding one literal (no verdict), the marker's list-item and bold
+spellings (no public design-system.md holds a marker); in the deprecated uses, a located row's namesake an index gives (4
+of 4 real cases not the row's component) and two index shapes (no file on 21 repositories).
+
+**Cost.** The project report with the UI pass against 1.39.0, no registry (a fresh process per sample, interleaved with an
+identical copy of 1.39.0 as a control, median of 4): shadcn-ui 0.99× · cal.com 1.45× (+850 ms), re-measured 0.96–0.98×
+(1.39.0 itself moved from 1.9 to 3.4 s between runs) · vben 1.09× · mantine 0.86× · nuxt/ui 1.02× · Bootstrap 1.00× ·
+Starlight 1.00× · taxonomy 0.95× · motion-primitives 0.96× · phanpy 1.09× · scottspence.com 1.11× (+26 ms) · syntax.fm
+1.11× (1 ms); with every component marked `_Deprecated:_`: shadcn-ui 1.05× (+273 ms), cal.com 1.24×, re-measured
+1.05–1.18×, vben 1.12× (+210 ms), the rest 0.92–1.09×. The feature report 0.90–1.18× (shadcn-ui +30 ms), `finish`
+1.02–1.09×. The reduced-motion script search keeps its 2,000-script bound: where no view mentions reduced motion it costs
+the scripts it opens — on a large tree, naive-ui (2,031 views, 1,108 scripts read), ×1.48 on Windows (1,032 against 696
+ms), ×1.03 on Linux; at the bound +412 ms on Windows, +82–106 ms on Linux — accepted as said. A deprecated component's
+renamed file imported directly: on a constructed tree of 100 indexes renaming 500 files and 2,000 pages importing them
+(~9,800 imports 1.39 missed) 1.16–1.26× on Windows, 1.41–1.51× on Linux (+310–350 ms) — the pages it now reads are the
+ones holding those findings. The `hsl()` / `oklch()` rule: +20–75 ms a feature report or a `finish` on a hostile scale
+(100 `oklch()` values against 2,000 HSL tokens), ×1.12 over the 51,806 values of 104 real projects.
+
+### Tests
+- `node mcp/test.js` 3014 assertions (was 2983), `node cli/test-cli.js` 707 (was 705). The load-sensitive cost checks
+  now count where the property is a count — a new helper, `fsCalls`, counts the file-system calls a call makes under a
+  folder: the fast check's planned walk, the protected-tests cap, a glob target below level tests, a feature report over
+  400 pages, and the deprecated uses' own parses (`deprecatedUses.parsed`, in-process only — never in a result); every
+  ratio the audit rewrote (the scale's, the deprecated uses', each hostile UI input) is one interleaved pair under its
+  own retry — older timing assertions stay outside it —, and the slowest cost file is split by topic. Each mutation
+  list was written before its fixtures: the font size 41 of 41; the colours 37 of 37 (1.38's and 1.39's colour mutants
+  replayed: 78 of 80 — one equivalent, one line deleted as dead); `@custom-media` 45 of 45; the deprecated uses 29 of 32
+  (one line dead and deleted; one, 1.39's whole-cell strip, put back once review found it reachable; one cost guard timed
+  with and without — counted since); the docs pass 21 of 21 (each new
+  prose clause dropped in a copy fails its row, and so does each engine fact or counted check a row reads, mutated); every
+  list replayed on the merged tree, 273 of 276 (each survivor also one on its own branch). Review 1's fixes: the
+  deprecated uses 9 of 9, the colours 6 of 6, the counted checks' re-read and feature-report mutants killed.
+
 ## [1.39.0] — 2026-11-23
 
 The +ui track's third round over the code: the files that still import a deprecated component, a Sass breakpoints map,
