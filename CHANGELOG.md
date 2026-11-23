@@ -8,9 +8,10 @@ this project versions the plugin as a whole.
 The +ui track's third round over the code: the files that still import a deprecated component, a Sass breakpoints map,
 the units table read more widely and quoted in the task brief, and fewer false findings (a Vue dynamic component, a
 reduced-motion mention in a script). Nothing 1.38.0 passed is refused — this release adds no refusal — and what it judged
-stays judged but in two places, now doubts: the reduced-motion fact, which any script's mention takes back (a comment's
-or a test setup's too — said less, never more), and a bound Vue `<component :is>`, a component even when it holds a
-literal or a ternary. No new tool, command, hook or dependency; the MCP tool list and SKILL.md are unchanged.
+stays judged but in a few places, now doubts: the reduced-motion fact, which any script's mention takes back (a comment's
+or a test setup's too — said less, never more); a Vue `<component>` whose `is` is bound (even to a literal or a ternary)
+or names a component (`is="MyCard"`); a state matrix whose `Announced · focus` cell lies past a header's 64th cell. No new
+tool, command, hook or dependency; the MCP tool list and SKILL.md are unchanged.
 
 ### Added
 - **The files that still import a deprecated component.** `spec_scan {designSystem: true}` / `dev-spec design-system` (no
@@ -69,8 +70,8 @@ literal or a ternary. No new tool, command, hook or dependency; the MCP tool lis
 
 ### Fixed
 - **`spec_scan {designSystem: true}` / `dev-spec design-system` no longer fail on a hostile stylesheet**: more than
-  ~125,000 breakpoint values not read (1.38: ~150,000 distinct Tailwind `--breakpoint-*`) threw "Maximum call stack size
-  exceeded" and lost the whole report; they are counted (`unreadTotal`), the first five listed.
+  ~125,000 breakpoint values not read (1.38 too, from the same ~125,000 distinct Tailwind `--breakpoint-*`) threw
+  "Maximum call stack size exceeded" and lost the whole report; they are counted (`unreadTotal`), the first five listed.
 - **Vue's `<component :is>` is a component.** A bound `:is` / `v-bind:is` is no longer judged as an element — even one
   holding a literal or a ternary (`:is="href ? 'a' : 'div'"`: 1.38 judged its div branch) —, its own click handler and
   style attribute are not judged: vben's alert.vue loses two false click-no-keyboard findings, and they
@@ -100,12 +101,13 @@ selectors and a skipped stylesheet's focus styles (no case on real code), keepin
 capture, `width-viewport` as a rule.
 
 **Cost.** The project report with the UI pass against 1.38.0, on 20 public repositories, no registry (one process,
-interleaved, median of 5): shadcn-ui 1.05× (+107 ms) · mantine 0.98× · cal.com 0.96× · outline 1.21× (+249 ms; 1.08×
-re-measured — noise) · vben 0.93× · nuxt/ui 0.96× · shadcn-svelte 0.97× · Bootstrap 0.96× · tailwindcss.com 1.04× ·
-taxonomy 1.12× (+17 ms) · motion-primitives 0.91× · sakai-vue 1.13× (+6 ms) · Breeze 1.02× · Starlight 1.05× · Bulma
-1.05× · Foundation 1.06× · open-props 1.03× · pico 0.94× · magicui 0.97× · astro-paper 1.06×; small trees' increments are
-at the measurement's noise. The reduced-motion script search, where it runs, adds a few to ~170 ms (it stops at the first
-mention — outline's 207th script); one that reads every script or reaches its bound costs ~1.2× (+110–280 ms). With a
+interleaved, median of 5): shadcn-ui 1.05× (+107 ms) · mantine 0.98× · cal.com 0.96× · outline 1.21× (+249 ms;
+1.05–1.11× re-measured, the reduced-motion script search's ~+90–110 ms) · vben 0.93× · nuxt/ui 0.96× · shadcn-svelte
+0.97× · Bootstrap 0.96× · tailwindcss.com 1.04× · taxonomy 1.12× (+17 ms) · motion-primitives 0.91× · sakai-vue 1.13×
+(+6 ms) · Breeze 1.02× · Starlight 1.05× · Bulma 1.05× · Foundation 1.06× · open-props 1.03× · pico 0.94× · magicui
+0.97× · astro-paper 1.06×; small trees' increments are at the measurement's noise. The reduced-motion script search,
+where it runs, adds a few ms for tens of scripts and ~+100 ms at outline's 207th (it stops at the first mention); at its
+2,000-script bound on a small UI it costs ~1.5–1.7× (+240–350 ms) — accepted as said. With a
 `_Deprecated:_` row marked, the deprecated uses' read adds 1.00–1.18× on trees of 700 view files or more (every row
 marked, up to 500: 1.04–1.43×) and, on smaller trees where the scan otherwise reads no script for its components, +25 to
 +240 ms — up to ~2–2.8× a report of 30–250 ms (Starlight 1.8–2.8×); a marked row no file holds reads nothing. The feature

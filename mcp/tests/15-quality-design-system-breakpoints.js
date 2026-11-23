@@ -284,7 +284,8 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const named = report(null, lines("$spacers: (0: 0, 1: .25rem, 5: 400px);", "$grid-breakpoints-custom: (sm: 700px);", "$mq-breakpoints: (tablet: 740px, desktop: 980px);"), "src/main.scss");
     const local = report(null, lines(".x { $grid-breakpoints: (sm: 600px); }", ".y {", "  $grid-breakpoints: (", "    sm: 650px", "  );", "}"), "src/main.scss");
     const entries = report(null, lines("$breakpoints: (xs: 0, \"sm\": 600px, md: $tablet, 'lg': 750, xl: 5000px, xxl: 80em);"), "src/main.scss");
-    const bulma = report(null, lines("$breakpoints: (", "  \"mobile\": (", "    \"until\": $tablet,", "  ),", "  \"tablet\": (", "    \"from\": $tablet,", "  ),", ") !default;"), "sass/utilities/_variables.scss");
+    // (review 2 of 1.39, R2-BU-3: an entry no length BEFORE the nested map — the nested return resets the count to 0)
+    const bulma = report(null, lines("$breakpoints: (", "  \"base\": 1,", "  \"mobile\": (", "    \"until\": $tablet,", "  ),", "  \"tablet\": (", "    \"from\": $tablet,", "  ),", ") !default;"), "sass/utilities/_variables.scss");
     const list = report(null, lines("$show-breakpoints: (mobile, tablet, desktop);", "$x-breakpoints: \"a\" \"b\";", "$y-breakpoints: ();"), "src/main.scss");
     const quoted = report(null, lines("$q-breakpoints: (sm: 600px, note: \"a, b)\", md: 900px);"), "src/main.scss"); // (a quoted `,` / `)` cuts nothing)
     all("1.39 breakpoints (a Sass map): a top-level `$…breakpoints` literal map's 0 / px / rem / em entries are min edges — Bootstrap 6's over lines (a comment inside), at its `$` line; `$spacers` / `$grid-breakpoints-custom` / a block's own map are not read; a non-length entry is unread `$name.key`; a nested map and a list give nothing; never partial (got " +

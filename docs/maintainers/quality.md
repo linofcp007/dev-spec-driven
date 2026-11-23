@@ -1192,8 +1192,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     keeps the first `BP_UNREAD` and the count, a Sass record its own first `BP_UNREAD` and `badTotal` (no entry past a
     record's first five can be among the report's), and `breakpointsReport` joins each source's one by one — never a spread
     (`push(...list)`: V8's arguments end near 125,000, and a hostile tree holds more — RangeError, the whole report lost).
-    What is kept grows with the assignments and declarations the walk reads, one record each (as 1.38's `decls`), never
-    with a map's entries. What it inherits from the walk: the sheets the token scan reads —
+    What is kept grows with the assignments and declarations the walk reads, one record each (as 1.38's `decls`), and
+    with a map's LENGTHS, one number each — never with its unread entries past five (review 2 of 1.39, R2-BU-2: 100
+    hostile sheets of one-line maps of 230 lengths keep 3.2M numbers, +67 MB, 4.8× their twin; 1.40 backlog with the
+    records cap). What it inherits from the walk: the sheets the token scan reads —
     a token file by name, a global sheet by name (`sheetRank`) up to `DS_TOKEN_READS`, where that search ends without a word
     (its own rule, review 5); a Tailwind 4 project's `@theme` is in its entry sheet (globals / app / index / tailwind.css),
     which ranks first. And (1.39, the Sass map reader) a TOP-LEVEL assignment, in a .scss sheet the same walk reads (the
@@ -1837,7 +1839,8 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `shared/styles/globals.ts`). Measured on the implementation (review 1 of 1.39, one process, interleaved): the search stops at
   outline's 207th script (+174 ms, loaded); taxonomy +11 ms, motion-primitives +1, sakai-vue ≈ 0; a search that reads every
   script or reaches its bound ~1.2× (outline with its mention edited out ×1.20, +280 ms; a 158-view tree with 3,400 scripts
-  ×1.23, +112 ms) — CRIT_2's prototype said +1 to +27 ms; cal.com itself never searches — its views mention; the 8 MB bound is
+  ×1.23 quiet, ×1.5–1.7 / +240–350 ms re-measured by review 2 — accepted as said) — CRIT_2's prototype said +1 to +27 ms;
+  cal.com itself never searches — its views mention; the 8 MB bound is
   reached on no clone (cal.com's first 2,000: 4.9 MB). What the bound hides: a mention past the
   2,000th script or 8 MB (cal.com's first sits at its 1,002nd).
 - **The marker `_UI checks off: <rule-id> (reason)_`** (1.38 — the registry's `checksOff`, Design-system registry above) —
@@ -3048,7 +3051,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   Bootstrap and Bulma at noise); the reviewers' loaded runs of the same shape gave Starlight +141 to +239 ms (2.4–2.8×),
   magicui / tailwindcss.com 1.6–1.8×, and chain A's own two runs +2 to +108 ms and up to +374 ms: the small-tree range is
   +25 to +240 ms, up to ~2.8×. Foundation, open-props, pico hold no component (idle, nothing read). The no-registry report
-  at the same moment 0.78–1.15× (outline 1.08×: the merged table's 1.21× was noise, not the script search). The fix
+  at the same moment 0.78–1.15× (outline 1.08×; review 2 measured outline 1.05–1.11× with the script search on and
+  0.97–0.99× with it off — its ~+90–110 ms IS outline's increment, the 1.21× the noise around it). The fix
   against the release as reviewed 0.93–1.03× (shadcn-svelte's 1.11 / 1.14 re-measured alone: 71 → 62 ms, 130 → 137 ms).
   R1-DEP-8 (tests): ONE tree for the count bounds (6,012 files, two reports — every cut, then every bound; 8,004 files and
   five reports before), each folder made once, G2q on 50 pages (the `includes` mutant 1.42–1.47×, 2.2–2.6× on 200: a
@@ -3442,6 +3446,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   ms), vben (729) 1.01; motion-primitives +15 ms, sakai-vue +3, taxonomy +71 (all 35 scripts read), breeze −21 (no search:
   noise) — within DECISIONS 6's bar (≤ 1.25× at 700 views or more, ≤ +150 ms below); `uiChecksOf` over the same clones'
   view files (the feature report's and finish's per-file part, D4) 0.89–1.03.
+- **1.39.0 reviews 1 and 2** (the UI checks' prose; no engine change) — review 1: the registry's marker bullet still listed a
+  code-spanned id as "another shape" (UC-2: an id in ONE balanced code span reads as bare since UP-7); THE SCRIPT SEARCH's
+  current rule quoted CRIT_2's prototype cost and a vendored example under `vendor/`, which the walk skips (UC-3); "a test
+  setup's included" was true only outside a test folder (UC-4 — `src/test/setup.ts` is a test file, never read); the doubt
+  sentence of ui-code-scan.md now says a bound `<component :is>` in a click body is none (R1-DOC-4 — the D4 narrowing that
+  keeps vben's true tiles). Review 2 re-measured the search at its 2,000-file bound on a small UI (158 views beside 3,381
+  scripts): ×1.5–1.7 (+240–350 ms; CPU ×2.05) — past DECISIONS 6's +150 ms for small trees; the owner ACCEPTED it as said
+  (the CHANGELOG states it), as the deprecated uses' watch; a smaller `DS_MOTION_SCRIPTS` is 1.40's question.
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table
