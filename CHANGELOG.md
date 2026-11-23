@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.40.0] — 2026-11-24
+## [1.40.0] — 2026-11-23
 
 The +ui track's fourth round over the code — every item 1.39 cut or left was designed again on fresh measurements, and the
 few that held came in: `@custom-media` alias lists as a breakpoint source, more of a deprecated component's imports
@@ -31,8 +31,8 @@ SKILL.md are unchanged.
   component folder's index renames, for every row whose index renames it (`import VbenButton from './button.vue'`, which
   1.39 said it did not count) — unless that export also has a live row's name, its own or one an index gives it: the
   usual deprecation of a rename (`export { default as Button, default as OldButton }`) or cal.com's `export {
-  AppleConnect as AppleCalendar }` while `AppleConnect` is a live row — a file already on the live name is not counted
-  for the alias;
+  AppleConnect as AppleCalendar }` while `AppleConnect` is a live row — a file that imports the export by the live name
+  is not counted for the alias (by name: a legacy file of a live row's name is taken for that row);
   `import type X from` the row's own file (through a folder's index it still does not count);
   the row's path cell read as the stale-row check reads it — the index it names may stand beside another path, in
   backticks or as a link, and a cell naming two indexes locates the row by both. On 21 public repositories with every
