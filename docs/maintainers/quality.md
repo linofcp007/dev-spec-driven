@@ -3098,8 +3098,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (1,000 barrels × 500 marked names, every name narrowed) 2.47–2.69 s against 2.46–2.71 s, heap 107–119 MB against
   113–136 MB. Review 1's 51 shapes and 13 hostile files: no difference. Left for 1.40 (with round 1's three): a file
   importing the file an index renames (vben's icon-button.vue), and a located row's namesake through a package's index
-  (cal.com's `export { BookerPlatformWrapper as Booker }` in atoms/index.ts: 1 pair) — the docs say an index locates a row
-  only when no file does.
+  (cal.com's atoms/index.ts, which re-exports its BookerPlatformWrapper as Booker: 1 pair) — the docs say an index
+  locates a row only when no file does.
 - **1.39.0, the release as merged** (the docs pass, after the four chains merged E → B → C → A; this summary is the 1.39
   round's for every area — the UI checks' and the state matrix's own entries below) — the ruling (DECISIONS) built ~15 of
   the ~29 mechanisms the four designs held (A 5, B 4–6, C 3, E 3; 1.38 shipped ~17 and needed three review rounds), to one
