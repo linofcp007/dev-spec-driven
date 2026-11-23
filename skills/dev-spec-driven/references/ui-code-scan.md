@@ -84,9 +84,10 @@ the code's tokens the registry does not list:
   nearest of several), in any notation — exact within one notation, across two within the rounding of the pair as written
   (0.011 ΔEOK with an HSL side, 0.001 otherwise; an HSL side against a hex or `rgb()` also both ways: the other in HSL
   rounds to its numbers or the HSL paints it, 8 bits a channel — `#05787d` is `hsl(183 92% 25%)`, `#eeeff2`
-  `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`), alphas within 0.01; `near` {`token`, `delta`} the nearest within
-  0.02 ΔEOK — a hint, never the token's colour (Tailwind's zinc hexes are not shadcn's neutral; its `oklch()` zinc is the
-  `hsl()` one, within 0.011). `hwb()`, `lab()`, `lch()`, `color()` and a named colour match by text alone.
+  `hsl(220 14% 94%)`, `#18181b` is not `hsl(0 0% 9%)`; against `oklch()` / `oklab()` the written roundings meet, or one
+  paints the other at 8 bits), alphas within 0.01; `near` {`token`, `delta`} the nearest within 0.02 ΔEOK — a hint,
+  never the token's colour (Tailwind's zinc hexes are not shadcn's neutral, nor its `oklch()` zinc the `hsl()` one).
+  `hwb()`, `lab()`, `lch()`, `color()` and a named colour match by text alone.
 - **Fonts** — a `font-family` stack ending in a generic family, by its first family, against the registry rows' font tokens
   only (a code token's stack is never read; one ending in a named emoji font is no stack). Read when the registry holds one.
 - **Motion** — a `transition` / `animation` declaration's literal times above 1 ms and easing functions (`cubic-bezier()`,

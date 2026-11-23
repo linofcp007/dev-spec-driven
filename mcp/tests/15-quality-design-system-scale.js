@@ -147,6 +147,73 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
     });
   }
 
+  { // (1.40, R2-T2 — CRIT_6 must-fixes 1–4) an HSL side against an oklch / oklab one is the same colour only where their written
+    // roundings meet (the HSL's box — h, s, l ± half the last written digit, 27 points in OKLab — against the other's, channel by
+    // channel; the hue moot where either side can be achromatic) or one paints the other at 8 bits (the oklch / oklab's pixel
+    // round-trips the HSL — 1.38's roundTrip —, or its box holds the HSL's pixel), under the 0.011, which stays the ceiling; each
+    // pair judged both orders (raw / token). Pairs from Tailwind 4's theme.css, shadcn's _legacy-colors.ts, Tailwind 4's hexes
+    // written as HSL and the real rows CRIT_6 found. (%TEMP%/dsd-140-e/MUTATIONS.md: each key kills the mutants it names.)
+    const kind = (j) => (j.token ? "token" : j.near ? "near" : "none");
+    const both = (h, o) => kind(judge(h, [["--t", o]])) + " / " + kind(judge(o, [["--t", h]]));
+    const got = {
+      // 1.39's `token`, another colour: Tailwind 4's zinc-900 against shadcn's neutral as hsl() (E1, E2) — its own hex's HSL is
+      // its token —; the real rows (arumanis' green-tinted preset against stone-50, blazordocs' Tailwind 3 zinc-400 / red-900
+      // against Tailwind 4's)
+      zinc: both("hsl(0 0% 9%)", "oklch(21% 0.006 285.885)"), zincOwn: both("hsl(240 5.9% 10%)", "oklch(21% 0.006 285.885)"),
+      real: [both("hsl(60 9.1% 97.8%)", "oklch(0.9789 0.0082 121.6272)"), both("hsl(240 5% 64.9%)", "oklch(0.705 0.015 286.067)"), both("hsl(0 62.8% 30.6%)", "oklch(0.396 0.141 25.723)")],
+      // another palette's colour: shadcn's purple-50 against Tailwind 4's fuchsia-50 (the hue — E9; round the circle — E12a),
+      // gray-200 / slate-400 against neutral-200 / slate-400 (L — E7; a % L's half — E17), red-100 against red-100 (C — E8)
+      other: [both("hsl(270 100% 98%)", "oklch(97.7% 0.017 320.058)"), both("hsl(220 13% 91%)", "oklch(92.2% 0 none)"), both("hsl(215 20.2% 65.1%)", "oklch(70.4% 0.04 256.788)"),
+        both("hsl(0 93.3% 94.1%)", "oklch(93.6% 0.032 17.717)")],
+      // the ceiling: Tailwind 4's orange-500 against its hex as integer HSL, 0.0117 apart, the boxes meeting (E3)
+      ceiling: both("hsl(25 100% 50%)", "oklch(70.5% 0.213 47.604)"),
+      // what must STILL be the token: the neutral's own oklch, achromatic — the hue moot (E11; shadcn's slate-50 against Tailwind's
+      // neutral-50 too); a faint grey against an HSL whose s may be 0 (E10)
+      neutral: [both("hsl(0 0% 9%)", "oklch(20.5% 0 0)"), both("hsl(210 40% 98%)", "oklch(98.5% 0 none)"), both("hsl(0 0% 45.1%)", "oklch(55.6% 0.001 250)")],
+      // shadcn's legacy pairs, one colour written twice: by the box alone (E4; its l axis — E14c), the hue's half (E13c), its s
+      // axis (E14b), the hue's distance a turn's (E12b)
+      legacy: [both("hsl(272.4 15% 98.2%)", "oklch(0.98 0.00 310)"), both("hsl(33.3 5.5% 32.4%)", "oklch(0.44 0.01 74)"), both("hsl(136.9 14.2% 95.2%)", "oklch(0.96 0.01 155)"),
+        both("hsl(240 5% 64.9%)", "oklch(0.71 0.01 286)")],
+      // Tailwind 4's colours, their hex as integer HSL: red-300 by the oklch's pixel alone, out of sRGB and clamped (E5, E5r, E19,
+      // E25); red-600, a dark channel's linear sRGB (E24); amber-300, a pixel that rounds to the HSL only at 8 bits (E5q); red-800,
+      // the hue's spread over the HSL's box (E13, E13b, E14a)
+      paint: [both("hsl(0 100% 82%)", "oklch(80.8% 0.114 19.571)"), both("hsl(357 100% 45%)", "oklch(57.7% 0.245 27.325)"), both("hsl(31 100% 71%)", "oklch(83.7% 0.128 66.29)"),
+        both("hsl(356 92% 33%)", "oklch(44.5% 0.177 26.787)")],
+      // a hex (#df7020) as integer HSL and as Tailwind 4 writes oklch: the boxes meet on an edge's middle, not a corner — the 27
+      // points, never the 8 corners and the centre (E14d)
+      mid: both("hsl(25 75% 50%)", "oklch(66.1% 0.164 49.416)"),
+      // an HSL's own paint written as oklch: the same 8-bit pixel (roundTrip's painted half — E5p), the oklch's box holding the
+      // HSL's pixel (E6, E6q), and 1.38's review colour #eeeff2 as oklch (CRIT_6 must-fix 2)
+      painted: [both("hsl(229.3 50.9% 18.3%)", "oklch(0.2555 0.0744 271.54)"), both("hsl(163.24 83.86% 20.87%)", "oklch(0.442 0.087 167.325)"), both("hsl(220 14% 94%)", "oklch(0.952 0.004 271.369)")],
+      // oklab, L, a and b each (E16a red-200's hex — E16b / E16c / E16d one channel off), its % channels (E17b, E26); an oklch
+      // hue in turns (E18)
+      oklab: [both("hsl(0 100% 89%)", "oklab(0.883 0.058 0.019)"), both("hsl(265.1 11.5% 55.2%)", "oklab(0.618 0.024 -0.03)"), both("hsl(200 76% 83%)", "oklab(0.88 -0.035 -0.039)"),
+        both("hsl(180 15% 86%)", "oklab(0.905 -0.011 0)"), both("hsl(157 16% 28%)", "oklab(41.6% -7.3% 2%)")],
+      turn: both("hsl(80.48 17.3% 16.91%)", "oklch(31% 6.6% 0.3424turn)"),
+    };
+    // T10, functional (CRIT_6 must-fix 4 — no clock): an HSL token's image is built ONCE, when an oklch / oklab value within the
+    // 0.011 first asks it, and kept across the report's rows (the same object after three judges); a hex token, or an HSL token
+    // no oklch value comes near, builds none (E20, E20b). The zinc oklch's token is its own hex's HSL, the nearest.
+    const sc = scale([], [["--a", "hsl(0 0% 9%)"], ["--b", "hsl(240 5.9% 10%)"], ["--c", "#18181b"], ["--d", "hsl(120 100% 50%)"]]);
+    const imgs = () => sc.colors.map((c) => (c.p.hsl ? c.p.hsl.img || null : "hex"));
+    const asks = (v) => T.judgeRaw({ kind: "color", value: v }, sc).token || null;
+    const once = [asks("oklch(21% 0.006 285.885)"), imgs()], twice = [asks("oklch(20.5% 0 0)"), asks("oklch(21% 0.006 285.885)"), imgs()];
+    const memo = { judged: [once[0], twice[0], twice[1]], built: once[1].map((x) => (x === "hex" ? x : !!x)), same: once[1].every((x, i) => x === twice[2][i]) };
+    all("1.40 R2-T2: an HSL side against oklch() / oklab() is the same colour only where the written roundings meet or one paints the other at 8 bits (both orders, under the 0.011) — Tailwind 4's zinc-900 is not hsl(0 0% 9%), its own hex's HSL is; CRIT_6's real rows and another palette's colour `near`; the neutral's own oklch, shadcn's legacy pairs, Tailwind 4's hexes as integer HSL, an HSL's paint as oklch (#eeeff2 among them), oklab and a hue in turns stay the token; an HSL token's image built once, only when asked (got " + js(got) + " " + js(memo) + ")", {
+      zinc: () => got.zinc === "near / near" && got.zincOwn === "token / token",
+      real: () => got.real.every((k) => k === "near / near"),
+      other: () => got.other.every((k) => k === "near / near"),
+      ceiling: () => got.ceiling === "near / near",
+      neutral: () => got.neutral.every((k) => k === "token / token"),
+      legacy: () => got.legacy.every((k) => k === "token / token"),
+      paint: () => got.paint.every((k) => k === "token / token") && got.mid === "token / token",
+      painted: () => got.painted.every((k) => k === "token / token"),
+      oklab: () => js(got.oklab) === js(["token / token", "near / near", "near / near", "near / near", "near / near"]),
+      turn: () => got.turn === "token / token",
+      memo: () => js(memo.judged) === js(["--b", "--a", "--b"]) && js(memo.built) === js([true, true, "hex", false]) && memo.same,
+    });
+  }
+
   { // fonts: a STACK (its last family generic, one that is not, nothing built) against the registry's font tokens by its primary
     // family; a code token's stack never makes a font token (designValue drops it: CRIT_2 must-fix 3)
     const F = (v) => T.fontStackOf(v);
