@@ -2782,7 +2782,8 @@ function settle(results, scripts, markups, read, places, watch) {
 //     components it exports (the follow: a barrel's `export *`, a renamed re-export, an SFC's default);
 //   - a component a file exports beside its own (`CardHeader` in `card.tsx`) counts by its NAME, through the same follow — and
 //     by a default import when it is the file's default export (1.39 review 1); a row no component file locates is located by
-//     the component folders' barrels that give its name (vben's `{ VbenButton }`), never a row a file locates.
+//     the component folders' barrels that give its name (vben's `{ VbenButton }`) — by the one its path names when they give
+//     it to more than one file, a kit's parts (1.39 review 2) —, never a row a file locates.
 // Only a component file whose importers the scan reads is a row's file (RE_JSX_FILE ∪ RE_MARKUP_FILE: an Angular
 // `*.component.ts` is imported by `.ts` files and rendered by templates — its row is `unlocated`, as a Blade one, a library's
 // and a dropped one are). The names a component folder's barrel gives a row's file or a watched name (`export { default as
