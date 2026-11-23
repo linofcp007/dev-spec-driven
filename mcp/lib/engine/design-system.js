@@ -2850,13 +2850,12 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   // row's name places (`export { default as VbenButton } from './button.vue'`) — imported DIRECTLY under the name it has there
   // (a default import of button.vue, `{ AppleConnect }` for `export { AppleConnect as AppleCalendar } from …`): a use of that
   // row, of every row whose barrel renames that file. Its key exactly, an SFC's twin too (twinOf); a module key → { the file,
-  // the name it has there → the rows' keys }; a component file's keys built once (fileKeys)
-  const renamed = new Map();
+  // the name it has there → the rows' keys }; a component file's keys built once (fileKeys). Never that export when an index
+  // also gives it a LIVE row's name (`live`, below: `default as Button, default as OldButton`, a compat index's BButton of
+  // AButton's file — the alias's own importers count, the live component's do not: DEP-1 of 1.40 review 1)
+  const renamed = new Map(), live = new Set();
   let fileKeys = null;
-  const renames = (r, n, k) => {
-    const via = r.uses.reexports && r.uses.reexports.named.get(n);
-    const at = via && via.spec[0] === "." ? placeOf(via.spec, r.path, null) : null;
-    if (!at) return;
+  const fileOf = (key) => {
     if (!fileKeys) {
       fileKeys = new Map();
       for (const c of files) {
@@ -2866,13 +2865,24 @@ function deprecatedWatch(reg, files, results, scripts, project) {
         if (twin != null && !fileKeys.has(twin)) fileKeys.set(twin, of);
       }
     }
-    for (const key of at.keys) {
-      const of = fileKeys.get(key);
-      if (of) for (const fk of of.keys) {
+    return fileKeys.get(key);
+  };
+  // (the component files a barrel's relative re-export of a name places, each with the name it has there)
+  const placedBy = (r, n) => {
+    const via = r.uses.reexports && r.uses.reexports.named.get(n);
+    const at = via && via.spec[0] === "." ? placeOf(via.spec, r.path, null) : null;
+    const out = [];
+    if (at) for (const key of at.keys) { const of = fileOf(key); if (of) out.push([of, via.name]); }
+    return out;
+  };
+  const renames = (r, n, k) => {
+    for (const [of, there] of placedBy(r, n)) {
+      if (live.has(of.path + "\n" + there)) continue;
+      for (const fk of of.keys) {
         if (!renamed.has(fk)) renamed.set(fk, { path: of.path, by: new Map() });
         const by = renamed.get(fk).by;
-        if (!by.has(via.name)) by.set(via.name, new Set());
-        by.get(via.name).add(k);
+        if (!by.has(there)) by.set(there, new Set());
+        by.get(there).add(k);
         bases.add(keyBase(fk));
       }
     }
@@ -2901,6 +2911,13 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   // as many content files, 13 of its 889 importers the picker's — only the barrel the row's path names locates it (its key or
   // its folder's); to one file, vben's VbenButton, every barrel — review 2 of 1.39. The file: a relative re-export's module,
   // the barrel itself when it declares the name; another package's places none)
+  // (the exports a component folder's index gives under a LIVE row's name — any named re-export of a relative module, its
+  // name kept or not: `export { Tab }`, `default as Button`, `Root as Table` — are that row's component: `live`, which
+  // renames reads; read before the barrels' nameRows — DEP-1 of 1.40 review 1)
+  for (const r of results) if (r.barrel && r.uses.reexports) for (const n of r.uses.reexports.named.keys()) {
+    const k = dsKey(n);
+    if (!dep.has(k) && rowName.has(k)) for (const [of, there] of placedBy(r, n)) live.add(of.path + "\n" + there);
+  }
   const byFile = new Set(located.keys()), givenTo = new Map();
   for (const r of results) if (r.barrel) for (const n of namesOf(r)) {
     const k = dsKey(n);
@@ -3500,11 +3517,13 @@ const RE_DOC_EXT = /\.(?:md|mdx|markdown|txt|rst|adoc|pdf|png|jpe?g|gif|webp|svg
 const DS_PATH_WORDS = 20; // words of a path cell read
 // (1.40) a path cell's readings, ONE reader for stalePath and the deprecated uses' watch (the index the row's path names): the
 // whole cell first, then its first DS_PATH_WORDS words (a cost guard: ×1.55 a report on 500 rows of 33 words), a link
-// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's: DS_CELL_MAX
-// characters at most, its ends' backticks stripped (dsCell, the markers' entries) — 1.39's own 400-character cut and
-// backtick strip were dead (no cell reaches them: the mutation pass of 1.40)
+// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's, trimmed and
+// DS_CELL_MAX characters at most (1.39's 400-character cut and its trims are dead: every reading is trimmed again —
+// projectPath, implementsRel); 1.39's strip of its ends' backticks stays: dsCell strips a component cell's, but the marker
+// reader cuts a `_Token sources:_` entry's note after its own strip — "`src/my styles/tokens.css` (generated)" comes here
+// as "src/my styles/tokens.css`" (DEP-2 of 1.40 review 1)
 function pathWords(cell) {
-  const text = String(cell || "").trim();
+  const text = stripEnds(String(cell || ""), unitIn("`"));
   if (!text) return [];
   return [text].concat(text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS).map((w) => stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`"))));
 }

@@ -1049,13 +1049,22 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   (`nameRows`' keep passed) also registers the file its relative re-export of the row's name places, under the name it has
   there (`renames` → `renamed`: the file's module key — an SFC's twin too, `twinOf`, ONE helper with the files loop above,
   none when a script holds the key — → {the file, the name there → the rows' keys, a Set: a file a hundred barrels rename
-  is held once a row}; `fileKeys`, the component files' keys, built once; the file's base watched, `bases`): a DIRECT
+  is held once a row}; `fileOf`, the component files' keys — `fileKeys` —, built once; the file's base watched, `bases`;
+  `placedBy`, a barrel's relative re-export of a name read once for `renames` and the live names below): a DIRECT
   import of that file under that name — a default for `export { default as X } from`, `{ A }` for `export { A as X } from`
   — is a use of every row whose barrel renames the file (1.40, R2-DEP-2 b: vben's `icon-button.vue`, `import VbenButton
   from './button.vue'`, and cal.com's `{ AppleConnect }` — "not counted" in 1.39). An exact module check (`moduleHit`,
   beside 1.39's `byKey` lookup), never the follow, never a name added to its index; never another export of the file, a
   component FILE's re-export (a barrel's alone), a package's (no file placed), a kit's part the row's barrel
-  does not give. The names a component folder's barrel
+  does not give; never an export an index ALSO gives under a LIVE row's name — a row not marked; `live`, the (file, name
+  there) pairs, read before the barrels' `nameRows` from every index's named re-exports (`reexports.named`, its name kept
+  or not — `namesOf` leaves out a pass-through `export { Tab } from './Tab'`): `export { default as Button, default as
+  OldButton }`, the usual deprecation of a rename, a compat index's `default as BButton` of a/index.ts's AButton file or
+  `export { Tab }` beside `Tab as OldTab` is the live component, its direct importers never the alias's (1.40.0 review 1,
+  DEP-1 — 1.40.0 counted them, 1.39.0 did not). Per export, never per file (another export of that file keeps counting);
+  a live row's NAME an index gives, never its path cell (vben's seed `ButtonGroup | …/button-group.vue` is live while its
+  index gives the file VbenButtonGroup alone: its +1 stands); an index's `export *` is not read for it (a constructed
+  limit: `export *` beside `Button as OldButton` still counts `{ Button }` for OldButton). The names a component folder's barrel
   gives a row's file or a watched name (a relative module) are watched too, DS_ALIAS_PASSES deep. A namespace's member resolves by
   its first part (`<UI.Table.Row>` is UI.Table's). A file is never its own importer. An .mdx / .vue tag with no dot that no
   import binds, whose key is a LOCATED row's, is `unbound` (`unboundAt`: the first by path). The cost guard: a text naming
@@ -1316,8 +1325,13 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   word names a file and none is (`src/components/Gone.tsx (see README.md)`); no word names one → the whole cell. The
   readings are `pathWords(cell)` (1.40, R3-DEP-3 — ONE reader of the cell, the deprecated uses' `rowAt` its other caller):
   the whole cell first, then its first DS_PATH_WORDS words (a cost guard: a report on 500 rows of 33-word cells ×1.55
-  without it), a link unwrapped; a cell is the registry reader's (DS_CELL_MAX characters, its ends' backticks stripped by
-  `dsCell`), so 1.39's own 400-character cut and backtick strip were dead and went (the mutation pass of 1.40).
+  without it), a link unwrapped; a cell is the registry reader's (DS_CELL_MAX characters, trimmed), so 1.39's own
+  400-character cut is dead and went (the mutation pass of 1.40), and so are its two trims around the strip (every reading
+  is trimmed again: `projectPath`, `implementsRel` — 1.40.0 review 1's mutation pass); 1.39's strip of the cell's end
+  backticks stays — `dsCell` strips a component cell's, but the marker reader cuts a `_Token sources:_` entry's note
+  AFTER its own strip, so the entry `` `src/my styles/tokens.css` (generated) `` comes with its closing backtick (1.40.0
+  review 1, DEP-2: 1.40.0 took the strip out as dead and that gone source went unlisted — a word cannot name a path with
+  a blank).
   `projectPath` decides on the TEXT before any fs call (a network path, `..` out, an absolute path elsewhere, a glob:
   null); `onDisk` stops at a link. **Every doubt reads as "not judged"** — a wrong "gone" sends a team to fix a registry
   that is right: a root-level file, a path whose first folder is gone as a whole, `_shared/` (`dsCell` drops the
@@ -3438,6 +3452,27 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   ms), vben 0.90×, Starlight 0.90×, phanpy 1.05×, scottspence.com 0.94×; N — shadcn-ui 1.02×, vben 1.09× (+16 ms): within
   DECISIONS 6's bar (≤ 1.25× at 700 view files or more, ≤ +150 ms below; the feature report and finish unchanged on real
   trees). Merged, before the docs pass: MCP 2999, CLI 707.
+- **1.40.0 review 1** (the deprecated uses, fix round 1 — DEP-1 MEDIUM, DEP-2 LOW; both new in 1.40) — DEP-1: R2-DEP-2 (b)
+  counted every direct import of the file a locating barrel renames, also when an index gives that same export a LIVE
+  row's name — `export { default as Button, default as OldButton } from './Button.vue'`, the usual deprecation of a
+  rename, a compat index's `default as BButton` of a/index.ts's AButton file: OldButton 3 files for 1.39's 1, BButton 2
+  for 1, the CLI sending files already on the replacement to migrate. Fixed by the property (Deprecated uses above:
+  `live`, per export, read from every index's named re-exports before the barrels' `nameRows`; `renames` skips it). The
+  reviewer's prototype read `namesOf`, which leaves out a pass-through (`export { IconCard } from './card'`): the
+  per-file mutant survived on it — a gap too, React's `export { Tab }` beside `Tab as OldTab` kept the bug. Rejected again:
+  a live row's PATH cell (vben's VbenButtonGroup +1). Not built: an index's `export *` (constructed only). DEP-2: 1.40's
+  mutation pass took 1.39's whole-cell backtick strip out of stalePath as dead — no fixture held a `_Token sources:_`
+  entry with a blank and a note, which reaches it; put back, 1.39's two trims around it out as dead (every reading is
+  trimmed again). Oracles: the 21 clones, every row marked — byte-identical to f539cb19, +7 / −0 against 8ec6ca52; with
+  LIVE rows (every index-located row marked, then every other row) — 0 pairs apart from f539cb19 on all 21; the
+  reviewer's alias / compat shapes give 1.39's answers, b-shapes' VbenTip 3 / KitButton 1 stay; vben with three rows
+  marked keeps 47 / 2 / 14. Mutation pass (%TEMP%/dsd-140-f1a/MUTATIONS.md): the second pass's 9 mutants all killed —
+  the first's survivors were the per-file mutant (the gap), `fileOf`'s twin entry (a fixture: an SFC an index
+  re-exports with no extension) and the two trims (dead, deleted); one equivalent probe (the words split before or after
+  the strip). Cost — the live loop runs per named re-export of an index, never per file read (in-process: 25 ms for
+  the hostileB2 tree's 50,000 re-exports, 3–5 ms on the real trees): CPU 0.95× / 1.06× / 1.02× on vben / cal.com /
+  shadcn-svelte with every other row live (A/A 0.90 / 1.08 / 1.02); the hostileB2 tree 0.94× with half its rows live
+  (A/A 0.91), 1.09× with all marked (A/A 1.06). ui-code-scan.md +37 B.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four

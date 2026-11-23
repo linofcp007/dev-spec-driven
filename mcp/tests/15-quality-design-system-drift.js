@@ -91,6 +91,18 @@ exports.run = async ({ all, S, tmp, require, __dirname }) => {
     });
   }
 
+  { // (1.40.0 review 1, DEP-2) an entry with a blank and a note: the marker reader strips its end backticks BEFORE it cuts the
+    // note — "`src/my styles/tokens.css` (generated)" comes to stalePath as "src/my styles/tokens.css`" —, so the whole entry is
+    // read with 1.39's strip of its ends' backticks (a blank before the closing one too: "`src/old styles/a.css ` (kept)", the
+    // reading trimmed): both gone, as 1.39.0 listed them (no word can name a path with a blank); one that is there never
+    const p = project({ "src/my styles/there.css": ":root { --a: 1px; }\n", "src/old styles/b.css": "\n" },
+      registry(["`src/my styles/tokens.css` (generated)", "`src/old styles/a.css ` (kept)", "`src/my styles/there.css` (kept)"], [["--a", "1px"]]));
+    const r = S.designSystemReport(p);
+    all("1.40.0 review 1 gone: a `_Token sources:_` entry with a blank and a note is judged whole, its ends' backticks stripped — `src/my styles/tokens.css` and `src/old styles/a.css ` gone (1.39.0's answer), `src/my styles/there.css` there (got " + js(r.gone) + ")", {
+      gone: () => js(r.gone) === js(["src/my styles/tokens.css`", "src/old styles/a.css `"]),
+    });
+  }
+
   { // no registry: no drift, nothing gone, no units table — and the 1.37 keys unchanged
     const p = project({ "src/styles/tokens.css": ":root { --a: 1px; }\n" }, null);
     const r = S.designSystemReport(p);
