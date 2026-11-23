@@ -806,7 +806,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   undeclared parts (`looseOf`: settled once an owner, the cost guard against parts × names), its re-exports under a name
   of its own or a package's (`reexported`) —, DS_EXPORT_NAMES of them, past it `more`; and its `defaultName`. `usesOf`
   reads a view: its imports (`importClause`: a default, `* as NS`, `{ a as b }`, over lines — a `type` one needs no
-  skip: what only a type names is neither rendered nor called —;
+  skip for settle: what only a type names is neither rendered nor called; TypeScript's modifier before `{` or `*` is
+  dropped (`RE_TYPE_MODIFIER`, 1.39 review 1: read as a default binding, `import type { X } from "./button"` was an import
+  of the folder's Button for the deprecated uses), `import type X from` stays unbound —;
   a `require` — `RE_REQUIRE_DECL` —, a whole one as a namespace), the tags it RENDERS (`RE_TAG_NAME`: a capitalised
   name or a member, `<a.b`, where an expression may start — never after a name, a `)` or a `]`, unless `return` /
   `yield`… (`RE_TAG_KEYWORD`) or the tag closes itself (`RE_SELF_CLOSED`: JSX text's `Press <Kbd />`) — nor a type
@@ -1016,25 +1018,35 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   (`cut`) — unless it is `idle` (no row located: settle reads nothing for it, `read` 0). Two rules, two predicates: a row named by its FILE — every namesake, RE_JSX_FILE ∪ RE_MARKUP_FILE only (an Angular
   `*.component.ts` is imported by `.ts` files: `unlocated`) — is its MODULE: a binding whose module IS the file counts
   (`byKey`, indexed: the key exactly, an index's folder, an SFC's key without its extension — the `TWIN` entry, its platform
-  infix dropped as moduleKey drops it —, `X/index.vue` by its folder; never `pointsTo`'s prefix: a folder import is not every
-  file under it), and through the follow its components (`byName`, the SFC's `defaults`); a component a file exports — its
-  own too, a result IS a component file — counts by its NAME (`nameRow`). The names a component folder's barrel gives a
+  infix dropped as moduleKey drops it, none when a script of the project has that key (`scriptHas`, 1.39 review 1: `./sheet`
+  is sheet.ts beside Sheet.vue in every resolver) —, `X/index.vue` by its folder; never `pointsTo`'s prefix: a folder import
+  is not every file under it), and through the follow its components (`byName`, the SFC's `defaults`); a component a file
+  exports — its own too, a result IS a component file — counts by its NAME (`nameRow`), and by a default import when it is
+  the file's default export (`defaults`, `byBase`, `bases` as a module row's file: List/Item.tsx's `export default
+  ListItem` — 1.39 review 1). A row NO component file locates is located by the component folders' barrels that give its
+  name, each a namesake as files are (`nameRows(r, byFile)`, the barrels after the files: vben's `export { default as
+  VbenButton } from './button.vue'` — the row the seed writes with the barrel's path —, outline's `List/index.ts` default;
+  1.39 review 1) — never a row a file locates (input-group's `export { Button }`, its own button, is no namesake of the
+  kit's: located rows' importers are 1.39's). The names a component folder's barrel gives a
   row's file or a watched name (a relative module) are watched too, DS_ALIAS_PASSES deep. A namespace's member resolves by
   its first part (`<UI.Table.Row>` is UI.Table's). A file is never its own importer. An .mdx / .vue tag with no dot that no
   import binds, whose key is a LOCATED row's, is `unbound` (`unboundAt`: the first by path). The cost guard: a text naming
   no watched name (RE_CAPITAL_WORD; a .vue file's kebab tags) and no row file's base (RE_PATH_SEGMENT) is not parsed, a
   binding naming neither is not followed — it hides an import whose binding and module name neither (`export { Table as
-  Grid }` outside a component folder's barrel, a `#ui` alias straight to `table.tsx`). The report: rows in the registry's
-  order (DS_LIST, `rowsTotal`), `use` = `dsReplacement` (quality.js — doctor's `ui-deprecated` prints the same, ONE
+  Grid }` outside a component folder's barrel, a `#ui` alias straight to `table.tsx`). The report: the rows still imported
+  first, each group in the registry's order, then the DS_LIST cut (`rowsTotal`; 1.39 review 1: past 50 rows a used one was
+  cut), `use` = `dsReplacement` (quality.js — doctor's `ui-deprecated` prints the same, ONE
   expression), DS_DEP_SHOWN files and paths by path, `unlocated`, `read` (the in-scope files seen), `limits` — the walk's
   `files` and the exports loop's `component-files` repeated, `usage-files` (settle's read stopped with a file the watch
   reads left), `deprecated-follow` (the follow's `spent.cut`: a refused read or step; settle's own cut stays silent) —, and
   the report's localized `note` (what is not seen; no import found is not unused). Never the report's `limits`,
   `truncated` or `inSync`. Not counted: a `.ts` file, a dynamic `import()`, tests / stories / mocks, a tag in a .tsx /
   .svelte / .astro file with no binding. The CLI (`dev-spec design-system`, no feature) prints it after the stale rows:
-  `cliOutput.dsDepUsesHead`, a row each (`dsDepUsesRow` — the files, `… +N` past the listed —, `dsDepUsesNone` with the
-  files read: no import found is no proof), `dsDepUsesUnbound`, `dsDepUsesUnlocated`, the note, then its limits the
-  report's own do not already say (`dsLimit`).
+  `cliOutput.dsDepUsesHead` (the rows listed that are imported, of `rowsTotal` — "at least" when every listed row is
+  imported and some are not listed), a row each (`dsDepUsesRow` — the files, `… +N` past the listed —, `dsDepUsesNone` with
+  the files read: no import found is no proof), `dsDepUsesUnbound`, `dsDepUsesUnlocated` (no component file the scan reads —
+  a component folder's index among them — gives the name), the note, then its limits the report's own do not already say
+  (`dsLimit`).
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),

@@ -122,12 +122,15 @@ every view needs).
 ### Deprecated components the code still imports
 
 While the registry marks a row `_Deprecated:_`, the project report adds `deprecatedUses`: for each such row the code holds a
-component file for, the files that still import it (`files`, the first 3 by path; `filesTotal`), its replacement as doctor
-names it (`use`) and its component files (`paths` — a namesake's importers count too); `unlocated`: rows with no .tsx / .jsx /
-.js / .vue / .svelte / .astro file (a library's, an Angular or a Blade one). A row named by its file is its **module** — any
+component file for — the rows still imported first —, the files that still import it (`files`, the first 3 by path;
+`filesTotal`), its replacement as doctor names it (`use`) and its component files (`paths` — a namesake's importers count
+too); `unlocated`: rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro
+file or a component folder's index (a library's, an Angular or a Blade one). A row named by its file is its **module** — any
 import of it counts (renamed, default, type-only, `require`, a non-component export, a namespace's member, an SFC with or
 without its extension) — and its components, followed through `export *` and a component folder's barrel; a component a file
-exports beside its own counts by its **name**. An .mdx / .vue tag no import binds is counted apart (`unbound`). Not seen (its
-`note`): a `.ts` file, a dynamic `import()`, a module only a bundler's alias or a virtual module names, a re-export under
-another name outside a component folder's index, a non-component export or a type through a barrel. **No import found is not
-unused.** Its `limits` (`usage-files`, `deprecated-follow`) never touch the report's `limits` or `inSync`.
+exports beside its own counts by its **name** (a default import too, when it is the file's default). An .mdx / .vue tag no
+import binds is counted apart (`unbound`). Not seen (its `note`): a `.ts` file, a dynamic `import()`, a module only a
+bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a tag an
+auto-import names by its folder, a non-component export or a type through a barrel. Nuxt's `<BaseCard>` is such a tag
+(`components/base/Card.vue`), `import type { X }` from a component folder such a type. **No import found is not unused.**
+Its `limits` (`usage-files`, `deprecated-follow`) never touch the report's `limits` or `inSync`.

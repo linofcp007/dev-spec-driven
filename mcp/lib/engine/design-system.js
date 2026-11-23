@@ -2778,7 +2778,9 @@ function settle(results, scripts, markups, read, places, watch) {
 //     key without its extension too, Vue CLI's `@/components/Table`, and `X/index.vue` by its folder — webpack's resolution,
 //     over-approximated as `./x` → x.ts and x/index.ts already is) —, and through what the project's files pass on, the
 //     components it exports (the follow: a barrel's `export *`, a renamed re-export, an SFC's default);
-//   - a component a file exports beside its own (`CardHeader` in `card.tsx`) counts by its NAME, through the same follow.
+//   - a component a file exports beside its own (`CardHeader` in `card.tsx`) counts by its NAME, through the same follow — and
+//     by a default import when it is the file's default export (1.39 review 1); a row no component file locates is located by
+//     the component folders' barrels that give its name (vben's `{ VbenButton }`), never a row a file locates.
 // Only a component file whose importers the scan reads is a row's file (RE_JSX_FILE ∪ RE_MARKUP_FILE: an Angular
 // `*.component.ts` is imported by `.ts` files and rendered by templates — its row is `unlocated`, as a Blade one, a library's
 // and a dropped one are). The names a component folder's barrel gives a row's file or a watched name (`export { default as
