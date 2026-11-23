@@ -29,8 +29,10 @@ SKILL.md are unchanged.
 ### Changed
 - **The files that still import a deprecated component** (`deprecatedUses`) count more: a direct import of the file a
   component folder's index renames, for every row whose index renames it (`import VbenButton from './button.vue'`, which
-  1.39 said it did not count) — unless an index also gives that export a live row's name, the usual deprecation of a
-  rename (`export { default as Button, default as OldButton }`: a file on `Button` is not counted for `OldButton`);
+  1.39 said it did not count) — unless that export also has a live row's name, its own or one an index gives it: the
+  usual deprecation of a rename (`export { default as Button, default as OldButton }`) or cal.com's `export {
+  AppleConnect as AppleCalendar }` while `AppleConnect` is a live row — a file already on the live name is not counted
+  for the alias;
   `import type X from` the row's own file (through a folder's index it still does not count);
   the row's path cell read as the stale-row check reads it — the index it names may stand beside another path, in
   backticks or as a link, and a cell naming two indexes locates the row by both. On 21 public repositories with every
@@ -96,7 +98,7 @@ ones holding those findings. The `hsl()` / `oklch()` rule: +20–75 ms a feature
 (100 `oklch()` values against 2,000 HSL tokens), ×1.12 over the 51,806 values of 104 real projects.
 
 ### Tests
-- `node mcp/test.js` 3012 assertions (was 2983), `node cli/test-cli.js` 707 (was 705). The load-sensitive cost checks
+- `node mcp/test.js` 3014 assertions (was 2983), `node cli/test-cli.js` 707 (was 705). The load-sensitive cost checks
   now count where the property is a count — a new helper, `fsCalls`, counts the file-system calls a call makes under a
   folder: the fast check's planned walk, the protected-tests cap, a glob target below level tests, a feature report over
   400 pages, and the deprecated uses' own parses (`deprecatedUses.parsed`, in-process only — never in a result); every
