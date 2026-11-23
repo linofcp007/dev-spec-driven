@@ -349,7 +349,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       block: () => block.from === "default" && names(block) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
       nested: () => nested.from === "default" && names(nested) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
       eof: () => eof.from === "default" && names(eof) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
-      unclosed: () => stray.from === "default" && names(stray) === js([["$grid-breakpoints", "(xs: 0, sm: 600px", "src/main.scss:1"]]),
+      unclosed: () => stray.from === "default" && names(stray) === js([["$grid-breakpoints", "(xs: 0, sm: 600px", "src/main.scss:1"]]) && stray.unreadTotal === 1,
       longMulti: () => longMulti.from === "default" && names(longMulti) === js([["$grid-breakpoints", "( …", "src/main.scss:1"]]),
       longOne: () => longOne.from === "default" && longOne.unreadTotal === 0,
     });
@@ -371,7 +371,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       plain: () => widths(plain) === js([320, 900]) && plain.at === "scss/custom.scss:2" && plain.partial === false,
       withIt: () => widths(withIt) === js([320, 600, 900]) && withIt.at === "scss/custom.scss:1",
       merge: () => merge.from === "default" && names(merge) === js([["$grid-breakpoints", "map-merge($grid-breakpoints, (xxxl: 1920px))", "scss/custom.scss:1"]]),
-      variable: () => variable.from === "default" && names(variable) === js([["$breakpoints", "$grid-breakpoints", "src/styles.scss:1"]]),
+      variable: () => variable.from === "default" && names(variable) === js([["$breakpoints", "$grid-breakpoints", "src/styles.scss:1"]]) && variable.unreadTotal === 1 && merge.unreadTotal === 1, // (1.39.0 review 1: each counted once — badTotal)
       unite: () => widths(unite) === js([320, 576, 740, 768, 992, 1400]) && js(unite.limits) === js([{ code: "breakpoint-widths", read: 6, count: 1, first: 1200 }]) && unite.at === "scss/_variables.scss:1",
       defaults: () => widths(defaults) === js([320, 600, 900]) && defaults.at === "scss/_variables.scss:1",
       walkOrder: () => mixed.at === "src/_variables.scss:1" && mixed.partial === true && widths(mixed) === js([320, 600, 768, 1024, 1440, 1600]),
@@ -494,6 +494,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     const run = (d, found) => { try { return T.breakpointsReport(d, found); } catch (e) { return { threw: e.name + ": " + e.message }; } };
     const s = run(dUi, sFound), t = run(dNone, tFound), cb = T.codeBreakpoints(tFound), records = sFound.files.flatMap((x) => x.maps), r0 = records[0] || { bad: [] };
     const aside = run(dNone, watch([["src/v.scss", wide.replace(");", ") !default;")], ["src/c.scss", lines("$a-breakpoints: (sm: 600px);")]]));
+    const uiSix = report("- Breakpoints: 4000 / 4100 / 4200 / 4300 / 4400 / 4500 px\n"); // (ui.md's own path: six unread, five listed — B8)
     // through the scan (three sheet candidates by name), project and feature shapes, and MCP
     const p = path.join(tmp, "proj-bp-crash");
     S.initProject(p, ["ui"], "en");
@@ -513,6 +514,7 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       code: () => cb.unread.length === 5 && cb.unreadTotal === 200000 && js(cb.unread) === js(t.unread),
       records: () => records.length === 3 * perSheet && records.every((m) => m.bad.length <= 5) && r0.bad.length === 5 && r0.badTotal === 480,
       aside: () => widths(aside) === js([320, 600]) && aside.unreadTotal === 0 && aside.at === "src/c.scss:1",
+      uiPath: () => uiSix.from === "default" && uiSix.unreadTotal === 6 && js(uiSix.unread.map((x) => x.value)) === js(["4000", "4100", "4200", "4300", "4400"]),
       scan: () => pb.from === "default" && pb.unreadTotal === SASS_TOTAL && pb.unread.length === 5 &&
         pb.unread[0].name === "$a-breakpoints.b0" && /^p\d\/custom\.scss:1$/.test(pb.unread[0].at) && js(fb) === js(pb),
       mcp: () => js(viaMcp.breakpoints) === js(pb) && js(featMcp.breakpoints) === js(fb),
