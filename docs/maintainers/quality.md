@@ -811,7 +811,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   reads a view: its imports (`importClause`: a default, `* as NS`, `{ a as b }`, over lines — a `type` one needs no
   skip for settle: what only a type names is neither rendered nor called; TypeScript's modifier before `{` or `*` is
   dropped (`RE_TYPE_MODIFIER`, 1.39 review 1: read as a default binding, `import type { X } from "./button"` was an import
-  of the folder's Button for the deprecated uses), `import type X from` stays unbound —;
+  of the folder's Button for the deprecated uses); a type-only DEFAULT import, `import type X from` (`RE_TYPE_DEFAULT`,
+  1.40 — `type from from` is a type named `from`), binds nothing settle or the follow reads (stripped, it gained a false pair
+  in 1.39): its local goes into `typed`, apart, which the deprecated uses' watch alone reads (below) —;
   a `require` — `RE_REQUIRE_DECL` —, a whole one as a namespace), the tags it RENDERS (`RE_TAG_NAME`: a capitalised
   name or a member, `<a.b`, where an expression may start — never after a name, a `)` or a `]`, unless `return` /
   `yield`… (`RE_TAG_KEYWORD`) or the tag closes itself (`RE_SELF_CLOSED`: JSX text's `Press <Kbd />`) — nor a type
@@ -1023,7 +1025,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   (`byKey`, indexed: the key exactly, an index's folder, an SFC's key without its extension — the `TWIN` entry, its platform
   infix dropped as moduleKey drops it, none when a script of the project has that key (`scriptHas`, 1.39 review 1: `./sheet`
   is sheet.ts beside Sheet.vue in every resolver) —, `X/index.vue` by its folder; never `pointsTo`'s prefix: a folder import
-  is not every file under it), and through the follow its components (`byName`, the SFC's `defaults`); a component a file
+  is not every file under it), and through the follow its components (`byName`, the SFC's `defaults`); a type-only default
+  import (usesOf's `typed` — 1.40, R3-DEP-4: shadcn-svelte's `calendar-caption.svelte` writes `import type Calendar from
+  "./calendar.svelte"` for `ComponentProps<typeof Calendar>`) counts by that module check alone (`moduleHit` with no name:
+  the row file's key, an index FILE by its folder) — never followed, so through a folder's index it does not count; never
+  as the file a barrel renames (below); filtered as a default import is, by its module's base; a component a file
   exports — its own too, a result IS a component file — counts by its NAME (`nameRow`), and by a default import when it is
   the file's default export (`defaults`, `byBase`, `bases` as a module row's file: List/Item.tsx's `export default
   ListItem` — 1.39 review 1). A row NO component file locates is located by the component folders' barrels that give its
@@ -1033,17 +1039,37 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   1.39's) —, each a namesake as files are while the barrels give the name to ONE file. To more than one (`givenTo`, of the
   names `nameRows` reads: a relative re-export's module, the barrel itself when it declares the name — `const Trigger =
   Primitive.Trigger` —, no file for another package's re-export — vben's common-ui `export { VbenButton } from
-  '@vben-core/shadcn-ui'`), only the barrel the row's path names locates it (`rowAt`: the path read as an `_Implements:_`
-  reference is, `implementsRel`, then `moduleKey` — the barrel's key or its folder's; 1.39 review 2: a kit's parts,
-  shadcn-svelte's `Content` in 31 barrels, 13 of its 889 importers the picker's). The names a component folder's barrel
+  '@vben-core/shadcn-ui'`), only a barrel the row's path names locates it (`rowAt`: the path CELL read as stalePath reads
+  it — `pathWords`, ONE reader for both (1.40, R3-DEP-3; 1.39 read it here as one reference while the unlocated line told
+  the user "the index the row's path names"): the whole cell, then each of its first DS_PATH_WORDS words, a link
+  unwrapped —, each reading as an `_Implements:_` reference is, `implementsRel`, then `moduleKey` — the barrel's key or its
+  folder's: `picker/index.ts, picker-content.svelte` and `[picker](…/picker/index.ts)` name the picker's index, a cell
+  naming two indexes locates the row by both; a superset of 1.39's key, so nothing 1.39 located moves; 1.39 review 2: a
+  kit's parts, shadcn-svelte's `Content` in 31 barrels, 13 of its 889 importers the picker's). A barrel that LOCATES a row
+  (`nameRows`' keep passed) also registers the file its relative re-export of the row's name places, under the name it has
+  there (`renames` → `renamed`: the file's module key — an SFC's twin too, `twinOf`, ONE helper with the files loop above,
+  none when a script holds the key — → {the file, the name there → the rows' keys, a Set: a file a hundred barrels rename
+  is held once a row}; `fileKeys`, the component files' keys, built once; the file's base watched, `bases`): a DIRECT
+  import of that file under that name — a default for `export { default as X } from`, `{ A }` for `export { A as X } from`
+  — is a use of every row whose barrel renames the file (1.40, R2-DEP-2 b: vben's `icon-button.vue`, `import VbenButton
+  from './button.vue'`, and cal.com's `{ AppleConnect }` — "not counted" in 1.39). An exact module check (`moduleHit`,
+  beside 1.39's `byKey` lookup), never the follow, never a name added to its index; never another export of the file, a
+  component FILE's re-export (a barrel's alone), a package's (no file placed), a kit's part the row's barrel
+  does not give. The names a component folder's barrel
   gives a row's file or a watched name (a relative module) are watched too, DS_ALIAS_PASSES deep. A namespace's member resolves by
   its first part (`<UI.Table.Row>` is UI.Table's). A file is never its own importer. An .mdx / .vue tag with no dot that no
   import binds, whose key is a LOCATED row's, is `unbound` (`unboundAt`: the first by path). The cost guard: a text naming
   no watched name (RE_CAPITAL_WORD; a .vue file's kebab tags) and no row file's base (RE_PATH_SEGMENT) is not parsed, a
   binding naming neither is not followed — it hides an import whose binding and module name neither (`export { Table as
-  Grid }` outside a component folder's barrel, a `#ui` alias straight to `table.tsx`). The report: the rows still imported
-  first, each group in the registry's order, then the DS_LIST cut (`rowsTotal`; 1.39 review 1: past 50 rows a used one was
-  cut), `use` = `dsReplacement` (quality.js — doctor's `ui-deprecated` prints the same, ONE
+  Grid }` outside a component folder's barrel, a `#ui` alias straight to `table.tsx`). Every text the watch parses itself
+  goes through `parse`, which counts it (1.40): the report's `parsed`, NOT enumerable (as classify's `tiers`) — MCP,
+  `--json` and a spread drop it, every surface 1.39's byte for byte —, in-process only, for the cost checks that count
+  instead of timing (G1 in 15-quality-design-system-cost-deprecated.js, the (b) hostile shape in
+  15-quality-design-system-deprecated.js); settle's parse is not counted. The report: the rows still imported first, then
+  those only rendered with no import (`unbound` — 1.40, R2-DEP-2 d: past DS_LIST, 1.39 listed unused rows before them:
+  Bootstrap's `BsTable` in 39 .mdx files, 15 of its 20 rendered-only rows listed, nuxt/ui's second registry 0 of 24 — now
+  20 and 24), then the rest, each group in the registry's order, then the DS_LIST cut (`rowsTotal`; 1.39 review 1: past
+  50 rows a used one was cut), `use` = `dsReplacement` (quality.js — doctor's `ui-deprecated` prints the same, ONE
   expression), DS_DEP_SHOWN files and paths by path, `unlocated`, `read` (the in-scope files seen), `limits` — the walk's
   `files` and the exports loop's `component-files` repeated, `usage-files` (settle's read stopped with a file the watch
   reads left), `deprecated-follow` (the follow's `spent.cut`: a refused read or step; settle's own cut stays silent) —, and
@@ -1051,7 +1077,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `truncated` or `inSync`. Not counted: a `.ts` file, a dynamic `import()`, tests / stories / mocks, a tag in a .tsx /
   .svelte / .astro file with no binding. The CLI (`dev-spec design-system`, no feature) prints it after the stale rows:
   `cliOutput.dsDepUsesHead` (the rows listed that are imported, of `rowsTotal` — "at least" when every listed row is
-  imported and some are not listed), a row each (`dsDepUsesRow` — the files, `… +N` past the listed —, `dsDepUsesNone` with
+  imported and some are not listed), a row each (`dsDepUsesRow` — the files, `… +N` past the listed, "(N files give that
+  name)" when its paths are more than one: 1.39's "component files of that name" was false of a row its index locates,
+  vben's two `index.ts` (1.40, R2-DEP-2 c — a wording, no field) —, `dsDepUsesNone` with
   the files read: no import found is no proof), `dsDepUsesUnbound`, `dsDepUsesUnlocated` (no component file the scan reads —
   a component folder's index among them, the one the row's path names when several give the name to different files — gives
   the name), the note, then its limits the report's own do not already say
@@ -1188,7 +1216,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     and its options (`RE_THEME`: inline, static, reference, default; a nested @theme is not read — Tailwind 4 declares its theme at the top level), read through the
     observer the token walk already carries (the token loop and the global-sheet loop, in their order: token files, then the
     sheet candidates; a sheet that is no source counts too) — never a second walk (CRIT_3 must-fix 5); an observer only for a
-    text holding `@theme` or (1.39) a .scss one holding `breakpoints` — below — (else the walk builds no event). The last
+    text holding `@theme`, (1.39) a .scss one holding `breakpoints` or (1.40) one holding `@custom-media` — below — (else
+    the walk builds no event). The last
     declaration of a name is kept; `--breakpoint-<name>: initial` drops it; `--breakpoint-*: initial` / `--*: initial` drop
     the file's earlier ones and set `reset`. `partial` = a Tailwind width read (320 or more) and no reset anywhere: Tailwind
     keeps its own five, which the engine never holds (stale data) — the default set fills the places the theme's widths
@@ -1200,8 +1229,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     (`push(...list)`: V8's arguments end near 125,000, and a hostile tree holds more — RangeError, the whole report lost).
     What is kept grows with the assignments and declarations the walk reads, one record each (as 1.38's `decls`), and
     with a map's LENGTHS, one number each — never with its unread entries past five (review 2 of 1.39, R2-BU-2: 100
-    hostile sheets of one-line maps of 230 lengths keep 3.2M numbers, +67 MB, 4.8× their twin; 1.40 backlog with the
-    records cap). What it inherits from the walk: the sheets the token scan reads —
+    hostile sheets of one-line maps of 230 lengths keep 3.2M numbers, +67 MB; 1.40, BU-1's remainder measured again and
+    left as prose: 14,100 records hold the 3.24M numbers, +66.8 MB, the reader 6.4–7.5× the no-op observer that builds the
+    same events — 1.39's 4.8× was against a twin that builds none —, the time the parse of 3.24M map entries, so a cap on
+    the records bounds the memory and not the time; no real map comes near — History → 1.40.0). What it inherits from the
+    walk: the sheets the token scan reads —
     a token file by name, a global sheet by name (`sheetRank`) up to `DS_TOKEN_READS`, where that search ends without a word
     (its own rule, review 5); a Tailwind 4 project's `@theme` is in its entry sheet (globals / app / index / tailwind.css),
     which ranks first. And (1.39, the Sass map reader) a TOP-LEVEL assignment, in a .scss sheet the same walk reads (the
@@ -1232,6 +1264,29 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     widths go into ui.md's line then.
     Not read: a map in a file the walk does not open by name (`_config.scss`, `_settings.scss`, `_vars.scss`, `core.scss`,
     `mixins.scss` — 14 of the designer's 26 sampled assignments; ui-responsive.md: paste the line), a .sass file, a .css one.
+    And (1.40, `@custom-media`), ONLY when the theme and the maps give no width (`codeBreakpoints`' fallback, `if
+    (!widths.length)` — CRIT_5 must-fix 1: every 1.39 shape whole, a reset theme, a map, their `at` and unread): a
+    TOP-LEVEL `@custom-media --name <query>` (Media Queries 5 — PostCSS, Lightning CSS) in a sheet the same walk reads,
+    lower case as every sampled file writes it (`RE_CM`; `mediaStatement` on the walk's own `statement` events of block 0
+    — no second walk) → the width EDGES its query names (`mediaEdges`): the first whole CSS px where its answer changes —
+    a lower bound (`min-width: L`, `L <= width`, `width >= L`) and a strict upper one (`width < L`) at ceil(L), an upper
+    bound (`max-width: L`, `width <= L`) and a strict lower one (`width > L`) at floor(L) + 1, so `(max-width: 767px)` and
+    `767.98px` are 768; a range either way round, `L op width op L` (the feature name in any case); rem / em × 16
+    (`lengthOf`, the unrounded length `lengthPx` makes a min edge). Each character joins the own text of ONE open group, a
+    nested group one `§` (linear). Another feature (height, orientation, `prefers-*`, `min-device-width`, an alias
+    `(--x)`) or an exact width (`width: 600px`, `width = 600px`) gives no edge and nothing unread; a width feature whose
+    value is no length (`30ch`, `calc()`, `var()`, a unitless number), an edge past 3840 or a `)` no `(` opened makes the
+    rule one `unread` {name, value: the query} (its other edges read); a rule of DS_PRELUDE characters — one the walk may
+    have cut — one unread, nothing read. Its record, a sheet's (`media`): the edges in [320, 3840] (a Set), the line of
+    the first rule with an edge, its first BP_UNREAD unread and `badTotal`; every definition counts — no per-name map (1
+    of 160 sampled files restates a name). An alias list is never the set (a team names what it reuses; the rest sit in
+    plain `@media` rules): `partial` (so a lone `--md (min-width: 768px)` captures the default set itself), `at` the
+    first rule with an edge (the files in the walk's order), its unread after the theme's and the maps'. A 1-px twin
+    stays (`(min-width: 768px)` beside `(max-width: 768px)` → 768 · 769: 48 of 153 sampled alias sets hold one — said,
+    1.41). Not read: an `@custom-media` rule in a file the walk does not open by name (99 of 160 sampled files: `media.css`
+    17, `_media-queries.css` 9, `queries.css` 7), in a `<style>` block or a CSS module, a nested rule, an alias of an
+    alias (`(--a)`: no edge, nothing unread), upper-case `@CUSTOM-MEDIA`, and, silent, a rule longer than DS_PRELUDE (it
+    arrives without its head, as a one-line Sass map) or one whose `(` its line leaves open.
   - `default` — `[320, 390, 768, 1024, 1440]`.
   The widths: 320 first (WCAG 1.4.10's reflow width — 1280 at 400 %; a narrower edge is the floor's), ascending, once each,
   `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —, past it the narrowest 5 and the widest of
@@ -1245,16 +1300,23 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   before it (History → 1.39.0, the table of 308 real themes). Not partial (ui.md, a reset theme): no fill.
   `breakpoints.limits` never feed the report's `limits`, `truncated` or `inSync`
   (they bound the widths, not the registry's comparison — CRIT_X D5d; a fixture: an in-sync project whose ui.md line is cut
-  stays in sync). Not read (or never): `@custom-media` (cut in 1.39 — History), a file named for breakpoints, a JS config
-  (Tailwind 3's `screens` — and `container.screens`, a max width, the trap), `@container`. CLI: `cliOutput.bp*` (`bpHead`,
-  `bpFrom` per source and partial, `bpUnread`, `bpLimit`), after the project's counts (`dsFound`) and after a feature's UI
-  checks.
+  stays in sync). Not read (or never): a file named for breakpoints, a JS config (Tailwind 3's `screens` — and
+  `container.screens`, a max width, the trap; designed again in 1.40 and cut again: History → 1.40.0), `@container`, an
+  `@custom-media` rule beside a theme or a map that gives a width. CLI: `cliOutput.bp*` (`bpHead`, `bpFrom` per source and
+  partial — 1.40: `bpFrom.partial` reworded, true of a theme and an alias list alike: "declared in X, then the review's
+  default set where room is left — the project's other widths, its framework's own or a plain media query's, are not
+  read"; 1.39's "what X adds to its framework's own" was false of an alias list —, `bpUnread`, `bpLimit`), after the
+  project's counts (`dsFound`) and after a feature's UI checks.
 - **A stale row** (`stalePath`) names a CODE FILE OF THE PROJECT that is gone. A reading counts only when its last segment
   has a file extension (`src/components/Card` may be Card.tsx or a folder) that is no document's or image's (`RE_DOC_EXT`: a
   note cites README.md) and its FIRST segment is on disk — `next/link`, `primereact/button`, `~/components/Button.vue`, a
   site, prose and `n/a (custom)` start nowhere in the project. The whole cell on disk → there (a path may hold a blank);
   else its words, each a reading (a markdown link's target, a path beside a note): ONE that is there → there, gone when a
-  word names a file and none is (`src/components/Gone.tsx (see README.md)`); no word names one → the whole cell.
+  word names a file and none is (`src/components/Gone.tsx (see README.md)`); no word names one → the whole cell. The
+  readings are `pathWords(cell)` (1.40, R3-DEP-3 — ONE reader of the cell, the deprecated uses' `rowAt` its other caller):
+  the whole cell first, then its first DS_PATH_WORDS words (a cost guard: a report on 500 rows of 33-word cells ×1.55
+  without it), a link unwrapped; a cell is the registry reader's (DS_CELL_MAX characters, its ends' backticks stripped by
+  `dsCell`), so 1.39's own 400-character cut and backtick strip were dead and went (the mutation pass of 1.40).
   `projectPath` decides on the TEXT before any fs call (a network path, `..` out, an absolute path elsewhere, a glob:
   null); `onDisk` stops at a link. **Every doubt reads as "not judged"** — a wrong "gone" sends a team to fix a registry
   that is right: a root-level file, a path whose first folder is gone as a whole, `_shared/` (`dsCell` drops the
@@ -1327,9 +1389,22 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   stays the CEILING — the round trip only narrows 1.38's rule, never widens it: integer HSL is NOT within 0.011 of every
   hex (479 of the 16.7M hexes are farther from their own integer HSL: `#020200` = `hsl(60 100% 0%)`, black, at 0.084 —
   OKLab's L is steep near black —, saturated yellows to 0.013; and 76 of the 3.56M integer HSL tokens' painted hexes, all
-  at l 1–2 %: `hsl(236 93% 1%)` paints `#000005` at 0.0136), and those stay what 1.38 said. HSL against oklab / oklch keeps
-  the 0.011 alone — so Tailwind 4's `oklch()` zinc IS shadcn's `hsl()` neutral (0.0082 apart — as far as zinc's hex, which
-  the round trip keeps `near`): said, ui-code-scan.md. `near`
+  at l 1–2 %: `hsl(236 93% 1%)` paints `#000005` at 0.0136), and those stay what 1.38 said. An HSL side against an oklab /
+  oklch one (1.40, R2-T2 — `meets`, asked both orders by `sameAt`) is the same colour, within the 0.011, only when (1)
+  their WRITTEN roundings meet: the HSL's box — h, s and l each as written, minus and plus half its last digit, 27 points
+  painted to OKLab, the centre first (`hslImage`, built ONCE a parsed colour: a scale's token keeps it across the report's
+  rows; a point past s / l 0–100 extrapolates, never clamped as CSS would — never a verdict apart, measured), its ranges
+  (`okRange`: L, a, b, the chroma, the hue's span round the circle) — meets the other's box channel by channel
+  (`boxMeets`: oklab's L, a, b; oklch's L, chroma and hue, the hue asked only where neither side can be achromatic — a
+  chroma within DS_EXACT, a written chroma whose half reaches 0 —, within the span plus the hue's half; parseColor keeps
+  an oklab / oklch's `box`: its channels as written, each one's half in its own scale, a % one's too, the hue in degrees);
+  or (2) one paints the other at 8 bits: the oklab / oklch's pixel (`rgbFromOk`, then `paint8`: clamped, 8 bits a channel)
+  round-trips the HSL (1.38's `roundTrip`), or its box holds the HSL's own pixel. So Tailwind 4's zinc-900 `oklch(21%
+  0.006 285.885)` is no longer shadcn's `hsl(0 0% 9%)` neutral (0.0082 apart, a bluish grey against a neutral one — as
+  far as zinc's hex, which the round trip keeps `near` too): `near`; the neutral's own `oklch(20.5% 0 0)` is its token,
+  zinc's own hex's HSL `hsl(240 5.9% 10%)` is zinc-900's, and 1.38's `#eeeff2` written as `oklch(0.952 0.004 271.369)` is
+  `hsl(220 14% 94%)`. The 0.011 stays the ceiling, so a `token` can only become `near` (History → 1.40.0: 0 of 240,000
+  same-source pairs lost; 9 rows move on 104 real projects): said, ui-code-scan.md. `near`
   (a hint, `{token, delta}`): the NEAREST token within the JND (0.02 ΔEOK), never the first. hwb / lab / lch / `color()` / a
   named colour are not parsed: the same TEXT names the token (1.37's rule, `colorKey`, moved here; a hex is always parsed
   now, so its 3-digit spelling-out went). FONTS: a `font-family` STACK (`fontStackOf`: its LAST family a generic one — CSS
@@ -1347,7 +1422,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   A kind is READ only when the scale holds such a token (fonts: a registry row's stack; motion: a duration or easing token,
   the registry's or the code's): `counts.font` / `counts.motion` exist only then — without them the report is 1.37's shape.
   SIZES stay raw, never judged (DECISIONS cut size families: on every real shape checked — shadcn's calc() radii, Tailwind's
-  base `--spacing`, Bootstrap's named Sass, Breeze, Tailwind 3's JS config — they decided nothing). Each new kind has its OWN
+  base `--spacing`, Bootstrap's named Sass, Breeze, Tailwind 3's JS config — they decided nothing; a size `token` designed
+  again in 1.40 and cut again: 0 judgments on the six kits, 98 % of its in-package rows from two apps, and 22.6 % of its rows
+  name a token another package of the monorepo declares — History → 1.40.0). Motion off / nearest too (1.40: 273 of 427
+  rows off a scale of three durations or more, 108 of them loop periods, 38 ties). Each new kind has its OWN
   per-file bound, `DS_RAW_PER_FILE` values (a transition-heavy sheet never hides its colours — CRIT_2 must-fix 5), said in
   the report's `limits` (`font-values` / `motion-values`, the first file it cut); with kinds the early exit waits until
   each kind is past its bound. Only the LISTED rows and groups are judged (≤ 100 × the scale: no window, no sort).
@@ -1399,8 +1477,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   The project report's `unitsTable` {rows, unread, past} | null —
   never in `inSync`. On the real corpora with a rem / px table: shadcn's typeset.css `em` paddings, Bootstrap's
   `border-radius: 50%`, Breeze's `rounded-[10px]` — each true to the convention it was given (why it is a report).
-- **DESIGN.md: deferred again** (1.38, and 1.39 — DECISIONS, CRIT_4: it changed again on 2026-11-17, and read as the
-  registry's it renamed tokens 1.38 reports) — the spec is `version: alpha` and changed after 1.37's design (a `motion` group,
+- **DESIGN.md: deferred again** (1.38, 1.39 and 1.40 — DECISIONS, CRIT_4: it changed again on 2026-11-17, and read as the
+  registry's it renamed tokens 1.38 reports; 1.40, CRIT_6: its `main` unchanged since, an open change to a value per mode,
+  #128, and read in the registry's place it renames 916 tokens of 1.39's on 23 of 24 real projects holding both) — the
+  spec is `version: alpha` and changed after 1.37's design (a `motion` group,
   nested colour groups, dimensions px / em / rem only); a YAML subset reader is a review series of its own. Its own CLI
   exports what is read today: `npx @google/design.md export --format css-tailwind DESIGN.md > theme.css` (a token file by
   name) or DTCG JSON.
@@ -3211,6 +3291,152 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   without the final slice: a fixture of six ui.md unread —, the record bound off, `badTotal` ignored or counted for a
   set-aside map, a single-entry record's `badTotal` left 0 — two fixtures gained `unreadTotal`), 9 on the two wordings
   (EN / PT / ES each, the header bound's argument, the plural, the pt-BR clause start), 4 prose clauses and pins.
+- **1.40.0** (item 6 of the owner's 1.40 list, "the scale, round 3" — chain E, cut to R2-T2 as CRIT_6 and the DECISIONS
+  ruled) — 1.39 had cut R2-T2 (`token` lost on 21–82 % of real same-source pairs) and kept the 0.011 alone for an HSL side
+  against oklab / oklch, so Tailwind 4's zinc-900 `oklch(21% 0.006 285.885)` was shadcn's `hsl(0 0% 9%)` neutral. ITEM_6
+  designed the written roundings channel by channel (0 of 120,000 same-source pairs lost, where 1.39's cut design lost
+  30–86 %); CRIT_6 found it a round trip asked ONE way: on the painted path — an HSL token painted at 8 bits, that hex
+  written as oklch / oklab — the box alone kept 17 % (1-dp HSL, the Tailwind / shadcn formats), 69 % (integers), 59 % / 96 %
+  (oklab), and 94 % of the pairs it lost (15,563 of 16,607) render the SAME 8-bit pixel — 1.38 review 2's `#eeeff2` among
+  them, `token` as the hex, `near` as `oklch(0.952 0.004 271.369)` —; the reverse path (a Tailwind 4 oklch token's hex
+  written as 1-dp HSL) kept 121 of 192. The box or the 8-bit paint, both ways, keeps 100 % on all four paths — built so
+  (Raw values against the scale above: `meets`, `boxMeets`, `hslImage`, `okRange`, `rgbFromOk`, `paint8`), with no bound
+  on the candidates asked (the designed top four hid 24 of its own fixture's 29 rows and nothing real — real rows ask ≤ 4
+  — to save ≤ 66 ms) and no timing guard: the image built once a token is checked, the same object after three judges
+  (CRIT_6: the two designed ratios timed different code paths, 0.68–1.06 run to run). Against 1.39.0: same-source pairs
+  lost 0 of 240,000; shadcn's legacy pairs 287 of 288 kept (slate-950's hue typo the one left); on 104 real projects 9 rows
+  move, `token` → `near`, each two different colours (arumanis ×7 — `hsl(60 4.8% 95.9%)` against a bluish `oklch(0.968
+  0.007 247.896)` —, blazordocs ×2); drift byte-identical (`tokenDrift` parses through the same parseColor). FINISH'S
+  VALUES move too: its raw top rows are judged. Cost: the hostile shape (100 oklch rows × 2,000 HSL tokens within 0.011)
+  +20–69 ms a feature report, +26–75 ms a finish, Windows and Linux; all 51,806 values of the 104 clones judged 221 →
+  247 ms (×1.12), the worst clone +13.7 ms. Out as dead, measured first (0 verdicts apart over 240,000 random same-source
+  pairs, the palettes and an edge grid of s 0 / 100 × l 0–100): `okFromRgb`'s clamp (every parsed triple is clamped
+  already; the image's points past s / l 0–100 extrapolate), the image's own clamp, the box's epsilons. Not built (the
+  narrower reading): `none` as a powerless oklch hue — with a written chroma whose half reaches 0 (Tailwind's `oklch(20.5%
+  0 none)`) the hue is moot anyway. Mutation pass (the list before the code, %TEMP%/dsd-140-e/MUTATIONS.md): 37 / 37; 1.38's
+  and 1.39's colour mutants replayed whole, 80 — 70 killed at first; the survivors that survive on 1.39.0 too got fixtures:
+  an alpha in an angle's unit, a hue in `%`, a channel in `deg` are no colour; within one notation 0.0005 apart is `near`
+  (DS_EXACT, not the 0.001); `hsl(0 20.0% 25.0%)`'s red is 76.50000000000001 in floats, so `#4c3333` needs `roundTrip`'s
+  1e-9 (0.1 × 255 is 25.5 exactly: `#191919`, 1.38's example, never did); the unparsed text lower-cased, its blanks out; a
+  colour's group keeps its alpha — 78 / 80 (C63, `tokenDrift`'s `p || q` against `p && q`, equivalent; C8, the clamp,
+  deleted). CUT AGAIN, with CRIT_6's fresh numbers: size `token` — 0 judgments on the six kits, 98 % of its in-package rows
+  from two apps (opendesk's admin / web and GitAscii, 1,989 of 2,028), and 591 of 2,619 rows (22.6 %) name a token another
+  package declares (opendesk's third Tailwind 4 entry, `site/`, where Tailwind's defaults hold: `text-[14px] → --text-base`
+  is 16px there — following the hint changes the rendering), so the package scope its design dropped would be owed; its
+  prototype's in-file reset was quadratic (938 against 32 ms) —; DESIGN.md (its `main` unchanged since 2026-11-17, #128's
+  value per mode open; read in the registry's place it renames 916 of 1.39's tokens on 23 of 24 projects holding both);
+  motion off / nearest (20 of 96 sampled repos hold three durations or more: 427 rows, 273 off, 108 of them loop periods,
+  38 ties — `off` alone is the row without its `→`, which 1.38 prints).
+- **1.40.0** (item 5 of the owner's 1.40 list, "Breakpoints and states, round 3" — chain B, as CRIT_5 and the DECISIONS cut
+  it) — `@custom-media`, cut in 1.39 (an alias list, not a set: a lone `--md` would capture [320, 768] where 1.38 captured
+  five), came back: that number predates 1.39's BS-2 fill — read as `partial`, a lone `--md` captures the default set
+  itself (ITEM_5: of 181 files holding one, 160 give a width — 21 exactly one, the median 3). CRIT_5's must-fix 1 made it a
+  FALLBACK (Breakpoints above): read only when the theme and the maps give no width — the designed union displaced declared
+  widths (a theme restating Tailwind's five beside two aliases lost its 1024 and 1280; aisep-workbench's 681 twin displaced
+  390) and filled a reset theme or a map 1.39 reports whole —, so every shape 1.39 read from code is byte-identical. The
+  evidence, restated (must-fix 3): 0 sets capture fewer layouts than 1.39 by count (36 clones' live edges, the critic's 160
+  files); but 20 of the 160 (6 of the 61 the scan reads by name, 4 of 20 apps on their live edges) lose a layout 1.39's
+  default set hit — the narrowest-five cut takes the laptop band (portafolio-ana drops 992 and 1200 for 375 and 411) —;
+  78 of 129 width aliases in 22 apps are used nowhere (9 apps use none: scottspence.com, Tailwind 4 with no
+  `--breakpoint-xs`, so its 7 `xs:` classes generate nothing, reports a dead 475 and leaves its live 1280, Tailwind's `xl`,
+  to the limit line); 48 of 153 alias sets keep a 1-px twin (must-fix 5's merge, the droppable last commit, not built —
+  said, 1.41). 17 of 20 apps 1.39 reported `default` now report `from: code`, `partial` (CRIT_5). `cliOutput.bpFrom.partial`
+  reworded in EN / PT / ES — its CLI check had compared the printed line with the same i18n function, so a PT / ES phrase
+  put back to 1.39's passed: now a property in every language and pt-BR (it opens with the `code` phrase and names the
+  media queries not read). Cost: K4a (an alias list against a theme of the same size) cut — its sides did different work
+  (a Map record per name parsed, against a Set of ≤ 3,000 widths), its ratio moved 0.60–0.88 run to run and passed a
+  quadratic-keeping mutant at 0.81; K4b rescaled to the method (testing.md): ONE query of 848 nested groups against sixteen
+  of 53 — the same 1,936 characters and groups —, 600 calls a side (≥ 150 ms in a container), interleaved, ≤ 3× with no
+  absolute slack — linear 0.53–1.07× (Windows, node:22, node:24-alpine), the quadratic mutants 8.5–9.2×. Real trees
+  0.87–1.18× (Bootstrap, holding no alias, 1.18: noise). ui-responsive.md +335 B (11,835 / 12,000). Mutation pass (the
+  list before the code, %TEMP%/dsd-140-b/MUTATIONS.md): 45 / 45 — its two survivors given fixtures (the reworded phrase as
+  a property; `(WIDTH >= 64REM)` → 1024). CUT AGAIN, with ITEM_5 / CRIT_5's fresh numbers: Tailwind 3's `screens` (291 of
+  300 configs hold `screens`, 145 only `container.screens`, 157 container keys; a key path separates the trap, but it costs
+  a new read, a JS tokenizer that gives up on a `/`, the value forms and a version gate — 4 of 105 configs sit in Tailwind
+  4 projects — for 35 % of the configs; the pasted line stays the remedy); BS-3 (`TBD` / `—` / `✓` / `?` / `N/A` cells read
+  `filled`, and ui-states already warns `open` on each: the warn the principle asks for exists, a refusal adds only
+  `--force`; its key would reach 45 of the corpus's 56 row keys); BS-4 (a `Data` 8 + `Interaction` 8 split and a desktop-8
+  / mobile-other-8 pair are the same bytes to the engine: a grouping that silences one silences the other); R2-BS-2's
+  engine change (1.39 misreads one shape — S8's `· 1200 px max content width` —, each syntactic narrowing 4, 2 or 1 others);
+  the `uiStates` stamp, a third time (nothing to protect without BS-3 — gates-and-approvals.md → History); BU-1's records
+  cap (Breakpoints above: the time is the parse of the map entries, which a records cap leaves).
+- **1.40.0** (item 2 of the owner's 1.40 list, "deprecated uses, round 2", with item 1's (c) — chain A, as CRIT_2 and the
+  DECISIONS cut it) — what 1.39's reviews left (above: "Left for 1.40"), designed on fresh numbers (ITEM_2: 21 shallow
+  clones, every component the scan names marked in registries of ≤ 490 rows, every (row, importer) pair diffed against
+  1.39.0 both ways). Built, each its own commit (Deprecated uses above): `parsed` first (item 1's (c): the pages the watch
+  parses itself, non-enumerable — `--json` byte-identical; its fixture's `table.tsx` holds no default export, CRIT_1
+  must-fix 8: with one, settle parses every Table page and the fixture's 4-against-5 vanishes); R3-DEP-3 (`pathWords`,
+  stalePath's fixtures unchanged — 0 pairs on the clones by construction: the seed writes one path); R2-DEP-2 (b) (a direct
+  import of the file a locating barrel renames: +5 / −0 — vben 4, `import VbenButton from './button.vue'`, `import Button`
+  / VbenButtonGroup / Tooltip from their files; cal.com 1, `{ AppleConnect }` — each read: the deprecated component's
+  own file imported directly); (c) as one neutral `dsDepUsesRow` wording, no field (CRIT_2: the defect was one CLI word —
+  the designed byIndex field, a result key and a tooling clause, cut); (d) the three row groups; R3-DEP-4 last
+  (`import type X from` the row's file: shadcn-svelte +2, its two calendar captions; its gate the settle differential —
+  the no-registry scanCode JSON byte-identical to 1.39.0 on the 21 clones). In all, against 1.39.0: +7 / −0 (vben 4,
+  cal.com 1, shadcn-svelte 2); paths, `unlocated`, `unbound`, `read` and `limits` identical; the watch's own parses
+  unchanged on every real tree. CUT AGAIN: R2-DEP-2 (a), a located row's namesake an index gives (cal.com's atoms `Booker`,
+  the case 1.39 review 2 left) — its +4 on cal.com were 4 of 4 not the row's component (TroubleShooter is the platform
+  wrapper's own, never apps/web's file; two `@calcom/ui` Radix `Group`s renamed RadioGroup, where the row is coss-ui's
+  Base UI one nothing imports; Booker's wrapper is one of the 2 files 1.39 already lists), and on the kit hostiles a
+  case-folded NAME match on an export the code never ties to the row's file — +3 false (a Svelte kit's `Header`), +2 (a
+  React kit's `Item`): R2-DEP-1's class back for located rows; 1.39's ruling and prose stand. R3-DEP-1 (one file an index
+  passes on from another index's folder counts as two) and R3-DEP-2 (an index's alias import places no file): the
+  reviewer's fixes move 0 pairs on the 21 trees, only constructed shapes — their CHANGELOG clauses stand. Cost (CRIT_2:
+  A/A alone spans 0.63–1.98× there, so the wall clock decides nothing; the load-free yardstick — the watch's own parses and
+  `seeUses` calls — identical on 11 tree × row cases; every real tree within its A/A band, Windows and node:22): (b)'s
+  hostile tree — 100 component folders' indexes renaming 500 files to 490 marked names, 2,000 pages importing them
+  directly, ~9,800 true pairs 1.39.0 missed entirely — 1.16–1.26× Windows, 1.41–1.51× Linux (+310–350 ms): `parsed`
+  2,000, the pages that hold those pairs, plus registering 100 × 490 barrel names (≈ 1.11× alone); the owner's ruling:
+  work bought by findings on a constructed tree, accepted and stated (DECISIONS 6's bar is the real trees', all within).
+  The `renamed` Set is a heap guard there (48.9 MB; 60.8 MB as a list). ui-code-scan.md +89 B (R3-DEP-4's exception out,
+  −25 B). Mutation pass (the list before the code, %TEMP%/dsd-140-a/MUTATIONS.md): 32 mutants, 29 killed (two fixtures
+  added in the pass: the renamed file importing itself — never its own importer —, a type-only default import of it — the
+  module check alone); the three left were 1.39's lines `pathWords` took from stalePath — the 400-character cut and the
+  backtick strip, dead (every cell is the registry reader's) and deleted, and DS_PATH_WORDS, a cost guard, timed with and
+  without (×1.55, A/A 0.97). CRIT_2's own mutants: M1 (the SFC twin when a script holds its key), M2 (the whole cell's key
+  dropped), M8 ((b) for a component file's re-export) got fixtures; M4's line (the renamed export's name watched) and
+  M5's guard (`type from from`) dropped; M6 (the type-only loop's base filter) pinned by a consistency pair, a value and a
+  type-only default import through one alias.
+- **1.40.0, the release as merged** (the docs pass, after F0 and the five chains merged T → C → E → B → A, then the owner's
+  G1 count; this summary is the 1.40 round's for every area — the UI checks' own entry below, testing.md's for the tests)
+  — the owner chose "everything, the cuts included": every 1.40 backlog entry (1.39's cut list and its reviews' LOWs)
+  designed again and critiqued on FRESH numbers — ~19 mechanisms designed, ~10 built (1.39 built ~15 of ~29) —, to 1.39's
+  bar: nothing 1.39.0 judged right is silenced, nothing it passed is refused — 1.40 adds no refusal, and no `limits` code,
+  marker, corpus key, doctor check or template. BUILT: `fsCalls` (F0) and the cost checks counted where the property is a
+  count, the cost file split (T — testing.md → History); R3-UI-1 (C — UI checks); R2-T2 (E), `@custom-media` as a fallback
+  (B) and the deprecated uses' round 2 — `parsed`, R3-DEP-3, R2-DEP-2 (b), (c) as a wording, (d), R3-DEP-4 (A) — above;
+  G1's `asks` counted (the owner, aac54623: the watch parses the 275 Table pages settle did not, 300 − 25, and every fs
+  call under the pages equals the identical tree's with no marker, 600 / 600; a watch parsing every page — the case the
+  1.39 clock saw at 1.05× on Windows — fails both, 610 and 660). CUT AGAIN, each with the fresh number that cut it (the
+  entries above and below): size `token` (0 judgments on the six kits; 22.6 % of its rows cross a package), DESIGN.md (it
+  renames 1.39's tokens on 23 of 24 projects), motion off / nearest (108 of 273 off rows loop periods); Tailwind 3's
+  `screens` (four mechanisms for 35 % of the configs), BS-3 (the warn exists), BS-4 (the split and its trap the same
+  bytes), R2-BS-2 (each narrowing misreads more), the `uiStates` stamp (a third time), BU-1's records cap (the time is the
+  parse); R2-DEP-2 (a) (4 of 4 not the row's component), the byIndex field (a wording instead), R3-DEP-1 and R3-DEP-2 (0
+  pairs on 21 trees); D1 (−144 true findings in one real repo), A2 (a true and a doubtful shape flip together),
+  `RE_TW_TEXT_ANY` narrowed (no real conditional `@apply … text-`), D2 (0 of 103 real blocks), D3 (1 of 4,026 candidates,
+  Svelte's `:global()`), D5 (0 of 15 repos), UP-6 (it would hide true removals: 9 certain of 16 read), S9's
+  mechanism (15 of its 18 removals false), `width-viewport` (no syntax decides), the floor-zoom capture (two new
+  definitions in pages with 282 and 4 B left), S12 (298 code files would turn tests), UC-1 (0 verdicts), the marker
+  spellings (no public design-system.md holds a marker); the injectable bounds table (testing.md). The owner's two rulings:
+  R2-UD-1 — the reduced-motion script search keeps its 2,000-script bound (`DS_MOTION_SCRIPTS`; UI checks: naive-ui ×1.48
+  on Windows, ×1.03 on node:22, +412 ms at the bound on Windows; a 500 bound would change no fact on the 38 measured trees
+  — CRIT_4 struck ITEM_4's "500 would cut three real first mentions") —; and (b)'s hostile tree (above, +310–350 ms on
+  Linux) accepted as work bought by findings. Budgets: ui-code-scan.md 31,582 → 31,755 / 32,000 (no cap move, no split —
+  CRIT_X D1: A +89, E +82, the docs pass +2), ui-responsive.md 11,500 → 11,835 / 12,000; tools/list, SKILL.md,
+  ui-design-patterns.md, ui-review.md and spec-ui-reviewer.md +0. FINISH'S VALUES move twice: R2-T2's `token` → `near` on
+  its raw top rows, and R3-UI-1's keyword size, which silences a bare `text-[…vw]` in its file (no real file holds both).
+  THE MERGED TREE'S COST (CRIT_X's total.js re-run, Windows, no agent running; a fresh process per sample, 1.39.0 / an A/A
+  copy / 1.40 interleaved, median of 4; P = the project report with the UI pass and no registry, Pall = every component
+  marked `_Deprecated:_` in ≤ 490 rows, F = the feature report's scan, N = finish's): P / Pall — shadcn-ui 0.99× / 1.05×
+  (+273 ms at 3,562 views) · cal.com 1.45× (+850 ms) / 1.24× (+618 ms), re-measured as noise — fresh processes, median of
+  8: 0.96× (A/A 0.94) / 1.18× (A/A 1.02); both engines in one process, median of 9: 0.98× (A/A 0.95) / 1.05× (A/A 1.15);
+  1.39.0 itself moved 1,901 → 3,440 ms between runs — · vben 1.09× / 1.12× (+210 ms) · mantine 0.86× / 1.00× · nuxt/ui
+  1.02× / 1.09× · Bootstrap 1.00× / 1.01× · Starlight 1.00× / 1.03× · taxonomy 0.95× / 1.03× · motion-primitives 0.96× /
+  0.97× · phanpy 1.09× / 1.07× · scottspence.com 1.11× / 1.06× · syntaxfm 1.11× / 0.92× (~1 ms); F — shadcn-ui 1.18× (+30
+  ms), vben 0.90×, Starlight 0.90×, phanpy 1.05×, scottspence.com 0.94×; N — shadcn-ui 1.02×, vben 1.09× (+16 ms): within
+  DECISIONS 6's bar (≤ 1.25× at 700 view files or more, ≤ +150 ms below; the feature report and finish unchanged on real
+  trees). Merged, before the docs pass: MCP 2999, CLI 707.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four

@@ -177,7 +177,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   (1) **counts before it times** — what the regression does to the file system is a count: `fsCalls(under, fn)` (every file
   receives it — scripts/test-runner.js) returns the fs calls a synchronous `fn` makes under a folder; assert an equality or a
   difference with a non-zero side, never a pinned total (the totals differ by platform), and count under the project root, not
-  one folder of it (FC2-3's log read again per planned file sits outside `src/`). It times only what has no count, and its
+  one folder of it (FC2-3's log read again per planned file sits outside `src/`); what the engine does is a count where it
+  keeps one — the deprecated uses' watch counts the pages it parses itself, `deprecatedUses.parsed` (not enumerable:
+  in-process only, never in a result's JSON), so G1's `asks` asserts that count and the fs calls under the pages, no clock
+  (15-quality-design-system-cost-deprecated.js). It times only what has no count, and its
   comment says what the bound hides (FC2-3's 2.5× backstop passes a 2× quadratic over the planned set that makes no fs call);
   (2) does **the same work on both sides** (1.39's G1 yardstick skipped the watch's parse: 1.02× Windows, 1.7–1.8× Linux);
   (3) **interleaves the sides** — a, b, a, b, …, each side's median of 5 (`pair`, 15-quality-design-system-cost.js) —, never a
@@ -359,11 +362,16 @@ How the rules above came to be — grep a release here.
   rebuilt per own file, no fs call: 1.6–2.2× on node 22, 0.8–1.5× on Windows); one call a side (~40 ms) crossed even 2.5
   (2.76, 1 of 36 alpine). Left as found, their numbers for 1.41: `clickNest` / `clickControl` cost 2–2.6× plain JSX themselves
   and still reach the 3× bound under load (both tries 3.06 / 3.14 once on node 22 with two containers at once; more calls a side
-  did not steady them); G1's `asks` (1.39's yardstick, ~1.2× typical) missed both tries once on node:24-alpine (1.63 / 1.64 — 1
-  of 16 probe samples over 1.5, the 1.39 sampling 0 of 16); twelve timing assertions outside `remeasure`; the three
+  did not steady them); twelve timing assertions outside `remeasure`; the three
   different-work checks (reexports :434, usage :513, aliases :490), which passed every Linux run (a first try missed on
   node:24-alpine for two of them, the retry held); the read-ahead pool's start against a read in sequence (+600 ms: the start
   took 650–1,330 ms in two containers at once; it held one container at a time). The cost file split by topic (The suites): its two halves took 133 and
   174 s in the default-jobs Windows run — one file, it was the critical path; that run's wall was 317 s, its slowest chains
   15-quality-design-system-usage (209 s) and 10-guards-protected-tests (194 s). The injectable bounds table was cut again (−11 to
-  −12 s Windows, −2 to −3 s Linux, off the critical path).
+  −12 s Windows, −2 to −3 s Linux, off the critical path). G1's `asks`, resampled on 1.39's yardstick (~1.2× typical), still
+  missed both tries once on node:24-alpine (1.63 / 1.64 — 1 of 16 probe samples over 1.5, the 1.39 sampling 0 of 16) while
+  the property is two counts, so once the merged tree gave the report `deprecatedUses.parsed` it is COUNTED, no clock (the
+  owner, after the merges): with settle asking a candidate on 50 pages, the watch parses the 275 Table pages settle did not
+  (300 − 25), and every fs call under the pages equals the identical tree's with no marker (600 / 600); a watch parsing every
+  page — the case the 1.39 clock saw at 1.05× on Windows — fails both (610, 660). `nothing` keeps its clock (0.67–0.79×
+  everywhere) and counts its 300.

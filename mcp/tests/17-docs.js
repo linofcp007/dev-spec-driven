@@ -2019,6 +2019,91 @@ exports.run = async ({
     for (const [label, check] of rows) all("1.39.0 Z docs — " + label + (label.includes("every key the report returns") ? " (got " + js({ keys: dep.keys, sane: dep.sane, missed: dep.keys.filter((k) => !depClause.includes(tick(k))) }) + ")" : ""), { holds: check });
   }
 
+  { // 1.40.0 Z — the docs pass: the clauses it wrote or made true over the merged chains — ui-code-scan.md's index sentence
+    // (R3-DEP-3's any word, R2-DEP-2 b's renamed file), quality.md's current rules (R2-T2's examples, the `@custom-media` edges
+    // and what is not read, the non-enumerable `parsed`), testing.md's rule 1, tasks-and-evidence.md's two counted checks and
+    // gates-and-approvals.md's stamp line. Each example runs through the engine; each counted check is read from its test's
+    // source. ONE assertion per clause: the docs pass's mutation pass drops each in a copy and its row fails (%TEMP%/dsd-140-z-mut).
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const js = (v) => JSON.stringify(v);
+    const note = (f) => ws(raw("docs", "maintainers", f));
+    const QM = note("quality.md"), TM = note("testing.md"), TE = note("tasks-and-evidence.md"), GA = note("gates-and-approvals.md");
+    const UCS = ws(raw("skills", "dev-spec-driven", "references", "ui-code-scan.md"));
+    const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
+    const put = (p, rel, text) => { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), text); };
+    const project = (tag, files) => { const p = path.join(tmp, "z140-" + tag); S.initProject(p, ["ui"], "en"); for (const [rel, text] of Object.entries(files)) put(p, rel, text); return p; };
+    const L = (lines) => lines.join("\n") + "\n";
+    const REG = (rows) => ({ ".specs/steering/design-system.md": "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n" + rows.join("\n") + "\n" });
+    const usesOf = (p) => S.designSystemReport(p).deprecatedUses || { rows: [] };
+    const rowOf = (d, name) => d.rows.find((x) => x.name === name) || { files: [], filesTotal: 0 };
+    // a kit of two component folders whose indexes give `Content` to different files, a page importing each kit as a namespace
+    const K = "src/lib/components/ui/";
+    const kit = {};
+    for (const c of ["card", "picker"]) {
+      kit[K + c + "/" + c + "-content.svelte"] = L(["<div><slot /></div>"]);
+      kit[K + c + "/index.ts"] = L(["import Content from \"./" + c + "-content.svelte\";", "export { Content };"]);
+      kit["src/routes/" + c + "/+page.svelte"] = L(["<script lang=\"ts\">", "  import * as Kit from '../../lib/components/ui/" + c + "';", "</script>", "<Kit.Content />"]);
+    }
+    kit["package.json"] = js({ name: "z140-kit" });
+    const cell = (tag, text) => rowOf(usesOf(project("cell-" + tag, Object.assign(REG(["| Content | " + text + " |  | _Deprecated_ |"]), kit))), "Content");
+    const words = cell("words", "`" + K + "picker/index.ts`, `" + K + "picker/picker-content.svelte`"), two = cell("two", K + "picker/index.ts " + K + "card/index.ts");
+    // vben's shape: a component folder's index renames button.vue; icon-button.vue imports that file directly
+    const B = "src/components/button/";
+    const renamed = rowOf(usesOf(project("renamed", Object.assign(REG(["| VbenButton | " + B + "index.ts |  | _Deprecated_ |"]), {
+      "package.json": js({ name: "z140-renamed" }), [B + "button.vue"]: L(["<template><button /></template>"]),
+      [B + "index.ts"]: L(["export { default as VbenButton } from './button.vue';"]),
+      [B + "icon-button.vue"]: L(["<script setup lang=\"ts\">", "import VbenButton from './button.vue';", "</script>", "<template><VbenButton /></template>"]) }))), "VbenButton");
+    const judge = (value, tok) => { const r = T.judgeRaw({ kind: "color", value }, T.tokenScale([{ name: "--a", value: tok }], [])); return r.token ? "token" : r.near ? "near" : "none"; };
+    const both = (x, y) => judge(x, y) + "|" + judge(y, x);
+    const bp = (tag, css) => { const b = S.designSystemReport(project("bp-" + tag, { "src/index.css": css })).breakpoints; return [b.from, b.partial, b.widths.join(","), b.unreadTotal].join(":"); };
+    const DEF = "320,390,768,1024,1440";
+    const parsed = (() => {
+      const d = usesOf(project("parsed", Object.assign(REG(["| Table | src/components/table.tsx |  | _Deprecated_ |"]), {
+        "package.json": js({ name: "z140-parsed" }), "src/components/table.tsx": "export function Table() { return <table />; }\n",
+        "src/app/page.tsx": "import { Table } from \"../components/table\";\nexport const P = () => <Table />;\n" })));
+      return { n: d.parsed, enumerable: Object.keys(d).includes("parsed"), inJson: js(d).includes("parsed"), files: rowOf(d, "Table").filesTotal };
+    })();
+    const testSrc = (f) => raw("mcp", "tests", f);
+    const G1 = testSrc("15-quality-design-system-cost-deprecated.js"), FC = testSrc("09-evidence-fast-check.js"), PT = testSrc("10-guards-protected-tests.js");
+    const rows = [
+      ["ui-code-scan: an index sentence — when several give the name to different files, only those the row's path names (any word: one backticked beside another path; two named, both locate it)", () =>
+        UCS.includes("when several give it to different files (a kit's parts: `Content` — the files their relative imports name), only those the row's path names (any word)")
+          && words.filesTotal === 1 && js(words.files) === js(["src/routes/picker/+page.svelte"]) && two.filesTotal === 2],
+      ["ui-code-scan: a direct import of a file an index renames counts for each such row (vben's icon-button.vue)", () =>
+        UCS.includes("a direct import of a file it renames counts for each such row (`import VbenButton from './button.vue'`)")
+          && renamed.filesTotal === 1 && js(renamed.files) === js([B + "icon-button.vue"])],
+      ["quality.md: R2-T2's examples — zinc-900's oklch() is not the hsl() neutral, the neutral's own oklch() and zinc's hex's HSL are, #eeeff2 as oklch() is hsl(220 14% 94%), both orders", () =>
+        QM.includes("So Tailwind 4's zinc-900 `oklch(21% 0.006 285.885)` is no longer shadcn's `hsl(0 0% 9%)` neutral")
+          && QM.includes("the neutral's own `oklch(20.5% 0 0)` is its token, zinc's own hex's HSL `hsl(240 5.9% 10%)` is zinc-900's, and 1.38's `#eeeff2` written as `oklch(0.952 0.004 271.369)` is `hsl(220 14% 94%)`")
+          && both("oklch(21% 0.006 285.885)", "hsl(0 0% 9%)") === "near|near" && both("oklch(20.5% 0 0)", "hsl(0 0% 9%)") === "token|token"
+          && both("oklch(21% 0.006 285.885)", "hsl(240 5.9% 10%)") === "token|token" && both("oklch(0.952 0.004 271.369)", "hsl(220 14% 94%)") === "token|token"],
+      ["quality.md: the @custom-media edges — a max-width one past its value, a lone `--md` the default set itself, from code and partial", () =>
+        QM.includes("so `(max-width: 767px)` and `767.98px` are 768") && QM.includes("`partial` (so a lone `--md (min-width: 768px)` captures the default set itself)")
+          && js(T.mediaEdges("(max-width: 767px)").px) === "[768]" && js(T.mediaEdges("(max-width: 767.98px)").px) === "[768]"
+          && bp("lone", "@custom-media --md (min-width: 768px);\n") === "code:true:" + DEF + ":0"],
+      ["quality.md: what @custom-media is not read — an alias of an alias (no edge, nothing unread), upper case, a rule whose `(` its line leaves open (silent)", () =>
+        QM.includes("an alias of an alias (`(--a)`: no edge, nothing unread), upper-case `@CUSTOM-MEDIA`, and, silent, a rule longer than DS_PRELUDE (it arrives without its head, as a one-line Sass map) or one whose `(` its line leaves open")
+          && js(T.mediaEdges("(--a)")) === js({ px: [], bad: false }) && bp("upper", "@CUSTOM-MEDIA --md (min-width: 600px);\n") === "default:false:" + DEF + ":0"
+          && bp("open", "@custom-media --md (min-width: 600px;\n") === "default:false:" + DEF + ":0"],
+      ["quality.md: the deprecated uses' `parsed` — not enumerable (in-process only), the pages the watch parsed itself", () =>
+        QM.includes("the report's `parsed`, NOT enumerable (as classify's `tiers`) — MCP, `--json` and a spread drop it")
+          && typeof parsed.n === "number" && !parsed.enumerable && !parsed.inJson && parsed.files === 1],
+      ["testing.md: rule 1 — the engine's own count, `deprecatedUses.parsed`, so G1's asks is counted (no clock)", () =>
+        TM.includes("the deprecated uses' watch counts the pages it parses itself, `deprecatedUses.parsed` (not enumerable: in-process only, never in a result's JSON), so G1's `asks` asserts that count and the fs calls under the pages, no clock")
+          && /asks: \(\) => counted\.asks === counted\.table - counted\.settled/.test(G1) && /asksReads: \(\) =>/.test(G1) && !/within\(rep\(G1\.asksOn\)/.test(G1)],
+      ["tasks-and-evidence.md: the fast check's planned-walk reuse — counted under the project root (09-evidence-fast-check), a 2.5× backstop", () =>
+        TE.includes("`09-evidence-fast-check` COUNTS it since 1.40 — the brief and next_task with the fast check make, under the project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's; a 2.5× timed backstop beside")
+          && /counted: \(\) => js\(counted\) === js\(\{ brief: \{ openSync: 1 \}, next: \{ openSync: 1 \} \}\)/.test(FC) && /\(x\) => x\.ratio <= 2\.5\)/.test(FC)],
+      ["tasks-and-evidence.md: the protected-tests walk stops at its cap — counted under the project root (10-guards-protected-tests)", () =>
+        TE.includes("past the cap the walk stops — COUNTED since 1.40 under the project root (10-guards-protected-tests: 4,000 test files open and stat what 2,000 do and list strictly fewer folders")
+          && /stops: \(\) => fewer\(over\.a\.k, over\.b\.k\)/.test(PT) && /a\.readdirSync < b\.readdirSync/.test(PT)],
+      ["gates-and-approvals.md: the uiStates stamp cut a third time — no stamp key in the engine", () =>
+        GA.includes("- **1.40.0** — the `uiStates` stamp cut a third time") && !libSources().some((f) => /\buiStates\b/.test(fs.readFileSync(f, "utf8")))],
+    ];
+    for (const [label, check] of rows) all("1.40.0 Z docs — " + label, { holds: check });
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

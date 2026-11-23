@@ -127,13 +127,13 @@ component file for — the rows still imported first, then those only rendered �
 (`files`, the first 3 by path; `filesTotal`), its replacement as doctor names it (`use`) and its component files (`paths` —
 a namesake's importers count too); `unlocated`: rows whose name no component file the scan reads gives — a .tsx / .jsx /
 .js / .vue / .svelte / .astro file or a component folder's index (a library's, an Angular or a Blade one). An index locates
-a row only when no component file gives its name; when indexes give it to different files (a kit's parts: `Content` — the
-files their relative imports name), only one the row's path names (any word); a direct import of a file it renames counts
-for each such row (`import VbenButton from './button.vue'`). A row named by its file is its **module** — any import
-of it counts (renamed, default, type-only, `require`, a
-non-component export, a namespace's member, an SFC with or without its extension) — and its components, followed through
-`export *` and a component folder's barrel; a component a file exports beside its own counts by its **name** (a default
-import too, when it is the file's default). An .mdx / .vue tag no import binds is counted apart (`unbound`). Not seen (its
+a row only when no component file gives its name; when several give it to different files (a kit's parts: `Content` — the
+files their relative imports name), only those the row's path names (any word); a direct import of a file it renames
+counts for each such row (`import VbenButton from './button.vue'`). A row named by its file is its **module** — any
+import of it counts (renamed, default, type-only, `require`, a non-component export, a namespace's member, an SFC with or
+without its extension) — and its components, followed through `export *` and a component folder's barrel; a component a
+file exports beside its own counts by its **name** (a default import too, when it is the file's default). An .mdx / .vue
+tag no import binds is counted apart (`unbound`). Not seen (its
 `note`): a `.ts` file, a dynamic `import()`, a module only a bundler's alias or a virtual module names, a re-export under
 another name outside a component folder's index, a tag an auto-import names by its folder, a non-component export or a type
 through a barrel. Nuxt's `<BaseCard>` is such a tag (`components/base/Card.vue`), `import type { X }` from a component folder
