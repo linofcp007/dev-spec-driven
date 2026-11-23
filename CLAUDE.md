@@ -53,10 +53,11 @@ file states the CURRENT rules first; its `## History` at the end keeps how they 
 - **`docs/maintainers/quality.md`** — before changing steering amendments, cross-feature criteria, the glossary, the
   design's trade-offs / risks / reuse checks (the m / l Reuse gate), the constraint nudge, the critical flows (their nudge,
   doctor warns and everyday-sense cues), the brief's Reuse section, the duplicate-code detector or the design-system registry
-  (`.specs/steering/design-system.md`, doctor's `ui-design-system` / `ui-deprecated`, spec_scan {designSystem}; raw values
-  against the scale, token drift and the units table — engine/design-values.js —, the breakpoints — engine/breakpoints.js),
-  the UI checks (engine/ui-checks.js — the project UI inventory, the `_UI checks off:_` marker) or the UI state matrix
-  (doctor's `ui-states`): Spec quality · Design trade-offs and risks · Reuse & Integration and clean code · Duplicate-code
+  (`.specs/steering/design-system.md`, doctor's `ui-design-system` / `ui-deprecated`, spec_scan {designSystem}; the
+  deprecated uses — the files that still import a `_Deprecated:_` component, settle's follow —; raw values against the
+  scale, token drift and the units table — engine/design-values.js —, the breakpoints — engine/breakpoints.js, a Sass
+  `…breakpoints` map too), the UI checks (engine/ui-checks.js — the project UI inventory and its reduced-motion script
+  search, the `_UI checks off:_` marker) or the UI state matrix (doctor's `ui-states`): Spec quality · Design trade-offs and risks · Reuse & Integration and clean code · Duplicate-code
   detector · Design-system registry · UI checks · UI state matrix.
 - **`docs/maintainers/claude-code-integration.md`** — before changing a hook, a command name, guard mode, the approval
   guard, the status line, user defaults, the dev-spec project probe or the plan-mode bridge: Hooks and commands · Guard

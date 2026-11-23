@@ -61,8 +61,8 @@ get it, or silence it.
 
 The fact `no-reduced-motion` (WCAG 2.3.3, AAA): the view files declare motion — an animation, a transform's transition,
 smooth scrolling — and none of the files read mentions reduced motion (`prefers-reduced-motion`, `motion-safe:` /
-`motion-reduce:`, `useReducedMotion`). Said only when no view read was cut (the walk, `ui-files`, a file's 256K); scripts
-count too, test setups included (2,000 by shorter path, 8 MB: `motion-scripts`).
+`motion-reduce:`, `useReducedMotion`). Said only when no view read was cut (the walk, `ui-files`, a file's 256K); a
+script's mention counts too, a test setup's included (2,000 by shorter path, 8 MB: `motion-scripts`).
 
 **Off for the project.** `_UI checks off: <rule-id> (reason)_` — a line of its own in design-system.md (never a list item
 or bold), the marker in English, ids bare or in a code span, entries separated by commas

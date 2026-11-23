@@ -142,7 +142,8 @@ indica, para cada cor, fonte ou temporização fixa, o token da escala do projet
 breakpoints do projeto, as larguras que a revisão visual captura. O `ui-states` do `doctor` avisa (uma nota no
 tamanho s) quando a matriz de estados do design deixa um estado sem linha ou a célula de uma vista por preencher.
 Uma linha do registo marcada `_Deprecated: use DataGrid_` retira o seu componente: o `doctor`
-avisa quando um design ainda o reutiliza ou estende, e indica o que o substitui. Uma tarefa +ui que muda o que se vê tem
+avisa quando um design ainda o reutiliza ou estende, e indica o que o substitui. O `dev-spec design-system` lista os
+ficheiros que ainda o importam (`deprecatedUses`). Uma tarefa +ui que muda o que se vê tem
 uma revisão visual (exceto nos tamanhos xs / s) — capturas de ecrã do que foi construído comparadas com a referência do
 design por um revisor que só vê as imagens —, e uma vista sem referência é avaliada no mínimo de acessibilidade
 (320 px de largura, texto a 200 %, foco visível), nunca dada como igual ao design.

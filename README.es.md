@@ -146,7 +146,8 @@ funcionalidad nombra, para cada color, fuente o temporización fijos, el token d
 dos terminan en los breakpoints del proyecto, los anchos que captura la revisión visual. El `ui-states` de `doctor`
 avisa (una nota en el tamaño s) cuando la matriz de estados del diseño deja un estado sin fila o la celda de una vista
 sin rellenar. Una fila del registro marcada `_Deprecated: use DataGrid_` retira su componente: `doctor` avisa cuando un
-diseño aún lo reutiliza o lo extiende, y nombra el que lo sustituye. Una tarea +ui que cambia lo que se ve pasa una
+diseño aún lo reutiliza o lo extiende, y nombra el que lo sustituye. `dev-spec design-system` enumera los ficheros que
+aún lo importan (`deprecatedUses`). Una tarea +ui que cambia lo que se ve pasa una
 revisión visual (salvo en los tamaños xs / s) — capturas de pantalla de lo construido comparadas con la referencia del
 diseño por un revisor que solo ve las imágenes —, y una vista sin referencia se juzga en el mínimo de accesibilidad
 (320 px de ancho, texto al 200 %, foco visible), nunca como igual al diseño.

@@ -1634,7 +1634,7 @@ exports.run = async ({
       // (1.39, D6: the scripts are searched — the bounds from the source, the order and the filter the engine's: a test setup is
       // no test by name, so its mention counts)
       ["fact: said only when no view read was cut — the inventory's bound by its code; the scripts searched, a test setup's too, their bounds and code", () =>
-        proj.includes("Said only when no view read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); scripts count too, test setups included (" + n(B.motionFiles) + " by shorter path, " + B.motionChars / 1048576 + " MB: `" + passCodes[1] + "`).")
+        proj.includes("Said only when no view read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); a script's mention counts too, a test setup's included (" + n(B.motionFiles) + " by shorter path, " + B.motionChars / 1048576 + " MB: `" + passCodes[1] + "`).")
           && passCodes[1] === "motion-scripts" && /const more = scan\.scripts\.filter\(\(x\) => !isViewFile\(x\.rel\) && !isTestFile\(x\.rel\) && !RE_NOT_COMPONENT_FILE\.test\(x\.rel\)\)\.sort\(\(a, b\) => a\.rel\.length - b\.rel\.length \|\| order\(a, b\)\)/.test(DS)
           && ["jest.setup.js", "vitest.setup.ts", "playwright.config.ts", "src/setupTests.ts"].every((f) => !require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier().isTestFile(f))],
       ["marker: `_UI checks off: <rule-id> (reason)_` — the label the registry reads (RE_DS_MARKER), an example entry a rule; off everywhere, counted never listed", () =>
@@ -1754,7 +1754,8 @@ exports.run = async ({
       // (item 5's reach: chain S's doctor entry, corrected to uiStateMatrix as ui-design-patterns.md is — the D block runs the examples)
       ["tooling-reference: doctor's ui-states — the anchor in any language, every anchored table, an n/a alone among a row's view cells, the a11y column and after unjudged", () => {
         const doc = ws(raw("skills", "dev-spec-driven", "references", "tooling-reference.md"));
-        return /recognised by its `Announced · focus` header cell in any language, every such table of the section:/.test(doc)
+        // (1.39: the header bound's clause between — the 1.39 Z block's row reads it)
+        return /recognised by its `Announced · focus` header cell in any language(?: \([^)]*\))?, every such table of the section:/.test(doc)
           && /\(an n\/a alone among a row's view cells answers its row\); the a11y column and the ones after it are not judged, a matrix in prose is not checked\./.test(doc);
       }],
       // item 2's one-liners (DECISIONS "T"): the checklist, the reviewer, the implementer
@@ -1812,6 +1813,157 @@ exports.run = async ({
         && /a line of its own, as `_Token sources:_` is \(in a list item or bold it is not read\), each id bare or in a code span, entries separated by commas/.test(ST)],
     ];
     for (const [label, check] of R1) all("1.38.0 review 1 docs — " + label + (label.includes("spellings") ? " (got " + js(spell) + ")" : ""), { holds: check });
+  }
+
+  { // 1.39.0 Z — the docs pass: tooling-reference.md written once for 1.39 (spec_scan {designSystem}'s `deprecatedUses`, the
+    // inventory's `motion-scripts`, the breakpoints' Sass map, partial fill and ui.md line, the units table's 1.39 reads;
+    // spec_task_brief's `designSystem.units`; doctor's ui-states header bound), the READMEs' deprecated-uses sentence and
+    // CLAUDE.md's topic map. Every key a clause names is read from a report the engine returns, every code and bound from
+    // mcp/lib/engine/*.js — never a hand list; each example runs through the engine. ONE assertion per prose clause: the docs
+    // pass's mutation pass drops each clause in a copy and its row fails (%TEMP%/dsd-139-z-mut).
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const js = (v) => JSON.stringify(v);
+    const eng = (f) => raw("mcp", "lib", "engine", f);
+    const DS = eng("design-system.js"), UC = eng("ui-checks.js"), BP = eng("breakpoints.js"), QY = eng("quality.js"), TK = eng("tasks.js"), DV = eng("design-values.js");
+    // a constant's value as the source writes it — alone (`const X = 5000;`) or in a list (`const A = 1, X = 8 * 1024 * 1024, …;`)
+    const num = (src, name) => { const m = src.match(new RegExp("\\b" + name + " = ([0-9.e* ]+)[,;]")); return m ? m[1].split("*").reduce((a, x) => a * Number(x.trim()), 1) : NaN; };
+    const n = (v) => v.toLocaleString("en-US");
+    const fnBody = (src, name) => { const at = src.indexOf("function " + name + "("); return at < 0 ? "" : src.slice(at, src.indexOf("\n}\n", at)); };
+    const regexOf = (src, name) => { const m = src.match(new RegExp("const " + name + " = /(.*)/([a-z]*);")); return m ? new RegExp(m[1], m[2]) : /(?!)/; };
+    const codesIn = (text) => [...text.matchAll(/code: "([a-z-]+)"/g)].map((m) => m[1]);
+    const tick = (id) => "`" + id + "`";
+    const TR = raw("skills", "dev-spec-driven", "references", "tooling-reference.md");
+    const rowOf = (head) => TR.split("\n").find((l) => l.startsWith(head)) || "";
+    const scanRow = rowOf("| `spec_scan {designSystem: true}` |"), briefRow = rowOf("| `spec_task_brief` |");
+    // (a clause of the row: from its opening words to the next top-level key of its shape)
+    const between = (text, from, to) => { const a = text.indexOf(from), b = a < 0 ? -1 : text.indexOf(to, a + from.length); return a < 0 || b < 0 ? "" : text.slice(a, b); };
+    const depClause = between(scanRow, "`deprecatedUses` (1.39", ". With `name`:");
+    const bpClause = between(scanRow, "both end in `breakpoints` (1.38", ". What the scan reads");
+    const E = require(path.join(root, "mcp", "lib", "engine", "index.js")), T = E.loadLazyTier();
+    const put = (p, rel, text) => { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), text); };
+    const project = (tag) => { const p = path.join(tmp, "z139-" + tag); S.initProject(p, ["ui"], "en"); return p; };
+    // the deprecated uses on a project that fills each key: a located row with an importer and an .mdx tag no import binds, an
+    // unlocated row (no file) — the keys the report returns, each of which the clause must name in a code span
+    const dep = (() => {
+      const p = project("dep");
+      put(p, ".specs/steering/design-system.md", "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n"
+        + "| Callout | src/components/callout.tsx |  | _Deprecated: use Box_ |\n| Box | src/components/box.tsx |  |  |\n| Modal |  |  | _Deprecated_ |\n");
+      put(p, "package.json", js({ name: "kit", dependencies: { react: "^19" } }));
+      put(p, "src/components/callout.tsx", "export function Callout() { return <div />; }\n");
+      put(p, "src/components/box.tsx", "export function Box() { return <div />; }\n");
+      put(p, "src/app/page.tsx", "import { Callout } from \"../components/callout\";\nexport const P = () => <Callout />;\n");
+      put(p, "docs/guide.mdx", "# Guide\n\n<Callout>hi</Callout>\n");
+      const r = S.designSystemReport(p), d = r.deprecatedUses || { rows: [] }, row = d.rows[0] || {};
+      const keys = [...Object.keys(d), ...Object.keys(row)];
+      const sane = row.name === "Callout" && row.use === "Box" && row.filesTotal === 1 && row.unbound === 1 && d.unlocatedTotal === 1 && d.unlocated[0] === "Modal"
+        && !r.limits.length && !r.truncated;
+      return { r, d, keys, sane };
+    })();
+    // the limit codes the watch builds (deprecatedWatch) and the report's cuts it repeats (scanCode's `watch.report([…])`)
+    const depCodes = codesIn(fnBody(DS, "deprecatedWatch")).concat(codesIn((DS.match(/deprecatedUses: watch\.report\(\[[^\n]*/) || [""])[0]));
+    const usage = { files: num(DS, "DS_USAGE_FILES"), chars: num(DS, "DS_USAGE_CHARS") }, follow = { files: num(DS, "DS_PASS_FILES"), chars: num(DS, "DS_PASS_CHARS"), steps: num(DS, "DS_PASS_STEPS") };
+    // the inventory's motion-scripts limit as uiProjectPass builds it — its keys — and the bounds readHeads may name
+    const msLine = (UC.match(/code: "motion-scripts"[^\n]*/) || [""])[0];
+    const msKeys = [...msLine.matchAll(/([a-z]+): scripts\./g)].map((m) => m[1]);
+    const cutNames = [...fnBody(DS, "readHeads").matchAll(/cut = "([a-z]+)"/g)].map((m) => m[1]);
+    // the breakpoints through the engine: ui.md's line (a no-break space, the slot's brackets, an aside), a Sass map, a partial theme
+    const ui = (() => {
+      const p = project("ui");
+      const at = (line) => { put(p, ".specs/steering/ui.md", "# UI\n\n" + line + "\n"); return T.breakpointsReport(p, null).widths.join(","); };
+      const nb = String.fromCharCode(0xa0), dot = String.fromCharCode(0xb7);
+      return { nbsp: at("- Breakpoints: 360 " + dot + nb + "768 px " + dot + " text expansion"), thin: at("- Breakpoints: 360 " + dot + String.fromCharCode(0x2009) + "768 px " + dot + " text expansion"),
+        slot: at("- Breakpoints: [576 / 768 px] " + dot + " text expansion"), aside: at("- Breakpoints: 480 / 960 px [1200 in print]"), stub: at("- Breakpoints: [360 / 768 / 1280 px] " + dot + " text expansion") };
+    })();
+    const sass = (() => {
+      const p = project("sass"), q = project("sass-merge");
+      put(p, "scss/_variables.scss", "$grid-breakpoints: (xs: 0, sm: 576px, md: 768px) !default;\n$spacers: (0: 0, 1: 400px);\n");
+      put(p, "scss/custom.scss", "$grid-breakpoints: (xs: 0, sm: 600px, md: 900px);\n");
+      put(q, "scss/_variables.scss", "$grid-breakpoints: (xs: 0, sm: 576px) !default;\n");
+      put(q, "scss/custom.scss", "$grid-breakpoints: map-merge($grid-breakpoints, (xxl: 1600px));\n");
+      const a = S.designSystemReport(p).breakpoints, b = S.designSystemReport(q).breakpoints;
+      return { plain: a.from + ":" + a.widths.join(","), merge: b.from + ":" + b.unread.map((x) => x.name).join(",") };
+    })();
+    const partial = (() => {
+      const p = project("partial");
+      put(p, "src/app/globals.css", "@import \"tailwindcss\";\n@theme {\n  --breakpoint-3xl: 1600px;\n  --breakpoint-4xl: 2000px;\n  --color-a: #fff;\n  --color-b: #000;\n  --color-c: #111;\n}\n");
+      const b = S.designSystemReport(p).breakpoints;
+      return b.partial + ":" + b.widths.join(",");
+    })();
+    const fill = (((BP.match(/const BP_FILL = \[([^\]]*)\]/) || [])[1] || "").match(/\d+/g) || []).join(" · ");
+    const readmeDep = { "README.md": "`dev-spec design-system` lists the files that still import it (`deprecatedUses`).",
+      "README.pt.md": "O `dev-spec design-system` lista os ficheiros que ainda o importam (`deprecatedUses`).",
+      "README.es.md": "`dev-spec design-system` enumera los ficheros que aún lo importan (`deprecatedUses`)." };
+    const qmap = ws(((raw("CLAUDE.md").split(/\n## Topic map\n/)[1] || "").match(/- \*\*`docs\/maintainers\/quality\.md`\*\*[\s\S]*?(?=\n- \*\*)/) || [""])[0]);
+    const rows = [
+      // spec_scan {designSystem} — the project shape's deprecatedUses (item 1)
+      ["tooling-reference: spec_scan's deprecatedUses — only while a row is marked, every key the report returns (rows and a row's), in its clause", () =>
+        dep.sane && dep.keys.length === 15 && dep.keys.every((k) => depClause.includes(tick(k)))
+          && depClause.startsWith("`deprecatedUses` (1.39 — only while the registry marks a row `_Deprecated:_`, a report:")],
+      ["tooling-reference: deprecatedUses' rows — the files and component files listed by their first DS_DEP_SHOWN", () => {
+        const shown = num(DS, "DS_DEP_SHOWN");
+        return shown === 3 && depClause.includes("`paths` (its component files, the first " + shown + " — a namesake's too)") && depClause.includes("`files` (the files that still import it, the first " + shown + " by path)");
+      }],
+      ["tooling-reference: deprecatedUses' unlocated — no component file whose importers the scan reads (RE_JSX_FILE ∪ RE_MARKUP_FILE)", () => {
+        const exts = [regexOf(DS, "RE_JSX_FILE"), regexOf(DS, "RE_MARKUP_FILE")];
+        const said = ["tsx", "jsx", "js", "vue", "svelte", "astro"];
+        return depClause.includes("`unlocated` (the rows with no .tsx / .jsx / .js / .vue / .svelte / .astro component file — a library's, an Angular or a Blade one)")
+          && said.every((x) => exts.some((re) => re.test("a." + x))) && !exts.some((re) => re.test("a.component.ts"));
+      }],
+      ["tooling-reference: deprecatedUses' limits — every code the watch builds or repeats, the usage read's and the follow's bounds (design-system.js)", () =>
+        depCodes.length === 4 && depCodes.every((c) => depClause.includes(tick(c)))
+          && depClause.includes("`usage-files` (the project's files read for what they import, " + n(usage.files) + " / " + usage.chars / 1048576 + " MB: `read`)")
+          && depClause.includes("`deprecated-follow` (the re-exports followed, " + n(follow.files) + " files / " + follow.chars / 1048576 + " MB / " + n(follow.steps) + " steps: `read`, `chars`, `count`)")],
+      ["tooling-reference: deprecatedUses — its note, localized: no import found is not unused; never the report's limits, truncated or inSync", () =>
+        dep.d.note === require(path.join(root, "mcp", "lib", "i18n.js")).msg("en").quality.dsDepUsesNote && /No import found is not unused/.test(dep.d.note)
+          && depClause.includes("`note` (localized: what it does not see — no import found is not unused); never the report's `limits`, `truncated` or `inSync`")],
+      // the inventory's motion-scripts (item 2)
+      ["tooling-reference: uiChecks' motion-scripts — its bounds (DS_MOTION_*), every key uiProjectPass gives it, the bounds readHeads names", () =>
+        js(msKeys) === js(["read", "bound", "count", "file"]) && js(cutNames) === js(["files", "chars"])
+          && scanRow.includes("`motion-scripts` (1.39 — the fact's script search, " + n(num(DS, "DS_MOTION_SCRIPTS")) + " scripts / " + num(DS, "DS_MOTION_CHARS") / 1048576 + " MB: `read`, `bound` " + cutNames.join(" · ") + " when one ended it, `count` and the first `file` of the scripts read only in part)")],
+      ["tooling-reference: the fact no-reduced-motion — taken back by a script's mention", () => /said only when no view read was cut, taken back by a script's mention \(1\.39\)/.test(scanRow)],
+      // the breakpoints (item 3)
+      ["tooling-reference: breakpoints' ui.md line — a no-break space after the `·` continues the list (RE_UI_END; a thin space ends it)", () =>
+        ui.nbsp === "320,360,768" && ui.thin === "320,360"
+          && bpClause.includes("1.39: a no-break space after the `·` continues the list as a blank does")],
+      ["tooling-reference: breakpoints' ui.md line — the stub's slot unread, widths written in the brackets opening the value read, another bracket an aside", () =>
+        ui.slot === "320,576,768" && ui.aside === "320,480,960" && ui.stub === "320,390,768,1024,1440"
+          && bpClause.includes("the stub's `[…]` slot is not read, but widths written inside the brackets that open the value are, and any other bracket is an aside")],
+      ["tooling-reference: breakpoints' code — a top-level Sass …breakpoints map (RE_SASS_NAME), a plain assignment over a `!default` one, map-merge unread", () => {
+        const name = regexOf(BP, "RE_SASS_NAME");
+        return sass.plain === "code:320,600,900" && sass.merge === "default:$grid-breakpoints" && name.test("$grid-breakpoints") && name.test("$breakpoints") && !name.test("$spacers")
+          && bpClause.includes("— 1.39 — a top-level Sass map whose name ends in `breakpoints`, `$grid-breakpoints`, in a .scss sheet the scan reads, a plain assignment over a `!default` one, `map-merge` or a variable unread");
+      }],
+      ["tooling-reference: breakpoints' partial — the theme's widths first, then the default set fills the places left in BP_FILL's order", () =>
+        partial === "true:320,768,1024,1440,1600,2000" && fill === "768 · 1024 · 1440 · 390"
+          && bpClause.includes("`partial` — a Tailwind 4 theme that keeps Tailwind's own five: the theme's widths first, then (1.39) the default set fills the places left, " + fill + " —")],
+      ["tooling-reference: breakpoints' breakpoint-widths — the source's own widths past BP_WIDTHS, never a default one", () =>
+        bpClause.includes("`breakpoint-widths` (the source's own widths past " + num(BP, "BP_WIDTHS") + " — never a default one)")],
+      // the units table (item 4)
+      ["tooling-reference: units — a negative length and a Tailwind size in any unit judged (offUnit, RE_TW_UNIT)", () =>
+        T.offUnit("0 -8px", ["rem"]) === "px" && new RegExp(regexOf(DS, "RE_TW_UNIT").source).test("text-[2vw]")
+          && scanRow.includes("`units` — the declarations off the registry's units table (1.39: a negative length too, `-8px`, and a Tailwind arbitrary size in any unit, `text-[2vw]`):")],
+      ["tooling-reference: unitsTable — the units column by its header's start, else the first holding the word (RE_DS_UNITS_WORD)", () =>
+        regexOf(QY, "RE_DS_UNITS_WORD").test("Allowed units") && !/^units/i.test("Allowed units")
+          && scanRow.includes("its units column is the one whose header starts with Units, else — 1.39 — the first holding the word, `Allowed units`")],
+      // spec_task_brief (item 4) and doctor's ui-states (item 3)
+      ["tooling-reference: spec_task_brief — the units table's rows within DS_BRIEF_UNITS, a units-only registry too, `designSystem.units` {rows, more} as briefDesignSystem builds it", () => {
+        const body = fnBody(QY, "briefDesignSystem");
+        return /units = \{ rows: \[\], more: 0 \}/.test(body) && /units\.rows\.push\(\{ props: r\.props, units: r\.units \}\)/.test(body) && /!reg\.units\)\) return null/.test(body)
+          && /if \(ds\.units\) res\.designSystem\.units = ds\.units;/.test(TK)
+          && briefRow.includes("and (1.39) the registry's units table, its first rows within " + num(QY, "DS_BRIEF_UNITS") + " characters, then how many more (a registry holding only the table gets the part too)")
+          && briefRow.includes("and with a units table `units` {`rows` [{props, units}], `more`} (1.39)}");
+      }],
+      ["tooling-reference: doctor's ui-states — the anchor looked for in a header's first US_HEADER cells, past them no matrix, the bound said", () =>
+        /t\.header\.slice\(0, US_HEADER\)/.test(QY) && /if \(a < 0 && t\.header\.length > US_HEADER\) truncated\.views = true;/.test(QY)
+          && ws(TR).includes("header cell in any language (looked for in a header's first " + num(QY, "US_HEADER") + " cells — 1.39: past them the table is none, the bound said)")],
+      // the READMEs (EN / PT / ES) and CLAUDE.md's topic map
+      ...Object.entries(readmeDep).map(([f, s]) => [f + ": the +ui paragraph — the files that still import a deprecated component (`deprecatedUses`)", () => ws(raw(f)).includes(s)]),
+      ["CLAUDE.md: the topic map's quality.md line — the deprecated uses, the Sass breakpoints map, the reduced-motion script search", () =>
+        qmap.includes("the deprecated uses — the files that still import a `_Deprecated:_` component, settle's follow —") && qmap.includes("a Sass `…breakpoints` map too")
+          && qmap.includes("the project UI inventory and its reduced-motion script search")],
+    ];
+    for (const [label, check] of rows) all("1.39.0 Z docs — " + label + (label.includes("every key the report returns") ? " (got " + js({ keys: dep.keys, sane: dep.sane, missed: dep.keys.filter((k) => !depClause.includes(tick(k))) }) + ")" : ""), { holds: check });
   }
 
   // Release hygiene: the three version fields agree.

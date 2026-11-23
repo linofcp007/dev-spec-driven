@@ -658,11 +658,12 @@ _Libraries: @mui/material_
   finish or doctor. `margin-*` covers `margin` and `margin-top`; a component's props table (`| Property | Type | Default |`)
   is none.
 - `_UI checks off: transition-all (our kit animates colours on purpose)_` — a line of its own, as `_Token sources:_` is
-  (in a list item or bold it is not read), each id bare or in a code span, entries separated by commas — switches a UI check off for the whole project: the project's report and every feature's count what it hides,
-  never list it, and finish never warns about it. An entry without its reason in parentheses, or naming no check or
-  project fact, is not applied — the report says why. A design-system.md written only for this line enrols the project in
-  the registry (doctor's `ui-design-system`, finish's New components); without one, silence a single finding with the
-  inline `ui-check-off:` comment (`references/ui-code-scan.md`).
+  (in a list item or bold it is not read), each id bare or in a code span, entries separated by commas — switches a UI
+  check off for the whole project: the project's report and every feature's count what it hides, never list it, and
+  finish never warns about it. An entry without its reason in parentheses, or naming no check or project fact, is not
+  applied — the report says why. A design-system.md written only for this line enrols the project in the registry
+  (doctor's `ui-design-system`, finish's New components); without one, silence a single finding with the inline
+  `ui-check-off:` comment (`references/ui-code-scan.md`).
 - A feature's design lists what it uses in `[UI] Design System Usage` (`Kind | Component | Why / notes`);
   `spec_doctor`'s `ui-design-system` checks those rows against this file, the task brief quotes the entries a UI task
   needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds
