@@ -735,13 +735,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const TFILE = { "package.json": js({ name: "b" }), "src/components/Table.tsx": compFile("Table") };
     const limitsOf = (p) => { const r = S.designSystemReport(p); return { codes: usesOf(r).limits, top: r.limits.map((l) => l.code), table: uses(r, "Table") }; };
     // the follow's own bounds (a second instance of settle's: DS_PASS_FILES 2,000 files, DS_PASS_CHARS 8 MB, DS_PASS_STEPS
-    // 100,000): a chain of 2,001 `export *` barrels to Table, then of 2,000; 33 barrels of 256K characters; a barrel of 11 stars
-    // whose 10 first pass on 10,000 names each, the 11th the one to Table
-    const chain = depProject("follow-files", TROW, Object.assign({ "src/app/page.tsx": L(["import { Table } from \"../chain/b0000\";", "export const P = () => <Table />;"]) }, TFILE));
-    for (let i = 0; i <= 2000; i++) write(chain, "src/chain/b" + String(i).padStart(4, "0") + ".ts", i === 2000 ? "export * from \"../components/Table\";\n" : "export * from \"./b" + String(i + 1).padStart(4, "0") + "\";\n");
-    const files2001 = limitsOf(chain);
-    write(chain, "src/chain/b0000.ts", "export * from \"./b0002\";\n");
-    const files2000 = limitsOf(chain);
+    // 100,000): a chain of 2,001 `export *` barrels to Table, then of 2,000 (in the count-bound tree below); 33 barrels of 256K
+    // characters; a barrel of 11 stars whose 10 first pass on 10,000 names each, the 11th the one to Table
     const fat = depProject("follow-chars", TROW, Object.assign({ "src/app/page.tsx": L(["import { Table } from \"../fat/f00\";", "export const P = () => <Table />;"]) }, TFILE));
     for (let i = 0; i <= 32; i++) write(fat, "src/fat/f" + String(i).padStart(2, "0") + ".ts", (i === 32 ? "export * from \"../components/Table\";\n" : "export * from \"./f" + String(i + 1).padStart(2, "0") + "\";\n") + "// " + "x".repeat(256 * 1024) + "\n");
     const chars = limitsOf(fat);
@@ -758,27 +753,34 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     write(hub, "src/n/n10.ts", tail(52));
     const reachFits = limitsOf(hub);
     const FOLLOW = { code: "deprecated-follow", read: 2000, chars: 8 * 1024 * 1024, count: 100000 };
-    // settle's read (DS_USAGE_FILES 5,000 files): a weak name asked, so 5,001 `.ts` files go before the markup files — a .vue
-    // importing Table past the bound is said; with only `.ts` files past it, nothing is (no file the watch reads was left)
-    const crowd = depProject("usage-files", TROW, Object.assign({ "src/components/kit.tsx": L(["export const Shown = observer(() => <div />);"]),
-      "jsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }) }, TFILE));
-    for (let i = 0; i <= 5000; i++) write(crowd, "src/lib/u" + String(i).padStart(4, "0") + ".ts", "export const x = 1;\n");
-    const tsOnly = limitsOf(crowd);
-    write(crowd, "src/views/list.vue", L(["<script setup>", "import Table from '@/components/Table'", "</script>", "<template><Table /></template>"]));
-    const past = limitsOf(crowd);
-    // the exports loop's bound (1,000 component files read for what they export): a name row past it is not located — said
-    const kit = depProject("exports-cut", TROW, Object.assign(Object.fromEntries(Array.from({ length: 1001 }, (_, i) => ["src/components/c" + String(i).padStart(4, "0") + ".tsx", compFile("C" + i)])), TFILE));
-    const cut = limitsOf(kit);
-    all("1.39 deprecatedUses: its own bounds are said in its `limits` — the follow's (`deprecated-follow`: a chain of 2,001 barrels, 33 of 256K characters, 100,000 steps; a chain of 2,000 is followed, Table's importer counted), settle's read (`usage-files`: the files read, when a file the watch reads was left past DS_USAGE_FILES — 5,001 `.ts` files before a .vue — never when only `.ts` files were), the exports loop's (`component-files`, as the report says it) — and none reaches the report's own `limits` but the exports loop's (got " +
-      js({ files2001, files2000, chars, steps, reachCut, reachFits, tsOnly, past, cut }) + ")", {
-      followFiles: () => js(files2001.codes) === js([FOLLOW]) && files2001.table[0] === 0 && js(files2001.top) === js([]),
-      followAtBound: () => js(files2000.codes) === js([]) && files2000.table[0] === 1,
+    // the count-bound tree, ONE project (review 1 of 1.39: three trees of 2,001 / 5,001 / 1,001 files read five times cost the
+    // file ~2.4× its 1.38.0 time), each limit read from the same report: the chain of 2,001 barrels (the follow's DS_PASS_FILES);
+    // settle's read (DS_USAGE_FILES 5,000 files: a weak name asked, so the chain's and 3,010 more `.ts` files go before the markup
+    // files — a .vue importing Table past the bound is said); the exports loop's bound (1,000 component files read for what they
+    // export: 1,003 here — said, as the report says it). Then the same tree at each bound: the chain of 2,000 (followed, Table's
+    // importer counted), only `.ts` files past DS_USAGE_FILES (nothing said: no file the watch reads was left), 1,000 component files
+    const tree = depProject("count-bounds", TROW, Object.assign({ "src/app/page.tsx": L(["import { Table } from \"../chain/b0000\";", "export const P = () => <Table />;"]),
+      "src/components/kit.tsx": L(["export const Shown = observer(() => <div />);"]), "jsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
+      "src/views/list.vue": L(["<script setup>", "import Table from '@/components/Table'", "</script>", "<template><Table /></template>"]) }, TFILE));
+    // (a folder made once, its files written in it: a mkdir a file cost the block a third of its writes)
+    const many = (folder, n, name, text) => { fs.mkdirSync(path.join(tree, folder), { recursive: true }); for (let i = 0; i < n; i++) fs.writeFileSync(path.join(tree, folder, name(i)), text(i)); };
+    const p4 = (i) => String(i).padStart(4, "0");
+    many("src/chain", 2001, (i) => "b" + p4(i) + ".ts", (i) => (i === 2000 ? "export * from \"../components/Table\";\n" : "export * from \"./b" + p4(i + 1) + "\";\n"));
+    many("src/lib", 3010, (i) => "u" + p4(i) + ".ts", () => "export const x = 1;\n");
+    many("src/components", 1001, (i) => "c" + p4(i) + ".tsx", (i) => compFile("C" + i));
+    const over = limitsOf(tree);
+    write(tree, "src/chain/b0000.ts", "export * from \"./b0002\";\n");
+    for (const f of ["src/views/list.vue", "src/components/c0998.tsx", "src/components/c0999.tsx", "src/components/c1000.tsx"]) fs.rmSync(path.join(tree, f));
+    const at = limitsOf(tree);
+    all("1.39 deprecatedUses: its own bounds are said in its `limits` — the follow's (`deprecated-follow`: a chain of 2,001 barrels, 33 of 256K characters, 100,000 steps; a chain of 2,000 is followed, Table's importer counted), settle's read (`usage-files`: the files read, when a file the watch reads was left past DS_USAGE_FILES — 5,014 `.ts` and `.tsx` files before a .vue — never when only `.ts` files were), the exports loop's (`component-files`, as the report says it; 1,000 component files cut nothing) — each from one report of one tree, and none reaches the report's own `limits` but the exports loop's (got " +
+      js({ over, at, chars, steps, reachCut, reachFits }) + ")", {
+      // (one report: the exports loop's cut repeated first, settle's read, the follow's — and the report's own limits the exports
+      // loop's alone)
+      over: () => js(over.codes) === js([{ code: "component-files", read: 1000 }, { code: "usage-files", read: 5000 }, FOLLOW]) && js(over.top) === js(["component-files"]) && over.table[0] === 0,
+      atBounds: () => js(at.codes) === js([]) && js(at.top) === js([]) && js(at.table) === js([1, ["src/app/page.tsx"]]),
       followChars: () => js(chars.codes) === js([FOLLOW]) && chars.table[0] === 0,
       followSteps: () => js(steps.codes) === js([FOLLOW]) && steps.table[0] === 0,
       followReach: () => js(reachCut.codes) === js([FOLLOW]) && reachCut.table[0] === 0 && js(reachFits.codes) === js([]) && reachFits.table[0] === 1,
-      usageQuiet: () => js(tsOnly.codes) === js([]) && js(tsOnly.top) === js([]),
-      usage: () => js(past.codes) === js([{ code: "usage-files", read: 5000 }]) && past.table[0] === 0 && js(past.top) === js([]),
-      exports: () => js(cut.codes) === js([{ code: "component-files", read: 1000 }]) && js(cut.top) === js(["component-files"]),
     });
   }
   {
