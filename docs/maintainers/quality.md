@@ -2994,6 +2994,53 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (`unbound` for located rows only), the walk-cap repeat (scratch-checked) and five cost guards timed with and without on
   shadcn-ui / cal.com / Starlight — the binding filter 1.43–1.46×, the text prefilter 1.01–1.13×, the module check's index,
   the namespace-binding and member filters within noise (0.93–1.07×).
+- **1.39.0 review 1** (the deprecated uses, fix round 1 — R1-DEP-1…8, R1-DOC-1) — each MEDIUM fixed by the property its
+  reviewer named, from the reviewer's fix copies re-derived and checked against b5e95372 and 92c44e0a both ways. R1-DEP-1: a
+  row the seed writes with a component folder's barrel (`| VbenButton | …/button/index.ts |`, `export { default as
+  VbenButton } from './button.vue'`) was `unlocated` — vben 55 of its 349 rows, cal.com 8, shadcn-svelte 6, outline 2 — and
+  the reason printed was false. The reviewer's fix made EVERY result a source of name rows; checked both ways it also made a
+  barrel's part a namesake of a LOCATED row (input-group's `export { Button }` of its own button, select's `Item`):
+  shadcn-svelte +2,367 pairs on rows 1.39 had located (Item +348, Label +239, Input +117, Button +30) — wider than the
+  finding, the 1.38 lesson. Cut to the rows NO file locates (`nameRows(r, byFile)`, the barrels after the files): every gain
+  is on a newly located row (shadcn-svelte +1,412 on its 6 — Content, Group, List…, each a name many barrels give, all in
+  `paths`: the namesake rule), no located row moves; vben's VbenButton 45 importers of the 46 grep finds. The unlocated
+  line says only the property (no component file the scan reads — a component folder's index among them — gives the name),
+  ui-code-scan.md and tooling-reference the same. R1-DEP-2: a file whose DEFAULT export is the row's name binds its default
+  importers (`defaults` / `byBase` / `bases`, as a module row's file) — outline ListItem +19, LoadingError +2,
+  NavLinkWithChildrenFunc +2, PdfViewer +1, Separator +2; cal.com DisableTwoFactorAuthModal +2, BookingListItemWithProvider
+  +1; motion-primitives GitHubIcon / XIcon +2 each — each read in its clone. R1-DEP-3: `RE_TYPE_MODIFIER` — 6 pairs leave
+  (vben PaginationItem.vue, ToggleGroup.vue; cal.com's two app-store KeyInput.tsx and DisconnectIntegration.tsx; outline
+  Collaborators.tsx — those two render another component and import only a type through the folder: the note's "a type
+  through a barrel"), and `import type * as` the row's own file now counts (the module rule); importClause is settle's: the
+  scanCode JSON with no registry is byte-identical to 1.38.0 (settle's keys) and to b5e95372 (all of it) on 21 clones, and
+  every row marked against none too. R1-DEP-6 (a subtraction): `scriptHas` — vben's SheetContent.vue leaves; of the
+  reviewer's 51 shapes two move, both to their stated want (`vue-twin-ts`, `vue-index-vue-and-ts`: 0). R1-DEP-4: the rows
+  still imported first, the CLI head's total `rowsTotal` — and, past the brief, "at least" when every listed row is imported
+  and some are not (else 50 is said where 70 are). R1-DEP-7 (prose): the note's sixth "not seen", a tag an auto-import names
+  by its folder (Nuxt's `<BaseCard>`). Every row of the 16 component clones marked, the release against the fix: 7 pairs
+  leave (the six types, the twin), the gains above, nothing else. Left for 1.40: a file importing the file a barrel renames
+  (vben icon-button.vue's `import VbenButton from './button.vue'` — the 46th), the CLI row line calling a barrel-located
+  row's barrels "component files", a row used only through `unbound` tags ordered with the unused. R1-DEP-5 / R1-DOC-1, the
+  watch's cost re-measured (cost139.js: 1.38.0's report and the fixed engine's in one process, interleaved, median of 7; the
+  increment = the fixed scanCode with the row less without): ONE used row on trees of 700 view files or more 1.00–1.18×
+  1.38.0 (cal.com 1.00, mantine 1.01, vben 1.04, nuxt/ui 1.06, shadcn-ui 1.13 +236 ms, outline 1.15, shadcn-svelte 1.18);
+  every row marked (≤ 500) 1.04–1.43× (cal.com / mantine 1.04, vben 1.06, nuxt/ui 1.25, shadcn-ui 1.26 +482 ms,
+  shadcn-svelte 1.35, outline 1.43 +429 ms); on the smaller trees, where the scan otherwise reads no script for its
+  components, +27 to +144 ms — up to 2× a report of 30–250 ms (sakai-vue 44 → 86 ms 1.97×, astro-paper 1.89×, Starlight
+  122 → 222 ms 1.83×, magicui 1.78× +144 ms, motion-primitives 1.61×, taxonomy 1.38×, tailwindcss.com 1.36×, Breeze 1.24×,
+  Bootstrap and Bulma at noise); the reviewers' loaded runs of the same shape gave Starlight +141 to +239 ms (2.4–2.8×),
+  magicui / tailwindcss.com 1.6–1.8×, and chain A's own two runs +2 to +108 ms and up to +374 ms: the small-tree range is
+  +25 to +240 ms, up to ~2.8×. Foundation, open-props, pico hold no component (idle, nothing read). The no-registry report
+  at the same moment 0.78–1.15× (outline 1.08×: the merged table's 1.21× was noise, not the script search). The fix
+  against the release as reviewed 0.93–1.03× (shadcn-svelte's 1.11 / 1.14 re-measured alone: 71 → 62 ms, 130 → 137 ms).
+  R1-DEP-8 (tests): ONE tree for the count bounds (6,012 files, two reports — every cut, then every bound; 8,004 files and
+  five reports before), each folder made once, G2q on 50 pages (the `includes` mutant 1.42–1.47×, 2.2–2.6× on 200: a
+  linearity ratio). Each file alone, 1.38.0 · the release · the fix interleaved, 2 rounds: the deprecated file 6.7–6.8 ·
+  17.2 · 15.5–16.9 s (2.3–2.5×; the count bounds' tree is ~7 s of it — 2,001 + 3,010 + 1,001 files are the bounds' floor, read
+  twice), the cost file 14.5–16.0 · 38.0–38.9 · 35.8–36.2 s (2.2–2.5×: G1–G3's trees), the CLI's 15-quality-design-system
+  2.6 · 3.6 · 3.8 s — about a tenth less than the release, not the 2× the finding asked: a smaller count bound needs the
+  bounds injectable (an engine change: 1.40). Mutation pass: 37 mutants, 37 killed (one re-formed: dropping `filesOf(at)` crashed before the
+  fixture ran); M3d equivalent, M6b not applicable.
 - **1.39.0, the release as merged** (the docs pass, after the four chains merged E → B → C → A; this summary is the 1.39
   round's for every area — the UI checks' and the state matrix's own entries below) — the ruling (DECISIONS) built ~15 of
   the ~29 mechanisms the four designs held (A 5, B 4–6, C 3, E 3; 1.38 shipped ~17 and needed three review rounds), to one
