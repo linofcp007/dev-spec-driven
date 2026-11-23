@@ -2850,10 +2850,13 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   // row's name places (`export { default as VbenButton } from './button.vue'`) — imported DIRECTLY under the name it has there
   // (a default import of button.vue, `{ AppleConnect }` for `export { AppleConnect as AppleCalendar } from …`): a use of that
   // row, of every row whose barrel renames that file. Its key exactly, an SFC's twin too (twinOf); a module key → { the file,
-  // the name it has there → the rows' keys }; a component file's keys built once (fileKeys). Never that export when an index
-  // also gives it a LIVE row's name (`live`, below: `default as Button, default as OldButton`, a compat index's BButton of
-  // AButton's file — the alias's own importers count, the live component's do not: DEP-1 of 1.40 review 1)
+  // the name it has there → the rows' keys }; a component file's keys built once (fileKeys). Never that export when it has a
+  // LIVE row's name (a row not marked, liveRow) — an index also gives it one (`live`, below: `default as Button, default as
+  // OldButton`, a compat index's BButton of AButton's file: DEP-1 of 1.40 review 1), or its own name there, a NAMED export's
+  // (cal.com's `{ AppleConnect }` with AppleConnect.tsx a live row; a default's local name is the importer's: vben's
+  // VbenButtonGroup counts — R2-DEP-1 of 1.40 review 2): the alias's own importers count, the live component's do not
   const renamed = new Map(), live = new Set();
+  const liveRow = (k) => !dep.has(k) && rowName.has(k);
   let fileKeys = null;
   const fileOf = (key) => {
     if (!fileKeys) {
@@ -2877,7 +2880,7 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   };
   const renames = (r, n, k) => {
     for (const [of, there] of placedBy(r, n)) {
-      if (live.has(of.path + "\n" + there)) continue;
+      if (live.has(of.path + "\n" + there) || (there !== "default" && liveRow(dsKey(there)))) continue;
       for (const fk of of.keys) {
         if (!renamed.has(fk)) renamed.set(fk, { path: of.path, by: new Map() });
         const by = renamed.get(fk).by;
@@ -2915,8 +2918,7 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   // name kept or not: `export { Tab }`, `default as Button`, `Root as Table` — are that row's component: `live`, which
   // renames reads; read before the barrels' nameRows — DEP-1 of 1.40 review 1)
   for (const r of results) if (r.barrel && r.uses.reexports) for (const n of r.uses.reexports.named.keys()) {
-    const k = dsKey(n);
-    if (!dep.has(k) && rowName.has(k)) for (const [of, there] of placedBy(r, n)) live.add(of.path + "\n" + there);
+    if (liveRow(dsKey(n))) for (const [of, there] of placedBy(r, n)) live.add(of.path + "\n" + there);
   }
   const byFile = new Set(located.keys()), givenTo = new Map();
   for (const r of results) if (r.barrel) for (const n of namesOf(r)) {
@@ -3517,13 +3519,14 @@ const RE_DOC_EXT = /\.(?:md|mdx|markdown|txt|rst|adoc|pdf|png|jpe?g|gif|webp|svg
 const DS_PATH_WORDS = 20; // words of a path cell read
 // (1.40) a path cell's readings, ONE reader for stalePath and the deprecated uses' watch (the index the row's path names): the
 // whole cell first, then its first DS_PATH_WORDS words (a cost guard: ×1.55 a report on 500 rows of 33 words), a link
-// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's, trimmed and
-// DS_CELL_MAX characters at most (1.39's 400-character cut and its trims are dead: every reading is trimmed again —
-// projectPath, implementsRel); 1.39's strip of its ends' backticks stays: dsCell strips a component cell's, but the marker
-// reader cuts a `_Token sources:_` entry's note after its own strip — "`src/my styles/tokens.css` (generated)" comes here
-// as "src/my styles/tokens.css`" (DEP-2 of 1.40 review 1)
+// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's, DS_CELL_MAX
+// characters at most (1.39's 400-character cut is dead); 1.39's whole reading stays as written: dsCell strips a component
+// cell's ends' backticks, but the marker reader cuts a `_Token sources:_` entry's note after its own strip —
+// "`src/my styles/tokens.css` (generated)" comes here as "src/my styles/tokens.css`" (DEP-2 of 1.40 review 1) —, and its
+// two trims are not dead (R2-DEP-3 of 1.40 review 2): the strip follows a trim (dsCell's cut may end in "` "), and the
+// words are split from the trimmed text (an entry stored "` w0 …" would spend a word on its leading blank)
 function pathWords(cell) {
-  const text = stripEnds(String(cell || ""), unitIn("`"));
+  const text = stripEnds(String(cell || "").trim(), unitIn("`")).trim();
   if (!text) return [];
   return [text].concat(text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS).map((w) => stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`"))));
 }
