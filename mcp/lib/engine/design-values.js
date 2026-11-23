@@ -48,9 +48,10 @@ const hueOf = (x) => (x.u === "" || x.u === "deg" ? x.v : x.u === "turn" ? x.v *
 const halfDigit = (t) => { const m = /^[+-]?\d*(?:\.(\d+))?(?:e([+-]?\d+))?/i.exec(t); return 0.5 * 10 ** (Number(m[2] || 0) - (m[1] || "").length); };
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-// sRGB (0..1, gamma-encoded) → OKLab (Björn Ottosson's matrices)
+// sRGB (0..1, gamma-encoded) → OKLab (Björn Ottosson's matrices). Every parsed colour's triple is clamped already; only an HSL
+// image's points past s / l 0–100 fall outside, and extrapolate (1.40: a clamp here or there never changed a verdict — measured)
 function okFromRgb(r0, g0, b0) {
-  const r = toLinear(clamp01(r0)), g = toLinear(clamp01(g0)), b = toLinear(clamp01(b0));
+  const r = toLinear(r0), g = toLinear(g0), b = toLinear(b0);
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
@@ -167,9 +168,8 @@ function okRange(points) {
   return r;
 }
 // An HSL colour's image, built ONCE a parsed colour (a scale's token keeps it across the report's rows): its written box —
-// h, s and l each at as written / −half / +half: 27 points painted to OKLab, the centre first (a point past s / l 0–100
-// paints a channel okFromRgb clamps: never a shape apart from CSS's clamp, measured) —, and the pixel it paints (8 bits a
-// channel), a point
+// h, s and l each at as written / −half / +half: 27 points painted to OKLab, the centre first (a point past s / l 0–100 is not
+// clamped as CSS would: never a verdict apart, measured) —, and the pixel it paints (8 bits a channel), a point
 function hslImage(hsl) {
   if (!hsl.img) {
     const pts = [];

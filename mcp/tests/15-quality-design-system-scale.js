@@ -39,7 +39,8 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       hex3: ok("#fff"), hex4: ok("#fff8"), hex8: ok("#1d4ed880"), rgbComma: ok("rgb(29, 78, 216)"), rgbaComma: ok("rgba(29, 78, 216, 0.5)"),
       rgbPct: ok("rgb(100% 0% 0%)"), rgbSlash: ok("rgb(29 78 216 / 50%)"), hslTurn: ok("hsl(.5turn 100% 50%)"), hslBare: ok("hsl(180 100 50)"),
       oklchPct: ok("oklch(20.5% 0 none)"), oklab: ok("oklab(50% 25% -25%)"),
-      none: [P("hwb(0 0% 0%)"), P("red"), P("color(display-p3 1 0 0)"), P("lab(50% 40 59.5)"), P("rgb(1 2)"), P("rgb(1 2 3 4)"), P("rgb(" + "1 ".repeat(2000) + ")")],
+      none: [P("hwb(0 0% 0%)"), P("red"), P("color(display-p3 1 0 0)"), P("lab(50% 40 59.5)"), P("rgb(1 2)"), P("rgb(1 2 3 4)"), P("rgb(" + "1 ".repeat(2000) + ")"),
+        P("rgb(1 2 3 / 50deg)"), P("hsl(10% 50% 50%)"), P("rgb(10deg 2 3)")], // (1.40's replay: an alpha in an angle's unit, a hue in %, a channel in deg are none)
     };
     all("1.38 design values: parseColor — hex 3 / 4 / 6 / 8, rgb / rgba (comma or space, % channels, an alpha after `/` or as a 4th argument), hsl (turn, a bare s / l), oklch (L in %, `none` = 0), oklab (% a / b = 0.4); hwb / named / color() / lab, a wrong arity and a 4,000-character argument are not parsed (got " + js(got) + ")", {
       hex3: () => js(got.hex3) === js(["hex", 1, 0, 0, 1]),
@@ -67,6 +68,8 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       alphaSame: judge("rgba(29, 78, 216, 0.5)", [["--b", "#1d4ed880"]]), hex8: judge("#1d4ed880", [["--b", "#1d4ed8"]]),
       turn: judge("hsl(.5turn 100% 50%)", [["--c", "#0ff"]]), rad: judge("hsl(3.14159rad 100% 50%)", [["--c", "#0ff"]]), grad: judge("hsl(200grad 100% 50%)", [["--c", "#0ff"]]),
       bare: judge("hsl(180 100 50)", [["--c", "#0ff"]]), lpct: judge("oklch(20.5% 0 0)", [["--n", "oklch(0.205 0 0)"]]),
+      // (1.40's replay: within one notation only float noise is the same colour — 0.0005 apart is near, not the 0.001 across two)
+      lnear: judge("oklch(0.205 0 0)", [["--n", "oklch(0.2055 0 0)"]]),
       none: judge("#171717", [["--color-neutral-900", "oklch(20.5% 0 none)"]]), oklab: judge("oklab(0.5 0.1 -0.1)", [["--o", "oklab(50% 25% -25%)"]]),
       zincTw: judge("oklch(21% 0.006 285.885)", [["--color-neutral-900", "oklch(20.5% 0 none)"]]),
       zinc: ["#18181b", "#09090b", "#e4e4e7", "#f4f4f5"].map((v, i) => judge(v, [[["--primary", "--foreground", "--border", "--secondary"][i], ["oklch(0.205 0 0)", "oklch(0.145 0 0)", "oklch(0.922 0 0)", "oklch(0.97 0 0)"][i]]])),
@@ -75,20 +78,22 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       jnd: [judge("#f5f5f5", [["--w", "#fff"]]), judge("#fafafa", [["--w", "#fff"]])],
       nearest: judge("oklch(0.5 0 0)", [["--far", "oklch(0.518 0 0)"], ["--close", "oklch(0.487 0 0)"]]),
       text: judge("lab(50% 40 59.5)", [["--brand", "lab(50% 40 59.5)"]]), textOther: judge("lab(50% 40 59.5)", [["--brand", "lab(50% 40 60)"]]),
+      // (1.40's replay: the text lower-cased, its blanks out — `LAB(50%,40,59.5)` is the token written `lab(50%, 40, 59.5)`)
+      textBlanks: judge("LAB(50%,40,59.5)", [["--brand", "lab(50%, 40, 59.5)"]]),
       first: judge("#123456", [["--a", "#123456"]], [["--b", "#123456"]]), code: judge("#123456", [], [["--b", "#123456"]]),
     };
     all("1.38 design values: judgeRaw — #fff = #ffffff, rgb(29, 78, 216) = #1d4ed8, % channels, hue in turn / rad / grad, a bare hsl, oklch's L in % and `none`; an alpha that differs is neither the same nor near; Tailwind's zinc-900 against neutral-900 (same notation, 0.0078) and zinc's hexes against shadcn's oklch neutrals are `near`, never the token — #171717 / #0a0a0a are; #05787d = hsl(183 92% 25%) (an HSL side: 0.011); near the NEAREST within 0.02 (#f5f5f5 at 0.0298 none, #fafafa near); lab() by its text; the registry before the code (got " + js(got) + ")", {
       hex3: () => got.hex3.token === "--w", comma: () => got.comma.token === "--b", pct: () => got.pct.token === "--r",
       alpha: () => js(got.alphaSlash) === "{}" && js(got.alpha4) === "{}" && js(got.hex8) === "{}" && got.alphaSame.token === "--b",
       hue: () => got.turn.token === "--c" && got.rad.token === "--c" && got.grad.token === "--c" && got.bare.token === "--c",
-      oklch: () => got.lpct.token === "--n" && got.none.token === "--color-neutral-900" && got.oklab.token === "--o",
+      oklch: () => got.lpct.token === "--n" && got.none.token === "--color-neutral-900" && got.oklab.token === "--o" && !got.lnear.token && got.lnear.near.token === "--n",
       zincTw: () => !got.zincTw.token && got.zincTw.near && got.zincTw.near.token === "--color-neutral-900" && got.zincTw.near.delta === 0.0078,
       zinc: () => js(got.zinc.map((x) => [x.token || null, x.near && x.near.delta])) === js([[null, 0.0079], [null, 0.0061], [null, 0.0046], [null, 0.0029]]),
       neutral: () => got.neutral.token === "--primary" && got.neutral2.token === "--foreground",
       hsl: () => got.hsl.token === "--teal",
       jnd: () => js(got.jnd[0]) === "{}" && got.jnd[1].near && got.jnd[1].near.token === "--w",
       nearest: () => got.nearest.near && got.nearest.near.token === "--close",
-      text: () => got.text.token === "--brand" && js(got.textOther) === "{}",
+      text: () => got.text.token === "--brand" && js(got.textOther) === "{}" && got.textBlanks.token === "--brand",
       order: () => got.first.token === "--a" && got.code.token === "--b",
     });
   }
@@ -111,10 +116,11 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       // #19191c, #05777d), is another colour
       prec: { s: [pair("#3b82f6", "hsl(217.2 90.2% 59.8%)"), pair("#2563eb", "hsl(221.2 83.5% 53.3%)")], l: pair("#18181b", "hsl(240 5.9% 10.3%)"), h: pair("#05787d", "hsl(183.0 92.3% 25.5%)") },
       // (review 2) the colour an HSL token paints — cal.com's and Radix's, as a picker or devtools give it — from either side; a
-      // channel painted at exactly half a unit (25.5) has both neighbours; CSS clamps before it paints; the next hex over (0.56
-      // off) is not; the ceiling holds
+      // channel painted at exactly half a unit (25.5) has both neighbours — (1.40's replay) one a hair past it in floats too
+      // (hsl(0 20.0% 25.0%)'s red is 76.50000000000001: #4c3333 needs the epsilon; 0.1 × 255 is 25.5 exactly); CSS clamps
+      // before it paints; the next hex over (0.56 off) is not; the ceiling holds
       paint: { hex: pair("#eeeff2", "hsla(220, 14%, 94%, 1)"), rgb: pair("rgb(238, 239, 242)", "hsla(220, 14%, 94%, 1)"), radix: pair("#ffb224", "hsl(39, 100%, 57.0%)"),
-        raw: pair("hsla(220, 14%, 94%, 1)", "#eeeff2"), half: [pair("#191919", "hsl(0 0% 10.0%)"), pair("#1a1a1a", "hsl(0 0% 10.0%)")],
+        raw: pair("hsla(220, 14%, 94%, 1)", "#eeeff2"), half: [pair("#191919", "hsl(0 0% 10.0%)"), pair("#1a1a1a", "hsl(0 0% 10.0%)"), pair("#4c3333", "hsl(0 20.0% 25.0%)")],
         clamp: pair("#ff2b00", "hsl(10.2 150% 50%)"), next: pair("#edeff2", "hsla(220, 14%, 94%, 1)"), ceiling: pair("#000005", "hsl(236 93% 1%)"),
         // (review 3: an rgb() with decimals is the 8-bit colour it paints — 237.1 paints #edeff2, 238.4 the token's own #eeeff2;
         // the blue channel pinned too)
@@ -136,7 +142,7 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       cal: () => kind(got.cal) === "near" && got.cal.near.token === "--cal-bg-subtle" && got.rawHsl === "near" && got.rgbSide === "near",
       keep: () => got.keep.every((k) => k === "token"),
       prec: () => js(got.prec) === js({ s: ["near", "near"], l: "near", h: "near" }),
-      paint: () => js(got.paint) === js({ hex: "token", rgb: "token", radix: "token", raw: "token", half: ["token", "token"], clamp: "token", next: "near", ceiling: "near",
+      paint: () => js(got.paint) === js({ hex: "token", rgb: "token", radix: "token", raw: "token", half: ["token", "token", "token"], clamp: "token", next: "near", ceiling: "near",
         decimals: ["near", "token"], blue: "near" }),
       exp: () => got.exp === "token" && got.turns === "token" && got.turnHalf === "token",
       moot: () => js(got.moot) === js({ grey: "token", white: "token", black: "token" }),
@@ -311,6 +317,8 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       top: () => js(got.first[0].slice(0, 3)) === js(["color", many[59], 5]),
       utility: () => js(got.first[2]) === js(["size", "md:p-[13px]", 2, 1, "src/checkout/B.tsx:1", null]) && !got.padding,
       single: () => !got.single,
+      // (1.40's replay: alpha included — #1e40af and #1e40af80 are two groups)
+      alpha: () => T.groupKey({ kind: "color", value: "#1e40af" }) !== T.groupKey({ kind: "color", value: "#1e40af80" }),
       bound: () => got.total === 62 && got.listed === 50 && got.raw === 50,
       order: () => js(got.first[3].slice(1, 5)) === js([many[0], 2, 1, "src/checkout/many.css:1"]) && r.groups.slice(1).every((y, i) => y.count <= r.groups[i].count),
     });
