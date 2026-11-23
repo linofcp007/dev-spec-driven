@@ -20,19 +20,22 @@ tool, command, hook or dependency; the MCP tool list and SKILL.md are unchanged.
   all counted), its replacement as
   doctor names it, its component files (a namesake's importers count too) and the .mdx / .vue files that render it with no
   import (an auto-import, a global registration, an MDX provider: counted apart, never resolved). A row named by its file
-  is its module — any import of the file counts: renamed, default, type-only, `require`, a non-component export
+  is its module — any import of the file counts: renamed, default, type-only (`import type { … }`, `import type * as` —
+  not a type-only default, `import type X from`), `require`, a non-component export
   (`buttonVariants`), a namespace's member, a Vue file with or without its extension, `X/index.vue` by its folder — and its
   components are followed through `export *` and a component folder's barrel; a component a file exports beside its own
   (`CardHeader` in `card.tsx`) counts by its name, and by a default import when it is the file's default export; a row
   whose name no component file gives is located by the component folders' indexes that give it (`export { default as
   VbenButton } from './button.vue'`, as the seed writes it) — when they give it to different files, a kit's parts
-  (shadcn-svelte's `Content` in 31 indexes), only by the index the row's path names; a file importing the file an index
+  (shadcn-svelte's `Content` in 31 indexes), only by the index the row's path names (the path cell read as one reference;
+  the files an index's relative imports name — an alias's import names none, and one file an index passes on from another
+  index's folder counts as two); a file importing the file an index
   renames (`import VbenButton from './button.vue'`) is not counted; `import type { … }` from a folder (`import type{ … }`
   too) binds no default. A row whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte /
   .astro file or a component folder's index, the one the row's path names when several give it to different files — is
   listed as `unlocated` (a library's, an Angular `*.component.ts` — its importers are `.ts` files the scan does not read
-  —, a Blade one). A localized `note` says what is not seen — a `.ts` file, a dynamic `import()`, a module only a bundler's alias or
-  a virtual module names, a re-export under another name outside a component folder's index, a tag an auto-import names by
+  —, a Blade one). A localized `note` says what is not seen — a `.ts` file, a dynamic `import()`, a module only a
+  bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a tag an auto-import names by
   its folder (Nuxt's `<BaseCard>`), a non-component export or a type through a barrel: no import found is not unused. Its
   own bounds are in its own `limits` (`usage-files`, `deprecated-follow`), never the report's `limits`, `truncated` or "in
   sync". The CLI prints it after the stale rows; its head counts every row the code holds a file for. The feature report,
