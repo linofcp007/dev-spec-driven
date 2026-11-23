@@ -3593,7 +3593,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   under `playwright/` / `cypress/` / `storybook/` folders in 9 of 38 repos hold 0 findings and 0 motion lines, while those
   folders in `TEST_DIRS` would turn 298 code files in 10 repos into test files for every `isTestFile` reader (carbon 139,
   cal.com 79, blockscout 42, canvas-kit 17 …). UC-1: 504 `<component>` tags in 11 Vue repos, 1 bound to one literal
-  (primevue's `TreeSelect.vue:51`, `:is="'ChevronDownIcon'"` — a component either way), 0 verdicts. The marker's list-item
+  (primevue's TreeSelect.vue:51, its `:is` bound to a quoted icon component's name — a component either way), 0 verdicts.
+  The marker's list-item
   / bold spellings: no public design-system.md holds any registry marker; a warn-only reader would cover one of the three
   markers `RE_DS_MARKER` anchors (`_Token sources:_` / `_Libraries:_` miss the same way) — prose, on a user's report a
   design for all three. R2-UD-1: the owner KEPT 2,000 (THE SCRIPT SEARCH above says the cost: naive-ui ×1.48 / ×1.51 on
