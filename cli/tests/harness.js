@@ -8,7 +8,8 @@
  *   all(label, conds) · eq(actual, expected, label)   one assertion each: all() over many conditions ({ name: cond } or
  *                     [() => cond, …] — a FAIL names the false ones), eq() a JSON deep equality (a FAIL shows the first
  *                     difference) — scripts/test-runner.js assertHelpers; prefer all() beyond ~4 conditions ·
- *                     remeasure(measure, holds): a timing-bound check's sample, measured once more on a miss
+ *                     remeasure(measure, holds): a timing-bound check's sample, measured once more on a miss ·
+ *                     fsCalls(under, fn): the fs calls a synchronous fn makes under a folder, counted
  *   run(args)         one `node cli/dev-spec.js <args>` → { out: stdout + stderr, code } — its default project is `tmp`
  *                     (SPEC_PROJECT_DIR); a file makes its own projects under it (--project path.join(tmp, "…"))
  *   runIn(args, o)    the same call IN THIS PROCESS (1.27: cli/main.js main, no process start — ~100× cheaper), the same
