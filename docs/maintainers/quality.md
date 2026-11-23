@@ -3465,12 +3465,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   trimmed again). Oracles: the 21 clones, every row marked — byte-identical to f539cb19, +7 / −0 against 8ec6ca52; with
   LIVE rows (every index-located row marked, then every other row) — 0 pairs apart from f539cb19 on all 21; the
   reviewer's alias / compat shapes give 1.39's answers, b-shapes' VbenTip 3 / KitButton 1 stay; vben with three rows
-  marked keeps 47 / 2 / 14. Mutation pass (%TEMP%/dsd-140-f1a/MUTATIONS.md): 10 mutants, all killed in the second pass —
+  marked keeps 47 / 2 / 14. Mutation pass (%TEMP%/dsd-140-f1a/MUTATIONS.md): the second pass's 9 mutants all killed —
   the first's survivors were the per-file mutant (the gap), `fileOf`'s twin entry (a fixture: an SFC an index
-  re-exports with no extension) and the trailing trim (dead); one equivalent probe (the words split before or after the
-  strip). Cost — the live loop runs per named re-export of an index, never per file read: CPU 0.95× / 1.06× / 1.02× on
-  vben / cal.com / shadcn-svelte with every other row live (A/A 0.90 / 1.08 / 1.02), 0.94× on the critic's hostileB2
-  tree (A/A 0.91). ui-code-scan.md +37 B.
+  re-exports with no extension) and the two trims (dead, deleted); one equivalent probe (the words split before or after
+  the strip). Cost — the live loop runs per named re-export of an index, never per file read (in-process: 25 ms for
+  the hostileB2 tree's 50,000 re-exports, 3–5 ms on the real trees): CPU 0.95× / 1.06× / 1.02× on vben / cal.com /
+  shadcn-svelte with every other row live (A/A 0.90 / 1.08 / 1.02); the hostileB2 tree 0.94× with half its rows live
+  (A/A 0.91), 1.09× with all marked (A/A 1.06). ui-code-scan.md +37 B.
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
