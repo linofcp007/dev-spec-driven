@@ -182,7 +182,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   in-process only, never in a result's JSON), so G1's `asks` asserts that count and the fs calls under the project root, no
   clock — the marked tree's own reads are the follow's config files (package.json, tsconfig), one or two by platform, a
   bound of 2 a kind — and, under every folder that holds what it reads (`src/`, `docs/`, `.specs/`), the SAME calls: a bound
-  is a slack, and a slack holds a regression of its size (review 2, DT2-1: a read once a row fit the root's on Windows)
+  is a slack, and a slack holds a regression of its size (review 2, DT2-1: a read once a row fit the root's on Windows; what
+  the root's bound still holds, review 3: a root file stat'ed once a row anywhere, a root config read once a row on Windows)
   (15-quality-design-system-cost-deprecated.js); `fsCalls` counts a path as the engine spells it, so a call made through the
   realpath of an aliased folder (Windows' 8.3 `ADMINI~1`) is not under it — assert no pinned difference that depends on one. It
   times only what has no count, and its
@@ -367,7 +368,7 @@ How the rules above came to be — grep a release here.
   rebuilt per own file, no fs call: 1.6–2.2× on node 22, 0.8–1.5× on Windows); one call a side (~40 ms) crossed even 2.5
   (2.76, 1 of 36 alpine). Left as found, their numbers for 1.41: `clickNest` / `clickControl` cost 2–2.6× plain JSX themselves
   and still reach the 3× bound under load (both tries 3.06 / 3.14 once on node 22 with two containers at once; more calls a side
-  did not steady them); twelve timing assertions outside `remeasure`; the three
+  did not steady them); timing assertions outside `remeasure`; the three
   different-work checks (reexports :434, usage :513, aliases :490), which passed every Linux run (a first try missed on
   node:24-alpine for two of them, the retry held); the read-ahead pool's start against a read in sequence (+600 ms: the start
   took 650–1,330 ms in two containers at once; it held one container at a time). The cost file split by topic (The suites): its two halves took 133 and
