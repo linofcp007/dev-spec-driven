@@ -1378,7 +1378,7 @@ exports.run = async ({
       // engine's, and what a bound cut in the report alone — R2-E1, R2-E2)
       ["ui-code-scan: the UI checks — silencing with a reason, on the line or the one above; counted, never listed",
         () => /a comment `ui-check-off: <rule-id> <why>` on its line \(a declaration's, a class's\) or the line above — `\/\/`, `\/\* \*\/`, `<!-- -->`, not Blade's or Twig's: counted, never listed; only this comment silences \(a linter's is not read\) — an `<a>` a parent gives its href \(Next's `legacyBehavior`\) is one to silence/.test(checks)],
-      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
+      ["ui-code-scan: the UI checks — what is never judged, its bounds the engine's", () => /A doubt is never judged: a named paste handler, a click whose content holds a control, a component \(an icon or a text component too; a bound Vue `<component :is>` in it is none\) or a slot, or no text \(an icon or an image alone\), a spread/.test(checks)
         && checks.includes("a tag past " + num("DS_TAG_ATTRS") + " attributes or " + num("DS_TAG_LINES") + " lines")
         && checks.includes("the project's first " + num("DS_FOCUS_SHEETS") + " stylesheets — past them, named unjudged — 2.4.7")
         && /In the report alone: `transition-all` \(kits ship it\), what a bound cut\./.test(checks)],
@@ -1633,8 +1633,9 @@ exports.run = async ({
       }],
       // (1.39, D6: the scripts are searched — the bounds from the source, the order and the filter the engine's: a test setup is
       // no test by name, so its mention counts)
-      ["fact: said only when no view read was cut — the inventory's bound by its code; the scripts searched, a test setup's too, their bounds and code", () =>
-        proj.includes("Said only when no view read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); a script's mention counts too, a test setup's included (" + n(B.motionFiles) + " by shorter path, " + B.motionChars / 1048576 + " MB: `" + passCodes[1] + "`).")
+      ["fact: said only when no view read was cut — the inventory's bound by its code; the scripts searched, a test setup's outside a test folder too (review 1 of 1.39, UC-4), their bounds and code", () =>
+        proj.includes("Said only when no view read was cut (the walk, `" + passCodes[0] + "`, a file's " + B.read / 1024 + "K); a script's mention counts too — a test setup's outside a test folder included (" + n(B.motionFiles) + " by shorter path, " + B.motionChars / 1048576 + " MB: `" + passCodes[1] + "`).")
+          && require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier().isTestFile("src/test/setup.ts")
           && passCodes[1] === "motion-scripts" && /const more = scan\.scripts\.filter\(\(x\) => !isViewFile\(x\.rel\) && !isTestFile\(x\.rel\) && !RE_NOT_COMPONENT_FILE\.test\(x\.rel\)\)\.sort\(\(a, b\) => a\.rel\.length - b\.rel\.length \|\| order\(a, b\)\)/.test(DS)
           && ["jest.setup.js", "vitest.setup.ts", "playwright.config.ts", "src/setupTests.ts"].every((f) => !require(path.join(root, "mcp", "lib", "engine", "index.js")).loadLazyTier().isTestFile(f))],
       ["marker: `_UI checks off: <rule-id> (reason)_` — the label the registry reads (RE_DS_MARKER), an example entry a rule; off everywhere, counted never listed", () =>
