@@ -82,8 +82,7 @@ literal or a ternary. No new tool, command, hook or dependency; the MCP tool lis
   read only where the fact would be said, the shorter path first, to the first mention or 2,000 scripts / 8 MB; a mention
   takes the fact back, never adds one (outline's false fact goes — so can a true one: said less, never more). A new
   inventory limit, `motion-scripts`, says which bound ended the search or which scripts were read only in part — never
-  the report's `limits`, `truncated` or "in
-  sync". The CLI's fact line reads "view files and scripts".
+  the report's `limits`, `truncated` or "in sync". The CLI's fact line reads "view files and scripts".
 - **`_UI checks off:_` accepts an id in a code span** (`` _UI checks off: `img-no-alt` (decorative)_ ``) — the docs' own
   spelling read `unreadable` in 1.38; a lone or doubled backtick still does.
 - **ui-responsive.md's `100vw` note** said the visual review measures the sideways scroll; its captures hide scrollbars
