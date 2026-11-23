@@ -511,7 +511,11 @@ function styleFontSize(v) {
 // whose value is viewport-only — a CANDIDATE pushed on `sizes` (the first a call), decided when the FILE ends by its caller:
 // none stands once a class list of the file (a line read; a sheet's `@apply`s apart) held a font SIZE under a variant
 // (RE_TW_TEXT_VARIANT, after a variant's `:` and Tailwind 3's `!`: a type-scale step — `md:text-6xl`, `lg:text-base/7` — or an
-// arbitrary length — `sm:text-[1.2vw]`, a `length:` hint, `[clamp(` / `calc(` / `min(` / `max(` —; never a colour, an alignment,
+// arbitrary length — `sm:text-[1.2vw]`, a `length:` hint, `[clamp(` / `calc(` / `min(` / `max(` — or (1.40, R3-UI-1) what
+// Tailwind's own `text-[…]` types a font size (utilities.ts `functional('text')`, infer-data-type.ts): a `percentage:` /
+// `size:` / `absolute-size:` / `relative-size:` hint (`size:` and the `(…)` form Tailwind 4's), a keyword of CSS's closed
+// `<absolute-size>` / `<relative-size>` lists whole to its `]` — `md:text-[x-large]`, `lg:text-[small]`, `md:text-[larger]`,
+// never `[mediumseagreen]` (a colour) nor `[theme(…)]` (not taken) —; never a colour, an alignment,
 // a wrap — `dark:text-white`, `hover:text-[#111]`, an untyped `[var(…)]`, `md:text-center` — nor a project's own key,
 // `md:text-hero`: F94's note, CRIT_3 must-fix 3; review 1 of 1.38: decided by the LINE, a class list split over lines —
 // `cn("text-[8vw]", "md:text-7xl")`, a cva base, a wrapped class attribute — warned; review 2 of 1.38: any variant `text-`, a
@@ -523,7 +527,7 @@ function styleFontSize(v) {
 const RE_TW_PICK = /transition-all|outline-|focus|text-\[|animate-|transition-transform|scroll-smooth/;
 const twMotion = (u) => (u.startsWith("animate-") ? u !== "animate-none" : u === "transition-transform" || u === "scroll-smooth");
 const RE_TW_TEXT = /^text-\[(?:length:)?([^\]]*)\](?:\/.*)?$/;
-const RE_TW_TEXT_VARIANT = /:!?text-(?:(?:\d*x[sl]|sm|base|lg)(?![\w-])|[[(]length:|\[(?:[\d.]|(?:calc|clamp|min|max)\())/;
+const RE_TW_TEXT_VARIANT = /:!?text-(?:(?:\d*x[sl]|sm|base|lg)(?![\w-])|[[(](?:length|percentage|size|absolute-size|relative-size):|\[(?:[\d.]|(?:calc|clamp|min|max)\(|(?:(?:xx?-)?small|(?:x{1,3}-)?large|medium|larger|smaller)\]))/;
 const RE_TW_SPLIT = /[\s"'`{}(),;=<>]+/;
 const RE_TW_REMOVAL = /^outline-(?:none|hidden|0)$/;
 const RE_TW_NOTHING = /(?:^|-)(?:0|none|hidden|transparent)$/;

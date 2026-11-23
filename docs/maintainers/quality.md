@@ -1553,15 +1553,25 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   responsive variant below, a wrapped JSX `className` / Vue `class` — warned): none stands once a non-CSS line of the file
   held a SIZE under a variant (`RE_TW_TEXT_VARIANT`, after `:` / `:!`: a type-scale step — `md:text-6xl`, `sm:text-xs`,
   `lg:text-base/7`, `md:text-6xl!` — or an arbitrary length — a digit or `.` first, a `length:` hint in `[…]` or Tailwind 4's
-  `(…)`, `clamp(` / `calc(` / `min(` / `max(`); never a colour — `dark:text-white`, `hover:text-[#111]`, an untyped
+  `(…)`, `clamp(` / `calc(` / `min(` / `max(` — or (1.40, R3-UI-1) what Tailwind's own `text-[…]` types a font size
+  (utilities.ts `functional('text')`, infer-data-type.ts): a `percentage:` / `size:` / `absolute-size:` / `relative-size:`
+  hint in either bracket (`size:` and the `(…)` form are Tailwind 4's — v3.4 emits nothing for `text-[size:…]`, a dead class
+  that still silences; no real file holds one), a keyword of CSS's closed `<absolute-size>` / `<relative-size>` lists read
+  whole to its `]` — ONE keyword group, one `]`: `md:text-[x-large]`, `lg:text-[small]`, `md:text-[larger]`; a named colour
+  (`[mediumseagreen]`) or `[smallish]` is none —; Tailwind 3's `[theme(fontSize.2xl)]` is not taken); never a colour —
+  `dark:text-white`, `hover:text-[#111]`, an untyped
   `[var(…)]`, which Tailwind reads as one, daisyUI's `text-base-content` —, an alignment (`md:text-center`) or a wrap; review 2
   of 1.38: any variant `text-` did, a colour's too, so a hero beside a nav link's `hover:` colour was silent, ~70 % of
   Breeze's and Jetstream's view files), nor in a `partial` file. The trade-off: a project's own size key under a variant
-  (`md:text-hero`) is no size here — the bare one warns, the team silences it (ui-code-scan.md says so). A sheet's `@apply`
+  (`md:text-hero`) is no size here — the bare one warns, the team silences it (ui-code-scan.md says so); and 1.38's limit,
+  R3-UI-1's too: a size under a variant on ANOTHER element silences the file's bare one (`lg:text-[small]` as `md:text-lg`,
+  per file). A sheet's `@apply`
   sizes are decided over its `@apply` statements by the same const (their variant size drops the `@apply` sizes, never the
-  sheet's declarations), a markup file's class lines and its `<style>` block apart (as before). A conditional `@apply`
+  sheet's declarations), a markup file's class lines and its `<style>` block apart (as before; deciding them as one — 1.39's
+  D1, 1.40's A2 for the variant flag alone — cut twice: History → UI checks, 1.40.0). A conditional `@apply`
   holding ANY `text-` utility still sets (2)'s `condSize` (`RE_TW_TEXT_ANY`, F0c's — a colour in a `@media` drops the sheet's
-  sizes: designed in 1.39 as D1 and cut — 1.40 backlog, History → UI checks, 1.39.0). An element's own `style` is
+  sizes: designed in 1.39 inside D1 and cut, cut again in 1.40 — none of the 163 real files holding an `@apply … text-` holds
+  one in a conditional block, History → UI checks, 1.39.0 and 1.40.0). An element's own `style` is
   decided on its tag, never deferred. Never: the `font` shorthand, a custom property
   (`--font-size-fluid-3`), a CSS-in-JS template line of a script. The walker keeps a statement's last 2,000 characters, so a
   longer declaration's property is not seen (a hostile shape only). `width-viewport` (`100vw` / `w-screen`) was cut to prose
@@ -1571,8 +1581,9 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   of 1243 with them, 1258 / 1258 without), so a `100vw` box scrolls nothing there; it now says nothing measures it — check
   an in-flow one by hand at a desktop size, scrollbars shown (a 17-docs row pins the capture line's flag, the reason).
   Keeping the scrollbars in `floor-zoom` was cut (CRIT_2 cut 3: scrollbars shrink the client width, "the width got"
-  undefined), and
-  `width-viewport` stays prose (ITEM_2: 22 boxes in 18 clones, 15 left after the best property, 1 likely defect).
+  undefined — again in 1.40: 625 against 640 on every tall page), and `width-viewport` stays prose (ITEM_2: 22 boxes in 18
+  clones, 15 left after the best property, 1 likely defect; 1.40: 78 boxes in 15 of 38 repos, 46 `fixed`, the rest decided
+  by the page's height, a clipping ancestor, the platform's scrollbars — no syntax: History → UI checks, 1.40.0).
 - **One file** — `uiChecksOf(lines, rel, over)` over `viewLines`' lines (the ONE line walk — Raw values above: each line cut at
   `DS_LINE_MAX`, its comments out, `cut` when it was longer; `over`, review 1 of 1.38: the file is longer than the text read —
   featureReport's two calls and the inventory's `feed` pass it) → `{findings: [{rule, line, value, silenced}], focus, past, cut}`;
@@ -1700,8 +1711,8 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   named the tag); a SECOND block's first prelude carries the first's `</style>` line before its own tag — stripped with it
   (review 1 of 1.38: Vue's documented global + scoped pair, `@media print` / a condition / keyframes there). Not Astro's
   `<style define:vars={{…}}>`: the walker opens blocks on its braces and the next prelude reads `> @media …` (the user docs
-  say to silence it; designed in 1.39 as D2 and cut, 1.40 backlog — viewLines yielding a `<style>` line's text after its
-  tag's end only would let `RE_STYLE_TAG` go).
+  say to silence it; designed in 1.39 as D2 and cut, cut again in 1.40 — 0 of 103 real blocks change a verdict; a local
+  form measured then, and its gaps: History → UI checks, 1.40.0).
   The statement events' `from` (the line a statement's text starts on) places a finding at a declaration's first line.
 - **The focus facts** (CRIT_1 must-fix 4) — a candidate stands only while NO focus style exists: in the feature's files read
   (any of them, a .vue `<style>` too), else in the project's stylesheets — ALL of them (`.css .scss .sass .less .styl` among
@@ -1783,7 +1794,7 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   a sheet), never parsed — its rules, focus styles and motion unseen: a removal elsewhere only its focus styles would have
   excused stands, where a feature report may excuse it (its focus search reads a sheet whole up to `DS_FOCUS_CHARS`; none
   on the clones: Bulma's and cal.com's other files hold focus styles; ui-code-scan.md says it — review 2 of 1.38, R2-UP-2;
-  designed in 1.39 as D5 and cut, 1.40 backlog). A feature report and finish keep 1.37's read of its first `DS_READ_CHARS` (a fixture). `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
+  designed in 1.39 as D5 and cut, cut again in 1.40: 0 of the 15 repos with such a sheet). A feature report and finish keep 1.37's read of its first `DS_READ_CHARS` (a fixture). `uiProjectPass(bounds, offs)` (ui-checks.js) is fed each file ONCE
   and keeps counts — its memory bounded by the rules, never the files: per rule its count (past a file's `DS_CHECK_PER_FILE`
   too — CRIT_1 must-fix 7), the FILES holding one (never the findings), its first place by file then line (a place past a
   file's cap has no line and is named only when no listed place exists — the feature report's unjudged rule); an
@@ -1794,7 +1805,9 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   same files); a pass a bound cut with no focus style read judges none. On the same files only: a feature report looks in its
   own files and the project's stylesheets alone, so a focus style only in a view file outside the feature (a Button's
   `focus-visible:ring-2`) excuses a removal in the inventory, never in that feature report or its finish (review 1 of 1.38,
-  UP-6 — kept: a class-list search project-wide reads every view file; ui-code-scan.md says it). `limits`, its own — never the report's `limits`,
+  UP-6 — kept: a class-list search project-wide reads every view file; ui-code-scan.md says it; cut again in 1.40: the
+  feature reports would lose 91 warnings, ≈ 55–60 % of them certain defects — the inventory's excuse hides about as many, a
+  1.41 count). `limits`, its own — never the report's `limits`,
   `truncated` or `inSync`: `ui-files` {read, count?, file?, line?: the removals it left unjudged}, `view-size`, `line-length`,
   `tag-length` {read, count, file: the smallest path}, (1.39) `motion-scripts` (the fact's script search, below) (the pass
   builds them; featureReport builds the feature's). The CLI
@@ -1848,7 +1861,13 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   ×1.23 quiet, ×1.5–1.7 / +240–350 ms re-measured by review 2 — accepted as said) — CRIT_2's prototype said +1 to +27 ms;
   cal.com itself never searches — its views mention; the 8 MB bound is
   reached on no clone (cal.com's first 2,000: 4.9 MB). What the bound hides: a mention past the
-  2,000th script or 8 MB (cal.com's first sits at its 1,002nd).
+  2,000th script or 8 MB (cal.com's first sits at its 1,002nd). (1.40, R2-UD-1 — the owner KEPT `DS_MOTION_SCRIPTS` 2,000)
+  Its cost is the scripts it OPENS (Windows scans each open): on a LARGE real tree too — naive-ui, 2,031 views, 1,108 scripts
+  read, none mentions: the project report ×1.48 on Windows (1,032 against 696 ms with the search off; ×1.51, +726 ms, in a
+  second loaded series), ×1.03 on node:22 (+23 ms, at noise); at the bound, 2,000 scripts beside a 158-view pass, +412 ms on
+  Windows, +82 / +106 ms on node:22 / node:24-alpine. It runs on 8 of 38 real trees, and a 500 bound would change no fact on
+  any (the one mention among them sits at outline's 207th script; carbon's, vben's and cal.com's deeper ones are in trees
+  whose views mention — never searched), adding a `motion-scripts` limit on canvas-kit and naive-ui.
 - **The marker `_UI checks off: <rule-id> (reason)_`** (1.38 — the registry's `checksOff`, Design-system registry above) —
   `uiOff(reg)` → {off: Map(id → reason), ignored: [{entry, why, read?}]}: an entry is APPLIED only when its id is a rule's
   or a project fact's (`UI_RULES` ∪ `UI_FACTS`, at call time — F0c's font-size-viewport is one: CRIT_X D7.4) and it gives a
@@ -1864,12 +1883,14 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   as nothing, said nowhere), each id bare or in ONE balanced code span (1.39, UP-7 — `RE_DS_OFF_ENTRY`'s two branches: the
   docs write ids in one, so the 1.38 docs' own spelling read `unreadable`; a lone backtick on either side or a doubled pair
   is another shape — `unreadable`; the list item and the bold line stay unread: the anchor is `_Token sources:_`' and
-  `_Libraries:_`' too). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
+  `_Libraries:_`' too — 1.40: no public design-system.md holds any registry marker; a reader, on a user's report, is one for
+  all three). The CLI prints the off line (`uiOff`: rule, the findings it hid, its reason)
   and each entry not applied (`uiOffIgnored[why]`) after the silenced count. A design-system.md written only for the marker
   enrols the project in the registry (`ui-design-system`, finish's New-component append — the user docs say so, CRIT_X D3);
   what-input's modality removals (`[data-whatintent='mouse'] { *:focus { outline: none } }`: no syntax tells a modality
   scope from a page scope — a name list) are judged as written: the inline `ui-check-off: outline-removed` on that rule is
-  the narrow answer, the marker switches every removal of the project off.
+  the narrow answer, the marker switches every removal of the project off (1.40: 18 such removals stand in 147 what-input
+  repos — 15 modality-only, false; 3 on `input:focus, textarea:focus` lists).
 - **Cost, as ratios** (mcp/tests/15-quality-ui-checks.js, measured at the same moment): ten hostile 256K inputs — unclosed
   tags, a line of tag starts one `>` closes, braces and quotes that never close, a string's tags, runs of focus variants and
   of `ui-check-off:`, a transition of endless items, a sheet of nothing but `{`, and (review 1 of 1.37) four click bodies —
@@ -1893,16 +1914,20 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   project report with the pass is NOT bounded against 1.37's: it opens and parses every view and style file the pass reads,
   so its ratio is high where 1.37's report read almost nothing (a small CSS / Vue tree) — the measured spread per clone is
   in History (1.38.0 review 1, the cost).
-- **Not in 1.37, 1.38 nor 1.39** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the
+- **Not in 1.37, 1.38, 1.39 nor 1.40** (cut — CRIT_1, the decisions): `autoplay-unmuted`, `img-no-size`, `motion-layout`, the
   `motion` raw kind (item 2's), the `addEventListener` paste form, a `hint` level; 1.38's cuts — deprecated uses (1.39),
   sharing settle's reads, the 5,000 / 32 MB focus bound in the feature report and finish, `DS_FOCUS_*` printed in MB (Vue's
-  `:is` / `v-bind:is` and the reduced-motion script search came in 1.39: D4, D6); 1.39's cuts (the 1.40 backlog — History
-  → UI checks, 1.39.0) — D1 (a markup file's template and `<style>` decided as one file for font-size-viewport: it hid
-  three true findings 1.38 caught; R3-UI-1, `RE_TW_TEXT_ANY`, A2 stay as written above), D2 (Astro's `define:vars` in the
-  shared line walk: no real effect, a bug in its in-tag state), D3 (`:is()` / `:where()` focus selectors: 0 of 661
-  candidates), D5 (a skipped sheet's focus styles: 0 cases), the floor-zoom capture keeping scrollbars, `width-viewport` as a
-  rule, S12 (harness folders as test files: 0 findings), S9 and UP-6 (prose: a modality-scoped rule — 0 in 18 clones —, a
-  feature report's focus search over every view file).
+  `:is` / `v-bind:is` and the reduced-motion script search came in 1.39: D4, D6); 1.39's cuts, designed again in 1.40 on a
+  corpus built to hold findings and cut AGAIN (History → UI checks, 1.39.0 and 1.40.0 — R3-UI-1 alone came in, above) — D1
+  (a markup file's template and `<style>` decided as one file for font-size-viewport: it hid three true findings 1.38
+  caught; 1.40: 144 real ones in one repo), A2 (D1 for the Tailwind variant flag alone: a true and a doubtful shape flip
+  together), `RE_TW_TEXT_ANY` narrowed (no real conditional `@apply … text-`), D2 (Astro's `define:vars`: 0 of 103 real
+  blocks), D3 (`:is()` / `:where()` / `:not()` / `:has()` focus selectors: 0 of 661, then 1 of 4,026 candidates — Svelte's
+  `:global()`, the element's own), D5 (a skipped sheet's focus styles: 0 cases), the floor-zoom capture keeping
+  scrollbars, `width-viewport` as a rule, S12 (harness folders as test files: 0 findings; ~300 code files would turn
+  tests), UC-1 (a bound `:is` holding one literal: 1 in 504 `<component>` tags, 0 verdicts), the marker's list-item / bold
+  spellings, S9 and UP-6 (prose: a modality-scoped rule — 15 false of 18 in 147 what-input repos —, a feature report's
+  focus search over every view file — it would hide true removals).
 
 ## UI state matrix (1.38)
 +ui's `[UI] UI States` scaffold ends in a state matrix (the template — markdown-and-trace.md → Readers, tracks.md): `State` ·
@@ -3507,6 +3532,82 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   keeps vben's true tiles). Review 2 re-measured the search at its 2,000-file bound on a small UI (158 views beside 3,381
   scripts): ×1.5–1.7 (+240–350 ms; CPU ×2.05) — past DECISIONS 6's +150 ms for small trees; the owner ACCEPTED it as said
   (the CHANGELOG states it), as the deprecated uses' watch; a smaller `DS_MOTION_SCRIPTS` is 1.40's question.
+- **1.40.0** (chain C — items 3 and 4 of the owner's 1.40 list, "everything, the cuts included", as CRIT_3 / CRIT_4 and the
+  DECISIONS cut them: every backlog entry designed again and critiqued on FRESH numbers; one mechanism kept, R3-UI-1). THE
+  CORPUS, built to HAVE findings (1.38's and 1.39's held no font-size-viewport finding: every D1 verdict had rested on
+  synthetic shapes) by GitHub code search, depth-1 clones of public repos: 22 of the standard shapes, 255 found by
+  `"text-[5vw]"` … `"text-[20vw]"`, 270 sampled from `font-size <N>vw` in CSS / SCSS / Vue / Svelte / Astro / HTML, 25 by
+  `"text-[x-large]"` and its kin, 150 by `not / has / where / is` + `focus outline none` — 722 repos, 50,043 view / style
+  files as the inventory feeds them: 3,921 font-size-viewport findings, 4,026 outline-removed candidates (the design's 4,072
+  counted 46 in sheets past 256K, which the inventory never feeds); plus 147 what-input repos (S9) and item 4's 38 repos
+  (1.39's 18, ten Vue / Astro apps, nine with Playwright / Cypress harnesses) with 193 `.astro` files.
+  KEPT — R3-UI-1 (UI checks above: what Tailwind's own `text-[…]` types a font size under a variant silences, as
+  `md:text-lg` does). It moved 0 of 3,921 findings either way: the oracle replay, `uiChecksOf` of the 50,043 files under
+  8ec6ca52 and this tree in one process (%TEMP%/dsd-140-c/both.js — CRIT_3's), every rule's count identical, 0 lost, 0
+  gained, 0 focus flips; by construction it can only set `tw.variant`, never add a finding. The shapes are real but never
+  beside a bare viewport size — 3 of 105,771 text files hold one only the new const matches (`max-[425px]:text-[small]`,
+  SkillANA's `sm:text-[large]`, `*:text-[x-small]`), all in the keyword-searched corpus; no file holds `size:` /
+  `percentage:` / `*-size:` under a variant. Its case is Tailwind's own typing at 0 bytes of user prose (ui-code-scan.md's
+  "no size under a variant" is now true of keywords), not a count. CRIT_3 must-fixes: ONE keyword group with one `]` (the
+  measured form, fewer mutant sites); `size:` and `(…)` named Tailwind 4's (v3.4.17's fontSize types are absolute-size /
+  relative-size / length / percentage), `[theme(…)]` named as not taken; 16 silent rows (37 in all) and 8 warning rows —
+  SkillANA's `[large]`, `[xx-large]`, the named colour `[mediumseagreen]` and `[smallish]` among them. Cost, the const
+  alone over the same 2,059,973 lines of 15,764 real view files (12,959 matches each side), interleaved, median of 11, with
+  an A/A control (the old const against a fresh copy of itself): Windows 0.945 (A/A 1.008), node:22-bookworm-slim 1.033
+  (A/A 0.993), node:24-alpine 0.901 (A/A 1.022) — noise; each alternative a literal of ≤ 14 characters after `:text-[`; no
+  cost guard (CRIT_X D5: CRIT_3's optional hostile row not added).
+  CUT AGAIN, item 3. D1 (a markup file's template and `<style>` decided as one file) on a REAL repo: it drops 144 of the
+  3,921, all in harshchovatiya/Durvasha-Infoteech's four pages (`accordion.html:193` `<p class="text-[5vw]">` silenced by a
+  slideshow's `@media (max-width:300px){.prev,.next,.text{font-size:11px}}` at :148-154) — true F94 failures, 0 doubts
+  fixed; a hero probe in each of the 5,000 real markup files holding a `<style>` block is silenced anew in 589 (11.8 %;
+  1.38's rejected R2-UP-1 was 9.3 %). A2 (the Tailwind variant flag alone crossing the halves): 0 findings move; 57 of the
+  5,000 probes flip, and a true / doubtful pair flips together — `<h1 class="hero text-[8vw]">` beside `.hero{@apply
+  md:text-6xl}` and `<h1 class="text-[8vw]">` beside `nav a{@apply sm:text-sm}`: telling them apart is matching a tag's
+  classes to a rule's selector. `RE_TW_TEXT_ANY` narrowed: 163 real files hold an `@apply … text-`, none of them in a
+  conditional block; the size-const narrowing re-makes 1.39 CRIT_2's app.css false positive (Tailwind 4 resolves a named
+  `text-<key>` colour-first, then `--text-*`: the theme decides, never the syntax). D3 (`:focus` inside `:is()` /
+  `:where()` / `:not()` / `:has()`): 1 of 4,026 candidates — a-sharapov/eile's `.card :global(.cms-form-sent:focus)`,
+  Svelte's scope wrapper, the element's own focus, which 1.39 ITEM_2's allow-list form would have DROPPED; the
+  negation-strip form moves 0. D5: 32 sheets past 256K in 15 of 722 repos, 6 with a focus style, 0 removals only such a
+  sheet would excuse. UP-6: the feature reports would lose 91 warnings (37 repos) that the inventory excuses by a focus
+  style in another view file; split by WCAG Understanding 2.4.7's Examples (a text field's caret is a visible focus
+  indicator) — of 16 read, 9 certain (`button{outline:none}` "excused" by an input's ring, Pricing / navbar / error-page
+  controls), 4 text fields (taxonomy's `editor.tsx:154` title textarea among them), 3 false (tailwindcss.com's dialog
+  panel, a vaul drawer, a `<section onClick>`): ≈ 50–60 certain of the 94 split files, not the design's "≈ 73 true". S9's
+  mechanism: 1,663 `[data-whatin…` selectors in 146 of 147 repos; 212 removals name one — 173 excused by their file's own
+  focus style, 21 by the project's sheets, 18 stand: 15 modality-only, false (`[data-whatintent='mouse'] *:focus`, in
+  reactjs/translations.react.dev's `a11y.css:7`), 3 on `input:focus, textarea:focus` lists, text fields — only one
+  library's attribute name tells them apart (1.39's "0 in 18 clones" corrected).
+  CUT AGAIN, item 4 (no engine change; the oracle the identity). D2 (Astro's `<style define:vars>`): 103 blocks in 102
+  files of ~100 repos, 4 opening with an at-rule, 0 verdicts change (3 files by a line shift). A local form on file, not
+  shipped — `.replace(/^>\s*(?=@)/, "")` beside `RE_STYLE_TAG` in sheetChecks, viewLines untouched: the four synthetic shapes
+  fixed, 0 of 31,884 files differ with the findings' VALUES compared (the plain `^>\s*` rewrote every nested child rule's
+  finding — taiga-ui's `input-inline.style.less:40` "> input { outline: none }"); it misses `define:vars={{…}} is:global`
+  and a styled-jsx `<style jsx>` template opening on `@media` (cal.com's `DataTable.tsx:132`, 0 verdicts). `width-viewport`: 78
+  boxes in 15 of 38 repos — 46 `fixed` within four lines, 3 `absolute`, 1 `sticky`, 28 in flow, 15 of those under a root
+  that clips horizontal overflow; Chrome 157 and the headless shell 158 at 640 × 360 @2: an `absolute` 100vw box overflows
+  as an in-flow one does, only `fixed` does not, `scrollbar-gutter: stable` takes it back (ui-responsive.md's sentence
+  re-verified). The floor-zoom capture keeping scrollbars: client width 625 against inner 640 on every tall page (15 CSS px
+  of scrollbar), so it needs two new definitions — "the width got", a reflow only where the root scrolls — in
+  ui-review.md (282 B left) and spec-ui-reviewer.md (4 B left). S12: `.storybook/` is never walked; 28 view / style files
+  under `playwright/` / `cypress/` / `storybook/` folders in 9 of 38 repos hold 0 findings and 0 motion lines, while those
+  folders in `TEST_DIRS` would turn 298 code files in 10 repos into test files for every `isTestFile` reader (carbon 139,
+  cal.com 79, blockscout 42, canvas-kit 17 …). UC-1: 504 `<component>` tags in 11 Vue repos, 1 bound to one literal
+  (primevue's TreeSelect.vue:51, its `:is` bound to a quoted icon component's name — a component either way), 0 verdicts.
+  The marker's list-item
+  / bold spellings: no public design-system.md holds any registry marker; a warn-only reader would cover one of the three
+  markers `RE_DS_MARKER` anchors (`_Token sources:_` / `_Libraries:_` miss the same way) — prose, on a user's report a
+  design for all three. R2-UD-1: the owner KEPT 2,000 (THE SCRIPT SEARCH above says the cost: naive-ui ×1.48 / ×1.51 on
+  Windows, ×1.03 on node:22; +412 ms at the bound on Windows, +82 / +106 ms in Linux); ITEM_4's "500 would cut three real
+  first mentions" was false (CRIT_4 must-fix 1) — carbon, vben and cal.com never search, their views mention; 500 changes
+  no fact on the 38 trees. Out of the items, 1.41: the inventory's 1.37 excuse hides ≈ 50–60 certain removals in 94 files
+  (a report-only count); cal.com's 53 `apps/web/playwright/*.e2e.ts` are no test files (`RE_TEST_NAME` has no `.e2e.`); the
+  floor's reflow measure reads overflow a clipped root cuts as a sideways scroll. Mutation pass, the list written before
+  the fixtures (%TEMP%/dsd-140-c/MUTATIONS.md): 41 / 41 killed, each by the font-size block's fixture — R3-UI-1's 24 (each
+  hint, the `(…)` bracket, each keyword's prefix and its count, the one `]` and its two partial forms — `[mediumseagreen]`,
+  `[smallish]` —, `xlarge`, any `[\w-]+:` hint, the `:`, the sheet's `@apply` on the old const, D1's declarations guard)
+  and 1.38's 17 replayed on the new const (each step, `\d*`, the end guard, both brackets, the `length:` hint, a digit /
+  `.`, each math function, `!?`, the `:`, the class-line test, any arbitrary value).
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table

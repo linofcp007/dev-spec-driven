@@ -562,6 +562,14 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     for (const [k, v] of Object.entries({ xs: "sm:text-xs", sm: "sm:text-sm", base: "lg:text-base", lg: "md:text-lg/7", bang: "md:text-6xl!", rem: "md:text-[2rem]",
       dot: "md:text-[.875rem]", hint: "lg:text-[length:var(--h)]", paren: "md:text-(length:--h)", calc: "md:text-[calc(1rem_+_2vw)]",
       clamp: "md:text-[clamp(2rem,6vw,5rem)]", min: "md:text-[min(6vw,5rem)]", max: "md:text-[max(2rem,6vw)]" })) S3[k] = sized(v);
+    // (1.40.0, R3-UI-1: what Tailwind's `text-[…]` itself types a font size — a `percentage:` / `size:` / `absolute-size:` /
+    // `relative-size:` hint, in `[…]` and Tailwind 4's `(…)`; each keyword of CSS's closed <absolute-size> / <relative-size>
+    // lists, whole to its `]` — SkillANA's real `lg:text-[small]` / `sm:text-[large]`; a sheet's @apply reads the same const)
+    for (const [k, v] of Object.entries({ pct: "md:text-[percentage:120%]", sizeHint: "md:text-[size:2rem]", abs: "md:text-[absolute-size:var(--k)]",
+      rel: "md:text-[relative-size:var(--k)]", pctParen: "md:text-(percentage:--h)", kwXs: "md:text-[x-small]", kwXxs: "sm:text-[xx-small]",
+      kwSmall: "lg:text-[small]", kwLarge: "sm:text-[large]", kwXl: "md:text-[x-large]", kwXxl: "md:text-[xx-large]", kwXxxl: "lg:text-[xxx-large]",
+      kwMedium: "md:text-[medium]", kwLarger: "md:text-[larger]", kwSmaller: "md:text-[smaller]" })) S3[k] = sized(v);
+    S3.applyKw = ["src/applykw.css", lines("h1 { @apply text-[5vw]; }", ".lead { @apply md:text-[x-large]; }")];
     const W3 = {
       html: ["public/404.html", lines("<p class=\"text-[5vw] font-bold\">404</p>", "<p class=\"text-red-500\">x</p>")],
       styleBeside: ["src/S.tsx", lines("export const A = () => <h1 className=\"md:text-6xl\" style={{ fontSize: \"5vw\" }}>a</h1>;")],
@@ -582,12 +590,20 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       daisy: ["src/Z.tsx", lines("export const B = () => <p className=\"text-[5vw] hover:text-base-content\">b</p>;")],
       ownKey: ["src/K.tsx", lines("export const B = () => <p className=\"text-[5vw] md:text-hero\">b</p>;")],
       applyColour: ["src/applyc.css", lines("h1 { @apply text-[5vw]; }", ".btn { @apply hover:text-white; }")],
+      // (1.40.0, R3-UI-1: a keyword is read whole to its `]` — a word that starts like one, a glued `xlarge`, a CSS named colour
+      // `mediumseagreen`, `smallish` are none —; a `color:` hint is a colour; a keyword with no variant is no condition; a
+      // keyword-size @apply drops the sheet's @apply sizes, never its declarations — D1's change, cut)
+      kwWord: sized("md:text-[large-blue]"), kwTail: sized("md:text-[x-large2]"), kwGlued: sized("md:text-[xlarge]"),
+      seagreen: sized("md:text-[mediumseagreen]"), smallish: sized("md:text-[smallish]"), colorHint: sized("md:text-[color:var(--x)]"),
+      bareKw: sized("text-[x-large]"),
+      declKw: ["src/declkw.css", lines("h1 { font-size: 5vw; }", ".lead { @apply md:text-[x-large]; }")],
     };
     const g3 = (o) => Object.fromEntries(Object.entries(o).map(([k, [rel, t]]) => [k, got(t, rel).filter((f) => /font-size-viewport/.test(f))]));
     const silent = g3(S3), warns = g3(W3);
-    const warnAt = { html: 1, styleBeside: 1, declColour: 1, dark: 1, hover: 4, darkP: 3, group: 3, align: 3, wrap: 1, hex: 1, cssVar: 1, daisy: 1, ownKey: 1, applyColour: 1 };
-    all("1.38.0 review 1 / 2: a bare `text-[…vw]` is decided per FILE — silent when any class list of the file holds a SIZE under a variant (cn() / cva / clsx() / a wrapped class attribute in JSX and Vue, the variant above or below, `lg:!text-7xl`, each type-scale step and arbitrary length; a sheet's @apply in another rule); a lone one, one beside a colour / alignment / wrap / own-key variant (`dark:text-white`, `hover:text-gray-900`, `hover:text-[#111]`, `md:text-center`, `md:text-hero`), an element's own style beside a variant, a sheet's declaration or @apply beside a colour-variant @apply still warn (got " + js({ silent, warns }) + ")", {
-      silent: () => Object.keys(silent).length === 21 && Object.values(silent).every((x) => js(x) === "[]"),
+    const warnAt = { html: 1, styleBeside: 1, declColour: 1, dark: 1, hover: 4, darkP: 3, group: 3, align: 3, wrap: 1, hex: 1, cssVar: 1, daisy: 1, ownKey: 1, applyColour: 1,
+      kwWord: 1, kwTail: 1, kwGlued: 1, seagreen: 1, smallish: 1, colorHint: 1, bareKw: 1, declKw: 1 };
+    all("1.38.0 review 1 / 2, 1.40.0 R3-UI-1: a bare `text-[…vw]` is decided per FILE — silent when any class list of the file holds a SIZE under a variant (cn() / cva / clsx() / a wrapped class attribute in JSX and Vue, the variant above or below, `lg:!text-7xl`, each type-scale step and arbitrary length, each size hint Tailwind types and each CSS size keyword — `md:text-[x-large]`, `lg:text-[small]`, `md:text-[percentage:120%]`; a sheet's @apply in another rule); a lone one, one beside a colour / alignment / wrap / own-key variant (`dark:text-white`, `hover:text-gray-900`, `hover:text-[#111]`, `md:text-center`, `md:text-hero`, `md:text-[mediumseagreen]`, `md:text-[color:…]`), a keyword with no variant, an element's own style beside a variant, a sheet's declaration or @apply beside a colour-variant @apply, a declaration beside a keyword-size @apply still warn (got " + js({ silent, warns }) + ")", {
+      silent: () => Object.keys(silent).length === 37 && Object.values(silent).every((x) => js(x) === "[]"),
       warns: () => js(warns) === js(Object.fromEntries(Object.entries(warnAt).map(([k, n]) => [k, ["font-size-viewport@" + n]]))),
     });
   }
