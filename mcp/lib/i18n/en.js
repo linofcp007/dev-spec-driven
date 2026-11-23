@@ -1640,11 +1640,11 @@ const msg = {
       dsMissingHead: (n) => `  in the code, not in the registry (${n}) — a row each:`,
       dsStaleHead: (n) => `  in the registry, but their path names no file (${n}):`,
       // 1.39: the files that still import a `_Deprecated:_` component (the project report's `deprecatedUses` — a report, never "in sync")
-      dsDepUsesHead: (n, total) => `  deprecated components the code still imports (${n} of the ${total} _Deprecated:_ ${total === 1 ? "row" : "rows"} the code holds a file for) — migrate each:`,
+      dsDepUsesHead: (n, total, atLeast) => `  deprecated components the code still imports (${atLeast ? "at least " : ""}${n} of the ${total} _Deprecated:_ ${total === 1 ? "row" : "rows"} the code holds a file for) — migrate each:`,
       dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "file" : "files"}: ${list}${at ? `  (${at} component files of that name)` : ""}`,
       dsDepUsesNone: (name, use, read) => `    ${name}${use ? " → " + use : ""} — no import of it in the ${read} ${read === 1 ? "file" : "files"} read: not proof it is unused (what is not read is below)`,
       dsDepUsesUnbound: (n, name, at) => `      ${n} .mdx / .vue ${n === 1 ? "file renders" : "files render"} <${name}> with no import — an auto-import, a global registration or an MDX provider, not resolved; the first: ${at}`,
-      dsDepUsesUnlocated: (list) => `  (no .tsx / .jsx / .js / .vue / .svelte / .astro component file of that name, so its importers were not looked for — a library's, an Angular or a Blade component, or one the code dropped: ${list})`,
+      dsDepUsesUnlocated: (list) => `  (no component file the scan reads gives that name — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index —, so its importers were not looked for: ${list})`,
       dsSourcesNew: (list) => `  token files the registry doesn't name (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  UI libraries in package.json the registry doesn't name (_Libraries:_): ${list}`,
       // 1.38: a registry token's value against the code's (`drift` — never part of "in sync"), the token files gone, the units table
@@ -3765,7 +3765,7 @@ const quality = {
     dsDeprecated: (n, list) => `Design System Usage reuses or extends ${n} ${n === 1 ? "component" : "components"} the registry (.specs/steering/design-system.md) marks deprecated — ${list}: move to what its marker names, or name that component in the row's notes to say why this one stays`,
     dsDeprecatedItem: (name, use) => (use ? `'${name}' (use ${use})` : `'${name}'`),
     // 1.39: the project report's deprecatedUses.note — what the search does not see (CRIT_1 must-fix 1: the JSON says it too)
-    dsDepUsesNote: "Read: the project's .tsx / .jsx / .js and .mdx / .vue / .svelte / .astro files, tests and stories aside. Not seen: a .ts file (a registration, a route table, an Angular component's imports), a dynamic import(), a module only a bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a non-component export or a type reached through a barrel. No import found is not unused: check what is not read before removing a file.",
+    dsDepUsesNote: "Read: the project's .tsx / .jsx / .js and .mdx / .vue / .svelte / .astro files, tests and stories aside. Not seen: a .ts file (a registration, a route table, an Angular component's imports), a dynamic import(), a module only a bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a tag an auto-import names by its folder (Nuxt's <BaseCard> for components/base/Card.vue), a non-component export or a type reached through a barrel. No import found is not unused: check what is not read before removing a file.",
     // 1.38 +ui's state matrix: each state's label by its English-stable id and the header's cells (UI_STATES — the template's
     // table is built from the same values)
     uiStateLabels: UI_STATES.labels, uiStateHead: UI_STATES.head, uiStateView: UI_STATES.view, uiStateA11y: UI_STATES.a11y,

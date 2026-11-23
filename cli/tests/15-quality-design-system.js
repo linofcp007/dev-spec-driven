@@ -429,4 +429,26 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       pt: () => ptOut.code === 0 && at(ptOut.out, lines(P, MSG("pt").quality)),
     });
   }
+  {
+    // review 1 of 1.39: past the 50 rows listed, the rows still imported come first (the registry's order within each group) and
+    // the head counts the rows the code holds a file for (rowsTotal) — "at least" when every listed row is imported and some are
+    // not listed (51 located rows: C50 and C10 imported, then all 51)
+    const L = (lines) => lines.join("\n") + "\n";
+    const names = Array.from({ length: 51 }, (_, i) => "C" + String(i).padStart(2, "0"));
+    const mk = (tag, used) => {
+      const dir = path.join(tmp, "p139-ds-uses-cut-" + tag);
+      SR.initProject(dir, ["ui"], "en");
+      for (const n of names) write(dir, "src/components/" + n + ".tsx", "export function " + n + "() { return <div />; }\n");
+      write(dir, REG, "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n" + names.map((n) => "| " + n + " | src/components/" + n + ".tsx |  | _Deprecated_ |").join("\n") + "\n");
+      write(dir, "src/app/page.tsx", L(used.map((n) => "import { " + n + " } from \"../components/" + n + "\";").concat(["export const P = () => <>" + used.map((n) => "<" + n + " />").join("") + "</>;"])));
+      return dir;
+    };
+    const two = runIn(["design-system", "--project", mk("two", ["C50", "C10"])]), every = runIn(["design-system", "--project", mk("every", names)]);
+    all("1.39 design-system (CLI, review 1): past the 50 rows listed, the rows still imported first and the head's total every row the code holds a file for — \"at least\" when every listed row is imported and some are not listed (got " + js([two.out, every.out]) + ")", {
+      order: () => two.code === 0 && two.out.includes(T.dsDepUsesHead(2, 51, false) + "\n" + T.dsDepUsesRow("C10", "", 1, "src/app/page.tsx", 0) + "\n" + T.dsDepUsesRow("C50", "", 1, "src/app/page.tsx", 0) + "\n" + T.dsDepUsesNone("C00", "", 52) + "\n")
+        && T.dsDepUsesHead(2, 51, false).includes("(2 of the 51 _Deprecated:_ rows"),
+      atLeast: () => every.code === 0 && every.out.includes(T.dsDepUsesHead(50, 51, true) + "\n") && T.dsDepUsesHead(50, 51, true).includes("(at least 50 of the 51 ")
+        && MSG("pt").cliOutput.dsDepUsesHead(50, 51, true).includes("(pelo menos 50 ") && MSG("es").cliOutput.dsDepUsesHead(50, 51, true).includes("(al menos 50 "),
+    });
+  }
 };

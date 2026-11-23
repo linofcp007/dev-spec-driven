@@ -8,7 +8,9 @@ const path = require("path");
 exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const T = require(path.join(__dirname, "lib", "engine", "index.js")).loadLazyTier();
-  const write = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
+  // (each folder made once — no folder is ever removed here: a mkdir a file cost the trees' writes a third, review 1 of 1.39)
+  const made = new Set();
+  const write = (dir, rel, text) => { const d = path.dirname(path.join(dir, rel)); if (!made.has(d)) { fs.mkdirSync(d, { recursive: true }); made.add(d); } fs.writeFileSync(path.join(dir, rel), text); };
   const registry = (tokens, more) => "# Design System\n\n| Token | Value | Use |\n|---|---|---|\n" + tokens.map(([n, v]) => "| " + n + " | " + v + " | x |").join("\n") + "\n" + (more || "");
   const table = (head, rows) => "| " + head.join(" | ") + " |\n|" + head.map(() => "---").join("|") + "|\n" + rows.map((r) => "| " + r.join(" | ") + " |").join("\n") + "\n";
   const REG = (more) => "# Design System\n\n| Token | Value | Use |\n|---|---|---|\n| --space-4 | 16px | gaps |\n\n" + more;
@@ -120,8 +122,9 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
     };
     const G1 = { asksOn: app("asks", true), asksOff: app("asks", false), nothingOn: app("nothing", true), all: app("all", false) };
     // G2: 500 LOCATED rows (500 component files, every one marked), 1,000 pages each importing one and 1,000 pages of 16 KB that
-    // name none — the module check indexed by key; and the prefilter two linear passes, whatever the rows: on 200 pages of 64 KB
-    // that name none, 500 rows marked ≤ 1.25× one (`includes` × the names scanned a text whole once a name)
+    // name none — the module check indexed by key; and the prefilter two linear passes, whatever the rows: on 50 pages of 64 KB
+    // that name none, 500 rows marked ≤ 1.25× one (`includes` × the names scanned a text whole once a name: 1.42–1.47× on 50
+    // pages, 2.2–2.6× on 200 — a linearity ratio, so 50 hold it at a quarter of the bytes written: review 1 of 1.39)
     const quiet = (rowsMarked) => {
       const files = { "package.json": js({ name: "g2q" }) }, rows = [];
       for (let c = 0; c < 500; c++) {
@@ -129,7 +132,7 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
         files["src/components/ui/" + n.toLowerCase() + ".tsx"] = L(["export function " + n + "() { return <div />; }"]);
         rows.push("| " + n + " | src/components/ui/" + n.toLowerCase() + ".tsx |  | " + (c < rowsMarked ? "_Deprecated_" : "") + " |");
       }
-      for (let i = 0; i < 200; i++) files["src/app/q" + i + ".tsx"] = L(["export const Q = () => <section />;"].concat(Array.from({ length: 800 }, (_, k) => "const w" + k + " = \"" + "z".repeat(70) + "\";")));
+      for (let i = 0; i < 50; i++) files["src/app/q" + i + ".tsx"] = L(["export const Q = () => <section />;"].concat(Array.from({ length: 800 }, (_, k) => "const w" + k + " = \"" + "z".repeat(70) + "\";")));
       files[".specs/steering/design-system.md"] = HEAD + rows.join("\n") + "\n";
       return project(null, files);
     };

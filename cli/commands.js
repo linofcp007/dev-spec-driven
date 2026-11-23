@@ -1976,7 +1976,10 @@ const COMMANDS = [
           const dep = r.deprecatedUses;
           if (dep) {
             const plus = (shown, total) => shown.join(", ") + (total > shown.length ? " … +" + (total - shown.length) : "");
-            if (dep.rows.length) log(T.dsDepUsesHead(dep.rows.filter((x) => x.filesTotal).length, dep.rows.length)); // (of the rows listed: the rest is counted below)
+            // (the rows still imported come first: of the rows the code holds a file for, those listed imported — every one, unless
+            // each listed row is imported and some are not listed: then at least that many)
+            const used = dep.rows.filter((x) => x.filesTotal).length;
+            if (dep.rows.length) log(T.dsDepUsesHead(used, dep.rowsTotal, used === dep.rows.length && dep.rowsTotal > dep.rows.length));
             dep.rows.forEach((x) => {
               log(x.filesTotal ? T.dsDepUsesRow(x.name, x.use, x.filesTotal, plus(x.files, x.filesTotal), x.pathsTotal > 1 ? x.pathsTotal : 0) : T.dsDepUsesNone(x.name, x.use, dep.read));
               if (x.unbound) log(T.dsDepUsesUnbound(x.unbound, x.name, x.unboundAt));
