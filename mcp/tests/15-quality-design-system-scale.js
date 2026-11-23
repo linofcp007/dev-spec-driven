@@ -201,9 +201,10 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       // HSL's pixel (E6, E6q), and 1.38's review colour #eeeff2 as oklch (CRIT_6 must-fix 2)
       painted: [both("hsl(229.3 50.9% 18.3%)", "oklch(0.2555 0.0744 271.54)"), both("hsl(163.24 83.86% 20.87%)", "oklch(0.442 0.087 167.325)"), both("hsl(220 14% 94%)", "oklch(0.952 0.004 271.369)")],
       // oklab, L, a and b each (E16a red-200's hex — E16b / E16c / E16d one channel off), its % channels (E17b, E26); an oklch
-      // hue in turns (E18)
+      // hue in turns (E18). (Review 1: `oklab(0.905 -0.011 0)`'s b, written zero, is off now too — the L alone off, its b the
+      // HSL's -0.003, is E16d's)
       oklab: [both("hsl(0 100% 89%)", "oklab(0.883 0.058 0.019)"), both("hsl(265.1 11.5% 55.2%)", "oklab(0.618 0.024 -0.03)"), both("hsl(200 76% 83%)", "oklab(0.88 -0.035 -0.039)"),
-        both("hsl(180 15% 86%)", "oklab(0.905 -0.011 0)"), both("hsl(157 16% 28%)", "oklab(41.6% -7.3% 2%)")],
+        both("hsl(180 15% 86%)", "oklab(0.905 -0.011 0)"), both("hsl(157 16% 28%)", "oklab(41.6% -7.3% 2%)"), both("hsl(180 15% 86%)", "oklab(0.905 -0.011 -0.003)")],
       turn: both("hsl(80.48 17.3% 16.91%)", "oklch(31% 6.6% 0.3424turn)"),
     };
     // T10, functional (CRIT_6 must-fix 4 — no clock): an HSL token's image is built ONCE, when an oklch / oklab value within the
@@ -224,7 +225,7 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       legacy: () => got.legacy.every((k) => k === "token / token"),
       paint: () => got.paint.every((k) => k === "token / token") && got.mid === "token / token",
       painted: () => got.painted.every((k) => k === "token / token"),
-      oklab: () => js(got.oklab) === js(["token / token", "near / near", "near / near", "near / near", "near / near"]),
+      oklab: () => js(got.oklab) === js(["token / token", "near / near", "near / near", "near / near", "near / near", "near / near"]),
       turn: () => got.turn === "token / token",
       memo: () => js(memo.judged) === js(["--b", "--a", "--b"]) && js(memo.built) === js([true, true, "hex", false]) && memo.same,
     });
