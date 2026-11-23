@@ -2850,13 +2850,12 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   // row's name places (`export { default as VbenButton } from './button.vue'`) — imported DIRECTLY under the name it has there
   // (a default import of button.vue, `{ AppleConnect }` for `export { AppleConnect as AppleCalendar } from …`): a use of that
   // row, of every row whose barrel renames that file. Its key exactly, an SFC's twin too (twinOf); a module key → { the file,
-  // the name it has there → the rows' keys }; a component file's keys built once (fileKeys)
-  const renamed = new Map();
+  // the name it has there → the rows' keys }; a component file's keys built once (fileKeys). Never that export when an index
+  // also gives it a LIVE row's name (`live`, the givenTo loop: `default as Button, default as OldButton`, a compat index's
+  // BButton of AButton's file — the alias's own importers count, the live component's do not: DEP-1 of 1.40 review 1)
+  const renamed = new Map(), live = new Set();
   let fileKeys = null;
-  const renames = (r, n, k) => {
-    const via = r.uses.reexports && r.uses.reexports.named.get(n);
-    const at = via && via.spec[0] === "." ? placeOf(via.spec, r.path, null) : null;
-    if (!at) return;
+  const fileOf = (key) => {
     if (!fileKeys) {
       fileKeys = new Map();
       for (const c of files) {
@@ -2866,13 +2865,24 @@ function deprecatedWatch(reg, files, results, scripts, project) {
         if (twin != null && !fileKeys.has(twin)) fileKeys.set(twin, of);
       }
     }
-    for (const key of at.keys) {
-      const of = fileKeys.get(key);
-      if (of) for (const fk of of.keys) {
+    return fileKeys.get(key);
+  };
+  // (the component files a barrel's relative re-export of a name places, each with the name it has there)
+  const placedBy = (r, n) => {
+    const via = r.uses.reexports && r.uses.reexports.named.get(n);
+    const at = via && via.spec[0] === "." ? placeOf(via.spec, r.path, null) : null;
+    const out = [];
+    if (at) for (const key of at.keys) { const of = fileOf(key); if (of) out.push([of, via.name]); }
+    return out;
+  };
+  const renames = (r, n, k) => {
+    for (const [of, there] of placedBy(r, n)) {
+      if (live.has(of.path + "\n" + there)) continue;
+      for (const fk of of.keys) {
         if (!renamed.has(fk)) renamed.set(fk, { path: of.path, by: new Map() });
         const by = renamed.get(fk).by;
-        if (!by.has(via.name)) by.set(via.name, new Set());
-        by.get(via.name).add(k);
+        if (!by.has(there)) by.set(there, new Set());
+        by.get(there).add(k);
         bases.add(keyBase(fk));
       }
     }
@@ -2904,7 +2914,8 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   const byFile = new Set(located.keys()), givenTo = new Map();
   for (const r of results) if (r.barrel) for (const n of namesOf(r)) {
     const k = dsKey(n);
-    if (!dep.has(k) || byFile.has(k)) continue;
+    if (!dep.has(k)) { if (rowName.has(k)) for (const [of, there] of placedBy(r, n)) live.add(of.path + "\n" + there); continue; }
+    if (byFile.has(k)) continue;
     const via = r.uses.reexports && r.uses.reexports.named.get(n);
     const at = !via ? { keys: [moduleKey(r.path)] } : via.spec[0] === "." ? placeOf(via.spec, r.path, null) : null;
     if (!at) continue;
