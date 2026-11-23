@@ -2145,7 +2145,8 @@ const UI_STATES_CHECK = "ui-states";
 const US_TABLES = 10;
 const US_ROWS = 60;
 const US_VIEWS = 12;
-const US_HEADER = 64; // (1.39, BS-5) a header's cells read for the anchor — past them, with none found, said as a view bound
+const US_HEADER = 64; // (1.39, BS-5) a header's cells read for the anchor — past them, with none found, said (`truncated.views`;
+// usTruncated names this bound too — 1.39.0 review 1, BU-5)
 const US_CELL = 400;
 const US_SHOWN = 5; // states named per view (or per no-row item), the rest counted
 // a text's words as the matrix compares them: accents folded, lower case, letters and digits
@@ -2236,7 +2237,7 @@ function uiStatesCheck(design, lang, opts = {}) {
   if (st === "na") return out("pass", Q.usNa, "na");
   const ids = Object.keys(Q.uiStateLabels);
   const m = uiStateMatrix(design, ids);
-  const cut = m && (m.truncated.tables || m.truncated.rows || m.truncated.views) ? "; " + Q.usTruncated(US_TABLES, US_ROWS, US_VIEWS) : "";
+  const cut = m && (m.truncated.tables || m.truncated.rows || m.truncated.views) ? "; " + Q.usTruncated(US_TABLES, US_ROWS, US_VIEWS, US_HEADER) : "";
   if (!m || !m.tables.length) return out("pass", Q.usNone + cut, "no-matrix");
   const named = (labels) => labels.slice(0, US_SHOWN).concat(labels.length > US_SHOWN ? [Q.xacMore(labels.length - US_SHOWN)] : []).join(", ");
   const items = [];

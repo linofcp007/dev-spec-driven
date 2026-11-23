@@ -312,6 +312,21 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       line: () => sass.every((x) => x.ok),
       json: () => sass.every((x) => x.json),
     });
+
+    // 1.39.0 review 1 (BU-1): the reviewer's crash shape — three sheet candidates (256K each) of one-line maps of 480 unitless
+    // entries, ~193K unread — prints the report (exit 0: 1.39 as reviewed said "Maximum call stack size exceeded", exit 1), the
+    // first five listed and the rest counted; --json = the engine
+    const wide = "$a-breakpoints: (" + Array(480).fill("a:1").join(",") + ");\n", sheet = wide.repeat(Math.floor(256 * 1024 / wide.length));
+    const crash = bp("crash", "en", null, null);
+    for (const k of [0, 1, 2]) write(crash, "p" + k + "/custom.scss", sheet);
+    const total = 3 * Math.floor(256 * 1024 / wide.length) * 480;
+    const cr = runIn(["design-system", "--project", crash]), crJson = jsonOf(runIn(["design-system", "--project", crash, "--json"]));
+    const crLine = cr.out.split("\n").find((l) => l.includes("⚠")) || "";
+    all("1.39.0 review 1 design-system (CLI — BU-1): ~193K unread Sass entries print the report — the default set, `⚠ " + total + " breakpoints…` with the first five and `… +" + (total - 5) + "`, exit 0; --json = the engine (got " +
+      js({ code: cr.code, err: String(cr.err || "").slice(0, 200), line: crLine.slice(0, 300), unreadTotal: crJson.breakpoints && crJson.breakpoints.unreadTotal }) + ")", {
+      line: () => cr.code === 0 && cr.out.includes(T.bpHead("320 · 390 · 768 · 1024 · 1440", T.bpFrom.default())) && crLine.startsWith(T.bpUnread(total, "$a-breakpoints.a 1 (").split(" — ")[0]) && crLine.includes(" … +" + (total - 5) + ":"),
+      json: () => crJson.breakpoints && crJson.breakpoints.unreadTotal === total && crJson.breakpoints.unread.length === 5 && js(crJson.breakpoints) === js(SR.designSystemReport(crash).breakpoints),
+    });
   }
 
   // --- 1.38: a raw value against the scale, the repeated values, the units table; the registry's values against the code ----------

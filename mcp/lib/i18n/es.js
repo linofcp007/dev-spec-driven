@@ -3533,7 +3533,7 @@ const quality = {
     usView: (view, labels) => `${view}: ${labels}`,
     usTable: (n, item) => `tabla ${n} › ${item}`,
     usSmall: (d) => `en el tamaño s, la matriz queda a criterio del autor — ${d}`,
-    usTruncated: (t, r, v) => `solo se leyeron las primeras ${t} tablas, ${r} filas de cada una y ${v} columnas de vista`,
+    usTruncated: (t, r, v, h) => `solo se leyeron las primeras ${t} tablas, ${r} filas de cada una, ${v} columnas de vista y las primeras ${h} celdas de una cabecera`,
     dsUnfilled: "la sección Uso del Design System aún no está escrita — se comprueba contra el registro cuando lo esté",
     dsNoRegistry: `todavía no hay registro del design system (.specs/steering/design-system.md) — el inventario único de componentes y tokens a partir del cual construyen todas las funcionalidades +ui. Para crearlo a partir del código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `el registro del design system (.specs/steering/design-system.md) todavía no enumera ningún componente — falta añadir los que ya existen (spec_scan {designSystem: true} · ${DEV_SPEC} design-system muestra lo que tiene el código)`,
@@ -3647,7 +3647,7 @@ const brief = {
     designSystemTokens: (n, sources) => `Tokens: ${n} en el registro${sources ? ` — definidos en ${sources}` : ""}.`,
     designSystemUnits: (list, more) => "Unidades — la tabla del registro, la convención del equipo: " + (list
       ? list + "." + (more ? ` (${more} ${more === 1 ? "fila" : "filas"} más en el registro)` : "")
-      : `${more} ${more === 1 ? "fila" : "filas"} en el registro, demasiado ${more === 1 ? "larga para citarla" : "largas para citarlas"} aquí.`),
+      : `la primera fila es demasiado larga para citarla aquí — ${more} ${more === 1 ? "fila" : "filas"} en el registro: ${more === 1 ? "léela" : "léelas"} allí.`),
     designSystemLibraries: (list) => `Bibliotecas de componentes sobre las que se apoya el proyecto: ${list}.`,
     design: "## Contexto de diseño",
     designToc: (p) => `Diseño completo: \`${p}\` — secciones:`,

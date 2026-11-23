@@ -114,7 +114,8 @@ const lengthPx = (v) => { if (v === "0") return 0; const m = RE_BP_LENGTH.exec(v
 // `$grid-breakpoints`, Bootstrap 6's and sass-mq's `$breakpoints` — never `$spacers`, a 0-led map of lengths too, nor
 // `$grid-breakpoints-custom`): plain, `!default`, or an override of `@use … with (…)` / `@forward … with (…)`. A record per
 // assignment → { name, line, def (a `!default` one), px (its entries' min edges: `0`, a px / rem / em length ≤ BP_CEIL), bad
-// ([{ name, value }] — unread) }:
+// (its first BP_UNREAD unread, [{ name, value }]), badTotal (all of them — 1.39.0 review 1, BU-1: a hostile line holds hundreds,
+// and no entry past a record's first BP_UNREAD can be among the report's first) }:
 //   a literal map — `(xs: 0, sm: 576px, …)`, keys quoted or not, to its own `)` — its entries; an entry that is no such length
 //     (`md: $tablet`, a unitless `750`, `5000px`) unread as `$name.key`; an entry that opens a map (Bulma's `"mobile": ("until":
 //     $tablet)`) makes the whole map no breakpoints (nothing, nothing unread);
@@ -152,11 +153,11 @@ function parenGroup(s, i) {
 }
 // One assignment's value as written → its record (above)
 function sassValue(name, value, line) {
-  const rec = { name, line, def: RE_SASS_DEFAULT.test(value), px: [], bad: [] };
+  const rec = { name, line, def: RE_SASS_DEFAULT.test(value), px: [], bad: [], badTotal: 0 };
   const v = value.trim();
-  if (v[0] !== "(") { if (RE_SASS_EXPR.test(v)) rec.bad.push({ name, value: v }); return rec; }
+  if (v[0] !== "(") { if (RE_SASS_EXPR.test(v)) { rec.bad.push({ name, value: v }); rec.badTotal = 1; } return rec; }
   const group = parenGroup(v, 0);
-  if (!group) { rec.bad.push({ name, value: v }); return rec; }
+  if (!group) { rec.bad.push({ name, value: v }); rec.badTotal = 1; return rec; }
   let map = null; // (asked of the first entry: a key makes it a map, none a list)
   for (const part of group) {
     const p = part.trim();
@@ -165,15 +166,15 @@ function sassValue(name, value, line) {
     if (map == null) map = c >= 0;
     if (!map) return rec; // a list: no width
     const val = c < 0 ? "" : p.slice(c + 1).trim();
-    if (val[0] === "(") return { name, line, def: rec.def, px: [], bad: [] }; // a nested map: no breakpoint widths
+    if (val[0] === "(") return { name, line, def: rec.def, px: [], bad: [], badTotal: 0 }; // a nested map: no breakpoint widths
     const px = lengthPx(val);
     if (px != null && px <= BP_CEIL) rec.px.push(px);
-    else rec.bad.push({ name: name + "." + (c < 0 ? p : p.slice(0, c)).trim().replace(RE_QUOTED, "$2"), value: val });
+    else if (rec.badTotal++ < BP_UNREAD) rec.bad.push({ name: name + "." + (c < 0 ? p : p.slice(0, c)).trim().replace(RE_QUOTED, "$2"), value: val });
   }
   return rec;
 }
 // what the walk did not deliver whole (voided, or cut at DS_PRELUDE) → one unread
-const sassUnread = (name, value, line) => ({ name, line, def: RE_SASS_DEFAULT.test(value), px: [], bad: [{ name, value: (value.trim() + " …").trim() }] });
+const sassUnread = (name, value, line) => ({ name, line, def: RE_SASS_DEFAULT.test(value), px: [], bad: [{ name, value: (value.trim() + " …").trim() }], badTotal: 1 });
 const sassVoid = (file) => { const p = file.open; if (p) { file.open = null; file.maps.push(sassUnread(p.name, p.value, p.line)); } };
 function sassOpen(file, e) {
   sassVoid(file);
@@ -232,11 +233,14 @@ function breakpointWatch() {
   };
   return { on, found };
 }
-// What the walk saw → { widths (px, in [BP_FLOOR, BP_CEIL]), unread, at (the first declaration KEPT with a length, file:line — the
-// files in the walk's order, a file's Tailwind declarations before its Sass maps: no sheet holds both), partial (a Tailwind width
-// read and no reset anywhere — never a Sass map's) }
+// What the walk saw → { widths (px, in [BP_FLOOR, BP_CEIL]), unread (the first BP_UNREAD), unreadTotal (all of them), at (the first
+// declaration KEPT with a length, file:line — the files in the walk's order, a file's Tailwind declarations before its Sass maps:
+// no sheet holds both), partial (a Tailwind width read and no reset anywhere — never a Sass map's) }. (1.39.0 review 1, BU-1: the
+// unread are counted, never all kept — a hostile sheet holds ~10^5 of them, and spreading them threw)
 function codeBreakpoints(found) {
   const widths = [], unread = [];
+  let unreadTotal = 0;
+  const miss = (name, value, at) => { if (unreadTotal++ < BP_UNREAD) unread.push({ name, value, at }); };
   const files = found ? found.files : [];
   // (an open the file's end left pending is voided — the walk delivered no rest)
   const mapsOf = (f) => (f.open ? [...f.maps, sassUnread(f.open.name, f.open.value, f.open.line)] : f.maps);
@@ -246,19 +250,20 @@ function codeBreakpoints(found) {
   for (const f of files) {
     for (const [name, d] of f.decls) {
       const px = lengthPx(d.value), where = f.rel + ":" + d.line;
-      if (px == null || px > BP_CEIL) { unread.push({ name: "--breakpoint-" + name, value: d.value, at: where }); continue; }
+      if (px == null || px > BP_CEIL) { miss("--breakpoint-" + name, d.value, where); continue; }
       if (at == null) at = where;
       if (px >= BP_FLOOR) { widths.push(px); tailwind = true; }
     }
     for (const m of mapsOf(f)) {
       if (m.def && plain.has(m.name)) continue;
       const where = f.rel + ":" + m.line;
-      for (const b of m.bad) unread.push({ name: b.name, value: b.value, at: where });
+      for (const b of m.bad) miss(b.name, b.value, where);
+      unreadTotal += m.badTotal - m.bad.length; // (the record's past its first BP_UNREAD: counted — the list is full by then)
       if (m.px.length && at == null) at = where;
       for (const px of m.px) if (px >= BP_FLOOR) widths.push(px);
     }
   }
-  return { widths, unread, at, partial: tailwind && !found.reset }; // (asked only when a width was read)
+  return { widths, unread, unreadTotal, at, partial: tailwind && !found.reset }; // (asked only when a width was read)
 }
 
 // spec_scan {designSystem: true}'s `breakpoints` (both shapes) → { widths (ascending, BP_FLOOR first, BP_WIDTHS at most), from:
@@ -272,11 +277,14 @@ function codeBreakpoints(found) {
 function breakpointsReport(projectDir, found) {
   const ui = uiBreakpoints(path.resolve(projectDir));
   const unread = [], limits = [];
-  let from = "default", partial = false, at = null, widths = BP_DEFAULT;
-  if (ui) { unread.push(...ui.unread); if (ui.cut) limits.push({ code: "breakpoint-line", read: BP_LINE, at: ui.at }); }
+  let from = "default", partial = false, at = null, widths = BP_DEFAULT, unreadTotal = 0;
+  // a source's unread joined one by one — never a spread, whose arguments a large list overflows (1.39.0 review 1, BU-1) —, its
+  // first ones while BP_UNREAD leaves room, all counted
+  const join = (list, total) => { for (const u of list) { if (unread.length >= BP_UNREAD) break; unread.push(u); } unreadTotal += total; };
+  if (ui) { join(ui.unread, ui.unread.length); if (ui.cut) limits.push({ code: "breakpoint-line", read: BP_LINE, at: ui.at }); }
   if (ui && ui.widths.length) { from = "ui.md"; at = ui.at; widths = ui.widths; } else {
     const code = codeBreakpoints(found);
-    unread.push(...code.unread);
+    join(code.unread, code.unreadTotal);
     if (code.widths.length) { from = "code"; at = code.at; partial = code.partial; widths = code.widths; }
   }
   // the source's own widths first — past BP_WIDTHS the narrowest BP_WIDTHS - 1 and the widest, the rest said —, then under
@@ -287,7 +295,7 @@ function breakpointsReport(projectDir, found) {
   const kept = all.length > BP_WIDTHS ? [...all.slice(0, BP_WIDTHS - 1), all[all.length - 1]] : all;
   if (kept.length < all.length) limits.push({ code: "breakpoint-widths", read: BP_WIDTHS, count: all.length - kept.length, first: all[BP_WIDTHS - 1] });
   if (partial) { for (const w of BP_FILL) if (kept.length < BP_WIDTHS && !kept.includes(w)) kept.push(w); kept.sort(asc); }
-  return { widths: kept, from, partial, at, unread: unread.slice(0, BP_UNREAD), unreadTotal: unread.length, limits };
+  return { widths: kept, from, partial, at, unread, unreadTotal, limits };
 }
 
-module.exports = { breakpointWatch, breakpointsReport, __link };
+module.exports = { breakpointWatch, breakpointsReport, codeBreakpoints, __link }; // (codeBreakpoints: its bound's own fixture, BP-crash)
