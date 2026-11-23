@@ -139,8 +139,9 @@ token of the project's scale that a raw colour, font or timing already is, and b
 the widths the visual review captures. `doctor`'s `ui-states` warns (a note at size s) when the design's state matrix
 gives a state no row or leaves a view's cell open. A registry row marked `_Deprecated: use DataGrid_` retires
 its component: `doctor` warns when a design still reuses or extends it, naming the replacement.
-`dev-spec design-system` lists the files that still import it (`deprecatedUses`). A +ui task that changes what renders gets a visual review (not at size xs / s) — screenshots of the build compared with the design's reference by
-a reviewer that sees only the images —, and a view with no reference is held to the accessibility floor instead (320 px
+`dev-spec design-system` lists the files that still import it (`deprecatedUses`). A +ui task that changes what renders
+gets a visual review (not at size xs / s) — screenshots of the build compared with the design's reference by a reviewer
+that sees only the images —, and a view with no reference is held to the accessibility floor instead (320 px
 wide, text at 200 %, focus visible), never reported as matching the design.
 
 A track can be added or turned off later (`/spec-change <feature> track +sec`). Your team's own tracks:
