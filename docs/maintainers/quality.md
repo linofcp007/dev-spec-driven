@@ -2773,8 +2773,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   trees of 700 view files or more 1.00–1.19× (shadcn-ui 1.06 · cal.com 1.04 · vben 1.19 · shadcn-svelte 1.09 · nuxt/ui 1.04 ·
   outline 1.00 · mantine 1.18), smaller ones +2 to +108 ms where a row is located (Bootstrap +2, taxonomy +37, Breeze +89,
   motion-primitives +95, Starlight +108 — the watch's read where settle asks nothing); a row no file holds read +51 / +117 ms
-  for nothing until the watch went `idle`; finish's scan 0.81–1.15× (the same code path). The mutation pass (77 mutants: the
-  lift's 8, the watch's 69): 70 killed — 17 of them by fixtures the first pass showed missing (a namesake's non-component
+  for nothing until the watch went `idle`; finish's scan 0.81–1.15× (the same code path). The mutation pass (85 mutants: the
+  lift's 8, the watch's 77): 78 killed — 17 of them by fixtures the first pass showed missing (a namesake's non-component
   export, a folder's index, a candidate's name row, two name rows in a file, a renamed import by its imported name, a
   member's part, a .js-written module, four namesakes out of path order, 51 unlocated, a cut in `reach`, the follow's own
   budget, an .mdx part tag, the idle watch) and the cost guards sharpened (G2q: 500 rows over pages that name none ≤ 1.25×
