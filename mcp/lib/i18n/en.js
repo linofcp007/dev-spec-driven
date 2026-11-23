@@ -1644,7 +1644,7 @@ const msg = {
       dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "file" : "files"}: ${list}${at ? `  (${at} component files of that name)` : ""}`,
       dsDepUsesNone: (name, use, read) => `    ${name}${use ? " → " + use : ""} — no import of it in the ${read} ${read === 1 ? "file" : "files"} read: not proof it is unused (what is not read is below)`,
       dsDepUsesUnbound: (n, name, at) => `      ${n} .mdx / .vue ${n === 1 ? "file renders" : "files render"} <${name}> with no import — an auto-import, a global registration or an MDX provider, not resolved; the first: ${at}`,
-      dsDepUsesUnlocated: (list) => `  (no component file the scan reads gives that name — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index —, so its importers were not looked for: ${list})`,
+      dsDepUsesUnlocated: (list) => `  (no component file the scan reads gives that name — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index; when several indexes give it to different files, the index the row's path names —, so its importers were not looked for: ${list})`,
       dsSourcesNew: (list) => `  token files the registry doesn't name (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  UI libraries in package.json the registry doesn't name (_Libraries:_): ${list}`,
       // 1.38: a registry token's value against the code's (`drift` — never part of "in sync"), the token files gone, the units table

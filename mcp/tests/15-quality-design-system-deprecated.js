@@ -728,6 +728,70 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       differential: () => diff.same === true,
     });
   }
+  {
+    // review 2 of 1.39 — a kit's parts: when the component folders' indexes give a row's name to more than one FILE (shadcn-
+    // svelte's `Content`: card's, dialog's and the picker's own content.svelte), only the index the row's path names locates it
+    // (its key, or its folder's: `./…/picker`); a name an index declares is that index's file (`const Trigger = …Trigger`);
+    // given to ONE file (vben's VbenButton → button.vue, through two indexes; a third passes on a package's, vben's common-ui
+    // `export { VbenButton } from '@vben-core/shadcn-ui'`: no file placed), every index, as before; a path that names none of
+    // them leaves the row unlocated, and the line says why. And `import type{ X }` — no blank, or two — binds no default
+    const C = "src/lib/components/ui/", part = (c, p) => C + c + "/" + c + "-" + p + ".svelte";
+    const files = {
+      "package.json": js({ name: "r2", private: true, workspaces: ["packages/*"], dependencies: { svelte: "^5", vue: "^3", react: "^19" } }),
+      "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "$lib/*": ["./src/lib/*"], "@/*": ["./src/*"] } } }),
+      "packages/ui/package.json": js({ name: "@acme/ui" }),
+      "packages/ui/src/index.ts": L(["export * from './components';"]),
+      "packages/ui/src/components/index.ts": L(["export * from './button';"]),
+      "packages/ui/src/components/button/button.vue": L(["<template><button /></template>"]),
+      "packages/ui/src/components/button/index.ts": L(["export { default as VbenButton } from './button.vue';"]),
+      "packages/ui/src/components/legacy/index.ts": L(["export { default as VbenButton } from '../button/button.vue';"]),
+      "packages/effects/package.json": js({ name: "@acme/effects" }),
+      "packages/effects/src/components/index.ts": L(["export {", "  VbenButton,", "  VbenTooltip,", "} from '@acme/ui';"]),
+      // (a name only packages' re-exports give — no file placed: every index, as before)
+      "packages/extras/src/components/index.ts": L(["export { VbenTooltip } from '@acme/ui';"]),
+      "packages/extras/src/views/tip.vue": L(["<script setup lang=\"ts\">", "import { VbenTooltip } from '../components';", "</script>", "<template><VbenTooltip /></template>"]),
+      "packages/ui/src/views/legacy.vue": L(["<script setup lang=\"ts\">", "import { VbenButton } from '../components/legacy';", "</script>", "<template><VbenButton /></template>"]),
+      "apps/web/src/v1.vue": L(["<script setup lang=\"ts\">", "import { VbenButton } from '@acme/ui';", "</script>", "<template><VbenButton /></template>"]),
+      "src/components/ui/toggle/toggle.tsx": compFile("Toggle"),
+      "src/components/ui/toggle/index.ts": L(["export * from \"./toggle\";", "export * from \"./variants\";"]),
+      "src/components/ui/toggle/variants.ts": L(["export type ToggleVariants = { size: string };"]),
+      "src/app/toggle.tsx": L(["import { Toggle } from \"@/components/ui/toggle\";", "export const R = () => <Toggle />;"]),
+      "src/app/type-tight.tsx": L(["import type{ ToggleVariants } from \"@/components/ui/toggle\";", "export const B = (p: { v: ToggleVariants }) => <div />;"]),
+      "src/app/type-wide.tsx": L(["import type  { ToggleVariants } from \"@/components/ui/toggle\";", "export const B = (p: { v: ToggleVariants }) => <div />;"]),
+      "src/app/type-file.tsx": L(["import type ToggleT from \"@/components/ui/toggle/toggle\";", "export const B = (p: { v: ToggleT }) => <div />;"]),
+    };
+    for (const c of ["card", "dialog", "picker"]) {
+      const U = c[0].toUpperCase() + c.slice(1), grouped = c !== "card", own = c === "picker";
+      for (const p of ["content", "footer"].concat(grouped ? ["group"] : [], own ? ["trigger"] : [])) files[part(c, p)] = L(["<div><slot /></div>"]);
+      files[C + c + "/" + c + ".svelte"] = L(["<div><slot /></div>"]);
+      files[C + c + "/index.ts"] = L(["import { Dialog as Primitive } from \"bits-ui\";", "import Root from \"./" + c + ".svelte\";", "import Content from \"./" + c + "-content.svelte\";", "import Footer from \"./" + c + "-footer.svelte\";"]
+        .concat(grouped ? ["import Group from \"./" + c + "-group.svelte\";"] : [], own ? ["import Trigger from \"./" + c + "-trigger.svelte\";"] : ["const Trigger = Primitive.Trigger;"],
+          ["export { Root, Content, Footer, Trigger" + (grouped ? ", Group" : "") + ", Root as " + U + ", Content as " + U + "Content };"]));
+    }
+    for (let i = 0; i < 4; i++) files["src/routes/r" + i + "/+page.svelte"] = L(["<script lang=\"ts\">", "  import * as Card from \"$lib/components/ui/card/index.js\";", "  import * as Dialog from \"$lib/components/ui/dialog/index.js\";", "</script>",
+      "<Card.Root><Card.Trigger /><Card.Content>x</Card.Content><Card.Footer /></Card.Root>", "<Dialog.Root><Dialog.Trigger /><Dialog.Group><Dialog.Content>y</Dialog.Content></Dialog.Group></Dialog.Root>"]);
+    files["src/routes/picker/+page.svelte"] = L(["<script lang=\"ts\">", "  import * as Picker from \"$lib/components/ui/picker/index.js\";", "</script>",
+      "<Picker.Root><Picker.Trigger /><Picker.Group><Picker.Content>z</Picker.Content></Picker.Group><Picker.Footer /></Picker.Root>"]);
+    const rows = (mark) => ["| VbenButton | `packages/ui/src/components/button/index.ts` |  | " + mark() + " |", "| Content | " + C + "picker/index.ts |  | " + mark("use Popover.Content") + " |",
+      "| Group | ./" + C + "picker |  | " + mark() + " |", "| Trigger | " + C + "picker/index.ts |  | " + mark() + " |", "| Footer | " + C + "sheet/index.ts |  | " + mark() + " |",
+      "| Toggle | src/components/ui/toggle/toggle.tsx |  | " + mark() + " |", "| VbenTooltip | packages/effects/src/components/index.ts |  | " + mark() + " |"];
+    const p = depProject("review2", rows(MARK), files);
+    const r = S.designSystemReport(p), d = usesOf(r);
+    const diff = differential(p, rows);
+    const PICKER = "src/routes/picker/+page.svelte", AT = [C + "picker/index.ts"];
+    const clause = { en: "the index the row's path names", pt: "o index que o caminho da linha nomeia", es: "el index que nombra la ruta de la fila" };
+    all("1.39 deprecatedUses (review 2): when the component folders' indexes give a row's name to more than one file — a kit's parts, a name an index declares its own —, only the index the row's path names (its key or its folder's) locates it; given to one file, every index; another package's re-export places no file; a path naming none of them leaves the row unlocated, the line saying why (EN / PT / ES); `import type{ X }` and `import type  { X }` bind no default, `import type X from` the row's file binds nothing; every other key the same with no marker (got " +
+      js({ rows: d.rows.map((x) => [x.name, x.filesTotal, x.files, x.paths, x.pathsTotal]), unlocated: d.unlocated, same: diff.same }) + ")", {
+      parts: () => js(uses(r, "Content")) === js([1, [PICKER]]) && js(rowOf(r, "Content").paths) === js(AT) && rowOf(r, "Content").pathsTotal === 1,
+      twoFiles: () => js(uses(r, "Group")) === js([1, [PICKER]]) && js(rowOf(r, "Group").paths) === js(AT),
+      declared: () => js(uses(r, "Trigger")) === js([1, [PICKER]]) && js(rowOf(r, "Trigger").paths) === js(AT),
+      oneFile: () => js(uses(r, "VbenButton")) === js([2, ["apps/web/src/v1.vue", "packages/ui/src/views/legacy.vue"]]),
+      noFile: () => js(uses(r, "VbenTooltip")) === js([1, ["packages/extras/src/views/tip.vue"]]),
+      unlocated: () => js(d.unlocated) === js(["Footer"]) && d.unlocatedTotal === 1 && ["en", "pt", "es"].every((l) => i18n.msg(l).cliOutput.dsDepUsesUnlocated("X").includes(clause[l])),
+      typeTight: () => js(uses(r, "Toggle")) === js([1, ["src/app/toggle.tsx"]]),
+      differential: () => diff.same === true,
+    });
+  }
 
   // --- 1.39: the bounds — each said in `deprecatedUses.limits` when it cut, never in the report's ---------------------------------
   {

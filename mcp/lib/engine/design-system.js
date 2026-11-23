@@ -27,7 +27,7 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
-  existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
+  existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, implementsRel, isDirSafe, isInsideDir,
   isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
   stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep,
   uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass, uiOff, breakpointWatch, breakpointsReport;
@@ -37,7 +37,7 @@ let dsReplacement;
 let easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP;
 function __link(E) { ({ dsReplacement, easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP,
   activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
-  detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
+  detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, implementsRel,
   isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
   stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns,
   fenceStep, uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass, uiOff, breakpointWatch, breakpointsReport } = E); }
@@ -1220,7 +1220,7 @@ const RE_SELF_CLOSED = /^[^<>]*\/>/; // (of what follows a tag's name) it closes
 const RE_REQUIRE_DECL = /^(?:export\s+)?(?:const|let|var)\s+(?:([\p{L}_$][\p{L}\p{N}_$]*)|\{([^}]*)\})\s*=\s*require\s*\(\s*["']([^"']+)["']\s*\)/u;
 const RE_NAMESPACE_IMPORT = /^\*\s*as\s+([\p{L}_$][\p{L}\p{N}_$]*)$/u;
 const RE_FROM_END = /(?:^|\s)from$/;
-const RE_TYPE_MODIFIER = /^type\s+(?=[{*])/; // (an import clause's TypeScript modifier before `{` or `*`)
+const RE_TYPE_MODIFIER = /^type\s*(?=[{*])/; // (an import clause's TypeScript modifier before `{` or `*`, a blank after it or none)
 // A call that renders a name — what a tag compiles to (1.35.4): React's `createElement(X, …)` (the classic runtime's, and
 // what React gives for writing without JSX), Preact's `h(X)` / `createElement(X)`, Vue's `h(X)` (its render functions) and
 // `createVNode(X)` (its JSX plugin's), the automatic runtime's `jsx` / `jsxs` / `jsxDEV` (each library's `/jsx-runtime`,
@@ -1242,9 +1242,11 @@ function importClause(text, spec, into) {
   let t = text.trim();
   if (RE_FROM_END.test(t)) t = t.slice(0, -4).trim();
   if (t === "") return; // (`import type …` needs no skip for settle: a name only a type is can be neither rendered nor called)
-  // (TypeScript's `type` modifier before a brace list or a namespace binds nothing: read as a default binding, `import type {
-  // ButtonVariants } from "./button"` was an import of the folder's Button for the deprecated uses — review 1 of 1.39; the
-  // names it lists are bound as an inline `{ type X }` is. `import type X from` stays unbound: stripped, it gained a false pair)
+  // (TypeScript's `type` modifier before a brace list or a namespace — `import type{ X }` too, review 2 of 1.39 — binds
+  // nothing: read as a default binding, `import type { ButtonVariants } from "./button"` was an import of the folder's Button
+  // for the deprecated uses — review 1 of 1.39. The names it lists are bound as `import { X }` binds them; an inline
+  // `{ type X }` entry is not: it binds a local named `type`, and X is never followed. `import type X from` stays unbound:
+  // stripped, it gained a false pair)
   t = t.replace(RE_TYPE_MODIFIER, "");
   const open = t.indexOf("{");
   for (const h of (open === -1 ? t : t.slice(0, open)).split(",")) {
@@ -2780,7 +2782,8 @@ function settle(results, scripts, markups, read, places, watch) {
 //     components it exports (the follow: a barrel's `export *`, a renamed re-export, an SFC's default);
 //   - a component a file exports beside its own (`CardHeader` in `card.tsx`) counts by its NAME, through the same follow — and
 //     by a default import when it is the file's default export (1.39 review 1); a row no component file locates is located by
-//     the component folders' barrels that give its name (vben's `{ VbenButton }`), never a row a file locates.
+//     the component folders' barrels that give its name (vben's `{ VbenButton }`) — by the one its path names when they give
+//     it to more than one file, a kit's parts (1.39 review 2) —, never a row a file locates.
 // Only a component file whose importers the scan reads is a row's file (RE_JSX_FILE ∪ RE_MARKUP_FILE: an Angular
 // `*.component.ts` is imported by `.ts` files and rendered by templates — its row is `unlocated`, as a Blade one, a library's
 // and a dropped one are). The names a component folder's barrel gives a row's file or a watched name (`export { default as
@@ -2832,10 +2835,11 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     }
   }
   // (its file's own component too, when deprecated: that file is a module row as well — a result is a component file)
-  const nameRows = (r, skip) => {
-    for (const n of r.found.names.concat(r.found.candidates.map((x) => x.name))) {
+  const namesOf = (r) => r.found.names.concat(r.found.candidates.map((x) => x.name));
+  const nameRows = (r, keep) => {
+    for (const n of namesOf(r)) {
       const k = dsKey(n);
-      if (!dep.has(k) || (skip && skip.has(k))) continue;
+      if (!dep.has(k) || (keep && !keep(k))) continue;
       nameRow.set(r.path + "\n" + n, k);
       keys.set(r.path, moduleKey(r.path));
       give(r.path, n);
@@ -2846,12 +2850,27 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     }
   };
   for (const r of results) if (!r.barrel) nameRows(r, null);
-  // (…and a row NO component file locates is located by the component folders' barrels that give its name — each a namesake, as
-  // files are: `export { default as VbenButton } from "./button.vue"`, the row the seed writes with the barrel's path, was
-  // `unlocated` — review 1 of 1.39. Never a row a file locates: a barrel's part, `export { Button }` of input-group's own button,
-  // is no namesake of the kit's Button)
-  const byFile = new Set(located.keys());
-  for (const r of results) if (r.barrel) nameRows(r, byFile);
+  // (…and a row NO component file locates is located by the component folders' barrels that give its name: `export { default
+  // as VbenButton } from "./button.vue"`, the row the seed writes with the barrel's path, was `unlocated` — review 1 of 1.39.
+  // Never a row a file locates: a barrel's part, `export { Button }` of input-group's own button, is no namesake of the kit's
+  // Button. When the barrels give the name to more than one FILE — a kit's parts: shadcn-svelte's `Content`, 31 indexes and
+  // as many content files, 13 of its 889 importers the picker's — only the barrel the row's path names locates it (its key or
+  // its folder's); to one file, vben's VbenButton, every barrel — review 2 of 1.39. The file: a relative re-export's module,
+  // the barrel itself when it declares the name; another package's places none)
+  const byFile = new Set(located.keys()), givenTo = new Map();
+  for (const r of results) if (r.barrel) for (const n of namesOf(r)) {
+    const k = dsKey(n);
+    if (!dep.has(k) || byFile.has(k)) continue;
+    const via = r.uses.reexports && r.uses.reexports.named.get(n);
+    const at = !via ? { keys: [moduleKey(r.path)] } : via.spec[0] === "." ? placeOf(via.spec, r.path, null) : null;
+    if (!at) continue;
+    if (!givenTo.has(k)) givenTo.set(k, new Set());
+    for (const f of at.keys) givenTo.get(k).add(f);
+  }
+  const rowAt = new Map(reg.components.map((c) => [c.key, moduleKey(implementsRel(c.path))]));
+  const named = (r, k) => { const at = rowAt.get(k), key = moduleKey(r.path); return at === key || at + "/index" === key; };
+  const oneFile = (k) => !givenTo.has(k) || givenTo.get(k).size <= 1;
+  for (const r of results) if (r.barrel) nameRows(r, (k) => !byFile.has(k) && (oneFile(k) || named(r, k)));
   // (the names a component folder's barrel gives a row's file or a watched name — read before the search)
   const rowFile = (spec, from) => { const at = spec[0] === "." ? placeOf(spec, from, null) : null; return !!at && [...at.keys].some((k) => byKey.has(k)); };
   for (let pass = 0, grew = true; grew && pass < DS_ALIAS_PASSES; pass++) {

@@ -1583,7 +1583,7 @@ const msg = {
       dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "fichero" : "ficheros"}: ${list}${at ? `  (${at} ficheros de componente con ese nombre)` : ""}`,
       dsDepUsesNone: (name, use, read) => `    ${name}${use ? " → " + use : ""} — ninguna importación suya ${read === 1 ? "en el fichero leído" : `en los ${read} ficheros leídos`}: no prueba que no se use (lo que no se lee está abajo)`,
       dsDepUsesUnbound: (n, name, at) => `      ${n} ${n === 1 ? "fichero .mdx / .vue muestra" : "ficheros .mdx / .vue muestran"} <${name}> sin importación — una importación automática, un registro global o un provider de MDX, sin resolver; el primero: ${at}`,
-      dsDepUsesUnlocated: (list) => `  (ningún fichero de componente que lee el análisis da ese nombre — un fichero .tsx / .jsx / .js / .vue / .svelte / .astro o el index de una carpeta de componentes —, así que no se buscó quién lo importa: ${list})`,
+      dsDepUsesUnlocated: (list) => `  (ningún fichero de componente que lee el análisis da ese nombre — un fichero .tsx / .jsx / .js / .vue / .svelte / .astro o el index de una carpeta de componentes; cuando varios index lo dan a ficheros distintos, el index que nombra la ruta de la fila —, así que no se buscó quién lo importa: ${list})`,
       dsSourcesNew: (list) => `  ficheros de tokens que el registro no indica (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  bibliotecas de UI en package.json que el registro no indica (_Libraries:_): ${list}`,
       dsDriftHead: (n) => `  valores de tokens que el código tiene distintos del registro (${n}) — la fila como la tiene el código:`,

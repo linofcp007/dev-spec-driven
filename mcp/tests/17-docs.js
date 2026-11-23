@@ -1922,8 +1922,9 @@ exports.run = async ({
       ["tooling-reference: deprecatedUses' unlocated — no component file whose importers the scan reads (RE_JSX_FILE ∪ RE_MARKUP_FILE)", () => {
         const exts = [regexOf(DS, "RE_JSX_FILE"), regexOf(DS, "RE_MARKUP_FILE")];
         const said = ["tsx", "jsx", "js", "vue", "svelte", "astro"];
-        // (review 1 of 1.39: a component folder's index that gives the name locates the row too; the rows still imported first)
-        return depClause.includes("`unlocated` (the rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index: a library's, an Angular or a Blade one)")
+        // (review 1 of 1.39: a component folder's index that gives the name locates the row too; the rows still imported first;
+        // review 2: the index the row's path names, when several give the name to different files)
+        return depClause.includes("`unlocated` (the rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index, the one the row's path names when several give it to different files: a library's, an Angular or a Blade one)")
           && said.every((x) => exts.some((re) => re.test("a." + x))) && !exts.some((re) => re.test("a.component.ts"))
           && depClause.includes("`rows` — each row the code holds a component file for, the rows still imported first, each group in the registry's order:");
       }],

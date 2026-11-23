@@ -1027,11 +1027,16 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   exports — its own too, a result IS a component file — counts by its NAME (`nameRow`), and by a default import when it is
   the file's default export (`defaults`, `byBase`, `bases` as a module row's file: List/Item.tsx's `export default
   ListItem` — 1.39 review 1). A row NO component file locates is located by the component folders' barrels that give its
-  name, each a namesake as files are (`nameRows(r, byFile)`, the barrels after the files: vben's `export { default as
-  VbenButton } from './button.vue'` — the row the seed writes with the barrel's path —, outline's `List/index.ts` default;
-  1.39 review 1) — never a row a file locates (input-group's `export { Button }`, its own button, is no namesake of the
-  kit's: located rows' importers are 1.39's). The names a component folder's barrel gives a
-  row's file or a watched name (a relative module) are watched too, DS_ALIAS_PASSES deep. A namespace's member resolves by
+  name (`nameRows(r, keep)`, the barrels after the files: vben's `export { default as VbenButton } from './button.vue'` —
+  the row the seed writes with the barrel's path —, outline's `List/index.ts` default; 1.39 review 1) — never a row a file
+  locates (input-group's `export { Button }`, its own button, is no namesake of the kit's: located rows' importers are
+  1.39's) —, each a namesake as files are while the barrels give the name to ONE file. To more than one (`givenTo`, of the
+  names `nameRows` reads: a relative re-export's module, the barrel itself when it declares the name — `const Trigger =
+  Primitive.Trigger` —, no file for another package's re-export — vben's common-ui `export { VbenButton } from
+  '@vben-core/shadcn-ui'`), only the barrel the row's path names locates it (`rowAt`: the path read as an `_Implements:_`
+  reference is, `implementsRel`, then `moduleKey` — the barrel's key or its folder's; 1.39 review 2: a kit's parts,
+  shadcn-svelte's `Content` in 31 barrels, 13 of its 889 importers the picker's). The names a component folder's barrel
+  gives a row's file or a watched name (a relative module) are watched too, DS_ALIAS_PASSES deep. A namespace's member resolves by
   its first part (`<UI.Table.Row>` is UI.Table's). A file is never its own importer. An .mdx / .vue tag with no dot that no
   import binds, whose key is a LOCATED row's, is `unbound` (`unboundAt`: the first by path). The cost guard: a text naming
   no watched name (RE_CAPITAL_WORD; a .vue file's kebab tags) and no row file's base (RE_PATH_SEGMENT) is not parsed, a
@@ -1048,7 +1053,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `cliOutput.dsDepUsesHead` (the rows listed that are imported, of `rowsTotal` — "at least" when every listed row is
   imported and some are not listed), a row each (`dsDepUsesRow` — the files, `… +N` past the listed —, `dsDepUsesNone` with
   the files read: no import found is no proof), `dsDepUsesUnbound`, `dsDepUsesUnlocated` (no component file the scan reads —
-  a component folder's index among them — gives the name), the note, then its limits the report's own do not already say
+  a component folder's index among them, the one the row's path names when several give the name to different files — gives
+  the name), the note, then its limits the report's own do not already say
   (`dsLimit`).
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
@@ -3062,6 +3068,42 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   2.6 · 3.6 · 3.8 s — about a tenth less than the release, not the 2× the finding asked: a smaller count bound needs the
   bounds injectable (an engine change: 1.40). Mutation pass: 37 mutants, 37 killed (one re-formed: dropping `filesOf(at)` crashed before the
   fixture ran); M3d equivalent, M6b not applicable.
+- **1.39.0 review 2** (the deprecated uses, fix round 2 — R2-DEP-1 MEDIUM, made by round 1's fix of R1-DEP-1; R2-DEP-2 and
+  R2-DEP-3 LOW) — R2-DEP-1: round 1 located a row no component file locates by EVERY component folder's barrel that gives its
+  name, so a kit's part names counted every other component's parts: shadcn-svelte's `Content` (the picker's, as the seed
+  writes it) 889 importers, 13 of them the picker's; `Group` 399 / 13; `List` 114 / 1 — 1,375 false pairs, the CLI saying
+  "migrate each". The owner's ruling, a narrowing by a property: how many FILES the barrels give the name to (`givenTo`) —
+  more than one, only the barrel the row's path names (`rowAt`); one, every barrel, as before. From the reviewer's prototype
+  (relative re-exports only, every entry of the barrels' re-export maps), re-derived: the names `nameRows` reads, so a
+  same-name `export { X } from './x'` — which locates nothing — counts nothing; a name the barrel declares is the barrel's own
+  file (bits-ui's older `const Trigger = Primitive.Trigger`: 0 pairs on the clones, the property's own case); another
+  package's re-export places no file (vben's common-ui `export { VbenButton } from '@vben-core/shadcn-ui'` — counted as a
+  file, it narrowed VbenButton to that barrel); the path read as `_Implements:_` is, then `moduleKey`, the barrel's key or
+  its folder's (`./…/picker`). The unlocated line names the path's index (EN / PT / ES), as ui-code-scan.md and
+  tooling-reference do. Every row marked (cmp.js: 490 rows a clone, in slices of 50), against c63bcfcb: shadcn-svelte
+  −1,375 (Content 876, Group 386, List 113; Picker.Content 13, Picker.Group 13, DocTabs.List 1 left — the reviewer's
+  prototype pair for pair), vben, cal.com, outline and the 17 others 0 (VbenButton 45 importers); against b5e95372 round 1's
+  deltas unchanged (vben −3 / +243, cal.com −3 / +12, outline −1 / +48, motion-primitives +4), shadcn-svelte +37 on its six
+  newly located rows (was +1,412). The 889 need `$lib` resolved: the clone's copy without `docs/.svelte-kit/tsconfig.json`
+  (no `svelte-kit sync`) moves 0. R2-DEP-3 (a subtraction): `RE_TYPE_MODIFIER` takes the modifier with no blank after it,
+  `import type{ X }`; settle-diff on 21 clones (+ that second copy): settle's keys = 1.38.0, the scanCode JSON with no
+  registry = b5e95372 = c63bcfcb, every row marked = none; four constructed shapes (`import type{` before `type(…)` among
+  them) as 1.38.0. The comment had said the brace list's names are bound "as an inline `{ type X }` is": that entry binds a
+  local named `type` and X is never followed — the comment says so now (prose; the behaviour kept). R2-DEP-2 (prose):
+  ui-code-scan.md says an index locates a row only when no component file gives its name, and only the path's index when
+  several give it to different files. The fixture (15-quality-design-system-deprecated.js, "review 2"): the reviewer's
+  parts shape (card / dialog / picker barrels) — Content, Group (two files, the folder spelling), Trigger (declared twice),
+  Footer (a path naming none: unlocated), VbenButton (one file, two barrels and a package's), VbenTooltip (packages'
+  re-exports alone), `import type{` / `import type  {` / `import type X from` the row's file; with the fix reverted five
+  of its eight checks fail. Mutation pass: 18 mutants, 16 killed; the two left are equivalent — `givenTo`'s guards (a
+  located row's count and a name no row marks are never asked: they bound the loop's work). The cost, against c63bcfcb (one
+  process, interleaved, median of 7, a loaded machine): one used row 0.91–1.15×, every row marked 0.91–1.15× (shadcn-svelte
+  0.91: fewer name rows), within the noise the same run shows (cal.com's increments came out negative); the hostile tree
+  (1,000 barrels × 500 marked names, every name narrowed) 2.47–2.69 s against 2.46–2.71 s, heap 107–119 MB against
+  113–136 MB. Review 1's 51 shapes and 13 hostile files: no difference. Left for 1.40 (with round 1's three): a file
+  importing the file an index renames (vben's icon-button.vue), and a located row's namesake through a package's index
+  (cal.com's atoms/index.ts, which re-exports its BookerPlatformWrapper as Booker: 1 pair) — the docs say an index
+  locates a row only when no file does.
 - **1.39.0, the release as merged** (the docs pass, after the four chains merged E → B → C → A; this summary is the 1.39
   round's for every area — the UI checks' and the state matrix's own entries below) — the ruling (DECISIONS) built ~15 of
   the ~29 mechanisms the four designs held (A 5, B 4–6, C 3, E 3; 1.38 shipped ~17 and needed three review rounds), to one
