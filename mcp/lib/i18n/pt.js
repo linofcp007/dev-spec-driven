@@ -3533,7 +3533,7 @@ const quality = {
     usView: (view, labels) => `${view}: ${labels}`,
     usTable: (n, item) => `tabela ${n} › ${item}`,
     usSmall: (d) => `no tamanho s, a matriz fica ao critério do autor — ${d}`,
-    usTruncated: (t, r, v) => `só foram lidas as primeiras ${t} tabelas, ${r} linhas de cada uma e ${v} colunas de vista`,
+    usTruncated: (t, r, v, h) => `só foram lidas as primeiras ${t} tabelas, ${r} linhas de cada uma, ${v} colunas de vista e as primeiras ${h} células de um cabeçalho`,
     dsUnfilled: "a secção Uso do Design System ainda não está escrita — é verificada contra o registo quando estiver",
     dsNoRegistry: `ainda não há registo do design system (.specs/steering/design-system.md) — o inventário único de componentes e tokens a partir do qual todas as features +ui constroem. Cria-o a partir do código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `o registo do design system (.specs/steering/design-system.md) ainda não lista nenhum componente — falta acrescentar os que já existem (spec_scan {designSystem: true} · ${DEV_SPEC} design-system mostra o que o código tem)`,
@@ -3648,7 +3648,7 @@ const brief = {
     designSystemTokens: (n, sources) => `Tokens: ${n} no registo${sources ? ` — definidos em ${sources}` : ""}.`,
     designSystemUnits: (list, more) => "Unidades — a tabela do registo, a convenção da equipa: " + (list
       ? list + "." + (more ? ` (mais ${more} ${more === 1 ? "linha" : "linhas"} no registo)` : "")
-      : `${more} ${more === 1 ? "linha" : "linhas"} no registo, ${more === 1 ? "longa" : "longas"} demais para citar aqui.`),
+      : `a primeira linha é longa demais para citar aqui — ${more} ${more === 1 ? "linha" : "linhas"} no registo: lê-${more === 1 ? "a" : "as"} lá.`),
     designSystemLibraries: (list) => `Bibliotecas de componentes em que o projeto assenta: ${list}.`,
     design: "## Contexto de design",
     designToc: (p) => `Design completo: \`${p}\` — secções:`,

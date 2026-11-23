@@ -3779,7 +3779,7 @@ const quality = {
     usView: (view, labels) => `${view}: ${labels}`,
     usTable: (n, item) => `table ${n} › ${item}`,
     usSmall: (d) => `at size s the matrix is the author's call — ${d}`,
-    usTruncated: (t, r, v) => `only the first ${t} tables, ${r} rows each and ${v} view columns were read`,
+    usTruncated: (t, r, v, h) => `only the first ${t} tables, ${r} rows each, ${v} view columns and a header's first ${h} cells were read`,
     dsUnfilled: "Design System Usage is not written yet — checked against the registry once it is",
     dsNoRegistry: `no design-system registry yet (.specs/steering/design-system.md) — the one inventory of components and tokens every +ui feature builds from. Create it from the code: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `the design-system registry (.specs/steering/design-system.md) lists no component yet — add the existing ones (spec_scan {designSystem: true} · ${DEV_SPEC} design-system lists what the code holds)`,
@@ -3893,10 +3893,11 @@ const brief = {
     designSystemNoRows: (file) => `The design names no component row — read \`${file}\` and reuse what it lists before creating anything.`,
     designSystemTokens: (n, sources) => `Tokens: ${n} in the registry${sources ? ` — defined in ${sources}` : ""}.`,
     // 1.39: the units table's rows the brief quotes (`list`: "font-size: rem · margin-*: rem, %") and `more`, the rows it left
-    // out — none quoted: one row is longer than the brief's bound
+    // out — none quoted: the FIRST row is longer than the brief's bound (the rows after it are not quoted either: 1.39.0 review 1,
+    // BU-4 — the line says so)
     designSystemUnits: (list, more) => "Units — the registry's table, the team's convention: " + (list
       ? list + "." + (more ? ` (+${more} more ${more === 1 ? "row" : "rows"} in the registry)` : "")
-      : `${more} ${more === 1 ? "row" : "rows"} in the registry, too long to quote here.`),
+      : `the first row is too long to quote here — ${more} ${more === 1 ? "row" : "rows"} in the registry: read ${more === 1 ? "it" : "them"} there.`),
     designSystemLibraries: (list) => `Component libraries the project builds on: ${list}.`,
     design: "## Design context",
     designToc: (p) => `Full design: \`${p}\` — sections:`,

@@ -169,8 +169,9 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
   }
 
   // --- the bounds: 10 tables, 60 rows, 12 views — what is past one is not judged, and the detail says so --------------------------------
+  // (1.39.0 review 1, BU-5: the detail names a header's first 64 cells too — the anchor's bound, below)
   {
-    const cut = () => "; " + Q().usTruncated(10, 60, 12);
+    const cut = () => "; " + Q().usTruncated(10, 60, 12, 64);
     const tables11 = check(states(Array.from({ length: 10 }, (_, i) => table(["Note", "Text"], [["n" + i, "x"]])).join("\n\n") + "\n\n" +
       matrix(["Orders list"], (l) => (l === "Stale" ? "" : said(l, "list")))));
     // the Undo row at place 61 (15 states, then 45 rows of the team's own states)
@@ -186,24 +187,28 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
   }
 
   // --- 1.39 (BS-5 — H1–H4): the anchor is looked for in a header's first 64 cells; past them, none found, the table is none and
-  // the detail says a bound cut (the view bound's own words: CRIT_3 must-fix 6, no new argument); found within them, the cells
-  // after it cost nothing and say nothing
+  // the detail says a bound cut (CRIT_3 must-fix 6: the `truncated.views` flag, no new one); found within them, the cells after it
+  // cost nothing and say nothing. 1.39.0 review 1 (BU-5): the detail names that bound — usTruncated's fourth clause, a header's
+  // first 64 cells, in EN / PT / ES (it named only the tables, rows and view columns)
   {
-    const cut = () => "; " + Q().usTruncated(10, 60, 12);
+    const cut = (l) => "; " + Q(l).usTruncated(10, 60, 12, 64);
     const named = Array.from({ length: 12 }, (_, i) => "View " + (i + 1));
     const blanks = (n) => Array.from({ length: n }, () => "");
     const cell = (l, v) => (v ? said(l, v) : "");
     const at63 = check(states(matrix([...named, ...blanks(50)], cell))); // State + 62 columns: the anchor is the 64th cell (index 63)
     const at64 = check(states(matrix([...named, ...blanks(51)], cell))); // …the 65th (index 64)
     const notes = check(states(matrix([...named, ...blanks(27)], cell, { after: Array.from({ length: 60 }, () => "Notes") }))); // anchor at 40, 101 cells
-    all("1.39 ui-states — the anchor is read in a header's first 64 cells: at its 64th it is a matrix (12 views, blank columns between), at its 65th none — usNone and the cut said; an anchor at 40 with 60 columns after it is read whole, nothing said (got " +
-      js([at63.detail, at64.detail, notes.detail]) + ")", {
+    const past = Object.fromEntries(["pt", "es"].map((l) => [l, check(states(matrix([...named, ...blanks(51)], cell)), "m", l)])); // (the anchor in any language)
+    const header = { en: "a header's first 64 cells", pt: "as primeiras 64 células de um cabeçalho", es: "las primeras 64 celdas de una cabecera" };
+    all("1.39 ui-states — the anchor is read in a header's first 64 cells: at its 64th it is a matrix (12 views, blank columns between), at its 65th none — usNone and the cut said, naming a header's first 64 cells (1.39.0 review 1, BU-5 — EN / PT / ES); an anchor at 40 with 60 columns after it is read whole, nothing said (got " +
+      js([at63.detail, at64.detail, notes.detail, past.pt.detail, past.es.detail]) + ")", {
       within: () => at63.state === "ok" && at63.detail === Q().usOk(12, 16),
-      past: () => at64.state === "no-matrix" && at64.detail === Q().usNone + cut(),
+      past: () => at64.state === "no-matrix" && at64.detail === Q().usNone + cut() && at64.detail.endsWith(header.en + " were read"),
+      named: () => ["pt", "es"].every((l) => past[l].state === "no-matrix" && past[l].detail === Q(l).usNone + cut(l) && past[l].detail.endsWith(header[l])),
       after: () => notes.state === "ok" && notes.detail === Q().usOk(12, 16),
     });
     // H1 (cost): 200,000 header cells, the anchor last — the matrix reader against sectionState on the same design, medians of 5
-    // interleaved rounds (1.38: 2.1–2.75× — each cell's words read for the anchor; 1.39: what parsing the row costs)
+    // interleaved rounds (1.38: 2.1–2.8× — each cell's words read for the anchor; 1.39: what parsing the row costs)
     const sec = (E.trackSectionTable("ui") || []).find((s) => s.name === "UI States");
     const hostile = states(table(["State", ...Array.from({ length: 200000 }, (_, i) => "v" + i + "xxxx"), "Announced · focus"], [["Loading", "a", ""]]));
     const ids = Object.keys(Q().uiStateLabels);

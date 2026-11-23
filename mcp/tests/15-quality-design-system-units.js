@@ -219,12 +219,16 @@ exports.run = async ({ all, S, tmp, require, __dirname }) => {
       exact: brief("exact", REG(table(["Property", "Units"], Array.from({ length: 20 }, (_, i) => [prop(i).replace("border-", "margin-").replace("-width", "-top"), "px"]))), null),
       skip: brief("skip", REG(table(["Property", "Units"], [[prop(0), "px"], [long(23), "px"], [prop(1), "px"]])), null),
       tooLong: brief("too-long", REG(table(["Property", "Units"], [[long(24), "px"]])), null),
+      // (1.39.0 review 1, BU-4 — W1–W3: a long FIRST row, two short ones after it — the line says the first is too long, then
+      // how many rows the registry holds; EN / PT / ES)
+      firstLong: Object.fromEntries(["en", "pt", "es"].map((l) => [l, brief("first-long-" + l, REG(table(["Property", "Units"], [[long(24), "px"], ["font-size", "rem"], ["gap", "rem, %"]])), null, l === "en" ? null : l)])),
       pt: brief("pt", REG(UNITS3), null, "pt"),
     };
     const sixtyList = Array.from({ length: 18 }, (_, i) => prop(i) + ": px").join(" · ");
     const comps = (b) => b.b1.designSystem && [b.b1.designSystem.components.map((c) => c.name), /more component/.test(b.part)];
-    all("1.39 brief: a UI task's Design system part quotes the units table after its tokens line — `" + LINE3 + "` — and the result's `designSystem.units` {rows, more}; a registry holding ONLY a units table opens the part (a blank line before); no table → no line, no `units` key; a non-UI task, write: true → none; its own " + bound + "-character bound — 60 rows: the first 18 (their text within it), `+42 more` (the 32 past it and the table's 10 past its 50), 20 rows of exactly 400 all, a long row ends the quote, one row too long alone is said —, the components' 1,500 untouched; PT (got " +
+    all("1.39 brief: a UI task's Design system part quotes the units table after its tokens line — `" + LINE3 + "` — and the result's `designSystem.units` {rows, more}; a registry holding ONLY a units table opens the part (a blank line before); no table → no line, no `units` key; a non-UI task, write: true → none; its own " + bound + "-character bound — 60 rows: the first 18 (their text within it), `+42 more` (the 32 past it and the table's 10 past its 50), 20 rows of exactly 400 all, a long row ends the quote, a first row too long is said as the first, with the rows the registry holds (1.39.0 review 1, BU-4 — EN / PT / ES) —, the components' 1,500 untouched; PT (got " +
       js({ three: got.three.part, only: got.only.part, sixty: got.sixty.b1.designSystem && got.sixty.b1.designSystem.units, skip: got.skip.b1.designSystem && got.skip.b1.designSystem.units, tooLong: got.tooLong.part, pt: got.pt.part,
+        firstLong: Object.fromEntries(Object.entries(got.firstLong).map(([l, b]) => [l, (b.part.match(/^Unid.*$|^Units — .*$/m) || [""])[0]])),
         full: [comps(got.full), comps(got.fullUnits)] }) + ")", {
       line: () => got.three.part.includes("\n\nTokens: 1 in the registry.\n" + LINE3 + "\n") && bound === 400,
       json: () => js(got.three.b1.designSystem.units) === js({ rows: ROWS3, more: 0 }),
@@ -236,7 +240,12 @@ exports.run = async ({ all, S, tmp, require, __dirname }) => {
         && got.sixty.part.includes(": " + sixtyList + ". (+42 more rows in the registry)") && sixtyList.length <= bound
         && got.exact.b1.designSystem.units.rows.length === 20 && got.exact.b1.designSystem.units.more === 0,
       prefix: () => js(got.skip.b1.designSystem.units) === js({ rows: [{ props: [prop(0)], units: ["px"] }], more: 2 }),
-      tooLong: () => got.tooLong.part.includes("Units — the registry's table, the team's convention: 1 row in the registry, too long to quote here.") && js(got.tooLong.b1.designSystem.units) === js({ rows: [], more: 1 }),
+      tooLong: () => got.tooLong.part.includes("Units — the registry's table, the team's convention: the first row is too long to quote here — 1 row in the registry: read it there.") && js(got.tooLong.b1.designSystem.units) === js({ rows: [], more: 1 }),
+      firstLong: () => got.firstLong.en.part.includes("Units — the registry's table, the team's convention: the first row is too long to quote here — 3 rows in the registry: read them there.") &&
+        got.firstLong.pt.part.includes("Unidades — a tabela do registo, a convenção da equipa: a primeira linha é longa demais para citar aqui — 3 linhas no registo: lê-as lá.") &&
+        got.firstLong.es.part.includes("Unidades — la tabla del registro, la convención del equipo: la primera fila es demasiado larga para citarla aquí — 3 filas en el registro: léelas allí.") &&
+        ["en", "pt", "es"].every((l) => js(got.firstLong[l].b1.designSystem.units) === js({ rows: [], more: 3 })) &&
+        require(path.join(__dirname, "lib", "i18n.js")).brief("pt-BR").designSystemUnits("", 3).endsWith("— 3 linhas no registro: leia-as lá."), // (pt-BR derived: a clause start after the colon)
       budget: () => js(comps(got.full)) === js([C12.map(([n]) => n), false]) && js(comps(got.fullUnits)) === js(comps(got.full)),
       pt: () => got.pt.part.includes("Unidades — a tabela do registo, a convenção da equipa: font-size, line-height: rem · margin-*, padding-*, gap: rem, % · border-width, outline-width: px."),
     });
