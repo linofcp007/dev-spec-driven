@@ -902,10 +902,11 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
   {
     // 1.40.0 review 1 (DEP-1) — an export an index ALSO gives under a LIVE row's name is that row's component: its direct
     // importers are never the deprecated alias's (`default as Button, default as OldButton` — the usual deprecation of a
-    // rename —, a compat index's `default as BButton` of a/index.ts's AButton file); the alias's own importers count, 1.39's.
-    // Still (b)'s: a name no row has makes nothing live (VbenBtn), another export of that file (`{ Card }` beside a live
-    // IconCard), and a live row naming the file by its PATH alone (vben's seed `ButtonGroup | …/button-group.vue`, the index
-    // giving it VbenButtonGroup only); a live name passed on from a package places no file
+    // rename —, a compat index's `default as BButton` of a/index.ts's AButton file, a React index's `export { Tab }` beside
+    // `Tab as OldTab`: any named re-export); the alias's own importers count, 1.39's. Still (b)'s: a name no row has makes
+    // nothing live (VbenBtn), another export of that file (`{ Card }` beside a live IconCard), and a live row naming the file
+    // by its PATH alone (vben's seed `ButtonGroup | …/button-group.vue`, the index giving it VbenButtonGroup only); a live
+    // name passed on from a package places no file
     const vue = (imp, tag) => L(["<script setup lang=\"ts\">", imp, "</script>", "<template><" + tag + " /></template>"]);
     const C = "src/components/";
     const files = {
@@ -924,24 +925,34 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
       [C + "card/index.ts"]: L(["export { Card as KitCard, IconCard } from './card';"]),
       "src/pages/card.tsx": L(["import { Card } from '../components/card/card';", "export default () => <Card />;"]),
       "src/pages/icon.tsx": L(["import { IconCard } from '../components/card/card';", "export default () => <IconCard />;"]),
+      [C + "tabs/Tab.tsx"]: L(["export function Tab() { return <div />; }"]), [C + "tabs/index.ts"]: L(["export { Tab } from './Tab';", "export { Tab as OldTab } from './Tab';"]),
+      "src/pages/tab.tsx": L(["import { Tab } from '../components/tabs/Tab';", "export default () => <Tab />;"]),
+      "src/pages/old-tab.tsx": L(["import { OldTab } from '../components/tabs';", "export default () => <OldTab />;"]),
       [C + "group/button-group.vue"]: L(["<template><div><slot /></div></template>"]), [C + "group/index.ts"]: L(["export { default as VbenButtonGroup } from './button-group.vue';"]),
       "src/views/group-direct.vue": vue("import ButtonGroup from '../components/group/button-group.vue';", "ButtonGroup"),
+      // (an SFC an index re-exports with no extension — Vue CLI's resolution: the file found by its twin, `fileOf`)
+      [C + "sel/sel.vue"]: L(["<template><select /></template>"]), [C + "sel/index.ts"]: L(["export { default as VbenSel } from './sel';"]),
+      "src/views/sel-direct.vue": vue("import Sel from '../components/sel/sel.vue';", "Sel"),
       [C + "pkg/index.ts"]: L(["export { Primitive } from 'some-primitives';"]),
     };
     const rows = (mark) => ["| Button | " + C + "button/Button.vue |  |  |", "| OldButton | " + C + "button/index.ts |  | " + mark("use Button") + " |",
       "| AButton | " + C + "a/index.ts |  |  |", "| BButton | " + C + "b/index.ts |  | " + mark("use AButton") + " |", "| VbenBtn | " + C + "norow/index.ts |  | " + mark() + " |",
       "| IconCard | " + C + "card/index.ts |  |  |", "| KitCard | " + C + "card/index.ts |  | " + mark() + " |",
-      "| ButtonGroup | " + C + "group/button-group.vue |  |  |", "| VbenButtonGroup | " + C + "group/index.ts |  | " + mark() + " |", "| Primitive | " + C + "pkg/index.ts |  |  |"];
+      "| Tab | " + C + "tabs/Tab.tsx |  |  |", "| OldTab | " + C + "tabs/index.ts |  | " + mark("use Tab") + " |",
+      "| ButtonGroup | " + C + "group/button-group.vue |  |  |", "| VbenButtonGroup | " + C + "group/index.ts |  | " + mark() + " |", "| Primitive | " + C + "pkg/index.ts |  |  |",
+      "| VbenSel | " + C + "sel/index.ts |  | " + mark() + " |"];
     const p = depProject("live-alias", rows(MARK), files);
     const r = S.designSystemReport(p), d = usesOf(r), diff = differential(p, rows);
-    all("1.40.0 review 1 deprecatedUses (DEP-1): an export an index also gives a LIVE row's name is that row's component — OldButton and BButton count their own importers alone (1.39.0's); a name no row has, another export of the file, a live row naming the file by its path keep (b)'s direct imports; every other key the same with no marker (got " +
+    all("1.40.0 review 1 deprecatedUses (DEP-1): an export an index also gives a LIVE row's name is that row's component — OldButton, BButton and OldTab count their own importers alone (1.39.0's); a name no row has, another export of the file, a live row naming the file by its path keep (b)'s direct imports; every other key the same with no marker (got " +
       js({ rows: d.rows.map((x) => [x.name, x.filesTotal, x.files, x.pathsTotal]), unlocated: d.unlocated, same: diff.same }) + ")", {
       alias: () => js(uses(r, "OldButton")) === js([1, ["src/views/old-named.vue"]]),
       compat: () => js(uses(r, "BButton")) === js([1, ["src/views/b-named.vue"]]),
+      passThrough: () => js(uses(r, "OldTab")) === js([1, ["src/pages/old-tab.tsx"]]),
       noRow: () => js(uses(r, "VbenBtn")) === js([1, ["src/views/btn-direct.vue"]]),
       otherExport: () => js(uses(r, "KitCard")) === js([1, ["src/pages/card.tsx"]]),
       byPath: () => js(uses(r, "VbenButtonGroup")) === js([1, ["src/views/group-direct.vue"]]),
-      located: () => js(d.unlocated) === js([]) && d.rowsTotal === 5 && js(d.limits) === js([]),
+      noExtension: () => js(uses(r, "VbenSel")) === js([1, ["src/views/sel-direct.vue"]]),
+      located: () => js(d.unlocated) === js([]) && d.rowsTotal === 7 && js(d.limits) === js([]),
       differential: () => diff.same === true,
     });
   }

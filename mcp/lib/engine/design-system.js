@@ -2851,8 +2851,8 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   // (a default import of button.vue, `{ AppleConnect }` for `export { AppleConnect as AppleCalendar } from …`): a use of that
   // row, of every row whose barrel renames that file. Its key exactly, an SFC's twin too (twinOf); a module key → { the file,
   // the name it has there → the rows' keys }; a component file's keys built once (fileKeys). Never that export when an index
-  // also gives it a LIVE row's name (`live`, the givenTo loop: `default as Button, default as OldButton`, a compat index's
-  // BButton of AButton's file — the alias's own importers count, the live component's do not: DEP-1 of 1.40 review 1)
+  // also gives it a LIVE row's name (`live`, below: `default as Button, default as OldButton`, a compat index's BButton of
+  // AButton's file — the alias's own importers count, the live component's do not: DEP-1 of 1.40 review 1)
   const renamed = new Map(), live = new Set();
   let fileKeys = null;
   const fileOf = (key) => {
@@ -2911,11 +2911,17 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   // as many content files, 13 of its 889 importers the picker's — only the barrel the row's path names locates it (its key or
   // its folder's); to one file, vben's VbenButton, every barrel — review 2 of 1.39. The file: a relative re-export's module,
   // the barrel itself when it declares the name; another package's places none)
+  // (the exports a component folder's index gives under a LIVE row's name — any named re-export of a relative module, its
+  // name kept or not: `export { Tab }`, `default as Button`, `Root as Table` — are that row's component: `live`, which
+  // renames reads; read before the barrels' nameRows — DEP-1 of 1.40 review 1)
+  for (const r of results) if (r.barrel && r.uses.reexports) for (const n of r.uses.reexports.named.keys()) {
+    const k = dsKey(n);
+    if (!dep.has(k) && rowName.has(k)) for (const [of, there] of placedBy(r, n)) live.add(of.path + "\n" + there);
+  }
   const byFile = new Set(located.keys()), givenTo = new Map();
   for (const r of results) if (r.barrel) for (const n of namesOf(r)) {
     const k = dsKey(n);
-    if (!dep.has(k)) { if (rowName.has(k)) for (const [of, there] of placedBy(r, n)) live.add(of.path + "\n" + there); continue; }
-    if (byFile.has(k)) continue;
+    if (!dep.has(k) || byFile.has(k)) continue;
     const via = r.uses.reexports && r.uses.reexports.named.get(n);
     const at = !via ? { keys: [moduleKey(r.path)] } : via.spec[0] === "." ? placeOf(via.spec, r.path, null) : null;
     if (!at) continue;
@@ -3511,12 +3517,13 @@ const RE_DOC_EXT = /\.(?:md|mdx|markdown|txt|rst|adoc|pdf|png|jpe?g|gif|webp|svg
 const DS_PATH_WORDS = 20; // words of a path cell read
 // (1.40) a path cell's readings, ONE reader for stalePath and the deprecated uses' watch (the index the row's path names): the
 // whole cell first, then its first DS_PATH_WORDS words (a cost guard: ×1.55 a report on 500 rows of 33 words), a link
-// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's, DS_CELL_MAX
-// characters at most (1.39's own 400-character cut is dead); 1.39's strip of its ends' backticks stays: dsCell strips a
-// component cell's, but the marker reader cuts a `_Token sources:_` entry's note after its own strip — "`src/my
-// styles/tokens.css` (generated)" comes here as "src/my styles/tokens.css`" (DEP-2 of 1.40 review 1)
+// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's, trimmed and
+// DS_CELL_MAX characters at most (1.39's 400-character cut and its trims are dead: every reading is trimmed again —
+// projectPath, implementsRel); 1.39's strip of its ends' backticks stays: dsCell strips a component cell's, but the marker
+// reader cuts a `_Token sources:_` entry's note after its own strip — "`src/my styles/tokens.css` (generated)" comes here
+// as "src/my styles/tokens.css`" (DEP-2 of 1.40 review 1)
 function pathWords(cell) {
-  const text = stripEnds(String(cell || "").trim(), unitIn("`")).trim();
+  const text = stripEnds(String(cell || ""), unitIn("`"));
   if (!text) return [];
   return [text].concat(text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS).map((w) => stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`"))));
 }
