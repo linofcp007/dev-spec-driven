@@ -501,9 +501,9 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     // the replacement is doctor's: a design reusing Table warns `'Table' (use DataGrid)` (ONE expression, dsReplacement)
     const g = mk("uses-doctor", { registry: "# Design System\n\n" + HEAD + KIT_ROWS(MARK).join("\n") + "\n", rows: ["| Reuse | Table | the list |"] });
     const doc = checkOf(g);
-    all("1.39 deprecatedUses (a React kit, settle asking nothing): for each `_Deprecated:_` row the code holds a component file for, in the registry's order, the files that still import it — its replacement as doctor names it; a row named by its file is its MODULE: a named, renamed, default (its local name is no watched name: the module's base), type-only or `require` import of the file, a non-component export of it (`toast`), a namespace member, the components it exports through a folder's barrel (`{ Toaster }`), every namesake's importers (`billing/components/table.tsx`); a component a file exports beside its own counts by its NAME (`CardHeader`, never `{ Card }`); one count a file; a component file read for its exports is an importer too; never a dynamic import(), a test, a story, a mock, a folder import of another member, a file's own local `<Table />`; an .mdx tag no import binds counted apart; a located row with no importer listed with 0, an unlocated one named; never the report's limits or inSync; the same report with no marker holds every other key the same (got " +
+    all("1.39 deprecatedUses (a React kit, settle asking nothing): for each `_Deprecated:_` row the code holds a component file for — the rows still imported first, each group in the registry's order —, the files that still import it — its replacement as doctor names it; a row named by its file is its MODULE: a named, renamed, default (its local name is no watched name: the module's base), type-only or `require` import of the file, a non-component export of it (`toast`), a namespace member, the components it exports through a folder's barrel (`{ Toaster }`), every namesake's importers (`billing/components/table.tsx`); a component a file exports beside its own counts by its NAME (`CardHeader`, never `{ Card }`); one count a file; a component file read for its exports is an importer too; never a dynamic import(), a test, a story, a mock, a folder import of another member, a file's own local `<Table />`; an .mdx tag no import binds counted apart; a located row with no importer listed with 0, an unlocated one named; never the report's limits or inSync; the same report with no marker holds every other key the same (got " +
       js({ rows: d.rows, unlocated: d.unlocated, read: d.read, limits: d.limits, same: diff.same, doc }) + ")", {
-      order: () => js(d.rows.map((x) => x.name)) === js(["Table", "CardHeader", "Sonner", "Toast", "Chart", "Callout", "Avatar", "Panel", "Field", "Chip", "Drawer", "Menu", "Badge", "TreeNode", "Select", "CardFooter"]) && d.rowsTotal === 16,
+      order: () => js(d.rows.map((x) => x.name)) === js(["Table", "CardHeader", "Sonner", "Chart", "Callout", "Avatar", "Panel", "Field", "Chip", "Menu", "Badge", "Select", "CardFooter", "Toast", "Drawer", "TreeNode"]) && d.rowsTotal === 16,
       indexFolder: () => js(uses(r, "Select")) === js([1, ["src/app/users/select.tsx"]]),
       ownFile: () => js(uses(r, "TreeNode")) === js([0, []]) && js(rowOf(r, "TreeNode").paths) === js(["src/components/ui/tree.tsx"]),
       use: () => rowOf(r, "Table").use === "DataGrid" && rowOf(r, "CardHeader").use === "Card" && rowOf(r, "Toast").use === "" && doc && doc.detail === Q().dsDeprecated(1, Q().dsDeprecatedItem("Table", "DataGrid")),
@@ -538,6 +538,10 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const r5 = S.designSystemReport(five);
     const big = {};
     for (let i = 0; i < 51; i++) big["src/components/C" + String(i).padStart(2, "0") + ".tsx"] = compFile("C" + String(i).padStart(2, "0"));
+    // (review 1 of 1.39: the rows still imported first, the registry's order within each group — C50, past the cut in the
+    // registry's order, imported twice; C10 once: [C10, C50, C00 …])
+    big["src/app/a.tsx"] = L(["import { C50 } from \"../components/C50\";", "import { C10 } from \"../components/C10\";", "export const P = () => <><C50 /><C10 /></>;"]);
+    big["src/app/b.tsx"] = L(["import { C50 } from \"../components/C50\";", "export const P = () => <C50 />;"]);
     const fifty = depProject("fifty", Array.from({ length: 51 }, (_, i) => "| C" + String(i).padStart(2, "0") + " | src/components/C" + String(i).padStart(2, "0") + ".tsx |  | _Deprecated_ |"), big);
     const r51 = usesOf(S.designSystemReport(fifty));
     const u51 = usesOf(S.designSystemReport(depProject("unlocated", Array.from({ length: 51 }, (_, i) => "| U" + String(i).padStart(2, "0") + " |  |  | _Deprecated_ |"), {})));
@@ -550,13 +554,13 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const plain = depProject("plain", ["| Table | src/components/Table.tsx |  |  |"], { "src/components/Table.tsx": compFile("Table") });
     const f = S.createFeature(sync, { name: "Orders", tracks: ["ui"], summary: "x" });
     const feat = S.designSystemReport(sync, { name: f.slug });
-    all("1.39 deprecatedUses: a row lists its first 3 importers by path and counts them all; the rows past the first 50 are counted (`rowsTotal`); the key is there only while the registry marks a row (none with no marker, none in a feature's report); a used deprecated row never touches the report's `inSync` or `limits` (got " +
+    all("1.39 deprecatedUses: a row lists its first 3 importers by path and counts them all; the rows still imported come first (the registry's order within each group), the rows past the first 50 are counted (`rowsTotal`); the key is there only while the registry marks a row (none with no marker, none in a feature's report); a used deprecated row never touches the report's `inSync` or `limits` (got " +
       js({ five: rowOf(r5, "Table"), fifty: [r51.rows.length, r51.rowsTotal], sync: [rs.inSync, rs.limits, rowOf(rs, "Table").filesTotal], plain: "deprecatedUses" in S.designSystemReport(plain), feat: "deprecatedUses" in feat }) + ")", {
       first3: () => js(uses(r5, "Table")) === js([5, ["src/app/p0/page.tsx", "src/app/p1/page.tsx", "src/app/p2/page.tsx"]]),
       paths3: () => js(rowOf(r5, "Table").paths) === js(["src/components/B/Table.tsx", "src/components/C/Table.tsx", "src/components/D/Table.tsx"]) && rowOf(r5, "Table").pathsTotal === 4,
       unlocated50: () => u51.unlocated.length === 50 && u51.unlocatedTotal === 51 && u51.unlocated[49] === "U49",
       idle: () => js([idle.rows, idle.unlocated, idle.read]) === js([[], ["Modal"], 0]),
-      fifty: () => r51.rows.length === 50 && r51.rowsTotal === 51 && r51.rows[49].name === "C49",
+      fifty: () => r51.rows.length === 50 && r51.rowsTotal === 51 && js(r51.rows.slice(0, 3).map((x) => [x.name, x.filesTotal])) === js([["C10", 1], ["C50", 2], ["C00", 0]]) && r51.rows[49].name === "C48" && !r51.rows.some((x) => x.name === "C49"),
       inSync: () => rs.inSync === true && js(rs.limits) === js([]) && rowOf(rs, "Table").filesTotal === 1,
       absent: () => !("deprecatedUses" in S.designSystemReport(plain)) && !("deprecatedUses" in feat),
     });
@@ -644,6 +648,84 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     for (const l of ["pt", "es", "pt-BR"]) loc[l] = usesOf(S.designSystemReport(depProject("lang-" + l, ["| Table | src/components/Table.tsx |  | _Deprecated_ |"], { "src/components/Table.tsx": compFile("Table") }, l))).note;
     all("1.39 deprecatedUses: its `note` — what the search does not see, and that no import found is not unused — in the project's language (got " + js(loc) + ")", {
       langs: () => ["pt", "es", "pt-BR"].every((l) => loc[l] === Q(l).dsDepUsesNote) && loc.pt !== loc["pt-BR"] && loc.es !== Q().dsDepUsesNote && /import\(\)/.test(Q().dsDepUsesNote),
+      // (review 1 of 1.39: what is not seen names a tag an auto-import names by its folder — Nuxt's <BaseCard>; and `unlocated`
+      // says only what is true: no component file the scan reads — a component folder's index among them — gives the name)
+      autoImport: () => ["en", "pt", "es"].every((l) => Q(l).dsDepUsesNote.includes("<BaseCard>") && Q(l).dsDepUsesNote.includes("components/base/Card.vue")),
+      unlocated: () => ["en", "pt", "es"].every((l) => i18n.msg(l).cliOutput.dsDepUsesUnlocated("X").includes("index") && !/Angular|Blade/.test(i18n.msg(l).cliOutput.dsDepUsesUnlocated("X"))),
+    });
+  }
+  {
+    // review 1 of 1.39 — a row named through a component folder's barrel (vben: `export { default as VbenButton } from
+    // './button.vue'`, the seed's row) is located, its importers counted; a barrel's default export (outline's List/index.ts over
+    // a styled List.ts) binds its default importers, as a file whose DEFAULT export is the row's name does (List/Item.tsx's
+    // `export default ListItem`, ToolbarSeparator.tsx's Separator) — never a default import of a file whose default is another
+    // (card.tsx's Card beside the deprecated CardHeader); a barrel is among `paths` only when no component file is; TypeScript's
+    // `import type { … }` names no default (a folder's types are not its component) while `import type * as` the row's own file
+    // is an import of it, and `import type X from` stays unbound; an SFC's extensionless twin is no module a script of that key
+    // holds (Sheet.vue beside sheet.ts)
+    const files = {
+      "package.json": js({ name: "r1", private: true, workspaces: ["packages/*"], dependencies: { react: "^19", vue: "^3" } }),
+      "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
+      "packages/ui/package.json": js({ name: "@acme/ui" }),
+      "packages/ui/src/index.ts": L(["export * from './components';"]),
+      "packages/ui/src/components/index.ts": L(["export * from './button';"]),
+      "packages/ui/src/components/button/button.vue": L(["<template><button /></template>"]),
+      "packages/ui/src/components/button/icon-button.vue": L(["<template><button /></template>"]),
+      "packages/ui/src/components/button/index.ts": L(["export { default as VbenButton } from './button.vue';", "export { default as VbenIconButton } from './icon-button.vue';"]),
+      "apps/web/src/views/v1.vue": L(["<script setup lang=\"ts\">", "import { VbenButton } from '@acme/ui';", "</script>", "<template><VbenButton /></template>"]),
+      "apps/web/src/views/v2.vue": L(["<script setup lang=\"ts\">", "import { VbenButton } from '@acme/ui';", "</script>", "<template><VbenButton /></template>"]),
+      "src/components/List/List.ts": L(["import styled from \"styled-components\";", "const List = styled.ol``;", "export default List;"]),
+      "src/components/List/index.ts": L(["import List from \"./List\";", "export default List;"]),
+      "src/components/List/Item.tsx": L(["function ListItem() { return <li />; }", "", "export default ListItem;"]),
+      "src/components/ToolbarSeparator.tsx": L(["const Separator = () => <hr />;", "export default Separator;"]),
+      "src/components/ui/card.tsx": L(["export function CardHeader() { return <div />; }", "export default function Card() { return <div />; }"]),
+      "src/components/ui/toggle/toggle.tsx": compFile("Toggle"),
+      "src/components/ui/toggle/index.ts": L(["export * from \"./toggle\";", "export * from \"./variants\";"]),
+      "src/components/ui/toggle/variants.ts": L(["export type ToggleVariants = { size: string };"]),
+      "src/components/ui/field.tsx": compFile("Field", ["export type FieldProps = { name: string };"]),
+      "src/components/ui/badge/Badge.vue": L(["<script setup lang=\"ts\">", "import { badgeVariants } from '.'", "</script>", "<template><span :class=\"badgeVariants()\" /></template>"]),
+      "src/components/ui/badge/index.ts": L(["export { default as Badge } from './Badge.vue'", "export const badgeVariants = (x) => x", "export type BadgeVariants = { size?: string }"]),
+      // (a barrel's part under a located row's name — select's `Option`, its own select-option.vue — is no namesake of the kit's Option)
+      "src/components/ui/option.tsx": compFile("Option"),
+      "src/components/ui/select/select-option.vue": L(["<template><li /></template>"]),
+      "src/components/ui/select/index.ts": L(["import Option from './select-option.vue';", "export { Option, Option as SelectOption };"]),
+      "src/app/select.tsx": L(["import * as Select from \"@/components/ui/select\";", "export const S = () => <Select.Option />;"]),
+      "src/app/option.tsx": L(["import { Option } from \"@/components/ui/option\";", "export const I = () => <Option />;"]),
+      "src/components/ui/sheet/Sheet.vue": L(["<template><div /></template>"]),
+      "src/components/ui/sheet/sheet.ts": L(["export const sheetVariants = 1;"]),
+      "src/components/ui/sheet/SheetContent.vue": L(["<script setup lang=\"ts\">", "import { sheetVariants } from './sheet'", "</script>", "<template><div :class=\"sheetVariants\" /></template>"]),
+      "src/app/list-a.tsx": L(["import List from \"@/components/List\";", "export const A = () => <List />;"]),
+      "src/app/list-b.tsx": L(["import List from \"../components/List\";", "export const B = () => <List />;"]),
+      "src/app/views.tsx": L(["import ListItem from \"@/components/List/Item\";", "export const V = () => <ListItem />;"]),
+      "src/app/toolbar.tsx": L(["import ToolbarSeparator from \"../components/ToolbarSeparator\";", "export const T = () => <ToolbarSeparator />;"]),
+      "src/app/card-default.tsx": L(["import Card from \"@/components/ui/card\";", "export const C = () => <Card />;"]),
+      "src/app/card-header.tsx": L(["import { CardHeader } from \"@/components/ui/card\";", "export const C = () => <CardHeader />;"]),
+      "src/app/type-folder.tsx": L(["import type { ToggleVariants } from \"@/components/ui/toggle\";", "export const B = (p: { v: ToggleVariants }) => <div>{p.v.size}</div>;"]),
+      "src/app/type-default.tsx": L(["import type ToggleDefault from \"@/components/ui/toggle\";", "export const B = (p: { v: ToggleDefault }) => <div />;"]),
+      "src/app/toggle.tsx": L(["import { Toggle } from \"@/components/ui/toggle\";", "export const R = () => <Toggle />;"]),
+      "src/app/type-ns.tsx": L(["import type * as FT from \"@/components/ui/field\";", "export const f = (x: FT.FieldProps) => <div>{x.name}</div>;"]),
+      "src/components/ui/pagination/PaginationFirst.vue": L(["<script setup lang=\"ts\">", "import type { BadgeVariants } from '@/components/ui/badge'", "import { badgeVariants } from '@/components/ui/badge'",
+        "defineProps<{ size?: BadgeVariants['size'] }>()", "</script>", "<template><a :class=\"badgeVariants()\" /></template>"]),
+    };
+    const rows = (mark) => ["| VbenButton | `packages/ui/src/components/button/index.ts` |  | " + mark("use VbenIconButton") + " |", "| VbenIconButton | `packages/ui/src/components/button/index.ts` |  |  |",
+      "| List | src/components/List/index.ts |  | " + mark() + " |", "| ListItem | src/components/List/Item.tsx |  | " + mark() + " |", "| Separator | src/components/ToolbarSeparator.tsx |  | " + mark() + " |",
+      "| CardHeader | src/components/ui/card.tsx |  | " + mark() + " |", "| Toggle | src/components/ui/toggle/toggle.tsx |  | " + mark() + " |", "| Field | src/components/ui/field.tsx |  | " + mark() + " |",
+      "| Badge | src/components/ui/badge/Badge.vue |  | " + mark() + " |", "| Sheet | src/components/ui/sheet/Sheet.vue |  | " + mark() + " |", "| Option | src/components/ui/option.tsx |  | " + mark() + " |"];
+    const p = depProject("review1", rows(MARK), files);
+    const r = S.designSystemReport(p), d = usesOf(r);
+    const diff = differential(p, rows);
+    all("1.39 deprecatedUses (review 1): a row named through a component folder's barrel is located and its importers counted; a barrel's default export and a file's default export under the row's name bind their default importers, never a default import of another default; a barrel is a row's path only when no component file is; `import type { … }` from a folder names no default, `import type * as` the row's file is its import, `import type X from` binds nothing; an SFC's extensionless twin is no module a script of that key holds; every other key the same with no marker (got " +
+      js({ rows: d.rows.map((x) => [x.name, x.filesTotal, x.files, x.paths, x.pathsTotal]), unlocated: d.unlocated, same: diff.same }) + ")", {
+      barrel: () => js(uses(r, "VbenButton")) === js([2, ["apps/web/src/views/v1.vue", "apps/web/src/views/v2.vue"]]) && js(rowOf(r, "VbenButton").paths) === js(["packages/ui/src/components/button/index.ts"]) && rowOf(r, "VbenButton").use === "VbenIconButton",
+      barrelDefault: () => js(uses(r, "List")) === js([2, ["src/app/list-a.tsx", "src/app/list-b.tsx"]]) && js(rowOf(r, "List").paths) === js(["src/components/List/index.ts"]),
+      defaultName: () => js(uses(r, "ListItem")) === js([1, ["src/app/views.tsx"]]) && js(uses(r, "Separator")) === js([1, ["src/app/toolbar.tsx"]]),
+      otherDefault: () => js(uses(r, "CardHeader")) === js([1, ["src/app/card-header.tsx"]]),
+      typeOnly: () => js(uses(r, "Toggle")) === js([1, ["src/app/toggle.tsx"]]) && js(uses(r, "Field")) === js([1, ["src/app/type-ns.tsx"]]),
+      vueType: () => js(uses(r, "Badge")) === js([0, []]) && js(rowOf(r, "Badge").paths) === js(["src/components/ui/badge/Badge.vue"]) && rowOf(r, "Badge").pathsTotal === 1,
+      twin: () => js(uses(r, "Sheet")) === js([0, []]),
+      barrelPart: () => js(uses(r, "Option")) === js([1, ["src/app/option.tsx"]]) && rowOf(r, "Option").pathsTotal === 1,
+      located: () => js(d.unlocated) === js([]) && d.rowsTotal === 10,
+      differential: () => diff.same === true,
     });
   }
 
