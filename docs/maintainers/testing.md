@@ -364,5 +364,6 @@ How the rules above came to be — grep a release here.
   different-work checks (reexports :434, usage :513, aliases :490), which passed every Linux run (a first try missed on
   node:24-alpine for two of them, the retry held); the read-ahead pool's start against a read in sequence (+600 ms: the start
   took 650–1,330 ms in two containers at once; it held one container at a time). The cost file split by topic (The suites): its two halves took 133 and
-  174 s in the default-jobs Windows run — one file, it was the critical path. The injectable bounds table was cut again (−11 to
+  174 s in the default-jobs Windows run — one file, it was the critical path; that run's wall was 317 s, its slowest chains
+  15-quality-design-system-usage (209 s) and 10-guards-protected-tests (194 s). The injectable bounds table was cut again (−11 to
   −12 s Windows, −2 to −3 s Linux, off the critical path).
