@@ -20,7 +20,7 @@ exports.trees = ({ S, tmp }, prefix) => {
     for (const [rel, text] of Object.entries(files || {})) write(p, rel, text);
     return p;
   };
-  return { write, project };
+  return { project };
 };
 // pair(a, b) → { ratio: a / b, a, b }: each side's median of 5 calls, the calls INTERLEAVED (a, b, a, b, …) so a load spike hits
 // both sides alike — and one ratio a remeasure (1.40: five calls of one side, then five of the other, crossed 1.5 where the
