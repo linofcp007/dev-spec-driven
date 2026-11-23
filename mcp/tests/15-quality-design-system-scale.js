@@ -173,9 +173,18 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
         both("hsl(0 93.3% 94.1%)", "oklch(93.6% 0.032 17.717)")],
       // the ceiling: Tailwind 4's orange-500 against its hex as integer HSL, 0.0117 apart, the boxes meeting (E3)
       ceiling: both("hsl(25 100% 50%)", "oklch(70.5% 0.213 47.604)"),
-      // what must STILL be the token: the neutral's own oklch, achromatic — the hue moot (E11; shadcn's slate-50 against Tailwind's
-      // neutral-50 too); a faint grey against an HSL whose s may be 0 (E10)
-      neutral: [both("hsl(0 0% 9%)", "oklch(20.5% 0 0)"), both("hsl(210 40% 98%)", "oklch(98.5% 0 none)"), both("hsl(0 0% 45.1%)", "oklch(55.6% 0.001 250)")],
+      // what must STILL be the token: the neutral's own oklch, achromatic — the hue moot (E11: slate-50 against an oklch whose L
+      // is written at 2 dp, its zero read at 0.005; a % L's half in L's own scale — review 1's F3. Review 1 moved E11's kill here:
+      // slate-50 against `oklch(98.5% 0 none)` is `zero`'s); a faint grey against an HSL whose s may be 0 (E10)
+      neutral: [both("hsl(0 0% 9%)", "oklch(20.5% 0 0)"), both("hsl(210 40% 98%)", "oklch(0.98 0 0)"), both("hsl(210 40% 98%)", "oklch(98% 0 0)"),
+        both("hsl(0 0% 45.1%)", "oklch(55.6% 0.001 250)")],
+      // (1.40.0 review 1, BUC-1) a channel written as zero — `0`, `none`, `0.0` — is read at most at its colour's L's half, never
+      // its integer's 0.5: shadcn's legacy zinc-900 against shadcn v4's / Tailwind 4's neutral (F1; `none`, `0.0` — F5), oklab's
+      // a / b, slate-50 against Tailwind 4's neutral-50; a zero written finer than its L keeps its own half (F2). Still the token:
+      // a NONZERO channel coarser than its L keeps its own half (F4: C at 2 dp, L at 3), the neutral's own oklch as shadcn writes it
+      zero: [both("hsl(240 5.9% 10%)", "oklch(0.205 0 0)"), both("hsl(240 5.9% 10%)", "oklch(20.5% none none)"), both("hsl(240 5.9% 10%)", "oklch(20.5% 0.0 0)"),
+        both("hsl(240 5.9% 10%)", "oklab(0.205 0 0)"), both("hsl(210 40% 98%)", "oklch(98.5% 0 none)"), both("hsl(240 4.8% 95.9%)", "oklch(0.97 0.000 0)")],
+      zeroKept: [both("hsl(230 35% 79%)", "oklch(0.804 0.04 276.7)"), both("hsl(0 0% 9%)", "oklch(0.205 0 0)")],
       // shadcn's legacy pairs, one colour written twice: by the box alone (E4; its l axis — E14c), the hue's half (E13c), its s
       // axis (E14b), the hue's distance a turn's (E12b)
       legacy: [both("hsl(272.4 15% 98.2%)", "oklch(0.98 0.00 310)"), both("hsl(33.3 5.5% 32.4%)", "oklch(0.44 0.01 74)"), both("hsl(136.9 14.2% 95.2%)", "oklch(0.96 0.01 155)"),
@@ -192,9 +201,10 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
       // HSL's pixel (E6, E6q), and 1.38's review colour #eeeff2 as oklch (CRIT_6 must-fix 2)
       painted: [both("hsl(229.3 50.9% 18.3%)", "oklch(0.2555 0.0744 271.54)"), both("hsl(163.24 83.86% 20.87%)", "oklch(0.442 0.087 167.325)"), both("hsl(220 14% 94%)", "oklch(0.952 0.004 271.369)")],
       // oklab, L, a and b each (E16a red-200's hex — E16b / E16c / E16d one channel off), its % channels (E17b, E26); an oklch
-      // hue in turns (E18)
+      // hue in turns (E18). (Review 1: `oklab(0.905 -0.011 0)`'s b, written zero, is off now too — the L alone off, its b the
+      // HSL's -0.003, is E16d's)
       oklab: [both("hsl(0 100% 89%)", "oklab(0.883 0.058 0.019)"), both("hsl(265.1 11.5% 55.2%)", "oklab(0.618 0.024 -0.03)"), both("hsl(200 76% 83%)", "oklab(0.88 -0.035 -0.039)"),
-        both("hsl(180 15% 86%)", "oklab(0.905 -0.011 0)"), both("hsl(157 16% 28%)", "oklab(41.6% -7.3% 2%)")],
+        both("hsl(180 15% 86%)", "oklab(0.905 -0.011 0)"), both("hsl(157 16% 28%)", "oklab(41.6% -7.3% 2%)"), both("hsl(180 15% 86%)", "oklab(0.905 -0.011 -0.003)")],
       turn: both("hsl(80.48 17.3% 16.91%)", "oklch(31% 6.6% 0.3424turn)"),
     };
     // T10, functional (CRIT_6 must-fix 4 — no clock): an HSL token's image is built ONCE, when an oklch / oklab value within the
@@ -205,16 +215,17 @@ exports.run = async ({ all, S, tmp, list, require, __dirname }) => {
     const asks = (v) => T.judgeRaw({ kind: "color", value: v }, sc).token || null;
     const once = [asks("oklch(21% 0.006 285.885)"), imgs()], twice = [asks("oklch(20.5% 0 0)"), asks("oklch(21% 0.006 285.885)"), imgs()];
     const memo = { judged: [once[0], twice[0], twice[1]], built: once[1].map((x) => (x === "hex" ? x : !!x)), same: once[1].every((x, i) => x === twice[2][i]) };
-    all("1.40 R2-T2: an HSL side against oklch() / oklab() is the same colour only where the written roundings meet or one paints the other at 8 bits (both orders, under the 0.011) — Tailwind 4's zinc-900 is not hsl(0 0% 9%), its own hex's HSL is; CRIT_6's real rows and another palette's colour `near`; the neutral's own oklch, shadcn's legacy pairs, Tailwind 4's hexes as integer HSL, an HSL's paint as oklch (#eeeff2 among them), oklab and a hue in turns stay the token; an HSL token's image built once, only when asked (got " + js(got) + " " + js(memo) + ")", {
+    all("1.40 R2-T2: an HSL side against oklch() / oklab() is the same colour only where the written roundings meet or one paints the other at 8 bits (both orders, under the 0.011) — Tailwind 4's zinc-900 is not hsl(0 0% 9%), its own hex's HSL is; CRIT_6's real rows and another palette's colour `near`; a zero channel read at most at its L's half (review 1: shadcn's hsl() zinc is not the oklch() neutral); the neutral's own oklch, shadcn's legacy pairs, Tailwind 4's hexes as integer HSL, an HSL's paint as oklch (#eeeff2 among them), oklab and a hue in turns stay the token; an HSL token's image built once, only when asked (got " + js(got) + " " + js(memo) + ")", {
       zinc: () => got.zinc === "near / near" && got.zincOwn === "token / token",
       real: () => got.real.every((k) => k === "near / near"),
       other: () => got.other.every((k) => k === "near / near"),
       ceiling: () => got.ceiling === "near / near",
       neutral: () => got.neutral.every((k) => k === "token / token"),
+      zero: () => got.zero.every((k) => k === "near / near") && got.zeroKept.every((k) => k === "token / token"),
       legacy: () => got.legacy.every((k) => k === "token / token"),
       paint: () => got.paint.every((k) => k === "token / token") && got.mid === "token / token",
       painted: () => got.painted.every((k) => k === "token / token"),
-      oklab: () => js(got.oklab) === js(["token / token", "near / near", "near / near", "near / near", "near / near"]),
+      oklab: () => js(got.oklab) === js(["token / token", "near / near", "near / near", "near / near", "near / near", "near / near"]),
       turn: () => got.turn === "token / token",
       memo: () => js(memo.judged) === js(["--b", "--a", "--b"]) && js(memo.built) === js([true, true, "hex", false]) && memo.same,
     });

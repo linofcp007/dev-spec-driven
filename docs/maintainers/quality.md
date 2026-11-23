@@ -1412,13 +1412,17 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   (`okRange`: L, a, b, the chroma, the hue's span round the circle) — meets the other's box channel by channel
   (`boxMeets`: oklab's L, a, b; oklch's L, chroma and hue, the hue asked only where neither side can be achromatic — a
   chroma within DS_EXACT, a written chroma whose half reaches 0 —, within the span plus the hue's half; parseColor keeps
-  an oklab / oklch's `box`: its channels as written, each one's half in its own scale, a % one's too, the hue in degrees);
-  or (2) one paints the other at 8 bits: the oklab / oklch's pixel (`rgbFromOk`, then `paint8`: clamped, 8 bits a channel)
-  round-trips the HSL (1.38's `roundTrip`), or its box holds the HSL's own pixel. So Tailwind 4's zinc-900 `oklch(21%
-  0.006 285.885)` is no longer shadcn's `hsl(0 0% 9%)` neutral (0.0082 apart, a bluish grey against a neutral one — as
-  far as zinc's hex, which the round trip keeps `near` too): `near`; the neutral's own `oklch(20.5% 0 0)` is its token,
-  zinc's own hex's HSL `hsl(240 5.9% 10%)` is zinc-900's, and 1.38's `#eeeff2` written as `oklch(0.952 0.004 271.369)` is
-  `hsl(220 14% 94%)`. The 0.011 stays the ceiling, so a `token` can only become `near` (History → 1.40.0: 0 of 240,000
+  an oklab / oklch's `box`: its channels as written, each one's half in its own scale, a % one's too, the hue in degrees —
+  a channel written as zero, `0` or `none`, at most at its L's half (1.40.0 review 1: a zero's text tells no precision,
+  `0.000` prints `0`, and a colour is written at one; its integer's 0.5 met any chroma); or (2) one paints the other at 8
+  bits: the oklab / oklch's pixel (`rgbFromOk`, then `paint8`: clamped, 8 bits a channel) round-trips the HSL (1.38's
+  `roundTrip`), or its box holds the HSL's own pixel. So Tailwind 4's zinc-900 `oklch(21% 0.006 285.885)` is no longer
+  shadcn's `hsl(0 0% 9%)` neutral (0.0082 apart, a bluish grey against a neutral one — as far as zinc's hex, which the
+  round trip keeps `near` too): `near`, as shadcn's legacy zinc `hsl(240 5.9% 10%)` is against shadcn v4's `oklch(0.205 0
+  0)` neutral (its zero read at 0.0005) — an L written at 2 dp reads its zero at 0.005, so `oklch(0.97 0 0)` stays zinc-100
+  `hsl(240 4.8% 95.9%)`'s token, as written —; the neutral's own `oklch(20.5% 0 0)` is its token, zinc's own hex's HSL
+  `hsl(240 5.9% 10%)` is zinc-900's, and 1.38's `#eeeff2` written as `oklch(0.952 0.004 271.369)` is `hsl(220 14% 94%)`.
+  The 0.011 stays the ceiling, so a `token` can only become `near`, or a farther token's (History → 1.40.0: 0 of 240,000
   same-source pairs lost; 9 rows move on 104 real projects): said, ui-code-scan.md. `near`
   (a hint, `{token, delta}`): the NEAREST token within the JND (0.02 ΔEOK), never the first. hwb / lab / lch / `color()` / a
   named colour are not parsed: the same TEXT names the token (1.37's rule, `colorKey`, moved here; a hex is always parsed
@@ -3473,6 +3477,33 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   the hostileB2 tree's 50,000 re-exports, 3–5 ms on the real trees): CPU 0.95× / 1.06× / 1.02× on vben / cal.com /
   shadcn-svelte with every other row live (A/A 0.90 / 1.08 / 1.02); the hostileB2 tree 0.94× with half its rows live
   (A/A 0.91), 1.09× with all marked (A/A 1.06). ui-code-scan.md +37 B.
+- **1.40.0 review 1** (the scale — BUC-1 MEDIUM, made by R2-T2's box; BUC-2 LOW, prose) — BUC-1: parseColor's oklab /
+  oklch box gave a channel written as zero (`0`, `none`) its integer's half, 0.5 — wider than chroma's whole range —, so
+  `boxMeets` met any tint, the hue went moot, and an achromatic `oklch(L 0 0)` stayed the token of every tinted HSL grey of
+  its L: R2-T2 one way in practice — Tailwind 4's zinc oklch against the `hsl()` neutral was fixed, shadcn v4's neutral
+  `oklch(0.205 0 0)` against shadcn's legacy zinc `hsl(240 5.9% 10%)` was not (0.0079 apart), the shadcn v3 → v4
+  migration. Fixed by the property, not a width: a zero's text tells no precision and a colour is written at one, so a zero
+  channel's half is at most its L's (`Math.min`: never wider than as written — the fix only narrows f539cb19). Against
+  f539cb19: same-source 0 lost (chain E's paths — 240,000 painted / random pairs, Tailwind 4's 576, shadcn's legacy 288 —,
+  240,000 HSL-painted pixels in four forms, 258,432 hexes and near-greys, 256,000 unit variants, a grid of zero channels
+  at every L / C precision: 0 wherever C is written at L's precision or finer); Tailwind 4 × shadcn legacy within 0.011
+  116 → 88 `token` (the 28: Tailwind 4's `oklch(L% 0 none)` against a legacy tinted grey, each another 8-bit pixel); the
+  palette cross (Tailwind 4 / shadcn v4 neutral × Tailwind 3's zinc, slate, gray, stone, both orders) 50 → 14 — the 36
+  another pixel each; the 14 an L written at 2 dp (`97%`, `0.97`, `87%`: its zero reads 0.005, above the chroma of
+  zinc-100, gray-100, stone-100 and stone-300 — as written) —; 0 real rows move (the 104 clones, 24,910 colours; 77 corpus
+  repos holding oklch / oklab, 421,645), drift and the group keys byte-identical. Against 8ec6ca52: the rows 1.40 moved
+  (the 104's 9; the corpus's 4 — cal.com's `hsla(37, 86%, 92%, 1)` in two clones, MindOS's legacy zinc ×2 against its v4
+  neutral tokens), nothing more; same-source as 1.39. Not covered, named: a writer that rounds a NONZERO chroma coarser
+  than its L (C at 2 dp, L at 3) and prints its zero `0` — the zero reads finer than it was rounded, so its own HSL can
+  lose `token` (the grid: 76–84 % of that writer's zero pairs); no such writer in the 104 clones or the corpus (11,634
+  zero channels, 8,438 read narrower; the 87 whose file writes a chroma coarser are achromatic as written — daisyUI 4's
+  greys, compiled blacks, shadcn's docs beside 2-dp examples, a hand-written `oklch(17.5% 0 0)`). The suite pin that flips:
+  slate-50 against `oklch(98.5% 0 none)` (now `zero`'s, `near`); E11's kill re-pointed to slate-50 against `oklch(0.98 0
+  0)` / `oklch(98% 0 0)` (the reviewer's); E16d's (oklab's L dropped) had leaned on a `0` b meeting anything — a pair with
+  the HSL's own b kills it. Mutation pass (%TEMP%/dsd-140-f1e/MUTATIONS.md): 6 / 6; chain E's 37 / 37 again, its replay
+  of 1.38's and 1.39's 78 / 80 as before (C8's line gone, C63 equivalent). BUC-2: "a `token` can only become `near`" —
+  or a farther token's: a nearer token the pair's rounding refuses hands the row on (`oklch(21% 0.006 285.885)`: `--a:
+  hsl(230 8% 10%)` at 0.00132 refused, `--b: hsl(250 7% 10%)` at 0.00133 kept).
 
 ### UI checks
 - **1.37** (item 1 of the owner's 1.37 "UI checks" list: a static scan for what is wrong whatever the taste, after four
