@@ -36,9 +36,9 @@ tool, command, hook or dependency; the MCP tool list and SKILL.md are unchanged.
   listed as `unlocated` (a library's, an Angular `*.component.ts` — its importers are `.ts` files the scan does not read
   —, a Blade one). A localized `note` says what is not seen — a `.ts` file, a dynamic `import()`, a module only a
   bundler's alias or a virtual module names, a re-export under another name outside a component folder's index, a tag an
-  auto-import names by its folder (Nuxt's `<BaseCard>`), a non-component export or a type through a barrel: no import found is not unused. Its
-  own bounds are in its own `limits` (`usage-files`, `deprecated-follow`), never the report's `limits`, `truncated` or "in
-  sync". The CLI prints it after the stale rows; its head counts every row the code holds a file for. The feature report,
+  auto-import names by its folder (Nuxt's `<BaseCard>`), a non-component export or a type through a barrel: no import
+  found is not unused. Its own bounds are in its own `limits` (`usage-files`, `deprecated-follow`), never the report's
+  `limits`, `truncated` or "in sync". The CLI prints it after the stale rows; its head counts every row the code holds a file for. The feature report,
   `finish`, doctor and the task brief are unchanged by it.
 - **A Sass breakpoints map.** A top-level Sass map whose name ends in `breakpoints` (`$grid-breakpoints`, `$breakpoints`,
   an override in `@use … with (…)`) in a `.scss` sheet the scan reads now gives the widths the visual review captures
@@ -120,7 +120,7 @@ marked, up to 500: 1.04–1.43×) and, on smaller trees where the scan otherwise
 report's and `finish`'s cost are unchanged.
 
 ### Tests
-- `node mcp/test.js` 2977 assertions, `node cli/test-cli.js` 703 (was 2911 / 698). Each mutation list was written before
+- `node mcp/test.js` 2983 assertions, `node cli/test-cli.js` 705 (was 2911 / 698). Each mutation list was written before
   its fixtures: the deprecated uses 79 of 85 (an equivalent memory guard, the walk-cap repeat checked in a scratch run — its
   fixture needs 20,001 files —, four cost guards timed with and without); the UI checks 56 of 56; breakpoints and states
   75 of 75; the units table 49 of 49; the docs pass 28 of 28 (each new prose clause dropped in a copy fails its row); every
