@@ -2883,7 +2883,9 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   }
   const F = followOf(scripts, project, { byName, byBase, keys, defaults }, results.map((r) => [r.path, r.uses.reexports]));
   const stats = new Map(), unbound = new Map(); // a row's key → { files: the first DS_DEP_SHOWN by path, total } · { total, at }
-  let read = 0, cut = null;
+  let read = 0, cut = null, parsed = 0;
+  // (every text the watch parses itself goes through here — counted: the report's in-process `parsed`; settle's parse is not)
+  const parse = (text, rel, usesFn) => { parsed++; return usesFn(text, rel); };
   const baseOf = (spec) => keyBase(moduleKey(spec));
   const inScope = (rel) => (RE_JSX_FILE.test(rel) || RE_MARKUP_FILE.test(rel)) && !isTestFile(rel) && !RE_NOT_COMPONENT_FILE.test(rel.slice(rel.lastIndexOf("/") + 1));
   const seeUses = (rel, u) => {
@@ -2942,7 +2944,7 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     // a component file read for what it exports (settle's `results`): its uses as that read gave them
     result: (rel, u) => { if (inScope(rel)) { read++; seeUses(rel, u); } },
     // a file of settle's queue: the uses settle parsed (u), else its own parse of the text — when it names what is watched
-    see: (rel, text, u, usesFn) => { if (!inScope(rel)) return; read++; if (u || wants(text, rel)) seeUses(rel, u || usesFn(text, rel)); },
+    see: (rel, text, u, usesFn) => { if (!inScope(rel)) return; read++; if (u || wants(text, rel)) seeUses(rel, u || parse(text, rel, usesFn)); },
     // settle's read stopped at its bound (DS_USAGE_FILES / DS_USAGE_CHARS): the queue's rest, the files read
     cut: (rest, n) => { if (rest.some(inScope)) cut = n; },
     // → the report's deprecatedUses, its `note` aside (localized: the report's). repeat: the cuts of the walk and of the
@@ -2962,7 +2964,11 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       // (the rows still imported first — the work left —, the registry's order kept within each group: past DS_LIST, a used
       // row was cut while 50 unused ones were listed, review 1 of 1.39)
       const listed = rows.filter((x) => x.filesTotal).concat(rows.filter((x) => !x.filesTotal));
-      return { rows: listed.slice(0, DS_LIST), rowsTotal: rows.length, unlocated: unlocated.slice(0, DS_LIST), unlocatedTotal: unlocated.length, read, limits };
+      const out = { rows: listed.slice(0, DS_LIST), rowsTotal: rows.length, unlocated: unlocated.slice(0, DS_LIST), unlocatedTotal: unlocated.length, read, limits };
+      // (1.40: in-process only, never in a result's JSON — not enumerable, as classify's `tiers`: the pages the watch parsed
+      // itself; 15-quality-design-system-deprecated.js counts them, a cost check with no clock)
+      Object.defineProperty(out, "parsed", { value: parsed, enumerable: false });
+      return out;
     },
   };
 }

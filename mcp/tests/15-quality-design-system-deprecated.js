@@ -6,7 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, require, __dirname }) => {
+exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCalls, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const E = require(path.join(__dirname, "lib", "engine", "index.js"));
   const write = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
@@ -790,6 +790,39 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
       unlocated: () => js(d.unlocated) === js(["Footer"]) && d.unlocatedTotal === 1 && ["en", "pt", "es"].every((l) => i18n.msg(l).cliOutput.dsDepUsesUnlocated("X").includes(clause[l])),
       typeTight: () => js(uses(r, "Toggle")) === js([1, ["src/app/toggle.tsx"]]),
       differential: () => diff.same === true,
+    });
+  }
+
+  // --- 1.40: the pages the watch parses itself — a count, not a clock ------------------------------------------------------------
+  {
+    // `parsed` (item 1 c — in-process only: not enumerable, never in the JSON): the texts the watch parses ITSELF — those
+    // that name a watched name or a row file's base and that settle did not parse. Twelve pages, the even ones Table's, the odd
+    // ones Button's; 0–3 also render Moving (a candidate settle asks: settle parses them, and its parse is not the watch's);
+    // one page imports table.tsx as Grid (its base, not its name). table.tsx has NO default export: with one, settle asks the
+    // name Table (a default's) and parses every Table page itself — parsed falls to 1 and the Grid page's count is gone
+    // (CRIT_1 must-fix 8). The watch reads nothing itself: every fs call under the pages' folder the same with no marker
+    const APP = "src/app/", page = (i) => APP + "p" + String(i).padStart(2, "0") + ".tsx";
+    const files = { "package.json": js({ name: "parsed" }), "src/components/table.tsx": compFile("Table"),
+      "src/components/kit.tsx": L(["export const Moving = motion(Box);", "export function Button() { return <button />; }"]),
+      [APP + "grid.tsx"]: L(["import Grid from \"../components/table\";", "export const G = () => <Grid />;"]) };
+    const pageOf = (i, wide) => i % 2 === 0
+      ? L(["import { Table } from \"../components/table\";"].concat(i < 4 ? ["import { Moving } from \"../components/kit\";"] : [], ["export const P = () => <Table>" + (i < 4 ? "<Moving />" : "") + "</Table>;"]))
+      : L(["import { Button" + (i < 4 ? ", Moving" : "") + " } from \"../components/kit\";", "export const P = () => <Button>" + (i < 4 ? "<Moving />" : "") + "</Button>;"].concat(wide ? ["// not a Table"] : []));
+    for (let i = 0; i < 12; i++) files[page(i)] = pageOf(i, false);
+    const rows = (mark) => ["| Table | src/components/table.tsx |  | " + mark() + " |", "| Button | src/components/kit.tsx |  |  |"];
+    const p = depProject("parsed", rows(MARK), files);
+    const under = path.join(p, "src", "app") + path.sep;
+    const callsOf = (mark) => { write(p, REG, "# Design System\n\n" + HEAD + rows(mark).join("\n") + "\n"); let r = null; const calls = fsCalls(under, () => { r = S.designSystemReport(p); }); return { r, calls }; };
+    const off = callsOf(NONE), on = callsOf(MARK);
+    const d = usesOf(on.r);
+    for (let i = 1; i < 12; i += 2) write(p, page(i), pageOf(i, true));
+    const wideR = S.designSystemReport(p), wide = usesOf(wideR), TABLE = [7, [APP + "grid.tsx", page(0), page(2)]];
+    all("1.40 deprecatedUses.parsed: the pages the watch parses itself — those naming a watched name or a row file's base that settle did not parse (4 Table pages and the Grid page: 5; every Button page naming Table: 9) —, in-process only (never in the report's JSON: its keys 1.39's), and the watch reads nothing itself: every fs call under the pages' folder the same with no marker (got " +
+      js({ parsed: d.parsed, wide: wide.parsed, table: uses(on.r, "Table"), keys: Object.keys(d), on: on.calls, off: off.calls }) + ")", {
+      parsed: () => d.parsed === 5 && js(uses(on.r, "Table")) === js(TABLE),
+      wide: () => wide.parsed === 9 && js(uses(wideR, "Table")) === js(TABLE),
+      hidden: () => !("parsed" in JSON.parse(js(d))) && js(Object.keys(d)) === js(["rows", "rowsTotal", "unlocated", "unlocatedTotal", "read", "limits", "note"]),
+      reads: () => js(on.calls) === js(off.calls) && (on.calls.openSync || 0) >= 13,
     });
   }
 
