@@ -3112,7 +3112,8 @@ function scanCode(root, withComponents = true, withBreakpoints = false, deprecat
   };
   const order = (a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
   // (1.38, withBreakpoints — the report's scan alone, never finish's or the seed's: the walks below carry breakpoints.js's
-  // observer, which reads a top-level `@theme` block's --breakpoint-*; the sheets the walks read, no other)
+  // observer, which reads a top-level `@theme` block's --breakpoint-* and (1.39) a top-level Sass map named …breakpoints in a
+  // .scss sheet — through the walk's `open` event too, built only for such a sheet; the sheets the walks read, no other)
   const bp = withBreakpoints ? breakpointWatch() : null;
   // (the files whose values ARE read first: 21 `tailwind.config.ts` — listed, unread — must not take tokens.css's place)
   const unread = (f) => (/\.json$/i.test(f.rel) || RE_STYLE_EXT.test(f.rel) ? 0 : 1);
@@ -3446,8 +3447,10 @@ function pendingNew(projectDir) {
 // registry rows naming a file of the project that is gone: [{name, path}]), staleTotal, newTokens (the code's tokens the registry doesn't list, the first
 // DS_LIST: [{name, value}]), newTokensTotal, newSources / newLibraries (token files / UI libraries the registry doesn't name),
 // drift (1.38 — the first DS_LIST: [{name, registry, code, source, kind: color | quantity}]: registryValues), driftTotal, gone
-// (the `_Token sources:_` files gone), unitsTable ({rows, unread, past} | null), inSync (never drift, gone or the units table),
-// uiChecks (1.38, opts.uiPass alone — the operation's: the inventory of the project's view files, uiProject), scanned:
+// (the `_Token sources:_` files gone), unitsTable ({rows, unread, past} | null), deprecatedUses (1.39 — only while the registry
+// marks a row `_Deprecated:_`: deprecatedWatch's report and its localized `note`; never limits, truncated or inSync), inSync
+// (never drift, gone, the units table or the deprecated uses), uiChecks (1.38, opts.uiPass alone — the operation's: the
+// inventory of the project's view files, uiProject), scanned:
 // {files}, limits, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} |
 // null: its design names no row), problems ([{code, name, near?, text}] — doctor's ui-design-system findings), viewFiles, raw
 // (the first DS_LIST: [{file, line, kind: color | size | font | motion, value, token? (the scale's token it is), near? ({token,
