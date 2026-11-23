@@ -1180,27 +1180,29 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       motionSheet: ["a { transition:\n" + fill("  transform 1s,\n") + "}\n", "x.css"], keyframesRun: [fill("@keyframes k { }\n"), "x.css"],
       animStyle: [fill("const s = { animation: \"" + "spin 1s, ".repeat(100) + "\" };\n"), "x.tsx"],
     };
-    const time = (f) => { const ts = []; for (let k = 0; k < 5; k++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
     // (a stylesheet is read through the ONE CSS walk the registry's token reader already makes — styleTokens —: its ratio is to
     // the larger of plain JSX and that walk of the same text with an observer that does nothing, so it measures what the
     // checks add; on Node 18's V8 the walk of a sheet of nothing but `{` is itself ~3× plain JSX — the 1.37 Docker run, the
     // same at 457d3da. `raw` ≤ 10× plain JSX still catches a walk that stopped being linear.)
+    // Each input is timed beside its own plain JSX (and walk) — the calls interleaved, input, plain, [walk], input, …, each side's
+    // median of 5 — under a remeasure of its own, so a miss measures that input again, alone (1.40: one plain JSX timed before all
+    // 23 inputs, their 46 ratios one sample — `clickNest` 3.06 missed a first try on Windows). What it cannot steady: `clickNest` and
+    // `clickControl` cost 2–2.6× plain JSX themselves, so with the suite running beside they reach 3 now and then — `clickNest`
+    // interleaved in 1 of 12 Windows samples, 5 of 32 on node 22, 2 of 32 on node:24-alpine (blocked, as before: 5 of 12 on
+    // Windows); three calls a side (each ≥ 100 ms in a container) made them no steadier. The plain JSX side is ~40–80 ms there.
+    const medians = (fns) => { const ts = fns.map(() => []); for (let k = 0; k < 5; k++) fns.forEach((f, i) => { const t0 = process.hrtime.bigint(); f(); ts[i].push(Number(process.hrtime.bigint() - t0) / 1e6); }); return ts.map((t) => t.sort((a, b) => a - b)[2]); };
     const noop = { block() {}, statement() {}, close() {} };
     const round = (x) => Math.round(x * 100) / 100;
     run(plain, "x.tsx");
-    const sample = remeasure(() => {
-      const base = time(() => run(plain, "x.tsx"));
-      const ratios = {}, raw = {};
-      for (const [k, [text, rel]] of Object.entries(hostile)) {
-        run(text, rel);
-        const t = time(() => run(text, rel)), walk = /\.css$/.test(rel) ? time(() => T.styleTokens(text, rel, noop)) : 0;
-        ratios[k] = round(t / Math.max(base, walk));
-        raw[k] = round(t / base);
-      }
-      return { base: Math.round(base * 10) / 10, ratios, raw };
-    }, (s) => Object.keys(s.ratios).every((k) => s.ratios[k] <= 3 && s.raw[k] <= 10));
-    all("1.37 UI checks: every hostile 256K input costs at most 3× plain JSX of the same size — a stylesheet 3× the CSS walk it shares, and 10× plain JSX —, measured at the same moment (got " + js(sample) + ")",
-      Object.fromEntries(Object.keys(hostile).map((k) => [k, () => sample.ratios[k] <= 3 && sample.raw[k] <= 10])));
+    const sample = {};
+    for (const [k, [text, rel]] of Object.entries(hostile)) {
+      run(text, rel);
+      const sides = [() => run(text, rel), () => run(plain, "x.tsx")].concat(/\.css$/.test(rel) ? [() => T.styleTokens(text, rel, noop)] : []);
+      sample[k] = remeasure(() => { const [t, base, walk] = medians(sides); return { ratio: round(t / Math.max(base, walk || 0)), raw: round(t / base) }; }, (s) => s.ratio <= 3 && s.raw <= 10);
+    }
+    all("1.37 UI checks: every hostile 256K input costs at most 3× plain JSX of the same size — a stylesheet 3× the CSS walk it shares, and 10× plain JSX —, measured at the same moment (got " +
+      js(Object.fromEntries(Object.entries(sample).map(([k, s]) => [k, [s.ratio, s.raw, s.tries]]))) + ")",
+      Object.fromEntries(Object.keys(hostile).map((k) => [k, () => sample[k].ratio <= 3 && sample[k].raw <= 10])));
   }
 
   { // the checks against the read they share a text with: uiChecksOf over real-shaped files costs at most 3× rawValuesOf over the

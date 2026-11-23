@@ -312,7 +312,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, fsC
     // root) is a count. The time is a backstop only: four calls a side (each side ≥ 100 ms in a Linux container), the call with the fast
     // check against the call without it plus the walk in ONE interval, each side's median of 5, the rounds interleaved, one ratio a
     // remeasure, ≤ 2.5× — it hides anything under 2.5×: a quadratic over the planned set that makes no fs call (the known set rebuilt
-    // per own file: 1.6–2.2× on node 22, 1.1–1.2× on Windows) passes. The 1.39 bound (≤ 1.3, one call a side) missed on Linux under load
+    // per own file: 1.6–2.2× on node 22; on Windows, where the opens weigh, 0.8–1.5×) passes. The 1.39 bound (≤ 1.3, one call a side) missed on Linux under load
     // (1.73 / 1.78 node:24-alpine); at ≤ 1.5 the four calls crossed 1.5 in 7 of 36 base samples on node 22 (max 1.94) and 3 of 36 on
     // node:24-alpine (1.75), the MCP suite running beside; one call a side (~40 ms) crossed even 2.5 (testing.md → Adding a test)
     const E = require(path.join(__dirname, "lib", "engine", "index.js"));
