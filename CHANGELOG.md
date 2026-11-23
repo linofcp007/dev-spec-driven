@@ -29,7 +29,9 @@ SKILL.md are unchanged.
 ### Changed
 - **The files that still import a deprecated component** (`deprecatedUses`) count more: a direct import of the file a
   component folder's index renames, for every row whose index renames it (`import VbenButton from './button.vue'`, which
-  1.39 said it did not count); `import type X from` the row's own file (through a folder's index it still does not count);
+  1.39 said it did not count) — unless an index also gives that export a live row's name, the usual deprecation of a
+  rename (`export { default as Button, default as OldButton }`: a file on `Button` is not counted for `OldButton`);
+  `import type X from` the row's own file (through a folder's index it still does not count);
   the row's path cell read as the stale-row check reads it — the index it names may stand beside another path, in
   backticks or as a link, and a cell naming two indexes locates the row by both. On 21 public repositories with every
   component marked: 7 more imports found, none lost. The rows only rendered with no import (`unbound`) now come after
@@ -50,8 +52,11 @@ SKILL.md are unchanged.
 - **An `hsl()` token is no longer the token of an `oklch()` / `oklab()` value of another colour.** The pair is the same
   colour only where their written roundings meet, or one paints the other at 8 bits (both ways) — 1.39 kept the 0.011
   ΔEOK alone for it, so Tailwind 4's zinc-900 `oklch(21% 0.006 285.885)`, a bluish grey, was shadcn's `hsl(0 0% 9%)`
-  neutral; it is now `near`, and its own hex's HSL, `hsl(240 5.9% 10%)`, is still its token. A `token` can only become
-  `near` or a farther token's (0 of 240,000 same-source pairs lost); on 104 real projects 9 rows move.
+  neutral; it is now `near`, and its own hex's HSL, `hsl(240 5.9% 10%)`, is still its token. Both ways: a channel written
+  as zero (`0`, `none`) is read at the precision of its L, so shadcn v4's neutral `oklch(0.205 0 0)` is no longer shadcn's
+  legacy zinc `hsl(240 5.9% 10%)` (an L written at 2 decimals, `oklch(0.97 0 0)`, reads its zero at 0.005, as written).
+  A `token` can only become `near` or a farther token's (0 of 240,000 same-source pairs lost); on 104 real projects 9
+  rows move.
 
 **`finish`'s values move twice**: its raw top rows carry the colour judgment above (`token` → `near` for such a pair), and
 its UI warning loses a bare `text-[…vw]` in a file that also sizes text by a keyword or a hint under a variant (no real
@@ -89,16 +94,18 @@ ones holding those findings. The `hsl()` / `oklch()` rule: +20–75 ms a feature
 (100 `oklch()` values against 2,000 HSL tokens), ×1.12 over the 51,806 values of 104 real projects.
 
 ### Tests
-- `node mcp/test.js` 3009 assertions (was 2983), `node cli/test-cli.js` 707 (was 705). The load-sensitive cost checks
+- `node mcp/test.js` 3012 assertions (was 2983), `node cli/test-cli.js` 707 (was 705). The load-sensitive cost checks
   now count where the property is a count — a new helper, `fsCalls`, counts the file-system calls a call makes under a
   folder: the fast check's planned walk, the protected-tests cap, a glob target below level tests, a feature report over
   400 pages, and the deprecated uses' own parses (`deprecatedUses.parsed`, in-process only — never in a result); every
   ratio the audit rewrote (the scale's, the deprecated uses', each hostile UI input) is one interleaved pair under its
-  own retry — twelve older timing assertions stay outside it —, and the slowest cost file is split by topic. Each mutation list
-  was written before its fixtures: the font size 41 of 41; the colours 37 of 37 (1.38's and 1.39's colour mutants
+  own retry — twelve older timing assertions stay outside it —, and the slowest cost file is split by topic. Each mutation
+  list was written before its fixtures: the font size 41 of 41; the colours 37 of 37 (1.38's and 1.39's colour mutants
   replayed: 78 of 80 — one equivalent, one line deleted as dead); `@custom-media` 45 of 45; the deprecated uses 29 of 32
-  (two lines dead and deleted, one cost guard timed with and without); the docs pass 21 of 21 (each new prose clause
-  dropped in a copy fails its row, and so does each engine fact or counted check a row reads, mutated).
+  (two lines dead and deleted, one cost guard timed with and without — counted since); the docs pass 21 of 21 (each new
+  prose clause dropped in a copy fails its row, and so does each engine fact or counted check a row reads, mutated); every
+  list replayed on the merged tree, 273 of 276 (each survivor also one on its own branch). Review 1's fixes: the
+  deprecated uses 9 of 9, the colours 6 of 6, the counted checks' re-read and feature-report mutants killed.
 
 ## [1.39.0] — 2026-11-23
 
