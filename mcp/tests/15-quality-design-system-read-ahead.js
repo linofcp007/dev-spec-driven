@@ -5,7 +5,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const wt = require("worker_threads");
 
 exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
@@ -213,7 +213,8 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       "wt.Worker = class extends Real {",
       "  constructor(src, o) {",
       "    super(scenario === \"stall\" && made.length === 3 ? \"setTimeout(() => {}, 120000);\" : scenario === \"failing\" && made.length === 3 ? \"throw new Error('worker fails');\" : src, o);",
-      "    const rec = { exited: false }; made.push(rec); this.on(\"exit\", () => { rec.exited = true; });",
+      // (each worker's own 'error' counted beside the engine's listener: a worker the shell's NODE_OPTIONS reached throws on its start)
+      "    const rec = { exited: false, failed: false }; made.push(rec); this.on(\"exit\", () => { rec.exited = true; }); this.on(\"error\", () => { rec.failed = true; });",
       "  }",
       "};",
       "const E = require(engine);",
@@ -226,7 +227,7 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       "if (scenario !== \"abandon\") h.stop();",
       "const same = got.every((t, i) => t === ref[i]) && got.length === take;",
       "const t1 = Date.now();",
-      "const say = () => process.stdout.write(JSON.stringify({ scenario, made: made.length, exited: made.filter((m) => m.exited).length, same, took, exitMs: Date.now() - t1 }) + \"\\n\");",
+      "const say = () => process.stdout.write(JSON.stringify({ scenario, made: made.length, exited: made.filter((m) => m.exited).length, failed: made.filter((m) => m.failed).length, same, took, exitMs: Date.now() - t1 }) + \"\\n\");",
       // (abandon: says at once, and nothing of its own holds the process — the workers it left must not either)
       "const tick = () => { if (scenario === \"abandon\" || made.every((m) => m.exited) || Date.now() - t1 > 5000) return say(); setTimeout(tick, 10); };",
       "tick();",
@@ -239,17 +240,25 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const pre = path.join(d, "refuse-workers.js");
     fs.writeFileSync(pre, "if (!require(\"worker_threads\").isMainThread) throw new Error(\"preload refuses worker threads\");\n");
     const refusedEnv = Object.assign(env("on"), { NODE_OPTIONS: "--require \"" + pre.split(path.sep).join("/") + "\"" });
-    // (…against its twin, the same read of all 400 files with no NODE_OPTIONS, at the same moment: a stall adds AHEAD_STALL_MS
-    // to the read whatever the load, so "no stall" is within 1.5× the twin's time + 1 s, never an absolute figure — 1.35.4
-    // review 2)
-    const [early, abandon, stall, base, failing, refused, plain] = await Promise.all([child("early"), child("abandon"), child("stall"), child("early", "off"), child("failing"),
-      runNode([CHILD, ENGINE, "refused", path.join(d, "files")], { env: refusedEnv, cwd: d, killMs: 40000 }), child("refused")]);
+    const [early, abandon, stall, base, failing] = await Promise.all([child("early"), child("abandon"), child("stall"), child("early", "off"), child("failing")]);
     const said = (x) => { try { return JSON.parse(x.stdout.trim().split("\n").pop()); } catch { return null; } };
-    const [e1, a1, s1, b1, f1, r1, p1] = [early, abandon, stall, base, failing, refused, plain].map(said);
+    const [e1, a1, s1, b1, f1] = [early, abandon, stall, base, failing].map(said);
+    // (…COUNTED: none of its workers fails on its start — each child counts its workers' errors, the failing one's 1 —; and timed
+    // against its twin, the same read of all 400 files with no NODE_OPTIONS: a stall adds AHEAD_STALL_MS to the read whatever the
+    // load, so "no stall" is within 1.5× the twin's time + 1 s, never an absolute figure — 1.35.4 review 2. 1.40: the two one
+    // after the other, under a remeasure of their own — among the seven children at once, `refused` took 2,375 ms against
+    // `plain`'s 724 in a default --jobs Windows run)
+    const runSync = (args, e) => { const t0 = Date.now(); const r = spawnSync(process.execPath, args, { env: e, cwd: d, encoding: "utf8", timeout: 40000 });
+      return { code: r.status, killed: !!r.error, ms: Date.now() - t0, stdout: r.stdout || "", stderr: r.stderr || "" }; };
+    const twins = remeasure(() => {
+      const refused = runSync([CHILD, ENGINE, "refused", path.join(d, "files")], refusedEnv), plain = runSync([CHILD, ENGINE, "refused", path.join(d, "files")], env("on"));
+      return { refused, plain, r1: said(refused), p1: said(plain) };
+    }, (x) => x.r1 != null && x.p1 != null && x.r1.took < 1.5 * x.p1.took + 1000);
+    const { refused, plain, r1, p1 } = twins;
     const brief = (x, y) => ({ code: x.code, killed: x.killed, ms: x.ms, said: y, stderr: x.stderr.slice(0, 200) });
-    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (its source throws) is heard — the process lives on and every file comes, in order; a NODE_OPTIONS preload that refuses worker threads reaches none (no stall: 1.35.4 review 2 — within 1.5× + 1 s of the same read with no NODE_OPTIONS at the same moment, no longer an absolute 1.8 s) (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(stall, s1), base: brief(base, b1), failing: brief(failing, f1), refused: brief(refused, r1), plain: brief(plain, p1) }) + ")", {
-      failing: () => failing.code === 0 && !failing.killed && f1 != null && f1.same && f1.made === 8,
-      refused: () => refused.code === 0 && !refused.killed && r1 != null && r1.same && r1.made === 8 && plain.code === 0 && p1 != null && p1.same && p1.made === 8 && r1.took < 1.5 * p1.took + 1000,
+    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (its source throws) is heard — the process lives on and every file comes, in order; a NODE_OPTIONS preload that refuses worker threads reaches none (no worker's error; no stall: 1.35.4 review 2 — within 1.5× + 1 s of the same read with no NODE_OPTIONS, measured next to it, no longer an absolute 1.8 s) (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(stall, s1), base: brief(base, b1), failing: brief(failing, f1), refused: brief(refused, r1), plain: brief(plain, p1), tries: twins.tries }) + ")", {
+      failing: () => failing.code === 0 && !failing.killed && f1 != null && f1.same && f1.made === 8 && f1.failed === 1,
+      refused: () => refused.code === 0 && !refused.killed && r1 != null && r1.same && r1.made === 8 && r1.failed === 0 && plain.code === 0 && p1 != null && p1.same && p1.made === 8 && r1.took < 1.5 * p1.took + 1000,
       early: () => early.code === 0 && !early.killed && e1.same && e1.made === 8 && e1.exited === 8 && e1.exitMs < 5000,
       base: () => base.code === 0 && b1.same && b1.made === 0,
       abandon: () => abandon.code === 0 && !abandon.killed && a1.same && a1.made === 8 && abandon.ms < 3 * base.ms + 5000,
