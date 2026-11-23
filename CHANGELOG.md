@@ -105,9 +105,9 @@ interleaved, median of 5): shadcn-ui 1.05× (+107 ms) · mantine 0.98× · cal.c
 1.05–1.11× re-measured, the reduced-motion script search's ~+90–110 ms) · vben 0.93× · nuxt/ui 0.96× · shadcn-svelte
 0.97× · Bootstrap 0.96× · tailwindcss.com 1.04× · taxonomy 1.12× (+17 ms) · motion-primitives 0.91× · sakai-vue 1.13×
 (+6 ms) · Breeze 1.02× · Starlight 1.05× · Bulma 1.05× · Foundation 1.06× · open-props 1.03× · pico 0.94× · magicui
-0.97× · astro-paper 1.06×; small trees' increments are at the measurement's noise. The reduced-motion script search, where it runs, adds a few ms for tens of scripts and ~+100
-ms at outline's 207th (it stops at the first mention); at its 2,000-script bound on a small UI it costs ~1.5–1.7×
-(+240–350 ms) — accepted as said. With a
+0.97× · astro-paper 1.06×; small trees' increments are at the measurement's noise. The reduced-motion script search,
+where it runs, adds a few ms for tens of scripts and ~+100 ms at outline's 207th (it stops at the first mention); at its
+2,000-script bound on a small UI it costs ~1.5–1.7× (+240–350 ms) — accepted as said. With a
 `_Deprecated:_` row marked, the deprecated uses' read adds 1.00–1.18× on trees of 700 view files or more (every row
 marked, up to 500: 1.04–1.43×) and, on smaller trees where the scan otherwise reads no script for its components, +25 to
 +240 ms — up to ~2–2.8× a report of 30–250 ms (Starlight 1.8–2.8×); a marked row no file holds reads nothing. The feature
