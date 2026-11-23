@@ -1,7 +1,8 @@
 "use strict";
 // The breakpoints (1.38) — engine/breakpoints.js: the widths the visual review captures, spec_scan {designSystem: true}'s
 // `breakpoints` (both shapes). ui.md's `- Breakpoints:` line (where it is read, how its value reads), else Tailwind 4's
-// `--breakpoint-*` in a top-level `@theme` block, read through the token walk's observer, else the default set; never computed in
+// `--breakpoint-*` in a top-level `@theme` block, read through the token walk's observer (1.39: and a Sass map; 1.40: when neither
+// gives a width, the `@custom-media` rules' edges), else the default set; never computed in
 // finish or the seed (V8 coverage of a child). Every fixture below was written from a mutation of the rule it names (the mutation
 // list came first): each must fail without it.
 
@@ -392,6 +393,140 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
     });
   }
 
+  // --- 1.40: @custom-media — its width edges, read only when no theme and no map gives a width (CRIT_5 must-fix 1) --------------
+  const cm = (...rules) => rules.map((r) => "@custom-media " + r + ";").join("\n") + "\n";
+  const tw = (...decls) => lines("@import \"tailwindcss\";", "@theme {", ...decls.map((d) => "  " + d + ";"), "}");
+
+  { // BP-media-edges (M4–M12, W4): a query → its width edges — a lower bound at ceil, an upper one at floor + 1, a range either
+    // way round, one- or two-sided, rem / em × 16, a nested group's own text; no edge for another feature or an exact width; a
+    // width it cannot read is bad, its other edges kept; parentheses that do not pair: bad, no edge
+    const edges = (q) => { const r = T.mediaEdges(q); return (r.bad ? "bad " : "") + r.px.join(" "); };
+    const table = [
+      ["(min-width: 767.5px)", "768"], ["(max-width: 767.98px)", "768"], ["(max-width: 767px)", "768"], // (M4, M5)
+      ["(width >= 64rem)", "1024"], ["(width > 1279px)", "1280"], ["(width <= 1535px)", "1536"], ["(width < 48rem)", "768"], // (M6)
+      ["(48em <= width)", "768"], ["(1024px > width)", "1024"], // (M7)
+      ["(480px <= width < 768px)", "480 768"], ["(480px < width <= 768px)", "481 769"], // (M8)
+      ["(prefers-color-scheme: dark)", ""], ["(orientation: portrait)", ""], ["(--md) and (--portrait)", ""], ["(min-height: 600px)", ""], // (M9)
+      ["(min-device-width: 768px)", ""], ["(width: 600px)", ""], ["(width = 600px)", ""], ["(1px < width < 2px < 3px)", ""],
+      ["(min-width: 30ch)", "bad "], ["(min-width: calc(1px + 2px))", "bad "], ["(calc(1px) < width)", "bad "], ["(min-width: var(--x))", "bad "], // (M10)
+      ["(min-width: 1280)", "bad "], ["(min-width: 600px) and (max-width: 30ch)", "bad 600"], ["(min-width: 40em (print))", "bad "], // (a group's text never its parent's)
+      ["((min-width: 40em) and (max-width: 52em))", "640 833"], ["(min-width: 40rem)", "640"], ["(MIN-WIDTH: 40REM)", "640"], // (M11, M12)
+      ["screen and (min-width: 600px), print and (max-width: 899px)", "600 900"], ["(max-width: 5000px)", "5001"],
+      ["(min-width: 768px", "bad "], ["(min-width: 600px) and (max-width: 900px", "bad "], ["(min-width: 600px))", "bad "], // (W4)
+    ];
+    const got = table.map(([q]) => [q, edges(q)]);
+    all("1.40 breakpoints (@custom-media — mediaEdges): min-width at ceil, max-width at floor + 1, a `width` range either way round and two-sided by its strictness, rem / em × 16, a nested group's own text; nothing for height, orientation, prefers-*, an alias, min-device-width, an exact width; bad for a width it cannot read (its other edges kept) and for parentheses that do not pair (no edge) (got " +
+      js(got.filter(([q, g], i) => g !== table[i][1])) + ")", Object.fromEntries(table.map(([q, want], i) => [q + " → " + (want || "nothing"), () => got[i][1] === want])));
+  }
+
+  { // BP-media-sheet (M1, M3, M15, M16): top-level rules through the walk — a sheet of rules alone gets the observer (`from:
+    // code`, partial); a rule nested in a block is not read; every definition counts (a name twice: both widths); `at` the first
+    // rule with an edge ≤ 3840 (`(min-width: 0)` — the floor's —, not a rule of no width or one past 3840); a rule over lines
+    const r = report(null, cm("--dark (prefers-color-scheme: dark)", "--tv (min-width: 5000px)", "--z (min-width: 0)", "--md (min-width: 768px)", "--md (min-width: 800px)"), "src/index.css");
+    const nested = report(null, lines("@media print {", "  @custom-media --p (min-width: 900px);", "}"), "src/index.css");
+    const over = report(null, lines(".a { color: red; }", "@custom-media --md", "  (min-width: 768px)", "  and (max-width: 1023px);"), "src/index.css");
+    all("1.40 breakpoints (@custom-media — a sheet): a sheet holding only rules is read (`from: code`, partial — the default set fills); a rule nested in @media is not; a name defined twice gives both widths; `at` the first rule with an edge (0 counts, 5000px and a rule of no width do not); a rule over lines read at its first line (got " +
+      js({ r, nested: [nested.from, nested.unreadTotal], over: [over.widths, over.at] }) + ")", {
+      sheet: () => r.from === "code" && r.partial === true && widths(r) === js([320, 390, 768, 800, 1024, 1440]) && js(r.limits) === js([]),
+      twice: () => r.widths.includes(768) && r.widths.includes(800),
+      at: () => r.at === "src/index.css:3",
+      unread: () => r.unreadTotal === 1 && js(r.unread) === js([{ name: "--tv", value: "(min-width: 5000px)", at: "src/index.css:2" }]),
+      nested: () => nested.from === "default" && nested.unreadTotal === 0,
+      over: () => over.from === "code" && widths(over) === js([320, 390, 768, 1024, 1440]) && over.at === "src/index.css:2",
+    });
+  }
+
+  { // BP-media-fill (M13, M14): an alias list is never the set — partial: a lone `--md` gives the default set itself (the cut's
+    // number in 1.39: "[320, 768]"), a lone `--sm 600px` the default set around it; a desktop-first list of max-widths (The Coding
+    // Train's shape) its edges, one past each; an edge under 320 alone is the floor's: the default set, `at` null
+    const md = report(null, cm("--md (min-width: 768px)"), "src/index.css"), sm = report(null, cm("--sm (min-width: 600px)"), "src/index.css");
+    const desk = report(null, cm("--xs (max-width: 400px)", "--sm (max-width: 600px)", "--md (max-width: 900px)", "--lg (max-width: 1180px)", "--xl (max-width: 1600px)"), "src/index.css");
+    const zero = report(null, cm("--z (min-width: 0)"), "src/index.css");
+    all("1.40 breakpoints (@custom-media — partial): a lone `--md (min-width: 768px)` → the default set (from code, partial), a lone 600px → 600 and the default set where room is left; max-widths → one px past each; `(min-width: 0)` alone → the default set, at null (got " +
+      js({ md: [md.widths, md.from, md.partial], sm: sm.widths, desk: desk.widths, zero: [zero.from, zero.at] }) + ")", {
+      md: () => widths(md) === js(DEFAULT) && md.from === "code" && md.partial === true && md.at === "src/index.css:1",
+      sm: () => widths(sm) === js([320, 390, 600, 768, 1024, 1440]) && js(sm.limits) === js([]),
+      desktopFirst: () => widths(desk) === js([320, 401, 601, 901, 1181, 1601]) && js(desk.limits) === js([]),
+      zero: () => zero.from === "default" && js(zero.widths) === js(DEFAULT) && zero.at === null && zero.unreadTotal === 0,
+    });
+  }
+
+  { // BP-media-unread (M10c, M17): a rule with a width it cannot read, or an edge past 3840, is unread with its query — the
+    // first five listed at their lines, all counted; a rule of DS_PRELUDE characters (one the walk may have cut) is one unread,
+    // nothing read — one character shorter, read; an unclosed group the walk delivers (its `;` on the next line) is one unread
+    const sevenCss = cm("--tv (max-width: 5000px)", ...[30, 31, 32, 33, 34, 35].map((n) => "--c" + n + " (min-width: " + n + "ch)"));
+    const seven = report(null, sevenCss, "src/index.css");
+    const rec = (() => { const w = T.breakpointWatch(); T.styleTokens(sevenCss, "src/index.css", w.on("src/index.css", sevenCss)); return w.found.files[0].media; })(); // (the sheet's own record)
+    const rule = (len) => { const head = "@custom-media --w (min-width: 600px) and ("; return head + "x".repeat(len - head.length - 1) + ")"; };
+    const cut = report(null, rule(T.DS_PRELUDE) + ";\n", "src/index.css"), whole = report(null, rule(T.DS_PRELUDE - 1) + ";\n", "src/index.css");
+    const open = report(null, lines("@custom-media --o (min-width: 768px", ";"), "src/index.css");
+    all("1.40 breakpoints (@custom-media — unread): 7 rules it cannot read → the first 5 {name, value: the query, at}, unreadTotal 7, the default set — the sheet's record keeps 5 and the count; a " + T.DS_PRELUDE + "-character rule → one unread, its 600 not read; " + (T.DS_PRELUDE - 1) + " characters → 600 read; an unclosed group → one unread (got " +
+      js({ seven: [seven.from, seven.unreadTotal, seven.unread.map((u) => u.name + " " + u.at)], cut: [cut.from, cut.unreadTotal, cut.unread.map((u) => u.name)], whole: whole.widths, open: [open.from, open.unread] }) + ")", {
+      seven: () => seven.from === "default" && seven.unreadTotal === 7 && js(seven.unread.map((u) => u.name)) === js(["--tv", "--c30", "--c31", "--c32", "--c33"]) &&
+        js(seven.unread[0]) === js({ name: "--tv", value: "(max-width: 5000px)", at: "src/index.css:1" }) && seven.unread[4].at === "src/index.css:5",
+      record: () => rec.bad.length === 5 && rec.badTotal === 7 && rec.widths.size === 0,
+      cut: () => cut.from === "default" && cut.unreadTotal === 1 && cut.unread[0].name === "--w" && cut.unread[0].value.endsWith(" …"),
+      whole: () => whole.from === "code" && whole.widths.includes(600) && whole.unreadTotal === 0,
+      open: () => open.from === "default" && js(open.unread) === js([{ name: "--o", value: "(min-width: 768px", at: "src/index.css:1" }]),
+    });
+  }
+
+  { // BP-media-fallback (W1, W2, W3, F1–F3): beside a theme or a map that gives a width the rules are never read — 1.39.0's
+    // report whole (CRIT_5 §1's shapes: a reset theme, a Sass map, Tailwind's five restated — its `at`, no fill, no limit line,
+    // none of the rules' unread); a theme whose only width is under 320, or only unread, leaves them the source: their widths,
+    // `at` the rule's, the theme's unread first
+    const vars = ["styles/variables.css", cm("--tablet (min-width: 40rem)", "--laptop (min-width: 64rem)", "--desktop (min-width: 80rem)", "--phone (max-width: 599px)", "--wide (min-width: 900px)")];
+    const reset = sheets([vars, ["app/globals.css", tw("--breakpoint-*: initial", "--breakpoint-tablet: 40rem", "--breakpoint-laptop: 64rem", "--breakpoint-desktop: 80rem")]]);
+    const map = sheets([["src/_variables.scss", "$breakpoints: (small: 0, medium: 640px, large: 1024px);\n"], ["src/styles.css", cm("--medium (min-width: 640px)", "--tiny (max-width: 359px)")]]);
+    const five = sheets([vars, ["app/globals.css", tw("--breakpoint-sm: 40rem", "--breakpoint-md: 48rem", "--breakpoint-lg: 64rem", "--breakpoint-xl: 80rem", "--breakpoint-2xl: 96rem")]]);
+    const badBeside = sheets([["app/globals.css", tw("--breakpoint-3xl: 1600px") + cm("--x (min-width: 30ch)")]]);
+    const under = sheets([["app/globals.css", tw("--breakpoint-*: initial", "--breakpoint-xs: 10rem")], ["src/index.css", lines("", "") + cm("--md (min-width: 900px)")]]);
+    const onlyBad = sheets([["app/globals.css", tw("--breakpoint-*: initial", "--breakpoint-x: calc(1px + 2px)")], ["src/index.css", cm("--md (min-width: 900px)", "--q (min-width: 30ch)")]]);
+    all("1.40 breakpoints (@custom-media — the fallback): beside a reset theme, a Sass map or Tailwind's five restated, the rules are not read — 1.39.0's widths, `partial`, `at` and limits, none of the rules' unread; under a theme of no width ≥ 320 (or only unread) they decide: their widths, `at` the rule's, the theme's unread then theirs (got " +
+      js({ reset: [reset.widths, reset.partial, reset.at], map: [map.widths, map.partial, map.at], five: [five.widths, five.at, five.limits], badBeside: badBeside.unreadTotal, under: [under.widths, under.at], onlyBad: [onlyBad.from, onlyBad.at, names(onlyBad)] }) + ")", {
+      resetTheme: () => widths(reset) === js([320, 640, 1024, 1280]) && reset.partial === false && reset.at === "app/globals.css:4" && reset.unreadTotal === 0,
+      sassMap: () => widths(map) === js([320, 640, 1024]) && map.partial === false && map.at === "src/_variables.scss:1",
+      themeFive: () => widths(five) === js([320, 640, 768, 1024, 1280, 1536]) && five.partial === true && five.at === "app/globals.css:3" && js(five.limits) === js([]),
+      unreadBeside: () => badBeside.from === "code" && badBeside.unreadTotal === 0 && js(badBeside.unread) === js([]),
+      under: () => under.from === "code" && widths(under) === js([320, 390, 768, 900, 1024, 1440]) && under.partial === true && under.at === "src/index.css:3",
+      onlyBad: () => onlyBad.from === "code" && onlyBad.at === "src/index.css:1" && onlyBad.unreadTotal === 2 &&
+        names(onlyBad) === js([["--breakpoint-x", "calc(1px + 2px)", "app/globals.css:4"], ["--q", "(min-width: 30ch)", "src/index.css:2"]]),
+    });
+  }
+
+  { // BP-media-files (M2): the pre-test — a sheet without `@custom-media` (or with `@custom-mediz`) gets no observer (the walk
+    // builds no event); two sheets of rules unite, `at` the first sheet's in the walk's order
+    const w = T.breakpointWatch();
+    const none = [w.on("a.css", "a{color:red}"), w.on("b.css", "@custom-mediz --x (min-width: 600px);\n")];
+    const two = sheets([["src/index.css", cm("--sm (min-width: 600px)")], ["src/app.css", cm("--lg (min-width: 1200px)", "--sm (min-width: 600px)")]]);
+    all("1.40 breakpoints (@custom-media — which sheets): no observer for a sheet without `@custom-media` (`@custom-mediz`); two sheets' rules unite, `at` the first in the walk's order (got " +
+      js({ none, files: w.found.files.length, two: [two.widths, two.at] }) + ")", {
+      pretest: () => none.every((x) => x === null) && w.found.files.length === 0,
+      unite: () => widths(two) === js([320, 600, 768, 1024, 1200, 1440]) && two.at === "src/index.css:1",
+    });
+  }
+
+  { // BP-media-scan (S1): through the scan's walks — `src/index.css`, a global sheet the scan opens by name, holding only rules:
+    // the project and the feature carry them, MCP = engine; the same rules in `src/media.css` (no name the scan opens) are not read
+    const p = path.join(tmp, "proj-bp-media");
+    S.initProject(p, ["ui"], "en");
+    write(p, "src/index.css", cm("--sm (min-width: 40em)", "--md (min-width: 64em)", "--narrow (max-width: 599px)") + "body { margin: 0; }\n");
+    const f = S.createFeature(p, { name: "Feed", tracks: ["ui"], summary: "x" });
+    const q = path.join(tmp, "proj-bp-media-file");
+    fs.mkdirSync(q, { recursive: true });
+    write(q, "src/media.css", cm("--sm (min-width: 40em)"));
+    write(q, "src/index.css", "body { margin: 0; }\n");
+    const proj = S.designSystemReport(p).breakpoints, feat = S.designSystemReport(p, { name: f.slug }).breakpoints, other = S.designSystemReport(q).breakpoints;
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_scan", arguments: { projectDir: p, designSystem: true } }));
+    all("1.40 breakpoints (@custom-media, through the scan): src/index.css's rules → 600 · 640 · 1024 and the default set where room is left, from code, partial, at its first rule — the project and the feature alike, MCP = engine; src/media.css is not read (got " +
+      js({ proj, other: other.from }) + ")", {
+      scan: () => js(proj) === js({ widths: [320, 600, 640, 768, 1024, 1440], from: "code", partial: true, at: "src/index.css:1", unread: [], unreadTotal: 0, limits: [] }),
+      feature: () => js(feat) === js(proj),
+      mcp: () => js(viaMcp.breakpoints) === js(proj),
+      notOpened: () => other.from === "default" && other.unreadTotal === 0,
+    });
+  }
+
   // --- through the scan: the walks that already run, both shapes, the report's own fields ------------------------------------------------
   // shadcn v4's app/globals.css (apps/v4, MIT) as written: imports, @source and @custom-variant lines, then `@theme inline` ADDING two
   // breakpoints to Tailwind's own five (its first declaration at line 45), then the page's tokens
@@ -647,6 +782,27 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       js(k.map((x) => Math.round(x))) + ")", {
       real: () => k[0] <= 1.5 * k[1] + 50 && js(got[0].widths) === js([320, 576, 768, 992, 1200, 1400]),
       hostile: () => [2, 4, 6].every((i) => k[i] <= 3 * k[i + 1] + 50) && got[1].unreadTotal === 1 && got[2].unreadTotal === 0 && got[3].unreadTotal > 10000,
+    });
+
+    // K4b (1.40 — the @custom-media query reader stays linear; DECISIONS Shared 5): mediaEdges on ONE query of 848 nested groups
+    // (its innermost text padded) against SIXTEEN of 53 — the same 1,936 characters and the same groups, so a linear reader does
+    // the same work on both sides, while one that rebuilds a group's own text from its `(` (quadratic in the depth) or from the
+    // query's start (in its length) does ~16× on the first (8.5–9.2× measured). 600 calls a side (≥ 150 ms in node:22 and
+    // node:24-alpine containers), interleaved, medians of 5, ≤ 3× with no absolute slack (0.53–1.07 measured on Windows, node 22,
+    // node 24 alpine)
+    const K = 16, inner = "min-width: 40em", nest = (g, text) => "(".repeat(g) + text + ")".repeat(g);
+    const big = nest(K * 53, inner + " ".repeat((K - 1) * inner.length)), small = Array.from({ length: K }, () => nest(53, inner));
+    const read = []; // (each side's edge count kept: V8 drops unused work)
+    const one = () => { let x = 0; for (let i = 0; i < 600; i++) x += T.mediaEdges(big).px.length; read.push(x); };
+    const many = () => { let x = 0; for (let i = 0; i < 600; i++) for (const q of small) x += T.mediaEdges(q).px.length; read.push(x); };
+    one(); many(); // warm
+    const m = remeasure(() => pair(one, many, 1), (x) => x[0] <= 3 * x[1], 3);
+    const count = (q, ch) => q.split(ch).length - 1;
+    all("1.40 breakpoints (cost — the @custom-media query reader): one query of 848 nested groups ≤ 3× sixteen of 53 — the same characters and groups — medians of 5 interleaved rounds, 600 calls a side (got [one, sixteen] ms " +
+      js(m.map((x) => Math.round(x))) + ")", {
+      linear: () => m[0] <= 3 * m[1],
+      sameWork: () => big.length === small.join("").length && count(big, "(") === count(small.join(""), "(") && js(T.mediaEdges(big)) === js({ px: [640], bad: false }) &&
+        read.every((x, i) => x === (i % 2 ? 600 * K : 600)),
     });
   }
 };

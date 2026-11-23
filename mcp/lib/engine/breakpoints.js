@@ -12,9 +12,11 @@
  *             reset them — Tailwind keeps its own then, which the engine never assumes (stale data): the default set fills
  *             the places the theme's widths leave (1.39, BS-2: 768 · 1024 · 1440 · 390); and (1.39) a top-level Sass map
  *             whose name's last word is `breakpoints` in a .scss sheet that walk reads (`$grid-breakpoints`, `$breakpoints`, a
- *             `@use … with (…)` override) — a map is whole, never `partial`;
+ *             `@use … with (…)` override) — a map is whole, never `partial`; and (1.40) ONLY when those give no width, the
+ *             width edges of a top-level `@custom-media` rule in such a sheet — an alias list, never the set: `partial`
+ *             (CRIT_5 must-fix 1: never beside a theme or a map, whose shapes stay 1.39's);
  *   default — 320 · 390 · 768 · 1024 · 1440.
- * Not read (or never): `@custom-media`, a file named for breakpoints, a JS config (Tailwind 3's `screens`), `map-merge` (unread).
+ * Not read (or never): a file named for breakpoints, a JS config (Tailwind 3's `screens`), `map-merge` (unread).
  * A width is a min edge in CSS px (rem / em × 16 — a media query's em is the initial font size), 320 first — WCAG 1.4.10's
  * reflow width, 1280 at 400 % —, BP_WIDTHS at most. Bounded, linear in what it reads, read-only.
  *
@@ -108,7 +110,9 @@ const RE_THEME = /^@theme(?:\s+[a-z]+)*$/; // a block's whole prelude: `@theme` 
 const RE_BP_DECL = /^--breakpoint-([A-Za-z0-9_-]+)\s*:\s*(.*)$/; // (a statement's text: its lines joined by a blank, trimmed)
 const RE_BP_RESET = /^--(?:breakpoint-)?\*\s*:\s*initial$/; // the namespace's reset, or the whole theme's
 const RE_BP_LENGTH = /^(\d+(?:\.\d+)?|\.\d+)(px|rem|em)$/i;
-const lengthPx = (v) => { if (v === "0") return 0; const m = RE_BP_LENGTH.exec(v); return m ? edge(parseFloat(m[1]) * (m[2].toLowerCase() === "px" ? 1 : BP_EM)) : null; };
+// a length → CSS px, unrounded (`0`, px, rem / em × 16) | null — and its min edge (lengthPx)
+const lengthOf = (v) => { if (v === "0") return 0; const m = RE_BP_LENGTH.exec(v); return m ? parseFloat(m[1]) * (m[2].toLowerCase() === "px" ? 1 : BP_EM) : null; };
+const lengthPx = (v) => { const L = lengthOf(v); return L == null ? null : edge(L); };
 // --- a Sass map named …breakpoints, through the same walk (1.39) -----------------------------------------------------------------
 // A TOP-LEVEL assignment, in a .scss sheet the walk reads, of a variable whose LAST `-` / `_` word is `breakpoints` (Bootstrap 5's
 // `$grid-breakpoints`, Bootstrap 6's and sass-mq's `$breakpoints` — never `$spacers`, a 0-led map of lengths too, nor
@@ -202,24 +206,100 @@ function sassStatement(file, e) {
   for (const part of group || []) { const o = RE_SASS_ASSIGN.exec(part.trim()); if (o && RE_SASS_NAME.test(o[1])) file.maps.push(sassValue(o[1], o[2], e.from)); }
 }
 
+// --- @custom-media, through the same walk (1.40) — read only when no theme and no map gives a width --------------------------------
+// A TOP-LEVEL `@custom-media --name <query>;` (Media Queries 5 — PostCSS / Lightning CSS), in a sheet the walk reads, → the width
+// EDGES its query names: the first whole CSS px where its answer changes. A lower bound — `min-width: L`, `L <= width`,
+// `width >= L`, and a strict upper one, `width < L` — changes at ceil(L); an upper bound — `max-width: L`, `width <= L`, and a
+// strict lower one, `width > L` — at floor(L) + 1 (`max-width: 767px` and `767.98px` both change at 768). An alias list, never
+// the set (a team names what it reuses; the rest sit in plain @media rules): its widths are partial, the default set fills.
+// Every definition counts — no per-name map (1 of 160 sampled files restates a name, its em set in rem).
+const RE_CM = /^@custom-media\s+(--[\w-]+)\s+([\s\S]+)$/;
+const RE_MQ_OP = /<=|>=|<|>|=/g;
+const upEdge = (L) => Math.floor(L) + 1; // an upper bound's edge: the first whole px past it
+// A group's own text (each group nested in it one `§`) → its edges pushed to `out`; true when a width feature's value is no
+// length (`30ch`, `calc(…)` — `calc§` —, `var(…)`, a unitless number). Another feature (height, orientation, `prefers-*`,
+// `min-device-width`, an alias `(--x)`) or an exact width (`width: 600px`, `width = 600px`): no edge, nothing unread.
+function mqGroup(t, out) {
+  const c = t.indexOf(":");
+  if (c >= 0) {
+    const f = t.slice(0, c).trim().toLowerCase();
+    if (f !== "min-width" && f !== "max-width") return false;
+    const L = lengthOf(t.slice(c + 1).trim());
+    if (L == null) return true;
+    out.push(f === "min-width" ? edge(L) : upEdge(L));
+    return false;
+  }
+  // a range: `L op width`, `width op L`, `L op width op L` (more parts: no range)
+  const parts = t.split(RE_MQ_OP), at = parts.findIndex((p) => p.trim().toLowerCase() === "width");
+  if (at < 0 || parts.length > 3) return false;
+  const ops = t.match(RE_MQ_OP);
+  if (ops.includes("=")) return false;
+  for (let k = 0; k < parts.length; k++) {
+    if (k === at) continue;
+    const L = lengthOf(parts[k].trim());
+    if (L == null) return true;
+    const op = k < at ? ops[k] : ops[k - 1];
+    const lower = k < at ? op[0] === "<" : op[0] === ">"; // (L < width, width > L: the width's lower bound)
+    out.push(lower === (op.length === 1) ? upEdge(L) : edge(L)); // (a strict lower or a non-strict upper bound: past L)
+  }
+  return false;
+}
+// A query → { px: its edges, bad: a width feature it could not read }; parentheses that do not pair (an unclosed group, a stray
+// `)`): bad, no edge. Linear: each character joins the own text of one open group, a nested group as one `§`.
+function mediaEdges(q) {
+  const px = [], open = []; // the own text so far of each open group, innermost last
+  let bad = false, from = 0;
+  for (let i = 0; i < q.length; i++) {
+    const ch = q[i];
+    if (ch === "(") { if (open.length) open[open.length - 1] += q.slice(from, i) + "§"; open.push(""); from = i + 1; }
+    else if (ch === ")") {
+      if (!open.length) return { px: [], bad: true };
+      if (mqGroup(open.pop() + q.slice(from, i), px)) bad = true;
+      from = i + 1;
+    }
+  }
+  return open.length ? { px: [], bad: true } : { px, bad };
+}
+// One top-level statement → the sheet's record { widths (a Set: the edges in [BP_FLOOR, BP_CEIL] — ≤ 3,521), first (the line of
+// the first rule with an edge ≤ BP_CEIL), bad (its first BP_UNREAD unread, [{ name, value: the query, line }]), badTotal }: a rule
+// with a width it could not read, an edge past BP_CEIL or unpaired parentheses is one unread (its other edges read); a text of
+// DS_PRELUDE characters — one the walk may have cut, keeping its end — one unread, nothing read (a longer rule arrives without
+// its head: silent, as a Sass one-line map)
+function mediaStatement(rec, e) {
+  const m = RE_CM.exec(e.text);
+  if (!m) return;
+  const miss = (value) => { if (rec.badTotal++ < BP_UNREAD) rec.bad.push({ name: m[1], value, line: e.from }); };
+  if (e.text.length >= DS_PRELUDE) { miss(m[2] + " …"); return; }
+  const q = mediaEdges(m[2]);
+  let bad = q.bad;
+  for (const px of q.px) {
+    if (px > BP_CEIL) { bad = true; continue; }
+    if (rec.first == null) rec.first = e.from;
+    if (px >= BP_FLOOR) rec.widths.add(px);
+  }
+  if (bad) miss(m[2]);
+}
+
 // The observer the token walk carries (design-system.js scanCode — the report's scan alone) → { on(rel, text): one stylesheet's
-// observer — none when its text holds no `@theme` and it is no .scss holding `breakpoints` (the walk then builds no event) —,
-// found: { files: [{ rel, decls: Map name → { value, line }, maps: [Sass records], open }], reset } }. Read: a top-level
-// `@theme` block's OWN `--breakpoint-<name>` declarations (Tailwind 4 declares its theme at the top level: a nested one is not
-// read), the last of a name kept; `--breakpoint-<name>: initial` drops that name, `--breakpoint-*: initial` / `--*: initial`
-// every one the file declared above it (and `reset`: Tailwind's own five are gone); and (1.39) the Sass maps above.
+// observer — none when its text holds no `@theme`, no `@custom-media` and it is no .scss holding `breakpoints` (the walk then
+// builds no event) —, found: { files: [{ rel, decls: Map name → { value, line }, maps: [Sass records], open, media: the
+// custom-media record | null }], reset } }. Read: a top-level `@theme` block's OWN `--breakpoint-<name>` declarations (Tailwind 4
+// declares its theme at the top level: a nested one is not read), the last of a name kept; `--breakpoint-<name>: initial` drops
+// that name, `--breakpoint-*: initial` / `--*: initial` every one the file declared above it (and `reset`: Tailwind's own five
+// are gone); (1.39) the Sass maps above; (1.40) the top-level `@custom-media` rules (lower case, as every sampled file writes it).
 function breakpointWatch() {
   const found = { files: [], reset: false };
   const on = (rel, text) => {
     // (pre-tests: the walk builds an event per statement for an observer)
-    const theme = text.includes("@theme"), sass = RE_SASS_FILE.test(rel) && text.includes("breakpoints");
-    if (!theme && !sass) return null;
-    const themes = new Set(), decls = new Map(), file = { rel, decls, maps: [], open: null };
+    const theme = text.includes("@theme"), sass = RE_SASS_FILE.test(rel) && text.includes("breakpoints"), cm = text.includes("@custom-media");
+    if (!theme && !sass && !cm) return null;
+    const themes = new Set(), decls = new Map(), file = { rel, decls, maps: [], open: null, media: cm ? { widths: new Set(), first: null, bad: [], badTotal: 0 } : null };
     found.files.push(file);
     const observer = {
       block: (e) => { if (sass) sassVoid(file); if (e.parent === 0 && RE_THEME.test(e.prelude)) themes.add(e.id); },
       statement: (e) => {
         if (sass) sassStatement(file, e);
+        if (cm && e.block === 0) mediaStatement(file.media, e);
         if (!themes.has(e.block)) return;
         if (RE_BP_RESET.test(e.text)) { decls.clear(); found.reset = true; return; }
         const m = RE_BP_DECL.exec(e.text);
@@ -236,7 +316,10 @@ function breakpointWatch() {
 // What the walk saw → { widths (px, in [BP_FLOOR, BP_CEIL]), unread (the first BP_UNREAD), unreadTotal (all of them), at (the first
 // declaration KEPT with a length, file:line — the files in the walk's order, a file's Tailwind declarations before its Sass maps:
 // no sheet holds both), partial (a Tailwind width read and no reset anywhere — never a Sass map's) }. (1.39.0 review 1, BU-1: the
-// unread are counted, never all kept — a hostile sheet holds ~10^5 of them, and spreading them threw)
+// unread are counted, never all kept — a hostile sheet holds ~10^5 of them, and spreading them threw.) (1.40) When no theme and
+// no map gave a width, the custom-media records decide — their edges united, their unread after the theme's and the maps', `at`
+// the first rule with an edge (the files in the walk's order), `partial` (an alias list); beside a width they are never asked
+// (CRIT_5 must-fix 1: every 1.39 shape whole — a reset theme, a map, its `at` and its unread).
 function codeBreakpoints(found) {
   const widths = [], unread = [];
   let unreadTotal = 0;
@@ -263,12 +346,25 @@ function codeBreakpoints(found) {
       for (const px of m.px) if (px >= BP_FLOOR) widths.push(px);
     }
   }
-  return { widths, unread, unreadTotal, at, partial: tailwind && !found.reset }; // (asked only when a width was read)
+  let partial = tailwind && !found.reset; // (asked only when a width was read)
+  if (!widths.length) {
+    let first = null;
+    for (const f of files) {
+      const r = f.media;
+      if (!r) continue;
+      for (const b of r.bad) miss(b.name, b.value, f.rel + ":" + b.line);
+      unreadTotal += r.badTotal - r.bad.length;
+      if (first == null && r.first != null) first = f.rel + ":" + r.first;
+      for (const px of r.widths) widths.push(px);
+    }
+    if (widths.length) { at = first; partial = true; }
+  }
+  return { widths, unread, unreadTotal, at, partial };
 }
 
 // spec_scan {designSystem: true}'s `breakpoints` (both shapes) → { widths (ascending, BP_FLOOR first, BP_WIDTHS at most), from:
 // "ui.md" | "code" | "default", partial (the code's widths, then the default set where room is left: Tailwind keeps its own five
-// too), at (the source's first place, file:line — null for the default set), unread (the first BP_UNREAD — [{ name, value, at }]:
+// too; 1.40, an alias list is never the set), at (the source's first place, file:line — null for the default set), unread (the first BP_UNREAD — [{ name, value, at }]:
 // a value that is no length, or wider than BP_CEIL — of the sources read: never the code's when ui.md decides), unreadTotal,
 // limits ([{ code, read, … }]: breakpoint-widths {count, first} — the source's own widths past BP_WIDTHS, the first one left out
 // (never a default one the fill had no room for); breakpoint-line {at} — ui.md's value longer than BP_LINE) }. `found`: what the
@@ -298,4 +394,5 @@ function breakpointsReport(projectDir, found) {
   return { widths: kept, from, partial, at, unread, unreadTotal, limits };
 }
 
-module.exports = { breakpointWatch, breakpointsReport, codeBreakpoints, __link }; // (codeBreakpoints: its bound's own fixture, BP-crash)
+// (codeBreakpoints: its bound's own fixture, BP-crash; mediaEdges: its table's, BP-media-edges)
+module.exports = { breakpointWatch, breakpointsReport, codeBreakpoints, mediaEdges, __link };
