@@ -839,7 +839,10 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
     const B = "src/components/button/", CD = "src/components/card/", T2 = "src/components/two/";
     const renamedFiles = {
       "package.json": js({ name: "renamed" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
-      [B + "button.vue"]: L(["<template><button /></template>"]), [B + "button.ts"]: L(["export type VbenButtonProps = { a?: string };", "export default {};"]),
+      // (the renamed file itself recursive — never its own importer —, and a type-only default import of it: the module check
+      // alone counts a type, never the file a barrel renames — R3-DEP-4)
+      [B + "button.vue"]: vue("import VbenButton from './button.vue';", "VbenButton"), [B + "type-default.vue"]: vue("import type VbenButtonT from './button.vue';", "div"),
+      [B + "button.ts"]: L(["export type VbenButtonProps = { a?: string };", "export default {};"]),
       [B + "icon-button.vue"]: vue("import VbenButton from './button.vue';", "VbenButton"), [B + "group.vue"]: vue("import Btn from './button.vue';", "Btn"),
       [B + "typed.vue"]: vue("import type { VbenButtonProps } from './button';", "div"), [B + "script.vue"]: vue("import Btn from './button';", "Btn"),
       [B + "index.ts"]: L(["export { default as VbenButton } from './button.vue';", "export { default as VbenIconButton } from './icon-button.vue';"]),

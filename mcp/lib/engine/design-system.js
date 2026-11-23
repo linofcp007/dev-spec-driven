@@ -3499,10 +3499,12 @@ const RE_FILE_EXT = /\.[A-Za-z][A-Za-z0-9]{0,9}$/;
 const RE_DOC_EXT = /\.(?:md|mdx|markdown|txt|rst|adoc|pdf|png|jpe?g|gif|webp|svg|fig|sketch)$/i;
 const DS_PATH_WORDS = 20; // words of a path cell read
 // (1.40) a path cell's readings, ONE reader for stalePath and the deprecated uses' watch (the index the row's path names): the
-// whole cell first (its first 400 characters, its backticks stripped), then its first DS_PATH_WORDS words, a link unwrapped
-// (`[Card](src/components/Card.tsx)`) — [] for an empty cell
+// whole cell first, then its first DS_PATH_WORDS words (a cost guard: ×1.55 a report on 500 rows of 33 words), a link
+// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's: DS_CELL_MAX
+// characters at most, its ends' backticks stripped (dsCell, the markers' entries) — 1.39's own 400-character cut and
+// backtick strip were dead (no cell reaches them: the mutation pass of 1.40)
 function pathWords(cell) {
-  const text = stripEnds(String(cell || "").slice(0, 400).trim(), unitIn("`")).trim();
+  const text = String(cell || "").trim();
   if (!text) return [];
   return [text].concat(text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS).map((w) => stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`"))));
 }
