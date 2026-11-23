@@ -922,6 +922,19 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
       counts: () => h.rowsTotal === 20 && h.rows.every((x) => x.filesTotal === want.get(x.name) && x.pathsTotal === 3) && [...want.values()].reduce((a, n) => a + n, 0) === 60,
     });
   }
+  {
+    // 1.40 (R2-DEP-2 d) — three groups: the rows still imported, then those only rendered with no import (`unbound`: Bootstrap's
+    // BsTable in 39 .mdx files, Nuxt's auto-imports — 1.39 listed them with the unused, past DS_LIST cut first), then the rest;
+    // the registry's order within each
+    const vue = (imp, tag) => L(["<script setup lang=\"ts\">", imp, "</script>", "<template><" + tag + " /></template>"]);
+    const files = { "package.json": js({ name: "order" }), "pages/p.vue": vue("import Eee from '../components/Eee.vue';", "Eee"), "pages/q.vue": L(["<template><Ccc /><Ddd /></template>"]) };
+    for (const n of ["Aaa", "Bbb", "Ccc", "Ddd", "Eee"]) files["components/" + n + ".vue"] = L(["<template><div /></template>"]);
+    const r = usesOf(S.designSystemReport(depProject("order", ["Aaa", "Bbb", "Ccc", "Ddd", "Eee"].map((n) => "| " + n + " | components/" + n + ".vue |  | _Deprecated_ |"), files)));
+    all("1.40 deprecatedUses (R2-DEP-2 d): the rows still imported first, then those only rendered with no import, then the rest — the registry's order within each group (got " +
+      js(r.rows.map((x) => [x.name, x.filesTotal, x.unbound])) + ")", {
+      order: () => js(r.rows.map((x) => x.name)) === js(["Eee", "Ccc", "Ddd", "Aaa", "Bbb"]) && r.rows[1].unbound === 1 && r.rows[3].unbound === 0 && r.rowsTotal === 5,
+    });
+  }
 
   // --- 1.40: the pages the watch parses itself — a count, not a clock ------------------------------------------------------------
   {

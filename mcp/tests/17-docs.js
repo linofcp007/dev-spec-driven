@@ -1493,7 +1493,8 @@ exports.run = async ({
       ["ui-code-scan: a namesake's importers count (CRIT_1 must-fix 6)", () => section.includes("its component files (`paths` — a namesake's importers count too)")],
       // (review 1 of 1.39: a row a component folder's index names is located — the wording says what is true, as the CLI's does)
       ["ui-code-scan: unlocated — no component file whose importers the scan reads (CRIT_1 must-fix 4)", () => section.includes("`unlocated`: rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index (a library's, an Angular or a Blade one)")],
-      ["ui-code-scan: the rows still imported first (review 1 of 1.39)", () => section.includes("for each such row the code holds a component file for — the rows still imported first —,")],
+      // (1.40: then the rows only rendered with no import — `unbound` —, before the rest: R2-DEP-2 d)
+      ["ui-code-scan: the rows still imported first, then those only rendered (review 1 of 1.39, 1.40)", () => section.includes("for each such row the code holds a component file for — the rows still imported first, then those only rendered —,")],
       ["ui-code-scan: a row named by its file is its module — any import of it", () => section.includes("A row named by its file is its **module** — any import of it counts (renamed, default, type-only but `import type X from`, `require`, a non-component export, a namespace's member, an SFC with or without its extension)")],
       ["ui-code-scan: …and its components through `export *` and a component folder's barrel", () => section.includes("and its components, followed through `export *` and a component folder's barrel")],
       ["ui-code-scan: a component a file exports beside its own counts by its name", () => section.includes("a component a file exports beside its own counts by its **name**")],
@@ -1926,7 +1927,7 @@ exports.run = async ({
         // review 2: the index the row's path names, when several give the name to different files)
         return depClause.includes("`unlocated` (the rows whose name no component file the scan reads gives — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index, the one the row's path names when several give it to different files: a library's, an Angular or a Blade one)")
           && said.every((x) => exts.some((re) => re.test("a." + x))) && !exts.some((re) => re.test("a.component.ts"))
-          && depClause.includes("`rows` — each row the code holds a component file for, the rows still imported first, each group in the registry's order:");
+          && depClause.includes("`rows` — each row the code holds a component file for, the rows still imported first, then those only rendered with no import, each group in the registry's order:");
       }],
       ["tooling-reference: deprecatedUses' limits — every code the watch builds or repeats, the usage read's and the follow's bounds (design-system.js)", () =>
         depCodes.length === 4 && depCodes.every((c) => depClause.includes(tick(c)))

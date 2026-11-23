@@ -3004,9 +3004,10 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       const limits = repeat.filter(Boolean);
       if (cut != null) limits.push({ code: "usage-files", read: cut });
       if (F.spent.cut) limits.push({ code: "deprecated-follow", read: DS_PASS_FILES, chars: DS_PASS_CHARS, count: DS_PASS_STEPS });
-      // (the rows still imported first — the work left —, the registry's order kept within each group: past DS_LIST, a used
-      // row was cut while 50 unused ones were listed, review 1 of 1.39)
-      const listed = rows.filter((x) => x.filesTotal).concat(rows.filter((x) => !x.filesTotal));
+      // (the rows still imported first — the work left —, then those only rendered with no import (`unbound`), then the rest;
+      // the registry's order kept within each group: past DS_LIST, a used row was cut while 50 unused ones were listed, review
+      // 1 of 1.39 — and a rendered one, Bootstrap's `BsTable` in 39 .mdx files, 1.40)
+      const listed = rows.filter((x) => x.filesTotal).concat(rows.filter((x) => !x.filesTotal && x.unbound), rows.filter((x) => !x.filesTotal && !x.unbound));
       const out = { rows: listed.slice(0, DS_LIST), rowsTotal: rows.length, unlocated: unlocated.slice(0, DS_LIST), unlocatedTotal: unlocated.length, read, limits };
       // (1.40: in-process only, never in a result's JSON — not enumerable, as classify's `tiers`: the pages the watch parsed
       // itself; 15-quality-design-system-deprecated.js counts them, a cost check with no clock)
