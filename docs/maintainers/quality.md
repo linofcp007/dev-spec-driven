@@ -1069,8 +1069,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   keeps counting); a live row's NAME, never its path cell, and never a default's local name — the importer's choice (vben's
   seed `ButtonGroup | …/button-group.vue` is live while its index gives the file VbenButtonGroup alone: its +1 stands). A
   constructed limit (R2-DEP-2 of 1.40.0 review 2): a kit index giving one part file a live row's name AND the alias's
-  (`export { Tag as Badge, Tag as KitTag }`, Badge the live badge.svelte) — the alias's direct importer of that file is
-  not counted. The names a component folder's barrel
+  (`export { Tag as Badge, Tag as Pill }`, Badge the live badge.svelte, Pill marked) — the alias's direct importer of that
+  file is not counted. The names a component folder's barrel
   gives a row's file or a watched name (a relative module) are watched too, DS_ALIAS_PASSES deep. A namespace's member resolves by
   its first part (`<UI.Table.Row>` is UI.Table's). A file is never its own importer. An .mdx / .vue tag with no dot that no
   import binds, whose key is a LOCATED row's, is `unbound` (`unboundAt`: the first by path). The cost guard: a text naming
