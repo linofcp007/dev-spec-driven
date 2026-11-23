@@ -1641,7 +1641,7 @@ const msg = {
       dsStaleHead: (n) => `  in the registry, but their path names no file (${n}):`,
       // 1.39: the files that still import a `_Deprecated:_` component (the project report's `deprecatedUses` — a report, never "in sync")
       dsDepUsesHead: (n, total, atLeast) => `  deprecated components the code still imports (${atLeast ? "at least " : ""}${n} of the ${total} _Deprecated:_ ${total === 1 ? "row" : "rows"} the code holds a file for) — migrate each:`,
-      dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "file" : "files"}: ${list}${at ? `  (${at} component files of that name)` : ""}`,
+      dsDepUsesRow: (name, use, n, list, at) => `    ${name}${use ? " → " + use : ""} — ${n} ${n === 1 ? "file" : "files"}: ${list}${at ? `  (${at} files give that name)` : ""}`,
       dsDepUsesNone: (name, use, read) => `    ${name}${use ? " → " + use : ""} — no import of it in the ${read} ${read === 1 ? "file" : "files"} read: not proof it is unused (what is not read is below)`,
       dsDepUsesUnbound: (n, name, at) => `      ${n} .mdx / .vue ${n === 1 ? "file renders" : "files render"} <${name}> with no import — an auto-import, a global registration or an MDX provider, not resolved; the first: ${at}`,
       dsDepUsesUnlocated: (list) => `  (no component file the scan reads gives that name — a .tsx / .jsx / .js / .vue / .svelte / .astro file or a component folder's index; when several indexes give it to different files, the index the row's path names —, so its importers were not looked for: ${list})`,

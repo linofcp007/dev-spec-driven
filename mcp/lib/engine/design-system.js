@@ -1194,7 +1194,8 @@ function exportedComponents(text) {
 // `<Card.Header>`), a helper is CALLED (`FormatPrice(value)` — scriptView's `called`), a context is given to `useContext(X)`
 // or provides (`<X.Provider>`), and a part that is an enum's member is read as an object (`Button.Sizes.Large`).
 // usesOf(view) → { rendered, called, contexts, members — the names as the file writes them (`Card.Header`, `UI.Button`) —,
-// imports: local name → { spec (the module), name: the name it has there ("default", "*" for a namespace) },
+// imports: local name → { spec (the module), name: the name it has there ("default", "*" for a namespace) }, typed (1.40):
+// a type-only default import's local name → { spec } (`import type X from` — read by the deprecated uses' watch alone),
 // reexports (1.35.4): what the file passes on — { named: exported name → { spec, name it has there }, stars: [spec] } | null }.
 // A tag is `<Name` (capitalised) or `<a.b` (a member: `<motion.div`, `<UI.Button`) where an expression may start — never
 // after a name or a `)` / `]` (`a < B`, `useState<Item>(`, `Array<Card>`), never a type's parameter (`<T,>`,
@@ -1221,6 +1222,7 @@ const RE_REQUIRE_DECL = /^(?:export\s+)?(?:const|let|var)\s+(?:([\p{L}_$][\p{L}\
 const RE_NAMESPACE_IMPORT = /^\*\s*as\s+([\p{L}_$][\p{L}\p{N}_$]*)$/u;
 const RE_FROM_END = /(?:^|\s)from$/;
 const RE_TYPE_MODIFIER = /^type\s*(?=[{*])/; // (an import clause's TypeScript modifier before `{` or `*`, a blank after it or none)
+const RE_TYPE_DEFAULT = /^type\s+([\p{L}_$][\p{L}\p{N}_$]*)$/u; // (a type-only DEFAULT import's clause: `import type X from` — 1.40)
 // A call that renders a name — what a tag compiles to (1.35.4): React's `createElement(X, …)` (the classic runtime's, and
 // what React gives for writing without JSX), Preact's `h(X)` / `createElement(X)`, Vue's `h(X)` (its render functions) and
 // `createVNode(X)` (its JSX plugin's), the automatic runtime's `jsx` / `jsxs` / `jsxDEV` (each library's `/jsx-runtime`,
@@ -1237,16 +1239,22 @@ const RE_FACTORY_CALL = /(?<![\p{L}\p{N}_$.])([\p{L}_$][\p{L}\p{N}_$]*)(?:\.([\p
 // string "button", `createElement(icon)` a variable), type arguments aside (`h(Table<Row>, …)`), then a `,`, a `)` or the
 // line's end (group 2 undefined: the next line with text must go on with a `,` or a `)` — usesOf)
 const RE_FIRST_ARG = /^\s*([\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)*)(?:\s*<[^<>()]*>)?\s*(?:([,)])|$)/u;
-// an `import` clause (what stands between `import` and the module's quote) → its names, into `into`
-function importClause(text, spec, into) {
+// an `import` clause (what stands between `import` and the module's quote) → its names, into `into` — a type-only default
+// import's into `typed`
+function importClause(text, spec, into, typed) {
   let t = text.trim();
   if (RE_FROM_END.test(t)) t = t.slice(0, -4).trim();
   if (t === "") return; // (`import type …` needs no skip for settle: a name only a type is can be neither rendered nor called)
+  // (`import type X from` binds nothing settle or the follow reads — stripped, it gained a false pair, 1.39 —: kept APART,
+  // `typed`, where the deprecated uses' watch counts it by the module alone, the module rule's exact key — `import type
+  // Calendar from "./calendar.svelte"` for `ComponentProps<typeof Calendar>` is an import of that file; `type from from` is
+  // a type named `from` — 1.40, R3-DEP-4)
+  const td = RE_TYPE_DEFAULT.exec(t);
+  if (td) { typed.set(td[1], { spec }); return; }
   // (TypeScript's `type` modifier before a brace list or a namespace — `import type{ X }` too, review 2 of 1.39 — binds
   // nothing: read as a default binding, `import type { ButtonVariants } from "./button"` was an import of the folder's Button
   // for the deprecated uses — review 1 of 1.39. The names it lists are bound as `import { X }` binds them; an inline
-  // `{ type X }` entry is not: it binds a local named `type`, and X is never followed. `import type X from` stays unbound:
-  // stripped, it gained a false pair)
+  // `{ type X }` entry is not: it binds a local named `type`, and X is never followed)
   t = t.replace(RE_TYPE_MODIFIER, "");
   const open = t.indexOf("{");
   for (const h of (open === -1 ? t : t.slice(0, open)).split(",")) {
@@ -1295,7 +1303,7 @@ const RE_FROM_SPEC = /^\s*from\s*["']([^"']+)["']/;
 const DS_PASS_FILES = 2000, DS_PASS_CHARS = 8 * 1024 * 1024, DS_PASS_STEPS = 100000;
 function usesOf(view) {
   const { code, plain, tpl } = view;
-  const rendered = new Set(), contexts = new Set(), providers = new Set(), members = new Set(), imports = new Map();
+  const rendered = new Set(), contexts = new Set(), providers = new Set(), members = new Set(), imports = new Map(), typed = new Map();
   let named = null, stars = null;
   const starSeen = new Set(); // (a file's identical stars kept once — a Set: a list's `includes` was quadratic in them, review 1 of 1.35.4)
   const locals = [], pass = (exported, spec, name) => { if (!named) named = new Map(); named.set(exported, { spec, name }); };
@@ -1314,7 +1322,7 @@ function usesOf(view) {
       }
       if (q !== -1 && isQuote(clause[q])) {
         const e = clause.indexOf(clause[q], q + 1);
-        if (e !== -1) importClause(clause.slice(6, q), clause.slice(q + 1, e), imports);
+        if (e !== -1) importClause(clause.slice(6, q), clause.slice(q + 1, e), imports, typed);
       }
       i = k;
       continue;
@@ -1389,7 +1397,7 @@ function usesOf(view) {
   }
   // (a name it imports, exported again — the import's own name kept: "default", "*", the identifier)
   for (const [exported, local] of locals) if (imports.has(local)) pass(exported, imports.get(local).spec, imports.get(local).name);
-  return { rendered, called: view.called, contexts, providers, members, imports, reexports: named || stars ? { named: named || new Map(), stars: stars || [] } : null };
+  return { rendered, called: view.called, contexts, providers, members, imports, typed, reexports: named || stars ? { named: named || new Map(), stars: stars || [] } : null };
 }
 // A token file by its name AND its place (tokenFileKind):
 //   style — a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss, theme.css): anywhere;
@@ -2783,7 +2791,8 @@ function settle(results, scripts, markups, read, places, watch) {
 //   - a component a file exports beside its own (`CardHeader` in `card.tsx`) counts by its NAME, through the same follow — and
 //     by a default import when it is the file's default export (1.39 review 1); a row no component file locates is located by
 //     the component folders' barrels that give its name (vben's `{ VbenButton }`) — by the one its path names when they give
-//     it to more than one file, a kit's parts (1.39 review 2) —, never a row a file locates.
+//     it to more than one file, a kit's parts (1.39 review 2) —, never a row a file locates; a direct import of the file
+//     such a barrel renames, under the name it has there, is a use of each row it locates (1.40).
 // Only a component file whose importers the scan reads is a row's file (RE_JSX_FILE ∪ RE_MARKUP_FILE: an Angular
 // `*.component.ts` is imported by `.ts` files and rendered by templates — its row is `unlocated`, as a Blade one, a library's
 // and a dropped one are). The names a component folder's barrel gives a row's file or a watched name (`export { default as
@@ -2816,11 +2825,14 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   // "./sheet"` is sheet.ts beside Sheet.vue in every resolver, review 1 of 1.39)
   let scriptKeys = null;
   const scriptHas = (k) => (scriptKeys || (scriptKeys = new Set(scripts.map((s) => moduleKey(s.rel))))).has(k);
+  // (an SFC's twin: its key without the extension, its platform infix dropped as moduleKey drops it — none for a script, none
+  // when a script of the project holds that key)
+  const twinOf = (p, key) => { if (RE_MODULE_EXT.test(p)) return null; const t = key.replace(/\.[a-z0-9]+$/, "").replace(RE_PLATFORM_INFIX, ""); return scriptHas(t) ? null : t; };
   for (const c of files) {
     if (!dep.has(c.key) || !(RE_JSX_FILE.test(c.path) || RE_MARKUP_FILE.test(c.path))) continue;
     locate(c.key, c.path);
-    const key = moduleKey(c.path), twin = RE_MODULE_EXT.test(c.path) ? null : key.replace(/\.[a-z0-9]+$/, "").replace(RE_PLATFORM_INFIX, "");
-    for (const [p, k] of [[c.path, key]].concat(twin != null && !scriptHas(twin) ? [[TWIN + c.path, twin]] : [])) {
+    const key = moduleKey(c.path), twin = twinOf(c.path, key);
+    for (const [p, k] of [[c.path, key]].concat(twin != null ? [[TWIN + c.path, twin]] : [])) {
       keys.set(p, k);
       const b = keyBase(k);
       push(byBase, b, p);
@@ -2834,6 +2846,37 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       if (r) for (const n of r.found.names) give(p, n);
     }
   }
+  // (1.40, R2-DEP-2 b) the file a component folder's barrel that LOCATES a row renames — the file its relative re-export of the
+  // row's name places (`export { default as VbenButton } from './button.vue'`) — imported DIRECTLY under the name it has there
+  // (a default import of button.vue, `{ AppleConnect }` for `export { AppleConnect as AppleCalendar } from …`): a use of that
+  // row, of every row whose barrel renames that file. Its key exactly, an SFC's twin too (twinOf); a module key → { the file,
+  // the name it has there → the rows' keys }; a component file's keys built once (fileKeys)
+  const renamed = new Map();
+  let fileKeys = null;
+  const renames = (r, n, k) => {
+    const via = r.uses.reexports && r.uses.reexports.named.get(n);
+    const at = via && via.spec[0] === "." ? placeOf(via.spec, r.path, null) : null;
+    if (!at) return;
+    if (!fileKeys) {
+      fileKeys = new Map();
+      for (const c of files) {
+        if (!(RE_JSX_FILE.test(c.path) || RE_MARKUP_FILE.test(c.path))) continue;
+        const key = moduleKey(c.path), twin = twinOf(c.path, key), of = { path: c.path, keys: twin != null ? [key, twin] : [key] };
+        fileKeys.set(key, of);
+        if (twin != null && !fileKeys.has(twin)) fileKeys.set(twin, of);
+      }
+    }
+    for (const key of at.keys) {
+      const of = fileKeys.get(key);
+      if (of) for (const fk of of.keys) {
+        if (!renamed.has(fk)) renamed.set(fk, { path: of.path, by: new Map() });
+        const by = renamed.get(fk).by;
+        if (!by.has(via.name)) by.set(via.name, new Set());
+        by.get(via.name).add(k);
+        bases.add(keyBase(fk));
+      }
+    }
+  };
   // (its file's own component too, when deprecated: that file is a module row as well — a result is a component file)
   const namesOf = (r) => r.found.names.concat(r.found.candidates.map((x) => x.name));
   const nameRows = (r, keep) => {
@@ -2844,6 +2887,7 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       keys.set(r.path, moduleKey(r.path));
       give(r.path, n);
       locate(k, r.path);
+      if (r.barrel) renames(r, n, k);
       // (the file's DEFAULT export under that name is imported by default — `export default ListItem` in List/Item.tsx, a
       // barrel's `export default List`: bound as a module row's file is, its default by the file's base — review 1 of 1.39)
       if (r.found.defaultName === n) { defaults.set(r.path, n); const b = keyBase(keys.get(r.path)); push(byBase, b, r.path); bases.add(b); }
@@ -2867,8 +2911,11 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     if (!givenTo.has(k)) givenTo.set(k, new Set());
     for (const f of at.keys) givenTo.get(k).add(f);
   }
-  const rowAt = new Map(reg.components.map((c) => [c.key, moduleKey(implementsRel(c.path))]));
-  const named = (r, k) => { const at = rowAt.get(k), key = moduleKey(r.path); return at === key || at + "/index" === key; };
+  // (the row's path cell read as stalePath reads it — pathWords: the whole cell, then each word, a link unwrapped —, each
+  // reading an `_Implements:_` reference: `picker/index.ts, picker-content.svelte` and `[picker](…/picker/index.ts)` name the
+  // picker's index — R3-DEP-3 of 1.40, one reader for one cell)
+  const rowAt = new Map(reg.components.map((c) => [c.key, new Set(pathWords(c.path).map((w) => moduleKey(implementsRel(w))))]));
+  const named = (r, k) => { const at = rowAt.get(k), key = moduleKey(r.path); return !!at && (at.has(key) || (key.endsWith("/index") && at.has(key.slice(0, -6)))); };
   const oneFile = (k) => !givenTo.has(k) || givenTo.get(k).size <= 1;
   for (const r of results) if (r.barrel) nameRows(r, (k) => !byFile.has(k) && (oneFile(k) || named(r, k)));
   // (the names a component folder's barrel gives a row's file or a watched name — read before the search)
@@ -2883,7 +2930,9 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   }
   const F = followOf(scripts, project, { byName, byBase, keys, defaults }, results.map((r) => [r.path, r.uses.reexports]));
   const stats = new Map(), unbound = new Map(); // a row's key → { files: the first DS_DEP_SHOWN by path, total } · { total, at }
-  let read = 0, cut = null;
+  let read = 0, cut = null, parsed = 0;
+  // (every text the watch parses itself goes through here — counted: the report's in-process `parsed`; settle's parse is not)
+  const parse = (text, rel, usesFn) => { parsed++; return usesFn(text, rel); };
   const baseOf = (spec) => keyBase(moduleKey(spec));
   const inScope = (rel) => (RE_JSX_FILE.test(rel) || RE_MARKUP_FILE.test(rel)) && !isTestFile(rel) && !RE_NOT_COMPONENT_FILE.test(rel.slice(rel.lastIndexOf("/") + 1));
   const seeUses = (rel, u) => {
@@ -2894,12 +2943,25 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       const k = nameRow.get(p + "\n" + n);
       if (k != null && p !== rel) hit.add(k);
     };
+    // (the module check: a binding whose module IS a row's file — its key exactly —, and the file a row's barrel renames
+    // imported under the name it has there — never followed)
+    const moduleHit = (spec, name) => {
+      const at = F.placed(spec, rel);
+      if (at) for (const k of at.keys) {
+        for (const [key, p] of byKey.get(k) || []) if (p !== rel) hit.add(key);
+        const rn = name == null ? null : renamed.get(k);
+        if (rn && rn.path !== rel && rn.by.has(name)) for (const key of rn.by.get(name)) hit.add(key);
+      }
+    };
     for (const [local, imp] of u.imports) {
       if (!names.has(imp.name) && !bases.has(baseOf(imp.spec))) continue; // (the binding filter: a cost guard, timed)
-      const at = F.placed(imp.spec, rel);
-      if (at) for (const k of at.keys) for (const [key, p] of byKey.get(k) || []) if (p !== rel) hit.add(key);
+      moduleHit(imp.spec, imp.name);
       if (imp.name !== "*") for (const [p, n] of F.resolve(rel, u.imports, local)) pair(p, n);
     }
+    // (a type-only default import — `import type Calendar from "./calendar.svelte"`: the row's file, an index FILE by its
+    // folder — by the module check alone, its row file's key: never followed, never the file a barrel renames; filtered as a
+    // default import is, by its module's base — R3-DEP-4 of 1.40)
+    for (const imp of u.typed.values()) if (bases.has(baseOf(imp.spec))) moduleHit(imp.spec, null);
     // (a namespace's members, each by its first part: `<UI.Table.Row>` is UI.Table's)
     for (const set of [u.rendered, u.members, u.providers]) for (const w of set) {
       const d = w.indexOf(".");
@@ -2942,7 +3004,7 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     // a component file read for what it exports (settle's `results`): its uses as that read gave them
     result: (rel, u) => { if (inScope(rel)) { read++; seeUses(rel, u); } },
     // a file of settle's queue: the uses settle parsed (u), else its own parse of the text — when it names what is watched
-    see: (rel, text, u, usesFn) => { if (!inScope(rel)) return; read++; if (u || wants(text, rel)) seeUses(rel, u || usesFn(text, rel)); },
+    see: (rel, text, u, usesFn) => { if (!inScope(rel)) return; read++; if (u || wants(text, rel)) seeUses(rel, u || parse(text, rel, usesFn)); },
     // settle's read stopped at its bound (DS_USAGE_FILES / DS_USAGE_CHARS): the queue's rest, the files read
     cut: (rest, n) => { if (rest.some(inScope)) cut = n; },
     // → the report's deprecatedUses, its `note` aside (localized: the report's). repeat: the cuts of the walk and of the
@@ -2959,10 +3021,15 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       const limits = repeat.filter(Boolean);
       if (cut != null) limits.push({ code: "usage-files", read: cut });
       if (F.spent.cut) limits.push({ code: "deprecated-follow", read: DS_PASS_FILES, chars: DS_PASS_CHARS, count: DS_PASS_STEPS });
-      // (the rows still imported first — the work left —, the registry's order kept within each group: past DS_LIST, a used
-      // row was cut while 50 unused ones were listed, review 1 of 1.39)
-      const listed = rows.filter((x) => x.filesTotal).concat(rows.filter((x) => !x.filesTotal));
-      return { rows: listed.slice(0, DS_LIST), rowsTotal: rows.length, unlocated: unlocated.slice(0, DS_LIST), unlocatedTotal: unlocated.length, read, limits };
+      // (the rows still imported first — the work left —, then those only rendered with no import (`unbound`), then the rest;
+      // the registry's order kept within each group: past DS_LIST, a used row was cut while 50 unused ones were listed, review
+      // 1 of 1.39 — and a rendered one, Bootstrap's `BsTable` in 39 .mdx files, 1.40)
+      const listed = rows.filter((x) => x.filesTotal).concat(rows.filter((x) => !x.filesTotal && x.unbound), rows.filter((x) => !x.filesTotal && !x.unbound));
+      const out = { rows: listed.slice(0, DS_LIST), rowsTotal: rows.length, unlocated: unlocated.slice(0, DS_LIST), unlocatedTotal: unlocated.length, read, limits };
+      // (1.40: in-process only, never in a result's JSON — not enumerable, as classify's `tiers`: the pages the watch parsed
+      // itself; 15-quality-design-system-deprecated.js counts them, a cost check with no clock)
+      Object.defineProperty(out, "parsed", { value: parsed, enumerable: false });
+      return out;
     },
   };
 }
@@ -3431,9 +3498,19 @@ function onDisk(root, rel) {
 const RE_FILE_EXT = /\.[A-Za-z][A-Za-z0-9]{0,9}$/;
 const RE_DOC_EXT = /\.(?:md|mdx|markdown|txt|rst|adoc|pdf|png|jpe?g|gif|webp|svg|fig|sketch)$/i;
 const DS_PATH_WORDS = 20; // words of a path cell read
+// (1.40) a path cell's readings, ONE reader for stalePath and the deprecated uses' watch (the index the row's path names): the
+// whole cell first, then its first DS_PATH_WORDS words (a cost guard: ×1.55 a report on 500 rows of 33 words), a link
+// unwrapped (`[Card](src/components/Card.tsx)`) — [] for an empty cell. A cell is the registry reader's: DS_CELL_MAX
+// characters at most, its ends' backticks stripped (dsCell, the markers' entries) — 1.39's own 400-character cut and
+// backtick strip were dead (no cell reaches them: the mutation pass of 1.40)
+function pathWords(cell) {
+  const text = String(cell || "").trim();
+  if (!text) return [];
+  return [text].concat(text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS).map((w) => stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`"))));
+}
 function stalePath(root, cell) {
-  const text = stripEnds(String(cell || "").slice(0, 400).trim(), unitIn("`")).trim();
-  if (!text) return false;
+  const [text, ...words] = pathWords(cell);
+  if (text == null) return false;
   // a reading → null (it names no code file of the project) | true (the file is there) | false (it is gone)
   const there = (w) => {
     const rel = projectPath(root, w);
@@ -3443,8 +3520,8 @@ function stalePath(root, cell) {
   const whole = projectPath(root, text);
   if (whole != null && onDisk(root, whole)) return false;
   let gone = false;
-  for (const w of text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS)) {
-    const t = there(stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`")));
+  for (const w of words) {
+    const t = there(w);
     if (t === true) return false;
     if (t === false) gone = true;
   }
