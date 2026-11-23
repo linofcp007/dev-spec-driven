@@ -825,6 +825,103 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, fsCa
       blank: () => js(at(blank)) === js([1, [PICKER], ["src/lib/components/ui kit/picker/index.ts"], []]),
     });
   }
+  {
+    // 1.40 (R2-DEP-2 b) — the file a component folder's barrel that LOCATES a row renames, imported DIRECTLY under the name it
+    // has there, is a use of that row (vben's icon-button.vue: `import VbenButton from './button.vue'`; cal.com's `{
+    // AppleConnect }` for `export { AppleConnect as AppleCalendar }`) — of every row whose barrel renames it; an SFC's twin
+    // too (never when a script holds that key: `./button` is button.ts); never another export of that file (`{ cardVariants
+    // }`, `{ IconCard }`), never a namesake row's import by name from the package (vben's form-field.vue), never the parts of a
+    // kit whose barrel does not locate the row (card-item.svelte), never a component FILE's re-export (only a barrel's), never
+    // a barrel passing on a package's (no file placed). Still 1.39's: every importer it counted, the same paths and unlocated
+    const vue = (imp, tag) => L(["<script setup lang=\"ts\">", imp, "</script>", "<template><" + tag + " /></template>"]);
+    const sv = (imp, tag) => L(["<script lang=\"ts\">", imp, "</script>", "<" + tag + " />"]);
+    const B = "src/components/button/", CD = "src/components/card/", T2 = "src/components/two/";
+    const renamedFiles = {
+      "package.json": js({ name: "renamed" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
+      [B + "button.vue"]: L(["<template><button /></template>"]), [B + "button.ts"]: L(["export type VbenButtonProps = { a?: string };", "export default {};"]),
+      [B + "icon-button.vue"]: vue("import VbenButton from './button.vue';", "VbenButton"), [B + "group.vue"]: vue("import Btn from './button.vue';", "Btn"),
+      [B + "typed.vue"]: vue("import type { VbenButtonProps } from './button';", "div"), [B + "script.vue"]: vue("import Btn from './button';", "Btn"),
+      [B + "index.ts"]: L(["export { default as VbenButton } from './button.vue';", "export { default as VbenIconButton } from './icon-button.vue';"]),
+      "src/views/v.vue": vue("import { VbenButton } from '../components/button';", "VbenButton"),
+      "src/views/alias.vue": vue("import T from '@/components/button/button.vue';", "T"),
+      [CD + "card.tsx"]: L(["export function Card() { return <div />; }", "export function IconCard() { return <div />; }", "export const cardVariants = {};"]),
+      [CD + "index.ts"]: L(["export { Card as KitCard } from './card';"]),
+      "src/pages/card.tsx": L(["import { Card } from '../components/card/card';", "export default () => <Card />;"]),
+      "src/pages/variants.tsx": L(["import { cardVariants } from '../components/card/card';", "export default () => <div />;"]),
+      "src/pages/icon.tsx": L(["import { IconCard } from '../components/card/card';", "export default () => <IconCard />;"]),
+      "src/pages/kit.tsx": L(["import { KitCard } from '../components/card';", "export default () => <KitCard />;"]),
+      // (two barrels renaming one file — the row each locates counts the direct import; a third renames it again)
+      [T2 + "a/button.vue"]: L(["<template><button /></template>"]), [T2 + "a/index.ts"]: L(["export { default as AButton } from './button.vue';"]),
+      [T2 + "b/index.ts"]: L(["export { default as BButton } from '../a/button.vue';"]), [T2 + "c/index.ts"]: L(["export { default as BButton } from '../a/button.vue';"]),
+      [T2 + "a/icon.vue"]: vue("import Btn from './button.vue';", "Btn"), "src/views/two.vue": vue("import X from '../components/two/a/button';", "X"),
+      // (a component FILE passing on another's component under a row's name: no barrel — its file's importers are not the row's)
+      "src/components/ui/panel.tsx": L(["export function Panel() { return <div />; }", "export { PanelTitle as Title } from './panel-title';"]),
+      "src/components/ui/panel-title.tsx": L(["export function PanelTitle() { return <h3 />; }"]),
+      "src/pages/title.tsx": L(["import { PanelTitle } from '../components/ui/panel-title';", "export default () => <PanelTitle />;"]),
+      "src/pages/panel.tsx": L(["import { Title } from '../components/ui/panel';", "export default () => <Title />;"]),
+    };
+    const K = "src/lib/components/ui/";
+    for (const c of ["card", "dialog", "picker"]) {
+      renamedFiles[K + c + "/" + c + ".svelte"] = L(["<div><slot /></div>"]);
+      renamedFiles[K + c + "/" + c + "-content.svelte"] = L(["<div><slot /></div>"]);
+      renamedFiles[K + c + "/index.ts"] = L(["import Root from \"./" + c + ".svelte\";", "import Content from \"./" + c + "-content.svelte\";", "export { Root, Content };"]);
+    }
+    renamedFiles[K + "picker/picker-item.svelte"] = sv("import Content from './picker-content.svelte';", "Content");
+    renamedFiles[K + "card/card-item.svelte"] = sv("import Content from './card-content.svelte';", "Content");
+    renamedFiles["src/routes/picker/+page.svelte"] = sv("import * as Picker from '../../lib/components/ui/picker';", "Picker.Content");
+    const rows = (mark) => ["| VbenButton | " + B + "index.ts |  | " + mark() + " |", "| KitCard | " + CD + "index.ts |  | " + mark() + " |", "| AButton | " + T2 + "a/index.ts |  | " + mark() + " |",
+      "| BButton | " + T2 + "b/index.ts |  | " + mark() + " |", "| Title | src/components/ui/panel.tsx |  | " + mark() + " |", "| Content | " + K + "picker/index.ts |  | " + mark() + " |"];
+    const p = depProject("renamed", rows(MARK), renamedFiles);
+    const r = S.designSystemReport(p), d = usesOf(r), diff = differential(p, rows);
+    // vben's shape: a namesake module row (Button.vue) imported BY NAME from the package is not the file VbenButton's barrel
+    // renames; a barrel passing on the package's VbenButton places no file
+    const ws = depProject("renamed-ws", ["| VbenButton | packages/ui/src/components/button/index.ts |  | _Deprecated_ |", "| Button | packages/ui/src/ui/button/Button.vue |  | _Deprecated_ |"], {
+      "package.json": js({ name: "root", private: true, workspaces: ["packages/*", "apps/*"] }), "packages/ui/package.json": js({ name: "@acme/ui", main: "src/index.ts" }),
+      "packages/ui/src/components/button/button.vue": L(["<template><button /></template>"]), "packages/ui/src/components/button/index.ts": L(["export { default as VbenButton } from './button.vue';"]),
+      "packages/ui/src/ui/button/Button.vue": L(["<template><button /></template>"]), "packages/ui/src/ui/button/index.ts": L(["export { default as Button } from './Button.vue';"]),
+      "packages/ui/src/index.ts": L(["export * from './components/button';", "export * from './ui/button';"]), "apps/web/package.json": js({ name: "web", dependencies: { "@acme/ui": "*" } }),
+      "apps/web/src/form.vue": vue("import { Button } from '@acme/ui';", "Button"), "apps/web/src/v.vue": vue("import { VbenButton } from '@acme/ui';", "VbenButton"),
+      "packages/effects/src/components/index.ts": L(["export { VbenButton } from '@acme/ui';"]) });
+    const rw = S.designSystemReport(ws);
+    all("1.40 deprecatedUses (R2-DEP-2 b): a direct import of the file a row's barrel renames, under the name it has there, counts — of every row whose barrel renames it, an SFC's twin too but never a script's key, never another export of the file, never a namesake row's import by name from the package, never a kit's part the row's barrel does not give, never a component file's re-export; paths and unlocated 1.39's; every other key the same with no marker (got " +
+      js({ rows: d.rows.map((x) => [x.name, x.filesTotal, x.files, x.pathsTotal]), unlocated: d.unlocated, ws: usesOf(rw).rows.map((x) => [x.name, x.filesTotal, x.files]), same: diff.same }) + ")", {
+      sfc: () => js(uses(r, "VbenButton")) === js([4, [B + "group.vue", B + "icon-button.vue", "src/views/alias.vue"]]) && rowOf(r, "VbenButton").pathsTotal === 1,
+      named: () => js(uses(r, "KitCard")) === js([2, ["src/pages/card.tsx", "src/pages/kit.tsx"]]),
+      twoBarrels: () => js(uses(r, "AButton")) === js([2, [T2 + "a/icon.vue", "src/views/two.vue"]]) && js(uses(r, "BButton")) === js([2, [T2 + "a/icon.vue", "src/views/two.vue"]]) && rowOf(r, "BButton").pathsTotal === 2,
+      fileReexport: () => js(uses(r, "Title")) === js([1, ["src/pages/panel.tsx"]]),
+      parts: () => js(uses(r, "Content")) === js([2, [K + "picker/picker-item.svelte", "src/routes/picker/+page.svelte"]]),
+      namesake: () => js(uses(rw, "VbenButton")) === js([1, ["apps/web/src/v.vue"]]) && js(uses(rw, "Button")) === js([2, ["apps/web/src/form.vue", "apps/web/src/v.vue"]]) && rowOf(rw, "VbenButton").pathsTotal === 2,
+      located: () => js(d.unlocated) === js([]) && d.rowsTotal === 6 && js(d.limits) === js([]),
+      differential: () => diff.same === true,
+    });
+  }
+  {
+    // …its cost, counted (CRIT_2's hostile shape, scaled; no clock): three component folders' barrels each rename the same 20
+    // files under the 20 marked rows' names (one file a name: every barrel locates its row — `renamed` holds each row once),
+    // 30 pages import two of the files directly, 10 import another file: the watch parses exactly the pages that name a renamed
+    // file — the fixture computes them —, and each row counts the pages that import its file
+    const vue = (imp, tag) => L(["<script setup lang=\"ts\">", imp, "</script>", "<template><" + tag + " /></template>"]);
+    const files = { "package.json": js({ name: "hostile-b" }), "src/components/files/other.vue": L(["<template><i /></template>"]) };
+    for (let i = 0; i < 20; i++) files["src/components/files/p" + i + ".vue"] = L(["<template><b /></template>"]);
+    for (let b = 0; b < 3; b++) {
+      files["src/components/k" + b + "/index.ts"] = L(Array.from({ length: 20 }, (_, i) => "export { default as N" + i + " } from \"../files/p" + i + ".vue\";"));
+      files["src/components/k" + b + "/k" + b + ".vue"] = L(["<template><div /></template>"]);
+    }
+    const imported = (j) => (j < 30 ? [(j * 7) % 20, (j * 7 + 3) % 20] : []);
+    for (let j = 0; j < 40; j++) {
+      const ids = imported(j), at = "src/views/v" + String(j).padStart(2, "0") + ".vue";
+      files[at] = ids.length ? vue(ids.map((i) => "import P" + i + " from \"../components/files/p" + i + ".vue\";").join("\n"), ids.map((i) => "P" + i).join(" /><")) : vue("import O from \"../components/files/other.vue\";", "O");
+    }
+    const want = new Map(); // a row → the pages that import its file (what the fixture expects)
+    let naming = 0;
+    for (let j = 0; j < 40; j++) { const ids = imported(j); if (ids.length) naming++; for (const i of ids) want.set("N" + i, (want.get("N" + i) || 0) + 1); }
+    const h = usesOf(S.designSystemReport(depProject("hostile-b", Array.from({ length: 20 }, (_, i) => "| N" + i + " | src/components/k0/index.ts |  | _Deprecated_ |"), files)));
+    all("1.40 deprecatedUses (R2-DEP-2 b), its cost counted: three barrels renaming the same 20 files, 30 of 40 pages importing two directly — the watch parses exactly the 30 pages that name a renamed file, and each row counts the pages that import its file (got " +
+      js({ parsed: h.parsed, naming, rows: h.rows.map((x) => [x.name, x.filesTotal]) }) + ")", {
+      parsed: () => naming === 30 && h.parsed === naming,
+      counts: () => h.rowsTotal === 20 && h.rows.every((x) => x.filesTotal === want.get(x.name) && x.pathsTotal === 3) && [...want.values()].reduce((a, n) => a + n, 0) === 60,
+    });
+  }
 
   // --- 1.40: the pages the watch parses itself — a count, not a clock ------------------------------------------------------------
   {

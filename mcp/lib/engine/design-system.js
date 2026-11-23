@@ -2783,7 +2783,8 @@ function settle(results, scripts, markups, read, places, watch) {
 //   - a component a file exports beside its own (`CardHeader` in `card.tsx`) counts by its NAME, through the same follow — and
 //     by a default import when it is the file's default export (1.39 review 1); a row no component file locates is located by
 //     the component folders' barrels that give its name (vben's `{ VbenButton }`) — by the one its path names when they give
-//     it to more than one file, a kit's parts (1.39 review 2) —, never a row a file locates.
+//     it to more than one file, a kit's parts (1.39 review 2) —, never a row a file locates; a direct import of the file
+//     such a barrel renames, under the name it has there, is a use of each row it locates (1.40).
 // Only a component file whose importers the scan reads is a row's file (RE_JSX_FILE ∪ RE_MARKUP_FILE: an Angular
 // `*.component.ts` is imported by `.ts` files and rendered by templates — its row is `unlocated`, as a Blade one, a library's
 // and a dropped one are). The names a component folder's barrel gives a row's file or a watched name (`export { default as
@@ -2816,11 +2817,14 @@ function deprecatedWatch(reg, files, results, scripts, project) {
   // "./sheet"` is sheet.ts beside Sheet.vue in every resolver, review 1 of 1.39)
   let scriptKeys = null;
   const scriptHas = (k) => (scriptKeys || (scriptKeys = new Set(scripts.map((s) => moduleKey(s.rel))))).has(k);
+  // (an SFC's twin: its key without the extension, its platform infix dropped as moduleKey drops it — none for a script, none
+  // when a script of the project holds that key)
+  const twinOf = (p, key) => { if (RE_MODULE_EXT.test(p)) return null; const t = key.replace(/\.[a-z0-9]+$/, "").replace(RE_PLATFORM_INFIX, ""); return scriptHas(t) ? null : t; };
   for (const c of files) {
     if (!dep.has(c.key) || !(RE_JSX_FILE.test(c.path) || RE_MARKUP_FILE.test(c.path))) continue;
     locate(c.key, c.path);
-    const key = moduleKey(c.path), twin = RE_MODULE_EXT.test(c.path) ? null : key.replace(/\.[a-z0-9]+$/, "").replace(RE_PLATFORM_INFIX, "");
-    for (const [p, k] of [[c.path, key]].concat(twin != null && !scriptHas(twin) ? [[TWIN + c.path, twin]] : [])) {
+    const key = moduleKey(c.path), twin = twinOf(c.path, key);
+    for (const [p, k] of [[c.path, key]].concat(twin != null ? [[TWIN + c.path, twin]] : [])) {
       keys.set(p, k);
       const b = keyBase(k);
       push(byBase, b, p);
@@ -2834,6 +2838,37 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       if (r) for (const n of r.found.names) give(p, n);
     }
   }
+  // (1.40, R2-DEP-2 b) the file a component folder's barrel that LOCATES a row renames — the file its relative re-export of the
+  // row's name places (`export { default as VbenButton } from './button.vue'`) — imported DIRECTLY under the name it has there
+  // (a default import of button.vue, `{ AppleConnect }` for `export { AppleConnect as AppleCalendar } from …`): a use of that
+  // row, of every row whose barrel renames that file. Its key exactly, an SFC's twin too (twinOf); a module key → { the file,
+  // the name it has there → the rows' keys }; a component file's keys built once (fileKeys)
+  const renamed = new Map();
+  let fileKeys = null;
+  const renames = (r, n, k) => {
+    const via = r.uses.reexports && r.uses.reexports.named.get(n);
+    const at = via && via.spec[0] === "." ? placeOf(via.spec, r.path, null) : null;
+    if (!at) return;
+    if (!fileKeys) {
+      fileKeys = new Map();
+      for (const c of files) {
+        if (!(RE_JSX_FILE.test(c.path) || RE_MARKUP_FILE.test(c.path))) continue;
+        const key = moduleKey(c.path), twin = twinOf(c.path, key), of = { path: c.path, keys: twin != null ? [key, twin] : [key] };
+        fileKeys.set(key, of);
+        if (twin != null && !fileKeys.has(twin)) fileKeys.set(twin, of);
+      }
+    }
+    for (const key of at.keys) {
+      const of = fileKeys.get(key);
+      if (of) for (const fk of of.keys) {
+        if (!renamed.has(fk)) renamed.set(fk, { path: of.path, by: new Map() });
+        const by = renamed.get(fk).by;
+        if (!by.has(via.name)) by.set(via.name, new Set());
+        by.get(via.name).add(k);
+        bases.add(keyBase(fk));
+      }
+    }
+  };
   // (its file's own component too, when deprecated: that file is a module row as well — a result is a component file)
   const namesOf = (r) => r.found.names.concat(r.found.candidates.map((x) => x.name));
   const nameRows = (r, keep) => {
@@ -2844,6 +2879,7 @@ function deprecatedWatch(reg, files, results, scripts, project) {
       keys.set(r.path, moduleKey(r.path));
       give(r.path, n);
       locate(k, r.path);
+      if (r.barrel) renames(r, n, k);
       // (the file's DEFAULT export under that name is imported by default — `export default ListItem` in List/Item.tsx, a
       // barrel's `export default List`: bound as a module row's file is, its default by the file's base — review 1 of 1.39)
       if (r.found.defaultName === n) { defaults.set(r.path, n); const b = keyBase(keys.get(r.path)); push(byBase, b, r.path); bases.add(b); }
@@ -2902,7 +2938,11 @@ function deprecatedWatch(reg, files, results, scripts, project) {
     for (const [local, imp] of u.imports) {
       if (!names.has(imp.name) && !bases.has(baseOf(imp.spec))) continue; // (the binding filter: a cost guard, timed)
       const at = F.placed(imp.spec, rel);
-      if (at) for (const k of at.keys) for (const [key, p] of byKey.get(k) || []) if (p !== rel) hit.add(key);
+      if (at) for (const k of at.keys) {
+        for (const [key, p] of byKey.get(k) || []) if (p !== rel) hit.add(key);
+        const rn = renamed.get(k); // (the file a barrel renames, under the name it has there — never followed)
+        if (rn && rn.path !== rel && rn.by.has(imp.name)) for (const key of rn.by.get(imp.name)) hit.add(key);
+      }
       if (imp.name !== "*") for (const [p, n] of F.resolve(rel, u.imports, local)) pair(p, n);
     }
     // (a namespace's members, each by its first part: `<UI.Table.Row>` is UI.Table's)
