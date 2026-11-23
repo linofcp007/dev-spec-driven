@@ -546,7 +546,7 @@ here. "r5 review" is 1.23's fifth review.
   History → UI state matrix). No new warn on an approved artifact, so no new stamp key.
 - **1.40.0** — the `uiStates` stamp cut a third time (ITEM_5 §2f, CRIT_5): it would protect one shape alone — a design
   approved under 1.39 whose matrix holds `TBD` / dashes / ticks, once BS-3 turned it into four approved-design warns — and
-  BS-3 is cut again (those cells read `filled`, and ui-states already warns `open` on each); no 1.40 chain touched what
+  BS-3 is cut again (those cells read `filled`, and ui-states already warns `open` on each at size m / l, a note at s); no 1.40 chain touched what
   ui-states reads (the corpus's `sectionLines` and `uiStateNames` byte-identical to 1.39.0's at every merge), so no new warn
   on an approved artifact and no stamp key (quality.md → History → Design-system registry, 1.40.0).
 

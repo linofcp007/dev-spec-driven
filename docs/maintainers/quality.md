@@ -1286,7 +1286,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     1.41). Not read: an `@custom-media` rule in a file the walk does not open by name (99 of 160 sampled files: `media.css`
     17, `_media-queries.css` 9, `queries.css` 7), in a `<style>` block or a CSS module, a nested rule, an alias of an
     alias (`(--a)`: no edge, nothing unread), upper-case `@CUSTOM-MEDIA`, and, silent, a rule longer than DS_PRELUDE (it
-    arrives without its head, as a one-line Sass map) or one whose `(` its line leaves open.
+    arrives without its head, as a one-line Sass map) or one whose `(` no `)` closes before its `;` (a rule wrapped over
+    lines whose groups close is read).
   - `default` — `[320, 390, 768, 1024, 1440]`.
   The widths: 320 first (WCAG 1.4.10's reflow width — 1280 at 400 %; a narrower edge is the floor's), ascending, once each,
   `BP_WIDTHS` (6) at most — one dispatch of images per view (ui-review.md's 16) —, past it the narrowest 5 and the widest of
@@ -3410,8 +3411,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   1.39 clock saw at 1.05× on Windows — fails both, 610 and 660). CUT AGAIN, each with the fresh number that cut it (the
   entries above and below): size `token` (0 judgments on the six kits; 22.6 % of its rows cross a package), DESIGN.md (it
   renames 1.39's tokens on 23 of 24 projects), motion off / nearest (108 of 273 off rows loop periods); Tailwind 3's
-  `screens` (four mechanisms for 35 % of the configs), BS-3 (the warn exists), BS-4 (the split and its trap the same
-  bytes), R2-BS-2 (each narrowing misreads more), the `uiStates` stamp (a third time), BU-1's records cap (the time is the
+  `screens` (four mechanisms for 35 % of the configs), BS-3 (the warn exists at m / l, a note at s), BS-4 (the split and
+  its trap the same bytes), R2-BS-2 (each narrowing drops widths 1.39 reads), the `uiStates` stamp (a third time), BU-1's records cap (the time is the
   parse); R2-DEP-2 (a) (4 of 4 not the row's component), the byIndex field (a wording instead), R3-DEP-1 and R3-DEP-2 (0
   pairs on 21 trees); D1 (−144 true findings in one real repo), A2 (a true and a doubtful shape flip together),
   `RE_TW_TEXT_ANY` narrowed (no real conditional `@apply … text-`), D2 (0 of 103 real blocks), D3 (1 of 4,026 candidates,

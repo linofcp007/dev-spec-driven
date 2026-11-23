@@ -21,8 +21,8 @@ SKILL.md are unchanged.
   the places left — a lone `--md (min-width: 768px)` captures the default set itself. A rule it cannot read is listed as a
   value not read (`30ch`, `calc()`, an edge past 3840 px, a `)` with no `(`). Beside a theme or a map that gives a width the
   rules are never read, so every 1.39 result stands. A rule in a file the scan does not open by name (`media.css`), in a
-  `<style>` block or a CSS module, a nested one or one written in upper case is not read; a rule whose `(` its line leaves
-  open is skipped. On 160 sampled stylesheets no set captures fewer layouts than 1.39's by count, but 20 lose one its
+  `<style>` block or a CSS module, a nested one or one written in upper case is not read; a rule whose `(` no `)` closes
+  before its `;` is skipped. On 160 sampled stylesheets no set captures fewer layouts than 1.39's by count, but 20 lose one its
   default set hit (past six widths the narrowest five are kept), and most aliases are used nowhere — choose the widths in
   ui.md's Breakpoints line.
 
@@ -51,7 +51,7 @@ SKILL.md are unchanged.
   colour only where their written roundings meet, or one paints the other at 8 bits (both ways) — 1.39 kept the 0.011
   ΔEOK alone for it, so Tailwind 4's zinc-900 `oklch(21% 0.006 285.885)`, a bluish grey, was shadcn's `hsl(0 0% 9%)`
   neutral; it is now `near`, and its own hex's HSL, `hsl(240 5.9% 10%)`, is still its token. A `token` can only become
-  `near` (0 of 240,000 same-source pairs lost); on 104 real projects 9 rows move.
+  `near` or a farther token's (0 of 240,000 same-source pairs lost); on 104 real projects 9 rows move.
 
 **`finish`'s values move twice**: its raw top rows carry the colour judgment above (`token` → `near` for such a pair), and
 its UI warning loses a bare `text-[…vw]` in a file that also sizes text by a keyword or a hint under a variant (no real
@@ -63,8 +63,8 @@ another package of the monorepo declares), DESIGN.md as a token source (still al
 values; read as the registry it would rename 1.39's tokens on 23 of 24 projects — export it to a token file as before),
 motion off / nearest (108 of the 273 rows off a scale are a loop's period), Tailwind 3's `screens` (four new mechanisms for
 a third of the configs — paste the line into ui.md), BS-3 (a `TBD` / dash matrix: ui-states already warns on each open
-cell), BS-4 (a split matrix and the gap it would hide are the same bytes), the Breakpoints line's notes (each narrowing
-misreads more lines than 1.39), a markup file's template and `<style>` judged as one file for `font-size-viewport` (it hid
+cell at size m / l), BS-4 (a split matrix and the gap it would hide are the same bytes), the Breakpoints line's notes (each
+narrowing drops widths 1.39 reads), a markup file's template and `<style>` judged as one file for `font-size-viewport` (it hid
 144 true findings in one real repository), Astro's `define:vars` (no verdict changes in 103 real blocks), `:is()` /
 `:where()` / `:not()` / `:has()` focus selectors (1 of 4,026 candidates), a skipped stylesheet's focus styles (no case in
 15 repositories), a feature report's focus search over every view file (it would hide true removals), a modality-scoped
@@ -93,7 +93,8 @@ ones holding those findings. The `hsl()` / `oklch()` rule: +20–75 ms a feature
   now count where the property is a count — a new helper, `fsCalls`, counts the file-system calls a call makes under a
   folder: the fast check's planned walk, the protected-tests cap, a glob target below level tests, a feature report over
   400 pages, and the deprecated uses' own parses (`deprecatedUses.parsed`, in-process only — never in a result); every
-  ratio left is one interleaved pair under its own retry, and the slowest cost file is split by topic. Each mutation list
+  ratio the audit rewrote (the scale's, the deprecated uses', each hostile UI input) is one interleaved pair under its
+  own retry — twelve older timing assertions stay outside it —, and the slowest cost file is split by topic. Each mutation list
   was written before its fixtures: the font size 41 of 41; the colours 37 of 37 (1.38's and 1.39's colour mutants
   replayed: 78 of 80 — one equivalent, one line deleted as dead); `@custom-media` 45 of 45; the deprecated uses 29 of 32
   (two lines dead and deleted, one cost guard timed with and without); the docs pass 21 of 21 (each new prose clause

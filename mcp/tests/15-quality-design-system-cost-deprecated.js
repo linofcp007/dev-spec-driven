@@ -17,24 +17,20 @@ exports.run = async ({ all, remeasure, fsCalls, S, tmp }) => {
     const HEAD = "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n";
     const kitOf = (moving) => L(["export function Table() { return <table />; }", "export function Button() { return <button />; }"].concat(moving ? ["export const Moving = motion(Box);"] : []));
     // G1: a real-shaped app — 600 TSX pages (300 render Table, 300 Button), 40 Vue SFCs, 20 MDX; `asks`: settle asks a candidate 50
-    // pages render; `same`: the same, and every Table page also names the candidate (settle parses the pages the watch would);
-    // `nothing`: it asks none (the watch reads alone); `all`: every page names the candidate (settle parses them all).
-    // (`asks` against `same`, never against the report with none: there settle parses its 50 pages alone, and the watch's 300
-    // are a parse the CHANGELOG states — 1.02× on Windows, where the reads weigh, and 1.69–1.83× on all four Linux images, where
-    // they are cheap and the parse is the report: a read-speed ratio, +19–24 ms. Against `same`: 1.01× Windows, 1.06–1.07× Linux.
-    // What the bound hides: a watch that parses pages naming no marked row — every Button page naming Table, 600 parsed for
-    // 300: 1.05× Windows, 1.30× Linux; it catches a second read of the tree, never that. 1.39 Docker)
-    // (1.40: `asks` is COUNTED, no clock — rebased on `same`, it still missed both tries on node:24-alpine under load (1.63,
-    // 1.64; ~1.2 typical) while the property is two counts: the watch parses the Table pages settle did not (300 − the 25 of
-    // settle's 50: 275 — `deprecatedUses.parsed`, which also sees the hidden case above: 550 for the wide stand-in), and reads
-    // nothing itself — every fs call under the pages the same as the identical tree with no marker. `nothing` keeps its clock
-    // (0.67–0.79× everywhere) and counts its 300)
+    // pages render; `nothing`: it asks none (the watch reads alone); `all`: every page names the candidate (settle parses them all).
+    // (1.40: `asks` is COUNTED, no clock — timed in 1.39 against a yardstick of the same pages parsed, it still missed both tries
+    // on node:24-alpine under load (1.63, 1.64; ~1.2 typical) while the property is two counts: the watch parses the Table pages
+    // settle did not (300 − the 25 of settle's 50: 275 — `deprecatedUses.parsed`, which also sees what that clock could not: a
+    // watch parsing pages that name no marked row, 610), and reads nothing itself — every fs call under the tree's view folders,
+    // `src/` and `docs/`, the same as the identical tree with no marker (the project root holds the follow's own tsconfig read,
+    // one or two opens by platform). `nothing` keeps its clock (0.67–1.29× measured, loaded) and counts its 300. A feature's
+    // report is counted too: with a row marked as with none it makes no call under the pages — it builds no watch)
     const app = (shape, marked) => {
       const files = { "package.json": js({ name: "g1" }), "tsconfig.json": js({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
         "src/components/ui/kit.tsx": kitOf(shape !== "nothing"), "src/components/ui/table.tsx": L(["export function Table() { return <table />; }"]) };
       for (let i = 0; i < 600; i++) {
-        const t = i % 2 === 0, m = shape === "all" || ((shape === "asks" || shape === "same") && i < 50);
-        files["src/app/p" + i + "/page.tsx"] = L([t ? "import { Table } from \"@/components/ui/table\";" : "import { Button } from \"@/components/ui/kit\";"].concat(m ? ["import { Moving } from \"@/components/ui/kit\";", "// Moving"] : shape === "same" && t ? ["// Moving"] : [],
+        const t = i % 2 === 0, m = shape === "all" || (shape === "asks" && i < 50);
+        files["src/app/p" + i + "/page.tsx"] = L([t ? "import { Table } from \"@/components/ui/table\";" : "import { Button } from \"@/components/ui/kit\";"].concat(m ? ["import { Moving } from \"@/components/ui/kit\";", "// Moving"] : [],
           ["export const P = () => <section>" + (t ? "<Table />" : "<Button />") + (m && shape !== "all" ? "<Moving />" : "") + "</section>;"], Array.from({ length: 40 }, (_, k) => "const v" + k + " = \"" + "x".repeat(60) + "\";")));
       }
       for (let i = 0; i < 40; i++) files["src/views/v" + i + ".vue"] = L(["<script setup>", "import Button from '@/components/ui/button.vue'", "</script>", "<template><Button />" + (shape === "all" ? "<!-- Moving -->" : "") + "</template>"]);
@@ -93,29 +89,46 @@ exports.run = async ({ all, remeasure, fsCalls, S, tmp }) => {
     // (a feature's report builds no watch — scanCode(root, false) reads no component's name: its cost is the same with a row
     // marked as with none; built, it read every page for nothing, ×3.6–4 on shadcn-ui and Starlight)
     const featOf = (p) => { const f = S.createFeature(p, { name: "Orders", tracks: ["ui"], summary: "x" }); return () => S.designSystemReport(p, { name: f.slug }); };
-    const F = { on: featOf(G1.nothingOn), off: featOf(app("nothing", false)) };
+    const nothingOff = app("nothing", false);
+    const F = { on: featOf(G1.nothingOn), off: featOf(nothingOff) };
     for (const g of [G1, G2, G2q, G3]) for (const p of Object.values(g)) S.designSystemReport(p);
     F.on(); F.off();
     const within = (a, b, bound) => remeasure(() => pair(a, b), (x) => x.ratio <= bound);
-    const pages = (p) => path.join(p, "src", "app") + path.sep;
-    const callsOf = (p) => fsCalls(pages(p), () => S.designSystemReport(p));
-    const asksCalls = { on: callsOf(G1.asksOn), off: callsOf(G1.asksOff) };
+    const under = (p, dir) => path.join(p, dir) + path.sep;
+    const asksCalls = { on: fsCalls(G1.asksOn + path.sep, rep(G1.asksOn)), off: fsCalls(G1.asksOff + path.sep, rep(G1.asksOff)) };
+    // (the marked tree's only own reads: the follow's tsconfig, one or two opens / realpaths by platform — never one a page)
+    const added = Object.keys(asksCalls.on).map((k) => asksCalls.on[k] - (asksCalls.off[k] || 0));
+    const featCalls = { on: fsCalls(under(G1.nothingOn, "src"), F.on), off: fsCalls(under(nothingOff, "src"), F.off),
+      project: fsCalls(under(G1.nothingOn, "src"), rep(G1.nothingOn)) };
     const parsedOf = (p) => (S.designSystemReport(p).deprecatedUses || {}).parsed;
     const counted = { asks: parsedOf(G1.asksOn), nothing: parsedOf(G1.nothingOn), table: 300, settled: 25 };
     const s = { nothing: within(rep(G1.nothingOn), rep(G1.all), 1.5), rows500: within(rep(G2.on), rep(G2.all), 1.5),
-      web: within(rep(G3.watch), rep(G3.settle), 1.5), feature: within(F.on, F.off, 1.25), prefilter: within(rep(G2q.q500), rep(G2q.q1), 1.25) };
+      web: within(rep(G3.watch), rep(G3.settle), 1.5), prefilter: within(rep(G2q.q500), rep(G2q.q1), 1.25) };
     const tries = Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v.tries]));
     const got = { asks: (S.designSystemReport(G1.asksOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal, nothing: (S.designSystemReport(G1.nothingOn).deprecatedUses || { rows: [{}] }).rows[0].filesTotal,
       rows500: ((d) => [d.rowsTotal, d.rows.every((r) => r.filesTotal === 2)])(S.designSystemReport(G2.on).deprecatedUses || { rows: [] }) };
-    all("1.39 cost: the deprecated uses' watch reads and parses no more than settle would — a real-shaped app (600 pages, 40 SFCs, 20 MDX) with a row while settle asks a candidate: the watch parses only the pages naming the row that settle did not (counted, 1.40) and reads nothing itself (every fs call under the pages the same with no marker); with no candidate it parses the row's pages alone, ≤ 1.5× settle parsing every page; 500 located rows over 2,000 pages (half naming none) ≤ 1.5× settle parsing them all; the hostile `export *` web ≤ 1.5× settle's own follow through it; a feature's report with a row marked ≤ 1.25× with none (it builds no watch); 500 rows marked over pages that name none ≤ 1.25× one (got " +
-      js({ s, tries, got, counted, asksCalls }) + ")", {
+    all("1.39 cost: the deprecated uses' watch reads and parses no more than settle would — a real-shaped app (600 pages, 40 SFCs, 20 MDX) with a row while settle asks a candidate: the watch parses only the pages naming the row that settle did not (counted, 1.40) and reads nothing itself (every fs call under the view folders, src/ and docs/, the same with no marker); with no candidate it parses the row's pages alone, ≤ 1.5× settle parsing every page; 500 located rows over 2,000 pages (half naming none) ≤ 1.5× settle parsing them all; the hostile `export *` web ≤ 1.5× settle's own follow through it; a feature's report with a row marked makes no fs call under src/ — as with none: it builds no watch (counted, 1.40); 500 rows marked over pages that name none ≤ 1.25× one (got " +
+      js({ s, tries, got, counted, asksCalls, featCalls }) + ")", {
       asks: () => counted.asks === counted.table - counted.settled && got.asks === counted.table,
-      asksReads: () => Object.keys(asksCalls.on).length > 0 && js(asksCalls.on) === js(asksCalls.off),
+      asksReads: () => (asksCalls.off.openSync || 0) >= 660 && Object.keys(asksCalls.off).every((k) => k in asksCalls.on) && added.every((n) => n >= 0 && n <= 2),
       nothing: () => s.nothing.ratio <= 1.5 && got.nothing === counted.table && counted.nothing === counted.table,
       rows500: () => s.rows500.ratio <= 1.5 && js(got.rows500) === js([500, true]),
       web: () => s.web.ratio <= 1.5,
-      feature: () => s.feature.ratio <= 1.25 && !("deprecatedUses" in F.on()),
+      feature: () => (featCalls.project.openSync || 0) >= 600 && js(featCalls.on) === js(featCalls.off) && !(featCalls.on.openSync > 0) && !("deprecatedUses" in F.on()),
       prefilter: () => s.prefilter.ratio <= 1.25,
+    });
+  }
+
+  { // 1.40 (the merged tree's mutation replay: S3, a cost guard only timed) — DS_PATH_WORDS: a registry row's path cell is read
+    // for its first 20 words at most; a cell of 33 absent files makes the same fs calls under the project as its first 20
+    // (without the bound: 38 lstats against 28)
+    const mk = (n) => project(null, { "src/a.tsx": "export function A() { return <div />; }\n",
+      ".specs/steering/design-system.md": "# Design System\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| C0 | " +
+        Array.from({ length: n }, (_, j) => "z/" + j + ".t").join(" ") + " |  |  |\n" });
+    const w20 = mk(20), w33 = mk(33);
+    const c = { w20: fsCalls(w20 + path.sep, () => S.designSystemReport(w20)), w33: fsCalls(w33 + path.sep, () => S.designSystemReport(w33)) };
+    all("1.40: a registry row's path cell is read for its first 20 words at most (DS_PATH_WORDS) — a cell of 33 absent files makes the same fs calls as its first 20, counted (got " + js(c) + ")", {
+      bounded: () => (c.w20.lstatSync || 0) > 0 && js(c.w33) === js(c.w20),
     });
   }
 };

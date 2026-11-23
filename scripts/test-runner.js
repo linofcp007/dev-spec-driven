@@ -520,7 +520,8 @@ function assertHelpers(ok) {
 // wrapped (the engine calls `.native` — a wrap without it leaves the engine none: its walk throws and counts nothing) and
 // DEV_SPEC_TEST_AHEAD=off (the read-ahead pool's workers read unseen — with it on, 32 of 400 opens showed), restores all of
 // them, and returns { <name>: n } — the calls whose first argument is a string path starting with `under` as the engine
-// passes it (a folder with its trailing separator). fn must be SYNCHRONOUS: one that returns a promise throws (restored at
+// passes it (a folder with its trailing separator — a call the engine makes through the realpath of an aliased folder, Windows'
+// 8.3 `ADMINI~1`, is not under it: never pin a difference that depends on one). fn must be SYNCHRONOUS: one that returns a promise throws (restored at
 // its first await, it would count nothing). In-process calls only — never the MCP server's (another process), a spawned CLI's
 // or a hook's; a Buffer / URL / fd argument is not counted (readSync(fd): its openSync is). Assert equalities or differences
 // with a non-zero side, never a pinned total (the totals differ by platform).
