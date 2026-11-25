@@ -565,8 +565,8 @@ It never runs mid-task: an implementer who thinks a test worthless reports it as
    `test-plan`, then `tests` (every remaining planned T-ID still in code), then `tasks`; on a finished feature also
    `execution` and a new `/spec-finish` — `spec_drift` names the gone file until then, and each re-approval counts as rework
    in `spec_metrics`. Each completes unforced: an AC a SHIPPED feature retired needs no planned test (trace leaves it out of
-   `uncoveredByTests`; one only a draft plans to supersede still needs one). So batch per feature: one pass, every pruning of the feature, one round of approvals. dev-guardian's
-   gate reads the removals as test-integrity findings (medium): below the default `--fail-on high` they never block
+   `uncoveredByTests`; one only a draft plans to supersede still needs one). So batch per feature: one pass, every
+   pruning of the feature, one round of approvals. dev-guardian's gate reads the removals as test-integrity findings (medium): below the default `--fail-on high` they never block
    (`/spec-finish` names them in one warning); at
    `--fail-on medium` an approved pruning blocks like any medium finding (verification.md → dev-guardian's gate).
 
