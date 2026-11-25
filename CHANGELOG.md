@@ -112,8 +112,8 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   the Decision text and the `**Lesson:**` paragraph as Context, and exports it — and the decision that closes it — as an
   ADR and a catalog row, closed or not. Update every machine that exports ADRs or the catalog before recording lessons.
 - **A 1.40 tick or finish has no metrics:** its runs carry no readings and its finish no `finished.metrics`, so the first
-  finish after the project adopts METRIC lines compares nothing (`new`). A 1.41 record merged with a 1.40 one keeps the
-  later run's or finish's readings, as git's merge driver of either version picks the later record.
+  finish after the project adopts METRIC lines compares nothing (`new`). Git's merge driver of either version keeps the
+  later run or finish whole — its readings, or none when that record came from 1.40; it needs no update.
 - **Nothing migrates:** no `spec_upgrade` migration; a design approved before 1.41 is not asked for Silent Regressions; an
   existing `testing-standards.md` is left as it is; `timings.jsonl` is git-ignored, each machine's own.
 - **dev-guardian:** the suppressions label needs dev-guardian 3.17.0; an older one (3.8+) gives its test-integrity findings
