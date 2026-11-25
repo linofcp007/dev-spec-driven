@@ -186,4 +186,98 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     const b0 = S.taskBrief(p0, "api-keys", 5, {});
     ok(!("examples" in b0) && !b0.brief.includes(B().examples), "1.41 reference examples: a brief without the table has no Reference examples part and no key");
   }
+
+  // --- 1.41.0 review 1 (R1-L-2): a Copy cell naming MORE than one file — a second code span, or `,` / `;` / and (e / y) between two
+  // file names — is a doubt: never judged gone, quoted by the brief as written (`asWritten`); a note beside ONE path is no list ----
+  {
+    const p = demo("doubt");
+    write(p, "src/api-keys/service.test.js", "x");
+    const A = "src/api-keys/**";
+    const rows = [
+      ["Service + test", "`src/api-keys/service.js`, `src/api-keys/service.test.js`", A], // the reviewer's shapes: both files there
+      ["Service and test", "src/api-keys/service.js and src/api-keys/service.test.js", A],
+      ["Gone single", "src/api-keys/gone-single.js", A], // still judged
+      ["Spans", "`src/api-keys/gone-a.js` `src/api-keys/gone-b.js`", A], // two code spans, no separator
+      ["Semicolon", "src/api-keys/gone-a.js; src/api-keys/gone-b.js", A],
+      ["Noted", "src/api-keys/gone-note.js (the old one, with its verify)", A], // ONE file name: a note, still judged
+      ["Plain", "src/api-keys/service.js", A],
+      ["PT", "src/api-keys/gone-a.js e src/api-keys/gone-b.js", "lib/**"], ["ES", "src/api-keys/gone-a.js y src/api-keys/gone-b.js", "lib/**"],
+    ];
+    structure(p, table(["Pattern", "Copy", "Applies to"], rows));
+    const d = check(p);
+    const b = S.taskBrief(p, "api-keys", 5, {});
+    const q = (b.examples && b.examples.quoted) || [];
+    const row = (pattern) => q.find((r) => r.pattern === pattern) || {};
+    const line = (r) => "- **" + r[0] + "** — " + r[1] + " (" + r[2] + ")";
+    all("1.41.0 review 1: a Copy cell naming two files (`a`, `b` · a and b · `a` `b` · a; b · a e b · a y b) is never judged gone — doctor names only the single gone paths; the brief quotes such a row as written (asWritten), a plain one as its path, and names the single gone ones (got " +
+      js({ d, quoted: q, gone: b.examples && b.examples.gone }) + ")", {
+      doctor: d && d.status === "warn" && d.detail === Q().refExamplesGone("`src/api-keys/gone-single.js`, `src/api-keys/gone-note.js`", 0, FILE),
+      quoted: js(q.map((r) => r.pattern)) === js(["Service + test", "Service and test", "Spans", "Semicolon", "Plain"]),
+      asWritten: [0, 1, 3, 4].every((i) => row(rows[i][0]).copy === rows[i][1] && row(rows[i][0]).asWritten === true) &&
+        row("Plain").copy === "src/api-keys/service.js" && !("asWritten" in row("Plain")),
+      rendered: b.brief.includes(line(rows[0])) && b.brief.includes(line(rows[1])) && b.brief.includes("- **Plain** — `src/api-keys/service.js` (" + A + ")"),
+      gone: js(b.examples.gone) === js(["src/api-keys/gone-single.js", "src/api-keys/gone-note.js"]),
+    });
+    // still judged: a single gone path, with or without backticks — the doubt is only a list
+    structure(p, table(["Pattern", "Copy", "Applies to"], [["One", "`src/api-keys/gone-one.js`", ""]]));
+    const d1 = check(p);
+    ok(d1 && d1.status === "warn" && d1.detail === Q().refExamplesGone("`src/api-keys/gone-one.js`", 0, FILE), "1.41.0 review 1: a single gone Copy path still warns (got " + js(d1) + ")");
+  }
+
+  // --- 1.41.0 review 1 (M22): without a glob, a Copy file's folder matches a target's folder case-folded where the file system folds case
+  {
+    const p = demo("fold");
+    structure(p, table(["Pattern", "Copy", "Applies to"], [["Upper", "SRC/API-KEYS/service.js", ""]]));
+    const b = S.taskBrief(p, "api-keys", 5, {});
+    const got = b.examples ? b.examples.quoted.map((r) => r.pattern) : null;
+    ok(js(got) === js(E.FOLD_CASE ? ["Upper"] : []), "1.41.0 review 1: a no-glob row's Copy folder differing from the task's only by case is quoted where case folds, never elsewhere (got " + js(got) + ")");
+  }
+
+  // --- 1.41.0 review 1 (R1-L-3): the check reads the table and its Copy paths ONCE per engine call — spec_upgrade runs the full doctor
+  // per feature, so over 6 features it lstat'ed each Copy path's folders 3× what it did over 2. COUNTED: exactly equal; each feature
+  // still words the warn in its own language. In one scope: a write of structure.md reads the table again, and another project reads
+  // its own files (the same table text).
+  {
+    const proj = (n) => {
+      const p = path.join(tmp, "proj-refex-upgrade-" + n);
+      S.initProject(p, ["core"], "en");
+      for (let i = 0; i < n; i++) S.createFeature(p, "Feature " + i, ["core"], "Feature " + i + " does a thing", undefined, i === 1 ? "pt" : "en");
+      for (let i = 0; i < 30; i++) write(p, "src/a/b/c" + i + "/x.ts", "x");
+      structure(p, table(["Pattern", "Copy", "Applies to"], Array.from({ length: 30 }, (_, i) => ["P" + i, i === 0 ? "src/a/b/gone/x.ts" : "src/a/b/c" + i + "/x.ts", "src/a/**"])));
+      return p;
+    };
+    const p2 = proj(2), p6 = proj(6);
+    const count = (p) => fsCalls(path.join(path.resolve(p), "src") + path.sep, () => S.specUpgrade(p)).lstatSync || 0;
+    const c2 = count(p2), c6 = count(p6);
+    const up = S.specUpgrade(p6);
+    const warnOf = (slug) => (S.specDoctor(p6, slug).checks || []).find((c) => c.id === "reference-examples");
+    const gone = "`src/a/b/gone/x.ts`";
+    const pt = warnOf("feature-1"), en = warnOf("feature-0");
+    // one scope: the table rewritten through the engine's writer, then another project with the same text and the gone file present
+    const pw = demo("memo-write"), pa = demo("memo-a"), pb = demo("memo-b");
+    structure(pw, table(["Pattern", "Copy", "Applies to"], [["Gone", "src/api-keys/gone.js", ""]]));
+    for (const x of [pa, pb]) structure(x, table(["Pattern", "Copy", "Applies to"], [["Gone", "src/api-keys/gone.js", ""]]));
+    write(pb, "src/api-keys/gone.js", "x");
+    const scoped = S.withReadCache(() => {
+      const before = check(pw);
+      E.writeFileAtomic(path.join(pw, STRUCT), "# Project Structure\n\n## Reference Examples\n\n" + table(["Pattern", "Copy", "Applies to"], [["There", "src/api-keys/service.js", ""]]) + "\n");
+      return { before, after: check(pw), a: check(pa), b: check(pb) };
+    });
+    all("1.41.0 review 1: reference-examples is read ONCE per engine call — spec_upgrade over 6 features lstats exactly what it does over 2, each feature's warn in its own language; in one scope a write of structure.md is read again and another project reads its own files (got " +
+      js({ c2, c6, pt: pt && pt.detail, scoped: Object.fromEntries(Object.entries(scoped).map(([k, v]) => [k, v && v.status])) }) + ")", {
+      setup: up.ok !== false && (up.features || []).length === 6 && c2 > 0,
+      once: c6 === c2,
+      languages: pt && pt.detail === Q("pt").refExamplesGone(gone, 0, FILE) && en && en.detail === Q().refExamplesGone(gone, 0, FILE),
+      rewritten: scoped.before.status === "warn" && scoped.after.status === "pass",
+      perProject: scoped.a.status === "warn" && scoped.b.status === "pass",
+    });
+  }
+
+  // --- 1.41.0 review 1 (R1-L-5): an Applies-to folder matches through a glob — the references say a folder needs `/**` -------------------
+  {
+    const rd = (f) => fs.readFileSync(path.join(__dirname, "..", "skills", "dev-spec-driven", "references", f), "utf8").replace(/\s+/g, " ");
+    const st = rd("steering-templates.md"), tr = rd("tooling-reference.md");
+    const says = (t) => /Applies-to folder needs `\/\*\*`/.test(t);
+    ok(says(st) && says(tr), "1.41.0 review 1: steering-templates.md and tooling-reference.md say an Applies-to folder needs `/**` (`src/api-keys/**`, never `src/api-keys/`)");
+  }
 };

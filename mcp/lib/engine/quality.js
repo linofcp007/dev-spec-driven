@@ -2400,17 +2400,32 @@ function exemplarPath(cell) {
   const link = /^\[[^\]]*\]\(\s*([^)\s]+)\s*\)$/.exec(t);
   return link ? stripEnds(link[1], unitIn("`<>")) : t;
 }
+// (1.41.0 review 1) A Copy cell naming MORE than one file — a second code span naming one, or `,` / `;` / and (PT e, ES y) between
+// two file names: "`a.js`, `b.js`", "a.js and b.js" — is a DOUBT: which one the row means is not read, so it is never judged gone and
+// the brief quotes the cell as written. A note beside ONE path ("x.ts (see README.md)", "x.ts (the old one, with its verify)") is no
+// list. A file name: a word whose path (implementsPath — a :12 / #L12 anchor dropped; brackets, quotes, backticks off) has an extension.
+const RE_EXEMPLAR_LIST = /[,;]|\s(?:and|e|y)\s/i;
+const namesFile = (text) => text.split(/\s+/).some((w) => RE_EXEMPLAR_FILE.test(implementsPath(w.replace(/[`()[\]<>"']/g, ""))));
+function exemplarMany(cell) {
+  const s = String(cell || "");
+  if ((s.match(/`[^`]*`/g) || []).filter(namesFile).length > 1) return true;
+  return s.replace(/`/g, " ").split(RE_EXEMPLAR_LIST).filter(namesFile).length > 1;
+}
 // Is a Copy cell a file that is gone? Only when it is a project path (projectPath — its text decides first) naming a file (an
 // extension), its first segment is on disk and the file is not. Anything else — a folder, a package, a root-level file, a gone first
-// folder, `file.py::func`, `x.ts#name`, a URL, prose — is not judged: one reading per cell. → the gone file's project path | null
+// folder, `file.py::func`, `x.ts#name`, a URL, prose, a cell naming several files (exemplarMany) — is not judged: one reading per
+// cell. → the gone file's project path | null
 function exemplarGone(root, cell) {
+  if (exemplarMany(cell)) return null;
   const rel = projectPath(root, exemplarPath(cell));
   return rel != null && RE_EXEMPLAR_FILE.test(rel) && onDisk(root, rel.split("/")[0]) && !onDisk(root, rel) ? rel : null;
 }
 // The rows a task's brief quotes (targets: its _Implements:_ paths, briefTargets): a row whose Applies-to globs match one (a glob
 // as a fileMatch pattern matches — steeringGlobMatch, a folder as "dir/"), or — without a glob — whose Copy file sits in a target's
-// folder. A gone file is named, never quoted; at most REF_BRIEF_ROWS rows within REF_BRIEF_CHARS (`omitted` counts the rest).
-// → { file, quoted: [{pattern, copy (its path), appliesTo}], gone: [path], omitted, total } | null (no row in the table).
+// folder. A gone file is named, never quoted; a cell naming several files (exemplarMany) is quoted as written (`asWritten`), never
+// judged; at most REF_BRIEF_ROWS rows within REF_BRIEF_CHARS (`omitted` counts the rest).
+// → { file, quoted: [{pattern, copy (its path — the cell itself when asWritten), appliesTo, asWritten?}], gone: [path], omitted, total }
+// | null (no row in the table).
 function briefExamples(projectDir, targets) {
   const ref = referenceExamples(projectDir);
   if (!ref || !ref.total) return null;
@@ -2427,27 +2442,42 @@ function briefExamples(projectDir, targets) {
   const quoted = [], gone = [];
   let omitted = 0, budget = REF_BRIEF_CHARS;
   for (const r of ref.rows.filter(matches)) {
-    const copy = exemplarPath(r.copy);
+    const many = exemplarMany(r.copy);
+    const copy = many ? r.copy : exemplarPath(r.copy);
     const lost = exemplarGone(root, r.copy);
     if (lost) { gone.push(lost); continue; }
     const cost = r.pattern.length + copy.length + r.appliesTo.length;
     if (quoted.length >= REF_BRIEF_ROWS || cost > budget) { omitted++; continue; }
     budget -= cost;
-    quoted.push({ pattern: r.pattern, copy, appliesTo: r.appliesTo });
+    quoted.push(Object.assign({ pattern: r.pattern, copy, appliesTo: r.appliesTo }, many ? { asWritten: true } : {}));
   }
   return { file: ref.file, quoted, gone, omitted, total: ref.total };
 }
 // doctor's `reference-examples` (project-level, like steering): warn — the rows whose Copy file is gone (exemplarGone; the first
 // REF_GONE_LISTED named), the rows past REF_EXAMPLES_ROWS not read; pass — every row read is there, or the section holds no table
 // (said: it is not read). No section, or a table without a real row: no entry.
-function referenceExamplesCheck(projectDir, lang) {
+// (1.41.0 review 1) Its reading — the table and each row's gone file — is made ONCE per project per engine call: spec_upgrade runs
+// the full doctor per feature, and each feature lstat'ed every Copy path's folders again. Memoized in the read-cache scope under a
+// key of its own (friction's timings memo), held with structure.md's text — a write of it in the call (forgetCached drops that
+// text) reads the table again; each feature's doctor still words it in its own language.
+const REF_EXAMPLES_MEMO = "\u0000refexamples:";
+function referenceExamplesRead(projectDir) {
+  const k = CTX.READ_CACHE ? REF_EXAMPLES_MEMO + readCacheKey(projectDir) : null;
+  const text = k !== null ? readIfExists(path.join(specsRoot(projectDir), "steering", "structure.md")) : null;
+  const m = k !== null ? CTX.READ_CACHE.get(k) : undefined;
+  if (m && m.text === text) return m.read;
   const ref = referenceExamples(projectDir);
+  const root = path.resolve(projectDir);
+  const read = { ref, gone: ref && ref.table ? ref.rows.map((r) => exemplarGone(root, r.copy)).filter(Boolean) : [] };
+  if (k !== null) CTX.READ_CACHE.set(k, { text, read });
+  return read;
+}
+function referenceExamplesCheck(projectDir, lang) {
+  const { ref, gone } = referenceExamplesRead(projectDir);
   if (!ref) return null;
   const Q = i18n.msg(lang).quality;
   if (!ref.table) return { status: "pass", detail: Q.refExamplesUnread(ref.file) };
   if (!ref.total && !ref.truncated) return null;
-  const root = path.resolve(projectDir);
-  const gone = ref.rows.map((r) => exemplarGone(root, r.copy)).filter(Boolean);
   const issues = [gone.length ? Q.refExamplesGone(gone.slice(0, REF_GONE_LISTED).map((p) => "`" + p + "`").join(", "), Math.max(0, gone.length - REF_GONE_LISTED), ref.file) : null,
     ref.truncated ? Q.refExamplesTruncated(ref.truncated, REF_EXAMPLES_ROWS, ref.file) : null].filter(Boolean);
   return issues.length ? { status: "warn", detail: issues.join("; ") } : { status: "pass", detail: Q.refExamplesOk(ref.total, ref.file) };
