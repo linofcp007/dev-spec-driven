@@ -273,6 +273,10 @@ Body: why, not what. Reference spec and tests.
 - No implementation code before a failing test that exercises the real path.
 - "Failing for the right reason" = assertion failure / NotImplementedError, NOT import/syntax error.
 - Test commits land before implementation commits (visible in git history).
+
+## Test Value
+- A test earns its place when it guards an AC (its T-ID in the test plan) or a past bug (a bugfix's regression test), and fails when that behaviour breaks.
+- The others — every AC it covers retired, the same path as another test, green when its behaviour breaks — go to the pruning pass (`/spec-review <feature> prune`): removed whole, only with the user's approval, never mid-task.
 ```
 
 ---

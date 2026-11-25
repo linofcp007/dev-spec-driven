@@ -476,6 +476,40 @@ exports.run = async ({
     all("1.41.0 (CRIT_X D8.9): spec-reviewer — a suppression the diff adds with no reason is a question, Important when it hides a security scanner (nosemgrep, Bandit's nosec, gitleaks:allow); a reasoned one stays Silenced on purpose", {
       reviewer: /\*\*Silenced on purpose\*\* — a rule the code switches off with its reason beside it[^.]*\. A suppression the diff adds with no reason is a question \(⚠️ — what does it silence, and why\?\), and \*\*Important\*\* when it hides a security scanner \(`nosemgrep`, Bandit's `nosec`, `gitleaks:allow`\): no scan sees that line again\./.test(rev),
     });
+
+    // CRIT_S4 (KEEP, #6): the Test Value rule — the testing-standards template of a NEW +tdd project (EN / PT / ES, pt-BR derived),
+    // the reference's template, test-patterns.md (the rule, new projects only and why, the criteria, the never-pruned list, remove a
+    // test whole). A 1.40 stub verbatim (the template without the section) still reads as a template.
+    const stub = (l) => {
+      const p = path.join(tmp, "p141-tv-" + l);
+      S.initProject(p, ["tdd"], l);
+      return fs.readFileSync(path.join(p, ".specs", "steering", "testing-standards.md"), "utf8");
+    };
+    const tv = { en: stub("en"), pt: stub("pt"), es: stub("es"), "pt-BR": stub("pt-BR") };
+    const old = path.join(tmp, "p141-tv-old");
+    S.initProject(old, ["tdd"], "en");
+    fs.writeFileSync(path.join(old, ".specs", "steering", "testing-standards.md"), tv.en.slice(0, tv.en.indexOf("\n## Test Value")) + "\n");
+    S.createFeature(old, "Cart", ["tdd"]);
+    const oldSteering = (S.specDoctor(old, "cart").checks || []).find((c) => c.id === "steering") || {};
+    const tp = rd("skills", "dev-spec-driven", "references", "test-patterns.md"), stt = rd("skills", "dev-spec-driven", "references", "steering-templates.md");
+    all("1.41.0 (CRIT_S4 #6): the Test Value rule — a new +tdd project's testing-standards.md (EN / PT / ES / pt-BR), the reference's template, test-patterns.md (new projects only — adopting it re-reviews every approved +tdd feature —, the three criteria, the never-pruned list, a test removed whole); the 1.40 stub verbatim still a template (got " +
+      JSON.stringify({ tails: Object.fromEntries(Object.entries(tv).map(([l, t]) => [l, t.slice(t.lastIndexOf("\n## "))])), oldSteering }) + ")", {
+      en: /\n## Test Value\n- A test earns its place when it guards an AC \(its T-ID in the test plan\) or a past bug \(a bugfix's regression test\), and fails when that behaviour breaks\.\n- The others — every AC it covers retired, the same path as another test, green when its behaviour breaks — go to the pruning pass \(\/spec-review <feature> prune\): removed whole, only with the user's approval, never mid-task\.\n$/.test(tv.en),
+      pt: /\n## Valor dos Testes\n- Um teste merece o seu lugar quando guarda um AC \(o seu T-ID no plano de testes\) ou um bug passado[^\n]*\n- Os outros — [^\n]*\(\/spec-review <feature> prune\): removidos por inteiro, só com a aprovação do utilizador, nunca durante uma tarefa\.\n$/.test(tv.pt) &&
+        /só com a aprovação do usuário, nunca durante uma tarefa\.\n$/.test(tv["pt-BR"]),
+      es: /\n## Valor de las Pruebas\n- Una prueba se gana su lugar cuando protege un AC \(su T-ID en el plan de pruebas\)[^\n]*\n- Las demás — [^\n]*\(\/spec-review <feature> prune\): se eliminan enteras, solo con la aprobación del usuario, nunca a mitad de una tarea\.\n$/.test(tv.es),
+      oldStub: oldSteering.status === "warn" && /testing-standards\.md \(4\)/.test(oldSteering.detail || ""),
+      reference: /## Test Value - A test earns its place when it guards an AC \(its T-ID in the test plan\)[^#]*\(`\/spec-review <feature> prune`\): removed whole, only with the user's approval, never mid-task\./.test(stt),
+      rule: /\*\*The rule\.\*\* A test earns its place when it guards an AC — its T-ID in the test plan — or a past bug \(a bugfix's regression test\), and fails when that behaviour breaks\./.test(tp),
+      newOnly: /for \*\*new projects only\*\*: an existing project that adds it to `\.specs\/steering\/testing-standards\.md` gets `steering-changed-since-approval` on every \+tdd feature whose requirements or design that file governed — a re-review and a re-approval each —/.test(tp),
+      criteria: /\| `retired-ac` \| every AC the test covers was retired by a shipped feature \(`_Supersedes:_`\) \| `trace_check \{matrix, code\}` — the row's `supersededBy` without `supersedePending` \|/.test(tp) &&
+        /\| `same-path` \|[^|]*\| the reviewer's proposal, confirmed by probes: every break that reddens this test reddens the kept one \|/.test(tp) && /\| `no-kill` \| it stays green when the behaviour it names breaks \|/.test(tp),
+      retrace: /that is a \*\*retrace\*\*/.test(tp) && /is \*\*strengthened\*\* \("When a test is wrong"\), never removed/.test(tp),
+      noShell: /Without a shell \(an MCP client that runs no command\) no probe runs, so no `same-path` or `no-kill` pruning is proposed — only `retired-ac`\./.test(tp),
+      never: /\*\*Never pruned:\*\* a bugfix's regression test while the code it guards lives · an eval or load row \(outside code — the eval regression set grows, never shrinks\) · a critical flow's twice \/ two-at-once \/ another-user rows/.test(tp),
+      whole: /\*\*Remove a test whole\.\*\* A pruned test is deleted — its case, or its file when nothing in it is kept —, never left as an empty body, a skipped case or a constant assertion/.test(tp),
+      notMidTask: /never mid-task: a test that looks worthless during a task is a concern in your report \("When a test is wrong"\), never a deletion/.test(tp),
+    });
   }
 
   // 1.14 full review (D) — docs and prose.
