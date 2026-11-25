@@ -466,6 +466,51 @@ Engine: the `B5` block of `engine/evidence.js`.
   the first files and the task's own are dated (`partial`); a clone re-dates every file (stale notes); test files planned only
   by T-ID are outside the planned set (finish's suite-evidence is the net); a lost log line (a concurrent trim) can only lose
   evidence.
+- **The friction budget (1.41, report only — never a gate, a refusal, a doctor entry or a size rule)** — engine/friction.js: how
+  long the project checks take in the dev loop against the budgets steering states. **The log:** a git-ignored, bounded
+  `.specs/.execution/timings.jsonl`, one line per measured run of a check — `{check, checkCmd, exitCode, ms, at, by: "cli" |
+  "hook", tool?}` — written by `recordTiming(projectDir, run)` (→ `{timed: [names]}`) through evidence.js's ONE appender,
+  `appendLog` (the folder's `.gitignore` first: after an MCP-only user's first `finish --run` the log is the folder's first file).
+  A run is a check's only as the matcher reads it, the check as ONE command (`runProvesVerify(…, [command])` — never observeRun's
+  plain-step fallback: one step's time is no check's; a piped, chained or joined run is none), after observeRun's `cd <root> &&`
+  strip (`stripCdPrefix`, the run's roots); `run.check` (finish --run) names the check it ran. `ms` is rounded, 0 –
+  `FRICTION_MAX_MS` (24 h), else nothing is written; `.specs/` is never created. **Writers:** cli/run.js `execCommand` measures
+  `ms`, the monotonic clock from the spawn to the command's EXIT (never the `RUN_DRAIN_MS` drain a background process adds),
+  returned through `runCommand`; `finish --run` (`runChecks`) times each check after the could-not-run refusal; `done --run`
+  forwards `ms` on its two `observeRun` calls (the fast pre-run, a `_Verify:_` that IS the fast command — timed once, there) and
+  calls `recordTiming` for every other `_Verify:_` command (a line only when it is a check's run); observeRun calls
+  `recordTiming(…, {by: event === "cli" ? "cli" : "hook"})` when the run carries `ms` (its result then adds `timed`) — the
+  observed `entry` stays 1.40's byte for byte; the observe hook passes the payload's `duration_ms` (Harness-observed
+  evidence). Nothing stores `ms` in `.state.json` (cut: per-machine churn nothing judges). **The trim** (`trimTimings`): past
+  `TIMINGS_MAX_BYTES` (64 KB) the log keeps, per check meta.checks holds now, its newest `FRICTION_KEEP` (10) PASSING lines
+  stamped with its current command — failed runs, a changed command's lines and a removed check's go; per check, never by
+  newest bytes (the fast check, run after every edit, would push the suite's few runs out). Read 4 × the cap at most
+  (`readLogTail`, observed.jsonl's tail reader generalized), once per engine call (`readTimings`: memoized in the read-cache
+  scope — spec_upgrade runs next_action per feature; recordTiming drops the memo). **The budgets** (`frictionBudgets(projectDir,
+  checks?)` → `{budgets: [{check, ms, line}], invalid: [{line, text, why}], truncated}`): `_Budget: <check> <duration>_`
+  markers of steering/tech.md (the call's read cache), read by tasks.js's span reader under its own label (`labelMarkerSpans`
+  → `scanMarkerSpans(s, open)`: one closer grammar — the task markers never read the label, nor it theirs) on `scanTaskLines`'
+  visible lines (no fenced or indented code, no HTML comment), anywhere on a line; `<check>` a meta.checks name (backticks
+  allowed), text after the closer a comment; `parseDuration`: ≤ 6 digits, ≤ 3 decimals, `ms · s · m / min · h`, any case, 1 ms
+  – 24 h. Readings: a check + a duration → a budget · a check + anything else → `duration` · another check-shaped name
+  (`validCheckName`) + a duration → `no-check` · a second budget of one check → `duplicate` (the first counts) · anything else
+  silent (`_Budget: $500/month_`, a bold label). Bounds, each said (`truncated`): `BUDGET_TEXT_MAX` (256 KB),
+  `BUDGET_MARKERS_MAX` (20). **The verdict** (`frictionStatus(projectDir, lng)`): per check its newest `FRICTION_RUNS` (5)
+  passing lines in FILE order (no clock) whose `checkCmd` is the check's command now — a string compare, no matcher at read
+  time (the designed per-line matcher cost 10–30 next_action calls on a worst-case log); the median (an even count: the two
+  middles' mean), ≥ `FRICTION_MIN_RUNS` (3) to judge → statuses (stable) `over` (median > budget: the boundary is within) ·
+  `within` · `few-runs` · `no-runs` · `unbudgeted`; `null` with no check, or with no budget, no unreadable line and no run; its
+  invalid lines carry their localized `message`; not enumerable: `read` (the bytes read — the cost guard's count).
+  **Surfaces:** spec_metrics' project view `friction` (finish.js `metrics`; `frictionLines` its CLI lines) — never the feature
+  view; next_action's `finish` step, its LAST hint (doctor.js `tasksStep`, after the panel, port and project-check lines; never
+  `implement`): `frictionHint(projectDir, lng)` — each `over` check that neither a backlog entry nor a feature folder (active or
+  archived — `locateFeatures`; spec_create prunes the backlog entry it fulfils) answers to as `friction-<check>`, by slug →
+  `friction.naHint` (the `backlog add` line per check; or the user raises / removes the budget) and `res.friction {over: [{check,
+  medianMs, budgetMs, runs}]}`; without meta.checks it reads nothing, without a `_Budget:_` line only tech.md (the read cache).
+  The engine never files the item. No `.state.json` / roadmap.json key, no merge rule, no tool argument, no tools/list or
+  SKILL.md byte. Known limits (verification.md says them): per machine; a worktree's own CLI runs stay in its log; nothing over
+  MCP; failing runs never count; a contended run (a parallel wave) counts — hence "≥ 2× a quiet run"; a tech.md with
+  `inclusion: always` governs, so a budget edit re-flags approvals.
 - **Pipes** — `verifyPipeMasked()` (a small shell lexer) flags an unquoted single `|` (also `|&`, inside a subshell or a `bash -c` /
   `sh -c` / `pwsh -Command` / `cmd /c` script); never `||`, a quoted or escaped pipe (`\|`, `^|`), `>|`, one inside `$(…)` or
   backticks; only a `set -o pipefail` BEFORE the pipe (or `-o pipefail`) silences it. Surfaces: the brief's `verifyPipes`, `done
@@ -780,7 +825,9 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   "PowerShell" on a PowerShell run — 1.36 review 1, the fast check's note reads it — none on a Bash one) to
   `.specs/<feature>/.execution/observed.jsonl` per non-archived feature with such a task, or `.specs/.execution/observed.jsonl` for a
   check; it never creates a feature folder. Bounds: past `OBSERVED_MAX_BYTES` (64 KB) the newest half is kept (atomic; a concurrent
-  append may lose a line — that run reads unobserved); `OBSERVED_MAX_COMMAND` (4000); `OBSERVED_MAX_FEATURES` (200).
+  append may lose a line — that run reads unobserved); `OBSERVED_MAX_COMMAND` (4000); `OBSERVED_MAX_FEATURES` (200). **1.41:**
+  the payload's `duration_ms` (both events; optional — an older Claude Code sends none) goes on as `ms`: observeRun times a
+  check's run in the git-ignored timings.jsonl (Project checks → The friction budget) — never on the observed line.
 - **Async:** an async hook decides nothing, its `timeout` isn't enforced (10 kept as documentation), and `claude -p` cancels one
   still running at teardown — a headless session's LAST run may go unlogged (`done --run` makes it observed). The line lands within
   ~0.2 s, before the model's next call; only a spec_complete_task in the SAME parallel batch could read the log first.
@@ -1085,6 +1132,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   of the fmt script). No name list tells `pants fmt lint` from `swift format lint`: the runner list is gone and `RE_LINT_MODE` is
   positive — swift-format's own subcommand only (`swift format lint`, `swift-format lint`, by any path). The split's
   `$(… | …)`-then-flag refusal (`ruff format $(git ls-files | grep -v x) --check`) is a documented limit, not a shell-aware split.
+- **1.41.0 (chain F)** — the friction budget (Project checks → The friction budget), S3 as CRIT_S3 cut it: the git-ignored,
+  name-stamped timings.jsonl (the writer stamps `check` + `checkCmd`, so the reader is a string compare — the designed reader ran
+  the matcher per line, 10–30 next_action calls of CPU on a worst-case log), trimmed per check (a byte trim let the fast check's
+  flood push the suite's runs out before they reached 3), `_Budget:_` read by the task markers' span reader under its own label
+  (a second closer grammar would drift — MARKER_CLOSE_PUNCT already differs from the design's), spec_metrics' project `friction`,
+  next_action's finish-step hint stopping on a backlog item OR a feature named `friction-<check>` (spec_create prunes the backlog
+  entry: a backlog-only stop came back while the platform feature was built), the timings read once per call (spec_upgrade runs
+  next_action per feature). Cut: `ms` on `.state.json` runs (and its internal CLI key), the feature-scope run times, doctor
+  `friction` (every feature, every size, spec_upgrade regrouping them all — and no project-level doctor exists), the `took` line
+  (a budgeted check's too: the decision lists none — the narrower reading). observed.jsonl's appender and tail reader became `appendLog` /
+  `readLogTail`, shared; the observed lines are 1.40's byte for byte (the oracle replay and 09-evidence-friction).
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
@@ -1267,3 +1325,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 (review 8, ds-maint finding 4)** — the hook's pre-filter was a renamed copy of `observedNorm` / `observedBodies`
   (`norm` / `bodies` / `RE_ENV`) that the 8-line duplication guard couldn't see and a source comparison kept in step: both now read
   mcp/lib/probe.js's one copy.
+- **1.41.0 (chain F)** — the hook passes the payload's `duration_ms` on as `ms`; a project check's run is timed in timings.jsonl
+  (the friction budget), the observed line unchanged (09-evidence-friction pins its keys). Only runs the matcher reads as the
+  check alone are timed: of this repository's 2,139 foreground check runs in its own transcripts 93 % were piped — the hook
+  mostly times the fast check run on its own; the suite's numbers come from `finish --run` / `done --run`.

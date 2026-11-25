@@ -62,7 +62,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `sessionProject()` can pick; it prints ≤ `SESSION_MAX_FEATURES` = 20 feature lines, then "+N more"
   (mcp/tests/10-guards-hooks-cost.js). **The Stop hook** ends before the engine loads when the closing message holds no claim
   pattern (hooks/stop-claims.generated.json; tasks-and-evidence.md → End-of-turn evidence gate). **The observe hook** prints
-  nothing; **the approval hook** only a permission decision, and only with `meta.approvalGuard` on.
+  nothing (1.41: it passes the payload's `duration_ms` on — a project check's run is timed in `.specs/.execution/timings.jsonl`,
+  tasks-and-evidence.md → The friction budget; past the same pre-filter, nothing more is read); **the approval hook** only a
+  permission decision, and only with `meta.approvalGuard` on.
 - **The claim scan runs on a one-byte text** (mcp/lib/latin1-scan.js, loaded only for a prose past U+00FF; guards.js
   `stopScan`, hook-utils `claimScan`): V8 compiles a regex for one-byte and two-byte subjects apart, and the two-byte code of
   the patterns' `[\p{L}\p{N}_]` boundaries is large. `latin1Text` projects the prose to one Latin-1 character per code point (an
@@ -637,6 +639,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   Bash run's line is unchanged): the PowerShell tool's passes are logged only with an explicit exit code while its failures
   always are, so the fast check read "failed on its last run" after an unlogged pass — its note now says why
   (tasks-and-evidence.md → The fast check).
+- **1.41.0 (chain F)** — the observe hook passes the payload's `duration_ms` (PostToolUse and PostToolUseFailure, optional:
+  "tool execution time in milliseconds, excludes permission-prompt and hook time") as `ms`; a project check's run gets a
+  timings line (the friction budget). Nothing reaches the new code before the pre-filter: 10-guards-hooks-cost is unchanged.
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.
