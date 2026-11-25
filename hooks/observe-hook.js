@@ -27,6 +27,8 @@
  * a PowerShell run, 1.36 review 1 — none for a Bash one) to a git-ignored, size-bounded
  * log (.specs/<feature>/.execution/observed.jsonl; .specs/.execution/observed.jsonl for a project check). It prints nothing,
  * never blocks, and exits 0 on any error, a malformed / empty / oversized payload, or an irrelevant event.
+ * 1.41: a project check's run carrying the payload's `duration_ms` is also timed — one line in .specs/.execution/timings.jsonl (the
+ * friction budget, engine/friction.js); the observed line stays as it was.
  */
 
 const fs = require("fs");
@@ -184,6 +186,10 @@ function decide(raw) {
       // a PowerShell run is marked (`tool`): its passes are logged only with an explicit exit code, so a logged failure may hide a
       // later pass — the fast check's note says so (1.36 review 1 FC-6). A Bash run's line is unchanged.
       tool: strict ? payload.tool_name : undefined,
+      // 1.41 the friction budget: Claude Code's own measure of the run (both events' optional `duration_ms` — the tool's execution
+      // time, without permission prompts and hooks) → a timings line when the run is a project check's (.specs/.execution/
+      // timings.jsonl, engine/friction.js); never on the observed line. Absent (an older Claude Code): nothing is timed.
+      ms: typeof payload.duration_ms === "number" ? payload.duration_ms : undefined,
     });
   }
   return null;

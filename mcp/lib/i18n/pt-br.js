@@ -225,7 +225,7 @@ const PTBR_IMPERATIVES = {
   fecha: "feche", adiciona: "adicione", renumera: "renumere", abre: "abra", define: "defina", copia: "copie", renomeia: "renomeie",
   edita: "edite", move: "mova", pede: "peça", nomeia: "nomeie", avisa: "avise", prolonga: "prolongue", age: "aja",
   considera: "considere", termina: "termine", experimenta: "experimente", refatora: "refatore", mostra: "mostre", melhora: "melhore",
-  otimiza: "otimize", sinaliza: "sinalize", cobre: "cubra", recusa: "recuse", cola: "cole", imprime: "imprima", diz: "diga",
+  otimiza: "otimize", sinaliza: "sinalize", cobre: "cubra", recusa: "recuse", cola: "cole", imprime: "imprima", diz: "diga", propõe: "proponha",
   guarda: "salve", sê: "seja", pára: "pare", inclui: "inclua", exporta: "exporte", importa: "importe", prioriza: "priorize",
   separa: "separe", junta: "junte", mapeia: "mapeie", agrupa: "agrupe", testa: "teste", reproduz: "reproduza", descreve: "descreva",
   anota: "anote", documenta: "documente", reabre: "reabra", desmarca: "desmarque", deixa: "deixe", espera: "espere", chama: "chame",

@@ -32,7 +32,7 @@
  */
 
 const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli, FEATURE_SIZES,
-  TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, greenLine, signalTracks, templateTestRows, coreSuperseded } = require("./i18n/common.js");
+  TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, greenLine, signalTracks, templateTestRows, coreSuperseded, fmtMs } = require("./i18n/common.js");
 // The pt-BR derivation (i18n/pt-br.js) loads on its first use — a table's "pt-BR" entry, toPtBr, derivePtBr: a process
 // that never meets pt-BR (most hooks) doesn't load it.
 let PTBR = null;
@@ -538,6 +538,7 @@ module.exports = {
   DEV_SPEC_SCRIPT, // this clone's cli/dev-spec.js (forward slashes)
   cliPrefix, // (script?) → `node "<script>"`, quoted to paste into bash and PowerShell
   portableCli, // text for a committed file: the runnable line → `dev-spec`
+  fmtMs, // 1.41 a measured duration (ms) → "850 ms" · "4.2 s" · "3 min 10 s" — the friction budget's messages (i18n/common.js)
   onLocaleLoad, // (fn) fn("i18n/<file>.js") after each language file loads on demand — the engine's corpus check
   toPtBr: (text, masks) => ptbr().toPtBr(text, masks), // (text, masks?) European → Brazilian Portuguese (the pt-BR derivation)
   derivePtBr: (value, raw) => ptbr().derivePtBr(value, raw || null, null, value), // a pt table (roadmap-md.js's roadmap chrome) → its pt-BR twin

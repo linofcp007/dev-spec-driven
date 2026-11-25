@@ -1314,7 +1314,9 @@ const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emi
 // bold-italic: `***Verify: x***` opens at its third `*` (exactly two before it — `**Verify:**` stays a bold label, no
 // marker); a closer may be followed by `*` (`**_Verify: x_**`), quotes (`("_Verify: x_")`, “…”, ‘…’, «…»), a dash (`_Verify: x_—`)
 // — CommonMark's right-flanking rule (a closer followed by punctuation); and a run of `*` closes at its first star.
-const RE_TASK_MARKER_OPEN = new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*|(?<=(?:^|[^*\\p{L}\\p{N}_])\\*\\*)\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
+// (the opener for a list of labels: the task markers', or — 1.41 — another reader's own label, labelMarkerSpans)
+const markerOpenRe = (labels) => new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*|(?<=(?:^|[^*\\p{L}\\p{N}_])\\*\\*)\\*)(" + labels.join("|") + "):[ \\t]*", "giu");
+const RE_TASK_MARKER_OPEN = markerOpenRe(TASK_MARKER_LABELS);
 const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]", "*", '"', "'", "—", "–", "”", "’", "»"]);
 // → [{ key (the label, lower-case), value (untrimmed), start, end }], in line order.
 // A closer followed directly by whitespace / the end ("plain") wins over one followed by closing punctuation, when one exists
@@ -1339,7 +1341,18 @@ function taskMarkerSpans(line) {
   }
   return hit;
 }
-function scanMarkerSpans(s) {
+// 1.41 the same reader for a marker of ANOTHER label — steering/tech.md's `_Budget: <check> <duration>_` lines (engine/friction.js):
+// one closer grammar, never a second copy (the task markers' labels never read it, nor it theirs). Not memoized (a few lines, read
+// once per call). label: a plain word (a regex-safe constant).
+const LABEL_OPEN_RE = new Map();
+function labelMarkerSpans(line, label) {
+  const s = String(line == null ? "" : line);
+  if (!s.includes(":")) return NO_MARKER_SPANS;
+  let re = LABEL_OPEN_RE.get(label);
+  if (!re) LABEL_OPEN_RE.set(label, (re = markerOpenRe([label])));
+  return scanMarkerSpans(s, re);
+}
+function scanMarkerSpans(s, open = RE_TASK_MARKER_OPEN) {
   const out = [];
   // The characters inside inline code spans (a backtick run closed by a run of the same length — backtickRuns, linear).
   let inCode = null;
@@ -1354,7 +1367,7 @@ function scanMarkerSpans(s) {
       k = e;
     }
   }
-  const re = new RegExp(RE_TASK_MARKER_OPEN.source, RE_TASK_MARKER_OPEN.flags); // its own lastIndex
+  const re = new RegExp(open.source, open.flags); // its own lastIndex
   const opens = [];
   let m;
   while ((m = re.exec(s)) !== null) if (!inCode || !inCode[m.index]) opens.push({ index: m.index, len: m[0].length, key: m[1] });
@@ -2297,7 +2310,7 @@ module.exports = { parseTasks, taskDescription, nextTask, taskDependsSpec, taskS
   taskDepsBlockedNote, taskDepsWaitList, taskDepsCheck, tasksRewrite, checkboxBytes, completeTask, reasonInput, taskLine,
   dropTrailingCr, RE_CHECKPOINT, scanTaskLines, indentOf, hasOutsideCode, backtickRuns, nextTaskNumber, taskPeerStamps,
   taskBlocks, unreadTaskLines, unreadTasksDetail, resolveTask, blockPosition, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
-  changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers,
+  changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, taskMarkerSpans, labelMarkerSpans, taskMarkerValues, withoutTaskMarkers,
   taskMarkers, malformedMarkers, suspiciousVerify, RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections,
   taskBrief, RE_THEMATIC_BREAK, appendTasks,
   readyTasks, // 1.36 guard tests (protect.js): the tasks that can start now — their exact _Implements:_ files unlock a protected test

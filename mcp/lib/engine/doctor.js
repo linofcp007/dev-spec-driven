@@ -47,7 +47,8 @@ let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.
 let fastCheckOf; // evidence.js — the fast check (1.36, meta.fastCheck): doctor's fast-check warn
 let guardLevel, protectedTestsDoctor; // guards.js · protect.js — 1.36 guard tests: doctor's protected-tests warn
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
-function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
+let frictionHint; // friction.js — 1.41 the friction budget: next_action's finish-step hint (a platform item for a check over its budget)
+function __link(E) { ({ frictionHint, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designReuseGated, designWeighChecks, detectPhase,
@@ -414,6 +415,7 @@ function nextAction(projectDir, name, opts = {}) {
     suiteMissing: null, // the project checks without a passing run since the last task activity (verify step, finished)
     depsBlocked: null, // [{number, waitsOn}] — open tasks, none can start (fix step)
     missingApproved: [], // approved artifacts that are gone (re-review step)
+    friction: null, // 1.41 {over: [{check, medianMs, budgetMs, runs}]} — the finish step's friction-budget hint (friction.js frictionHint)
   };
   NEXT_STEPS.find((s) => s.when(x)).run(x);
 
@@ -429,6 +431,7 @@ function nextAction(projectDir, name, opts = {}) {
   if (x.depsBlocked) res.blocked = x.depsBlocked; // stable — the open tasks and the dependencies each waits on
   if (x.impactPhases.length) res.impact = { tool: "spec_impact", phases: x.impactPhases }; // what to run before re-approval
   if (x.missingApproved.length) res.missingApproved = x.missingApproved; // stable — approved artifacts that no longer exist
+  if (x.friction) res.friction = x.friction; // 1.41 (stable keys): {over: [{check, medianMs, budgetMs, runs}]} — the finish step's platform item
   if (doc.reviewPanel) res.reviewPanel = doc.reviewPanel; // 1.36 (stable): the lean doctor's, never computed again
   const extras = x.approveExtras;
   if (extras && extras.missingRoles) res.missingRoles = extras.missingRoles; // stable — the roles to sign
@@ -609,6 +612,13 @@ function tasksStep(x) {
   if ((x.step === "finish" || x.step === "drift") && !st.invalid) {
     const suite = ctx.suite;
     if (suite.missing.length) x.recommendation += " " + i18n.msg(lng).projectChecks.naFinish(slug, suiteLabel(suite.missing, lng)) + suiteGuardianHint(suite.missing, slug, lng);
+  }
+  // 1.41 the friction budget — the LAST hint, at the finish step only (a feature's close is the cross-cutting moment; never `implement`:
+  // no per-task nag): a budgeted check over its budget (steering/tech.md) that no backlog item or feature answers to as friction-<check>
+  // → propose that platform item to the user (frictionHint; res.friction). Without meta.checks or a _Budget:_ line it reads nothing more.
+  if (x.step === "finish") {
+    const fh = frictionHint(x.projectDir, lng);
+    if (fh) { x.recommendation += " " + fh.text; x.friction = { over: fh.over }; }
   }
 }
 function verifyStep(x, f) {

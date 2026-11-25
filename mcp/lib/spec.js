@@ -76,7 +76,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   manageFeature, markdownToHtml, markRoadmapStale, matrixCsv, maybeRefreshCatalog, mdPlainText, refreshStaleRoadmap, ROADMAP_STALE_FILE, roadmapStale, staleGeneratedText, MERGE_ATTRIBUTE_LINES,
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, templatesLines, upgradeLines, milestone,
   MILESTONE_ACTIONS, networkPathInside, nextAction, nextTask, normalizeLang,
-  normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
+  normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, recordTiming, OPTIONAL_TRACKS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
   recordSpecEdit, runStartStamp, isGuardianCheck, guardianRecord, guardianLines, guardianPreRun, guardianDiffBase, GUARDIAN_DIFF_BASE_ENV,
   parseGitLog, parseTasks, parseTracks, PHASES, placeholderReport, planBridge, planPaths,
   posixPwshScript, posixShellSyntax, projectChecks, protectHashFirst, protectWalkFirst, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
@@ -333,6 +333,7 @@ module.exports = {
   // harness-observed evidence
   observeRun, // hooks/observe-hook.js: log a Bash run of a _Verify:_ / project-check command (.specs/<f>/.execution/observed.jsonl, .specs/.execution/observed.jsonl)
   observedRun, // was this reported run observed? (latest observed run of the same command, same exit code, recent) → { observed, at? }
+  recordTiming, // 1.41 `done --run` / `finish --run`: a measured run of a project check → its line in .specs/.execution/timings.jsonl (the friction budget)
   runProvesVerify, // is a run {command, observed?} a run of one of these _Verify:_ / check commands? (else command-mismatch / changed)
   stripCdPrefix, // `cd <dir> && cmd` → cmd when <dir> is one of the given project roots — the observe hook's log and observedRun alike
   evidenceMode, // roadmap.json meta.evidence → "reported" (default) | "observed"

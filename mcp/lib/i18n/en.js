@@ -2320,6 +2320,22 @@ const msg = {
       doctorInvalid: (name, why) => `meta.fastCheck names '${name}', ${({ missing: "which is no project check (meta.checks)", guardian: "which runs dev-guardian's gate (a scan of minutes)", fixer: "whose command rewrites files (--fix, --write, a fmt / format command with -w or without a check flag)" })[why]} — no fast check runs. Set another: ${DEV_SPEC} init --fast-check <check> (or off).`,
       offer: (cmd, from, name, existing) => `A fast check after each small change catches type and lint errors in seconds: \`${cmd}\` (${from}). It must pass on the base branch — it becomes a project check spec_finish needs too. Offered, never set: ${existing ? `${DEV_SPEC} init --fast-check ${name}` : `${DEV_SPEC} init --check ${name}="${cmd}" --fast-check ${name}`}.`,
     },
+    // 1.41 the friction budget (`_Budget: <check> <duration>_` lines in steering/tech.md · spec_metrics' project `friction` · next_action's
+    // finish step): how long the project checks take in the dev loop — report only, never a gate. `_Budget:`, steering/tech.md,
+    // meta.checks, `friction-<check>` and the check names stay English; the durations come formatted (fmtMs, i18n/common.js).
+    friction: {
+      over: (check, median, budget, n) => `▲ ${check} ${median} > ${budget} (${n} runs)`,
+      within: (check, median, budget, n) => `${check} ${median} ≤ ${budget} (${n} runs)`,
+      fewRuns: (check, n, need) => `${check}: ${n} measured passing run(s) — ${need} needed to judge`,
+      noRuns: (check) => `${check}: no measured run yet`,
+      unbudgeted: (check, median, n) => `${check} ${median} (${n} runs, no budget)`,
+      metrics: (items) => `  friction (steering/tech.md _Budget:_): ${items}`,
+      invalid: (line, text, why, checks) => `steering/tech.md line ${line}: ${text} — ${({ "no-check": `names no project check (meta.checks: ${checks || "none"})`, duration: "its duration is unreadable (e.g. 90s, 2m, 1500ms; at most 24 h)", duplicate: "a second budget for that check — the first one counts" })[why]}`,
+      truncated: "steering/tech.md: only its first 20 _Budget:_ markers (and its first 256 KB) are read",
+      naItem: (check, median, n, budget) => `${check} (median ${median} of its last ${n} passing runs, budget ${budget})`,
+      backlogNote: (median, n, budget) => `median ${median} over the ${budget} budget (steering/tech.md, last ${n} passing runs)`,
+      naHint: (items, cmds) => `Friction: ${items} — over budget (steering/tech.md). Before closing, propose a platform item to the user — ${cmds} (spec_roadmap_edit {kind: "backlog", action: "add", name, note}) — never a fix inside this feature; or the user raises or removes that budget line.`,
+    },
     // 1.36 the review panel (roadmap.json meta.reviewModels · spec_init {reviewModels} · `dev-spec init --review-models`). Model names,
     // `meta.reviewModels`, `diverse` and the slash commands stay English.
     reviewModels: {

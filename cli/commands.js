@@ -1138,7 +1138,8 @@ const COMMANDS = [
             const x = await RUN.runCommand(fc.command, sh, M, c.execOpts());
             if (x.summary) say(x.summary.replace(/^/gm, "  "));
             if (x.cantRun) say("  " + FC.cantRun(fc.command, x.cantRun.why));
-            else spec.observeRun(projectDir, { command: fc.command, exitCode: x.code, event: "cli", at, cwd: projectDir });
+            // (+ its measured time: a project check's run, timed too — 1.41, the friction budget's timings.jsonl, never the observed line)
+            else spec.observeRun(projectDir, { command: fc.command, exitCode: x.code, event: "cli", at, cwd: projectDir, ms: x.ms });
             if (!x.cantRun && x.code !== 0) say("  " + FC.runFailed(fc.command, x.code));
           } else if (fc && !inVerify) say("  " + FC.skipClean(fc.check)); // clean since the last edit: not run again
           runStartedAt = new Date().toISOString(); // the run's `at` is when it STARTED (an edit made meanwhile isn't tested)
@@ -1151,8 +1152,11 @@ const COMMANDS = [
             // the buffer, WSL's launcher) is refused and NOTHING is recorded — it used to be recorded as exit 1 (an _Expect: fail_
             // task was then ticked on a red run that never happened; a passing check recorded as failed).
             if (x.cantRun) return fail({ ok: false, couldNotRun: x.cantRun.code, error: M.runGate.taskRefused(cmd, x.cantRun.why) });
-            // the fast command as this task's _Verify:_: its run is the fast check's too (the log the tick reads)
-            if (isFast(cmd)) spec.observeRun(projectDir, { command: cmd, exitCode: x.code, event: "cli", at: runStartedAt, cwd: projectDir });
+            // the fast command as this task's _Verify:_: its run is the fast check's too (the log the tick reads) — and timed once there
+            // (1.41); any other _Verify:_ command that is a run of a project check is only timed (recordTiming: a timings line, no
+            // observed one — the run is recorded "cli" on the task)
+            if (isFast(cmd)) spec.observeRun(projectDir, { command: cmd, exitCode: x.code, event: "cli", at: runStartedAt, cwd: projectDir, ms: x.ms });
+            else spec.recordTiming(projectDir, { command: cmd, exitCode: x.code, ms: x.ms, by: "cli", at: runStartedAt, cwd: projectDir });
             // A crash is a failed check, but no red test (not failing "for the right reason"): refused, nothing recorded.
             if (x.crashed && b.expect === "fail") return fail({ ok: false, couldNotRun: "signal", error: M.runGate.taskRefused(cmd, M.runGate.why.signal(x.crashed)) });
             const code = x.code;
