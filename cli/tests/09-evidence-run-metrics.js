@@ -85,4 +85,26 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
       lines: m.status === 0 && (m.stdout || "").includes(MT.measuredHead + "\n    " + MT.measuredLine("bundle-size", "size", "120", "142.3 kB", 2, "+18.6 %")),
     });
   }
+
+  // 1.41.0 review 1 R1-MF-6: the reader gets each command's stdout and stderr as TWO texts, never joined end to end — a stdout line with
+  // no final newline is read, not glued to stderr's first line; a name printed on both streams reads stderr's value (documented order)
+  {
+    const q = path.join(tmp, "metric-streams");
+    S.initProject(q, ["core"], "en", { checks: { streams: "node scripts/streams.js" } });
+    w(q, "scripts/streams.js", "console.log(\"METRIC both=1\");\nconsole.error(\"METRIC both=2\");\nprocess.stderr.write(\"METRIC err_only=3\\n\");\nprocess.stdout.write(\"METRIC out_only=4\");\n");
+    const c = S.createFeature(q, "Streams", undefined, "x", undefined, "en", "change");
+    fs.writeFileSync(path.join(c.dir, "change.md"), "# Change: Streams\n\n## Summary\nThe change.\n\n## Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer.\n\n## Approach\nOne string.\n\n## Tasks\n- [ ] 1. [US1] Measure it\n" +
+      "  - _Requirements: US-1.AC-1_\n  - _Verify: node scripts/streams.js_\n");
+    S.approvePhase(q, c.slug, null, "t", { through: "tasks" });
+    const done = json((await run(q, ["done", c.slug, "1", "--run", "--json"])).stdout);
+    const fin = json((await run(q, ["finish", c.slug, "--run", "--json"])).stdout);
+    const fc = state(c.dir).finishChecks;
+    const names = (list) => (list || []).map((m) => m.name + "=" + m.value).sort().join(" ");
+    all("1.41.0 review 1 R1-MF-6: done --run and finish --run read stdout and stderr apart — stdout's last line without a newline is read (never glued to stderr's), a name on both streams reads stderr's value (got " +
+      JSON.stringify({ done: done && [done.metrics, done.metricsMalformed], fin: fin && fin.recordedChecks, fc: fc && fc.streams && fc.streams.metrics }) + ")", {
+      done: !!done && done.ok && names(done.metrics) === "both=2 err_only=3 out_only=4" && done.metricsMalformed === undefined,
+      finish: !!fin && JSON.stringify(fin.recordedChecks) === JSON.stringify([{ name: "streams", exitCode: 0, metrics: 3 }]) && names(fc.streams.metrics) === "both=2 err_only=3 out_only=4",
+    });
+  }
 };
