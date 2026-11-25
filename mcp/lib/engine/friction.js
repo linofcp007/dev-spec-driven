@@ -24,10 +24,10 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // load time — the read-cache scope the timings read is memoized in
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let appendLog, isObj, labelMarkerSpans, locateFeatures, observedBodies, observedNorm, projectChecks, readCacheKey, readIfExists, readLogTail,
-  readRoadmap, runProvesVerify, scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic;
-function __link(E) { ({ appendLog, isObj, labelMarkerSpans, locateFeatures, observedBodies, observedNorm, projectChecks, readCacheKey, readIfExists,
-  readLogTail, readRoadmap, runProvesVerify, scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic } = E); }
+let appendLog, labelMarkerSpans, locateFeatures, projectChecks, readCacheKey, readIfExists, readLogTail, readRoadmap, runProvesVerify,
+  scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic;
+function __link(E) { ({ appendLog, labelMarkerSpans, locateFeatures, projectChecks, readCacheKey, readIfExists, readLogTail, readRoadmap,
+  runProvesVerify, scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic } = E); }
 
 const TIMINGS_LOG = "timings.jsonl";
 const TIMINGS_MAX_BYTES = 64 * 1024; // past this the log keeps, per check, its newest FRICTION_KEEP passing lines (read: 4 × this at most)
@@ -72,14 +72,14 @@ function parseDuration(text) {
 // allowed), text after the closer a comment. Readings: a check + a duration → a budget · a check + anything else → `duration` ·
 // another check-shaped name + a duration → `no-check` · a second budget of one check → `duplicate` (the first counts) · anything else
 // (`_Budget: $500/month_`, a bold `**Budget:**` label) → not ours, silent. Bounds, each said (`truncated`): the first BUDGET_TEXT_MAX
-// characters, the first BUDGET_MARKERS_MAX markers. checks: meta.checks' list (projectChecks), when the caller has it. Not enumerable:
-// `scanned` — the lines read for markers (the cost guard's count: a tech.md that never says "budget:" is not scanned — ~110× on 250 KB).
-function frictionBudgets(projectDir, checks) {
+// characters, the first BUDGET_MARKERS_MAX markers. Not enumerable: `scanned` — the lines read for markers (the cost guard's count: a
+// tech.md that never says "budget:" is not scanned — ~110× on 250 KB).
+function frictionBudgets(projectDir) {
   const out = { budgets: [], invalid: [], truncated: false };
   Object.defineProperty(out, "scanned", { value: 0, writable: true });
   const text = readIfExists(path.join(specsRoot(projectDir), "steering", "tech.md"));
   if (!text || !/budget:/i.test(text)) return out;
-  const names = new Set((checks || projectChecks(projectDir).checks).map((c) => c.name));
+  const names = new Set(projectChecks(projectDir).checks.map((c) => c.name));
   let head = text;
   if (head.length > BUDGET_TEXT_MAX) { head = head.slice(0, BUDGET_TEXT_MAX); out.truncated = true; }
   const lines = scanTaskLines(head);
@@ -108,22 +108,19 @@ function frictionBudgets(projectDir, checks) {
 // check whose command the run proves AS ONE COMMAND (runProvesVerify — never observeRun's plain-step fallback: one step's time is no
 // check's), its leading `cd <root> &&` stripped as observeRun strips it (stripCdPrefix, the same roots — a worktree's). ms: rounded,
 // 0 – FRICTION_MAX_MS, else nothing. Without .specs/ nothing is written (appendLog never creates it, and there is no check); the line goes
-// through the appender that makes .execution/ ignore itself. Never throws.
+// through the appender that makes .execution/ ignore itself. Never throws (a run that is no object, a throwing one: nothing).
 function recordTiming(projectDir, run) {
   try {
     const pdir = path.resolve(projectDir);
-    if (!run || typeof run !== "object") return { timed: [] };
     const ms = typeof run.ms === "number" && Number.isFinite(run.ms) ? Math.round(run.ms) : NaN;
     if (!(ms >= 0 && ms <= FRICTION_MAX_MS) || !Number.isInteger(run.exitCode) || (run.by !== "cli" && run.by !== "hook")) return { timed: [] };
     const { checks } = projectChecks(pdir);
-    let hit = [];
+    let hit;
     if (typeof run.check === "string") hit = checks.filter((c) => c.name === run.check);
     else {
       const roots = [pdir, ...(Array.isArray(run.roots) ? run.roots : [])];
       const key = stripCdPrefix(run.command, roots, typeof run.cwd === "string" && run.cwd ? run.cwd : pdir);
-      const bodies = observedBodies(key);
-      // (the cheap text test first — the observe hook's pre-filter reading — then the matcher)
-      if (bodies.length) hit = checks.filter((c) => { const t = observedNorm(c.command); return bodies.every((b) => t.includes(b)) && runProvesVerify({ command: key }, [c.command], pdir); });
+      hit = checks.filter((c) => runProvesVerify({ command: key }, [c.command], pdir)); // (≤ 20 checks: the matcher alone)
     }
     const at = typeof run.at === "string" && Number.isFinite(Date.parse(run.at)) ? run.at : new Date().toISOString();
     const tool = typeof run.tool === "string" && run.tool ? { tool: run.tool.slice(0, 40) } : {};
@@ -182,7 +179,7 @@ function checkTimings(projectDir, checks) {
 // messages' language (the project's). Not enumerable: `read` — the bytes of timings.jsonl read (the cost guard's count).
 function frictionStatus(projectDir, lng) {
   const { checks } = projectChecks(projectDir);
-  return checks.length ? frictionOf(projectDir, checks, frictionBudgets(projectDir, checks), lng) : null;
+  return checks.length ? frictionOf(projectDir, checks, frictionBudgets(projectDir), lng) : null;
 }
 function frictionOf(projectDir, checks, b, lng) {
   const { runs, read } = checkTimings(projectDir, checks);
@@ -222,13 +219,12 @@ function frictionLines(fr, lng) {
 function frictionHint(projectDir, lng) {
   const { checks } = projectChecks(projectDir);
   if (!checks.length) return null;
-  const b = frictionBudgets(projectDir, checks);
+  const b = frictionBudgets(projectDir);
   if (!b.budgets.length) return null;
-  const st = frictionOf(projectDir, checks, b, lng);
-  const over = st ? st.checks.filter((c) => c.status === "over") : [];
+  // (a budget lists its check: frictionOf is never null here; loadRoadmap keeps only well-formed backlog entries)
+  const over = frictionOf(projectDir, checks, b, lng).checks.filter((c) => c.status === "over");
   if (!over.length) return null;
-  const backlog = readRoadmap(projectDir).backlog;
-  const listed = new Set((Array.isArray(backlog) ? backlog : []).filter((x) => isObj(x) && typeof x.name === "string").map((x) => slugify(x.name)));
+  const listed = new Set((readRoadmap(projectDir).backlog || []).map((x) => slugify(x.name)));
   const open = over.filter((c) => !listed.has(slugify(PLATFORM_PREFIX + c.check)) && !locateFeatures(projectDir, PLATFORM_PREFIX + c.check).length);
   if (!open.length) return null;
   const F = i18n.msg(lng).friction, ms = i18n.fmtMs;
