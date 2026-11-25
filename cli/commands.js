@@ -178,6 +178,16 @@ function runShell(c) {
   return spec.resolveRunShell(req, { gitExecPath: needsGit ? GIT.gitText(["--exec-path"], { cwd: c.projectDir }) : null });
 }
 
+// 1.41: what a run's METRIC reading says on the human output (done --run's result, a finish --run check's recordedChecks entry) —
+// each reading in its line's form (a tick's readings only: `metrics` is a count on a check's entry), then what the reader could not
+// read (malformed lines, a bound). MT: the metric messages; label: before the warnings ("size: " — a check's name).
+function metricRunLines(r, MT, label) {
+  const out = Array.isArray(r.metrics) ? r.metrics.map((m) => "  METRIC " + spec.metricLineText(m)) : [];
+  if (r.metricsMalformed) out.push("  ⚠ " + label + MT.notRead(r.metricsMalformed, r.metricsLastMalformed, spec.METRIC_GRAMMAR));
+  if (r.metricsDropped) out.push("  ⚠ " + label + MT.dropped(r.metricsDropped.join(", ")));
+  return out;
+}
+
 // Every --check occurrence (the shared parser keeps only the last value) → {name: command} (null-prototype: "__proto__" stays a plain
 // key the engine refuses), or undefined when none was given.
 function checksFlag(c) {
@@ -1077,6 +1087,7 @@ const COMMANDS = [
           log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : r.done < r.total ? "" : D.allDone));
           if (r.redRecorded) log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // _Expect: fail_
           if (r.note) log("  ⚠ " + r.note);
+          metricRunLines(r, spec.msg(spec.featureLang(projectDir, r.feature)).metric, "").forEach((l) => log(l)); // 1.41: stored, never judged here
         });
       };
       if (on("run")) {
@@ -1182,7 +1193,8 @@ const COMMANDS = [
             const none = spec.vacuousRun(x.output);
             if (none) return fail({ ok: false, couldNotRun: "no-tests", error: M.runGate.noTests(cmd, none.text) });
             passed.push({ cmd, output: x.output, summary: x.summary });
-            evidence = { command: cmds.join(" && "), exitCode: 0, summary: RUN.runSummaries(passed), ...git };
+            // (output: every passing command's whole output — 1.41, the engine reads their METRIC lines; never stored)
+            evidence = { command: cmds.join(" && "), exitCode: 0, summary: RUN.runSummaries(passed), output: passed.map((p) => p.output), ...git };
           }
           return tick();
         })();
@@ -1239,10 +1251,14 @@ const COMMANDS = [
         if (!r.readyToFinish) c.exitCode = 1; // scriptable: blockers → non-zero
         const T = c.featureText(r.feature);
         return out(r, (r) => {
+          const MT = spec.msg(spec.featureLang(projectDir, r.feature)).metric;
           if (r.recordedChecks) log(spec.msg(spec.featureLang(projectDir, r.feature)).projectChecks.recorded(r.recordedChecks.length));
+          (r.recordedChecks || []).forEach((rc) => metricRunLines(rc, MT, rc.name + ": ").forEach((l) => log(l))); // 1.41: what a reader bound dropped
           log(r.message);
           r.blockers.forEach((b) => log("  ✗ " + b));
           (r.warnings || []).forEach((w) => log("  ▲ " + w)); // EC/NFR/SC and tests-in-code — never blockers
+          // 1.41: each METRIC reading against the last other finish that recorded it (the merge summary's ## Metrics)
+          if (r.metrics) { log(MT.reportHead); spec.metricItemLines(r.metrics, spec.featureLang(projectDir, r.feature)).forEach((l) => log("  " + l)); }
           log("\n" + r.checks.map((x) => "  [ ] " + x).join("\n"));
           if (r.wrote) log(T.mergeSummaryAt(r.paths.summary));
           if (r.designSystem && r.designSystem.registered.length) log(T.dsRegistered(r.designSystem.registered.join(", "))); // 1.35: its New components
@@ -1251,6 +1267,7 @@ const COMMANDS = [
           if (r.baseline && r.baseline.recorded) {
             const D = spec.msg(spec.featureLang(projectDir, r.feature)).drift;
             log(D.baselineRecorded(r.baseline.files, r.baseline.missing));
+            if (r.baseline.metrics) log("  " + MT.recorded(r.baseline.metrics)); // 1.41: finished.metrics
             const rp = r.baseline.replaced; // a re-finish over a drifted baseline: the drift it accepted
             if (rp) { const list = [...rp.changed, ...rp.missing, ...rp.nowPresent]; log("  " + D.baselineReplaced(list.length, spec.dayOf(rp.at) || "?", list.join(", "))); }
           } else if (r.baseline && r.baseline.error) err("dev-spec: " + r.baseline.error); // a broken .state.json is never rewritten

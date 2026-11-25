@@ -123,7 +123,8 @@ run. The report's RED and GREEN runs of the target tests are the cycle's proof.
 
 - **Never edit a planned test's expectation, and never skip, delete or weaken a test or an assertion to make it pass.** If a
   test looks wrong, stop and report BLOCKED with the evidence — a wrong test is a spec problem the
-  human decides, not an implementation detail.
+  human decides, not an implementation detail. The same for a check's `METRIC <name>=<value> … better= tolerance=` line: never
+  loosen its tolerance, flip or drop its `better=`, change its unit or remove it to pass — a number that got worse is reported.
 - **Never edit the design's visual reference** (a design export or an approved HTML prototype — the files `design.md →
   [UI] UI States` names) to make a visual review pass. A reference that looks wrong is a design problem: report BLOCKED
   with the difference.

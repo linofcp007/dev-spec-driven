@@ -111,6 +111,10 @@ History at the end.
 - **`meta.fastCheck` (1.36) is a plain value** (a check's name): the default rule — two different names conflict. A tick's
   fast-check snapshot (`fast` {check, status, runs, clean}) is a RUN field (`runOf` keeps it): it travels with the run that wins
   `evidence[n]`, no rule of its own.
+- **`metrics` (1.41) is a field of the LATEST run** (`evidence[n]`, `finishChecks[name]` — never in their history): it travels with
+  the record that wins (the later run), no rule of its own; the losing side's readings are dropped with its run.
+- **`finished.metrics` (1.41) lives inside `finished`**, which merges as "the later" whole: the later finish's readings, never a
+  union (cli/tests/16-conventions-merge-state.js holds both).
 - **`protectedTests` (1.36, guard tests) has its rule** (`mergeProtectedTests`): `files` file by file, 3-way (`mergeMapWith`) — a
   one-sided change (a tick's re-baseline, an added test) comes through; both sides changed one → OURS, never a conflict (finish
   hashes the content again and names a change no record explains); `at` / `via` the EARLIER snapshot's (a record without a time
@@ -400,6 +404,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   would have reverted a tick's re-baseline made on one branch — files merge 3-way, both-changed keeps ours with no conflict.
 - **1.36.0 review 3** — the accept record (`{…, accepted: true}`, `feature protect --accept`) lives in `protectedTests.lifts`:
   `LIFT_ID` gained `accepted`, so it never merges into a lift or an end of the same file, time and user (no new key).
+- **1.41.0** — two new state fields and no merge rule: a run's `metrics` (as 1.36's `fast`) and `finished.metrics` ride with the
+  record their existing rules already pick (the later run, the later finish).
 
 ### The locks
 - **1.13** — the cross-process feature lock: two MCP servers (or MCP + `dev-spec done`) on one feature lost ticks and evidence

@@ -18,7 +18,9 @@ before it.
    a protected test changed with no recorded reason — guard tests: check the change is intended, a test made to pass is a
    weakened test; if it is, the user accepts it with the `feature protect <feature> <file> --accept --reason "…"` line the
    warning gives — its current content becomes the recorded one, so the re-check is explained and the test stays protected
-   for every later feature; never a `feature unprotect` here: a lift lasts until `feature protect <feature> <file>`).
+   for every later feature; never a `feature unprotect` here: a lift lasts until `feature protect <feature> <file>`; a
+   METRIC reading worse past its stated tolerance, or a loosened METRIC line: tell the user — the number holds every change
+   merged since the earlier finish, not only this feature's — and never loosen the line to pass).
    After the accept (or a lift), run step 1 again (`spec_finish {name, write: true}`): the merge summary then lists the
    accept and no longer names the test as changed — the one written before it still does.
 2. **Verify fresh, now** — the full suite and every check the report lists for the active tracks. With project checks set,

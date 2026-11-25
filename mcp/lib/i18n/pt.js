@@ -425,6 +425,15 @@ Cada critério SE…ENTÃO em requirements.md já nomeia uma falha e a sua recup
 | Risco | Probabilidade | Impacto | Mitigação | Responsável |
 |---|---|---|---|---|
 | [o que pode falhar] | [baixa / média / alta] | [baixo / médio / alto] | [como o evitamos ou detetamos] | [quem o acompanha] |`,
+    silent: `## Regressões Silenciosas
+<!-- Que número pode piorar com todos os testes a passar — o tamanho do bundle, a latência p95, as consultas por pedido, os
+     tokens por chamada, a memória, o tempo de build? Uma linha por número: o nome com que um check do projeto o imprime (uma
+     linha METRIC <name>=<value> <unit> better=lower|higher tolerance=<n>%) — o finish compara-o com o último finish que o
+     registou e avisa para lá da tolerância declarada. A secção de orçamento de uma track (Orçamento de Desempenho, Economia de
+     Tokens, Orçamento de Desempenho da Interface) fixa os alvos: uma linha aqui nomeia o check que imprime o número.
+     "Nenhuma — <porquê>" é uma resposta; em branco não. -->
+| Métrica | Porque pode regredir em silêncio | Impressa por |
+|---|---|---|`,
     constitution: `## Verificação da Constituição
 Verifica este design contra cada princípio em \`steering/constitution.md\`. GATE: tem de passar antes
 da implementação; volta a verificar após qualquer alteração de design.
@@ -2196,6 +2205,24 @@ const msg = {
       doctorInvalid: (name, why) => `meta.fastCheck nomeia '${name}', ${({ missing: "que não é uma verificação do projeto (meta.checks)", guardian: "que corre o gate do dev-guardian (uma análise de minutos)", fixer: "cujo comando reescreve ficheiros (--fix, --write, um comando fmt / format com -w ou sem uma opção de verificação)" })[why]} — não corre nenhuma verificação rápida. Define outra: ${DEV_SPEC} init --fast-check <verificação> (ou off).`,
       offer: (cmd, from, name, existing) => `Uma verificação rápida depois de cada pequena alteração apanha erros de tipos e de lint em segundos: \`${cmd}\` (${from}). Tem de passar no ramo base — passa a ser uma verificação do projeto de que o spec_finish também precisa. Proposta, nunca ativada: ${existing ? `${DEV_SPEC} init --fast-check ${name}` : `${DEV_SPEC} init --check ${name}="${cmd}" --fast-check ${name}`}.`,
     },
+    metric: {
+      verdict: { within: "dentro da tolerância", improved: "melhor para lá da tolerância", regressed: "pior para lá da tolerância" },
+      unjudged: (why) => (why.includes("unit") ? "não comparada — a unidade mudou" : `não avaliada — a linha anterior não declara ${why.map((w) => w + "=").join(" nem ")}`),
+      loosened: (term, was, now) => `afrouxou ${term === "unit" ? "a unidade" : term + "="} (${was} → ${now}) — avaliada pelos termos do finish anterior`,
+      line: (name, check, now, ref, feature, day, delta, judged) => `${name} (${check}): ${now} — ${ref} no finish de ${feature} (${day})${delta == null ? "" : " · " + delta} · ${judged}`,
+      lineNew: (name, check, now) => `${name} (${check}): ${now} — primeira medição: o próximo finish compara com ela`,
+      summaryHead: "## Métricas",
+      flagged: (name, check, ref, now, feature, day, delta, applied, verdict) => `${name} (check ${check}): ${ref} → ${now} desde o finish de ${feature} em ${day} (` +
+        [delta, verdict === "unjudged" ? (delta == null ? "não comparada" : "não avaliada") : `${({ within: "dentro da", improved: "melhor do que a", regressed: "para lá da" })[verdict]} tolerância ${applied}`].filter(Boolean).join(", ") + ")",
+      finishWarn: (n, list, more) => `${n} leitura(s) METRIC pioraram para lá da tolerância que a sua linha declara, ou afrouxaram os seus termos, desde o último finish que as registou: ${list}${more ? ` — e mais ${more} (as metrics do spec_finish)` : ""}. Todas as alterações integradas desde esse finish estão no número, não só as desta feature: diz ao utilizador antes do merge — e nunca afrouxes, invertas nem retires uma linha METRIC para passar.`,
+      unmeasured: (names, slug) => `O design.md de ${slug} indica ${names} em Regressões Silenciosas, mas nenhuma execução bem-sucedida de um check do projeto imprimiu uma linha METRIC com esse nome — acrescenta a linha ao check que o mede (references/verification.md → Metrics that regress silently), ou corrige a linha da tabela.`,
+      notRead: (n, last, grammar) => `${n} linha(s) METRIC não lida(s) — a forma é ${grammar}${last ? ` (a última: ${last})` : ""}`,
+      dropped: (bounds) => `linhas METRIC para lá de um limite do leitor ficaram por ler (${bounds}): no máximo 20 nomes, 1000 linhas candidatas de no máximo 512 bytes, os últimos 64 MiB da saída — ficam as linhas impressas por último`,
+      reportHead: "Leituras METRIC (cada uma contra o último outro finish que a registou):",
+      recorded: (n) => `${n} leitura(s) METRIC registada(s) com este finish: o finish da próxima feature compara com elas`,
+      measuredHead: "  Leituras METRIC ao longo dos finishes:",
+      measuredLine: (name, check, first, last, n, change) => `${name} (${check}): ${first} → ${last} em ${n} finish(es) (${change})`,
+    },
     reviewModels: {
       on: (list, diverse) => `Painel de revisão LIGADO (meta.reviewModels: ${list}${diverse ? " — diverse" : ""}): a revisão do ramo antes do merge, o converge e os críticos do gate da revisão profunda correm também em cada modelo do painel — o painel acrescenta modelos, nunca substitui o da própria revisão (o dos críticos do gate: o modelo da sessão) —; os achados da revisão do ramo e do converge são reunidos e cada um é verificado uma vez, os achados reunidos dos críticos do gate vão para o utilizador (os gates não têm verificador). O revisor de cada tarefa corre num modelo do painel diferente do do implementador, nunca abaixo do nível do sonnet — com diverse e um implementador sonnet, cada revisão de tarefa corre em opus. Cada modelo a mais custa mais um despacho de revisão por cada revisão que cobre. O Claude Code só despacha aliases (opus, sonnet, haiku, fable): aí, outro nome faz a revisão num só modelo.`,
       off: "Painel de revisão DESLIGADO (meta.reviewModels): cada revisão corre num só modelo.",
@@ -2534,6 +2561,7 @@ const msg = {
         "tradeoffs-missing": "sem secção Alternativas e Compromissos — o doctor avisa (design-tradeoffs) em todas as features criadas a partir dele.",
         "risks-missing": "sem secção Riscos — o doctor avisa (design-risks) em todas as features criadas a partir dele.",
         "reuse-missing": "sem secção Reutilização e Integração — o doctor avisa (design-reuse) em todas as features criadas a partir dele.",
+        "silent-missing": "sem secção Regressões Silenciosas — o doctor avisa (design-silent-regressions) em todas as features de tamanho m / l criadas a partir dele.",
         "no-criteria": "nenhum critério de aceitação (uma linha US-n.AC-m com DEVE) — nada para o EARS, o trace_check ou o plano de testes seguirem.",
         "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — o doctor falha em todas as features criadas a partir dele.`,
         "phantom-ac": (ids, file) => `cita IDs de AC que ${file} não define: ${ids} — o trace_check reporta-os como fantasmas.`,
@@ -3581,6 +3609,13 @@ const designWeigh = {
       empty: () => "Reutilização e Integração está vazia — indica o que é reutilizado ou estendido, ou numa linha a razão de nada o ser (projeto novo); em branco não",
       few: () => "Reutilização e Integração não indica nada",
       integration: (n) => `coberta pelo integration-plan.md → Pontos de Integração${n ? ` (${n} item(ns))` : ""}`,
+    },
+    "design-silent-regressions": {
+      filled: (n) => (n ? `${n} número(s) indicado(s) que podem piorar com os testes a passar` : "escrita (sem linha — 'Nenhuma — porquê' conta)"),
+      missing: () => "sem secção Regressões Silenciosas — indica que número pode piorar com todos os testes a passar (o tamanho de um bundle, um p95, as consultas por pedido, os tokens por chamada), uma linha por cada linha METRIC que um check do projeto imprime, ou escreve 'Nenhuma — porquê' (a secção de orçamento de uma track fixa os alvos; esta nomeia o check que imprime o número — references/verification.md → Metrics that regress silently)",
+      template: () => "Regressões Silenciosas ainda é o template — indica os números que um check do projeto imprime como linhas METRIC, ou escreve 'Nenhuma — porquê'",
+      empty: () => "Regressões Silenciosas está vazia — uma linha por número que um check do projeto imprime como linha METRIC, ou 'Nenhuma — porquê'; em branco não é resposta",
+      few: () => "Regressões Silenciosas não indica nada",
     },
     legacyApproval: (d, v = "1.17") => `design aprovado antes da ${v} — só é exigido a partir da próxima aprovação (${d})`,
     // 1.28: a Reutilização e Integração de um design de tamanho m / l é uma verificação da aprovação

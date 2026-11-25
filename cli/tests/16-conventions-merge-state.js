@@ -103,6 +103,25 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, runAsync, tmp, CLI }) => {
       runField: () => ms.code === 0 && s1 && js(s1.evidence["1"].fast) === js(fast) && s1.evidence["1"].history.some((h) => js(h.fast) === js(fast)),
     });
   }
+  // 1.41 METRIC readings: `metrics` is a field of the LATEST run (evidence[n], finishChecks[name]) and `finished.metrics` lives inside
+  // `finished` — no rule of their own: each travels with the record that wins (the later run · the later finish), the losing side's dropped
+  {
+    const run = (at, metrics) => { const r = { command: "npm test", exitCode: 0, at, cmdRule: 1 }; return { ...r, ...(metrics ? { metrics } : {}), check: "npm test", history: [r] }; };
+    const st = (fc, fin) => ({ lang: "en", tracks: ["core"], finishChecks: fc, ...(fin ? { finished: fin } : {}) });
+    const mOurs = [{ name: "bundle-size", value: 120, unit: "kB" }], mTheirs = [{ name: "bundle-size", value: 142.3, unit: "kB", better: "lower", tolerance: { amount: 2, percent: true } }];
+    const fOurs = { at: T(4), files: {}, metrics: [{ check: "size", ...mOurs[0] }] }, fTheirs = { at: T(6), files: {}, metrics: [{ check: "size", ...mTheirs[0] }] };
+    const so = put("o-met", st({ size: run(T(4), mOurs) }, fOurs));
+    const ms = runIn(["merge-state", put("b-met", st({})), so, put("t-met", st({ size: run(T(6), mTheirs) }, fTheirs)), ".specs/invoices/.state.json"]);
+    const s1 = parse(so);
+    const so2 = put("o-met2", st({ size: run(T(8)) }, { at: T(8), files: {} })); // ours later, without readings: none come back from theirs
+    const ms2 = runIn(["merge-state", put("b-met2", st({})), so2, put("t-met2", st({ size: run(T(6), mTheirs) }, fTheirs)), ".specs/invoices/.state.json"]);
+    const s2 = parse(so2);
+    all("1.41 metrics: a run's `metrics` and `finished.metrics` ride with the record that wins — the later run, the later finish — never merged with the other side's, no conflict (got " +
+      js([ms.code, s1 && s1.finishChecks.size, s1 && s1.finished, ms2.code, s2 && s2.finishChecks.size.metrics, s2 && s2.finished.metrics]) + ")", {
+      later: () => ms.code === 0 && js(s1.finishChecks.size.metrics) === js(mTheirs) && js(s1.finished.metrics) === js(fTheirs.metrics) && !("mergeConflicts" in s1),
+      noneBack: () => ms2.code === 0 && s2.finishChecks.size.metrics === undefined && s2.finished.metrics === undefined && !("mergeConflicts" in s2),
+    });
+  }
   // 1.36 guard tests: protectedTests merges by its own rule — files file by file (a one-sided re-baseline or addition comes through; both
   // sides changed one → ours, NO conflict: finish hashes the content again), at / via the earlier snapshot's, truncated either side's,
   // the lifts united by identity (a lift and its end each a record)

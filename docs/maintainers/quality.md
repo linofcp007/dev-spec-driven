@@ -155,6 +155,23 @@ they came to be — the releases and review findings — is in History at the en
 - **The merged section (size S)** — a sized-S design writes ONE `## Decisions, reuse & risks` section. `designWeighChecks`
   reads it (`WEIGH_MERGED_SYN`) for a check whose own section the design lacks, min 0 ("no material risk" answers); the brief's
   Reuse part reads it too. A design with its own section is judged on that section.
+- **Silent Regressions (1.41, sizes m / l)** — what number can get worse while every test stays green: the m / l scaffold (i18n.js
+  LAYOUTS.design, `D.silent` after Risks) writes `## Silent Regressions` with a comment and an EMPTY table (`| Metric | Why it can
+  regress silently | Printed by |`) — NO slot, so a fresh design is never refused on `placeholders` (a slot would refuse every m / l
+  design: more than the owner's warn); the no-size and size-s scaffolds never get it (the no-size sha1 pin holds). Doctor
+  `design-silent-regressions` is DESIGN_WEIGH's 4th entry `[id, SILENT_SYN, 0, "silent", true]` — the last field: run only with
+  `opts.gate` (`designReuseGated`: a plain feature of size m / l; designWeighChecks' other callers — the save check — get the three
+  as before, and the reuse gate's `[2]` is unchanged). States as Risks' (min 0: a row or a line of prose — "None — why" — answers;
+  the empty table reads `empty`); a WARN, never a fail nor a gate; the size-S merged section never answers it (`sized`). Its stamp
+  `silent` (`DESIGN_WEIGH_STAMPS.silent = "1.41"`, approvePhase on every design approval and its record): a design approved before
+  passes with `legacyApproval`. In DESIGN_WEIGH_IDS, so spec_upgrade never counts it toward `attention`. `templates check` warns
+  `silent-missing` on a project design template without the heading — never on the built-in's own copy (`templates init` copies the
+  no-size design, which has none: `sameText`, BOM / CRLF / final blanks aside — its pristine copy checks clean, as in 1.40).
+  `SILENT_SYN`: silent regression(s) / silent metrics / regression metrics / metrics that regress silently, PT regressões
+  silenciosas / regressão silenciosa / métricas de regressão, ES regresiones silenciosas / regresión silenciosa / métricas de
+  regresión, unaccented twins — never "Metrics" alone (+saas Observability's). The rows' METRIC names are what finish's
+  `metricsUnmeasured` reads (tasks-and-evidence.md → Metrics that regress silently); the comment points at a track's budget section
+  (Performance Budget, Token Economics, UI Performance Budget): it holds the targets, this row the check that prints the number.
 - **The TDD micro-cycle** (adapted from obra/superpowers, MIT) is prose only — test-patterns.md "The micro-cycle inside a
   task", spec-implementer (a hard rule), spec-reviewer, /executeTask, AGENTS.md, SKILL.md. It lives INSIDE a task: never a new
   T-ID, never an edit of a planned assertion. Its red flags (green on the first run, written after the code) apply to a NEW
@@ -2188,6 +2205,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   upload", "at 10:00" read "00"), and a noun-like action alone ("2 panels handle the click" — the bare "click"). Now `parts` and
   `UNITS` after a quantity, no digit after `\d[.,:]`, bare actions only in unambiguous verb forms, request nouns plural; the
   phrase-first form and ES cajeros added. The timing guard is relative: `max(250 ms, 4 ×` a same-size plan of words`)`.
+- **1.41.0** — Silent Regressions (S2 as CRIT_S2 cut it): an m / l design names the numbers a check prints as METRIC lines, or
+  "None — why". The designer's scaffold had a slotted example row: CRIT_S2 #7 — a slot is a `placeholders` refusal of every fresh
+  m / l design, more than the owner's warn — so the table is empty and an unanswered section reads `empty`. The templates-check
+  warning trade-offs and risks have is restored (`silent-missing`), skipping the built-in's own copy: the no-size design `templates
+  init` writes has no such section, and a pristine copy checked clean in 1.40.
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the

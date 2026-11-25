@@ -363,6 +363,45 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   says when the project is over it. dev-spec counts windows of code lines, dev-guardian measures with jscpd — close, not
   identical.
 
+### Metrics that regress silently
+
+Some numbers get worse while every test stays green: a bundle's size, a p95, queries per request, tokens per call, a
+build's time. A project check prints each as a METRIC line — the form dev-guardian's `metrics` command reads too:
+
+    METRIC <name>=<number>[ <unit>][ better=lower|higher][ tolerance=<n>[%]][ <key>=<value>...]
+
+- **The line.** `METRIC` starts the line, after blanks or one `# ` (node's TAP reporter); the name is ASCII (letters, digits,
+  `_ . -`, up to 64); the number is a plain decimal (`142.3`, `1.5e3` — never `1,5`); the unit one token of up to 16
+  characters; unknown `key=value` words are ignored; the last line of a name wins. A line that starts `METRIC <name>=` and
+  breaks the form is said as not read; a table header (`METRIC | BEFORE`) is no attempt. Colours are removed first.
+- **Only the CLI reads them:** `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read each passing
+  command's whole output (its last 64 MiB, at most 1,000 candidate lines of 512 bytes from the end, 20 names — a line
+  past a bound is said). The tick prints and stores them; it never judges. An MCP report carries none.
+- **finish compares.** Each `(check, name)` a project check's passing run printed is set against the LATEST other
+  feature's finish that recorded it (`finished.at`, archived features included; never the feature's own). Judged only
+  when that earlier line states BOTH `better=` and `tolerance=` — no defaults: otherwise the result shows the delta,
+  `unjudged`. Its terms decide; a new line may only tighten (the smaller tolerance applies). A flipped or dropped
+  `better=`, a raised or dropped tolerance or a changed unit is said as `loosened` (a new unit is not compared). `n%` is n
+  percent of the earlier value; the boundary counts as within; values compare as exact decimals (120 → 122.4 at 2 % is
+  within). Verdicts: `new` · `within` · `improved` · `regressed` · `unjudged`.
+- **The warning, never a blocker.** A reading worse past the tolerance, or a loosened line, is ONE finish warning and the
+  merge summary's `## Metrics`; a ready written finish records the readings (`finished.metrics`) for the next feature.
+  The number holds every change merged since that finish — another branch's, a dependency bump made outside a feature —,
+  not only this feature's: tell the user before the merge. Never loosen, flip or drop a METRIC line to pass.
+- **A tolerance is the measured spread.** Run the check a few times on quiet code and state at least the spread you saw
+  (`tolerance=3%` for a timing that wanders 2 %). A count (`tests.count`) can say `tolerance=0`. Timings from another
+  machine are noise; `kB` and `KB` are different units.
+- **Limits.** A test whose output prints a METRIC fixture line is read as a metric (print the real ones from a script); a
+  runner that captures stdout hides the line (`pytest -s`); cmd.exe turns `µ` into an unreadable name (ASCII names).
+- **The design names them.** A size m / l design gets a `## Silent Regressions` section: one row per number, its METRIC name
+  in a code span in the first cell and the check that prints it — or `None — <why>`. Doctor warns
+  `design-silent-regressions` while it is missing or blank (never a refusal; a design approved before 1.41 is not asked); a
+  track's budget section (Performance Budget, Token Economics, UI Performance Budget) holds the targets, this row the check
+  that prints the number. finish warns when a name a row declares was printed by no passing check. Sizes s, xs and none get
+  nothing new unless a check prints a METRIC line with stated terms.
+- **The trend:** `dev-spec metrics` (spec_metrics, the project) lists each `(check, name)` across the finishes — a 1.9 %
+  step at each finish never warns, but the series shows it.
+
 ## Protected tests (`meta.guard: "tests"`, 1.36)
 
 A test made to pass is a weakened test. At guard level `tests` (`init --guard tests`) the tests the plan was approved

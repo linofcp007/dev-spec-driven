@@ -772,17 +772,26 @@ const REUSE_SYN = ["reuse", "code reuse", "reuse of existing code", "reused comp
   "reutilización", "reutilizacion", "aprovechamiento", "servicios existentes", "puntos de integración",
   "puntos de integracion", "integración con lo existente", "integracion con lo existente", "integración con el código existente",
   "integracion con el codigo existente", "integración con el sistema existente", "integracion con el sistema existente"];
-// [id, synonyms, the fewest entries that count as weighed, the approval stamp the check needs]: a decision needs at least two
-// options; one honest line about the risks (a table row, a bullet, or "no material risk, because X") is enough, and so is one
-// about reuse ("Greenfield: nothing to reuse yet"). The stamp: a design approval made before a check existed never has it,
-// and is never flagged by that check — `weigh` (trade-offs, risks), `reuse`. A 1.17 / 1.18 approval (weigh
-// without reuse) is still held to the trade-offs and risks, never to the reuse section.
-const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2, "weigh"], ["design-risks", RISKS_SYN, 0, "weigh"], ["design-reuse", REUSE_SYN, 0, "reuse"]];
+// 1.41: what number can get worse while every test stays green (a bundle's size, a p95, queries per request, tokens per call) — a
+// size m / l design's `## Silent Regressions` section: a row per METRIC line a project check prints (engine/metric.js — spec_finish
+// compares it with the last finish that recorded it), or "None — why". Its own heading: never "Metrics" alone (+saas Observability's).
+const SILENT_SYN = ["silent regressions", "silent regression", "silent metrics", "regression metrics", "metrics that regress silently",
+  "regressões silenciosas", "regressoes silenciosas", "regressão silenciosa", "regressao silenciosa", "métricas de regressão", "metricas de regressao",
+  "regresiones silenciosas", "regresión silenciosa", "regresion silenciosa", "métricas de regresión", "metricas de regresion"];
+// [id, synonyms, the fewest entries that count as weighed, the approval stamp the check needs, m / l only]: a decision needs at
+// least two options; one honest line about the risks (a table row, a bullet, or "no material risk, because X") is enough, and so is
+// one about reuse ("Greenfield: nothing to reuse yet") and one about silent regressions ("None — the feature changes no measured
+// path"). The stamp: a design approval made before a check existed never has it, and is never flagged by that check — `weigh`
+// (trade-offs, risks), `reuse`, `silent`. A 1.17 / 1.18 approval (weigh without reuse) is still held to the trade-offs and risks,
+// never to the reuse section. design-silent-regressions (1.41) runs only for a design whose size gates (opts.gate — m / l): a warn,
+// never a refusal, never an upgrade to-do (DESIGN_WEIGH_IDS).
+const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2, "weigh"], ["design-risks", RISKS_SYN, 0, "weigh"], ["design-reuse", REUSE_SYN, 0, "reuse"],
+  ["design-silent-regressions", SILENT_SYN, 0, "silent", true]];
 const DESIGN_WEIGH_IDS = new Set(DESIGN_WEIGH.map(([id]) => id));
 // The release each stamp arrived with (the "approved before X" note) — approvePhase stamps every key here on a design approval.
 // `reuseGate` (1.28): the Reuse & Integration section is an APPROVAL check of a size m / l design (designReuseGated) — doctor fails
 // it there, the design gate refuses it; a design approved before (no stamp) keeps the warning, never failed retroactively.
-const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19", reuseGate: "1.28" };
+const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19", reuseGate: "1.28", silent: "1.41" };
 // Is the Reuse & Integration section a gate for this feature? A plain feature of size m / l (the full chain) — never a bugfix, a
 // spike, a change, an unsized feature or size s / xs (a warning there, as before).
 const designReuseGated = (kind, size) => (kind || "feature") === "feature" && (size === "m" || size === "l");
@@ -895,8 +904,8 @@ function designWeighChecks(design, lang, opts = {}) {
   const W = i18n.msg(lang).designWeigh;
   const approval = isRecord(opts.approval) ? opts.approval : null;
   const merged = weighSection(design || "", WEIGH_MERGED_SYN) != null;
-  return DESIGN_WEIGH.map(([id, syn, min, stamp]) => {
-    const own = !merged || weighSection(design || "", syn) != null;
+  return DESIGN_WEIGH.filter((w) => !w[4] || opts.gate).map(([id, syn, min, stamp, sized]) => {
+    const own = !merged || sized || weighSection(design || "", syn) != null; // (the size-S merged section never answers an m / l question)
     let st = own ? designWeighState(design, syn, min) : designWeighState(design, WEIGH_MERGED_SYN, 0);
     if (id === "design-reuse" && (st.status === "missing" || st.status === "empty")) {
       const fb = designReuseFallback(opts.integrationPlan);
@@ -3160,7 +3169,7 @@ function clarifyChange(projectDir, f, c) {
 }
 
 module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
-  TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
+  TRADEOFFS_SYN, RISKS_SYN, SILENT_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
   designSystemDeprecatedCheck, dsReplacement, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,

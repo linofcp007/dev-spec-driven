@@ -2106,6 +2106,22 @@ exports.run = async ({
     for (const [label, check] of rows) all("1.40.0 Z docs — " + label, { holds: check });
   }
 
+  // 1.41 the METRIC line (engine/metric.js): ONE owner of its form — METRIC_GRAMMAR, the contract fixture's grammar.line — quoted whole by
+  // references/verification.md (its indented line), the agents' rule against loosening a line to pass, /spec-finish's decision.
+  {
+    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const rd = (...p) => fs.readFileSync(path.join(__dirname, "..", ...p), "utf8").replace(/\r\n/g, "\n");
+    const VER = rd("skills", "dev-spec-driven", "references", "verification.md");
+    const sec = (VER.split("### Metrics that regress silently\n")[1] || "").split("\n## ")[0];
+    const quoted = sec.split("\n").filter((l) => /^ {4}METRIC /.test(l)).map((l) => l.trim());
+    all("1.41 the METRIC line's form is ONE text: verification.md's Metrics that regress silently quotes METRIC_GRAMMAR (the fixture's line) whole, once; spec-implementer never loosens, flips or drops a line to pass, spec-reviewer calls that Important, /spec-finish has the user decide on the warning (got " + JSON.stringify(quoted) + ")", {
+      grammar: quoted.length === 1 && quoted[0] === E.METRIC_GRAMMAR,
+      implementer: /never\s+loosen its tolerance, flip or drop its `better=`, change its unit or remove it to pass/.test(rd("agents", "spec-implementer.md")),
+      reviewer: /A diff that raises or drops a METRIC line's `tolerance=`, flips or drops its `better=`, changes its unit or\s+removes the line[^\n]*\n?[^\n]*\*\*Important\*\*/.test(rd("agents", "spec-reviewer.md")),
+      finish: /METRIC reading worse past its stated tolerance, or a loosened METRIC line: tell the user/.test(rd("commands", "spec-finish.md").replace(/\n\s+/g, " ")),
+    });
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

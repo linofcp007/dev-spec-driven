@@ -83,13 +83,16 @@ and:
   the new code lives (`references/code-reuse-and-quality.md`).
 - **Alternatives & Trade-offs** — ≥ 2 real options per key decision, the one chosen and why.
 - **Risks** — likelihood · impact · mitigation · owner.
+- **Silent Regressions** (size m / l) — what number can get worse while every test stays green, one row per METRIC line a
+  project check prints, or `None — <why>` (`references/verification.md` → Metrics that regress silently).
 - **Constitution Check** — each principle, re-checked after any change; **Complexity Tracking** — what breaks a
   principle (empty is good).
 - Each active track's mandatory sections (+tdd Testability Notes, +ai 10, the others 5 or 6) — what goes in each:
   `references/track-checklists.md`.
 
 Doctor warns `design-tradeoffs` / `design-risks` / `design-reuse`; at size m / l `design-reuse` FAILS and the design
-approval refuses an empty Reuse & Integration (size s and no size: a warning). Fill `quickstart.md` (a manual acceptance
+approval refuses an empty Reuse & Integration (size s and no size: a warning); at m / l it also warns
+`design-silent-regressions` until Silent Regressions is answered (never a refusal). Fill `quickstart.md` (a manual acceptance
 scenario) and `checklist.md`. Simplicity over cleverness, consistency with the codebase; present for approval.
 
 ## Phase 3 — Test plan and eval plan (track-conditional)

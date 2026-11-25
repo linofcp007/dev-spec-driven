@@ -315,7 +315,8 @@ const LAYOUTS = {
   // design.md: the core sections, then the active tracks' (trackDesignBlock, +tdd first), then the footer. No size: the 1.20
   // design. A SIZED feature (s | m | l; xs is a change, no design): Error Handling points at the IF…THEN criteria (never
   // asked twice), Complexity Tracking has no example row (the placeholder gate refused it), and a core section a track's own
-  // sections supersede is left out (CORE_SUPERSEDED_BY). M / L: Reuse & Integration with one example row. S: the three weigh
+  // sections supersede is left out (CORE_SUPERSEDED_BY). M / L: Reuse & Integration with one example row, and (1.41) Silent
+  // Regressions after Risks — a comment and an empty table, no slot (doctor's design-silent-regressions warns until answered). S: the three weigh
   // sections merged into ONE "Decisions, reuse & risks" (designWeighChecks reads it), no Data Models / API Contracts / Security
   // Considerations / Testing Strategy / Risks. The track blocks are the full ones — the engine keeps a size's tiers and drops the
   // sections another active track covers (engine/scaffold.js).
@@ -336,7 +337,7 @@ const LAYOUTS = {
     }
     if (keep("errorHandling")) secs.push(D.errorHandlingSized);
     if (!s && keep("testingStrategy")) secs.push(D.testing);
-    if (!s) secs.push(D.risks);
+    if (!s) secs.push(D.risks, D.silent); // 1.41: M / L — Silent Regressions, no slot (a doctor warn until answered)
     secs.push(D.constitution, D.complexity);
     return secs.join("\n\n") + "\n" + extra + "\n" + D.footerSized(a.label, a.size) + "\n";
   },

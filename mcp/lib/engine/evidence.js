@@ -21,7 +21,8 @@ let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, c
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact; // guardian.js — dev-guardian's gate: which check runs it, its run read, its verdict, what is refused / stored, --compact
 let fastCheckCandidates; // scan.js — 1.36: what the root manifests suggest as the fast check (fastCheckOffer)
-function __link(E) { ({ fastCheckCandidates, dayOf, isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
+let runMetricsOf, metricResultFields; // metric.js — 1.41: the METRIC lines of a CLI run's output, and what a result says of them
+function __link(E) { ({ runMetricsOf, metricResultFields, fastCheckCandidates, dayOf, isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
@@ -488,6 +489,9 @@ function recordEvidence(prev, ev, at, stamp, verify, root) {
   // so redProof never grandfathers it as a red proof of another command.
   const run = runOf({ ...ev, at, cmdRule: CMD_RULE });
   const rec = { ...run, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
+  // 1.41: the METRIC readings of `done --run`'s passing commands (completeTask's, never a caller's) — on the LATEST run only, never in
+  // its history (20 names × 6 copies a record); a later run without them leaves none.
+  if (Array.isArray(ev.metrics) && ev.metrics.length) rec.metrics = ev.metrics;
   // an _Expect: fail_ task's red run stays its proof (`red`) when a later run passes — its fix made the test green.
   // (verify — the task's _Verify:_ values: the red run of THAT command, never a red run of another one — unless
   // this run is a passing run of the _Verify:_ and the red run on record predates the command rule: redProof's grandfathering).
@@ -1928,8 +1932,11 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
         ranBy === "cli" && it.diffBaseUncommitted === true) : null; // (1.33: finish --run's own word — the base it passed contains HEAD)
     const refused = guardian ? guardianRefusal(guardian, lng) : null;
     if (refused) return { error: P.evidenceItem(i, refused.why), code: refused.code };
+    // 1.41: the METRIC lines of a PASSING run's whole output — `finish --run` only (ranBy "cli": `output`, never stored; MCP can't pass
+    // it — nested keys are validated), never dev-guardian's gate (its output is a scan report)
+    const read = ranBy === "cli" && !guardian && run.exitCode === 0 && (typeof it.output === "string" || Array.isArray(it.output)) ? runMetricsOf(it.output) : null;
     // (a CLI run's `check` is the command it ran — meta.checks when it started; edited meanwhile, the run reads `changed`)
-    runs.push({ name: it.name, check: start ? run.command : byName.get(it.name), run, guardian });
+    runs.push({ name: it.name, check: start ? run.command : byName.get(it.name), run, guardian, read });
   }
   const state = readState(projectDir, slug);
   if (state.invalid) return { error: state.invalid };
@@ -1943,12 +1950,14 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
     const prev = Object.prototype.hasOwnProperty.call(fc, r.name) && isRecord(fc[r.name]) ? fc[r.name] : null;
     const run = runOf({ ...r.run, at, cmdRule: CMD_RULE }); // recorded under the command rule (suiteStatus judges it by it)
     const hist = prev && prev.check === r.check && Array.isArray(prev.history) ? prev.history.filter(isRecord) : [];
-    fc[r.name] = { ...run, check: r.check, ...(code ? { code } : {}), ...(r.guardian ? { guardian: guardianStored(r.guardian) } : {}), history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
+    fc[r.name] = { ...run, check: r.check, ...(code ? { code } : {}), ...(r.guardian ? { guardian: guardianStored(r.guardian) } : {}),
+      ...(r.read && r.read.stored.length ? { metrics: r.read.stored } : {}), history: hist.concat([run]).slice(-EVIDENCE_HISTORY) }; // metrics: the latest run's only
   }
   state.finishChecks = fc;
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
-  // the observed stamp: suiteChecks[].observed · a guardian check's verdict (stable): here and in suiteChecks[].guardian
-  return { recorded: runs.map((r) => Object.assign({ name: r.name, exitCode: r.run.exitCode }, r.guardian ? { guardian: r.guardian.verdict } : {})) };
+  // the observed stamp: suiteChecks[].observed · a guardian check's verdict (stable): here and in suiteChecks[].guardian · 1.41: metrics
+  // (the count read), metricsMalformed / metricsLastMalformed / metricsDropped (what the reader could not read)
+  return { recorded: runs.map((r) => Object.assign({ name: r.name, exitCode: r.run.exitCode }, r.guardian ? { guardian: r.guardian.verdict } : {}, r.read ? metricResultFields(r.read.read, true) : {})) };
 }
 // Each project check's standing (spec_finish's suite-evidence blocker, doctor's warn): pass — its latest run exited 0, for
 // the command meta.checks names now, at or after the feature's last task activity · no-run · failed · changed (meta.checks'

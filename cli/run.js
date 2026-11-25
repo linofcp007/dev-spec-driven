@@ -242,9 +242,10 @@ async function runChecks(feature, deps) {
     // spec_finish {evidence}) — it used to be recorded as a failed run (exit 1).
     if (x.cantRun) return { ok: false, couldNotRun: x.cantRun.code, check: c.name, error: M.runGate.checkRefused(c.name, c.command, x.cantRun.why) };
     if (x.code !== 0 && sh.cmd && spec.windowsShellFailure(x.output, x.code)) cmdFailed = true;
-    // a guardian check: its JSON report (stdout) and its raw stderr (its own message, node's — the summary keeps only the last lines)
+    // a guardian check: its JSON report (stdout) and its raw stderr (its own message, node's — the summary keeps only the last lines);
+    // any other: its whole output (1.41 — the engine reads a passing run's METRIC lines from it; never stored)
     evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary,
-      ...(guardian ? { report: x.stdout, stderr: x.stderr, ...(uncommitted ? { diffBaseUncommitted: true } : {}) } : {}), ...git });
+      ...(guardian ? { report: x.stdout, stderr: x.stderr, ...(uncommitted ? { diffBaseUncommitted: true } : {}) } : { output: x.output }), ...git });
   }
   if (cmdFailed) deps.warn(M.taskDone.shellHint);
   return { ok: true, evidence };
