@@ -169,7 +169,7 @@ are yours to type, so their descriptions stay out of its context. As a plugin th
 | | `/spec-change [impact \| decide \| track ±x]` | After an approval: what an edit touches, a decision-log entry, a track on or off |
 | execute | `/executeTask [--subagents] \| commit` | The next task (or task N) with evidence; `commit` drafts a commit citing the spec |
 | | `/eval [run \| baseline \| migrate]` | (+ai) The local eval harness with your own API key; a model migration gated on it |
-| review | `/spec-review [branch \| converge \| simplify \| feedback \| prompt]` | Review against the spec — the branch, a converge or simplification pass, review comments, a prompt change |
+| review | `/spec-review [branch \| converge \| simplify \| prune \| feedback \| prompt]` | Review against the spec — the branch, a converge, simplification or pruning pass, review comments, a prompt change |
 | close | `/spec-finish` | Verify it is really done, draft the merge summary, then merge locally or keep the branch |
 | | `/feature [archive \| restore \| rename \| remove \| flow]` | A feature's lifecycle; `flow design-first` for work that starts from an architecture |
 | adopt | `/spec-adopt [scan \| reverse \| coverage \| import]` | An existing codebase: inventory it, reverse-engineer specs, measure coverage, import Kiro / spec-kit / OpenSpec / plans / BMAD |

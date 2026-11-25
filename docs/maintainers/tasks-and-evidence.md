@@ -56,7 +56,10 @@ Phase 6, opt-in.
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
   ONE finding fresh (80+ opens a fix round, 50–79 is ledgered as unconfirmed, below 50 refuted); its **simplify** mode reviews
-  `/spec-review simplify`'s diff; it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
+  `/spec-review simplify`'s diff; its **prune** mode (1.41.0) gives each candidate test of `/spec-review prune` a verdict —
+  prune · keep · retrace · strengthen — and asks for the probes the controller runs (the pass is prose end to end: the
+  candidates are the matrix's retired rows, the record spec_impact's `retire` and the protected-test accept — no engine
+  part; `references/subagent-execution.md` → The pruning pass, `test-patterns.md` → Test value and pruning); it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
   rewritten lines' history. The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
@@ -337,7 +340,12 @@ Engine: the `B5` block of `engine/evidence.js`.
     12 R1: those files that are the feature's own `_Implements:_` files — the `own` set behind `[this feature]`, read lazily
     (`mine()`): `{count, files ≤ 3: [{file, kind}]}`), notes?
     (`coverage_notes`, 3.4+: their count), staleTimeouts? (`unused_timeout_acceptances`, 3.4+: `{count, files ≤ 3}` — distinct
-    accept_timeouts entries no step reported a timeout on), message?,
+    accept_timeouts entries no step reported a timeout on), testIntegrity? (1.41.0, W — `integrityFindings`: the `new_findings` of
+    dev-guardian's own passes, `GUARDIAN_INTEGRITY_KINDS` — `guardian-test-integrity` → kind `test`, `guardian-suppressions`
+    (3.17, `GUARDIAN_SUPPRESSIONS`) → kind `suppression` — whose severity is under the command's `--fail-on` (`severityRank`:
+    dev-guardian's own blocking rule, gate.ts; unknown → under every level): `{count, top ≤ 3: [{severity, rule, file, line,
+    kind}]}`, by severity then the report's order; no fs call — `findingFacts` is the blocking items' reader, `mine()` never
+    runs for it; a `--compact` report lists only the blocking findings, so none is read), message?,
     baseline? ("absent": `baseline_absent` / `baseline_status`), tool? (`tool_version`), update? (no
     `tool_version`, one below `GUARDIAN_MIN_VERSION` 3.2.1, or "Cannot find package" — 3.2.0 from a plugin install), override?
     (the `DEV_GUARDIAN_CLI` the launcher said it ran)}`. Every scan step repeats a non-gating line under its own name
@@ -386,7 +394,11 @@ Engine: the `B5` block of `engine/evidence.js`.
     not a blocker — dev-guardian refuses a listed file that changed since scan.yml did) — and that those files go unanalysed —
     review a change to them by hand (`acceptedWarn`),
     and, on any verdict, the stale accept_timeouts entries — remove them, or a future timeout on that file is accepted unseen
-    (`staleTimeouts`: an entry never expires) — warnings, never blockers (`guardianWarnings`).
+    (`staleTimeouts`: an entry never expires) — and, LAST (the finish batch's order: dev-guardian, W, …), on any verdict, W's
+    ONE line (`integrityWarning` → `guardian.integrityWarn`: the count, `--fail-on`, the top 3 each labelled by its pass —
+    `guardian.finding`'s fifth argument is a kind, `test` · `suppression` · none, never one label for both —, the rest counted;
+    the first guardian check that has one) — warnings, never blockers (`guardianWarnings`). The merge summary and finish
+    --run's own lines are unchanged ("(N new below it)" still counts every new finding below the bar).
   - *finish --run* (cli/run.js): `guardianPreRun()` first — a guardian check that runs the launcher needs this version's
     (an earlier version's is rewritten, with a note; missing → `no-launcher`, anything else → `launcher-changed`: refused before
     anything runs, nothing recorded). For a guardian check it prints `guardianLines()` (the head, the findings, then each
@@ -926,6 +938,16 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   narrower choice). The brief grows to ~8.3 KB at 2 views, ~9 KB at 3. Fixture: 08-tasks (1, 2 and 3 views; it fails at
   4,000); three 1.37 fixtures sized for 4,000 were re-sized past the new budget (M15's Big file, the 1.37 view brief's
   Accessibility, RB-2's [UI] block).
+- **1.41.0** (the gardening round, CRIT_S4's cut form) — the Test Value rule (the testing-standards template, new projects
+  only; test-patterns.md) and an optional `/spec-review <f> prune` pass, PROSE: candidates from the matrix trace_check
+  already returns (`supersededBy` without `supersedePending`, `tests[].files`), the reviewer's prune mode, the controller's
+  probes (a tracked, clean file, a hash-checked copy-restore, each test of a pair alone — `git diff --quiet` passes an
+  untracked file and `git checkout --` cannot restore one), the record through the existing flows (spec_impact `retire`,
+  `protect --accept --reason "pruned: …"`). The designed engine pass was cut: `trace_check {prune}` (the matrix has the
+  data), `no-ac` and `costlier-layer` (real plans: empty or real wiring), the `_Pruned:_` / `_Prunes:_` markers (11 readers
+  missed; a prune task naming the deleted file fails trace on 43 % of real test files), the guardian.js "approved pruning"
+  mark (text only, file-granular). The reviewer also got one line: an unreasoned suppression is a question, Important when it
+  hides a security scanner (CRIT_X D8.9).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
@@ -1085,6 +1107,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   of the fmt script). No name list tells `pants fmt lint` from `swift format lint`: the runner list is gone and `RE_LINT_MODE` is
   positive — swift-format's own subcommand only (`swift format lint`, `swift-format lint`, by any path). The split's
   `$(… | …)`-then-flag refusal (`ruff format $(git ls-files | grep -v x) --check`) is a documented limit, not a shell-aware split.
+- **1.41.0** (the gardening round, W — CRIT_X D7) — a new finding of dev-guardian's own passes below the gate (a test skipped or
+  deleted, assertions removed; from 3.17 an added suppression) read only as "(N new below it)". It is now `testIntegrity`
+  and ONE finish warning, never a blocker, each finding labelled by its pass. dev-guardian 3.17 gives suppressions a pass of
+  their own (CRIT_G1 #5): reported under `guardian-test-integrity` they would have read "weakened test: scanner-suppression-
+  added". The name `guardian-suppressions` is DECISIONS' (dev-guardian's chain had not committed one when this was built) —
+  one constant, `GUARDIAN_SUPPRESSIONS`. An older dev-guardian has no such pass: its test findings only, nothing else changes.
+  "Below the gate" is the gate's own rule (severity under `--fail-on`), not "absent from `blocking_findings`". Not built:
+  a label on a BLOCKING suppression finding (at `--fail-on medium` it reads as its rule id, as in 1.40), W in the merge summary
+  or finish --run's own lines. The same round rewrote the five bare `# nosec` examples (fixHint EN / PT / ES, AGENTS.md,
+  verification.md) as `# nosec <id>  # <reason>` — a bare one silences every Bandit rule on its line (CRIT_G1 #6; 17-docs
+  reads every surface for one).
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful

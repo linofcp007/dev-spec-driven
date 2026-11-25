@@ -155,7 +155,7 @@ against the design's reference (`references/ui-review.md`), send the diff to **`
 each ❌ / Critical / Important finding (a `dev-spec-driven:spec-verifier` per finding; only 80+ opens a fix round), at
 most 5 rounds, then `spec_complete_task`. You never write feature code; stop at every `**Checkpoint:**` (past it only on
 the user's word); a finding that changes an AC, the design or a planned test goes back to that phase; +ai prompt tasks
-stay inline. `references/subagent-execution.md` (also the final review, converge, the simplification pass).
+stay inline. `references/subagent-execution.md` (also the final review, converge, the simplification pass, the pruning pass).
 
 ## Gates and approvals
 

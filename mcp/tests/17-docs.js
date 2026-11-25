@@ -451,6 +451,111 @@ exports.run = async ({
   ok(steersToPr.length === 0 && readmePt.length > 1000 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
     "no command/skill/agent text steers toward PRs or CI; README.pt.md is read as PT, README.es.md as ES (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
 
+  // 1.41.0 (CRIT_G1 #6): a `# nosec` example a user or an agent copies names the rule and gives its reason — `# nosec <id>  # <reason>`,
+  // the form Bandit takes silently (a bare `# nosec` silences every Bandit rule on the line, and dev-guardian 3.17 reports it as a
+  // blanket suppression). A property over every surface that teaches one — the prose files above, the i18n sources (every language),
+  // the CLI and the hooks —, never a list of the places that held one. A directive NAMED without its `#` (`nosec`, a reviewer's
+  // list of scanner directives) is no example. The guard's own reader is checked on both sides.
+  {
+    const RE_BARE_NOSEC = /#[ \t]*nosec\b(?![ \t]+(?:<id>|[A-Z]{1,2}\d{2,4})(?:,[ \t]*(?:<id>|[A-Z]{1,2}\d{2,4}))*[ \t]+#[ \t]*\S)/gi;
+    const nosecFiles = proseFiles.concat(["mcp/lib/i18n", "cli", "hooks"].flatMap((d) => walkFiles(path.join(root, d)).filter((p) => /\.(?:js|cjs|mjs|md)$/.test(p))));
+    const bareAt = nosecFiles.flatMap((p) => (fs.readFileSync(p, "utf8").match(RE_BARE_NOSEC) || []).length ? [path.relative(root, p)] : []);
+    const flags = (s) => (s.match(RE_BARE_NOSEC) || []).length > 0;
+    all("1.41.0 (CRIT_G1 #6): every `# nosec` example names the rule and its reason (`# nosec <id>  # <reason>`) — the prose, the i18n sources of every language, the CLI, the hooks; the reader flags a bare one and passes the named forms (got " + JSON.stringify(bareAt) + ")", {
+      none: bareAt.length === 0 && nosecFiles.length > 100,
+      reader: ["(nosemgrep: <rule> -- <reason>, # nosec)", "`# nosec`", "x = 1  #nosec", "# nosec B602", "# NOSEC <id>"].every(flags) &&
+        !["# nosec <id>  # <reason>", "# nosec <id>  # <motivo>", "# nosec B602, B607  # reviewed: constant command", "`nosec`, `gitleaks:allow`"].some(flags),
+      taught: ["en", "pt", "es", "pt-BR"].every((l) => /# nosec <id> {2}# </.test(S.msg(l).guardian.fixHint("x"))),
+    });
+  }
+
+  // 1.41.0 chain P — the gardening round's prose: the reviewer's suppression line (CRIT_X D8.9).
+  {
+    const rd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n").replace(/\s+/g, " ");
+    const rev = rd("agents", "spec-reviewer.md");
+    all("1.41.0 (CRIT_X D8.9): spec-reviewer — a suppression the diff adds with no reason is a question, Important when it hides a security scanner (nosemgrep, Bandit's nosec, gitleaks:allow); a reasoned one stays Silenced on purpose", {
+      reviewer: /\*\*Silenced on purpose\*\* — a rule the code switches off with its reason beside it[^.]*\. A suppression the diff adds with no reason is a question \(⚠️ — what does it silence, and why\?\), and \*\*Important\*\* when it hides a security scanner \(`nosemgrep`, Bandit's `nosec`, `gitleaks:allow`\): no scan sees that line again\./.test(rev),
+    });
+
+    // CRIT_S4 (KEEP, #6): the Test Value rule — the testing-standards template of a NEW +tdd project (EN / PT / ES, pt-BR derived),
+    // the reference's template, test-patterns.md (the rule, new projects only and why, the criteria, the never-pruned list, remove a
+    // test whole). A 1.40 stub verbatim (the template without the section) still reads as a template.
+    const stub = (l) => {
+      const p = path.join(tmp, "p141-tv-" + l);
+      S.initProject(p, ["tdd"], l);
+      return fs.readFileSync(path.join(p, ".specs", "steering", "testing-standards.md"), "utf8");
+    };
+    const tv = { en: stub("en"), pt: stub("pt"), es: stub("es"), "pt-BR": stub("pt-BR") };
+    const old = path.join(tmp, "p141-tv-old");
+    S.initProject(old, ["tdd"], "en");
+    fs.writeFileSync(path.join(old, ".specs", "steering", "testing-standards.md"), tv.en.slice(0, tv.en.indexOf("\n## Test Value")) + "\n");
+    S.createFeature(old, "Cart", ["tdd"]);
+    const oldSteering = (S.specDoctor(old, "cart").checks || []).find((c) => c.id === "steering") || {};
+    const tp = rd("skills", "dev-spec-driven", "references", "test-patterns.md"), stt = rd("skills", "dev-spec-driven", "references", "steering-templates.md");
+    all("1.41.0 (CRIT_S4 #6): the Test Value rule — a new +tdd project's testing-standards.md (EN / PT / ES / pt-BR), the reference's template, test-patterns.md (new projects only — adopting it re-reviews every approved +tdd feature —, the three criteria, the never-pruned list, a test removed whole); the 1.40 stub verbatim still a template (got " +
+      JSON.stringify({ tails: Object.fromEntries(Object.entries(tv).map(([l, t]) => [l, t.slice(t.lastIndexOf("\n## "))])), oldSteering }) + ")", {
+      en: /\n## Test Value\n- A test earns its place when it guards an AC \(its T-ID in the test plan\) or a past bug \(a bugfix's regression test\), and fails when that behaviour breaks\.\n- The others — every AC it covers retired, the same path as another test, green when its behaviour breaks — go to the pruning pass \(\/spec-review <feature> prune\): removed whole, only with the user's approval, never mid-task\.\n$/.test(tv.en),
+      pt: /\n## Valor dos Testes\n- Um teste merece o seu lugar quando guarda um AC \(o seu T-ID no plano de testes\) ou um bug passado[^\n]*\n- Os outros — [^\n]*\(\/spec-review <feature> prune\): removidos por inteiro, só com a aprovação do utilizador, nunca durante uma tarefa\.\n$/.test(tv.pt) &&
+        /só com a aprovação do usuário, nunca durante uma tarefa\.\n$/.test(tv["pt-BR"]),
+      es: /\n## Valor de las Pruebas\n- Una prueba se gana su lugar cuando protege un AC \(su T-ID en el plan de pruebas\)[^\n]*\n- Las demás — [^\n]*\(\/spec-review <feature> prune\): se eliminan enteras, solo con la aprobación del usuario, nunca a mitad de una tarea\.\n$/.test(tv.es),
+      oldStub: oldSteering.status === "warn" && /testing-standards\.md \(4\)/.test(oldSteering.detail || ""),
+      reference: /## Test Value - A test earns its place when it guards an AC \(its T-ID in the test plan\)[^#]*\(`\/spec-review <feature> prune`\): removed whole, only with the user's approval, never mid-task\./.test(stt),
+      rule: /\*\*The rule\.\*\* A test earns its place when it guards an AC — its T-ID in the test plan — or a past bug \(a bugfix's regression test\), and fails when that behaviour breaks\./.test(tp),
+      newOnly: /for \*\*new projects only\*\*: an existing project that adds it to `\.specs\/steering\/testing-standards\.md` gets `steering-changed-since-approval` on every \+tdd feature whose requirements or design that file governed — a re-review and a re-approval each —/.test(tp),
+      criteria: /\| `retired-ac` \| every AC the test covers was retired by a shipped feature \(`_Supersedes:_`\) \| `trace_check \{matrix, code\}` — the row's `supersededBy` without `supersedePending` \|/.test(tp) &&
+        /\| `same-path` \|[^|]*\| the reviewer's proposal, confirmed by probes: every break that reddens this test reddens the kept one \|/.test(tp) && /\| `no-kill` \| it stays green when the behaviour it names breaks \|/.test(tp),
+      retrace: /that is a \*\*retrace\*\*/.test(tp) && /is \*\*strengthened\*\* \("When a test is wrong"\), never removed/.test(tp),
+      noShell: /Without a shell \(an MCP client that runs no command\) no probe runs, so no `same-path` or `no-kill` pruning is proposed — only `retired-ac`\./.test(tp),
+      never: /\*\*Never pruned:\*\* a bugfix's regression test while the code it guards lives · an eval or load row \(outside code — the eval regression set grows, never shrinks\) · a critical flow's twice \/ two-at-once \/ another-user rows/.test(tp),
+      whole: /\*\*Remove a test whole\.\*\* A pruned test is deleted — its case, or its file when nothing in it is kept —, never left as an empty body, a skipped case or a constant assertion/.test(tp),
+      notMidTask: /never mid-task: a test that looks worthless during a task is a concern in your report \("When a test is wrong"\), never a deletion/.test(tp),
+    });
+
+    // CRIT_S4 (PROSE, must-fixes 1–5 and 7; CRIT_X D5): the optional /spec-review <f> prune pass — the command's mode, the protocol
+    // (subagent-execution.md → The pruning pass), the reviewer's prune mode, SKILL.md's pointer, verification.md's --fail-on medium note.
+    const cmdRaw = fs.readFileSync(path.join(root, "commands", "spec-review.md"), "utf8");
+    const cmd = rd("commands", "spec-review.md"), sub = rd("skills", "dev-spec-driven", "references", "subagent-execution.md");
+    const ver = rd("skills", "dev-spec-driven", "references", "verification.md"), skill = rd("skills", "dev-spec-driven", "SKILL.md");
+    const desc = (/^description: (.*)$/m.exec(fs.readFileSync(path.join(root, "agents", "spec-reviewer.md"), "utf8")) || [])[1] || "";
+    all("1.41.0 (CRIT_S4 #1–5, #7; CRIT_X D5): the /spec-review prune pass, prose — candidates from trace_check {matrix, code}, probes only on a tracked clean file with a hash-checked copy-restore and each test alone, never `git diff --quiet` alone, no shell no probe, the batch (rows, retire, _Implements:_, removed whole, the accept), the churn; the reviewer's prune mode; SKILL.md; --fail-on medium blocks like any medium", {
+      hint: /^argument-hint: "\[feature\] \[branch \| converge \| simplify \[--subagents\] \| prune \| feedback <comments> \| prompt\]"$/m.test(cmdRaw),
+      command: /\*\*prune\*\* — optional, a \+tdd feature with every task done \(or a finished one, which then reopens\)/.test(cmd) &&
+        /`trace_check \{name, matrix: true, code: true\}` — a T-ID whose every AC row has `supersededBy` and no `supersedePending` \(`retired-ac`; its files, the row's `tests\[\]\.files`\)/.test(cmd) &&
+        /a tracked, clean file only, restored from a hash-checked copy, each test of a pair run alone; no shell, no probe, so `retired-ac` only/.test(cmd) &&
+        /each changed protected test accepted \(`feature protect <feature> <file> --accept --reason "pruned: …"`\), then the re-approvals\./.test(cmd),
+      section: /## The pruning pass \(optional, before finishing\)/.test(sub) && /It never runs mid-task: an implementer who thinks a test worthless reports it as a concern\./.test(sub),
+      candidates: /a T-ID whose EVERY AC row has `supersededBy` and no `supersedePending` \(its declarer shipped\) is a `retired-ac` candidate, its files the row's `tests\[\]\.files`; a test of an `outsideCode` row \(eval, load\) never is\./.test(sub),
+      tracked: /only on a file git tracks with no change of its own: `git ls-files --error-unmatch -- <file>` exits 0 and `git status --porcelain -- <file>` prints nothing\. Never `git diff --quiet` alone — an untracked file passes it, and `git checkout --` cannot restore it\./.test(sub),
+      restore: /Copy the file's bytes aside \(under `\.specs\/<feature>\/\.execution\/`\) and record its `git hash-object`; make the break; run \*\*each test of the pair alone, by name\*\*[^;]*; restore from the copy, then check that `git hash-object` gives the recorded hash and `git status --porcelain -- <file>` is empty again — a mismatch stops the pass\./.test(sub),
+      noShell: /\*\*No shell\*\* \(an MCP client that runs no command\): no probe, so no `same-path` \/ `no-kill` pruning is proposed — `retired-ac` only\./.test(sub),
+      batch: /\*\*The user approves each pruning — never you\.\*\*/.test(sub) && /`spec_impact \{name, phase: "test-plan"\}` — its `retire` names the tasks whose `_Makes green:_` still cite a removed T-ID/.test(sub) &&
+        /a pruning that deletes a whole file also drops that file from every done task's `_Implements:_` \(left there, trace's missing-file gap fails doctor and blocks the finish\)/.test(sub) &&
+        /remove each test \*\*whole\*\* — its case, or the file —, never an empty body, a skip or a constant assertion/.test(sub),
+      record: /`feature protect <feature> <file> --accept --reason "pruned: <criterion> — <what still guards it>"`/.test(sub) && /Without guard tests the removed row in the approval history is the record\./.test(sub),
+      churn: /re-approve `test-plan`, then `tests` \(every remaining planned T-ID still in code\), then `tasks`; on a finished feature also `execution` and a new `\/spec-finish` — `spec_drift` names the gone file until then, and each re-approval counts as rework in `spec_metrics`\. So batch per feature/.test(sub),
+      failOnMedium: /At a non-default `--fail-on medium` an approved pruning blocks like any medium finding: dev-guardian reads no dev-spec approval/.test(ver) &&
+        /at `--fail-on medium` an approved pruning blocks like any medium finding/.test(sub),
+      reviewer: /- \*\*Prune mode\*\* — the candidate tests of a pruning pass/.test(rev) && /## Prune mode The question is "does each candidate test still earn its place\?"/.test(rev) &&
+        ["\\*\\*prune\\*\\* — name what still guards each AC it covers", "\\*\\*keep\\*\\* — why it earns its place", "\\*\\*retrace\\*\\* — a `retired-ac` test that now asserts the superseding feature's AC", "\\*\\*strengthen\\*\\* — its AC's only test"].every((s) => new RegExp(s).test(rev)) &&
+        /the controller runs every probe \(you never edit a file to make one\)/.test(rev) && /a pruned test is removed whole\./.test(rev),
+      description: /, a simplification or pruning pass — /.test(desc) && desc.length <= 250,
+      skill: /\(also the final review, converge, the simplification pass, the pruning pass\)\./.test(skill),
+      // the mode lists: the three READMEs' command row, tooling-reference's, a workflows row of its own
+      lists: [["README.md", /`\/spec-review \[branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt\]` \| Review against the spec — the branch, a converge, simplification or pruning pass,/],
+        ["README.pt.md", /`\/spec-review \[branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt\]` \| Revisão face à spec — o branch, uma passagem de convergência, de simplificação ou de poda,/],
+        ["README.es.md", /`\/spec-review \[branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt\]` \| Revisión frente a la spec — la rama, una pasada de convergencia, de simplificación o de poda,/]]
+        .every(([f, re]) => re.test(fs.readFileSync(path.join(root, f), "utf8"))) &&
+        /\| `\/spec-review branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt` \|[^\n]*· `prune`: optional — the tests that no longer earn their place/.test(rd("skills", "dev-spec-driven", "references", "tooling-reference.md")) &&
+        /\| `\/spec-review prune` \| Optional, a \+tdd feature with every task done[^|]*\| `references\/subagent-execution\.md` \|/.test(rd("skills", "dev-spec-driven", "references", "workflows.md")),
+    });
+    // W (CRIT_X D7): verification.md says what finish shows of dev-guardian's own checks below the gate
+    all("1.41.0 W (CRIT_X D7): verification.md — dev-guardian's test-integrity and suppressions checks below the gate are ONE finish warning, never a blocker, labelled per check; --compact names none; before 3.17 tests only; the pruning bullet points at it", {
+      w: /\*\*Its own checks' findings below the gate\*\* \(1\.41\) — the new findings that do not block from dev-guardian's test-integrity check \(`guardian-test-integrity`, 3\.8\+: a skip, a deleted test file, fewer assertions\) and its suppressions check \(`guardian-suppressions`, 3\.17\+:[^)]*\) — are ONE finish warning, never a blocker: each labelled by its check \(weakened test · suppression added\), the first 3 by severity, the rest counted\./.test(ver),
+      limits: /A `--compact` report lists the blocking findings only, so none is named there; a dev-guardian before 3\.17 has no suppressions check — its test findings only\./.test(ver),
+      pointer: /Below the default `--fail-on high` they never block — the warning below names them\./.test(ver) && /they never block \(`\/spec-finish` names them in one warning\)/.test(sub),
+    });
+  }
+
   // 1.14 full review (D) — docs and prose.
   {
     const dRead = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");

@@ -1,11 +1,12 @@
 ---
 description: Review a feature — its branch against the spec, a converge or simplification pass, review feedback, a prompt change.
 disable-model-invocation: true
-argument-hint: "[feature] [branch | converge | simplify [--subagents] | feedback <comments> | prompt]"
+argument-hint: "[feature] [branch | converge | simplify [--subagents] | prune | feedback <comments> | prompt]"
 ---
 
 Use the **dev-spec-driven** skill, review loops. Args: $ARGUMENTS (default mode: `branch`). The protocols:
-`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` (converge, verify, the simplification pass).
+`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` (converge, verify, the simplification and
+pruning passes).
 
 **Duplicates first** (branch · converge · simplify): `spec_scan {duplicates: true, name}` — its `existing` runs go to the
 reviewer as candidate findings, its `within` runs to the simplifier; each is verified like any finding (a repeat the spec
@@ -58,6 +59,18 @@ never repaired; a revert that conflicts is aborted (`git revert --abort`) and st
 task's `_Verify:_` (`node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`) and the project checks,
 each under its `meta.checks` name (`… finish <feature> --run`) — never add checks just to record a run.
 Never "behaviour unchanged" without the runs.
+
+**prune** — optional, a +tdd feature with every task done (or a finished one, which then reopens): the tests that no longer
+earn their place (`test-patterns.md` → Test value and pruning), removed only on the user's word. Candidates:
+`trace_check {name, matrix: true, code: true}` — a T-ID whose every AC row has `supersededBy` and no `supersedePending`
+(`retired-ac`; its files, the row's `tests[].files`) — then a prune-mode `dev-spec-driven:spec-reviewer` (inline without a
+subagent tool): prune · keep · retrace · strengthen per candidate, plus `same-path` / `no-kill` probe requests. You run the
+probes — a tracked, clean file only, restored from a hash-checked copy, each test of a pair run alone; no shell, no probe,
+so `retired-ac` only (`subagent-execution.md` → The pruning pass). The report: `.specs/<feature>/.execution/prune-report.md`.
+Say the churn first (test-plan, then tests, then tasks — on a finished feature execution and a new finish too) and batch
+the feature's prunings. On the user's yes: the rows out of `test-plan.md`, `spec_impact {name, phase: "test-plan"}`'s
+`retire` applied, a deleted file out of every done task's `_Implements:_`, each test removed whole, each changed protected
+test accepted (`feature protect <feature> <file> --accept --reason "pruned: …"`), then the re-approvals.
 
 **feedback `<comments>`** — read them all, verify each against the code and the spec
 (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/review-feedback.md`): an AC violation → fix it, cite the AC ·

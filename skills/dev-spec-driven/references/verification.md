@@ -348,7 +348,7 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   refused (`report-mismatch`), and so is any run of a `.specs/guardian.cjs` that is not the launcher dev-spec-driven writes
   (`launcher-changed` — `init --guardian` writes it again; `finish --run` replaces an earlier version's itself).
 - **A blocking finding is fixed**, then the check runs again. To accept ONE reviewed finding the user suppresses it inline
-  with a reason (`nosemgrep: <rule> -- <reason>`, `# nosec`) — never `baseline update`, which accepts every current
+  with a reason (`nosemgrep: <rule> -- <reason>`, `# nosec <id>  # <reason>`) — never `baseline update`, which accepts every current
   finding, the feature's own included (it belongs on the base commit, and it is the user's decision). An incomplete scan
   stays a failed check until its gaps are fixed — the blocker names how, by kind: install a missing scanner
   (dev-guardian's `/guardian-init`), commit a lockfile, a Semgrep per-file timeout → a larger `semgrep.timeout`, or the file
@@ -358,6 +358,19 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   Never force the finish, nor remove the check, without the user — with the approval guard on, removing the check, an
   agent's write of `.specs/guardian.cjs` or `.guardian/baseline.json`, an agent-run `baseline update` and a gate run under a
   `DEV_GUARDIAN_CLI` / `CLAUDE_CONFIG_DIR` of its own are guard-downs.
+- **A test pruning the user approved** (`/spec-review <feature> prune` — `subagent-execution.md` → The pruning pass) removes
+  tests, and dev-guardian's test-integrity check reports each removal (`test-file-deleted`, `test-assertions-removed` —
+  medium). Below the default `--fail-on high` they never block — the warning below names them. At a non-default
+  `--fail-on medium` an approved pruning blocks like any medium finding: dev-guardian reads no dev-spec approval (the
+  user's accept, `feature protect <feature> <file> --accept --reason "pruned: …"`, is dev-spec's record) and has no accept
+  of its own for such a finding, so the finish stays blocked until the user decides — never forced.
+- **Its own checks' findings below the gate** (1.41) — the new findings that do not block from dev-guardian's
+  test-integrity check (`guardian-test-integrity`, 3.8+: a skip, a deleted test file, fewer assertions) and its suppressions
+  check (`guardian-suppressions`, 3.17+: an added `nosemgrep`, Bandit `nosec`, `eslint-disable` …) — are ONE finish warning,
+  never a blocker: each labelled by its check (weakened test · suppression added), the first 3 by severity, the rest
+  counted. The user decides each: an intended one stays (a pruning they approved, a suppression with its reason); otherwise
+  fix it and run the check again. A `--compact` report lists the blocking findings only, so none is named there; a
+  dev-guardian before 3.17 has no suppressions check — its test findings only.
 - **Duplication budget:** when `.guardian/budgets.yml` sets `quality.duplication_pct`, `dev-spec dupes` (no feature) /
   `spec_scan {duplicates: true}` shows the project's duplicated share beside it (`budget`), and finish's duplicate warning
   says when the project is over it. dev-spec counts windows of code lines, dev-guardian measures with jscpd — close, not

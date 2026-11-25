@@ -174,7 +174,7 @@ namespace (`/dev-spec-driven:spec`); noutros clientes MCP são os prompts do ser
 | | `/spec-change [impact \| decide \| track ±x]` | Depois de uma aprovação: o que uma edição afeta, uma entrada no registo de decisões, um track ligado ou desligado |
 | executar | `/executeTask [--subagents] \| commit` | A tarefa seguinte (ou a tarefa N) com evidência; `commit` escreve um commit que cita a spec |
 | | `/eval [run \| baseline \| migrate]` | (+ai) O harness de evals local com a tua chave de API; uma migração de modelo condicionada por ele |
-| rever | `/spec-review [branch \| converge \| simplify \| feedback \| prompt]` | Revisão face à spec — o branch, uma passagem de convergência ou de simplificação, comentários de revisão, uma alteração de prompt |
+| rever | `/spec-review [branch \| converge \| simplify \| prune \| feedback \| prompt]` | Revisão face à spec — o branch, uma passagem de convergência, de simplificação ou de poda, comentários de revisão, uma alteração de prompt |
 | fechar | `/spec-finish` | Verifica que está mesmo feito, escreve o resumo de merge e depois faz o merge localmente ou mantém o branch |
 | | `/feature [archive \| restore \| rename \| remove \| flow]` | O ciclo de vida de uma funcionalidade; `flow design-first` para trabalho que parte de uma arquitetura |
 | adotar | `/spec-adopt [scan \| reverse \| coverage \| import]` | Código existente: inventariá-lo, gerar specs a partir dele, medir a cobertura, importar Kiro / spec-kit / OpenSpec / planos / BMAD |
