@@ -316,8 +316,10 @@ function finishMetrics(projectDir, dir, state, suite, tracks, lng, slug) {
   }
   const res = { items: [], record: current.map((r) => storedReading(r, r.check)), unmeasured: [], summaryLines: [] };
   // the design's Silent Regressions rows name what a check should print: said when no passing run printed it — only once every
-  // project check passes (a missing run is the suite-evidence blocker's to say)
-  if (!suite.missing.length) {
+  // project check passes (a missing run is the suite-evidence blocker's to say) AND each of those runs is the CLI's (observed "cli":
+  // finish --run). A run reported over MCP never carries a reading — what it printed is a doubt, never judged (R1-MF-1).
+  const cliRuns = suite.items.every((it) => (isObj(fc[it.name]) ? fc[it.name].observed : null) === "cli");
+  if (!suite.missing.length && cliRuns) {
     const names = designMetricNames(activeDesign(readIfExists(path.join(dir, "design.md")) || "", tracks));
     const printed = new Set(current.map((r) => r.name));
     res.unmeasured = names.filter((n) => !printed.has(n));
