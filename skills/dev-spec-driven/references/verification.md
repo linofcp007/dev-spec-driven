@@ -319,7 +319,8 @@ blocked or warned per feature, at any size.
 - **The budget:** a line of `.specs/steering/tech.md` naming a project check and a duration — `- _Budget: test 2m_` (or
   `*Budget: …*`, any case; the check may be in backticks; text after the closing `_` is a comment: `_Budget: build 90s_ — on a
   laptop`). Units `ms`, `s`, `m` / `min`, `h`; 1 ms – 24 h; at most 20 markers in the first 256 KB are read. One per check (a
-  second is reported, the first counts); a name that is no check, an unreadable duration and a duplicate are reported in
+  second is reported, the first counts); a name that is no check (a command in its place too: `_Budget: npm test 2m_`), an
+  unreadable duration and a duplicate are reported in
   `spec_metrics`' `friction.invalid`; anything else (`_Budget: $500/month_`, a bold `**Budget:**`) is no budget. Fenced code
   and HTML comments are skipped.
 - **What is measured:** each run of a check as ONE command — `done --run` / `finish --run` (spawn → the command's exit, never a
@@ -419,15 +420,16 @@ build's time. A project check prints each as a METRIC line — the form dev-guar
   characters; unknown `key=value` words are ignored; the last line of a name wins. A line that starts `METRIC <name>=` and
   breaks the form is said as not read; a table header (`METRIC | BEFORE`) is no attempt. Colours are removed first.
 - **Only the CLI reads them:** `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read each passing
-  command's whole output (its last 64 MiB, at most 1,000 candidate lines of 512 bytes from the end, 20 names — a line
-  past a bound is said). The tick prints and stores them; it never judges. An MCP report carries none.
+  command's whole output, stdout and stderr apart — a name printed on both reads stderr's — (its last 64 MiB, at most 1,000
+  candidate lines of 512 bytes from the end, 20 names — a line past a bound is said). The tick prints and stores them; it
+  never judges. An MCP report carries none.
 - **finish compares.** Each `(check, name)` a project check's passing run printed is set against the LATEST other
   feature's finish that recorded it (`finished.at`, archived features included; never the feature's own). Judged only
   when that earlier line states BOTH `better=` and `tolerance=` — no defaults: otherwise the result shows the delta,
   `unjudged`. Its terms decide; a new line may only tighten (the smaller tolerance applies). A flipped or dropped
   `better=`, a raised or dropped tolerance or a changed unit is said as `loosened` (a new unit is not compared). `n%` is n
-  percent of the earlier value; the boundary counts as within; values compare as exact decimals (120 → 122.4 at 2 % is
-  within). Verdicts: `new` · `within` · `improved` · `regressed` · `unjudged`.
+  percent of the earlier value; the boundary counts as within; values compare as the exact decimals the lines printed (120 →
+  122.4 at 2 % is within). Verdicts: `new` · `within` · `improved` · `regressed` · `unjudged`.
 - **The warning, never a blocker.** A reading worse past the tolerance, or a loosened line, is ONE finish warning and the
   merge summary's `## Metrics`; a ready written finish records the readings (`finished.metrics`) for the next feature.
   The number holds every change merged since that finish — another branch's, a dependency bump made outside a feature —,
@@ -437,12 +439,14 @@ build's time. A project check prints each as a METRIC line — the form dev-guar
   machine are noise; `kB` and `KB` are different units.
 - **Limits.** A test whose output prints a METRIC fixture line is read as a metric (print the real ones from a script); a
   runner that captures stdout hides the line (`pytest -s`); cmd.exe turns `µ` into an unreadable name (ASCII names).
-- **The design names them.** A size m / l design gets a `## Silent Regressions` section: one row per number, its METRIC name
+- **The design names them.** A size m / l design gets a `## Silent Regressions` section (from a project design template
+  without one: the built-in section, at the end): one row per number, its METRIC name
   in a code span in the first cell and the check that prints it — or `None — <why>`. Doctor warns
   `design-silent-regressions` while it is missing or blank (never a refusal; a design approved before 1.41 is not asked); a
   track's budget section (Performance Budget, Token Economics, UI Performance Budget) holds the targets, this row the check
-  that prints the number. finish warns when a name a row declares was printed by no passing check. Sizes s, xs and none get
-  nothing new unless a check prints a METRIC line with stated terms.
+  that prints the number. finish warns when a name a row declares was printed by no passing check — once `finish --run` ran
+  every check (a run reported over MCP carries no reading, so it says nothing). Sizes s, xs and none get nothing new unless a
+  check prints a METRIC line with stated terms.
 - **The trend:** `dev-spec metrics` (spec_metrics, the project) lists each `(check, name)` across the finishes — a 1.9 %
   step at each finish never warns, but the series shows it.
 

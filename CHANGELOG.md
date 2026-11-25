@@ -46,30 +46,32 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
 - **METRIC lines — numbers that get worse while the tests stay green.** A project check prints
   `METRIC <name>=<number>[ <unit>][ better=lower|higher][ tolerance=<n>[%]]` (`metric-lines/1`, the line dev-guardian
   3.17's `metrics` command reads too); `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read it
-  from a passing run's whole output (its last 64 MiB, 1,000 candidate lines from the end, 20 names — a line past a bound
-  is said). The tick prints and stores
+  from a passing run's whole output, stdout and stderr apart (its last 64 MiB, 1,000 candidate lines from the end, 20
+  names — a line past a bound is said). The tick prints and stores
   the readings, never judges. `spec_finish` compares each (check, name) with the latest OTHER feature's finish that
   recorded it, archived ones included: `metrics`, each with its verdict (`new` · `within` · `improved` · `regressed` ·
-  `unjudged`) and `loosened` for a flipped or dropped `better=`, a raised or dropped tolerance or a changed unit — ONE
-  warning for a reading worse past its stated tolerance or a loosened line, worded as what it is (the number holds every
-  change merged since, not only this feature's), never a blocker; `## Metrics` in the merge summary; a ready written finish
-  records the readings (`finished.metrics`) for the next one. No defaults: a reading is judged only when the earlier line
-  states both `better=` and `tolerance=`; the current line may only tighten them; values compare as exact decimals (120 →
-  122.4 at 2 % is `within`). `spec_metrics` (the project) lists each reading across the finishes (`measured`, the last 10).
-  An MCP report carries none — the CLI reads the whole output.
+  `unjudged`) and `loosened` for a flipped or dropped `better=`, a raised or dropped tolerance or a changed unit (never
+  compared) — ONE warning for a reading worse past its stated tolerance or a loosened line, worded as what it is (the
+  number holds every change merged since, not only this feature's), never a blocker; `## Metrics` in the merge summary; a
+  ready written finish records the readings (`finished.metrics`) for the next one. No defaults: a reading is judged only
+  when the earlier line states both `better=` and `tolerance=`; the current line may only tighten them; values compare as
+  the exact decimals printed (120 → 122.4 at 2 % is `within`). `spec_metrics` (the project) lists each reading across the
+  finishes (`measured`, the last 10). An MCP report carries none — the CLI reads the whole output.
 - **Silent Regressions (size m / l).** The m / l design gets `## Silent Regressions` — one row per number (its METRIC name
   in a code span, the check that prints it) or "None — why". Doctor warns `design-silent-regressions` until it is
   answered — never a refusal, and a design approved before 1.41 is not asked; finish warns when a name a row declares was
-  printed by no passing check (`metricsUnmeasured`); `templates check` warns `silent-missing` on a project design template
-  without the heading. Sizes s, xs and none get nothing new.
+  printed by no passing check (`metricsUnmeasured`, once `finish --run` ran every check); a project design template without
+  the heading gives an m / l feature the built-in section at the end, and `templates check` warns `silent-missing` on it.
+  Sizes s, xs and none get nothing new.
 - **The friction budget (report only).** `_Budget: <check> <duration>_` lines in `.specs/steering/tech.md` (`ms` · `s` ·
   `m` / `min` · `h`; 1 ms – 24 h). `done --run` / `finish --run` (from the spawn to the command's exit) and Claude Code's
   observe hook (the tool's `duration_ms`) time each run of a check made as ONE command into the git-ignored
   `.specs/.execution/timings.jsonl` (this machine's; past 64 KB each check keeps its newest 10 passing runs).
   `spec_metrics` (the project) → `friction`: the median of a check's last 5 passing runs (3 needed) against its budget —
-  `over` · `within` · `few-runs` · `no-runs` · `unbudgeted`, unreadable lines in `invalid`. While a check is over,
-  `spec_next_action`'s finish step ends with the platform item to propose (`dev-spec backlog add "friction-<check>" …`),
-  until the backlog or a feature has that name. Never a gate, a refusal or a doctor entry; pick a budget ≥ 2× a quiet run.
+  `over` · `within` · `few-runs` · `no-runs` · `unbudgeted`, unreadable lines in `invalid` (a command in the check's
+  place too). While a check is over, `spec_next_action`'s finish step ends with the platform item to propose
+  (`dev-spec backlog add "friction-<check>" …`), until the backlog or a feature has that name. Never a gate, a refusal or
+  a doctor entry; pick a budget ≥ 2× a quiet run.
 - **The Test Value rule and an optional pruning pass (+tdd).** The testing-standards template of NEW +tdd projects (EN /
   PT / ES) says a test earns its place when it guards an AC or a past bug and fails when that behaviour breaks (adding it
   to an existing `testing-standards.md` re-reviews every +tdd feature it governed — add it between features);
