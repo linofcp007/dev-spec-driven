@@ -119,7 +119,8 @@ At each phase boundary run `dev-spec doctor <feature>` and advance only on `read
   unticks the affected done tasks and marks their evidence stale — never a removed criterion's tasks: `retire` lists
   them. Re-review, re-approve (`--phase steering` after a steering amendment). Every approval is snapshotted in
   `.specs/<feature>/.history/` — commit it.
-- **Decisions** go to `decisions.md` (`dev-spec decide`), follow-up work through `dev-spec append-tasks`, a replaced
+- **Decisions** go to `decisions.md` (`dev-spec decide`; a confirmed review finding's cause as a lesson, `--kind lesson --cause
+  <code>`, closed at the finish), follow-up work through `dev-spec append-tasks`, a replaced
   criterion declares `_Supersedes: <feature>/US-n.AC-m_`; archive rather than delete. After a plugin update, `dev-spec
   upgrade` audits read-only; `--apply` with the user's OK. Depth: `skills/dev-spec-driven/references/change-management.md`.
 

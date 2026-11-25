@@ -63,8 +63,9 @@ Never "behaviour unchanged" without the runs.
 (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/review-feedback.md`): an AC violation → fix it, cite the AC ·
 a spec change → take it to its phase · out of scope / YAGNI → push back citing the spec · quality → fix with a test · a
 nit → if cheap · a rule for every later task → fix it here, then propose it as a steering amendment, written on the
-user's OK · unclear → ask. One at a time, the covering tests after each, fresh evidence (`spec_complete_task`).
-Reply with the change or the evidence, never performative agreement.
+user's OK · unclear → ask. One at a time, the covering tests after each, fresh evidence (`spec_complete_task`). Each
+confirmed fix gets its cause as a lesson (`spec_decide {kind: "lesson", cause, target}`, never a guess — the finish
+batch amends the guidance once). Reply with the change or the evidence, never performative agreement.
 
 **prompt** (+ai) — a prompt change lands only with its eval delta (golden's median better or held against the
 baseline's spread, adversarial held, regression intact), its cost delta and a bumped `prompts/vN.md`; without eval

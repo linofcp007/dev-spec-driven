@@ -217,7 +217,7 @@ cliente MCP — llaman al mismo motor:
 | `spec_impact` | Lo que toca una edición después de una aprobación (ACs, secciones, pruebas, tareas); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado: `retire` las lista) |
 | `spec_add_track` | Activa un track en una función existente (aditivo) — `remove: true` desactiva uno, sin borrar ficheros |
 | `spec_feature` | Archiva · restaura · renombra · elimina una función (eliminar exige `confirm: true`), o fija su `flow` |
-| `spec_decide` | Añade una decisión o un descubrimiento (`D-n`) a `decisions.md`, con lo que afecta (comprobado) |
+| `spec_decide` | Añade una decisión, un descubrimiento o una lección (`D-n` — por qué ocurrió un hallazgo confirmado en una revisión: la causa, el fichero que hay que corregir) a `decisions.md`, con lo que afecta (comprobado) |
 | `ears_validate` | Valida criterios EARS — SHALL / DEVE / DEBE, IDs estables, palabras vagas, placeholders (EN / PT / ES) |
 | `trace_check` | Cada AC cubierto por una tarea (y por una prueba en +tdd), referencias fantasma; `code` busca T-IDs en los ficheros de prueba, `matrix` la matriz de trazabilidad |
 | `spec_doctor` | Una revisión de salud → "¿lista para avanzar?" (EARS, placeholders, traza, secciones, evidencia, gates, steering) |

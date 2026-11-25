@@ -14,7 +14,12 @@ Phase 6, opt-in.
   IDs, ≤ 5 / 2000 characters); a `[SEC]` / `[PRIVACY]` task's track design sections; a bugfix's Reproduction + Root Cause (+
   `gated` / `gateError` when the bugfix gate would refuse it — 1.36: or +port's, with `heldBy`, the `[PORT]` tasks it waits for);
   `portRole` (`port` · `after`) + `differential` on a +port task (its definition-of-done rule, `brief.portRules`); `dependsOn` (see
-  Task dependencies); the loop's definition of done.
+  Task dependencies); the loop's definition of done. 1.41: two parts after Reuse — **Reference examples** (`briefExamples`,
+  quality.js: structure.md's `## Reference Examples` rows for the task's `briefTargets` — the same paths briefSteering's
+  fileMatch patterns match —, ≤ 6 rows / 1,200 characters, a gone file named never quoted: `examples`; quality.md →
+  Reference examples) and **Lessons** (`briefLessons`, decisions.js: the feature's OPEN lessons, newest first, ≤ 5 / 1,200
+  characters, the rest named — `lessons` {quoted, omitted}; `decisions` never quotes a lesson: lifecycle.md → Decisions and
+  spikes). `write: true` keeps `refs.examples` {quoted, gone, total} and `refs.lessons` {quoted, omitted} only.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`, 6,000 characters since 1.38: a view task keeps +ui's filled state
   matrix — `[UI] UI States`, ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views — beside the other `[UI]` sections, all five up to 2 views;
@@ -926,6 +931,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   narrower choice). The brief grows to ~8.3 KB at 2 views, ~9 KB at 3. Fixture: 08-tasks (1, 2 and 3 views; it fails at
   4,000); three 1.37 fixtures sized for 4,000 were re-sized past the new budget (M15's Big file, the 1.37 view brief's
   Accessibility, RB-2's [UI] block).
+- **1.41.0** — the brief's Reference examples and Lessons parts (each ≤ 1,200 characters, CRIT_X D8.6); `briefTargets` taken out
+  of briefSteering so both read the same paths (CRIT_S1 #11 — `implementsRel` alone missed an absolute path inside the
+  project); a lesson is quoted once, in its own part (CRIT_S1 #2). The fix report's `### Causes` block is one sentence of
+  agents/spec-implementer.md (paid per dispatch — CRIT_S1's cut of more).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

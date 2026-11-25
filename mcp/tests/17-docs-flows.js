@@ -273,4 +273,35 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
     const bad = rows.filter(([, re]) => !re.test(tool)).map(([k]) => k);
     ok(!bad.length, "1.36.0 review 4 (D4-2): tooling-reference.md names doctor's protected-tests warn on a finished feature, the accept beside unprotect in the approval hook's row and the MCP approvals paragraph, and spec_next_task's batch never adding a held task (missing: " + js(bad) + ")");
   }
+
+  { // 1.41 lessons: the prose that runs the loop — a PROPERTY over the engine's codes, never a copied list
+    const { LESSON_CAUSES } = require(path.join(root, "mcp", "lib", "engine", "index.js"));
+    const sub = ws(rd("skills", "dev-spec-driven", "references", "subagent-execution.md"));
+    const files = { "subagent-execution.md": sub, "spec-implementer.md": ws(rd("agents", "spec-implementer.md")),
+      "review-feedback.md": ws(rd("skills", "dev-spec-driven", "references", "review-feedback.md")) };
+    const missing = Object.entries(files).flatMap(([f, t]) => LESSON_CAUSES.filter((c) => !t.includes("`" + c + "`")).map((c) => f + ": " + c));
+    const lessons = (sub.split("### 7b. Lessons")[1] || "").split("### 8. Complete")[0];
+    const finish = ws(rd("commands", "spec-finish.md"));
+    const batch = (finish.split("**The finish batch — ONE question.**")[1] || "").split("After the accept (or a lift)")[0];
+    const props = {
+      codes: !missing.length && LESSON_CAUSES.length === 5,
+      // the self-report is checked before it is recorded, the three a file can show
+      checked: /\*\*Check before recording\*\* the three a file can show: `example-copied` — the file it names holds the same shape \(grep it\), else no lesson; `guidance-wrong` — the line it names exists and says that; `tool-friction` — the evidence shows the slow or failed check\./.test(lessons),
+      // a target in the feature's own folder is a spec change (spec_impact), never a steering line
+      specTarget: /a target inside the feature's own folder [^;]*→ a spec change, taken to its phase \(`spec_impact`\) — never a steering line/.test(lessons) &&
+        /a target inside the feature's own folder is a spec change, never a steering line/.test(batch),
+      // the dedupe key shared with dev-guardian 3.17 (an HTML comment ending `dev-guardian: <stored rule_id> -->`), searched first
+      dedupe: /`<!-- lesson <feature> D-4, <date> -->`, plus ` · dev-guardian: <rule_id>` before the `-->`/.test(lessons) &&
+        /search `AGENTS\.md`, `CLAUDE\.md` and `\.specs\/steering\/\*\.md` for `dev-guardian: <rule_id> -->`: found, the rule is already written — propose none/.test(lessons) &&
+        /never quotes a finding's message or snippet/.test(lessons),
+      // a rule the user states at a checkpoint is no open lesson
+      checkpoint: /\*\*A rule the user states at a checkpoint gets no lesson:\*\*/.test(lessons) && /— no lesson: that amendment is the record \(§7b\)/.test(sub),
+      // the finish batch: ONE question, the warnings in the round's order, the platform names, then step 1 again
+      batch: ["dev-guardian's", "test integrity's (`testIntegrity`", "the metrics' (a regressed or loosened metric)", "the lessons' (`lessons`"].map((w) => batch.indexOf(w)).every((i, k, a) => i >= 0 && (k === 0 || i > a[k - 1])) &&
+        /Ask ONE question for all of them, never one per warning/.test(batch) && /`friction-<check>` for an over-budget check or a `tool-friction` lesson on a `meta\.checks` command, else `platform-<topic>`/.test(batch) &&
+        /then run step 1 again\.$/.test(batch.trim()),
+    };
+    const off = Object.entries(props).filter(([, v]) => !v).map(([k]) => k);
+    ok(!off.length, "1.41 lessons: every cause code (LESSON_CAUSES) in subagent-execution.md, spec-implementer.md and review-feedback.md; the controller checks three before recording; a feature-folder target is a spec change; the dev-guardian dedupe key; no lesson for a checkpoint rule; /spec-finish's ONE batched question in the round's warning order (off: " + js(off) + "; missing: " + js(missing) + ")");
+  }
 };

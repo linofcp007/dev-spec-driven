@@ -1345,7 +1345,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   review 1, DEP-2: 1.40.0 took the strip out as dead and that gone source went unlisted — a word cannot name a path with
   a blank).
   `projectPath` decides on the TEXT before any fs call (a network path, `..` out, an absolute path elsewhere, a glob:
-  null); `onDisk` stops at a link. **Every doubt reads as "not judged"** — a wrong "gone" sends a team to fix a registry
+  null); `onDisk` stops at a link (both live in the eager quality.js since 1.41, moved verbatim — a lesson's `_Target:_` and
+  a Reference Examples Copy cell read them too; design-system.js links them back, `pathWords` / `stalePath` stay its own).
+  **Every doubt reads as "not judged"** — a wrong "gone" sends a team to fix a registry
   that is right: a root-level file, a path whose first folder is gone as a whole, `_shared/` (`dsCell` drops the
   underscore), a row naming a gone file AND one that is there ("was src/old/Card.jsx, now src/components/Card.tsx" —
   review 3's "the first word decides" called it stale; so `Gone.tsx — replaced by Card.tsx` is not stale either). The
@@ -2093,6 +2095,39 @@ view needs (the detail points there), tooling-reference.md's id.
   `uiStateNames` (markdown.js `uiStateNames()` / `renderUiStateNames()`: `<id>\t<label>` lines, `UI_STATE_A11Y` — `a11y` — as
   the anchor's id; architecture.md → The build): an English doctor loads no pt.js / es.js (a child-process fixture). The
   state ids order the gaps: the feature language's `uiStateLabels` keys.
+
+## Reference examples (1.41)
+- **The table.** `.specs/steering/structure.md`'s `## Reference Examples` section (`REF_EXAMPLES_SYN`: EN · PT `Exemplos de
+  Referência` · ES `Ejemplos de Referencia`, accents optional), read by `referenceExamples(projectDir)` (quality.js): the
+  section's FIRST table outside comments and fences, its columns by header (`REF_EXAMPLES_COLS` — Pattern / Padrão / Patrón ·
+  Copy / Copiar · Applies to / Aplica-se a / Se aplica a), a role no header names by position (1 · 2 · 3), never a column a
+  header took; a row whose Copy cell is empty, a dash or a `[slot]` skipped; `REF_EXAMPLES_ROWS` (30) table lines read,
+  `truncated` counts the rest; a cell cut at `REF_EXAMPLES_CELL` (200). Prose and bullets are never mined (the exemplars found
+  in the wild — PrefectHQ, mithril, vscode's agentHost — are all prose: a section without a table is `{table: false}`).
+  **Why structure.md and not a fileMatch steering file:** front matter makes a file govern the approvals (each edit flags every
+  approved feature its patterns match); an exemplar changes with the code; structure.md without front matter governs nothing.
+  The steering stub has no such section — the default project has no table (CRIT_X D9): the check and the brief part stay
+  inert until a team writes one.
+- **Gone** (`exemplarGone` — its own predicate, never stalePath's: never one predicate for two rules). A Copy cell is ONE
+  path (`exemplarPath`: backticks stripped, a markdown link unwrapped); it is gone only when `projectPath` reads it as a
+  project path with a file extension (`RE_EXEMPLAR_FILE`), its first segment is on disk and the file is not. Everything else
+  — a folder, a package, an alias, a root-level file, a gone first folder, `file.py::func`, `x.ts#name`, a URL, prose — is
+  not judged; no document rule (a `docs/runbook-template.md` exemplar is a file to copy). One reading per cell.
+- **Doctor `reference-examples`** (`referenceExamplesCheck`, project-level like `steering`): a warn naming the gone files
+  (the first `REF_GONE_LISTED` 6, `+N more`) and / or the rows past 30; a pass with the row count, or saying a section
+  without a table is not read; no entry without the section or with slot rows only. Never a fail, never an approval check.
+  **Lean = full:** a `last: true` entry under cross-feature-acs' rule — the lean doctor (next_action's, finish's) runs it
+  while every other check passes and skips it once one warns or fails (it only warns: the verdict can't change). spec_upgrade
+  leaves it out of `attention` (`REF_EXAMPLES_CHECK`, beside `UI_STATES_CHECK`): every feature reads the same project table.
+- **The brief's part** (`briefExamples(projectDir, targets)` — targets: `briefTargets`, the paths a fileMatch pattern
+  matches): a row whose Applies-to globs (split on blanks / `,` / `;`, backticks dropped) match a target as `steeringGlobMatch`
+  does (a folder as `dir/`), or — without a glob — whose Copy file sits in a target's folder (a file target's folder, a
+  folder target itself, case-folded where the file system folds case); a gone file is named (`gone`), never quoted; at most
+  `REF_BRIEF_ROWS` (6) rows within `REF_BRIEF_CHARS` (1,200), `omitted` counts the rest; rows but none for the task → the
+  count line. `null` without a real row.
+- **Cost:** a count (15-quality-reference-examples.js, `fsCalls`): 30 rows of a 4-segment gone path → exactly 2 lstats per
+  row under `src/` (the first-segment read, then the walk to the first missing segment); a lean doctor that already warns
+  reads none.
 
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
@@ -3991,3 +4026,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   15-quality-ui-states.js now pass 64, and the BS-5 fixture asserts the clause in PT and ES too). One 1.38 range for the old
   header cost, 2.1–2.8× (the CHANGELOG, the current rule above, the test's comment); re-measured with the fix (h1.js, the
   H1 shape, medians of 5, three runs): 1.38 2.59–2.75×, the fix 0.26–0.28×.
+
+### Reference examples
+- **1.41.0** — the `## Reference Examples` table of structure.md, its reader, doctor `reference-examples` and the brief's part
+  (ITEM_S1 / CRIT_S1 of the gardening round). CRIT_S1's cuts kept: only `projectPath` + `onDisk` moved out of the lazy
+  design-system.js, verbatim (a lazy entry would load the tier in every doctor and brief — 25 ms Windows / 50 ms Linux);
+  `pathWords` / `stalePath` / `DS_PATH_WORDS` untouched, no `words` knob, no check-vs-stalePath ratio guard (it measured
+  the parse only — 1.3 on Linux) but an exact lstat count; a gone predicate of its own (ONE path per cell, no RE_DOC_EXT);
+  lean = full (the design's full-doctor-only `applies: !c.lean` would have made next_action say pass where spec_doctor
+  warns). Not built: the steering stub's section and slot row (CRIT_X D9: the default project has no table).

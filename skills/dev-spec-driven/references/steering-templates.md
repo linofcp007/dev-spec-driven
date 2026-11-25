@@ -228,6 +228,12 @@ src/
   system) — search there before adding a helper or a component
 - **Promotion:** code moves into `lib/` on its second or third real use, feature-agnostic, with its own tests
 
+## Reference Examples
+| Pattern | Copy | Applies to |
+|---|---|---|
+| A new API route | `src/features/events/api/route.ts` | `src/features/*/api/**` |
+| Money arithmetic (integer cents) | `src/lib/money.ts` | `src/**` |
+
 ## Naming
 - **Files:** kebab-case (`user-settings.tsx`)
 - **Components:** PascalCase export, file in kebab-case
@@ -244,6 +250,14 @@ Body: why, not what. Reference spec and tests.
 - `main` — production; `feature/<feature-name>` per feature, short-lived, squash-merged
 - Reviews required for all merges to main; must check spec compliance and active-track sections
 ```
+
+**Reference Examples** (optional; PT `## Exemplos de Referência` — Padrão · Copiar · Aplica-se a —, ES `## Ejemplos de
+Referencia` — Patrón · Copiar · Se aplica a): the files agents copy the shape of, one per pattern. Only a TABLE is read —
+the Copy column a path, Applies to its globs, at most 30 rows. A task's brief quotes the rows for its `_Implements:_`
+files (an Applies-to glob that matches, or with none the Copy file's own folder); `spec_doctor` warns
+`reference-examples` when a Copy file is gone. A lesson's `example-copied` amendment adds a row here — the good file,
+never the copied one. Why here and not a `fileMatch` steering file: front matter makes a file govern approvals, and an
+exemplar changes with the code; `structure.md` without front matter governs nothing.
 
 ---
 
