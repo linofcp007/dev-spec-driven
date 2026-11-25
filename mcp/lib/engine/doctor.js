@@ -41,6 +41,7 @@ let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the t
 let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
 let designSystemRegistry, designSystemCheck, designSystemGated, designSystemDeprecatedCheck; // quality.js — the design-system registry's checks (1.35; 1.37 ui-deprecated)
 let uiStatesCheck; // quality.js — 1.38 ui-states, [UI] UI States' state matrix
+let referenceExamplesCheck; // quality.js — 1.41 reference-examples, structure.md's Reference Examples table
 let portOn, portPlanCheck, portPlanProbe, portRunChecks, portSchedule, portRecheckNext, portCheckNumber; // port.js — +port's fence (1.36; portSchedule, portRecheckNext: review 1; portCheckNumber: review 2)
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let reviewModelsSetting; // guards.js — the review panel's models (1.36, meta.reviewModels)
@@ -48,7 +49,7 @@ let fastCheckOf; // evidence.js — the fast check (1.36, meta.fastCheck): docto
 let guardLevel, protectedTestsDoctor; // guards.js · protect.js — 1.36 guard tests: doctor's protected-tests warn
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
 let frictionHint; // friction.js — 1.41 the friction budget: next_action's finish-step hint (a platform item for a check over its budget)
-function __link(E) { ({ frictionHint, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
+function __link(E) { ({ frictionHint, referenceExamplesCheck, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designReuseGated, designWeighChecks, detectPhase,
@@ -944,6 +945,12 @@ const DOCTOR_CHECKS = [
       stub.length ? c.fm.scopedSteering.placeholders(stub.map((s) => s.file + (s.placeholders ? ` (${s.placeholders})` : "")).join(", ")) : null].filter(Boolean);
     return { status: issues.length ? "warn" : "pass", detail: issues.join("; ") || c.m.steeringOk };
   } },
+  // 1.41: structure.md's ## Reference Examples table (the brief quotes its rows for a task's files) — a warn for a Copy file that is
+  // gone or rows past the read; a pass that says a section without a table is not read; nothing without the section. Project-level,
+  // like steering. Computed last, under cross-feature-acs' rule: the lean doctor (next_action's, finish's) skips it once another check
+  // already warns or fails — it only warns, so the verdict can't change: lean and full agree.
+  { id: "reference-examples", last: true, applies: (c) => !(c.lean && c.checks.some((x) => x.status !== "pass")),
+    run: (c) => referenceExamplesCheck(c.projectDir, c.lang) },
   // the glossary (.specs/steering/glossary.md): words it says to avoid used in requirements.md / design.md — a warn with the
   // count (spec_clarify asks about each). Only when the glossary lists an avoided word: no glossary, no check.
   { id: "glossary", phase: 1, applies: (c) => !!c.glossary && (c.glossary.truncated || c.glossary.entries.some((e) => e.avoid.length)), run: (c) => {

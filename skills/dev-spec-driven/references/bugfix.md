@@ -23,7 +23,9 @@ not only `[brackets]`), and the human still approves `bug.md` before any fix.
 
 **No fix before the root cause is known.** `spec_doctor` fails the `root-cause` check until
 `bug.md → Root Cause` holds real content — the cause *with evidence*, never "probably". A symptom fix
-that makes the error go away without explaining it is a new bug waiting.
+that makes the error go away without explaining it is a new bug waiting. A root cause that shows a gap in the guidance,
+a bad example that was copied or a tool that pushed the code there is also a lesson (`spec_decide {kind: "lesson", cause,
+target}` — `references/subagent-execution.md` → 7b), amended once at the finish.
 
 **And no fix before the human approved that root cause.** "Fix this" / "corrige isto" / "arréglalo" asks for the
 outcome — it is **not** an approval of the root cause you found, of the test plan or of the tasks. After writing the

@@ -204,7 +204,8 @@ Write the full report to the report path, in the brief's language:
 - Self-review findings and any concerns
 
 On a fix round, **append** a fix report: what changed per finding, the covering tests, the command
-and the output.
+and the output — asked for causes, first a `### Causes` block, one `Cause: <code> — <what led you there>` per finding
+(`guidance-missing` · `guidance-wrong` · `example-copied` · `tool-friction` · `model-error`; never a guess — say you don't know).
 
 Then reply with ONLY (under 15 lines — the detail lives in the file):
 - **Status:** DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED

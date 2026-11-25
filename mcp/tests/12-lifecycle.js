@@ -1139,7 +1139,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
       () => /^unknown _Affects:_ reference\(s\): US-9\.AC-9, T-99, SC-042, Nowhere Section — .*Nothing was written\.$/.test(bad1.error),
       () => bad2.ok === false, () => /_Supersedes:_ must name decisions already in this log \(D-n\): D-9, X-1/.test(bad2.error),
       () => bad3.ok === false, () => /needs a title/.test(bad3.error), () => bad4.ok === false, () => /needs its text/.test(bad4.error),
-      () => bad5.ok === false, () => /kind must be decision or discovery \(got "idea"\)/.test(bad5.error), () => bad6.ok === false,
+      () => bad5.ok === false, () => /kind must be decision, discovery or lesson \(got "idea"\)/.test(bad5.error), () => bad6.ok === false, // 1.41: + lesson
       () => /Missing required argument\(s\): title/.test(bad6.error), () => bad7.result, () => bad7.result.isError === true,
       () => c2Read(f1, "decisions.md") === before1, () => bad8.ok === false, () => !fs.existsSync(path.join(f1b.dir, "decisions.md")),
     ]);

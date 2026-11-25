@@ -21,6 +21,15 @@ before it.
    for every later feature; never a `feature unprotect` here: a lift lasts until `feature protect <feature> <file>`; a
    METRIC reading worse past its stated tolerance, or a loosened METRIC line: tell the user — the number holds every change
    merged since the earlier finish, not only this feature's — and never loosen the line to pass).
+   **The finish batch — ONE question.** The warnings that need the user's decision come in this order: dev-guardian's,
+   test integrity's (`testIntegrity`: tests weakened, suppressions added), the metrics' (a regressed or loosened metric),
+   the lessons' (`lessons`: the open ones). Ask ONE question for all of them, never one per warning: per lesson the
+   amendment, grouped by target (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` → 7b — a
+   target inside the feature's own folder is a spec change, never a steering line; the approved features a constitution or
+   track-file edit flags, named); per platform item its backlog name — `friction-<check>` for an over-budget check or a
+   `tool-friction` lesson on a `meta.checks` command, else `platform-<topic>`; per metric or finding what the user fixes
+   or accepts. Apply the answers — each file edited once, the lessons closed by ONE `spec_decide` entry that supersedes
+   them — then run step 1 again.
    After the accept (or a lift), run step 1 again (`spec_finish {name, write: true}`): the merge summary then lists the
    accept and no longer names the test as changed — the one written before it still does.
 2. **Verify fresh, now** — the full suite and every check the report lists for the active tracks. With project checks set,

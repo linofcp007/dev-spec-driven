@@ -207,7 +207,7 @@ calls the same engine:
 | `spec_impact` | What an edit after an approval touches (ACs, sections, tests, tasks); `reopen` unticks the affected done tasks (never a removed criterion's: `retire` lists those) |
 | `spec_add_track` | Turn a track on for an existing feature (additive) — `remove: true` turns one off, files kept |
 | `spec_feature` | Archive · restore · rename · remove a feature (remove needs `confirm: true`), or set its `flow` |
-| `spec_decide` | Append a decision or a discovery (`D-n`) to `decisions.md`, with what it affects (checked) |
+| `spec_decide` | Append a decision, a discovery or a lesson (`D-n` — why a confirmed review finding happened: its cause, the file to fix) to `decisions.md`, with what it affects (checked) |
 | `ears_validate` | Lint EARS criteria — SHALL / DEVE / DEBE, stable IDs, vague words, placeholders (EN / PT / ES) |
 | `trace_check` | Every AC covered by a task (and a test on +tdd), phantom refs; `code` finds T-IDs in test files, `matrix` the traceability matrix |
 | `spec_doctor` | One health check → "ready to advance?" (EARS, placeholders, trace, sections, evidence, gates, steering) |

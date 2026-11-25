@@ -135,6 +135,36 @@ first; how they came to be — the releases and review findings — is in Histor
 - **Readers:** the brief (bounded), finish's merge summary, spec_export and the catalog, trace_check (`phantomAffects`, warnings),
   doctor (`decision-affects`; `decision-affects-approved` for a decision recorded AFTER the approval it names), the ADR export
   (`exportAdr`: ADR number = D-number, so the log never renumbers — templates-imports-exports.md → Exports and planning).
+- **The lesson kind (1.41)** — why a confirmed review finding happened, as the agent that wrote the code gave it (the loop:
+  references/subagent-execution.md → 7b). `spec_decide {kind: "lesson", cause, target?}` (CLI `decide <f> --kind lesson --cause
+  <code> [--target <path>]`): `cause` one of `LESSON_CAUSES` (`guidance-missing` · `guidance-wrong` · `example-copied` ·
+  `tool-friction` · `model-error` — a string in the schema, the refusal lists them: `causeRequired`, `badCause`); `cause` /
+  `target` on another kind → `lessonOnly`; `target` decided on its TEXT (`lessonTarget`: backticks dropped, a control character
+  none, then quality.js `projectPath` — `badTarget`) and, for `guidance-wrong` / `example-copied` (`LESSON_TARGET_THERE`: the
+  wrong line, the copied file exist by definition), `onDisk` (`targetGone`) — stored as its project path. The entry: markers
+  Kind · Date · `_Cause:_` · `_Target:_` · Affects · Supersedes, the paragraph labelled **Lesson** / **Lição** / **Lección**
+  (`labels.lesson`). The reader takes `_Cause:_` / `_Target:_` (`RE_LESSON_MARKER_HEAD`) and the label (`RE_LESSON_LABEL`)
+  ONLY inside an entry whose `_Kind: lesson_` came first — a decision's `**Lesson:**` paragraph or `_Cause:_` line stays its
+  text, as 1.40 read it; `safeSpecText(s, lesson)` escapes them only in a lesson's own text. A later entry's `_Supersedes:_`
+  CLOSES a lesson. **Who reads it:** `lessonView` (finish's `lessons` {open, closed, unread} + ONE warning — the last, never a
+  blocker), `briefLessons` (the brief's Lessons part: open ones, newest first, `BRIEF_LESSONS_MAX` 5 within
+  `BRIEF_LESSONS_CHARS` 1,200), `lessonCounts` / `projectLessons` (spec_metrics — below), the retro (one amendments line each).
+  **Who leaves it out:** briefDecisions (never quoted twice), `decision-affects-approved` (a lesson changes nothing the spec
+  says), the ADR export (`excluded` reason `lesson`) and the catalog — and both leave out a decision whose `_Supersedes:_` are
+  all lessons (`lessonCloses`: the finish batch's closing entry, reason `lesson-close`); one superseding a lesson AND a
+  decision is a decision. The merge summary keeps every entry (a lesson's cause → target in its meta, a closed one struck
+  through). A hand-written cause outside the codes is `unread`: listed, never counted under a cause.
+- **spec_metrics' lessons (1.41).** A feature's `lessons` {total, open, byCause (`LESSON_CAUSES` order, read causes only),
+  unread} only when it has one. The project's comes from the metrics blocks' ONE walk (`lessonsBlock` → `projectLessons`; finish.js
+  `metricsBlocks` → metric.js `walkFeatureStates` — tasks-and-evidence.md → spec_metrics' ONE walk) over every folder,
+  ACTIVE and ARCHIVED (`featureDirs`; at most `LESSON_FEATURES_MAX` 1,000 read, `truncated` the rest): + `unread` [{feature, id,
+  archived?}] and `repeated` [{cause, target, features, lessons}] — one (cause, target) in two features or more, the target
+  as its project path (`./x` = `x`, case-folded where the file system folds case) and only OUTSIDE `.specs/` (a steering
+  file is every rule's home — "money → tech.md" and "logging → tech.md" are two lessons); no target never repeats. A folder
+  the walk reads keeps its `view`: the walk runs BEFORE the features' own metrics and `viewOf(dir)` hands an active folder's to
+  that feature's (`featureMetrics(…, lv)`), one read of each decisions.md — a COUNT (12-lifecycle-lessons: lessons in an active
+  and an archived feature make exactly the fs calls of a twin without them, each decisions.md read once, cached or not). **No state key on purpose** — decisions.md has the lock, the append, the supersession and the
+  readers; a `.state.json` key would need a writer and a merge rule (conventions.md).
 - **Spike kind** (`kind: "spike"`, `question`, `timebox` `YYYY-MM-DD` | `3d`): spike.md (Question · Timebox · Options considered ·
   Evidence · Decision + `_Outcome: go | no-go | pivot_` · Follow-up; `SPIKE_SYN`; `_Outcome:_` also reads PT/ES and yes/no) +
   investigation tasks; core-only, no gates (`gateWalk`, `pendingGateList`, `chainArtifacts` empty; approve takes only the
@@ -280,6 +310,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   again; add_track's sections landed inside an open fence, read "missing", and a re-add wrote them twice. `appendSpecText()`
   became the one append of every spec writer.
 - **1.25** — the ADR export (`spec_export {format: "adr"}`).
+- **1.41.0** — the lesson kind (ITEM_S1 / CRIT_S1 of the gardening round), a third kind in the committed log rather than a
+  state key or a project `lessons.md` (every branch would append to it: every merge would conflict). CRIT_S1's must-fixes
+  built: a lesson-closing decision is no ADR / catalog row (its probe: a "Lessons of billing" ADR, status accepted, on every
+  feature with lessons); briefDecisions skips lessons (one lesson citing the task's T-ID was quoted in both parts, charged to
+  both budgets); the label and the markers read only inside a lesson entry (a `**Lesson:**` line in an existing entry would
+  have re-segmented it — its Decision and Consequences shifted, its ADR rewritten); `repeated` only outside `.specs/`. Cut:
+  `repeated` in finish, with the design's last-closed and since fields (cross-feature data is project metrics'), a cause enum in the schema (+156
+  tools/list characters against the round's 235 reserve — the string form, +64), the `causes` display names (the codes print as
+  codes), the header's extra sentence. **1.40 garbles a lesson:** it reads `_Kind: lesson_` as a decision, its
+  `_Cause:_` / `_Target:_` lines become the Decision text (body fallback) and the `**Lesson:**` paragraph joins Context — an
+  older engine exports it as an ADR (the CHANGELOG says so).
 
 ### Forecasts and cross-feature overlap
 - **1.14** — sizes, tick times, velocity, ETAs and the cross-feature overlaps. Tasks ticked before 1.14 have no tick time (the

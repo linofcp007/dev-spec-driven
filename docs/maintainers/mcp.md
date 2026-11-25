@@ -277,6 +277,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   sentence (no sentence of its own).
 - **1.36.0 review 3** — the accept: `spec_feature` gains a bare `accept: {type: "boolean"}` and "or protect it with `accept`
   — its current content authorised —," in its protect / unprotect clause: +93 (44,617 → 44,710), under the 45,000 cap.
+- **1.41.0** — the lesson kind (the gardening round's one tools/list spend, its reserve 235): `spec_decide`'s kind enum +
+  `lesson`, its now-redundant description dropped (the enum says it), bare `cause` / `target` strings (the refusal lists the
+  five codes — an enum was +156) and "(a decision, a discovery or a lesson — a finding's `cause` and `target` file)": +64
+  (44,701 → 44,765). The round's other chains spend 0 here (their prose lives in the references).
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.

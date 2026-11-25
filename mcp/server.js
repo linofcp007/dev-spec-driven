@@ -396,7 +396,7 @@ const TOOLS = [
   {
     name: "spec_decide",
     description:
-      "Decision log: append ONE entry to .specs/<feature>/decisions.md — `## D-<n> — <title>` (a decision or a discovery) with Context / Decision / Consequences. Append-only: an entry is never renumbered or rewritten. `affects` must name what exists (an AC / T / EC / NFR / SC ID, or a design section) and `supersedes` earlier entries — else nothing is written (`unknownAffects`).",
+      "Decision log: append ONE entry to .specs/<feature>/decisions.md — `## D-<n> — <title>` (a decision, a discovery or a lesson — a finding's `cause` and `target` file) with Context / Decision / Consequences. Append-only: an entry is never renumbered or rewritten. `affects` must name what exists (an AC / T / EC / NFR / SC ID, or a design section) and `supersedes` earlier entries — else nothing is written (`unknownAffects`).",
     inputSchema: {
       type: "object",
       properties: {
@@ -407,7 +407,9 @@ const TOOLS = [
         consequences: { type: "string", description: "Optional: what follows from it." },
         affects: { type: "array", items: { type: "string" }, description: "Optional: AC / T / EC / NFR / SC IDs, or design section headings as design.md spells them ('Data Models')." },
         supersedes: { type: "array", items: { type: "string" }, description: "Optional: the entries it replaces (D-1)." },
-        kind: { type: "string", enum: ["decision", "discovery"], description: "decision (default) | discovery." },
+        kind: { type: "string", enum: ["decision", "discovery", "lesson"] },
+        cause: { type: "string" },
+        target: { type: "string" },
         projectDir: PROJECT_DIR,
       },
       required: ["name", "title", "decision"],

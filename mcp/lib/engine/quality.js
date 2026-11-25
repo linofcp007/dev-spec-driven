@@ -21,10 +21,11 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsPath, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
   closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf,
   naAnswer, uiStateNames; // markdown.js — 1.38 doctor's ui-states (an n/a cell; the state labels of every language, from the corpus)
+let stripEnd, steeringGlobMatch; // core.js — 1.41 the Reference Examples table (a header cell's colon; an Applies-to glob)
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -34,9 +35,9 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsPath, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
-  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf, naAnswer, uiStateNames } = E); }
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf, naAnswer, uiStateNames, stripEnd, steeringGlobMatch } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -2309,6 +2310,150 @@ function briefDesignSystem(root, design) {
 }
 
 // ---------------------------------------------------------------------------
+// A project path and whether it is there (1.41: moved verbatim from design-system.js, which links them back — the registry's
+// stalePath reads them, and so do a lesson's _Target:_ and a Reference Examples row's Copy cell, eager readers)
+// ---------------------------------------------------------------------------
+// A word of a registry row's path cell as a project path — decided on its TEXT before any fs call (the Reuse section's rule: a
+// network path, an absolute path elsewhere or a `..` out of the project names nothing) — or null when it is no path of the
+// project: a package (`@mui/x-data-grid`), `n/a`, a URL, prose. A `:12` / `#L12` anchor is dropped (implementsPath).
+function projectPath(root, word) {
+  const w = implementsPath(word);
+  if (!w || w.startsWith("@") || /^https?:/i.test(w) || /^n\/a$/i.test(w) || !/[/.]/.test(w) || /[<>"|?*]/.test(w) || isNetworkPath(w)) return null;
+  const abs = path.resolve(root, w);
+  return abs !== root && isInsideDir(root, abs) ? toPosix(path.relative(root, abs)) : null;
+}
+// Does the project path name something on disk — reached WITHOUT following a link: a symlink or a junction on the way (it may
+// lead out of the project, or to a share) is where the walk stops, and counts as there.
+function onDisk(root, rel) {
+  let cur = root;
+  for (const seg of rel.split("/")) {
+    cur = path.join(cur, seg);
+    let st;
+    try { st = fs.lstatSync(cur); } catch { return false; }
+    if (st.isSymbolicLink()) return true;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// (1.41) Reference examples — .specs/steering/structure.md's `## Reference Examples` table: Pattern · Copy · Applies to
+// ---------------------------------------------------------------------------
+// The files a team points its agents to ("copy the shape of this file for that pattern"), read as a TABLE only — prose and bullets
+// are never mined (a section without a table is said as not read). The section's first table (outside comments and fences): the
+// Copy column by its header, else the 2nd; Applies to by its header, else the 3rd; Pattern by its header, else the 1st (a column a
+// header already took is never taken again). A row whose Copy cell is empty, a dash or a template slot is skipped; at most
+// REF_EXAMPLES_ROWS rows read (`truncated` counts the rest), each cell cut at REF_EXAMPLES_CELL characters. Why a table in
+// structure.md and not a fileMatch steering file: a front-mattered steering file governs the approvals (each edit flags every
+// approved feature its patterns match), and exemplars change with the code; structure.md without front matter governs nothing.
+// Readers: the brief's Reference examples part (the rows for the task's files) and doctor's `reference-examples` (the gone files).
+const REF_EXAMPLES_SYN = ["reference examples", "exemplos de referência", "exemplos de referencia", "ejemplos de referencia"];
+const REF_EXAMPLES_COLS = { pattern: ["pattern", "padrão", "padrao", "patrón", "patron"], copy: ["copy", "copiar", "copia"],
+  appliesTo: ["applies to", "aplica-se a", "aplica se a", "se aplica a", "aplica a"] };
+const REF_EXAMPLES_ROWS = 30;
+const REF_EXAMPLES_CELL = 200;
+const REF_EXAMPLES_CHECK = "reference-examples";
+const REF_BRIEF_ROWS = 6; // rows a brief quotes…
+const REF_BRIEF_CHARS = 1200; // …and their characters
+const REF_GONE_LISTED = 6; // gone files doctor names (+ how many more)
+// A code file's name: a file extension on its last segment (`src/routes` may be a folder: never judged). No document rule here —
+// a `docs/runbook-template.md` exemplar is a file to copy too (the registry's stalePath has its own: never one predicate for two rules).
+const RE_EXEMPLAR_FILE = /\.[A-Za-z][A-Za-z0-9]{0,9}$/;
+const RE_TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+const refCellKey = (c) => stripEnd(c.replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase(), unitIn(":"));
+// The structure.md table → { file, table: false } (a section without a table) | { file, table: true, rows: [{pattern, copy, appliesTo}],
+// total, truncated } | null (no structure.md, no such section).
+function referenceExamples(projectDir) {
+  const file = path.join(specsRoot(projectDir), "steering", "structure.md");
+  const text = readIfExists(file);
+  if (text == null) return null;
+  const body = extractSection(steeringFrontMatter(text).body, REF_EXAMPLES_SYN);
+  if (body == null) return null;
+  const rel = toPosix(path.relative(path.resolve(projectDir), file));
+  const lines = stripFencedCode(stripHtmlComments(body)).split(/\r?\n/);
+  const at = lines.findIndex((l, i) => /^\s*\|/.test(l) && i + 1 < lines.length && RE_TABLE_RULE.test(lines[i + 1]));
+  if (at < 0) return { file: rel, table: false };
+  const head = tableCells(lines[at]).map(refCellKey);
+  const col = {};
+  for (const k of Object.keys(REF_EXAMPLES_COLS)) { const i = head.findIndex((h) => REF_EXAMPLES_COLS[k].includes(h)); if (i >= 0) col[k] = i; }
+  const taken = () => new Set(Object.values(col));
+  [["pattern", 0], ["copy", 1], ["appliesTo", 2]].forEach(([k, d]) => {
+    if (col[k] != null) return;
+    const t = taken();
+    col[k] = !t.has(d) ? d : [0, 1, 2, 3, 4, 5].find((i) => !t.has(i));
+  });
+  const rows = [];
+  let read = 0, truncated = 0;
+  for (let i = at + 2; i < lines.length && /^\s*\|/.test(lines[i]); i++) {
+    if (read >= REF_EXAMPLES_ROWS) { truncated++; continue; }
+    read++;
+    const cells = tableCells(lines[i]);
+    const cell = (k) => String(cells[col[k]] || "").trim().slice(0, REF_EXAMPLES_CELL);
+    const copy = cell("copy");
+    if (!copy || /^[-—–]$/.test(copy) || /^\[[^\]]*\]$/.test(copy)) continue; // empty, a dash, a slot
+    rows.push({ pattern: cell("pattern"), copy, appliesTo: cell("appliesTo") });
+  }
+  return { file: rel, table: true, rows, total: rows.length, truncated };
+}
+// A Copy cell as ONE path: its backticks stripped, a markdown link unwrapped.
+function exemplarPath(cell) {
+  const t = stripEnds(String(cell || "").trim(), unitIn("`")).trim();
+  const link = /^\[[^\]]*\]\(\s*([^)\s]+)\s*\)$/.exec(t);
+  return link ? stripEnds(link[1], unitIn("`<>")) : t;
+}
+// Is a Copy cell a file that is gone? Only when it is a project path (projectPath — its text decides first) naming a file (an
+// extension), its first segment is on disk and the file is not. Anything else — a folder, a package, a root-level file, a gone first
+// folder, `file.py::func`, `x.ts#name`, a URL, prose — is not judged: one reading per cell. → the gone file's project path | null
+function exemplarGone(root, cell) {
+  const rel = projectPath(root, exemplarPath(cell));
+  return rel != null && RE_EXEMPLAR_FILE.test(rel) && onDisk(root, rel.split("/")[0]) && !onDisk(root, rel) ? rel : null;
+}
+// The rows a task's brief quotes (targets: its _Implements:_ paths, briefTargets): a row whose Applies-to globs match one (a glob
+// as a fileMatch pattern matches — steeringGlobMatch, a folder as "dir/"), or — without a glob — whose Copy file sits in a target's
+// folder. A gone file is named, never quoted; at most REF_BRIEF_ROWS rows within REF_BRIEF_CHARS (`omitted` counts the rest).
+// → { file, quoted: [{pattern, copy (its path), appliesTo}], gone: [path], omitted, total } | null (no row in the table).
+function briefExamples(projectDir, targets) {
+  const ref = referenceExamples(projectDir);
+  if (!ref || !ref.total) return null;
+  const root = path.resolve(projectDir);
+  const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
+  const tdirs = targets.map((t) => { const x = t.replace(/\/+$/, ""); return fold(RE_EXEMPLAR_FILE.test(x) ? path.posix.dirname(x) : x); });
+  const globsOf = (cell) => cell.split(/[\s,;]+/).map((g) => stripEnds(g, unitIn("`"))).filter((g) => g && !/^(?:[-—–]|n\/a)$/i.test(g));
+  const matches = (r) => {
+    const globs = globsOf(r.appliesTo);
+    if (globs.length) return targets.some((t) => globs.some((g) => steeringGlobMatch(g, t) || steeringGlobMatch(g, t + "/")));
+    const rel = projectPath(root, exemplarPath(r.copy));
+    return rel != null && tdirs.includes(fold(path.posix.dirname(rel)));
+  };
+  const quoted = [], gone = [];
+  let omitted = 0, budget = REF_BRIEF_CHARS;
+  for (const r of ref.rows.filter(matches)) {
+    const copy = exemplarPath(r.copy);
+    const lost = exemplarGone(root, r.copy);
+    if (lost) { gone.push(lost); continue; }
+    const cost = r.pattern.length + copy.length + r.appliesTo.length;
+    if (quoted.length >= REF_BRIEF_ROWS || cost > budget) { omitted++; continue; }
+    budget -= cost;
+    quoted.push({ pattern: r.pattern, copy, appliesTo: r.appliesTo });
+  }
+  return { file: ref.file, quoted, gone, omitted, total: ref.total };
+}
+// doctor's `reference-examples` (project-level, like steering): warn — the rows whose Copy file is gone (exemplarGone; the first
+// REF_GONE_LISTED named), the rows past REF_EXAMPLES_ROWS not read; pass — every row read is there, or the section holds no table
+// (said: it is not read). No section, or a table without a real row: no entry.
+function referenceExamplesCheck(projectDir, lang) {
+  const ref = referenceExamples(projectDir);
+  if (!ref) return null;
+  const Q = i18n.msg(lang).quality;
+  if (!ref.table) return { status: "pass", detail: Q.refExamplesUnread(ref.file) };
+  if (!ref.total && !ref.truncated) return null;
+  const root = path.resolve(projectDir);
+  const gone = ref.rows.map((r) => exemplarGone(root, r.copy)).filter(Boolean);
+  const issues = [gone.length ? Q.refExamplesGone(gone.slice(0, REF_GONE_LISTED).map((p) => "`" + p + "`").join(", "), Math.max(0, gone.length - REF_GONE_LISTED), ref.file) : null,
+    ref.truncated ? Q.refExamplesTruncated(ref.truncated, REF_EXAMPLES_ROWS, ref.file) : null].filter(Boolean);
+  return issues.length ? { status: "warn", detail: issues.join("; ") } : { status: "pass", detail: Q.refExamplesOk(ref.total, ref.file) };
+}
+
+// ---------------------------------------------------------------------------
 // Clarify — surface ambiguities/gaps in requirements before designing
 // ---------------------------------------------------------------------------
 
@@ -3173,4 +3318,4 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
   designSystemDeprecatedCheck, dsReplacement, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,
-  UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, __link };
+  UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, projectPath, onDisk, REF_EXAMPLES_CHECK, referenceExamples, briefExamples, referenceExamplesCheck, __link };

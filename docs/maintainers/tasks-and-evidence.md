@@ -14,7 +14,12 @@ Phase 6, opt-in.
   IDs, ≤ 5 / 2000 characters); a `[SEC]` / `[PRIVACY]` task's track design sections; a bugfix's Reproduction + Root Cause (+
   `gated` / `gateError` when the bugfix gate would refuse it — 1.36: or +port's, with `heldBy`, the `[PORT]` tasks it waits for);
   `portRole` (`port` · `after`) + `differential` on a +port task (its definition-of-done rule, `brief.portRules`); `dependsOn` (see
-  Task dependencies); the loop's definition of done.
+  Task dependencies); the loop's definition of done. 1.41: two parts after Reuse — **Reference examples** (`briefExamples`,
+  quality.js: structure.md's `## Reference Examples` rows for the task's `briefTargets` — the same paths briefSteering's
+  fileMatch patterns match —, ≤ 6 rows / 1,200 characters, a gone file named never quoted: `examples`; quality.md →
+  Reference examples) and **Lessons** (`briefLessons`, decisions.js: the feature's OPEN lessons, newest first, ≤ 5 / 1,200
+  characters, the rest named — `lessons` {quoted, omitted}; `decisions` never quotes a lesson: lifecycle.md → Decisions and
+  spikes). `write: true` keeps `refs.examples` {quoted, gone, total} and `refs.lessons` {quoted, omitted} only.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`, 6,000 characters since 1.38: a view task keeps +ui's filled state
   matrix — `[UI] UI States`, ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views — beside the other `[UI]` sections, all five up to 2 views;
@@ -586,7 +591,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   non-null result becomes the project result's `key`. M's block is `measuredBlock` → `measured` [{check, name, unit, better,
   finishes, first, last, change, changePct, series ≤ 10, otherUnit?}] — per (check, name), in its latest finish's unit (another
   unit's finishes counted apart), by finished.at; none: no key (a project without readings reads as in 1.40). Its CLI lines:
-  `measuredLines`, the last of `metricsLines`.
+  `measuredLines`, the last of `metricsLines`. L's is `lessonsBlock` (decisions.js) → `lessons` (lifecycle.md → spec_metrics'
+  lessons); the walk runs before the features' own metrics, so the block's read of an active folder is handed on (`viewOf`).
 
 ## Task dependencies and execution waves
 - **`_Depends: 3, 5_`** — an English-stable task marker (the task line or a sub-line, never fenced code: `taskMarkers(b).depends`).
@@ -1054,6 +1060,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   missed; a prune task naming the deleted file fails trace on 43 % of real test files), the guardian.js "approved pruning"
   mark (text only, file-granular). The reviewer also got one line: an unreasoned suppression is a question, Important when it
   hides a security scanner (CRIT_X D8.9).
+- **1.41.0** — the brief's Reference examples and Lessons parts (each ≤ 1,200 characters, CRIT_X D8.6); `briefTargets` taken out
+  of briefSteering so both read the same paths (CRIT_S1 #11 — `implementsRel` alone missed an absolute path inside the
+  project); a lesson is quoted once, in its own part (CRIT_S1 #2). The fix report's `### Causes` block is one sentence of
+  agents/spec-implementer.md (paid per dispatch — CRIT_S1's cut of more).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

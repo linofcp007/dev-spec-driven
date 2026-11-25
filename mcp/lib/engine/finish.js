@@ -41,7 +41,8 @@ let protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummary
 let portOn, portFinishRecheck, evidenceRule; // port.js — +port's re-check of the differential check (1.36) · evidence.js
 let frictionStatus, frictionLines; // friction.js — 1.41 the friction budget: spec_metrics' project `friction` and its CLI lines
 let finishMetrics, walkFeatureStates, measuredBlock, measuredLines; // metric.js — 1.41: the METRIC readings at finish, spec_metrics' walk
-function __link(E) { ({ frictionStatus, frictionLines, finishMetrics, walkFeatureStates, measuredBlock, measuredLines, protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, portOn, portFinishRecheck, evidenceRule,
+let lessonView, lessonCounts, lessonsBlock; // decisions.js — 1.41 the lessons (finish's `lessons`, spec_metrics' counts and project block)
+function __link(E) { ({ frictionStatus, frictionLines, finishMetrics, walkFeatureStates, measuredBlock, measuredLines, lessonView, lessonCounts, lessonsBlock, protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, portOn, portFinishRecheck, evidenceRule,
   phaseFile, duplicationReport, designSystemFinish, DESIGN_SYSTEM_FILE, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -343,6 +344,11 @@ function finishFeature(projectDir, name, opts = {}) {
   const unjudged = pass ? F.uiUnjudged(pass.count, pass.line ? pass.file + ":" + pass.line : pass.file, pass.read, pass.sheet, pass.chars, pass.alone) : "";
   if (ds && ds.uiChecks.total) warnings.push(F.uiChecks(ds.uiChecks.total, ds.uiChecks.top.map((x) => `${x.file}:${x.line} ${x.rule}`).join("; "), slug, unjudged));
   else if (unjudged) warnings.push(unjudged);
+  // 1.41 the lessons (decisions.md's _Kind: lesson_ entries — why a confirmed review finding happened): the OPEN ones wait for the user's
+  // decision — /spec-finish's ONE batched question, then one decision superseding them closes them. ONE warning, never a blocker, the
+  // LAST one (the batch's order: dev-guardian, test integrity, metrics, lessons); `lessons` only when the feature has one.
+  const lessons = lessonView(dir);
+  if (lessons && lessons.open.length) warnings.push(i18n.msg(lng).decisions.finishOpen(lessons.open.map((x) => x.id), slug));
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
   // (+ 1.41: finished.metrics — the readings the next feature's finish compares with)
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap, fm.record) : null;
@@ -377,6 +383,7 @@ function finishFeature(projectDir, name, opts = {}) {
     res.designSystem = Object.assign(ds.raw ? { raw: ds.raw } : {}, ds.uiChecks.total || pass ? { uiChecks: ds.uiChecks } : {}, { registered: ds.registered, unregistered: ds.unregistered },
       ds.registered.length ? { note: i18n.msg(lng).quality.dsRegistered(ds.registered.join(", ")) } : {});
   }
+  if (lessons) res.lessons = lessons; // 1.41: {open: [{id, title, cause, target, affects}], closed: [{id, title, cause, target, closedBy}], unread: [D-n]}
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code
   // 1.41 (stable): [{check, name, value, unit, better, tolerance, verdict (new · within · improved · regressed · unjudged), why, loosened,
   // delta, applied, reference: null | {feature, at (its finished.at), value, unit, better, tolerance}}] · the design's unmeasured names
@@ -403,7 +410,7 @@ const isoOf = (t) => (t == null ? null : new Date(t).toISOString());
 // Lead time in hours (never negative: an approximate start may postdate a milestone).
 const hoursFrom = (start, t) => (start == null || t == null ? null : round2(Math.max(0, t - start) / 3600000));
 
-function featureMetrics(projectDir, slug, dir) {
+function featureMetrics(projectDir, slug, dir, lv) {
   const state = readState(projectDir, slug);
   const tracks = detectTracks(dir);
   const kind = state.kind || "feature";
@@ -538,6 +545,9 @@ function featureMetrics(projectDir, slug, dir) {
     tasks: { done, total: active.length },
     openClarifications,
   };
+  // 1.41: the feature's lessons {total, open, byCause, unread} — only when it has one (lv: the project walk's read of this folder)
+  const lessons = lessonCounts(lv === undefined ? lessonView(dir) : lv);
+  if (lessons) res.lessons = lessons;
   if (state.invalid) res.warning = state.invalid; // the valid parts were used
   return res;
 }
@@ -565,7 +575,8 @@ function metrics(projectDir, name, opts = {}) {
     if (write) {
       const file = path.join(f.dir, "retro.md");
       const rel = path.relative(projectDir, file).split(path.sep).join("/");
-      const written = writeIfAbsent(file, i18n.portableCli(M.retro(res, { dur: fmtHours, today: today(), day: dayOf })));
+      const lessonList = res.lessons ? lessonView(f.dir, { text: true }) : null; // 1.41: one line per lesson in the amendments section
+      const written = writeIfAbsent(file, i18n.portableCli(M.retro(res, { dur: fmtHours, today: today(), day: dayOf, lessons: lessonList })));
       res.retro = { path: rel, written };
       res.note = written ? M.retroWritten(rel) : M.retroExists(rel);
     }
@@ -574,7 +585,12 @@ function metrics(projectDir, name, opts = {}) {
   const lng = projectLang(projectDir);
   if (write) return { ok: false, error: i18n.msg(lng).metrics.writeNeedsName };
   const list = listFeatures(projectDir);
-  const features = list.features.map((x) => featureMetrics(projectDir, x.name, path.join(list.specsDir, x.name)));
+  // 1.41: the project blocks — ONE walk of every feature folder, ACTIVE and ARCHIVED, its state read once (the read cache serves the
+  // features' own reads below it); the lessons block's read of an active folder (its decisions.md) is handed on to that feature's metrics
+  const blocks = metricsBlocks(projectDir, lng);
+  walkFeatureStates(projectDir, blocks.map((b) => b.visit));
+  const lessonsRead = blocks.find((b) => b.key === "lessons");
+  const features = list.features.map((x) => { const d = path.join(list.specsDir, x.name); return featureMetrics(projectDir, x.name, d, lessonsRead.viewOf(d)); });
   const col = (fn) => features.map(fn);
   const aggregates = {
     leadTimeHours: Object.fromEntries([...METRIC_PHASES, "complete", "finished"].map((ph) => [ph, stats(col((m) => (m.leadTime[ph] ? m.leadTime[ph].hours : null)))])),
@@ -602,18 +618,17 @@ function metrics(projectDir, name, opts = {}) {
   // 1.41 the friction budget (project-level, never per feature): each project check's measured time against its steering/tech.md
   // budget — null with no budget, no unreadable budget line and no measured run (friction.js frictionStatus)
   const res = { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity, friction: frictionStatus(projectDir, lng) };
-  // 1.41: the project blocks — ONE walk of every feature folder, its state read once (the read cache serves the reads above it)
-  const blocks = metricsBlocks(projectDir, lng);
-  walkFeatureStates(projectDir, blocks.map((b) => b.visit));
   for (const b of blocks) { const v = b.result(); if (v != null) res[b.key] = v; }
   return res;
 }
 // spec_metrics' project blocks (1.41): each { key, visit(fd {slug, dir, archived}, state), result() → the value of `key` in the
 // project result, or null (no key) } — fed by ONE walk of every feature folder (metric.js walkFeatureStates: active, then archived,
-// each state read once; none of them writes). M: `measured` (each METRIC reading across finishes). A block of another concern is one
-// more entry here, built by its own module (its lines: metricsLines, after measured's).
+// each state read once; none of them writes), made BEFORE the features' own metrics (the lessons block hands each active folder's
+// read on to them — viewOf). M: `measured` (each METRIC reading across finishes); L: `lessons` (decisions.js lessonsBlock: every
+// folder's lessons, `repeated`). A block of another concern is one more entry here, built by its own module (its lines:
+// metricsLines, after measured's).
 function metricsBlocks(projectDir, lng) {
-  return [measuredBlock(projectDir, lng)];
+  return [measuredBlock(projectDir, lng), lessonsBlock(projectDir, lng)];
 }
 
 // 0.5 → "30m", 5 → "5h", 60 → "2.5d" (same units in EN/PT/ES); null → "—".
@@ -624,6 +639,15 @@ function fmtHours(h) {
   return round1(h / 24) + "d";
 }
 
+// (1.41) the lessons lines of spec_metrics (a feature's or the project's block; none without lessons): the count by cause, the unread
+// ones, the folders not read, then one line per repeated (cause, target) — the project's.
+function lessonsLines(l, M) {
+  if (!l) return [];
+  const by = Object.entries(l.byCause).map(([c, n]) => c + " " + n).join(" · ");
+  const unread = l.unread.map((u) => (typeof u === "string" ? u : (u.archived ? "_archive/" : "") + u.feature + " " + u.id));
+  return [M.lessonsLine(l.total, l.open, by), ...(unread.length ? [M.lessonsUnread(unread.join(", "))] : []), ...(l.truncated ? [M.lessonsTruncated(l.truncated)] : []),
+    ...(l.repeated || []).map((g) => M.lessonsRepeated(g.cause, g.target, g.features.join(", "), g.lessons))];
+}
 // Human-readable spec_metrics (CLI), in the feature's / project's language.
 function metricsLines(r) {
   const M = i18n.msg(r.lang).metrics;
@@ -643,6 +667,7 @@ function metricsLines(r) {
     const fc = r.fastCheck; // 1.36
     if (fc) out.push(i18n.msg(r.lang).fastCheck.metrics(fc.check, fc.runs, fc.clean, fc.cleanRate, fc.ticks, fc.ticksClean));
     out.push(M.tasks(r.tasks.done, r.tasks.total, r.openClarifications));
+    out.push(...lessonsLines(r.lessons, M)); // 1.41
     if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // 1.14 B4
     if (r.warning) out.push("  ⚠ " + r.warning);
     if (r.note) out.push(r.note);
@@ -667,6 +692,7 @@ function metricsLines(r) {
   }
   out.push(M.totals(r.totals.tasksDone, r.totals.tasksTotal, r.totals.evidenceRuns ? `${r.totals.evidencePassRate}%` : "—", r.totals.evidenceRuns, r.totals.changeRequests, r.totals.reopenedTasks));
   if (r.totals.fastTicks) out.push(i18n.msg(r.lang).fastCheck.metricsTotals(r.totals.fastTicks, r.totals.fastTicksClean)); // 1.36
+  out.push(...lessonsLines(r.lessons, M)); // 1.41: every feature folder's, archived ones too
   if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // 1.14 B4
   out.push(...frictionLines(r.friction, r.lang)); // 1.41 the friction budget
   out.push(...measuredLines(r.measured, r.lang)); // 1.41: each METRIC reading across finishes (the creep view)

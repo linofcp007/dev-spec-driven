@@ -380,6 +380,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   disk or a concurrent reader met it empty or half written) and followed a link the gate had checked a moment before. Chosen
   over a `.bak` copy: nothing to clean up or recover by hand, the gate's guarantee kept whole. The fsync measured ~0.5 ms per
   write (Windows / NTFS).
+- **1.41.0** — the lessons (lifecycle.md → Decisions and spikes) add NO state key on purpose: a `_Kind: lesson_` entry of the
+  committed decisions.md has the lock, the append, the supersession and the readers already; a `.state.json` key would need
+  a writer and a merge-driver rule, a project-level file a conflict on every merge. decisions.md merges as text — its known limit.
 
 ### Merging the spec state
 - **1.21 F1a** — the merge driver: two branches that both approved, ticked or recorded evidence conflicted in `.state.json` /

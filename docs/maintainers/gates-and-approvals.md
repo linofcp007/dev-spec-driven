@@ -144,7 +144,9 @@ review findings — is in History at the end.
   listed after it was ticked or re-run), `suite-evidence` (`meta.checks`), `approval-gates` (a phase missing a role's
   sign-off is pending); a spike: `spike`, `decision`, `open-tasks`. `warnings` never block (EC/NFR/SC,
   planned-not-in-code, legacy approvals missing a role, `outside-code-artifacts`, a file-date-only change, an expired
-  waiver). spec_metrics' `finished` = the earlier of the first execution approval and `state.finished.at`.
+  waiver; 1.41: the open lessons — ONE warning, always the LAST, the field `lessons` only when the feature has one; the
+  finish batch of commands/spec-finish.md asks one question for the warnings that need the user, in the round's order:
+  dev-guardian, test integrity, metrics, lessons — lifecycle.md → Decisions and spikes). spec_metrics' `finished` = the earlier of the first execution approval and `state.finished.at`.
 - **Bugfix execution gate (`bugfixGate()`).** While bug.md → Root Cause is unfilled, no task after the one that writes it
   (`rootCauseTaskIndex()`: names bug.md + a Root Cause synonym, no `_Makes green:_` / `_Verify:_`) can be ticked or given
   evidence — without one (the short form), none after task 1 (`bugGateFirst`); `done --run` refuses before running. A

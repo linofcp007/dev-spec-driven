@@ -151,6 +151,22 @@ function renderBrief(d, lang) {
     // R review 4: a folder read up to its cap (`truncated`) makes the count a lower bound — "at least N more", or "possibly more"
     if (r.files.length && (r.more || r.truncated)) push(t.reuseFilesMore(r.more, !!r.truncated));
   }
+  // 1.41: structure.md's Reference Examples rows for this task's files (a gone file named, never quoted), or that none is for them
+  if (d.examples) {
+    const x = d.examples;
+    if (x.quoted.length || x.gone.length) {
+      push("", t.examples, t.examplesRule(x.file), ...x.quoted.map((r) => `- **${r.pattern || "—"}** — \`${r.copy}\`` + (r.appliesTo ? ` (${r.appliesTo})` : "")));
+      if (x.gone.length) push(t.examplesGone(x.gone.map((p) => "`" + p + "`").join(", ")));
+      if (x.omitted) push(t.examplesOmitted(x.omitted, x.file));
+    } else push("", t.examples, t.examplesNoMatch(x.total, x.file));
+  }
+  // 1.41: the feature's open lessons (decisions.md) — confirmed findings of earlier tasks and why they happened, newest first (bounded)
+  if ((d.lessons || []).length) {
+    const D = MSG[normalizeLang(lang)].decisions;
+    push("", D.briefLessonsHeading, D.briefLessonsIntro);
+    d.lessons.forEach((x) => push(`- **${x.id}** — ${x.title}` + (x.cause ? ` _(${x.cause}${x.target ? " → " + x.target : ""})_` : "") + (x.text ? ": " + x.text : "")));
+    if ((d.lessonsOmitted || []).length) push(D.briefOmitted(d.lessonsOmitted.join(", ")));
+  }
   // 1.35: a task that builds a view — the design-system registry's entry for each component the design names ([UI] Design
   // System Usage: its kind, path, variants, notes and the row's reason), the names the registry doesn't list, where the tokens live
   if (d.designSystem) {
@@ -256,8 +272,12 @@ function renderRetro(T, P, m, fmt) {
   if (m.reopenedTasks) sig.push(T.sigReopened(m.reopenedTasks));
   if (m.evidence && m.evidence.runs && m.evidence.passRate < 100) sig.push(T.sigPass(m.evidence.passRate));
   if (m.openClarifications) sig.push(T.sigClar(m.openClarifications));
+  if (m.lessons) sig.push(T.sigLessons(m.lessons.total, m.lessons.open)); // 1.41
+  // 1.41: the amendments section starts from the feature's lessons (fmt.lessons — a lessonView with their rules), in D-n order
+  const lessons = fmt.lessons ? fmt.lessons.open.concat(fmt.lessons.closed).sort((a, b) => parseInt(a.id.slice(2), 10) - parseInt(b.id.slice(2), 10)) : [];
   return [T.title(m.feature), "", T.intro(fmt.today), "", T.metrics, "", T.header, "|---|---|", ...rows.map(([k, v]) => `| ${k} | ${v} |`), "",
-    T.well, "", "- ", "", T.hurt, "", ...(sig.length ? [T.signals(sig.join("; "))] : []), "- ", "", T.amend, "", T.amendNote, "- ", "",
+    T.well, "", "- ", "", T.hurt, "", ...(sig.length ? [T.signals(sig.join("; "))] : []), "- ", "", T.amend, "", T.amendNote,
+    ...(lessons.length ? lessons.map(T.lessonLine) : ["- "]), "",
     T.followUps, "", T.followUpsNote, "- ", ""].join("\n");
 }
 

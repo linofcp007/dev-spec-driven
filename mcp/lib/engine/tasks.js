@@ -30,7 +30,8 @@ let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (nex
 let guardLevel, protectOnTick, protectedCount, tickRecorded; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
 let portTask, portSchedule, portHeldNumbers; // port.js — +port's fence (1.36; next_task passes over the tasks it holds — review 1; the batch: review 3)
 let runMetricsOf, metricResultFields; // metric.js — 1.41: `done --run`'s METRIC lines (stored and reported, never judged at the tick)
-function __link(E) { ({ runMetricsOf, metricResultFields, guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, portHeldNumbers, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+let briefLessons, briefExamples, briefTargets; // decisions.js · quality.js · scaffold.js — 1.41 the brief's Lessons and Reference examples parts
+function __link(E) { ({ runMetricsOf, metricResultFields, briefLessons, briefExamples, briefTargets, guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, portHeldNumbers, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -1740,6 +1741,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const testRows = testIds.filter((id) => tests.has(id)).map((id) => tests.get(id));
   const unresolved = { acs: acIds.filter((id) => !acs.has(id)), tests: testIds.filter((id) => !tests.has(id)) };
   const dec = briefDecisions(dir, acIds, testIds, blockText); // decisions.md entries citing the task's IDs (bounded)
+  const les = briefLessons(dir); // 1.41: the feature's OPEN lessons, newest first (bounded) — never in the Decisions part too
   // the glossary entries the task's text and its criteria use (a term or an avoided word; bounded)
   const gloss = briefGlossary(root, [blockText, ...acceptanceCriteria.map((a) => a.text)].join("\n"));
 
@@ -1781,6 +1783,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // … and the design section it quotes leaves "Design context" only when the Reuse section quotes ALL of it (R review 2 —
   // reuseQuotedSection): every other section, whatever its heading, keeps the 1.18 selection below.
   const reuseSection = reuseQuotedSection(sections, designText, reuse);
+  // 1.41: structure.md's Reference Examples rows for the task's files (the paths a fileMatch pattern matches — briefTargets), bounded;
+  // null without a row in the table
+  const examples = briefExamples(projectDir, briefTargets(root, mk.implements));
   // 1.35: a task that builds what the user sees (uiTask — the visual review's rule) reads the design-system registry
   // (.specs/steering/design-system.md): the entry of each component the design's [UI] Design System Usage names, bounded. null
   // without a registry.
@@ -1863,6 +1868,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     metrics: mk["emits metrics"],
     implements: mk.implements,
     reuse: reuseShown ? reuse : null,
+    examples,
+    lessons: les.items,
+    lessonsOmitted: les.omitted,
     designSystem: ds,
     unresolved,
     design: { path: rel(path.join(dir, "design.md")), toc: sections.map((s) => s.title), included, omitted },
@@ -1944,6 +1952,10 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (gloss.items.length) res.glossary = gloss.items.map((g) => ({ term: g.term, definition: g.definition, avoid: g.avoid })); // 1.16 Q3
   if (gloss.omitted.length) res.glossaryOmitted = gloss.omitted;
   if (reuseShown) res.reuse = reuse; // {state, total, entries, omitted, files, more}
+  // 1.41: {file, quoted: [{pattern, copy, appliesTo}], gone: [path], omitted, total} — structure.md's Reference Examples rows for its files
+  if (examples) res.examples = examples;
+  // 1.41: {quoted: [{id, title, cause, target, text}], omitted: [D-n]} — the feature's open lessons the brief quotes
+  if (les.items.length || les.omitted.length) res.lessons = { quoted: les.items, omitted: les.omitted };
   // 1.35: {file, components: [{kind, name, path}], unknown, tokens} — the registry entries the brief quotes (identifiers only);
   // 1.39: units {rows: [{props, units}], more} — the units table's rows it quotes, only when the registry holds one
   if (ds) {
@@ -1963,10 +1975,13 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // the nearby files (identifiers) and how many design entries the brief quotes — never the entries' text
     if (res.reuse) res.refs.reuse = { entries: res.reuse.entries.length, files: res.reuse.files };
     if (res.designSystem) res.refs.designSystem = res.designSystem.components.map((c) => c.name); // the names only
+    // 1.41: how many example rows the brief quotes, the gone files it names (paths), how many rows the table holds · the lessons' IDs
+    if (res.examples) res.refs.examples = { quoted: res.examples.quoted.length, gone: res.examples.gone, total: res.examples.total };
+    if (res.lessons) res.refs.lessons = { quoted: res.lessons.quoted.map((x) => x.id), omitted: res.lessons.omitted };
     // KEPT (identifiers the controller and done --run act on): verify, expect, projectChecks, dependsOn, gated / gateError /
     // heldBy, preflight, uiReview, fastCheck (1.36), protectedTests (1.36), portRole / differential (1.36) — only the quoted spec
     // text below goes.
-    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse", "designSystem"]) delete res[k];
+    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse", "designSystem", "examples", "lessons"]) delete res[k];
   }
   return res;
 }
