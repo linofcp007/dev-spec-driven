@@ -46,6 +46,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   port.js                      +port's fence (1.36): the two [PORT] anchors, the gate complete / brief apply, port-verify, the re-check
   evidence.js                  the evidence gate (taskVerification), run shells, red → green, observed runs, project checks
   guardian.js                  dev-guardian's gate (the check `guardian`): the launcher, the CLI lookup, the verdict, its guard rules
+  friction.js                  the friction budget (1.41): tech.md's _Budget:_ lines, timings.jsonl, spec_metrics' friction, the hint
   trace.js                     criterion blocks, the EARS linter, trace_check, the traceability matrix
   gates.js                     the gate walk, pending gates, flows, detectPhase; spec_approve; .history/, spec_impact
   doctor.js                    the check registry (DOCTOR_CHECKS, GATES, approvalChecks), spec_doctor, next_action, status,
@@ -164,7 +165,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 25 modules loaded with the engine (+ dupes.js, design-values.js,
+  costs ~0.65 ms before any compile (the open is the expensive part): 26 modules loaded with the engine (+ dupes.js, design-values.js,
   design-system.js, ui-checks.js, breakpoints.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
   the module of the concept; a new file must earn its load cost. The facade's first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
@@ -303,6 +304,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   after scanCode, and `uiViewFile`, the one view-reader predicate) in design-system.js, the COUNTS (`uiProjectPass`) and the
   marker's ids (`uiOff`, `UI_FACTS`) in ui-checks.js, the marker's reader (`dsChecksOff`) in quality.js, which names no rule
   id. design-system.js exports `uiProject` for one test (a truncated walk's scan).
+- **1.41.0** (chain F) — engine/friction.js, the friction budget (tasks-and-evidence.md → Project checks, The friction budget):
+  EAGER after guardian.js (CRIT_X D8.8) — observeRun, which the observe hook runs, calls its `recordTiming` on every measured run
+  of a project check, and next_action / spec_metrics read it; ~200 lines kept out of evidence.js (2,200+). It reuses evidence.js's
+  one appender and tail reader (`appendLog`, `readLogTail` — observed.jsonl's, generalized) and tasks.js's marker span reader
+  under its own label (`labelMarkerSpans`). 26 eager modules.
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):

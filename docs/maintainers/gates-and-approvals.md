@@ -370,7 +370,9 @@ A feature's **size** (xs · s · m · l) decides its scaffold and approvals. **N
 (mcp/tests/06-gates-sizes.js pins every no-size builder output's sha1; changed on purpose once — the bugfix tasks.md), no
 size key, never assigned by `spec_upgrade`; the unsized gates too, **except the stricter filled rule** (Track sections,
 below), which applies at every size. At EVERY size: EARS, trace, the evidence gate, the bugfix iron law, phase order, the
-finish / execution gate, every track criterion scaffolded.
+finish / execution gate, every track criterion scaffolded. The friction budget (1.41) is project-level: no size reads it and
+it is never a gate — spec_metrics' `friction` and next_action's finish-step hint, only when a check is over its `_Budget:_`
+(tasks-and-evidence.md → The friction budget).
 - **Input.** `spec_create {size}` / `create --size` (`sizeInput()`, case-folded; new features only — `sizes.sizeKept`);
   `.state.json → size` only when given (no merge-driver rule); `featureSize(dir)`. `spec_classify` suggests one, never
   applies it: `suggestedSize`, stable `sizeReason` (trivial-change · small-change · several-tracks · public-api ·
@@ -652,6 +654,8 @@ here. "r5 review" is 1.23's fifth review.
   customer id" was m / default.
 - **1.28** — a size m / l design's Reuse & Integration became a design-gate check (`design-weigh:reuse`; doctor fails it
   there), so doctor's verdict and the gate agree; s / xs / unsized / bugfix / spike / change keep the warning.
+- **1.41.0 (chain F)** — the friction budget stays out of every size rule and gate (CRIT_X D9: sizes none / s see nothing new
+  unless a check is over its budget); its designed doctor entry was cut — it warned every feature at every size.
 
 ### Bugfix and finish
 - **v1.12** — the bugfix kind.

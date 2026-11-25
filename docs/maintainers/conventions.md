@@ -111,6 +111,8 @@ History at the end.
 - **`meta.fastCheck` (1.36) is a plain value** (a check's name): the default rule — two different names conflict. A tick's
   fast-check snapshot (`fast` {check, status, runs, clean}) is a RUN field (`runOf` keeps it): it travels with the run that wins
   `evidence[n]`, no rule of its own.
+- **`.specs/.execution/timings.jsonl` (1.41, the friction budget) is never merged:** git-ignored (`.execution/.gitignore`), one
+  machine's measures — no state key, no run field `ms`, no rule (tasks-and-evidence.md → The friction budget).
 - **`protectedTests` (1.36, guard tests) has its rule** (`mergeProtectedTests`): `files` file by file, 3-way (`mergeMapWith`) — a
   one-sided change (a tick's re-baseline, an added test) comes through; both sides changed one → OURS, never a conflict (finish
   hashes the content again and names a change no record explains); `at` / `via` the EARLIER snapshot's (a record without a time
@@ -400,6 +402,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   would have reverted a tick's re-baseline made on one branch — files merge 3-way, both-changed keeps ours with no conflict.
 - **1.36.0 review 3** — the accept record (`{…, accepted: true}`, `feature protect --accept`) lives in `protectedTests.lifts`:
   `LIFT_ID` gained `accepted`, so it never merges into a lift or an end of the same file, time and user (no new key).
+- **1.41.0 (chain F)** — the friction budget adds no state: its `ms` per run was cut from `.state.json` (a per-machine number
+  nothing judges, churning a committed file on every re-run) and lives in the git-ignored timings.jsonl.
 
 ### The locks
 - **1.13** — the cross-process feature lock: two MCP servers (or MCP + `dev-spec done`) on one feature lost ticks and evidence

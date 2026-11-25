@@ -311,6 +311,37 @@ edit**, so a type error is fixed the moment it appears, not at the `_Verify:_` o
   cap only the first files and the task's own are dated (`partial: true`); test files a task names only by T-ID are outside
   the planned files; after merging a parallel wave the merged files are new — run the fast check once before the ticks.
 
+### The friction budget (`_Budget:` lines in tech.md, report only — 1.41)
+
+How long the project checks take in the dev loop: a slow suite slows every agent's loop. Report only — nothing is refused,
+blocked or warned per feature, at any size.
+
+- **The budget:** a line of `.specs/steering/tech.md` naming a project check and a duration — `- _Budget: test 2m_` (or
+  `*Budget: …*`, any case; the check may be in backticks; text after the closing `_` is a comment: `_Budget: build 90s_ — on a
+  laptop`). Units `ms`, `s`, `m` / `min`, `h`; 1 ms – 24 h; at most 20 markers in the first 256 KB are read. One per check (a
+  second is reported, the first counts); a name that is no check, an unreadable duration and a duplicate are reported in
+  `spec_metrics`' `friction.invalid`; anything else (`_Budget: $500/month_`, a bold `**Budget:**`) is no budget. Fenced code
+  and HTML comments are skipped.
+- **What is measured:** each run of a check as ONE command — `done --run` / `finish --run` (spawn → the command's exit, never a
+  background process's hold on the output) and, in Claude Code, the observe hook (the tool's own `duration_ms`). A piped,
+  chained or backgrounded run is no run of the check and is not timed — run the check on its own. The lines go to the
+  git-ignored `.specs/.execution/timings.jsonl` (this machine's; past 64 KB each check keeps its newest 10 passing runs); a
+  line counts while the check's command is still the one it ran.
+- **The verdict:** the MEDIAN of the check's last 5 passing measured runs, 3 needed — one slow run never judges. `spec_metrics`
+  (the project view; `dev-spec metrics`) → `friction {checks: [{check, budgetMs, runs, medianMs, minMs, maxMs, status}],
+  invalid}`, status (stable) `over` · `within` (a median at the budget is within) · `few-runs` · `no-runs` · `unbudgeted`.
+- **At the finish step:** while a check is `over`, `spec_next_action`'s `finish` step ends with a hint and returns `friction
+  {over: [{check, medianMs, budgetMs, runs}]}` — propose a platform item to the user (`dev-spec backlog add "friction-<check>"
+  "…"`), never a fix inside the feature; or the user raises or removes that budget. The hint stops once the backlog holds
+  `friction-<check>` or a feature (active or archived) has that name.
+- **Pick a budget ≥ 2× a quiet run:** two suites at once or a parallel wave slow a check by 30–60 % (+56 % measured on Linux,
+  two at once), and the median then reads that as friction. One median mixes the CLI's shell (cmd.exe, pwsh) with Claude Code's
+  Bash, and each start costs time (PowerShell ~0.35 s): a budget under ~2 s mostly measures shells.
+- **A tech.md with `inclusion: always` front matter governs:** editing a budget there marks every approved feature
+  `steering-changed-since-approval` — keep budgets in a tech.md without that front matter, or re-approve.
+- **Not measured:** runs over the MCP server (it runs nothing) or reported to it; failing runs (a bail-out reads fast); a
+  worktree's own CLI runs (its log stays there); permission prompts and the model's thinking.
+
 ### dev-guardian's gate — the check `guardian`
 
 With the sibling plugin **dev-guardian** (3.2.1 or later) installed, `spec_init {guardian: true}` (CLI `dev-spec init

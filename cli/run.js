@@ -40,7 +40,7 @@ function shellName(sh, env) {
   return sh.shell === true ? (process.platform === "win32" ? e.ComSpec || "cmd.exe" : "/bin/sh") : String(sh.shell);
 }
 
-// Runs ONE command line → a Promise of the raw run: { status, signal, error, heldOpen, stdout, stderr }. Asynchronous with a timer
+// Runs ONE command line → a Promise of the raw run: { status, signal, error, heldOpen, stdout, stderr, ms }. Asynchronous with a timer
 // of its own, so `timeoutS` kills the whole PROCESS TREE — `taskkill /T /F` on Windows, the process group (a
 // detached child: its own group) elsewhere; spawnSync's timeout killed the shell alone, the check it started ran on (and held the
 // output pipes). A PowerShell shell (sh.args — resolveRunShell) runs `<shell> -NoProfile -NonInteractive -Command <cmd>`,
@@ -48,6 +48,8 @@ function shellName(sh, env) {
 // opts: cwd · timeoutS (seconds, none = no limit) · onSignal(sig) — given, a SIGINT / SIGTERM to this process kills the tree
 // first, then calls it (the CLI exits 130 / 143: a detached group no longer gets the terminal's Ctrl+C) · drainMs · maxOutput ·
 // env (the command's whole environment — default: this process's; finish --run: dev-guardian's diff base, 1.33).
+// ms (1.41, the friction budget's measure): the monotonic time from the spawn to the command's EXIT — never the pipes' drain after it
+// (a background process holding them would add up to drainMs); null when it never exited (a spawn error, a run that never ended).
 function execCommand(command, sh, opts) {
   const o = opts || {};
   const timeoutS = o.timeoutS;
@@ -58,6 +60,7 @@ function execCommand(command, sh, opts) {
     const chunks = [[], []];
     let size = 0, error = null, settled = false, timer = null, grace = null, child = null;
     let exited = null, drain = null, heldOpen = false; // the command's exit, the drain after it, pipes still held then
+    let t0 = null, ms = null; // the monotonic clock at the spawn, the run's time at the exit (1.41)
     const killTree = () => {
       if (child && child.pid != null) {
         if (win) {
@@ -81,10 +84,11 @@ function execCommand(command, sh, opts) {
         process.removeListener("SIGTERM", onSignal);
       }
       if (child) { try { child.stdout.destroy(); child.stderr.destroy(); child.unref(); } catch { /* already closed */ } }
-      resolve({ status, signal, error, heldOpen, stdout: Buffer.concat(chunks[0]).toString("utf8"), stderr: Buffer.concat(chunks[1]).toString("utf8") });
+      resolve({ status, signal, error, heldOpen, stdout: Buffer.concat(chunks[0]).toString("utf8"), stderr: Buffer.concat(chunks[1]).toString("utf8"), ms });
     };
     try {
       const sopts = { cwd: o.cwd, windowsHide: true, detached: !win, ...(o.env ? { env: o.env } : {}) };
+      t0 = process.hrtime.bigint();
       // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
       child = Array.isArray(sh.args) ? spawn(String(sh.shell), [...sh.args, command], sopts) : spawn(command, { shell: sh.shell, ...sopts });
     } catch (e) { error = e; return settle(null, null); }
@@ -108,6 +112,7 @@ function execCommand(command, sh, opts) {
     // dropped and the exit status settles the run (heldOpen: the caller prints a note).
     child.on("exit", (code, signal) => {
       exited = { code, signal };
+      ms = Number((process.hrtime.bigint() - t0) / 1000000n);
       if (!error) clearTimeout(timer);
       drain = setTimeout(() => { heldOpen = true; settle(code, signal); }, drainMs);
     });
@@ -147,7 +152,8 @@ function runVerdict(run, sh, why, timeoutS) {
 }
 
 // ONE command, run and judged → the verdict + heldOpen (a background process still held the output pipes when the
-// run settled at the command's exit) + its stdout and stderr apart (finish --run: dev-guardian's JSON report is its stdout).
+// run settled at the command's exit) + its stdout and stderr apart (finish --run: dev-guardian's JSON report is its stdout) + ms
+// (spawn → exit — the friction budget's timings line, 1.41; never stored in .state.json).
 // M: the feature language's messages. opts: execCommand's.
 async function runCommand(command, sh, M, opts) {
   const run = await execCommand(command, sh, opts);
@@ -155,6 +161,7 @@ async function runCommand(command, sh, M, opts) {
   r.heldOpen = !!run.heldOpen;
   r.stdout = run.stdout || "";
   r.stderr = run.stderr || "";
+  r.ms = run.ms;
   return r;
 }
 
@@ -241,6 +248,9 @@ async function runChecks(feature, deps) {
     // a check that could not run is refused and NOTHING is recorded (all-or-nothing, like
     // spec_finish {evidence}) — it used to be recorded as a failed run (exit 1).
     if (x.cantRun) return { ok: false, couldNotRun: x.cantRun.code, check: c.name, error: M.runGate.checkRefused(c.name, c.command, x.cantRun.why) };
+    // 1.41 the friction budget: the check's measured run → its timings line (git-ignored; never an observed line — finish --run's runs
+    // are stamped observed "cli" on the record, and an MCP-only client's fast check must keep reading unknown)
+    spec.recordTiming(projectDir, { check: c.name, command: c.command, exitCode: x.code, ms: x.ms, by: "cli" });
     if (x.code !== 0 && sh.cmd && spec.windowsShellFailure(x.output, x.code)) cmdFailed = true;
     // a guardian check: its JSON report (stdout) and its raw stderr (its own message, node's — the summary keeps only the last lines)
     evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary,

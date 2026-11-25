@@ -39,7 +39,8 @@ let today, dayOf; // core.js — the local calendar date (today / dayOf)
 let phaseFile; // state.js — the file a phase writes (tasks: an xs change's change.md)
 let protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines; // protect.js — 1.36 guard tests: protect / unprotect, finish's check
 let portOn, portFinishRecheck, evidenceRule; // port.js — +port's re-check of the differential check (1.36) · evidence.js
-function __link(E) { ({ protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, portOn, portFinishRecheck, evidenceRule,
+let frictionStatus, frictionLines; // friction.js — 1.41 the friction budget: spec_metrics' project `friction` and its CLI lines
+function __link(E) { ({ frictionStatus, frictionLines, protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, portOn, portFinishRecheck, evidenceRule,
   phaseFile, duplicationReport, designSystemFinish, DESIGN_SYSTEM_FILE, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -585,7 +586,9 @@ function metrics(projectDir, name, opts = {}) {
   // the project velocity (every feature's completions: the roadmap forecasts' rate — the archived ones' too)
   const now = (opts.now != null && timeOf(opts.now)) || Date.now();
   const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
-  return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity };
+  // 1.41 the friction budget (project-level, never per feature): each project check's measured time against its steering/tech.md
+  // budget — null with no budget, no unreadable budget line and no measured run (friction.js frictionStatus)
+  return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity, friction: frictionStatus(projectDir, lng) };
 }
 
 // 0.5 → "30m", 5 → "5h", 60 → "2.5d" (same units in EN/PT/ES); null → "—".
@@ -620,7 +623,7 @@ function metricsLines(r) {
     if (r.note) out.push(r.note);
     return out;
   }
-  if (!r.features.length) return [M.noFeatures(r.specsDir)];
+  if (!r.features.length) return [M.noFeatures(r.specsDir), ...frictionLines(r.friction, r.lang)];
   const out = [M.projectHead(r.features.length)];
   const w = Math.min(28, Math.max(8, ...r.features.map((m) => m.feature.length)));
   for (const m of r.features) {
@@ -640,6 +643,7 @@ function metricsLines(r) {
   out.push(M.totals(r.totals.tasksDone, r.totals.tasksTotal, r.totals.evidenceRuns ? `${r.totals.evidencePassRate}%` : "—", r.totals.evidenceRuns, r.totals.changeRequests, r.totals.reopenedTasks));
   if (r.totals.fastTicks) out.push(i18n.msg(r.lang).fastCheck.metricsTotals(r.totals.fastTicks, r.totals.fastTicksClean)); // 1.36
   if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // 1.14 B4
+  out.push(...frictionLines(r.friction, r.lang)); // 1.41 the friction budget
   return out;
 }
 

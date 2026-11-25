@@ -194,6 +194,11 @@ recurring enterprise plan for venues (€49/mo).
 - **Regulatory:** [e.g., EU GDPR, data residency]
 ```
 
+Optional (1.41): **friction budgets** — a `_Budget: <check> <duration>_` line per project check, how long it may take in the dev
+loop (`- _Budget: test 2m_`, `- _Budget: typecheck 30s_`; pick ≥ 2× a quiet run). Report only: `spec_metrics` judges the median
+of its last 5 passing runs, the finish step proposes a `friction-<check>` backlog item — `references/verification.md` → The
+friction budget. Not in the stub (no slot to fill).
+
 ---
 
 ## `structure.md` (core)
