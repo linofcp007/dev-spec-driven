@@ -668,7 +668,7 @@ function projectLessons(projectDir, folders) {
     counted.push(...all);
     for (const id of f.view.unread) unread.push(Object.assign({ feature: f.feature, id }, f.archived ? { archived: true } : {}));
     for (const x of all) {
-      const rel = x.cause && x.target ? projectPath(root, x.target) : null;
+      const rel = x.cause ? projectPath(root, x.target) : null; // (no target: projectPath names none — the text "null" is no path)
       if (rel == null || rel === ".specs" || rel.startsWith(".specs/")) continue;
       const key = x.cause + "\n" + (FOLD_CASE ? rel.toLowerCase() : rel);
       const g = groups.get(key) || groups.set(key, { cause: x.cause, target: rel, features: [], lessons: 0 }).get(key);

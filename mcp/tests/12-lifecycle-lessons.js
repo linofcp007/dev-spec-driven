@@ -185,7 +185,11 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, require, __di
     lesson(p, "usage-metering", { title: "copied again", target: "./src/api-keys/service.js" }); // `./x` = `x`
     lesson(p, "usage-metering", { title: "logging → tech", cause: "guidance-missing", target: ".specs/steering/tech.md" });
     lesson(p, "usage-metering", { title: "no target", cause: "model-error", target: undefined });
+    lesson(p, "usage-metering", { title: "slow check", cause: "tool-friction", target: "src/api-keys/service.js" }); // one feature: never repeated
     const mf = S.metrics(p, "api-keys");
+    // two hand-written lessons whose cause reads as none of the codes, the same target in two features: unread, never one repeated group
+    const unreadLesson = "\n## D-9 — Hand-written\n\n- _Kind: lesson_\n- _Cause: sloppy_\n- _Target: src/api-keys/service.js_\n\n**Lesson:** x\n";
+    for (const f of ["api-keys", "usage-metering"]) fs.appendFileSync(path.join(p, ".specs", f, "decisions.md"), unreadLesson);
     const before = S.metrics(p);
     // an archived feature's lessons still count (the archive is history), and a third feature repeating the copied file
     // (its lesson hand-written, `./`-prefixed: spec_decide stores the project path, a hand edit may not — the grouping reads it as one)
@@ -198,14 +202,17 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, require, __di
       js([mf.lessons, before.lessons, after.lessons]) + ")", {
       keysBefore: !k0.includes("lessons") && !pk0.includes("lessons"),
       feature: js(mf.lessons) === js({ total: 2, open: 2, byCause: { "guidance-missing": 1, "example-copied": 1 }, unread: [] }),
-      project: before.lessons.total === 5 && before.lessons.open === 5 && js(before.lessons.byCause) === js({ "guidance-missing": 2, "example-copied": 2, "model-error": 1 }),
+      project: before.lessons.total === 8 && before.lessons.open === 8 && js(before.lessons.byCause) === js({ "guidance-missing": 2, "example-copied": 2, "tool-friction": 1, "model-error": 1 }) &&
+        js(before.lessons.unread) === js([{ feature: "api-keys", id: "D-9" }, { feature: "usage-metering", id: "D-9" }]),
       repeated: js(before.lessons.repeated) === js([{ cause: "example-copied", target: "src/api-keys/service.js", features: ["api-keys", "usage-metering"], lessons: 2 }]),
-      archived: f3.ok && arch.ok && after.lessons.total === 6 && js(after.lessons.repeated[0].features) === js(["api-keys", "usage-metering", "_archive/invoices"]) && after.lessons.repeated[0].lessons === 3,
-      perFeature: after.features.find((m) => m.feature === "api-keys").lessons.total === 2 && !("lessons" in (after.features.find((m) => m.feature === "invoices") || {})),
+      archived: f3.ok && arch.ok && after.lessons.total === 9 && js(after.lessons.repeated[0].features) === js(["api-keys", "usage-metering", "_archive/invoices"]) && after.lessons.repeated[0].lessons === 3 &&
+        after.lessons.repeated.length === 1,
+      perFeature: after.features.find((m) => m.feature === "api-keys").lessons.total === 3 && !("lessons" in (after.features.find((m) => m.feature === "invoices") || {})),
     });
     const lines = E.metricsLines(after);
-    all("1.41 lessons: the CLI's metrics lines — the project's count by cause and one `repeated:` line each (got " + js(lines.filter((l) => /lessons|repeated/.test(l))) + ")", {
-      count: lines.includes(I.msg("en").metrics.lessonsLine(6, 6, "guidance-missing 2 · example-copied 3 · model-error 1")),
+    all("1.41 lessons: the CLI's metrics lines — the project's count by cause, the unread ones, one `repeated:` line each (got " + js(lines.filter((l) => /lessons|repeated/.test(l))) + ")", {
+      count: lines.includes(I.msg("en").metrics.lessonsLine(9, 9, "guidance-missing 2 · example-copied 3 · tool-friction 1 · model-error 1")),
+      unread: lines.includes(I.msg("en").metrics.lessonsUnread("api-keys D-9, usage-metering D-9")),
       repeated: lines.includes(I.msg("en").metrics.lessonsRepeated("example-copied", "src/api-keys/service.js", "api-keys, usage-metering, _archive/invoices", 3)),
       feature: E.metricsLines(mf).includes(I.msg("en").metrics.lessonsLine(2, 2, "guidance-missing 1 · example-copied 1")),
     });
@@ -215,8 +222,9 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, require, __di
     const T = I.msg("en").metrics.retroText;
     all("1.41 lessons: retro.md — the amendments section starts from the lessons (one line each: cause → target, the rule, open / closed by) and the signals say how many (got " + js(retro.split(T.amend)[1]) + ")", {
       written: w.retro && w.retro.written === true,
-      lines: retro.includes("- D-1 (example-copied → src/api-keys/service.js): Money is integer cents; never a float. — open") && retro.includes("- D-2 (guidance-missing → .specs/steering/tech.md):"),
-      signal: retro.includes(T.sigLessons(2, 2)),
+      lines: retro.includes("- D-1 (example-copied → src/api-keys/service.js): Money is integer cents; never a float. — open") && retro.includes("- D-2 (guidance-missing → .specs/steering/tech.md):") &&
+        retro.includes("- D-9 (? → src/api-keys/service.js): x — open"),
+      signal: retro.includes(T.sigLessons(3, 3)),
     });
     // a retro without lessons is 1.40's
     const p2 = demo("retro-none");
