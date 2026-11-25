@@ -71,6 +71,8 @@ const PTBR_OVERRIDES = [
   ["uma ligação (symlink / junction)", "um link (symlink / junction)"],
   // enclisis mid-sentence reads European (the phrase table can't see it: tasks.md is held as a file name first)
   ["uma alteração ao tasks.md revê-se e volta a aprovar-se", "uma alteração no tasks.md é revisada e aprovada de novo"],
+  // 1.41: an imperative chained to a negated subjunctive ("nunca os copies, e diz …") — the chain only follows an imperative
+  ["e diz no teu relatório", "e diga no seu relatório"],
 ];
 
 // 1. The European progressive a + infinitive → the Brazilian gerund. correr = a process running → rodando.
@@ -208,6 +210,7 @@ const PTBR_YOU_SUBJ = {
   tenhas: "tenha", possas: "possa", queiras: "queira", sejas: "seja", estejas: "esteja", vás: "vá", ignores: "ignore",
   mexas: "mexa", toques: "toque", reescrevas: "reescreva", apresentes: "apresente", declares: "declare", afirmes: "afirme",
   tires: "tire", forces: "force", // "Nunca forces o finish" → "Nunca force o finish"
+  repitas: "repita", copies: "copie", // 1.41: "não os repitas" (the brief's lessons) · "nunca os copies" (its gone examples)
 };
 const PTBR_POSSESSIVE = { teu: "seu", tua: "sua", teus: "seus", tuas: "suas" };
 
