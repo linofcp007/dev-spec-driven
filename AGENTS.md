@@ -90,7 +90,7 @@ fill the scaffold, `dev-spec doctor`, present it, and record the user's yes. Pha
    - **Before you claim it:** run `dev-spec stop-check --message "<what you are about to say>"` — exit 1 means ticked tasks still lack passing evidence: record the run or say plainly what is not verified.
    - **Review findings are claims:** before fixing a finding of this plugin's reviewer, check it exists at HEAD, this branch introduced it, nothing in the spec asks for it and no green check answers it (`agents/spec-verifier.md`; only 80+ is worth a fix; an AC with no code is always a gap). A person's review comments go through `skills/dev-spec-driven/references/review-feedback.md`.
    - **Repeated code:** `dev-spec dupes <feature>` lists what the feature's code repeats — elsewhere in the project (`existing`: reuse or extend it) or inside the feature (`within`); candidates to check, never verdicts (finish warns on them).
-   - **Close** with `dev-spec finish`, optionally after a simplification pass (`skills/dev-spec-driven/references/code-reuse-and-quality.md`); subagent execution: `skills/dev-spec-driven/references/subagent-execution.md`.
+   - **Close** with `dev-spec finish`, optionally after a simplification pass (`skills/dev-spec-driven/references/code-reuse-and-quality.md`) or, on +tdd, a pruning pass (the tests that no longer earn their place, each removal the user's); subagent execution and both passes: `skills/dev-spec-driven/references/subagent-execution.md`.
 
 At each phase boundary run `dev-spec doctor <feature>` and advance only on `readyToAdvance`. Record the user's sign-off (their explicit yes for that phase) with `dev-spec approve <feature> <phase>`. Unsure what comes next? `dev-spec next-action <feature>`.
 

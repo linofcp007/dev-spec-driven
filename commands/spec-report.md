@@ -17,8 +17,10 @@ Args: $ARGUMENTS — everything is derived locally from `.specs/`; no model, not
   `/spec-change <feature> impact`; the code is wrong → fix it (`/spec-bugfix`); harmless → finish again for a fresh baseline.
 - **metrics `[feature] [--write]`** — `spec_metrics {name?, write?}`: lead times, rework, forced and batch approvals,
   change requests, evidence pass rate, velocity, the review lessons by cause (the project's over archived features too, and
-  the cause and file repeated in two features or more). `write` (with a name) creates `retro.md`, never over an existing
-  one; its steering amendments — one line per lesson — are proposals for the user.
+  the cause and file repeated in two features or more); for the project, each check's measured time against its
+  `_Budget:_` line (`friction`) and each METRIC reading across the finishes that recorded it (`measured`). `write` (with a
+  name) creates `retro.md`, never over an existing one; its steering amendments — one line per lesson — are proposals for
+  the user.
 - **changelog `[--since <date|last|all>] [--milestone <name>] [--write]`** — `spec_export {format: "changelog", since?,
   milestone?, write?}`: Added, Changed and Fixed from the spec data; `write` → `.specs/RELEASE-NOTES.md` (a milestone's:
   `RELEASE-NOTES.<milestone>.md`).
