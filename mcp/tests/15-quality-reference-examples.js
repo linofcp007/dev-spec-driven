@@ -203,6 +203,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
       ["Plain", "src/api-keys/service.js", A],
       ["PT", "src/api-keys/gone-a.js e src/api-keys/gone-b.js", "lib/**"], ["ES", "src/api-keys/gone-a.js y src/api-keys/gone-b.js", "lib/**"],
       ["Folder, file", "src/api-keys/, src/api-keys/service.js", "lib/**"], // a folder is path-like too (read as ONE path it was a gone file)
+      ["Root file", "src/api-keys/service.js, see README.md", "lib/**"], // so is a root-level file name (no slash)
     ];
     structure(p, table(["Pattern", "Copy", "Applies to"], rows));
     const d = check(p);
