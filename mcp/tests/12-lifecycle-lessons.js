@@ -275,4 +275,84 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, require, __di
       finishPt: S.finishFeature(p, "faturas", {}).warnings.slice(-1)[0] === D("pt").finishOpen(["D-1"], "faturas"),
     });
   }
+
+  // --- 1.41.0 merge: spec_metrics' lessons ride the ONE walk of the metrics blocks (metric.js walkFeatureStates) — COUNTED -----------
+  // A project with lessons in an ACTIVE and an ARCHIVED feature and its twin with plain decisions instead: through the facade the twin
+  // makes exactly the same fs calls (the feature folders listed as often — no walk of the lessons' own), and each decisions.md is read
+  // once; without the read cache (the engine called directly) too — the walk's read of an active folder is handed on to that feature's
+  // own metrics, and no second walk reads it again.
+  {
+    const twin = (n, withLessons) => {
+      const p = demo("walk-" + n);
+      const inv = S.createFeature(p, "Invoices", ["core"]);
+      for (const f of ["api-keys", inv.slug]) {
+        if (withLessons) lesson(p, f, {});
+        else S.decide(p, f, { title: "Integer cents", decision: "Money is integer cents." });
+      }
+      const arch = S.manageFeature(p, "archive", inv.slug);
+      return { p, arch, act: path.join(p, ".specs", "api-keys", "decisions.md"), old: path.join(p, ".specs", "_archive", inv.slug, "decisions.md") };
+    };
+    const L = twin("lessons", true), N = twin("plain", false);
+    const reads = (x, fn) => [fsCalls(x.act, fn).readFileSync || 0, fsCalls(x.old, fn).readFileSync || 0];
+    const r = S.metrics(L.p);
+    const cL = fsCalls(L.p + path.sep, () => S.metrics(L.p)), cN = fsCalls(N.p + path.sep, () => S.metrics(N.p));
+    const facade = reads(L, () => S.metrics(L.p)), engine = reads(L, () => E.metrics(L.p));
+    all("1.41.0 merge: spec_metrics' lessons come from the metrics blocks' ONE walk — a project with lessons in an active and an archived feature makes exactly the fs calls of its twin without lessons, and reads each decisions.md once, through the facade and without the read cache (got " +
+      js({ lessons: r.lessons && [r.lessons.total, r.lessons.repeated.map((g) => g.features)], cL, cN, facade, engine }) + ")", {
+      setup: L.arch.ok && N.arch.ok && fs.existsSync(L.old) && fs.existsSync(N.old),
+      both: r.ok && r.lessons.total === 2 && js(r.lessons.repeated.map((g) => g.features)) === js([["api-keys", "_archive/invoices"]]) &&
+        js(r.features.find((m) => m.feature === "api-keys").lessons) === js({ total: 1, open: 1, byCause: { "example-copied": 1 }, unread: [] }),
+      sameCalls: js(cL) === js(cN) && (cL.readdirSync || 0) > 0,
+      onceFacade: js(facade) === js([1, 1]),
+      onceEngine: js(engine) === js([1, 1]),
+    });
+  }
+
+  // --- 1.41.0 merge: the finish batch's order — dev-guardian's warnings (W, test integrity, the last of them), then the metrics', then
+  // the lessons' LAST: the order /spec-finish's ONE batched question lists (commands/spec-finish.md — the prose and the engine agree) --
+  {
+    const p = path.join(tmp, "proj-lessons-batch");
+    const GCMD = "node .specs/guardian.cjs scan --project . --fail-on high --format json", SIZE = 'node -e "process.exit(0)"';
+    S.initProject(p, ["core"], "en", { guardian: true, checks: { size: SIZE } });
+    const VERIFY = 'node -e "process.exit(0)"';
+    const change = (name) => {
+      const c = S.createFeature(p, name, undefined, "x", undefined, "en", "change");
+      fs.writeFileSync(path.join(c.dir, "change.md"), "# Change: " + name + "\n\n## Summary\nThe change " + name + ".\n\n## Acceptance Criteria (EARS)\n" +
+        "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer.\n\n## Approach\nOne string.\n\n## Tasks\n- [ ] 1. [US1] Do it\n" +
+        "  - _Requirements: US-1.AC-1_\n  - _Verify: " + VERIFY + "_\n");
+      S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
+      S.completeTask(p, c.slug, 1, { command: VERIFY, exitCode: 0, summary: "ok" });
+      return c.slug;
+    };
+    const TI = (sev, rule, file, line) => ({ fingerprint: rule + file, tool: "guardian-test-integrity", severity: sev, category: "quality", title: rule, rule_id: rule, file_path: file, line_start: line, fix_available: false });
+    const report = (fresh) => js({ exit_code: 0, tool_version: "3.17.0", baseline_status: "present", coverage: "full", coverage_gaps: [], new_findings: fresh,
+      blocking_findings: [], baseline_absent: false, unused_timeout_acceptances: ["src/gone.js"] });
+    const finish = (slug, metric, fresh, write) => S.finishFeature(p, slug, { ranBy: "cli", write, evidence: [
+      { name: "guardian", command: GCMD, exitCode: 0, summary: "", report: report(fresh) },
+      { name: "size", command: SIZE, exitCode: 0, summary: "ok", output: metric }] });
+    const base = change("Base line");
+    const first = finish(base, "METRIC bundle=100 kB better=lower tolerance=1%\n", [], true);
+    const subj = change("Subject");
+    const le = S.decide(p, subj, { title: "Copied the float", decision: "Money is integer cents.", kind: "lesson", cause: "model-error" });
+    const until = Date.now() + 3; while (Date.now() < until) { /* a later finished.at */ }
+    const r = finish(subj, "METRIC bundle=110 kB better=lower tolerance=1%\n", [TI("low", "test-skipped", "tests/b.test.js", 9)], false);
+    const w = r.warnings || [];
+    const at = { stale: w.findIndex((s) => /stale accept_timeouts/.test(s)), integrity: w.findIndex((s) => /^dev-guardian: \d+ new finding\(s\) of its test-integrity and suppression checks/.test(s)),
+      metrics: w.indexOf(I.msg("en").metric.finishWarn(1, I.msg("en").metric.flagged("bundle", "size", "100 kB", "110 kB", "base-line", E.dayOf(r.metrics[0].reference.at), "+10", "1", "regressed"), 0)),
+      lessons: w.indexOf(D().finishOpen(["D-1"], subj)) };
+    // the prose: the batch paragraph names the four in this order
+    const md = rd(__dirname, "..", "commands", "spec-finish.md").replace(/\s+/g, " ");
+    const batch = md.slice(md.indexOf("**The finish batch — ONE question.**"));
+    const prose = ["dev-guardian's", "test integrity's (`testIntegrity`", "the metrics' (", "the lessons' (`lessons`"].map((s) => batch.indexOf(s));
+    all("1.41.0 merge: the finish batch's order — dev-guardian's warnings with W (test integrity) the last of them, then the METRIC warning, then the lessons' LAST — the order commands/spec-finish.md's batch paragraph lists (got " +
+      js({ at, n: w.length, prose, first: first.readyToFinish, warnings: w.map((s) => s.slice(0, 70)) }) + ")", {
+      setup: first.readyToFinish && first.baseline && first.baseline.recorded && le.ok && r.readyToFinish,
+      found: Object.values(at).every((i) => i >= 0),
+      guardianThenW: at.stale + 1 === at.integrity,
+      wThenMetrics: at.integrity < at.metrics,
+      metricsThenLessons: at.metrics < at.lessons,
+      lessonsLast: at.lessons === w.length - 1,
+      prose: prose.every((i) => i >= 0) && prose.every((i, k) => k === 0 || prose[k - 1] < i),
+    });
+  }
 };
