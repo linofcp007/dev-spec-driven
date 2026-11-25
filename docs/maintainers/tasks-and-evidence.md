@@ -544,9 +544,11 @@ Engine: the `B5` block of `engine/evidence.js`.
   byte-identical in dev-guardian 3.17 — testing.md); 17-docs pins references/verification.md's quoted line to it. `metricLinesOf(text |
   [texts])` passes the fixture case by case (09-evidence-metrics) and the points it leaves open, which both readers follow
   (the round's DECISIONS 3b — History, 1.41.0) and, where the fixture is silent, dev-guardian 3.17's metricLine.ts (review
-  1's five shapes, each a "parity with dev-guardian 3.17 metricLine.ts" test): the keyword at a line's start after blanks,
-  then at most one `# ` — never blanks after it (`RE_CANDIDATE`, after CSI sequences are removed — `RE_CSI`, ESC [ … a
-  final LETTER: `ESC[2~` stays in the line) —, an ATTEMPT is a first token holding `=`, a failed one `malformed` (counted,
+  1's seven shapes, each a "parity with dev-guardian 3.17 metricLine.ts" test): the keyword at a line's start after blanks,
+  then at most one `# ` — never blanks after it —, then a blank or the line's end (`RE_CANDIDATE`, after CSI sequences are
+  removed — `RE_CSI`, ESC [ … a final LETTER: `ESC[2~` stays in the line); a line ends at its LF or the text's end, ONE CR
+  before either dropped; a bare `METRIC` is a candidate (counted toward the 1,000, ignored) —, an ATTEMPT is a first token
+  holding `=`, a failed one `malformed` (counted,
   the last one kept for the note, control characters folded), anything else ignored and uncounted; tokens split on runs of
   blanks; the unit only right after the number, ≤ 16 CODE POINTS (`unitFits`, the reader and readingOf alike; its length
   guard a cost guard — no array for a long unit) (a bare word elsewhere, a known key twice, a negative tolerance:
@@ -1296,9 +1298,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   reported over MCP, where no run carries a reading — now only when every check's latest run is the CLI's (R1-MF-1). The reader
   got stdout + stderr joined (a stdout line without its newline glued to stderr's first) — now two texts (R1-MF-6). A unit change
   read "judged by the earlier finish's terms" and a unit-only warning "got worse past the tolerance" — both say not compared
-  (R1-MF-7). `_Budget: npm test 2m_` (the command in the check's place) was silent — now `no-check` (R1-MF-9). Left as they are
-  (reported, not ruled): a final CR with no LF after it (dev-guardian strips it, dev-spec reads it into the last token —
-  malformed) and a bare `METRIC` line (dev-guardian counts it as a candidate toward its 1,000, dev-spec never does).
+  (R1-MF-7). `_Budget: npm test 2m_` (the command in the check's place) was silent — now `no-check` (R1-MF-9). Two more
+  differences the fix found past the 73 lines, aligned on the controller's ruling the same way: a final CR with no LF after
+  it (dev-spec read it into the last token — malformed; now one CR ends the line at the text's end too) and a bare `METRIC`
+  line (dev-guardian counts it toward its 1,000 candidates, dev-spec never did; now a candidate, ignored — a flood of them
+  pushes earlier readings out with `candidates` said, never unsaid). Both harnesses: 0 disagreements.
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful

@@ -140,9 +140,24 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
       // (5) '#' runs before the keyword are no candidate at any length (one '# ' at most) — nothing dropped; blanks past 512 still are
       hashRun: [["#".repeat(600) + " METRIC a=1\n", none], ["#".repeat(10) + " METRIC a=1\n", none],
         [" ".repeat(600) + "METRIC a=1\n", { metrics: [], malformed: 0, dropped: ["candidateBytes"] }]],
+      // (6, the controller's ruling) a CR at a text's very end, no LF after it, ends the line like CR LF — one CR, never two
+      finalCr: [["METRIC a=1\r", a1], ["x\nMETRIC b=2\r", { metrics: [["b", 2, null]], malformed: 0, dropped: [] }],
+        ["METRIC a=1 ms\r", { metrics: [["a", 1, "ms"]], malformed: 0, dropped: [] }], ["# METRIC a=1\r", a1],
+        ["METRIC a=1\r\r", { metrics: [], malformed: 1, dropped: [] }], ["METRIC a=1\r\n", a1]],
+      // (7, the controller's ruling) a bare `METRIC` (nothing after it on its line — LF, CR LF, the text's end, a colour) is a candidate:
+      // ignored, but counted toward the 1,000 — the 1,001st says `candidates`
+      bareKeyword: [["METRIC\n".repeat(3), none],
+        [Array.from({ length: 1001 }, () => "METRIC").join("\n") + "\nMETRIC z=1\n", { metrics: [["z", 1, null]], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\n" + "METRIC\n".repeat(1000), { metrics: [], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\r\n" + "METRIC\r\n".repeat(1000), { metrics: [], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\n" + "METRIC\n".repeat(999) + "METRIC", { metrics: [], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\n" + ("METRIC" + ESC + "[0m\n").repeat(1000), { metrics: [], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\n" + "METRIC\n".repeat(999), { metrics: [["early", 1, null]], malformed: 0, dropped: [] }],
+        ["METRIC\rx\nMETRIC early=1\n", { metrics: [["early", 1, null]], malformed: 0, dropped: [] }]],
     };
     const names = { hash: "(1) one '# ' prefix", csiLetter: "(2) a CSI sequence ends at a letter", csiBytes: "(3) the 512-byte bound after CSI removal",
-      unitPoints: "(4) a unit's 16 in code points", hashRun: "(5) a '#' run before the keyword" };
+      unitPoints: "(4) a unit's 16 in code points", hashRun: "(5) a '#' run before the keyword", finalCr: "(6) a final CR with no LF ends the line",
+      bareKeyword: "(7) a bare METRIC line is a candidate, ignored" };
     for (const [k, rows] of Object.entries(shapes)) {
       const got = rows.map(([t]) => sum(t));
       ok(rows.every(([, want], i) => js(got[i]) === js(want)), "1.41.0 review 1 R1-MF-4 parity with dev-guardian 3.17 metricLine.ts: " + names[k] + " (got " + js(got) + ")");

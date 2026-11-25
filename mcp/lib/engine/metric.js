@@ -43,7 +43,8 @@ const unitFits = (u) => u.length <= 2 * UNIT_MAX && [...u].length <= UNIT_MAX;
 const KEYWORD = "METRIC";
 const ESC = String.fromCharCode(27);
 const RE_CSI = new RegExp(ESC + "\\[[0-?]*[ -/]*[A-Za-z]", "g"); // a CSI sequence (ESC [ params intermediates, a final LETTER) — 3b(9)
-const RE_CANDIDATE = /^[ \t]*(?:# )?METRIC(?=[ \t])/; // the keyword at a line's start, after blanks and one '# ' (never blanks after it)
+// the keyword at a line's start, after blanks and one '# ' (never blanks after it), then a blank or the line's end (a bare METRIC)
+const RE_CANDIDATE = /^[ \t]*(?:# )?METRIC(?=[ \t]|$)/;
 const RE_CONTROL = /[\u0000-\u001f\u007f]+/g;
 
 // The index the line of the keyword at i starts at, when only blanks, '#' and CSI sequences stand before it on that line — a
@@ -132,16 +133,18 @@ function metricLinesOf(input) {
       if (i < lo) break;
       from = i - 1;
       const next = s.charCodeAt(i + KEYWORD.length);
-      if (next !== 32 && next !== 9 && next !== 27) continue; // METRICS, METRIC alone at the end, METRIC=…
+      // METRICS, METRIC=…: no keyword; a bare METRIC (LF, CR, the text's end after it) is one — a candidate, as dev-guardian 3.17 counts it
+      if (next !== 32 && next !== 9 && next !== 27 && next !== 10 && next !== 13 && i + KEYWORD.length !== s.length) continue;
       const start = lineStartOf(s, i, lo);
       if (start === -1) continue;
       if (start === -3) { dropped.add("readBytes"); continue; }
-      // the candidate line: from its start to its LF (a CR before it dropped), its CSI sequences removed — the candidate bound is
+      // the candidate line: from its start to its LF (ONE CR before it dropped — or at the text's end, no LF after it: dev-guardian
+      // 3.17's line end too), its CSI sequences removed — the candidate bound is
       // the CLEANED line's bytes (R1-MF-4, as dev-guardian 3.17 reads it: a colour never pushes a line over). Each line is read once:
       // only its first keyword can follow nothing but blanks, '#' and CSI sequences.
       const nl = s.indexOf("\n", i);
       let end = nl === -1 ? s.length : nl;
-      if (nl !== -1 && s.charCodeAt(end - 1) === 13) end--;
+      if (s.charCodeAt(end - 1) === 13) end--;
       const raw = s.slice(start, end);
       const line = raw.indexOf(ESC) === -1 ? raw : raw.replace(RE_CSI, "");
       if (!RE_CANDIDATE.test(line)) continue; // "## METRIC", "#METRIC", "#  METRIC", a '#' run of any length: no candidate
