@@ -2358,15 +2358,19 @@ const msg = {
     metric: {
       verdict: { within: "within its tolerance", improved: "better past its tolerance", regressed: "worse past its tolerance" },
       unjudged: (why) => (why.includes("unit") ? "not compared — the unit changed" : `not judged — the earlier line states no ${why.map((w) => w + "=").join(" and no ")}`),
-      loosened: (term, was, now) => `loosened ${term === "unit" ? "the unit" : term + "="} (${was} → ${now}) — judged by the earlier finish's terms`,
+      // a changed unit is never compared (no conversion), so never "judged by" (1.41.0 review 1)
+      loosened: (term, was, now) => (term === "unit" ? `changed the unit (${was} → ${now}) — not compared` : `loosened ${term}= (${was} → ${now}) — judged by the earlier finish's terms`),
       // one reading against the last OTHER finish that recorded it (the merge summary's ## Metrics, the CLI's finish report)
       line: (name, check, now, ref, feature, day, delta, judged) => `${name} (${check}): ${now} — ${ref} at ${feature}'s finish (${day})${delta == null ? "" : " · " + delta} · ${judged}`,
       lineNew: (name, check, now) => `${name} (${check}): ${now} — first measure: the next finish compares with it`,
       summaryHead: "## Metrics",
       flagged: (name, check, ref, now, feature, day, delta, applied, verdict) => `${name} (check ${check}): ${ref} → ${now} since ${feature}'s finish on ${day} (` +
         [delta, verdict === "unjudged" ? (delta == null ? "not compared" : "not judged") : `${({ within: "within", improved: "better than", regressed: "past" })[verdict]} its tolerance ${applied}`].filter(Boolean).join(", ") + ")",
-      // the finish warning — never a blocker; worded without blaming this feature (the number holds every change merged since)
-      finishWarn: (n, list, more) => `${n} METRIC reading(s) got worse past the tolerance their line states, or loosened its terms, since the last finish that recorded them: ${list}${more ? ` — and ${more} more (spec_finish's metrics)` : ""}. Every change merged since that finish is in the number, not only this feature's: tell the user before the merge — and never loosen, flip or drop a METRIC line to pass.`,
+      // the finish warning — never a blocker; worded without blaming this feature (the number holds every change merged since).
+      // unitOnly: each reading it names only changed its unit — none was compared (1.41.0 review 1)
+      finishWarn: (n, list, more, unitOnly) => (unitOnly
+        ? `${n} METRIC reading(s) changed their unit since the last finish that recorded them — not compared (no conversion): ${list}${more ? ` — and ${more} more (spec_finish's metrics)` : ""}. Tell the user before the merge: the next finish compares in the new unit — and never change the unit, loosen, flip or drop a METRIC line to pass.`
+        : `${n} METRIC reading(s) got worse past the tolerance their line states, or loosened its terms, since the last finish that recorded them: ${list}${more ? ` — and ${more} more (spec_finish's metrics)` : ""}. Every change merged since that finish is in the number, not only this feature's: tell the user before the merge — and never loosen, flip or drop a METRIC line to pass.`),
       unmeasured: (names, slug) => `${slug}'s design.md names ${names} under Silent Regressions, but no project check's passing run printed a METRIC line of that name — add the line to the check that measures it (references/verification.md → Metrics that regress silently), or correct the row.`,
       notRead: (n, last, grammar) => `${n} METRIC line(s) not read — the form is ${grammar}${last ? ` (the last: ${last})` : ""}`,
       dropped: (bounds) => `METRIC lines past a reader bound were not read (${bounds}): at most 20 names, 1,000 candidate lines of at most 512 bytes, the output's last 64 MiB — the lines printed last are kept`,

@@ -2229,13 +2229,15 @@ const msg = {
     metric: {
       verdict: { within: "dentro da tolerância", improved: "melhor para lá da tolerância", regressed: "pior para lá da tolerância" },
       unjudged: (why) => (why.includes("unit") ? "não comparada — a unidade mudou" : `não avaliada — a linha anterior não declara ${why.map((w) => w + "=").join(" nem ")}`),
-      loosened: (term, was, now) => `afrouxou ${term === "unit" ? "a unidade" : term + "="} (${was} → ${now}) — avaliada pelos termos do finish anterior`,
+      loosened: (term, was, now) => (term === "unit" ? `mudou a unidade (${was} → ${now}) — não comparada` : `afrouxou ${term}= (${was} → ${now}) — avaliada pelos termos do finish anterior`),
       line: (name, check, now, ref, feature, day, delta, judged) => `${name} (${check}): ${now} — ${ref} no finish de ${feature} (${day})${delta == null ? "" : " · " + delta} · ${judged}`,
       lineNew: (name, check, now) => `${name} (${check}): ${now} — primeira medição: o próximo finish compara com ela`,
       summaryHead: "## Métricas",
       flagged: (name, check, ref, now, feature, day, delta, applied, verdict) => `${name} (check ${check}): ${ref} → ${now} desde o finish de ${feature} em ${day} (` +
         [delta, verdict === "unjudged" ? (delta == null ? "não comparada" : "não avaliada") : `${({ within: "dentro da", improved: "melhor do que a", regressed: "para lá da" })[verdict]} tolerância ${applied}`].filter(Boolean).join(", ") + ")",
-      finishWarn: (n, list, more) => `${n} leitura(s) METRIC pioraram para lá da tolerância que a sua linha declara, ou afrouxaram os seus termos, desde o último finish que as registou: ${list}${more ? ` — e mais ${more} (as metrics do spec_finish)` : ""}. Todas as alterações integradas desde esse finish estão no número, não só as desta feature: diz ao utilizador antes do merge — e nunca afrouxes, invertas nem retires uma linha METRIC para passar.`,
+      finishWarn: (n, list, more, unitOnly) => (unitOnly
+        ? `${n} leitura(s) METRIC mudaram de unidade desde o último finish que as registou — não comparadas (sem conversão): ${list}${more ? ` — e mais ${more} (as metrics do spec_finish)` : ""}. Diz ao utilizador antes do merge: o próximo finish compara na nova unidade — e nunca mudes a unidade, nem afrouxes, invertas ou retires uma linha METRIC para passar.`
+        : `${n} leitura(s) METRIC pioraram para lá da tolerância que a sua linha declara, ou afrouxaram os seus termos, desde o último finish que as registou: ${list}${more ? ` — e mais ${more} (as metrics do spec_finish)` : ""}. Todas as alterações integradas desde esse finish estão no número, não só as desta feature: diz ao utilizador antes do merge — e nunca afrouxes, invertas nem retires uma linha METRIC para passar.`),
       unmeasured: (names, slug) => `O design.md de ${slug} indica ${names} em Regressões Silenciosas, mas nenhuma execução bem-sucedida de um check do projeto imprimiu uma linha METRIC com esse nome — acrescenta a linha ao check que o mede (references/verification.md → Metrics that regress silently), ou corrige a linha da tabela.`,
       notRead: (n, last, grammar) => `${n} linha(s) METRIC não lida(s) — a forma é ${grammar}${last ? ` (a última: ${last})` : ""}`,
       dropped: (bounds) => `linhas METRIC para lá de um limite do leitor ficaram por ler (${bounds}): no máximo 20 nomes, 1000 linhas candidatas de no máximo 512 bytes, os últimos 64 MiB da saída — ficam as linhas impressas por último`,

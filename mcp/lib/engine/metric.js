@@ -349,7 +349,8 @@ function finishMetrics(projectDir, dir, state, suite, tracks, lng, slug) {
   }
   if (flagged.length) {
     const listed = flagged.slice(0, MAX_LISTED).map((x) => flaggedText(x, T)).join("; ");
-    res.warning = T.finishWarn(flagged.length, listed, flagged.length - Math.min(flagged.length, MAX_LISTED));
+    // a warning naming only unit changes says so (none was compared — never "got worse past the tolerance")
+    res.warning = T.finishWarn(flagged.length, listed, flagged.length - Math.min(flagged.length, MAX_LISTED), flagged.every((x) => x.loosened === "unit"));
   }
   res.summaryLines = [T.summaryHead, ...res.items.map((x) => "- " + itemText(x, T))];
   return res;
