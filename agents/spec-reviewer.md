@@ -159,7 +159,9 @@ controller rules on it.
 - **Disproved by a run** — what the compiler, type checker or linter would reject, when the report shows those checks
   green on this diff.
 - **Silenced on purpose** — a rule the code switches off with its reason beside it (a lint-ignore comment, a documented
-  exception), unless the spec or the project's rules forbid that exception.
+  exception), unless the spec or the project's rules forbid that exception. A suppression the diff adds with no reason is
+  a question (⚠️ — what does it silence, and why?), and **Important** when it hides a security scanner (`nosemgrep`,
+  Bandit's `nosec`, `gitleaks:allow`): no scan sees that line again.
 - **A nitpick** a senior engineer wouldn't raise — Minor at most.
 
 **Confidence** (the scale a finding is rated on — adapted from Anthropic's `code-review` plugin):

@@ -469,6 +469,15 @@ exports.run = async ({
     });
   }
 
+  // 1.41.0 chain P — the gardening round's prose: the reviewer's suppression line (CRIT_X D8.9).
+  {
+    const rd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n").replace(/\s+/g, " ");
+    const rev = rd("agents", "spec-reviewer.md");
+    all("1.41.0 (CRIT_X D8.9): spec-reviewer — a suppression the diff adds with no reason is a question, Important when it hides a security scanner (nosemgrep, Bandit's nosec, gitleaks:allow); a reasoned one stays Silenced on purpose", {
+      reviewer: /\*\*Silenced on purpose\*\* — a rule the code switches off with its reason beside it[^.]*\. A suppression the diff adds with no reason is a question \(⚠️ — what does it silence, and why\?\), and \*\*Important\*\* when it hides a security scanner \(`nosemgrep`, Bandit's `nosec`, `gitleaks:allow`\): no scan sees that line again\./.test(rev),
+    });
+  }
+
   // 1.14 full review (D) — docs and prose.
   {
     const dRead = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
