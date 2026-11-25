@@ -1,9 +1,10 @@
 # Spec quality — steering amendments, cross-feature criteria, glossary, design weighing, reuse, duplicates, the design system
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
-The spec-quality checks, the design's trade-offs / risks / reuse sections and their doctor warnings, the constraint nudge,
-the critical flows, the TDD micro-cycle, the duplicate-code detector, the design-system registry. The rules come first; how
-they came to be — the releases and review findings — is in History at the end.
+The spec-quality checks, the design's trade-offs / risks / reuse / Silent Regressions sections and their doctor warnings, the
+constraint nudge, the critical flows, the TDD micro-cycle, the duplicate-code detector, the design-system registry, the UI
+checks and state matrix, structure.md's Reference Examples. The rules come first; how they came to be — the releases and
+review findings — is in History at the end.
 
 ## Spec quality
 - **Steering amendments** — a requirements / design approval (`STEERING_GOVERNED`) and its history record carry `steering`

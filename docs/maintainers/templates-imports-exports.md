@@ -225,8 +225,9 @@ engine/scan.js — area 13 of the suites.
     `slugify(mdPlainText(title))` cut to `ADR_SLUG_MAX`: a retitle renames the file.
   - **Content:** front matter `status` (accepted, superseded by ADR-NNNN, superseded) and `date` (the log's day),
     English-stable; then only the localized MADR sections the log has text for, linking the feature, the log entry and
-    each `_Affects:_` target (`resolveAffect`). A discovery is no ADR (`excluded`: `discovery`, `duplicate-id`,
-    `unsafe-file` — a linked decisions.md is never read, `readContained`). User text is inert where it sits in our
+    each `_Affects:_` target (`resolveAffect`). A discovery is no ADR, nor (1.41) a lesson or an entry that only closes
+    lessons (`excluded`: `discovery`, `lesson`, `lesson-close`, `duplicate-id`, `unsafe-file` — a linked decisions.md is never
+    read, `readContained`; lifecycle.md → Decisions and spikes). User text is inert where it sits in our
     structure (`adrLabel`, `mdCell`, `adrInert`, `adrBlock`). No run date: a re-run is byte-identical.
   - **Write**, all-or-nothing: the legacy `exports` feature, a linked target or scope (`specsWriteContained`) or an
     unmarked same-named file (`isGeneratedOrAbsent`, `skipped: true`) refuses it all; unchanged text is not rewritten;

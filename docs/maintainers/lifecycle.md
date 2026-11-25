@@ -118,7 +118,7 @@ first; how they came to be — the releases and review findings — is in Histor
 
 ## Decisions and spikes
 - **`decisions.md`** (committed; `.execution/` is scratch): a localized header, then entries `## D-<n> — <title>` with the
-  markers `_Kind: decision | discovery_`, `_Date:_` and the optional `_Affects:_` / `_Supersedes: D-m_`, then **Context** /
+  markers `_Kind: decision | discovery | lesson_` (a lesson: below), `_Date:_` and the optional `_Affects:_` / `_Supersedes: D-m_`, then **Context** /
   **Decision** (or **Discovery**) / **Consequences** (localized; any EN/PT/ES label read). IDs and markers are English-stable,
   read only between the heading and the first label; HTML comments and fenced code never hold an entry.
 - **`spec_decide`** appends under the feature lock after the highest D-n, the existing bytes untouched (BOM, CRLF kept); title ≤
@@ -150,7 +150,8 @@ first; how they came to be — the releases and review findings — is in Histor
   blocker), `briefLessons` (the brief's Lessons part: open ones, newest first, `BRIEF_LESSONS_MAX` 5 within
   `BRIEF_LESSONS_CHARS` 1,200), `lessonCounts` / `projectLessons` (spec_metrics — below), the retro (one amendments line each).
   **Who leaves it out:** briefDecisions (never quoted twice), `decision-affects-approved` (a lesson changes nothing the spec
-  says), the ADR export (`excluded` reason `lesson`) and the catalog — and both leave out a decision whose `_Supersedes:_` are
+  says), the ADR export (`excluded` reason `lesson`) and the catalog (`catalogDecisions`' `count` is the items it lists — every
+  entry before 1.41) — and both leave out a decision whose `_Supersedes:_` are
   all lessons (`lessonCloses`: the finish batch's closing entry, reason `lesson-close`); one superseding a lesson AND a
   decision is a decision. The merge summary keeps every entry (a lesson's cause → target in its meta, a closed one struck
   through). A hand-written cause outside the codes is `unread`: listed, never counted under a cause.
@@ -163,8 +164,8 @@ first; how they came to be — the releases and review findings — is in Histor
   file is every rule's home — "money → tech.md" and "logging → tech.md" are two lessons); no target never repeats. A folder
   the walk reads keeps its `view`: the walk runs BEFORE the features' own metrics and `viewOf(dir)` hands an active folder's to
   that feature's (`featureMetrics(…, lv)`), one read of each decisions.md — a COUNT (12-lifecycle-lessons: lessons in an active
-  and an archived feature make exactly the fs calls of a twin without them, each decisions.md read once, cached or not). **No state key on purpose** — decisions.md has the lock, the append, the supersession and the
-  readers; a `.state.json` key would need a writer and a merge rule (conventions.md).
+  and an archived feature make exactly the fs calls of a twin without them, each decisions.md read once, cached or not).
+  **No state key:** the entry is the record (why: conventions.md → History, Merging the spec state, 1.41.0).
 - **Spike kind** (`kind: "spike"`, `question`, `timebox` `YYYY-MM-DD` | `3d`): spike.md (Question · Timebox · Options considered ·
   Evidence · Decision + `_Outcome: go | no-go | pivot_` · Follow-up; `SPIKE_SYN`; `_Outcome:_` also reads PT/ES and yes/no) +
   investigation tasks; core-only, no gates (`gateWalk`, `pendingGateList`, `chainArtifacts` empty; approve takes only the

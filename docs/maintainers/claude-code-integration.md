@@ -639,9 +639,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   Bash run's line is unchanged): the PowerShell tool's passes are logged only with an explicit exit code while its failures
   always are, so the fast check read "failed on its last run" after an unlogged pass — its note now says why
   (tasks-and-evidence.md → The fast check).
-- **1.41.0 (chain F)** — the observe hook passes the payload's `duration_ms` (PostToolUse and PostToolUseFailure, optional:
-  "tool execution time in milliseconds, excludes permission-prompt and hook time") as `ms`; a project check's run gets a
-  timings line (the friction budget). Nothing reaches the new code before the pre-filter: 10-guards-hooks-cost is unchanged.
+- **1.41.0** (the gardening round) — the observe hook passes the payload's `duration_ms` (PostToolUse and PostToolUseFailure,
+  optional: "tool execution time in milliseconds, excludes permission-prompt and hook time") as `ms`; a project check's run gets
+  a timings line (the friction budget). Nothing reaches the new code before the pre-filter: 10-guards-hooks-cost is unchanged.
+  No hook, matcher or agent tool list changed: spec-reviewer gained a prune mode (its description +9 characters, 222 of ~250)
+  and spec-implementer a fix round's `### Causes` block and the METRIC-line rule — prose (tasks-and-evidence.md → Subagent-driven
+  execution).
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.

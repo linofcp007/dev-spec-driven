@@ -61,11 +61,14 @@ Phase 6, opt-in.
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
   ONE finding fresh (80+ opens a fix round, 50–79 is ledgered as unconfirmed, below 50 refuted); its **simplify** mode reviews
-  `/spec-review simplify`'s diff; its **prune** mode (1.41.0) gives each candidate test of `/spec-review prune` a verdict —
+  `/spec-review simplify`'s diff; its **prune** mode (1.41) gives each candidate test of `/spec-review prune` a verdict —
   prune · keep · retrace · strengthen — and asks for the probes the controller runs (the pass is prose end to end: the
   candidates are the matrix's retired rows, the record spec_impact's `retire` and the protected-test accept — no engine
   part; `references/subagent-execution.md` → The pruning pass, `test-patterns.md` → Test value and pruning); it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
-  rewritten lines' history. The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
+  rewritten lines' history. **Lessons (1.41):** a fix round 1–3 asks the implementer each confirmed finding's cause (its
+  report's `### Causes` block), the controller checks the three a file can show and records it with `spec_decide {kind:
+  "lesson"}`; the finish batch amends the guidance once (§7b; lifecycle.md → Decisions and spikes — the engine's part is the
+  entry, its readers and finish's warning). The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
   runs the simplifier's, each verified before it costs a fix.
@@ -537,7 +540,8 @@ Engine: the `B5` block of `engine/evidence.js`.
 ### Metrics that regress silently (1.41, engine/metric.js)
 - **The line is a contract, `metric-lines/1`.** `METRIC_GRAMMAR` = the fixture's `grammar.line` (mcp/tests/fixtures/metric-lines.v1.json,
   byte-identical in dev-guardian 3.17 — testing.md); 17-docs pins references/verification.md's quoted line to it. `metricLinesOf(text |
-  [texts])` passes the fixture case by case (09-evidence-metrics) and DECISIONS 3b: the keyword at a line's start after blanks / one
+  [texts])` passes the fixture case by case (09-evidence-metrics) and the points it leaves open, which both readers follow
+  (the round's DECISIONS 3b — History, 1.41.0): the keyword at a line's start after blanks / one
   `# ` (`RE_CANDIDATE`, after CSI sequences are removed — `RE_CSI`, ESC [ … final), an ATTEMPT is a first token holding `=`, a failed
   one `malformed` (counted, the last one kept for the note, control characters folded), anything else ignored and uncounted; tokens
   split on runs of blanks; the unit only right after the number (a bare word elsewhere, a known key twice, a negative tolerance:
@@ -588,11 +592,14 @@ Engine: the `B5` block of `engine/evidence.js`.
 - **spec_metrics' ONE walk** (finish.js `metricsBlocks` → metric.js `walkFeatureStates`): every folder (featureDirs: active, then
   archived), its state read ONCE (stateFromFile; the read cache serves featureMetrics' and the velocity's reads of the same files —
   the COUNT: each `.state.json` opened once per call), handed to each block `{ key, visit(fd, state), result() → value | null }`; a
-  non-null result becomes the project result's `key`. M's block is `measuredBlock` → `measured` [{check, name, unit, better,
+  non-null result becomes the project result's `key` (a block of another concern is one more entry of `metricsBlocks`, built by
+  its own module). The readings' block is `measuredBlock` → `measured` [{check, name, unit, better,
   finishes, first, last, change, changePct, series ≤ 10, otherUnit?}] — per (check, name), in its latest finish's unit (another
   unit's finishes counted apart), by finished.at; none: no key (a project without readings reads as in 1.40). Its CLI lines:
-  `measuredLines`, the last of `metricsLines`. L's is `lessonsBlock` (decisions.js) → `lessons` (lifecycle.md → spec_metrics'
-  lessons); the walk runs before the features' own metrics, so the block's read of an active folder is handed on (`viewOf`).
+  `measuredLines`, the last of `metricsLines`. The lessons' is `lessonsBlock` (decisions.js) → `lessons` (lifecycle.md →
+  spec_metrics' lessons); the walk runs before the features' own metrics, so the block's read of an active folder is handed on
+  (`viewOf`). The project's `friction` is no block (it reads the timings log, never a feature folder). With no active feature
+  the CLI still prints the project's lessons, friction and measured lines (`metricsLines`' no-features branch).
 
 ## Task dependencies and execution waves
 - **`_Depends: 3, 5_`** — an English-stable task marker (the task line or a sub-line, never fenced code: `taskMarkers(b).depends`).
@@ -1050,8 +1057,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   narrower choice). The brief grows to ~8.3 KB at 2 views, ~9 KB at 3. Fixture: 08-tasks (1, 2 and 3 views; it fails at
   4,000); three 1.37 fixtures sized for 4,000 were re-sized past the new budget (M15's Big file, the 1.37 view brief's
   Accessibility, RB-2's [UI] block).
-- **1.41.0** (the gardening round, CRIT_S4's cut form) — the Test Value rule (the testing-standards template, new projects
-  only; test-patterns.md) and an optional `/spec-review <f> prune` pass, PROSE: candidates from the matrix trace_check
+- **1.41.0** (the gardening round) — **the pruning pass** (CRIT_S4's cut form): the Test Value rule (the testing-standards
+  template, new projects only; test-patterns.md) and an optional `/spec-review <f> prune` pass, PROSE: candidates from the matrix trace_check
   already returns (`supersededBy` without `supersedePending`, `tests[].files`), the reviewer's prune mode, the controller's
   probes (a tracked, clean file, a hash-checked copy-restore, each test of a pair alone — `git diff --quiet` passes an
   untracked file and `git checkout --` cannot restore one), the record through the existing flows (spec_impact `retire`,
@@ -1059,11 +1066,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   data), `no-ac` and `costlier-layer` (real plans: empty or real wiring), the `_Pruned:_` / `_Prunes:_` markers (11 readers
   missed; a prune task naming the deleted file fails trace on 43 % of real test files), the guardian.js "approved pruning"
   mark (text only, file-granular). The reviewer also got one line: an unreasoned suppression is a question, Important when it
-  hides a security scanner (CRIT_X D8.9).
-- **1.41.0** — the brief's Reference examples and Lessons parts (each ≤ 1,200 characters, CRIT_X D8.6); `briefTargets` taken out
-  of briefSteering so both read the same paths (CRIT_S1 #11 — `implementsRel` alone missed an absolute path inside the
-  project); a lesson is quoted once, in its own part (CRIT_S1 #2). The fix report's `### Causes` block is one sentence of
-  agents/spec-implementer.md (paid per dispatch — CRIT_S1's cut of more).
+  hides a security scanner (CRIT_X D8.9). **The brief's Reference examples and Lessons parts** (each ≤ 1,200 characters,
+  CRIT_X D8.6); `briefTargets` taken out of briefSteering so both read the same paths (CRIT_S1 #11 — `implementsRel` alone
+  missed an absolute path inside the project); a lesson is quoted once, in its own part (CRIT_S1 #2). The fix report's
+  `### Causes` block is one sentence of agents/spec-implementer.md (paid per dispatch — CRIT_S1's cut of more), and the
+  implementer and the reviewer each got the METRIC line's rule (never loosen, flip, re-unit or drop one to pass; a diff that
+  does is Important).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
@@ -1223,18 +1231,18 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   of the fmt script). No name list tells `pants fmt lint` from `swift format lint`: the runner list is gone and `RE_LINT_MODE` is
   positive — swift-format's own subcommand only (`swift format lint`, `swift-format lint`, by any path). The split's
   `$(… | …)`-then-flag refusal (`ruff format $(git ls-files | grep -v x) --check`) is a documented limit, not a shell-aware split.
-- **1.41.0** (the gardening round, W — CRIT_X D7) — a new finding of dev-guardian's own passes below the gate (a test skipped or
+- **1.41.0** (the gardening round: tending what agents write code in — the guidance, the stakes with a number, early weeding;
+  three of its items here). **W (CRIT_X D7)** — a new finding of dev-guardian's own passes below the gate (a test skipped or
   deleted, assertions removed; from 3.17 an added suppression) read only as "(N new below it)". It is now `testIntegrity`
   and ONE finish warning, never a blocker, each finding labelled by its pass. dev-guardian 3.17 gives suppressions a pass of
   their own (CRIT_G1 #5): reported under `guardian-test-integrity` they would have read "weakened test: scanner-suppression-
-  added". The name `guardian-suppressions` is DECISIONS' (dev-guardian's chain had not committed one when this was built) —
-  one constant, `GUARDIAN_SUPPRESSIONS`. An older dev-guardian has no such pass: its test findings only, nothing else changes.
+  added". The name `guardian-suppressions` is DECISIONS' (dev-guardian's chain had not committed one when this was built;
+  3.17's pass carries that name) — one constant, `GUARDIAN_SUPPRESSIONS`. An older dev-guardian has no such pass: its test findings only, nothing else changes.
   "Below the gate" is the gate's own rule (severity under `--fail-on`), not "absent from `blocking_findings`". Not built:
   a label on a BLOCKING suppression finding (at `--fail-on medium` it reads as its rule id, as in 1.40), W in the merge summary
   or finish --run's own lines. The same round rewrote the five bare `# nosec` examples (fixHint EN / PT / ES, AGENTS.md,
   verification.md) as `# nosec <id>  # <reason>` — a bare one silences every Bandit rule on its line (CRIT_G1 #6; 17-docs
-  reads every surface for one).
-- **1.41.0 (chain F)** — the friction budget (Project checks → The friction budget), S3 as CRIT_S3 cut it: the git-ignored,
+  reads every surface for one). **The friction budget** (Project checks → The friction budget), S3 as CRIT_S3 cut it: the git-ignored,
   name-stamped timings.jsonl (the writer stamps `check` + `checkCmd`, so the reader is a string compare — the designed reader ran
   the matcher per line, 10–30 next_action calls of CPU on a worst-case log), trimmed per check (a byte trim let the fast check's
   flood push the suite's runs out before they reached 3), `_Budget:_` read by the task markers' span reader under its own label
@@ -1244,8 +1252,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   next_action per feature). Cut: `ms` on `.state.json` runs (and its internal CLI key), the feature-scope run times, doctor
   `friction` (every feature, every size, spec_upgrade regrouping them all — and no project-level doctor exists), the `took` line
   (a budgeted check's too: the decision lists none — the narrower reading). observed.jsonl's appender and tail reader became `appendLog` /
-  `readLogTail`, shared; the observed lines are 1.40's byte for byte (the oracle replay and 09-evidence-friction).
-- **1.41.0** — metrics that regress silently (S2 as CRIT_S2 cut it, under the round's Shared 1–3 + 3b): a number a check prints —
+  `readLogTail`, shared; the observed lines are 1.40's byte for byte (the oracle replay and 09-evidence-friction). **Metrics that
+  regress silently** (S2 as CRIT_S2 cut it, under the round's Shared 1–3 + 3b): a number a check prints —
   the `METRIC name=value` line agent benchmark loops print, with an optional unit, `better=` and `tolerance=` — is read, stored and
   compared at finish (Metrics that regress silently, above). One contract with dev-guardian 3.17 (`metric-lines.v1.json`), two
   readers. Cut on the way (CRIT_S2): the tools/list words (prose in verification.md instead), `vanished` (the lookup can't see a
@@ -1253,7 +1261,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   tick), three loosening statuses (one `loosened`), the timed lookup backstop (a COUNT), the m / l scaffold's slots (a refusal of
   every fresh design — an empty table warns instead), an absent tolerance read as 0 (46 % of unchanged benchmark pairs warned), and
   `metrics` in a run's history. Over MCP no reading at all — DECISIONS' "the latest CLI run only", the narrower reading of the
-  critic's `reported` summary parse: a summary is the reporter's text, and the CLI reads the whole output.
+  critic's `reported` summary parse: a summary is the reporter's text, and the CLI reads the whole output. Where the fixture is
+  silent the reader chose (dev-guardian's may differ — the cross-plugin review's to compare): a known key given twice is
+  malformed, a unit only right after the number, no negative tolerance, a lone CR no line start, a changed unit the
+  `loosened` term before a flipped `better=`. **At the merge** spec_metrics' lessons moved onto the metrics blocks' ONE walk
+  (the lessons chain's own walk over `featureDirs` was temporary — a COUNT pins one walk now), and finish's warning order
+  (dev-guardian's, W the last of them, the metrics', the lessons' last) was pinned against commands/spec-finish.md.
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
@@ -1436,7 +1449,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 (review 8, ds-maint finding 4)** — the hook's pre-filter was a renamed copy of `observedNorm` / `observedBodies`
   (`norm` / `bodies` / `RE_ENV`) that the 8-line duplication guard couldn't see and a source comparison kept in step: both now read
   mcp/lib/probe.js's one copy.
-- **1.41.0 (chain F)** — the hook passes the payload's `duration_ms` on as `ms`; a project check's run is timed in timings.jsonl
+- **1.41.0** (the gardening round) — the hook passes the payload's `duration_ms` on as `ms`; a project check's run is timed in timings.jsonl
   (the friction budget), the observed line unchanged (09-evidence-friction pins its keys). Only runs the matcher reads as the
   check alone are timed: of this repository's 2,139 foreground check runs in its own transcripts 93 % were piped — the hook
   mostly times the fast check run on its own; the suite's numbers come from `finish --run` / `done --run`.

@@ -17,7 +17,14 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   bytes at its `mcp/test/fixtures/metrics/`, BOTH suites pinning one sha256 literal (09-evidence-runs.js here,
   `test/unit/metrics/metricLinesFixture.test.ts` there), never edited: a change is `metric-lines/2`, a new file landed in both
   repositories before either tags); the runner loads only
-  `NN-*.js` files. **A file is named after its topic** — `10-guards-shell-writes.js`,
+  `NN-*.js` files. 1.41's topics: 09 — `09-evidence-friction.js` (the friction budget: `_Budget:_` lines, timings.jsonl, the
+  verdict, next_action's hint) and `09-evidence-metrics.js` (METRIC lines: the reader case by case against the fixture, the
+  judge, the latest run's readings, finish's comparison, Silent Regressions' unmeasured names, spec_metrics' `measured`), with
+  their CLI twins `cli/tests/09-evidence-run-friction.js` / `09-evidence-run-metrics.js` (real children through `done --run` /
+  `finish --run`); W in each suite's `09-evidence-guardian.js`; 12 — `12-lifecycle-lessons.js` (the lesson kind, finish's
+  `lessons`, the brief's part, spec_metrics' lessons on the one walk, the finish batch's order against
+  commands/spec-finish.md); 15 — `15-quality-reference-examples.js` (structure.md's table, doctor `reference-examples`, the
+  brief's part). **A file is named after its topic** — `10-guards-shell-writes.js`,
   `12-lifecycle-branch.js` — never after a release or a review round: 1.27 renamed the 23 that were (`10-guards-review7.js`
   → `10-guards-shell-writes.js`, `13-imports-1-25.js` → `13-imports-steering.js`, `18-reviews.js` → `18-cross-area.js`…) and
   merged six small ones into their area's topic file (`05-markdown-r7-readers.js` into `05-markdown-readers.js`). An
@@ -188,8 +195,11 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   is a slack, and a slack holds a regression of its size (review 2, DT2-1: a read once a row fit the root's on Windows; what
   the root's bound still holds, review 3: a root file stat'ed once a row anywhere, a root config read once a row on Windows)
   (15-quality-design-system-cost-deprecated.js); `fsCalls` counts a path as the engine spells it, so a call made through the
-  realpath of an aliased folder (Windows' 8.3 `ADMINI~1`) is not under it — assert no pinned difference that depends on one. It
-  times only what has no count, and its
+  realpath of an aliased folder (Windows' 8.3 `ADMINI~1`) is not under it — assert no pinned difference that depends on one
+  (1.41's are counts: spec_metrics' one walk — each `.state.json` and decisions.md opened once, a twin without lessons making
+  the same calls —, finish's metric lookup — one more open per other folder, none without a reading —, Reference Examples'
+  lstats per row, the friction verdict's bytes read, `read`). It times only what has no count (1.41: the METRIC reader's CPU
+  walk, a ratio against a bare `lastIndexOf` of the same text), and its
   comment says what the bound hides (FC2-3's 2.5× backstop passes a 2× quadratic over the planned set that makes no fs call);
   (2) does **the same work on both sides** (1.39's G1 yardstick skipped the watch's parse: 1.02× Windows, 1.7–1.8× Linux);
   (3) **interleaves the sides** — a, b, a, b, …, each side's median of 5 (`pair`, 15-quality-design-system-cost.js) —, never a

@@ -380,9 +380,6 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   disk or a concurrent reader met it empty or half written) and followed a link the gate had checked a moment before. Chosen
   over a `.bak` copy: nothing to clean up or recover by hand, the gate's guarantee kept whole. The fsync measured ~0.5 ms per
   write (Windows / NTFS).
-- **1.41.0** — the lessons (lifecycle.md → Decisions and spikes) add NO state key on purpose: a `_Kind: lesson_` entry of the
-  committed decisions.md has the lock, the append, the supersession and the readers already; a `.state.json` key would need
-  a writer and a merge-driver rule, a project-level file a conflict on every merge. decisions.md merges as text — its known limit.
 
 ### Merging the spec state
 - **1.21 F1a** — the merge driver: two branches that both approved, ticked or recorded evidence conflicted in `.state.json` /
@@ -409,10 +406,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   would have reverted a tick's re-baseline made on one branch — files merge 3-way, both-changed keeps ours with no conflict.
 - **1.36.0 review 3** — the accept record (`{…, accepted: true}`, `feature protect --accept`) lives in `protectedTests.lifts`:
   `LIFT_ID` gained `accepted`, so it never merges into a lift or an end of the same file, time and user (no new key).
-- **1.41.0 (chain F)** — the friction budget adds no state: its `ms` per run was cut from `.state.json` (a per-machine number
-  nothing judges, churning a committed file on every re-run) and lives in the git-ignored timings.jsonl.
-- **1.41.0** — two new state fields and no merge rule: a run's `metrics` (as 1.36's `fast`) and `finished.metrics` ride with the
-  record their existing rules already pick (the later run, the later finish).
+- **1.41.0** (the gardening round) — two new state fields and no merge rule: a run's `metrics` (as 1.36's `fast`) and
+  `finished.metrics` ride with the record their existing rules already pick (the later run, the later finish). The rest of
+  the round adds no state on purpose. The friction budget's `ms` per run was cut from `.state.json` (a per-machine number
+  nothing judges, churning a committed file on every re-run): it lives in the git-ignored timings.jsonl. The lessons
+  (lifecycle.md → Decisions and spikes) are `_Kind: lesson_` entries of the committed decisions.md, which has the lock, the
+  append, the supersession and the readers already; a `.state.json` key would need a writer and a merge-driver rule, a
+  project-level file a conflict on every merge. decisions.md merges as text — its known limit.
 
 ### The locks
 - **1.13** — the cross-process feature lock: two MCP servers (or MCP + `dev-spec done`) on one feature lost ticks and evidence

@@ -45,9 +45,10 @@ review findings — is in History at the end.
   replaces it). Before the gate: an invalid `.state.json` or unreadable `roadmap.json` refuses; a spike approves only
   `execution`, a change only `tasks` / `execution` (`sizes.noGate`).
 - **Approval stamps — which later rules an approval is held to.** `approvePhase()` stamps every design approval `weigh`,
-  `reuse`, `reuseGate` and `designSystem` (1.35), and every design AND test-plan approval `critical` (1.33), on
+  `reuse`, `reuseGate`, `designSystem` (1.35) and `silent` (1.41), and every design AND test-plan approval `critical` (1.33), on
   `approvals[phase]` and its history record. A warn whose stamp an approval lacks passes with an "approved before X" note —
   design-tradeoffs / design-risks (`weigh`, 1.17), design-reuse (`reuse`, 1.19; `reuseGate`, 1.28: its m / l fail),
+  design-silent-regressions (`silent`, 1.41 — quality.md → Silent Regressions),
   `critical-flows` / `critical-flow-tests` (`critical`, 1.33), `ui-design-system` (`designSystem`, 1.35 — quality.md →
   Design-system registry; this check reads a file OUTSIDE the feature, so a design approved cleanly under it and unchanged
   since only warns when the registry moves on — `designSystemSettled`): a finished feature is never asked to reopen what it signed off (quality.md →
@@ -119,7 +120,8 @@ review findings — is in History at the end.
      but unverified → `verify` naming its run, `port.naHeld`) → `verify` (all ticked, one unverified — `verificationStatus()`) →
      `verify` (+port: the differential check not passed again since a task after it — FINISH_STEPS `recheck`, `port.naRecheck`:
      before the review panel's sentence and the project checks' hint, which stay on the finish step, so the checks run once) →
-     `finish` (`tasks` when there are none).
+     `finish` (`tasks` when there are none; 1.41: a check over its `_Budget:_` ends its recommendation — the LAST hint,
+     never on `verify` / `drift` / `finished` — and adds `friction {over}`: tasks-and-evidence.md → The friction budget).
 - **After a finish** (`state.finished`): `finished` — asking for the `execution` sign-off (with roles: `missingRoles`,
   `--role <next>`; project checks without a passing run → `verify`, `suite`, `finish --run`) — or `drift`
   (`baselineDrift()`: {finishedAt, files, changed, missing, nowPresent, drifted}; a re-finish's `recordFinishBaseline()`
@@ -144,9 +146,13 @@ review findings — is in History at the end.
   listed after it was ticked or re-run), `suite-evidence` (`meta.checks`), `approval-gates` (a phase missing a role's
   sign-off is pending); a spike: `spike`, `decision`, `open-tasks`. `warnings` never block (EC/NFR/SC,
   planned-not-in-code, legacy approvals missing a role, `outside-code-artifacts`, a file-date-only change, an expired
-  waiver; 1.41: the open lessons — ONE warning, always the LAST, the field `lessons` only when the feature has one; the
-  finish batch of commands/spec-finish.md asks one question for the warnings that need the user, in the round's order:
-  dev-guardian, test integrity, metrics, lessons — lifecycle.md → Decisions and spikes). spec_metrics' `finished` = the earlier of the first execution approval and `state.finished.at`.
+  waiver; 1.41: dev-guardian's own findings below the gate — W, one line, the last of dev-guardian's warnings
+  (tasks-and-evidence.md → Project checks, dev-guardian's gate) —, then a regressed or loosened METRIC reading and the
+  Silent Regressions names no passing check printed (tasks-and-evidence.md → Metrics that regress silently), and the open
+  lessons — ONE warning, always the LAST, the field `lessons` only when the feature has one (lifecycle.md → Decisions and
+  spikes). The finish batch of commands/spec-finish.md asks ONE question for the warnings that need the user, in that order —
+  dev-guardian, test integrity, metrics, lessons —, then runs finish again; 12-lifecycle-lessons holds the engine's order
+  and the prose's to each other). spec_metrics' `finished` = the earlier of the first execution approval and `state.finished.at`.
 - **Bugfix execution gate (`bugfixGate()`).** While bug.md → Root Cause is unfilled, no task after the one that writes it
   (`rootCauseTaskIndex()`: names bug.md + a Root Cause synonym, no `_Makes green:_` / `_Verify:_`) can be ticked or given
   evidence — without one (the short form), none after task 1 (`bugGateFirst`); `done --run` refuses before running. A
@@ -372,9 +378,11 @@ A feature's **size** (xs · s · m · l) decides its scaffold and approvals. **N
 (mcp/tests/06-gates-sizes.js pins every no-size builder output's sha1; changed on purpose once — the bugfix tasks.md), no
 size key, never assigned by `spec_upgrade`; the unsized gates too, **except the stricter filled rule** (Track sections,
 below), which applies at every size. At EVERY size: EARS, trace, the evidence gate, the bugfix iron law, phase order, the
-finish / execution gate, every track criterion scaffolded. The friction budget (1.41) is project-level: no size reads it and
-it is never a gate — spec_metrics' `friction` and next_action's finish-step hint, only when a check is over its `_Budget:_`
-(tasks-and-evidence.md → The friction budget).
+finish / execution gate, every track criterion scaffolded. What 1.41 added reads no size and is never a gate, but the m / l
+design's Silent Regressions (below): the friction budget is project-level — spec_metrics' `friction` and next_action's
+finish-step hint, only when a check is over its `_Budget:_` (tasks-and-evidence.md → The friction budget); a METRIC reading
+and an open lesson are finish warnings only when a check printed one or a lesson was recorded — a feature with neither sees
+nothing new at any size.
 - **Input.** `spec_create {size}` / `create --size` (`sizeInput()`, case-folded; new features only — `sizes.sizeKept`);
   `.state.json → size` only when given (no merge-driver rule); `featureSize(dir)`. `spec_classify` suggests one, never
   applies it: `suggestedSize`, stable `sizeReason` (trivial-change · small-change · several-tracks · public-api ·
@@ -422,7 +430,8 @@ it is never a gate — spec_metrics' `friction` and next_action's finish-step hi
   doctor fails `design-reuse` and the design gate refuses it until the section names what is reused, extended or new; a
   design approved before 1.28 (no `reuseGate` stamp) keeps the warning (quality.md → Reuse & Integration). 1.41: the m / l design
   also gets `## Silent Regressions` (an empty table, no slot) and doctor WARNS `design-silent-regressions` until it is answered —
-  never a refusal, never a gate (quality.md → Silent Regressions); s / xs / unsized / bugfix / spike / change see nothing new. At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
+  never a refusal, never a gate (quality.md → Silent Regressions); s / xs / unsized / bugfix / spike / change get no such
+  section and no such warn. At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
   Considerations under +sec, Testing Strategy under +tdd) drops the core section, Complexity Tracking has no example row,
   Reuse & Integration one, Error Handling points at the IF…THEN criteria, and `TRACK_OVERLAPS` / `TRACK_TASK_OVERLAPS`
   (tracks.js) write a section / task two tracks ask for once (with +obs the +saas telemetry line goes); **+api / +dist
@@ -555,6 +564,10 @@ here. "r5 review" is 1.23's fifth review.
   BS-3 is cut again (those cells read `filled`, and ui-states already warns `open` on each at size m / l, a note at s); no 1.40 chain touched what
   ui-states reads (the corpus's `sectionLines` and `uiStateNames` byte-identical to 1.39.0's at every merge), so no new warn
   on an approved artifact and no stamp key (quality.md → History → Design-system registry, 1.40.0).
+- **1.41.0** — one new warn on an approved artifact, so one new stamp: `design-silent-regressions`' `silent` (quality.md →
+  Silent Regressions). Finish gained three warnings and no blocker — W (dev-guardian's own findings below the gate, which
+  1.40 only counted in "(N new below it)"), the METRIC warning and the lessons' —, in the order the finish batch asks them
+  (CRIT_X D8.3: dev-guardian, W, metrics, lessons); the merge pinned it against the prose (12-lifecycle-lessons).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12
@@ -658,10 +671,11 @@ here. "r5 review" is 1.23's fifth review.
   customer id" was m / default.
 - **1.28** — a size m / l design's Reuse & Integration became a design-gate check (`design-weigh:reuse`; doctor fails it
   there), so doctor's verdict and the gate agree; s / xs / unsized / bugfix / spike / change keep the warning.
-- **1.41.0 (chain F)** — the friction budget stays out of every size rule and gate (CRIT_X D9: sizes none / s see nothing new
-  unless a check is over its budget); its designed doctor entry was cut — it warned every feature at every size.
-- **1.41.0** — the m / l design's Silent Regressions: a WARN (DECISIONS: "a doctor warn until answered, never a refusal"), so
-  unlike Reuse & Integration it joins no gate; its `silent` stamp only spares a design approved before 1.41.
+- **1.41.0** (the gardening round — "a cross-cutting cycle, never an extra gate per feature") — CRIT_X D9: sizes none / s see
+  nothing new unless something happened (then the one finish question). The friction budget stays out of every size rule and
+  gate; its designed doctor entry was cut — it warned every feature at every size. The m / l design's Silent Regressions is a
+  WARN (DECISIONS: "a doctor warn until answered, never a refusal"), so unlike Reuse & Integration it joins no gate; its
+  `silent` stamp only spares a design approved before 1.41.
 
 ### Bugfix and finish
 - **v1.12** — the bugfix kind.

@@ -52,9 +52,10 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   gates.js                     the gate walk, pending gates, flows, detectPhase; spec_approve; .history/, spec_impact
   doctor.js                    the check registry (DOCTOR_CHECKS, GATES, approvalChecks), spec_doctor, next_action, status,
                                the status line, the plan-mode bridge, isDevSpecDir, the DEV_SPEC_* defaults
-  quality.js                   cross-feature ACs, glossary, trade-offs / risks / reuse, the constraint nudge, spec_clarify
+  quality.js                   cross-feature ACs, glossary, trade-offs / risks / reuse, the constraint nudge, spec_clarify;
+                               1.41: structure.md's Reference Examples, projectPath / onDisk (design-system.js links them)
   finish.js                    spec_finish, drift, remove / rename / archive / restore, _Supersedes:_, SPECS.md, metrics
-  roadmap-md.js · decisions.js ROADMAP.md / .html, forecasts, overlaps · decisions.md, the ADR export, spikes
+  roadmap-md.js · decisions.js ROADMAP.md / .html, forecasts, overlaps · decisions.md, the ADR export, spikes, lessons (1.41)
   export.js                    spec_export (markdown, HTML, Gherkin, CSV, changelog), milestones
   guards.js                    guard mode, the stop gate and its claim scan, the approval guard + shell lexer (CLI_SWITCHES: probe.js)
   protect.js                   1.36 guard tests' protected tests: the snapshot, the tick record, the edit decision, protect / unprotect, finish's check
@@ -305,16 +306,18 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   after scanCode, and `uiViewFile`, the one view-reader predicate) in design-system.js, the COUNTS (`uiProjectPass`) and the
   marker's ids (`uiOff`, `UI_FACTS`) in ui-checks.js, the marker's reader (`dsChecksOff`) in quality.js, which names no rule
   id. design-system.js exports `uiProject` for one test (a truncated walk's scan).
-- **1.41.0** (chain F) — engine/friction.js, the friction budget (tasks-and-evidence.md → Project checks, The friction budget):
-  EAGER after guardian.js (CRIT_X D8.8) — observeRun, which the observe hook runs, calls its `recordTiming` on every measured run
-  of a project check, and next_action / spec_metrics read it; ~200 lines kept out of evidence.js (2,200+). It reuses evidence.js's
-  one appender and tail reader (`appendLog`, `readLogTail` — observed.jsonl's, generalized) and tasks.js's marker span reader
-  under its own label (`labelMarkerSpans`). With chain M's metric.js (below), 27 eager modules.
-- **1.41.0** (chain M) — engine/metric.js, the METRIC line (tasks-and-evidence.md → Metrics that regress silently): EAGER, after
-  evidence.js in `MODULES` — the CLI's run paths and the tick call it, and the lazy tier loads all its modules at once (a lazy
-  metric.js would cost more); a metric-free run reaches no more than the reader's first `lastIndexOf`. It links what it reads
-  (featureDirs, stateFromFile, the weigh reader, isGuardianCheck); evidence.js, tasks.js and finish.js link its entries. 27 eager
-  modules with friction.js (the load-cost line above; README's trees say 32 with the lazy ones).
+- **1.41.0** (the gardening round) — two eager modules, 27 with the engine (the load-cost line above; README's trees say 32 with
+  the lazy ones). **engine/metric.js**, the METRIC line (tasks-and-evidence.md → Metrics that regress silently): after evidence.js
+  in `MODULES` — the CLI's run paths and the tick call it, and the lazy tier loads all its modules at once (a lazy metric.js
+  would cost more); a metric-free run reaches no more than the reader's first `lastIndexOf`. It links what it reads
+  (featureDirs, stateFromFile, the weigh reader, isGuardianCheck); evidence.js, tasks.js and finish.js link its entries, and it
+  holds spec_metrics' one walk (`walkFeatureStates`) the lessons ride too. **engine/friction.js**, the friction budget
+  (tasks-and-evidence.md → Project checks, The friction budget): after guardian.js (CRIT_X D8.8) — observeRun, which the observe
+  hook runs, calls its `recordTiming` on every measured run of a project check, and next_action / spec_metrics read it; ~200
+  lines kept out of evidence.js (2,200+). It reuses evidence.js's one appender and tail reader (`appendLog`, `readLogTail` —
+  observed.jsonl's, generalized) and tasks.js's marker span reader under its own label (`labelMarkerSpans`). No module for the
+  lessons (decisions.js) or Reference Examples (quality.js): `projectPath` and `onDisk` moved verbatim from the lazy
+  design-system.js into the eager quality.js, which both read (quality.md → History, Reference examples).
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):
