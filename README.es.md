@@ -178,7 +178,7 @@ en otros clientes MCP son los prompts del servidor.
 | | `/spec-change [impact \| decide \| track ±x]` | Después de una aprobación: lo que toca una edición, una entrada en el registro de decisiones, un track activado o desactivado |
 | ejecutar | `/executeTask [--subagents] \| commit` | La tarea siguiente (o la tarea N) con evidencia; `commit` redacta un commit que cita la spec |
 | | `/eval [run \| baseline \| migrate]` | (+ai) El harness de evals local con tu propia clave de API; una migración de modelo condicionada a él |
-| revisar | `/spec-review [branch \| converge \| simplify \| feedback \| prompt]` | Revisión frente a la spec — la rama, una pasada de convergencia o de simplificación, comentarios de revisión, un cambio de prompt |
+| revisar | `/spec-review [branch \| converge \| simplify \| prune \| feedback \| prompt]` | Revisión frente a la spec — la rama, una pasada de convergencia, de simplificación o de poda, comentarios de revisión, un cambio de prompt |
 | cerrar | `/spec-finish` | Comprueba que está realmente terminada, redacta el resumen del merge y después hace el merge en local o mantiene la rama |
 | | `/feature [archive \| restore \| rename \| remove \| flow]` | El ciclo de vida de una función; `flow design-first` para el trabajo que parte de una arquitectura |
 | adoptar | `/spec-adopt [scan \| reverse \| coverage \| import]` | Código existente: inventariarlo, generar specs a partir de él, medir la cobertura, importar Kiro / spec-kit / OpenSpec / planes / BMAD |
