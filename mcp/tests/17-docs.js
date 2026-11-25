@@ -510,6 +510,37 @@ exports.run = async ({
       whole: /\*\*Remove a test whole\.\*\* A pruned test is deleted — its case, or its file when nothing in it is kept —, never left as an empty body, a skipped case or a constant assertion/.test(tp),
       notMidTask: /never mid-task: a test that looks worthless during a task is a concern in your report \("When a test is wrong"\), never a deletion/.test(tp),
     });
+
+    // CRIT_S4 (PROSE, must-fixes 1–5 and 7; CRIT_X D5): the optional /spec-review <f> prune pass — the command's mode, the protocol
+    // (subagent-execution.md → The pruning pass), the reviewer's prune mode, SKILL.md's pointer, verification.md's --fail-on medium note.
+    const cmdRaw = fs.readFileSync(path.join(root, "commands", "spec-review.md"), "utf8");
+    const cmd = rd("commands", "spec-review.md"), sub = rd("skills", "dev-spec-driven", "references", "subagent-execution.md");
+    const ver = rd("skills", "dev-spec-driven", "references", "verification.md"), skill = rd("skills", "dev-spec-driven", "SKILL.md");
+    const desc = (/^description: (.*)$/m.exec(fs.readFileSync(path.join(root, "agents", "spec-reviewer.md"), "utf8")) || [])[1] || "";
+    all("1.41.0 (CRIT_S4 #1–5, #7; CRIT_X D5): the /spec-review prune pass, prose — candidates from trace_check {matrix, code}, probes only on a tracked clean file with a hash-checked copy-restore and each test alone, never `git diff --quiet` alone, no shell no probe, the batch (rows, retire, _Implements:_, removed whole, the accept), the churn; the reviewer's prune mode; SKILL.md; --fail-on medium blocks like any medium", {
+      hint: /^argument-hint: "\[feature\] \[branch \| converge \| simplify \[--subagents\] \| prune \| feedback <comments> \| prompt\]"$/m.test(cmdRaw),
+      command: /\*\*prune\*\* — optional, a \+tdd feature with every task done \(or a finished one, which then reopens\)/.test(cmd) &&
+        /`trace_check \{name, matrix: true, code: true\}` — a T-ID whose every AC row has `supersededBy` and no `supersedePending` \(`retired-ac`; its files, the row's `tests\[\]\.files`\)/.test(cmd) &&
+        /a tracked, clean file only, restored from a hash-checked copy, each test of a pair run alone; no shell, no probe, so `retired-ac` only/.test(cmd) &&
+        /each changed protected test accepted \(`feature protect <feature> <file> --accept --reason "pruned: …"`\), then the re-approvals\./.test(cmd),
+      section: /## The pruning pass \(optional, before finishing\)/.test(sub) && /It never runs mid-task: an implementer who thinks a test worthless reports it as a concern\./.test(sub),
+      candidates: /a T-ID whose EVERY AC row has `supersededBy` and no `supersedePending` \(its declarer shipped\) is a `retired-ac` candidate, its files the row's `tests\[\]\.files`; a test of an `outsideCode` row \(eval, load\) never is\./.test(sub),
+      tracked: /only on a file git tracks with no change of its own: `git ls-files --error-unmatch -- <file>` exits 0 and `git status --porcelain -- <file>` prints nothing\. Never `git diff --quiet` alone — an untracked file passes it, and `git checkout --` cannot restore it\./.test(sub),
+      restore: /Copy the file's bytes aside \(under `\.specs\/<feature>\/\.execution\/`\) and record its `git hash-object`; make the break; run \*\*each test of the pair alone, by name\*\*[^;]*; restore from the copy, then check that `git hash-object` gives the recorded hash and `git status --porcelain -- <file>` is empty again — a mismatch stops the pass\./.test(sub),
+      noShell: /\*\*No shell\*\* \(an MCP client that runs no command\): no probe, so no `same-path` \/ `no-kill` pruning is proposed — `retired-ac` only\./.test(sub),
+      batch: /\*\*The user approves each pruning — never you\.\*\*/.test(sub) && /`spec_impact \{name, phase: "test-plan"\}` — its `retire` names the tasks whose `_Makes green:_` still cite a removed T-ID/.test(sub) &&
+        /a pruning that deletes a whole file also drops that file from every done task's `_Implements:_` \(left there, trace's missing-file gap fails doctor and blocks the finish\)/.test(sub) &&
+        /remove each test \*\*whole\*\* — its case, or the file —, never an empty body, a skip or a constant assertion/.test(sub),
+      record: /`feature protect <feature> <file> --accept --reason "pruned: <criterion> — <what still guards it>"`/.test(sub) && /Without guard tests the removed row in the approval history is the record\./.test(sub),
+      churn: /re-approve `test-plan`, then `tests` \(every remaining planned T-ID still in code\), then `tasks`; on a finished feature also `execution` and a new `\/spec-finish` — `spec_drift` names the gone file until then, and each re-approval counts as rework in `spec_metrics`\. So batch per feature/.test(sub),
+      failOnMedium: /At a non-default `--fail-on medium` an approved pruning blocks like any medium finding: dev-guardian reads no dev-spec approval/.test(ver) &&
+        /at `--fail-on medium` an approved pruning blocks like any medium finding/.test(sub),
+      reviewer: /- \*\*Prune mode\*\* — the candidate tests of a pruning pass/.test(rev) && /## Prune mode The question is "does each candidate test still earn its place\?"/.test(rev) &&
+        ["\\*\\*prune\\*\\* — name what still guards each AC it covers", "\\*\\*keep\\*\\* — why it earns its place", "\\*\\*retrace\\*\\* — a `retired-ac` test that now asserts the superseding feature's AC", "\\*\\*strengthen\\*\\* — its AC's only test"].every((s) => new RegExp(s).test(rev)) &&
+        /the controller runs every probe \(you never edit a file to make one\)/.test(rev) && /a pruned test is removed whole\./.test(rev),
+      description: /, a simplification or pruning pass — /.test(desc) && desc.length <= 250,
+      skill: /\(also the final review, converge, the simplification pass, the pruning pass\)\./.test(skill),
+    });
   }
 
   // 1.14 full review (D) — docs and prose.

@@ -358,6 +358,12 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   Never force the finish, nor remove the check, without the user — with the approval guard on, removing the check, an
   agent's write of `.specs/guardian.cjs` or `.guardian/baseline.json`, an agent-run `baseline update` and a gate run under a
   `DEV_GUARDIAN_CLI` / `CLAUDE_CONFIG_DIR` of its own are guard-downs.
+- **A test pruning the user approved** (`/spec-review <feature> prune` — `subagent-execution.md` → The pruning pass) removes
+  tests, and dev-guardian's test-integrity check reports each removal (`test-file-deleted`, `test-assertions-removed` —
+  medium). Below the default `--fail-on high` they never block. At a non-default `--fail-on medium` an approved pruning
+  blocks like any medium finding: dev-guardian reads no dev-spec approval (the user's accept, `feature protect <feature>
+  <file> --accept --reason "pruned: …"`, is dev-spec's record) and has no accept of its own for such a finding, so the
+  finish stays blocked until the user decides — never forced.
 - **Duplication budget:** when `.guardian/budgets.yml` sets `quality.duplication_pct`, `dev-spec dupes` (no feature) /
   `spec_scan {duplicates: true}` shows the project's duplicated share beside it (`budget`), and finish's duplicate warning
   says when the project is over it. dev-spec counts windows of code lines, dev-guardian measures with jscpd — close, not

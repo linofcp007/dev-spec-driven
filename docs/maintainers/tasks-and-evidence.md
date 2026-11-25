@@ -56,7 +56,10 @@ Phase 6, opt-in.
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
   ONE finding fresh (80+ opens a fix round, 50–79 is ledgered as unconfirmed, below 50 refuted); its **simplify** mode reviews
-  `/spec-review simplify`'s diff; it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
+  `/spec-review simplify`'s diff; its **prune** mode (1.41.0) gives each candidate test of `/spec-review prune` a verdict —
+  prune · keep · retrace · strengthen — and asks for the probes the controller runs (the pass is prose end to end: the
+  candidates are the matrix's retired rows, the record spec_impact's `retire` and the protected-test accept — no engine
+  part; `references/subagent-execution.md` → The pruning pass, `test-patterns.md` → Test value and pruning); it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
   rewritten lines' history. The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
@@ -926,6 +929,16 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   narrower choice). The brief grows to ~8.3 KB at 2 views, ~9 KB at 3. Fixture: 08-tasks (1, 2 and 3 views; it fails at
   4,000); three 1.37 fixtures sized for 4,000 were re-sized past the new budget (M15's Big file, the 1.37 view brief's
   Accessibility, RB-2's [UI] block).
+- **1.41.0** (the gardening round, CRIT_S4's cut form) — the Test Value rule (the testing-standards template, new projects
+  only; test-patterns.md) and an optional `/spec-review <f> prune` pass, PROSE: candidates from the matrix trace_check
+  already returns (`supersededBy` without `supersedePending`, `tests[].files`), the reviewer's prune mode, the controller's
+  probes (a tracked, clean file, a hash-checked copy-restore, each test of a pair alone — `git diff --quiet` passes an
+  untracked file and `git checkout --` cannot restore one), the record through the existing flows (spec_impact `retire`,
+  `protect --accept --reason "pruned: …"`). The designed engine pass was cut: `trace_check {prune}` (the matrix has the
+  data), `no-ac` and `costlier-layer` (real plans: empty or real wiring), the `_Pruned:_` / `_Prunes:_` markers (11 readers
+  missed; a prune task naming the deleted file fails trace on 43 % of real test files), the guardian.js "approved pruning"
+  mark (text only, file-granular). The reviewer also got one line: an unreasoned suppression is a question, Important when it
+  hides a security scanner (CRIT_X D8.9).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
