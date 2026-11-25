@@ -81,7 +81,8 @@ function readLine(line) {
   if (!RE_NAME.test(name) || !RE_NUMBER.test(num)) return { kind: "malformed" };
   const value = Number(num);
   if (!Number.isFinite(value)) return { kind: "malformed" };
-  const r = { name, value, unit: null, better: null, tolerance: null };
+  // text: the decimal as the line printed it — what the judge compares (R1-MF-5: past 15 significant digits a double drops digits)
+  const r = { name, value, text: num, unit: null, better: null, tolerance: null };
   const known = new Set();
   for (let k = 1; k < tokens.length; k++) {
     const t = tokens[k], at = t.indexOf("=");
@@ -108,7 +109,7 @@ function readLine(line) {
 }
 
 // The METRIC lines of a run's output (a string, or the outputs of several commands in run order — a later one wins) →
-// { metrics: [{name, value, unit, better, tolerance}] in print order (each name's last valid line, whole), repeats (the lines a
+// { metrics: [{name, value, text, unit, better, tolerance}] in print order (each name's last valid line, whole), repeats (the lines a
 // later one of the same name replaced), malformed (failed attempts), dropped: [the bounds that dropped input], lastMalformed? }.
 // Walked from the END with lastIndexOf — never a split (a 64 MiB output costs a scan, no copy) —, so the bounds keep what was
 // printed LAST: a benchmark loop's final iteration. 3b(7): a later malformed line of a name read stays malformed; the last valid
@@ -174,8 +175,9 @@ function metricLinesOf(input) {
 // states a direction AND a tolerance, else `unjudged` with its delta and `why` (the reference's missing terms); n% is n percent
 // of |reference|; the boundary inclusive; symmetric (3b.1): improved / regressed only past the applied tolerance.
 // ---------------------------------------------------------------------------
-// A JS number as an exact decimal { n: BigInt, s: scale } (value = n / 10^s): its shortest round-trip text — the printed
-// decimal itself for every value of up to 15 significant digits, which is all the grammar's number keeps exactly.
+// A reading's printed text — or a JS number — as an exact decimal { n: BigInt, s: scale } (value = n / 10^s). A number is read
+// by its shortest round-trip text, which is the printed decimal only up to 15 significant digits: the grammar prints up to 24
+// (15 integer + 9 fraction digits), so the judge reads the line's own text when both readings carry one (R1-MF-5).
 function decimalOf(v) {
   const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([-+]?\d+))?$/i.exec(String(v)); // a finite number always matches (readingOf, the grammar)
   const frac = m[3] || "";
@@ -201,7 +203,9 @@ function toleranceAmount(t, ref) {
 function judgeMetric(ref, cur) {
   const out = { verdict: "new", why: null, loosened: null, delta: null, applied: null };
   if (!ref) return out;
-  const R = decimalOf(ref.value), C = decimalOf(cur.value);
+  // the printed texts when BOTH readings carry one (a reading without — a hand edit, another writer — is judged on the two values)
+  const exact = ref.text != null && cur.text != null;
+  const R = decimalOf(exact ? ref.text : ref.value), C = decimalOf(exact ? cur.text : cur.value);
   const why = [];
   if (ref.better == null) why.push("better");
   if (ref.tolerance == null) why.push("tolerance");
@@ -225,25 +229,27 @@ function judgeMetric(ref, cur) {
 // ---------------------------------------------------------------------------
 // Readings in the state: an ARRAY (never an object keyed by name — no name is a prototype key there either), null terms left out.
 // ---------------------------------------------------------------------------
-// a reading as stored: {name, value, unit?, better?, tolerance?} (+ check: finished.metrics' entries)
+// a reading as stored: {name, value, text?, unit?, better?, tolerance?} (+ check: finished.metrics' entries)
 function storedReading(r, check) {
   const o = check ? { check, name: r.name, value: r.value } : { name: r.name, value: r.value };
+  if (r.text != null) o.text = r.text;
   if (r.unit != null) o.unit = r.unit;
   if (r.better != null) o.better = r.better;
   if (r.tolerance != null) o.tolerance = { amount: r.tolerance.amount, percent: r.tolerance.percent };
   return o;
 }
-// a stored reading read back (a hand edit, another version's record) → the reader's shape {check?, name, value, unit, better,
-// tolerance} or null — what the grammar could not have printed is skipped
+// a stored reading read back (a hand edit, another version's record) → the reader's shape {check?, name, value, text, unit, better,
+// tolerance} or null — what the grammar could not have printed is skipped (a text: only the grammar's number that IS the value)
 function readingOf(x, withCheck) {
   if (!isObj(x) || typeof x.name !== "string" || !RE_NAME.test(x.name) || typeof x.value !== "number" || !Number.isFinite(x.value)) return null;
   if (withCheck && (typeof x.check !== "string" || !x.check || x.check.length > 40)) return null;
+  const text = typeof x.text === "string" && RE_NUMBER.test(x.text) && Number(x.text) === x.value ? x.text : null;
   const unit = typeof x.unit === "string" && x.unit && unitFits(x.unit) && !/[\s=]/.test(x.unit) ? x.unit : null;
   const better = x.better === "lower" || x.better === "higher" ? x.better : null;
   const t = x.tolerance;
   const tolerance = isObj(t) && typeof t.amount === "number" && Number.isFinite(t.amount) && t.amount >= 0 && typeof t.percent === "boolean"
     ? { amount: t.amount, percent: t.percent } : null;
-  const r = { name: x.name, value: x.value, unit, better, tolerance };
+  const r = { name: x.name, value: x.value, text, unit, better, tolerance };
   return withCheck ? { check: x.check, ...r } : r;
 }
 const readingsOf = (list, withCheck) => (Array.isArray(list) ? list.map((x) => readingOf(x, withCheck)).filter(Boolean) : []);

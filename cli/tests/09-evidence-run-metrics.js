@@ -44,10 +44,10 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
   all("1.41 done --run reads every passing command's WHOLE output: the line printed before 50 noise lines, the first command's own name, the second command's reading of a shared name winning; the readings go on the run (never its history), into --json and as METRIC lines in the human output, a reader bound said; a --evidence note holding a METRIC line yields none (got " +
     JSON.stringify({ tick: tick.out.slice(0, 400), tickJ: tickJ && tickJ.metrics, rec: st.evidence["1"].metrics, note: note && note.metrics, rec2: st.evidence["2"], many: many.out.slice(-300) }) + ")", {
     human: tick.code === 0 && tick.out.includes("  METRIC first_only=1\n") && tick.out.includes("  METRIC queries_per_request=6 better=lower tolerance=0\n") && tick.out.includes("  METRIC heap_mb=48.25 MB\n"),
-    json: !!tickJ && JSON.stringify(tickJ.metrics) === JSON.stringify([{ name: "first_only", value: 1, unit: null, better: null, tolerance: null },
-      { name: "queries_per_request", value: 6, unit: null, better: "lower", tolerance: { amount: 0, percent: false } }, { name: "heap_mb", value: 48.25, unit: "MB", better: null, tolerance: null }]),
-    stored: JSON.stringify(st.evidence["1"].metrics) === JSON.stringify([{ name: "first_only", value: 1 }, { name: "queries_per_request", value: 6, better: "lower", tolerance: { amount: 0, percent: false } },
-      { name: "heap_mb", value: 48.25, unit: "MB" }]) && st.evidence["1"].history.every((h) => h.metrics === undefined),
+    json: !!tickJ && JSON.stringify(tickJ.metrics) === JSON.stringify([{ name: "first_only", value: 1, text: "1", unit: null, better: null, tolerance: null },
+      { name: "queries_per_request", value: 6, text: "6", unit: null, better: "lower", tolerance: { amount: 0, percent: false } }, { name: "heap_mb", value: 48.25, text: "48.25", unit: "MB", better: null, tolerance: null }]),
+    stored: JSON.stringify(st.evidence["1"].metrics) === JSON.stringify([{ name: "first_only", value: 1, text: "1" }, { name: "queries_per_request", value: 6, text: "6", better: "lower", tolerance: { amount: 0, percent: false } },
+      { name: "heap_mb", value: 48.25, text: "48.25", unit: "MB" }]) && st.evidence["1"].history.every((h) => h.metrics === undefined),
     manual: !!note && note.ok && note.metrics === undefined && st.evidence["2"].metrics === undefined,
     bound: many.code === 0 && many.out.includes("  ⚠ " + MT.dropped("names") + "\n") && st.evidence["3"].metrics.length === 20,
   });
@@ -66,8 +66,8 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
   const day = S.dayOf(fin1 && fin1.at);
   all("1.41 finish --run reads each project check's whole output — a size script's line before 50 noise lines, node --test's TAP '# METRIC' of a nested subtest — says the malformed line per check, records the readings on a ready written finish; the next feature's finish compares each (check, name): the size that grew past its tolerance is ONE ▲ warning (exit 0: ready), the report's METRIC lines and --json's metrics (got " +
     JSON.stringify({ f1: f1.out.slice(0, 900), fin1: fin1 && fin1.metrics, f2: f2.out.slice(0, 1200), f2j: f2j && [f2j.readyToFinish, f2j.metrics, f2j.recordedChecks] }) + ")", {
-    readFirst: f1.code === 0 && JSON.stringify(fin1.metrics) === JSON.stringify([{ check: "size", name: "bundle-size", value: 120, unit: "kB", better: "lower", tolerance: { amount: 2, percent: true } },
-      { check: "tap", name: "parse.ms", value: 3, unit: "ms" }]),
+    readFirst: f1.code === 0 && JSON.stringify(fin1.metrics) === JSON.stringify([{ check: "size", name: "bundle-size", value: 120, text: "120", unit: "kB", better: "lower", tolerance: { amount: 2, percent: true } },
+      { check: "tap", name: "parse.ms", value: 3, text: "3", unit: "ms" }]),
     malformed: f1.out.includes("  ⚠ size: " + MT.notRead(1, "METRIC broken=1,5", S.METRIC_GRAMMAR) + "\n"),
     recorded: f1.out.includes("  " + MT.recorded(2)),
     warning: f2.code === 0 && (f2.out.match(/▲ \d+ METRIC reading/g) || []).length === 1 &&

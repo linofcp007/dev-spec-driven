@@ -242,12 +242,12 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     const fc3 = stateOf(p, slug).finishChecks;
     all("1.41 a run's METRIC readings: done --run's passing commands (several outputs, the later winning) go on the LATEST run — never in its history — and into the result (metrics, metricsMalformed); a run reported without ranBy \"cli\" (MCP, a facade call) and a failed run carry none, and drop the older run's; finish --run's passing checks the same, recordedChecks counting them (got " +
       js({ tick: [tick.metrics, tick.metricsMalformed], st1: [st1.metrics, st1.history.map((h) => h.metrics)], st2: st2.metrics, st3: st3.metrics, rec: fin.recordedChecks, fc: [fc.size.metrics, fc.size.history.some((h) => h.metrics)], fc2: fc2.size.metrics, fc3: fc3.size.metrics }) + ")", {
-      tick: tick.ok && js(tick.metrics) === js([{ name: "t", value: 2, unit: "ms", better: null, tolerance: null }]) && tick.metricsMalformed === 1 && tick.metricsLastMalformed === "METRIC u=1,5",
-      latestOnly: js(st1.metrics) === js([{ name: "t", value: 2, unit: "ms" }]) && st1.history.every((h) => h.metrics === undefined),
+      tick: tick.ok && js(tick.metrics) === js([{ name: "t", value: 2, text: "2", unit: "ms", better: null, tolerance: null }]) && tick.metricsMalformed === 1 && tick.metricsLastMalformed === "METRIC u=1,5",
+      latestOnly: js(st1.metrics) === js([{ name: "t", value: 2, text: "2", unit: "ms" }]) && st1.history.every((h) => h.metrics === undefined),
       notCli: noCli.ok && noCli.metrics === undefined && st2.metrics === undefined,
       notFailed: failed.ok === false && failed.metrics === undefined && st3.metrics === undefined,
       finishRun: js(fin.recordedChecks) === js([{ name: "size", exitCode: 0, metrics: 1 }, { name: "test", exitCode: 0, metrics: 1 }]) &&
-        js(fc.size.metrics) === js([{ name: "bundle-size", value: 120, unit: "kB" }]) && !fc.size.history.some((h) => h.metrics),
+        js(fc.size.metrics) === js([{ name: "bundle-size", value: 120, text: "120", unit: "kB" }]) && !fc.size.history.some((h) => h.metrics),
       finishFailed: fc2.size.exitCode === 1 && fc2.size.metrics === undefined,
       finishFacade: facade.ok && fc3.size.metrics === undefined && !facade.recordedChecks.some((r) => r.metrics),
     });
@@ -370,10 +370,10 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     // not ready (an open task): no record, the comparison still shown
     const other = change(p, "Not ready", true);
     const notReady = finishWith(p, other, { size: "METRIC a=3\n", test: "METRIC b=2\n" }, { checks: { size: CHECKS.size, test: 'node -e "process.exit(0)" --test --again' } });
-    all("1.41 finished.metrics: recorded by a ready WRITTEN finish only ([{check, name, value, unit?, better?, tolerance?}], baseline.metrics counts it), from the project checks' passing runs — never a task's reading, never a check whose run no longer passes (`changed`), never a not-ready finish (got " +
+    all("1.41 finished.metrics: recorded by a ready WRITTEN finish only ([{check, name, value, text, unit?, better?, tolerance?}], baseline.metrics counts it), from the project checks' passing runs — never a task's reading, never a check whose run no longer passes (`changed`), never a not-ready finish (got " +
       js({ noRecord, rec, rec2, baseline: written.baseline, stale: [stale.readyToFinish, stale.suiteChecks.map((s) => s.status)], notReady: [notReady.readyToFinish, stateOf(p, other).finished, notReady.metrics && notReady.metrics.length] }) + ")", {
       reportOnly: report.readyToFinish && noRecord === undefined,
-      written: js(rec) === js([{ check: "size", name: "a", value: 1 }, { check: "test", name: "b", value: 2 }]) && written.baseline.metrics === 2,
+      written: js(rec) === js([{ check: "size", name: "a", value: 1, text: "1" }, { check: "test", name: "b", value: 2, text: "2" }]) && written.baseline.metrics === 2,
       noTask: !js(rec).includes("task_only"),
       notPassing: stale.readyToFinish === false && js((stale.metrics || []).map((m) => m.check)) === js(["size"]) && js(rec2) === js(rec),
       notReady: notReady.readyToFinish === false && stateOf(p, other).finished === undefined && notReady.metrics.length === 2,
