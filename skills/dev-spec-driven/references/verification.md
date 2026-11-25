@@ -348,7 +348,7 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   refused (`report-mismatch`), and so is any run of a `.specs/guardian.cjs` that is not the launcher dev-spec-driven writes
   (`launcher-changed` — `init --guardian` writes it again; `finish --run` replaces an earlier version's itself).
 - **A blocking finding is fixed**, then the check runs again. To accept ONE reviewed finding the user suppresses it inline
-  with a reason (`nosemgrep: <rule> -- <reason>`, `# nosec`) — never `baseline update`, which accepts every current
+  with a reason (`nosemgrep: <rule> -- <reason>`, `# nosec <id>  # <reason>`) — never `baseline update`, which accepts every current
   finding, the feature's own included (it belongs on the base commit, and it is the user's decision). An incomplete scan
   stays a failed check until its gaps are fixed — the blocker names how, by kind: install a missing scanner
   (dev-guardian's `/guardian-init`), commit a lockfile, a Semgrep per-file timeout → a larger `semgrep.timeout`, or the file

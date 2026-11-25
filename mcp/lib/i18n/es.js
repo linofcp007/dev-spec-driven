@@ -3029,7 +3029,7 @@ const msg = {
       finding: (at, rule, severity, own, test) => `${at} ${test ? "prueba debilitada: " : ""}${rule} (${severity})` + (own ? " [esta funcionalidad]" : ""),
       blocker: (name, text) => `la verificación del proyecto '${name}' falló — ${text}.`,
       more: (n) => `+${n} más`,
-      fixHint: (slug) => `Corrige el/los finding(s) y vuelve a ejecutar la verificación: ${DEV_SPEC} finish ${slug} --run. Para aceptar UN finding revisado, el usuario lo suprime en la propia línea con un motivo (nosemgrep: <regla> -- <motivo>, # nosec) — nunca con \`baseline update\`, que acepta todos los findings actuales, incluidos los de esta funcionalidad. Nunca fuerces el finish sin el usuario.`,
+      fixHint: (slug) => `Corrige el/los finding(s) y vuelve a ejecutar la verificación: ${DEV_SPEC} finish ${slug} --run. Para aceptar UN finding revisado, el usuario lo suprime en la propia línea con un motivo (nosemgrep: <regla> -- <motivo>, # nosec <id>  # <motivo>) — nunca con \`baseline update\`, que acepta todos los findings actuales, incluidos los de esta funcionalidad. Nunca fuerces el finish sin el usuario.`,
       baselineHint: "Sin baseline: el usuario registra una en el commit base, antes del código de esta funcionalidad (en un checkout de la rama base: node .specs/guardian.cjs baseline update --project . allí, y luego commit de .guardian/baseline.json) — registrada aquí, aceptaría también los findings de esta funcionalidad.",
       incompleteHint: "Instala el escáner que falta (el /guardian-init de dev-guardian), o — sin red, cuando Semgrep no pudo obtener sus reglas — añade --local-only al comando de la verificación; la verificación sigue fallida hasta que pase o el usuario la cambie.",
       gap: {

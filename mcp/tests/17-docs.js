@@ -451,6 +451,24 @@ exports.run = async ({
   ok(steersToPr.length === 0 && readmePt.length > 1000 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
     "no command/skill/agent text steers toward PRs or CI; README.pt.md is read as PT, README.es.md as ES (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
 
+  // 1.41.0 (CRIT_G1 #6): a `# nosec` example a user or an agent copies names the rule and gives its reason — `# nosec <id>  # <reason>`,
+  // the form Bandit takes silently (a bare `# nosec` silences every Bandit rule on the line, and dev-guardian 3.17 reports it as a
+  // blanket suppression). A property over every surface that teaches one — the prose files above, the i18n sources (every language),
+  // the CLI and the hooks —, never a list of the places that held one. A directive NAMED without its `#` (`nosec`, a reviewer's
+  // list of scanner directives) is no example. The guard's own reader is checked on both sides.
+  {
+    const RE_BARE_NOSEC = /#[ \t]*nosec\b(?![ \t]+(?:<id>|[A-Z]{1,2}\d{2,4})(?:,[ \t]*(?:<id>|[A-Z]{1,2}\d{2,4}))*[ \t]+#[ \t]*\S)/gi;
+    const nosecFiles = proseFiles.concat(["mcp/lib/i18n", "cli", "hooks"].flatMap((d) => walkFiles(path.join(root, d)).filter((p) => /\.(?:js|cjs|mjs|md)$/.test(p))));
+    const bareAt = nosecFiles.flatMap((p) => (fs.readFileSync(p, "utf8").match(RE_BARE_NOSEC) || []).length ? [path.relative(root, p)] : []);
+    const flags = (s) => (s.match(RE_BARE_NOSEC) || []).length > 0;
+    all("1.41.0 (CRIT_G1 #6): every `# nosec` example names the rule and its reason (`# nosec <id>  # <reason>`) — the prose, the i18n sources of every language, the CLI, the hooks; the reader flags a bare one and passes the named forms (got " + JSON.stringify(bareAt) + ")", {
+      none: bareAt.length === 0 && nosecFiles.length > 100,
+      reader: ["(nosemgrep: <rule> -- <reason>, # nosec)", "`# nosec`", "x = 1  #nosec", "# nosec B602", "# NOSEC <id>"].every(flags) &&
+        !["# nosec <id>  # <reason>", "# nosec <id>  # <motivo>", "# nosec B602, B607  # reviewed: constant command", "`nosec`, `gitleaks:allow`"].some(flags),
+      taught: ["en", "pt", "es", "pt-BR"].every((l) => /# nosec <id> {2}# </.test(S.msg(l).guardian.fixHint("x"))),
+    });
+  }
+
   // 1.14 full review (D) — docs and prose.
   {
     const dRead = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");

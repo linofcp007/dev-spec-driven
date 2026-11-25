@@ -3229,7 +3229,7 @@ const msg = {
       blocker: (name, text) => `the project check '${name}' failed — ${text}.`,
       more: (n) => `+${n} more`,
       // review 8: never `baseline update` to accept ONE finding — it accepts every current finding, the feature's own included
-      fixHint: (slug) => `Fix the finding(s), then run the check again: ${DEV_SPEC} finish ${slug} --run. To accept ONE reviewed finding, the user suppresses it inline with a reason (nosemgrep: <rule> -- <reason>, # nosec) — never \`baseline update\`, which accepts every current finding, this feature's included. Never force the finish without the user.`,
+      fixHint: (slug) => `Fix the finding(s), then run the check again: ${DEV_SPEC} finish ${slug} --run. To accept ONE reviewed finding, the user suppresses it inline with a reason (nosemgrep: <rule> -- <reason>, # nosec <id>  # <reason>) — never \`baseline update\`, which accepts every current finding, this feature's included. Never force the finish without the user.`,
       baselineHint: "No baseline: the user records one on the base commit, before this feature's code (a checkout of the base branch: node .specs/guardian.cjs baseline update --project . there, then commit .guardian/baseline.json) — recorded here it would accept this feature's findings too.",
       incompleteHint: "Install the missing scanner (dev-guardian's /guardian-init), or — offline, when Semgrep could not fetch its rules — add --local-only to the check's command; the check stays failed until it passes or the user changes it.",
       // an incomplete scan, by the gating gaps' kinds (dev-guardian 3.3's coverage_gap_details); remedy: dev-guardian's own (English)
