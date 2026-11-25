@@ -152,7 +152,7 @@ call; `reference-examples` `lstat`s each Copy path's folders once per engine cal
 most 4 × 64 KB).
 
 ### Tests
-- `node mcp/test.js` 3107 assertions (was 3014), `node cli/test-cli.js` 716 (was 707). New files by area: 09
+- `node mcp/test.js` 3134 assertions (was 3014), `node cli/test-cli.js` 717 (was 707). New files by area: 09
   `09-evidence-friction.js` / `09-evidence-metrics.js` and their CLI twins `09-evidence-run-friction.js` /
   `09-evidence-run-metrics.js` (real children through `done --run` / `finish --run`), 12 `12-lifecycle-lessons.js`, 15
   `15-quality-reference-examples.js`; W in each suite's `09-evidence-guardian.js`. The METRIC contract is one fixture,
