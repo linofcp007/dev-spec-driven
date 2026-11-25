@@ -374,7 +374,16 @@ const SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
 // (the class built from character codes: an editor turns the escapes of U+2028 / U+2029 into the characters, which end a regex literal)
 const RE_REPORT_CONTROL = new RegExp("[" + String.fromCharCode(0) + "-" + String.fromCharCode(0x1f) + String.fromCharCode(0x7f) + "-" +
   String.fromCharCode(0x9f) + String.fromCharCode(0x2028, 0x2029) + "]+", "g");
-const cleanLine = (v, max) => oneLine(String(v == null ? "" : v)).replace(RE_REPORT_CONTROL, " ").trim().slice(0, max);
+// … and the bidi controls and zero-width format characters dropped (U+200B–U+200F, U+202A–U+202E, U+2066–U+2069 — 1.41.0 review 1: a
+// U+202E in a rule or a file reordered the warning's and the blocker's text). Tested before the replace: most lines hold none, and a
+// second global replace on every one of a 120k-finding report's facts cost W a quarter more.
+const REPORT_FORMAT_SRC = "[" + String.fromCharCode(0x200b) + "-" + String.fromCharCode(0x200f) + String.fromCharCode(0x202a) + "-" +
+  String.fromCharCode(0x202e) + String.fromCharCode(0x2066) + "-" + String.fromCharCode(0x2069) + "]";
+const RE_REPORT_FORMAT = new RegExp(REPORT_FORMAT_SRC, "g"), RE_REPORT_FORMAT_ANY = new RegExp(REPORT_FORMAT_SRC);
+const cleanLine = (v, max) => {
+  const s = oneLine(String(v == null ? "" : v)).replace(RE_REPORT_CONTROL, " ");
+  return (RE_REPORT_FORMAT_ANY.test(s) ? s.replace(RE_REPORT_FORMAT, "") : s).trim().slice(0, max);
+};
 const gateShape = (j) => isRecord(j) && (Array.isArray(j.blocking_findings) || Array.isArray(j.new_findings) || Number.isInteger(j.exit_code));
 // From s[i] (a "{"), the index of the "}" that closes it — strings (with their escapes) skipped — or -1. Linear in the span read.
 function balancedEnd(s, i) {
@@ -443,20 +452,30 @@ function findingFacts(f, rel) {
     file, line: Number.isSafeInteger(f.line_start) && f.line_start > 0 ? f.line_start : null };
 }
 // W: the report's new findings of GUARDIAN_INTEGRITY_KINDS' passes whose severity is under --fail-on (the gate's own rule: none of them
-// blocks) → { count, top: ≤ GUARDIAN_INTEGRITY_TOP [{severity, rule, file, line, kind}], by severity, then the report's order } | null.
-// A --compact report lists the blocking findings only: none to read there (newFindings still counts them).
-function integrityFindings(fresh, failOn, rel) {
+// blocks) → { count, top: ≤ GUARDIAN_INTEGRITY_TOP [{severity, rule, file, line, kind}], by severity, then the report's order, kinds: the
+// kinds among ALL of them, GUARDIAN_INTEGRITY_KINDS' order — the warning's head names those checks only } | null.
+// A --compact report lists the blocking findings only: none to read there (newFindings still counts them). blocked(facts): one of the
+// report's blocking_findings (blockedFacts) — never W's (1.41.0 review 1: dev-spec reads the command's FIRST --fail-on, dev-guardian its
+// last).
+function integrityFindings(fresh, failOn, rel, blocked) {
   if (!fresh) return null;
   const bar = severityRank(failOn), below = [];
   for (const f of fresh) {
     const kind = GUARDIAN_INTEGRITY_KINDS.get(f.tool);
     if (!kind) continue;
     const x = findingFacts(f, rel);
-    if (severityRank(x.severity) < bar) below.push({ ...x, kind });
+    if (severityRank(x.severity) < bar && !blocked(x)) below.push({ ...x, kind });
   }
   if (!below.length) return null;
   below.sort((a, b) => severityRank(b.severity) - severityRank(a.severity)); // stable: the report's order next
-  return { count: below.length, top: below.slice(0, GUARDIAN_INTEGRITY_TOP) };
+  return { count: below.length, top: below.slice(0, GUARDIAN_INTEGRITY_TOP), kinds: [...GUARDIAN_INTEGRITY_KINDS.values()].filter((k) => below.some((x) => x.kind === k)) };
+}
+// The blocking findings' facts → (facts) → is it one of them, by rule + file + line (the rule first: a W finding rarely shares one, and
+// a report of 120k findings built a key for each)
+function blockedFacts(facts) {
+  const key = (x) => x.rule + "\n" + (x.file || "") + "\n" + (x.line || "");
+  const rules = new Set(facts.map((x) => x.rule)), keys = new Set(facts.map(key));
+  return (x) => rules.has(x.rule) && keys.has(key(x));
 }
 // "3.2.0" below "3.2.1"? (x.y.z — a suffix like -beta read as its x.y.z; unreadable → below: dev-spec can't tell, so it says so)
 function versionBelow(v, min) {
@@ -647,12 +666,13 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output, unco
   if (stale.length) g.staleTimeouts = { count: stale.length, files: stale.slice(0, GUARDIAN_SAID).map((f) => cleanLine(f, 200)) };
   // W (1.41.0, CRIT_X D7): a weakened test or an added suppression dev-guardian found below the gate — ONE finish warning, never a
   // blocker (today's "(N new below it)" counted them and said no more)
-  const integrity = integrityFindings(fresh, g.failOn, rel);
+  const facts = blocking ? blocking.map((f) => findingFacts(f, rel)) : [];
+  const integrity = integrityFindings(fresh, g.failOn, rel, blockedFacts(facts));
   if (integrity) g.testIntegrity = integrity;
   if (!blocking) return g;
   g.blocking = blocking.length;
-  const items = blocking.map((f) => {
-    const x = findingFacts(f, rel);
+  const items = blocking.map((f, i) => {
+    const x = facts[i];
     return { ...x, own: !!x.file && mine().has(fold(x.file)), ...(f.tool === GUARDIAN_TEST_INTEGRITY ? { test: true } : {}) };
   });
   items.sort((a, b) => (b.own ? 1 : 0) - (a.own ? 1 : 0) || severityRank(b.severity) - severityRank(a.severity)); // stable: the report's order next
@@ -815,12 +835,14 @@ function guardianWarnings(items, lng) {
     ...(ti ? [integrityWarning(ti, G)] : [])];
 }
 // W's one warning: the count, --fail-on, up to 3 findings, each labelled by its pass (guardian.finding labels `test` / `suppression`
-// only: a kind a hand-edited state garbled gets none), the rest counted.
+// only: a kind a hand-edited state garbled gets none), the rest counted. Its head names the one check the findings come from when
+// `kinds` says one (1.41.0 review 1 — a dev-guardian before 3.17 has no suppressions check), else both.
 function integrityWarning(g, G) {
   const n = countOf(g.testIntegrity.count);
   const top = (Array.isArray(g.testIntegrity.top) ? g.testIntegrity.top : []).filter(isRecord).slice(0, GUARDIAN_INTEGRITY_TOP);
   const list = top.map((f) => G.finding(guardianAt(f), f.rule, f.severity, false, f.kind)).join(", ") + (n > top.length && top.length ? ", " + G.more(n - top.length) : "");
-  return G.integrityWarn(n, typeof g.failOn === "string" && g.failOn ? g.failOn : "high", list);
+  const kinds = Array.isArray(g.testIntegrity.kinds) ? [...GUARDIAN_INTEGRITY_KINDS.values()].filter((k) => g.testIntegrity.kinds.includes(k)) : [];
+  return G.integrityWarn(n, typeof g.failOn === "string" && g.failOn ? g.failOn : "high", list, kinds.length === 1 ? kinds[0] : null);
 }
 
 // --- the approval guard's dev-guardian rules (guards.js calls them; with a guardian check set — guardianGuardOn) -------------------

@@ -211,7 +211,7 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
       printed: rW.out.includes("  ▲ " + WARN + "\n") && rW.out.split("\n").filter((l) => l.includes("of its test-integrity and suppression checks")).length === 1 && !/✗ the project check 'guardian'/.test(rW.out) &&
         /tests\/b\.test\.js:9 weakened test: test-skipped \(medium\), src\/c\.py:4 suppression added: scanner-suppression-added \(low\)/.test(WARN),
       stored: !!stW && stW.exitCode === 0 && js(stW.guardian.testIntegrity) === js({ count: 2, top: [{ severity: "medium", rule: "test-skipped", file: "tests/b.test.js", line: 9, kind: "test" },
-        { severity: "low", rule: "scanner-suppression-added", file: "src/c.py", line: 4, kind: "suppression" }] }),
+        { severity: "low", rule: "scanner-suppression-added", file: "src/c.py", line: 4, kind: "suppression" }], kinds: ["test", "suppression"] }), // (kinds: review 1, R1-PZ-5)
       json: !!jW && (jW.warnings || []).filter((w) => w === WARN).length === 1 && !(jW.blockers || []).some((b) => /weakened|suppression/.test(b)),
     });
   }

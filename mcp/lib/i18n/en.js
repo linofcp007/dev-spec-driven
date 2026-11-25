@@ -3283,8 +3283,9 @@ const msg = {
       updateHint: (slug) => `Update the dev-guardian plugin (3.2.1 or later — Claude Code: /plugin), then run the check again: ${DEV_SPEC} finish ${slug} --run.`,
       // kind: "test" (dev-guardian's test-integrity pass) · "suppression" (1.41.0: its suppressions pass) · "" — never one label for both
       finding: (at, rule, severity, own, kind) => `${at} ${kind === "test" ? "weakened test: " : kind === "suppression" ? "suppression added: " : ""}${rule} (${severity})` + (own ? " [this feature]" : ""),
-      // W (1.41.0): dev-guardian's own passes found a weakened test or an added suppression below --fail-on — one finish warning, never a blocker
-      integrityWarn: (n, failOn, list) => `dev-guardian: ${n} new finding(s) of its test-integrity and suppression checks below --fail-on ${failOn}${list ? " — " + list : ""}. They do not block: the user decides each — one they intended stays (a test removal they approved, a suppression with its reason); otherwise fix it and run the check again.`,
+      // W (1.41.0): dev-guardian's own passes found a weakened test or an added suppression below --fail-on — one finish warning, never a blocker;
+      // only: "test" · "suppression" when every finding is that check's (review 1), else both are named
+      integrityWarn: (n, failOn, list, only) => `dev-guardian: ${n} new finding(s) of its ${only === "test" ? "test-integrity check" : only === "suppression" ? "suppression check" : "test-integrity and suppression checks"} below --fail-on ${failOn}${list ? " — " + list : ""}. They do not block: the user decides each — one they intended stays (a test removal they approved, a suppression with its reason); otherwise fix it and run the check again.`,
       blocker: (name, text) => `the project check '${name}' failed — ${text}.`,
       more: (n) => `+${n} more`,
       // review 8: never `baseline update` to accept ONE finding — it accepts every current finding, the feature's own included
@@ -3308,7 +3309,7 @@ const msg = {
       configHint: (slug) => `Fix that, then run the check again: ${DEV_SPEC} finish ${slug} --run.`,
       // a guardian check still needing a run (1.30): Claude Code runs the CLI (it records the report itself; minutes — the Bash
       // tool's 2-minute default is too short); another MCP client reports the run, a pass with its report (--compact keeps it short)
-      mcpRun: (name, cmd, slug) => `The '${name}' check runs dev-guardian's scan (minutes). In Claude Code run ${DEV_SPEC} finish ${slug} --run (Bash timeout 600000, or in the background): it runs the check and records its report itself. Elsewhere run \`${cmd}\` from the project root (dev-guardian 3.3+: add --compact for a short report) and report it with spec_finish {evidence: [{name: "${name}", command, exitCode, summary: its stderr's last lines, report: its JSON stdout}]} — a pass needs its report.`,
+      mcpRun: (name, cmd, slug) => `The '${name}' check runs dev-guardian's scan (minutes). In Claude Code run ${DEV_SPEC} finish ${slug} --run (Bash timeout 600000, or in the background): it runs the check and records its report itself. Elsewhere run \`${cmd}\` from the project root (dev-guardian 3.3+: add --compact for a short report; a full report, without --compact, names the findings below the gate) and report it with spec_finish {evidence: [{name: "${name}", command, exitCode, summary: its stderr's last lines, report: its JSON stdout}]} — a pass needs its report.`,
       // the launcher verified before a run and when one is recorded (1.30)
       launcherChanged: `.specs/guardian.cjs is not the launcher dev-spec-driven writes (edited, replaced or a link), so the gate does not run it — ${DEV_SPEC} init --guardian writes it again (if a newer dev-spec wrote it, update dev-spec instead)`,
       launcherRefreshed: ".specs/guardian.cjs replaced by this version's launcher (it was an earlier version's).",
