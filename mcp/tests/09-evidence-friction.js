@@ -54,12 +54,13 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
     // 1.41.0 review 1 R1-MF-9: a command where the check's name goes — a check-shaped first word that is no check, more words, and a
     // duration LAST — names no check (reported); a duration elsewhere, or a first word no check could be called, stays silent
     const c9 = project("proj-fr-command");
-    tech(c9, ["# Tech", "", "- _Budget: npm test 2m_", "- _Budget: npm run lint 90 s_", "- _Budget: npm 2m test_", "- _Budget: $500/month for 2h_", "- _Budget: `npm test` 2m_"]);
+    tech(c9, ["# Tech", "", "- _Budget: npm test 2m_", "- _Budget: npm run lint 90 s_", "- _Budget: npm 2m test_", "- _Budget: $500/month for 2h_", "- _Budget: `npm test` 2m_",
+      "- _Budget: npm test 25h_", "- _Budget: npm test2m_"]);
     eq(safe(() => E.frictionBudgets(c9)), {
       budgets: [],
       invalid: [{ line: 3, text: "_Budget: npm test 2m_", why: "no-check" }, { line: 4, text: "_Budget: npm run lint 90 s_", why: "no-check" }],
       truncated: false,
-    }, "1.41.0 review 1 R1-MF-9 friction: `_Budget: npm test 2m_` (the command instead of the check's name) and `npm run lint 90 s` → no-check; `npm 2m test` (no duration last), `$500/month for 2h` (no check-shaped first word) and a backticked command → nothing");
+    }, "1.41.0 review 1 R1-MF-9 friction: `_Budget: npm test 2m_` (the command instead of the check's name) and `npm run lint 90 s` → no-check; `npm 2m test` (no duration last), `$500/month for 2h` (no check-shaped first word), a backticked command, a last word past 24 h and a duration glued to a word → nothing");
     eq(["2m", "2 min", "2M", "90 s", "1500ms", "1.5h", "24h", "1ms", "0.5s", "999999ms", "1.2345s", "0ms", "25h", "2mn", "", "1e3s", "-1s", "1000000s", "1000000ms"].map((d) => E.parseDuration(d)),
       [120000, 120000, 120000, 90000, 1500, 5400000, 86400000, 1, 500, 999999, null, null, null, null, null, null, null, null, null],
       "1.41 friction: a duration — ≤ 6 digits, ≤ 3 decimals, ms · s · m / min · h, any case, 1 ms – 24 h; anything else null");
