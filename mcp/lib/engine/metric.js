@@ -37,20 +37,22 @@ const RE_NAME = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
 const NUMBER = "-?(?:0|[1-9][0-9]{0,14})(?:\\.[0-9]{1,9})?(?:[eE][-+]?[0-9]{1,3})?";
 const RE_NUMBER = new RegExp("^" + NUMBER + "$");
 const RE_TOLERANCE = new RegExp("^(" + NUMBER.slice(2) + ")(%?)$"); // the number without a sign: a tolerance is never negative
-const UNIT_MAX = 16;
+const UNIT_MAX = 16; // code points (an astral character is one — dev-guardian 3.17's count, R1-MF-4)
+// (past 2 × UNIT_MAX UTF-16 units a text holds more than UNIT_MAX code points: no array is built for a long one)
+const unitFits = (u) => u.length <= 2 * UNIT_MAX && [...u].length <= UNIT_MAX;
 const KEYWORD = "METRIC";
 const ESC = String.fromCharCode(27);
-const RE_CSI = new RegExp(ESC + "\\[[0-?]*[ -/]*[@-~]", "g"); // a CSI sequence (ESC [ params intermediates final) — 3b(9)
-const RE_CANDIDATE = /^[ \t]*(?:# )?[ \t]*METRIC(?=[ \t])/; // the keyword at a line's start, after blanks and one '# '
+const RE_CSI = new RegExp(ESC + "\\[[0-?]*[ -/]*[A-Za-z]", "g"); // a CSI sequence (ESC [ params intermediates, a final LETTER) — 3b(9)
+const RE_CANDIDATE = /^[ \t]*(?:# )?METRIC(?=[ \t])/; // the keyword at a line's start, after blanks and one '# ' (never blanks after it)
 const RE_CONTROL = /[\u0000-\u001f\u007f]+/g;
 
 // The index the line of the keyword at i starts at, when only blanks, '#' and CSI sequences stand before it on that line — a
-// pre-filter, linear over the whole walk (a scan stops at the first other character: an earlier "METRIC" stops it at its 'C'),
-// bounded to candidateBytes characters back; RE_CANDIDATE then decides. → the start · -1 (not a line start) · -2 (a prefix past
-// the candidate bound: a dropped candidate) · -3 (blanks or '#' up to the read's first character, which is no line start: the read
-// bound cut what may be a candidate — said as readBytes)
+// pre-filter, linear over the whole walk (a scan stops at the first other character: an earlier "METRIC" stops it at its 'C', so
+// two scans never cross), its CSI test any final byte (a superset of RE_CSI's letters); RE_CANDIDATE on the cleaned line then
+// decides, and the candidate bound is the cleaned line's (R1-MF-4: a colour never counts). → the start · -1 (not a line start) · -3
+// (blanks or '#' up to the read's first character, which is no line start: the read bound cut what may be a candidate — said as readBytes)
 function lineStartOf(s, i, lo) {
-  const floor = Math.max(lo, i - METRIC_BOUNDS.candidateBytes - 1);
+  const floor = lo;
   let j = i;
   while (j > floor) {
     const c = s.charCodeAt(j - 1);
@@ -63,7 +65,6 @@ function lineStartOf(s, i, lo) {
     }
     return -1;
   }
-  if (floor > lo) return -2; // still blanks / '#' / CSI 513 characters back
   if (lo === 0 || s.charCodeAt(lo - 1) === 10) return lo; // the read's first line is whole only at a line start
   const c = s.charCodeAt(lo - 1);
   return c === 32 || c === 9 || c === 35 ? -3 : -1;
@@ -84,8 +85,8 @@ function readLine(line) {
   const known = new Set();
   for (let k = 1; k < tokens.length; k++) {
     const t = tokens[k], at = t.indexOf("=");
-    if (at === -1) { // a unit: one token, right after the number, at most UNIT_MAX characters
-      if (k !== 1 || t.length > UNIT_MAX) return { kind: "malformed" };
+    if (at === -1) { // a unit: one token, right after the number, at most UNIT_MAX code points
+      if (k !== 1 || !unitFits(t)) return { kind: "malformed" };
       r.unit = t;
       continue;
     }
@@ -134,23 +135,19 @@ function metricLinesOf(input) {
       const start = lineStartOf(s, i, lo);
       if (start === -1) continue;
       if (start === -3) { dropped.add("readBytes"); continue; }
-      // the candidate line: from its start to its LF (a CR before it dropped), read at most candidateBytes + 2 characters
-      // past its start (bytes ≥ characters: a longer line is over the bound) — a prefix past the bound (-2) is over it too
-      let line = null, over = start === -2;
-      if (!over) {
-        const lim = Math.min(s.length, start + B.candidateBytes + 2);
-        const nl = s.slice(i, lim).indexOf("\n");
-        let end = nl === -1 ? lim : i + nl;
-        over = nl === -1 && lim < s.length; // the line goes on past the bound
-        if (!over && nl !== -1 && s.charCodeAt(end - 1) === 13) end--;
-        const raw = s.slice(start, end);
-        if (!over && Buffer.byteLength(raw, "utf8") > B.candidateBytes) over = true;
-        line = raw.indexOf(ESC) === -1 ? raw : raw.replace(RE_CSI, "");
-        if (!RE_CANDIDATE.test(line)) continue; // "## METRIC", "#METRIC": no candidate
-      }
+      // the candidate line: from its start to its LF (a CR before it dropped), its CSI sequences removed — the candidate bound is
+      // the CLEANED line's bytes (R1-MF-4, as dev-guardian 3.17 reads it: a colour never pushes a line over). Each line is read once:
+      // only its first keyword can follow nothing but blanks, '#' and CSI sequences.
+      const nl = s.indexOf("\n", i);
+      let end = nl === -1 ? s.length : nl;
+      if (nl !== -1 && s.charCodeAt(end - 1) === 13) end--;
+      const raw = s.slice(start, end);
+      const line = raw.indexOf(ESC) === -1 ? raw : raw.replace(RE_CSI, "");
+      if (!RE_CANDIDATE.test(line)) continue; // "## METRIC", "#METRIC", "#  METRIC", a '#' run of any length: no candidate
       if (candidates === B.candidates) { dropped.add("candidates"); stop = true; break; }
       candidates++;
-      if (over) { dropped.add("candidateBytes"); continue; } // 3b(6): a drop, never malformed
+      // 3b(6): over the bound is a drop, never malformed (a UTF-16 unit is at least one UTF-8 byte: the length decides most lines)
+      if (line.length > B.candidateBytes || Buffer.byteLength(line, "utf8") > B.candidateBytes) { dropped.add("candidateBytes"); continue; }
       const got = readLine(line);
       if (got.kind === "ignored") continue;
       if (got.kind === "malformed") {
@@ -241,7 +238,7 @@ function storedReading(r, check) {
 function readingOf(x, withCheck) {
   if (!isObj(x) || typeof x.name !== "string" || !RE_NAME.test(x.name) || typeof x.value !== "number" || !Number.isFinite(x.value)) return null;
   if (withCheck && (typeof x.check !== "string" || !x.check || x.check.length > 40)) return null;
-  const unit = typeof x.unit === "string" && x.unit && x.unit.length <= UNIT_MAX && !/[\s=]/.test(x.unit) ? x.unit : null;
+  const unit = typeof x.unit === "string" && x.unit && unitFits(x.unit) && !/[\s=]/.test(x.unit) ? x.unit : null;
   const better = x.better === "lower" || x.better === "higher" ? x.better : null;
   const t = x.tolerance;
   const tolerance = isObj(t) && typeof t.amount === "number" && Number.isFinite(t.amount) && t.amount >= 0 && typeof t.percent === "boolean"
