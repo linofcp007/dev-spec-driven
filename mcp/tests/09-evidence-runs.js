@@ -1,10 +1,11 @@
 "use strict";
-// Evidence — whose record a task reads after a renumber (evidence-moved); what a run's OUTPUT proves: the could-not-run table (one fixture per runner), a vacuous pass (no test ran), node --test's file-level failures; _Expect:_ values; an _Expect: fail_ re-run into a crash; an incomplete command (`npm test &&`).
+// Evidence — whose record a task reads after a renumber (evidence-moved); what a run's OUTPUT proves: the could-not-run table (one fixture per runner), a vacuous pass (no test ran), node --test's file-level failures; _Expect:_ values; an _Expect: fail_ re-run into a crash; an incomplete command (`npm test &&`); the METRIC line's contract with dev-guardian (metric-lines.v1.json: its sha256 pin and its shape).
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
-exports.run = async ({ ok, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
   const js = JSON.stringify;
   const E = require(path.join(__dirname, "lib", "engine", "index.js"));
   const proj = (name) => { const d = path.join(tmp, "proj-r6-" + name); S.initProject(d, ["core"], "en"); return d; };
@@ -326,5 +327,74 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
         "1.25.1 review 7: a run reported as `npm test &&` (or `npm test |`, `&& npm test`, `a && && b`) proves no _Verify:_ — the task ticks but stays unverified (command-mismatch); quoted operators, a trailing `;` / `&`, a pipe and a substitution are complete commands (got " +
         js([c1.ok, c2.ok, vs.unverifiedDetail, inc, fine]) + ")");
     }
+  }
+
+  // 1.41 F0: the METRIC line's contract with dev-guardian 3.17 is ONE file, mcp/tests/fixtures/metric-lines.v1.json — written once and
+  // committed byte-identical at dev-guardian's mcp/test/fixtures/metrics/, both suites pinning this SAME sha256: the line's grammar and
+  // bounds, the judge's rule, 36 lines, 5 whole outputs and 21 judge cases. The readers are checked against it in their own files;
+  // this block holds the file — its bytes, and the fields every case gives a reader (docs/maintainers/testing.md → The suites). A change is
+  // metric-lines/2: a NEW file landed in both repositories before either tags, never an edit of this one.
+  {
+    const FX = fs.readFileSync(path.join(__dirname, "tests", "fixtures", "metric-lines.v1.json"));
+    const sha = crypto.createHash("sha256").update(FX).digest("hex");
+    ok(sha === "55a8b9daeb03e700bcfd5487587392e667f635daa0050c55f92438b604701868",
+      "1.41 F0: mcp/tests/fixtures/metric-lines.v1.json is the metric-lines/1 contract, byte for byte the file dev-guardian 3.17 pins (sha256 " + sha + ")");
+    const text = FX.toString("utf8");
+    let doc = null;
+    try { doc = JSON.parse(text); } catch { /* said by `parsed` below */ }
+    const fx = doc && typeof doc === "object" ? doc : {};
+    const V = fx.vocabulary || {}, G = fx.grammar || {};
+    const L = Array.isArray(fx.lines) ? fx.lines : [], O = Array.isArray(fx.outputs) ? fx.outputs : [], J = Array.isArray(fx.judge) ? fx.judge : [];
+    const keysOf = (o) => (o && typeof o === "object" && !Array.isArray(o) ? Object.keys(o).sort().join(",") : "");
+    const num = (v) => typeof v === "number" && Number.isFinite(v);
+    const count = (v) => Number.isInteger(v) && v >= 0;
+    const among = (list) => (v) => Array.isArray(list) && list.includes(v);
+    const strOrNull = (v) => v === null || typeof v === "string";
+    const oneLine = (v) => typeof v === "string" && !v.includes("\n");
+    // a case has exactly its fields (an absent value is null, never a missing key) and, at most, a string `note`
+    const caseKeys = (c, need) => { const k = keysOf(c).split(","); return need.every((x) => k.includes(x)) && k.every((x) => need.includes(x) || (x === "note" && typeof c.note === "string")); };
+    const tolOk = (t) => t === null || (keysOf(t) === "amount,percent" && num(t.amount) && t.amount >= 0 && typeof t.percent === "boolean");
+    const readingOk = (r) => keysOf(r) === "better,tolerance,unit,value" && num(r.value) && strOrNull(r.unit) && (r.better === null || among(G.better)(r.better)) && tolOk(r.tolerance);
+    const lineOk = (c) => caseKeys(c, ["id", "text", "expect"]) && typeof c.id === "string" && oneLine(c.text) && among(V.kinds)(c.expect && c.expect.kind) &&
+      (c.expect.kind === "metric"
+        ? keysOf(c.expect) === "better,kind,name,tolerance,unit,value" && typeof c.expect.name === "string" &&
+          readingOk({ value: c.expect.value, unit: c.expect.unit, better: c.expect.better, tolerance: c.expect.tolerance })
+        : keysOf(c.expect) === "kind");
+    const outputOk = (c) => caseKeys(c, ["id", "text", "expect"]) && typeof c.id === "string" && typeof c.text === "string" && c.text.includes("\n") &&
+      keysOf(c.expect) === "dropped,malformed,metrics,repeats" && keysOf(c.expect.metrics) !== "" && Object.values(c.expect.metrics).every(readingOk) &&
+      count(c.expect.repeats) && count(c.expect.malformed) && Array.isArray(c.expect.dropped) && c.expect.dropped.every(among(V.bounds));
+    const JUDGED = ["within", "improved", "regressed"];
+    const judgeOk = (c) => {
+      const e = c && c.expect;
+      return caseKeys(c, ["id", "reference", "current", "expect"]) && typeof c.id === "string" && (c.reference === null || oneLine(c.reference)) && oneLine(c.current) &&
+        keysOf(e) === "applied,delta,loosened,verdict,why" && among(V.verdicts)(e.verdict) &&
+        (e.why === null || (Array.isArray(e.why) && e.why.length > 0 && e.why.every(among(V.terms)))) && (e.loosened === null || among(V.terms)(e.loosened)) &&
+        (e.delta === null || num(e.delta)) && (e.applied === null || (num(e.applied) && e.applied >= 0)) &&
+        // new ⇔ no reference (and no delta); unjudged ⇔ a why; a judged verdict ⇔ the tolerance it applied
+        (e.verdict === "new") === (c.reference === null) && (e.verdict !== "new" || e.delta === null) && (e.verdict === "unjudged") === (e.why !== null) &&
+        JUDGED.includes(e.verdict) === (e.applied !== null);
+    };
+    const badOf = (list, pred) => list.map((c, i) => [c, i]).filter(([c]) => { try { return !pred(c); } catch { return true; } }).map(([c, i]) => (c && c.id) || "#" + i);
+    const bad = { lines: badOf(L, lineOk), outputs: badOf(O, outputOk), judge: badOf(J, judgeOk) };
+    const ids = [...L, ...O, ...J].map((c) => c && c.id);
+    const used = (field) => new Set(J.flatMap((c) => { const v = c && c.expect && c.expect[field]; return Array.isArray(v) ? v : [v]; }));
+    all("1.41 F0: metric-lines.v1.json is well-formed — ASCII and LF, every case with the fields a reader needs in the shared vocabulary, the cases the decisions name, no CI / PR word (bad: " + js(bad) + ")", {
+      parsed: doc !== null,
+      asciiLf: [...FX].every((b) => b < 0x80 && b !== 13) && text.endsWith("}\n"),
+      format: fx.format === "metric-lines/1",
+      bounds: keysOf(fx.bounds) === [...(V.bounds || [])].sort().join(",") && Object.values(fx.bounds || {}).every((v) => Number.isInteger(v) && v > 0),
+      grammar: [G.name, G.number].every((p) => { try { return typeof p === "string" && new RegExp(p).source.length > 0; } catch { return false; } }) &&
+        G.numberFinite === true && Number.isInteger(G.unitMaxChars) && js(G.better) === '["lower","higher"]',
+      lines: L.length >= 30 && bad.lines.length === 0,
+      outputs: O.length >= 4 && bad.outputs.length === 0,
+      judge: J.length >= 15 && bad.judge.length === 0,
+      uniqueIds: ids.length === new Set(ids).size,
+      // a TAP line, a non-ASCII name, every kind, a repeat, a dropped bound, every verdict, every term both as a why and as loosened
+      coverage: (V.kinds || []).every((k) => L.some((c) => c && c.expect && c.expect.kind === k)) && L.some((c) => /^[ \t]*# METRIC /.test(c && c.text)) &&
+        L.some((c) => c && c.expect && c.expect.kind === "malformed" && [...String(c.text)].some((ch) => ch.charCodeAt(0) > 0x7f)) &&
+        O.some((c) => c && c.expect && c.expect.repeats > 0) && O.some((c) => c && c.expect && Array.isArray(c.expect.dropped) && c.expect.dropped.length > 0) &&
+        (V.verdicts || []).every((v) => used("verdict").has(v)) && (V.terms || []).every((t) => used("loosened").has(t) && used("why").has(t)),
+      noCiPrWord: !/\b(?:CI|PRs?)\b/.test(text) && !/pull requests?/i.test(text),
+    });
   }
 };

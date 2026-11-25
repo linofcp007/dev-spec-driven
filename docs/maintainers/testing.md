@@ -13,7 +13,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   18 cross-area regressions (`18-cross-area*.js` — findings that span several areas). `--list` prints every file with its
   one-line summary (the file's first comment line). `mcp/tests/fixtures/` holds files a test reads byte for byte (1.30: the
   launcher dev-spec-driven 1.29 wrote, `guardian-launcher-1.29.cjs`; 1.33: the one 1.30–1.32.x wrote, `guardian-launcher-1.32.cjs` —
-  never edited: their sha1s are pinned); the runner loads only
+  never edited: their sha1s are pinned; 1.41: `metric-lines.v1.json`, the METRIC line's contract with dev-guardian — the same
+  bytes at its `mcp/test/fixtures/metrics/`, BOTH suites pinning one sha256 literal (09-evidence-runs.js here,
+  `test/unit/metrics/metricLinesFixture.test.ts` there), never edited: a change is `metric-lines/2`, a new file landed in both
+  repositories before either tags); the runner loads only
   `NN-*.js` files. **A file is named after its topic** — `10-guards-shell-writes.js`,
   `12-lifecycle-branch.js` — never after a release or a review round: 1.27 renamed the 23 that were (`10-guards-review7.js`
   → `10-guards-shell-writes.js`, `13-imports-1-25.js` → `13-imports-steering.js`, `18-reviews.js` → `18-cross-area.js`…) and
@@ -391,3 +394,14 @@ How the rules above came to be — grep a release here.
   sides on Linux) is a count — with a row marked as with none it makes the same calls under `src/` and opens no page (the
   project report 642), and a watch built for it fails; DS_PATH_WORDS, a cost guard only timed (1.48–1.55×), is counted — a
   path cell of 33 absent files makes the calls of its first 20 (without the bound 38 lstats against 28).
+- **1.41.0** — `mcp/tests/fixtures/metric-lines.v1.json` (F0 of the 1.41.0 / dev-guardian 3.17.0 round): the METRIC line's
+  contract — its grammar and the one set of reader bounds, the judge's rule, 36 lines, 5 whole outputs and 21 judge cases —
+  written once and committed byte-identical in both repositories, each suite pinning the same sha256. The readers live in two
+  languages (dev-spec's CommonJS, dev-guardian's TypeScript) and no hermetic suite can read the other repository, so the pin is
+  the only thing that keeps them on one contract. 09-evidence-runs.js holds the file, not a reader: the pin, and the fields
+  every case gives one (an absent value is `null`, never a missing key; `new` ⇔ no reference; `unjudged` ⇔ a `why`; a judged
+  verdict ⇔ its `applied` tolerance), the cases the decisions name (a TAP line, a non-ASCII name, every kind, verdict and term),
+  ASCII with LF ends, no CI / PR word — dev-guardian's test checks the same properties. The expectations were written by hand
+  and re-derived by an independent oracle (a second reader of the grammar, BigInt-scaled decimals) before the copy; three
+  decimal cases read `regressed` in binary floating point and `within` exactly (120 → 122.4 at 2 %, 0.7 → 0.77 at 0.07,
+  0.3 → 0.33 at 10 %).
