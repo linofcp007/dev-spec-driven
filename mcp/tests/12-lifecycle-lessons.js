@@ -231,6 +231,15 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, require, __di
     S.metrics(p2, "api-keys", { write: true });
     const plain = rd(p2, ".specs", "api-keys", "retro.md");
     ok(plain.includes(T.amend + "\n\n" + T.amendNote + "\n- \n") && !/lesson/i.test(plain), "1.41 lessons: a retro without lessons keeps 1.40's empty amendments line");
+    // every feature archived (no active one): the CLI lines still carry the project's lessons, as the JSON does
+    for (const x of S.listFeatures(p).features) S.manageFeature(p, "archive", x.name);
+    const gone = S.metrics(p);
+    const goneLines = E.metricsLines(gone);
+    all("1.41 lessons: with every feature archived, the CLI's metrics lines still print the project's lessons after `no features` (got " + js(goneLines) + ")", {
+      noActive: gone.features.length === 0 && gone.lessons && gone.lessons.total === 9,
+      head: goneLines[0] === I.msg("en").metrics.noFeatures(gone.specsDir),
+      lines: goneLines.includes(I.msg("en").metrics.lessonsLine(9, 9, "guidance-missing 2 · example-copied 3 · tool-friction 1 · model-error 1")),
+    });
   }
 
   // --- the brief's Lessons part: open lessons only, newest first, bounded (5 / 1,200 characters), the rest named; refs on write --------

@@ -412,6 +412,15 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
       walk: js(seen) === js([[names[1], false, "object"], [names[2], false, "object"], [names[0], true, "object"]]),
       lines: E.metricsLines(m).slice(-2).join("\n") === MT().measuredHead + "\n    " + MT().measuredLine("bundle-size", "size", "100", "103.8 kB", 2, "+3.8 %"),
     });
+    // every feature archived (no active one): the CLI lines still carry `measured`, as the JSON does
+    S.archiveFeature(p, names[1]);
+    S.archiveFeature(p, names[2]);
+    const gone = S.metrics(p);
+    const goneLines = E.metricsLines(gone);
+    all("1.41 spec_metrics: with every feature archived, the CLI's lines still print `measured` after `no features` (got " + js(goneLines) + ")", {
+      noActive: gone.features.length === 0 && (gone.measured || []).length === 1,
+      tail: goneLines.slice(-2).join("\n") === MT().measuredHead + "\n    " + MT().measuredLine("bundle-size", "size", "100", "103.8 kB", 2, "+3.8 %"),
+    });
   }
 
   // a hand-edited (or another version's) finished.metrics: what the grammar could not have printed is skipped, term by term or whole

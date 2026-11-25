@@ -673,7 +673,8 @@ function metricsLines(r) {
     if (r.note) out.push(r.note);
     return out;
   }
-  if (!r.features.length) return [M.noFeatures(r.specsDir), ...frictionLines(r.friction, r.lang)];
+  // 1.41: no active feature — the project blocks still print (an archived folder's lessons and readings; the JSON carries them)
+  if (!r.features.length) return [M.noFeatures(r.specsDir), ...lessonsLines(r.lessons, M), ...frictionLines(r.friction, r.lang), ...measuredLines(r.measured, r.lang)];
   const out = [M.projectHead(r.features.length)];
   const w = Math.min(28, Math.max(8, ...r.features.map((m) => m.feature.length)));
   for (const m of r.features) {
