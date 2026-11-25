@@ -19,13 +19,16 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
     "for (let i = 0; i < 50; i++) console.log(\"building chunk \" + i);\n");
   size("120");
   w(p, "tests/tap.test.js", "const test = require(\"node:test\");\ntest(\"outer\", async (t) => { await t.test(\"inner\", () => { console.log(\"METRIC parse.ms=3 ms\"); }); });\n");
-  w(p, "scripts/first.js", "console.log(\"METRIC queries_per_request=7 better=lower tolerance=0\");\nfor (let i = 0; i < 50; i++) console.log(\"ok \" + i + \" - noise\");\n");
+  w(p, "scripts/first.js", "console.log(\"METRIC queries_per_request=7 better=lower tolerance=0\");\nconsole.log(\"METRIC first_only=1\");\n" +
+    "for (let i = 0; i < 50; i++) console.log(\"ok \" + i + \" - noise\");\n");
+  w(p, "scripts/many.js", "for (let i = 0; i < 21; i++) console.log(\"METRIC m\" + i + \"=\" + i);\n"); // 21 names: one past the bound
   w(p, "scripts/second.js", "console.log(\"METRIC queries_per_request=6 better=lower tolerance=0\");\nconsole.log(\"METRIC heap_mb=48.25 MB\");\n");
   const change = (name) => {
     const c = S.createFeature(p, name, undefined, "x", undefined, "en", "change");
     fs.writeFileSync(path.join(c.dir, "change.md"), "# Change: " + name + "\n\n## Summary\nThe change " + name + ".\n\n## Acceptance Criteria (EARS)\n" +
       "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer.\n\n## Approach\nOne string.\n\n## Tasks\n- [ ] 1. [US1] Measure it\n" +
-      "  - _Requirements: US-1.AC-1_\n  - _Verify: node scripts/first.js_\n  - _Verify: node scripts/second.js_\n- [ ] 2. [US1] Note it\n  - _Requirements: US-1.AC-1_\n");
+      "  - _Requirements: US-1.AC-1_\n  - _Verify: node scripts/first.js_\n  - _Verify: node scripts/second.js_\n- [ ] 2. [US1] Note it\n  - _Requirements: US-1.AC-1_\n" +
+      "- [ ] 3. [US1] Count them\n  - _Requirements: US-1.AC-1_\n  - _Verify: node scripts/many.js_\n");
     S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
     return c;
   };
@@ -36,15 +39,17 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
   const tick = await run(p, ["done", a.slug, "1", "--run"]);
   const tickJ = json((await run(p, ["done", a.slug, "1", "--run", "--json"])).stdout);
   const note = json((await run(p, ["done", a.slug, "2", "--evidence", "METRIC manual=1", "--json"])).stdout);
+  const many = await run(p, ["done", a.slug, "3", "--run"]);
   const st = state(a.dir);
-  all("1.41 done --run reads every passing command's WHOLE output: the line printed before 50 noise lines, the second command's reading of the same name winning; the readings go on the run (never its history), into --json and as METRIC lines in the human output; a --evidence note holding a METRIC line yields none (got " +
-    JSON.stringify({ tick: tick.out.slice(0, 400), tickJ: tickJ && tickJ.metrics, rec: st.evidence["1"].metrics, note: note && note.metrics, rec2: st.evidence["2"] }) + ")", {
-    human: tick.code === 0 && tick.out.includes("  METRIC queries_per_request=6 better=lower tolerance=0\n") && tick.out.includes("  METRIC heap_mb=48.25 MB\n"),
-    json: !!tickJ && JSON.stringify(tickJ.metrics) === JSON.stringify([{ name: "queries_per_request", value: 6, unit: null, better: "lower", tolerance: { amount: 0, percent: false } },
-      { name: "heap_mb", value: 48.25, unit: "MB", better: null, tolerance: null }]),
-    stored: JSON.stringify(st.evidence["1"].metrics) === JSON.stringify([{ name: "queries_per_request", value: 6, better: "lower", tolerance: { amount: 0, percent: false } }, { name: "heap_mb", value: 48.25, unit: "MB" }]) &&
-      st.evidence["1"].history.every((h) => h.metrics === undefined),
+  all("1.41 done --run reads every passing command's WHOLE output: the line printed before 50 noise lines, the first command's own name, the second command's reading of a shared name winning; the readings go on the run (never its history), into --json and as METRIC lines in the human output, a reader bound said; a --evidence note holding a METRIC line yields none (got " +
+    JSON.stringify({ tick: tick.out.slice(0, 400), tickJ: tickJ && tickJ.metrics, rec: st.evidence["1"].metrics, note: note && note.metrics, rec2: st.evidence["2"], many: many.out.slice(-300) }) + ")", {
+    human: tick.code === 0 && tick.out.includes("  METRIC first_only=1\n") && tick.out.includes("  METRIC queries_per_request=6 better=lower tolerance=0\n") && tick.out.includes("  METRIC heap_mb=48.25 MB\n"),
+    json: !!tickJ && JSON.stringify(tickJ.metrics) === JSON.stringify([{ name: "first_only", value: 1, unit: null, better: null, tolerance: null },
+      { name: "queries_per_request", value: 6, unit: null, better: "lower", tolerance: { amount: 0, percent: false } }, { name: "heap_mb", value: 48.25, unit: "MB", better: null, tolerance: null }]),
+    stored: JSON.stringify(st.evidence["1"].metrics) === JSON.stringify([{ name: "first_only", value: 1 }, { name: "queries_per_request", value: 6, better: "lower", tolerance: { amount: 0, percent: false } },
+      { name: "heap_mb", value: 48.25, unit: "MB" }]) && st.evidence["1"].history.every((h) => h.metrics === undefined),
     manual: !!note && note.ok && note.metrics === undefined && st.evidence["2"].metrics === undefined,
+    bound: many.code === 0 && many.out.includes("  ⚠ " + MT.dropped("names") + "\n") && st.evidence["3"].metrics.length === 20,
   });
 
   // finish --run: each check's whole output (TAP's "# METRIC" too) read; the malformed line said per check; a first finish measures
@@ -54,6 +59,7 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
   const b = change("Beta");
   await run(p, ["done", b.slug, "1", "--run"]);
   await run(p, ["done", b.slug, "2", "--evidence", "noted"]);
+  await run(p, ["done", b.slug, "3", "--run"]);
   size("142.3");
   const f2 = await run(p, ["finish", b.slug, "--run"]);
   const f2j = json((await run(p, ["finish", b.slug, "--run", "--json"])).stdout);

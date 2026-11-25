@@ -91,6 +91,34 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     });
   }
 
+  // --- the reader's edges: a lone CR is no line start; the read window's first character mid-line, or after blanks the bound cut;
+  // a 512-byte CRLF line; the last malformed line kept; the grammar's other refusals; several outputs filling the read bound ---
+  {
+    const RB = E.METRIC_BOUNDS.readBytes;
+    const midLine = E.metricLinesOf("abc" + "METRIC a=1\n" + "x".repeat(RB - 11)); // the window starts at "METRIC", inside "abcMETRIC"
+    const cutBlank = E.metricLinesOf("  " + "METRIC a=1\n" + "x".repeat(RB - 11)); // … after blanks the bound cut: maybe a candidate
+    const crlf512 = E.metricLinesOf("METRIC a=1 k=" + "x".repeat(512 - 13) + "\r\nok\r\n");
+    const twoMal = E.metricLinesOf("METRIC a=1,5\nMETRIC b=2,5\n");
+    const filled = E.metricLinesOf(["METRIC early=1\n", "x".repeat(RB - 15) + "\nMETRIC late=2\n"]); // the later output fills the bound
+    const partial = E.metricLinesOf(["METRIC early=1\n" + "x".repeat(40 * 1024 * 1024), "y".repeat(40 * 1024 * 1024) + "\nMETRIC late=2\n"]);
+    const refused = ["METRIC a=1 better=lower ms", "METRIC a=1 better=lower better=higher", "METRIC a=1 tolerance=-2%", "METRIC a=1 tolerance=1e400%"];
+    all("1.41 the reader's edges: a lone CR is no line start; a METRIC at the read window's first character is read only at a line start (mid-line: ignored; after blanks the bound cut: said, readBytes); a 512-byte line with its CRLF is read; the LAST printed malformed line is the one kept; a unit after a key, a known key twice, a negative or infinite tolerance are malformed; several outputs share the read bound (an earlier one past it, wholly or in part, said) (got " +
+      js({ midLine, cutBlank, crlf512: crlf512.metrics.length, twoMal: twoMal.lastMalformed, filled, partial, refused: refused.map((t) => E.metricLinesOf(t).malformed) }) + ")", {
+      loneCr: !E.metricLinesOf("x\rMETRIC a=1\n").metrics.length,
+      midLine: !midLine.metrics.length && js(midLine.dropped) === js([]),
+      cutBlank: !cutBlank.metrics.length && js(cutBlank.dropped) === js(["readBytes"]),
+      crlf512: crlf512.metrics.length === 1 && !crlf512.dropped.length,
+      lastMalformed: twoMal.malformed === 2 && twoMal.lastMalformed === "METRIC b=2,5",
+      refused: refused.every((t) => E.metricLinesOf(t).malformed === 1),
+      filled: js(filled.dropped) === js(["readBytes"]) && js(filled.metrics.map((m) => m.name)) === js(["late"]),
+      partial: js(partial.dropped) === js(["readBytes"]) && js(partial.metrics.map((m) => m.name)) === js(["late"]),
+    });
+    // the judge's own choices beyond the contract: a changed unit wins `loosened` and adds `unit` to the reference's missing terms
+    ok(E.judgeMetric(one("METRIC a=1 kB better=lower tolerance=1%"), one("METRIC a=1 MB better=higher tolerance=1%")).loosened === "unit" &&
+      js(E.judgeMetric(one("METRIC a=1 kB tolerance=1%"), one("METRIC a=1 MB")).why) === js(["better", "unit"]),
+      "1.41 the judge: a changed unit is THE loosened term (before a flipped better=), and `why` names the reference's missing terms then the unit");
+  }
+
   // --- cost (the same work on both sides): the walk is linear on hostile input UNDER the cap, and a 64 MiB output costs one scan ---
   {
     const hostile = (n) => {
@@ -100,19 +128,23 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
       return s.slice(0, n);
     };
     const time = (s, reps) => { const t0 = process.hrtime.bigint(); let k = 0; for (let i = 0; i < reps; i++) k += E.metricLinesOf(s).repeats + 1; return { ms: Number(process.hrtime.bigint() - t0) / 1e6 / reps, k }; };
-    const small = hostile(16 * 1024), large = hostile(64 * 1024);
-    const sm = remeasure(() => { const a = time(small, 200), b = time(large, 200); return { a: a.ms, b: b.ms, ratio: b.ms / a.ms }; }, (x) => x.ratio <= 6, 3);
+    const small = hostile(64 * 1024), large = hostile(256 * 1024); // (no line of it is a candidate: under the cap at any size)
+    time(small, 20); time(large, 5); // warmed: neither side pays the compile
+    const sm = remeasure(() => { const a = time(small, 80), b = time(large, 20); return { a: a.ms, b: b.ms, ratio: b.ms / a.ms }; }, (x) => x.ratio <= 6, 3);
     const underCap = E.metricLinesOf(large).dropped;
-    // 64 MiB with ONE METRIC line at its start: the reader's backward scan against a bare lastIndexOf of the same text
-    const huge = "METRIC first=1\n" + "x".repeat(64 * 1024 * 1024 - 16) + "\n";
+    // 64 MiB of output lines (2.2 M of them) with ONE METRIC line at the start: the reader's backward scan against a bare lastIndexOf
+    // of the same FLAT text (flattened first — the first scan of a concatenation pays for the copy) — a split of it costs 6–9×
+    const noise = "ok 1 - a noise line of output\n";
+    const huge = "METRIC first=1\n" + noise.repeat(Math.floor((64 * 1024 * 1024 - 16) / noise.length));
+    huge.lastIndexOf("zzzz");
     const big = remeasure(() => {
       let t0 = process.hrtime.bigint(); const bare = huge.lastIndexOf("METRIC", huge.length) === 0 ? 1 : 0; const tb = Number(process.hrtime.bigint() - t0) / 1e6;
       t0 = process.hrtime.bigint(); const r = E.metricLinesOf(huge); const tr = Number(process.hrtime.bigint() - t0) / 1e6;
       return { bare: tb, reader: tr, ratio: tr / Math.max(tb, 0.5), read: r.metrics.length + bare };
-    }, (x) => x.ratio <= 4, 3);
-    all("1.41 the reader's cost: hostile lines (METRICMETRIC runs, blank / '#' / digit runs before a keyword, CSI fragments, a long value) grown 16 → 64 KiB UNDER the candidate cap cost ≤ 6× (linear: 4×; measured " +
-      sm.ratio.toFixed(2) + "×, " + sm.a.toFixed(3) + " → " + sm.b.toFixed(3) + " ms); 64 MiB with one line costs ≤ 4× a bare lastIndexOf over the same text (a split: ~20×; measured " + big.ratio.toFixed(2) + "×, " + big.bare.toFixed(1) + " / " + big.reader.toFixed(1) + " ms)", {
-      linear: sm.ratio <= 6, underCap: js(underCap) === js([]), oneScan: big.ratio <= 4 && big.read === 2,
+    }, (x) => x.ratio <= 3, 3);
+    all("1.41 the reader's cost: hostile lines (METRICMETRIC runs, blank / '#' / digit runs before a keyword, CSI fragments, a long value) grown 64 → 256 KiB UNDER the candidate cap cost ≤ 6× (linear: 4×; measured " +
+      sm.ratio.toFixed(2) + "×, " + sm.a.toFixed(3) + " → " + sm.b.toFixed(3) + " ms); 64 MiB of output lines with one METRIC line costs ≤ 3× a bare lastIndexOf over the same flat text (a split: 6–9×; measured " + big.ratio.toFixed(2) + "×, " + big.bare.toFixed(1) + " / " + big.reader.toFixed(1) + " ms)", {
+      linear: sm.ratio <= 6, underCap: js(underCap) === js([]), oneScan: big.ratio <= 3 && big.read === 2,
     });
   }
 
@@ -276,6 +308,9 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     S.initProject(p, ["core"], "en", { checks: { test: 'node -e "process.exit(0)" --test --again' } });
     const stale = S.finishFeature(p, slug, { write: true });
     const rec2 = stateOf(p, slug).finished.metrics;
+    // a ready written finish whose checks printed no METRIC line records no key
+    const quiet = change(p, "Quiet");
+    const quietFin = finishWith(p, quiet, {}, { checks: { size: CHECKS.size, test: 'node -e "process.exit(0)" --test --again' } });
     // not ready (an open task): no record, the comparison still shown
     const other = change(p, "Not ready", true);
     const notReady = finishWith(p, other, { size: "METRIC a=3\n", test: "METRIC b=2\n" }, { checks: { size: CHECKS.size, test: 'node -e "process.exit(0)" --test --again' } });
@@ -286,6 +321,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
       noTask: !js(rec).includes("task_only"),
       notPassing: stale.readyToFinish === false && js((stale.metrics || []).map((m) => m.check)) === js(["size"]) && js(rec2) === js(rec),
       notReady: notReady.readyToFinish === false && stateOf(p, other).finished === undefined && notReady.metrics.length === 2,
+      noReadings: quietFin.readyToFinish && quietFin.baseline.recorded && !("metrics" in stateOf(p, quiet).finished) && quietFin.baseline.metrics === undefined && quietFin.metrics === undefined,
     });
   }
 
@@ -310,14 +346,15 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     // unmeasured: a code span in a row's FIRST cell of Silent Regressions, once every check passes
     const p = proj("unmeasured");
     const slug = change(p, "Measured");
-    const design = "# Design\n\n## Silent Regressions\n<!-- | `in_comment` | x | y | -->\n| Metric | Why | Printed by |\n|---|---|---|\n| `bundle-size` | grows | size |\n| `p95_ms` and `p99_ms` | slow | perf |\n" +
+    const design = "# Design\n\n## Silent Regressions\n<!--\n| Metric | Why | Printed by |\n|---|---|---|\n| `in_comment` | x | y |\n-->\n" +
+      "```\n| Metric | Why | Printed by |\n|---|---|---|\n| `in_fence` | x | y |\n```\n| `Metric` | Why | Printed by |\n|---|---|---|\n| `bundle-size` | grows | size |\n| `p95_ms` and `p99_ms` | slow | perf |\n" +
       "| prose name | x | `not_first` |\nA line naming `prose_span` outside the table.\n";
     fs.writeFileSync(path.join(p, ".specs", slug, "design.md"), design);
     const missing = S.finishFeature(p, slug, {}); // no passing run yet: suite-evidence says it, nothing unmeasured
     const r = finishWith(p, slug, { size: "METRIC bundle-size=1 kB\n" }, { write: false });
     eq([missing.metricsUnmeasured, r.metricsUnmeasured, r.warnings.filter((w) => /Silent Regressions/.test(w))],
       [undefined, ["p95_ms", "p99_ms"], [MT().unmeasured("`p95_ms`, `p99_ms`", slug)]],
-      "1.41 metricsUnmeasured: the code spans of the FIRST cell of Silent Regressions' data rows (never a comment, a prose cell, another cell, a line outside the table) no passing check printed — only once every project check passes");
+      "1.41 metricsUnmeasured: the code spans of the FIRST cell of Silent Regressions' data rows (never the header, a comment, a prose cell, another cell, a line outside the table) no passing check printed — only once every project check passes");
   }
 
   // --- the COUNT: a finish without METRIC readings walks nothing; with them it opens each OTHER folder's state once, never its own ---
@@ -375,6 +412,38 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
       walk: js(seen) === js([[names[1], false, "object"], [names[2], false, "object"], [names[0], true, "object"]]),
       lines: E.metricsLines(m).slice(-2).join("\n") === MT().measuredHead + "\n    " + MT().measuredLine("bundle-size", "size", "100", "103.8 kB", 2, "+3.8 %"),
     });
+  }
+
+  // a hand-edited (or another version's) finished.metrics: what the grammar could not have printed is skipped, term by term or whole
+  {
+    const p = proj("handedit");
+    const a = change(p, "Edited");
+    finishWith(p, a, { size: "METRIC x=1\n" });
+    const sp = path.join(p, ".specs", a, ".state.json");
+    const st = stateOf(p, a);
+    st.finished.metrics = [{ check: "size", name: "x", value: 7, unit: "k B", better: "up", tolerance: { amount: -1, percent: true } },
+      { check: "size", name: "bad name", value: 1 }, { check: "size", name: "s", value: "5" }, { name: "z", value: 1 }, { check: "c".repeat(41), name: "v", value: 1 },
+      { check: "size", name: "w", value: 424242.125 }];
+    fs.writeFileSync(sp, JSON.stringify(st, null, 2).replace("424242.125", "1e999")); // JSON.parse reads 1e999 as Infinity
+    const b = change(p, "Reader");
+    const r = finishWith(p, b, { size: "METRIC x=7\nMETRIC w=1\nMETRIC z=1\nMETRIC v=1\nMETRIC s=5\n" }, { write: false });
+    const m = S.metrics(p);
+    const x = (r.metrics || []).find((i) => i.name === "x") || {};
+    all("1.41 a hand-edited finished.metrics: an entry the grammar could not have printed is skipped (a bad name, a non-number or non-finite value, no check or one past 40 characters) and a bad term read as absent (a unit with a blank, better=up, a negative tolerance) — the comparison and spec_metrics' series alike (got " +
+      js({ items: (r.metrics || []).map((i) => [i.name, i.verdict, i.reference && i.reference.value]), x, measured: (m.measured || []).map((e) => e.check + ":" + e.name) }) + ")", {
+      sanitized: js(x.reference) === js({ feature: a, at: stateOf(p, a).finished.at, value: 7, unit: null, better: null, tolerance: null }) && x.verdict === "unjudged" && js(x.why) === js(["better", "tolerance"]),
+      skipped: ["w", "z", "v", "s"].every((n) => (r.metrics.find((i) => i.name === n) || {}).verdict === "new"),
+      series: js((m.measured || []).map((e) => e.check + ":" + e.name)) === js(["size:x"]),
+    });
+  }
+  {
+    // the series bound and its arithmetic, on the block alone: 12 finishes visited out of order → ordered by finished.at, the last 10
+    const blk = E.measuredBlock();
+    for (let k = 11; k >= 0; k--) blk.visit({ slug: "f" + k }, { finished: { at: new Date(Date.UTC(2026, 0, 1 + k)).toISOString(), metrics: [{ check: "c", name: "n", value: k }] } });
+    const r = blk.result()[0];
+    ok(r.finishes === 12 && r.series.length === 10 && r.series[0].feature === "f2" && r.series[9].feature === "f11" && r.first.feature === "f0" && r.last.value === 11 &&
+      r.change === 11 && r.changePct === null && E.measuredBlock().result() === null,
+      "1.41 measured: ordered by finished.at, the series its last 10, first → last over every finish; a change from 0 has no percentage; a block that saw nothing gives no key (got " + js(r) + ")");
   }
 
   // --- the m / l design: Silent Regressions, no slot; doctor's design-silent-regressions warn (m / l only, the 1.41 stamp) ---
@@ -466,7 +535,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     const st = (h) => E.designWeighChecks("# D\n\n## " + h + "\nNone — no measured path.\n", "en", { gate: "m" }).find((c) => c.id === "design-silent-regressions").state;
     eq(["Silent Regressions", "Regressões Silenciosas", "Regressoes silenciosas", "Regresiones Silenciosas", "Regresion silenciosa", "Métricas de regresión", "Silent regressions & budgets", "Silent regressionsx"].map(st),
       ["filled", "filled", "filled", "filled", "filled", "filled", "filled", "missing"], "1.41 SILENT_SYN: the EN / PT / ES headings (unaccented too) name the section; a modifier makes another");
-    ok(E.designWeighChecks("# D\n", "en", {}).length === 3 && E.designWeighChecks("# D\n", "en", { gate: "m" }).length === 4,
-      "1.41 designWeighChecks runs design-silent-regressions only with the size gate (m / l)");
+    ok(E.designWeighChecks("# D\n", "en", {}).length === 3 && E.designWeighChecks("# D\n", "en", { gate: "m" }).length === 4 &&
+      st("Decisions, reuse & risks") === "missing",
+      "1.41 designWeighChecks runs design-silent-regressions only with the size gate (m / l); the size-S merged section never answers it");
   }
 };

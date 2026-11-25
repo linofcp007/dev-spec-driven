@@ -483,12 +483,14 @@ Engine: the `B5` block of `engine/evidence.js`.
   split: `lineStartOf()` scans back over blanks, `#` and CSI sequences only (an earlier `METRIC` stops it at its `C`, so the whole
   walk is linear), bounded to `candidateBytes` characters; the line read to its LF within `candidateBytes + 2` characters past its
   start. **The bounds, one set (`METRIC_BOUNDS` = the fixture's):** the last `readBytes` CHARACTERS of the output (run.js caps bytes;
-  a character is ≥ 1 byte) — `readBytes` said only when a METRIC lies before them —, a candidate (a line passing RE_CANDIDATE, an
+  a character is ≥ 1 byte) — `readBytes` said when a METRIC lies before them, or when the bound cuts the blanks / `#` in front of
+  one (`lineStartOf` → -3: maybe a candidate; mid-line text before it is none) —, a candidate (a line passing RE_CANDIDATE, an
   attempt or not) of ≤ 512 UTF-8 bytes — a longer one or a prefix past the bound is a drop (`candidateBytes`), never malformed —,
   ≤ 1,000 candidates walked (`candidates` said on the 1,001st), ≤ 20 names (`names`) — the lines printed LAST are kept, a benchmark
   loop's final iteration. `dropped` lists the bounds in the fixture's order. Cost (09-evidence-metrics, ratios — no count exists for a
-  CPU walk): hostile lines UNDER the cap 16 → 64 KiB ≤ 6× (Windows 3.3×, Linux in the report), 64 MiB with one line at its start ≤ 4×
-  a bare `lastIndexOf` of the same text (a split is ~20×).
+  CPU walk; both sides warmed): hostile lines UNDER the cap (no line of them a candidate) 64 → 256 KiB ≤ 6× (linear 4×, ~4.6×
+  measured; quadratic would be 16×), and 64 MiB of output lines (2.2 M) with one METRIC line ≤ 3× a bare `lastIndexOf` of the same
+  text, flattened first — the first scan of a concatenation pays for its copy — (~1×; a split is 6–9×).
 - **The judge, `judgeMetric(reference, current)`** → the fixture's `{verdict, why, loosened, delta, applied}`: the REFERENCE's terms;
   judged only when it states `better=` AND `tolerance=` (else `unjudged`, `why` its missing terms, with the delta); a changed unit
   `unjudged` + `loosened: "unit"`, no delta; `loosened` is ONE term (unit, then better, then tolerance — a flipped / dropped direction,

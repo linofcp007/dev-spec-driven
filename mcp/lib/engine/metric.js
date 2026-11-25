@@ -20,9 +20,9 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let featureDirs, stateFromFile, statePath, isObj, timeOf, round1, dayOf, activeDesign, readIfExists, weighSection, SILENT_SYN, stripHtmlComments,
-  stripFencedCode, isGuardianCheck;
+  stripFencedCode;
 function __link(E) { ({ featureDirs, stateFromFile, statePath, isObj, timeOf, round1, dayOf, activeDesign, readIfExists, weighSection, SILENT_SYN,
-  stripHtmlComments, stripFencedCode, isGuardianCheck } = E); }
+  stripHtmlComments, stripFencedCode } = E); }
 
 // ---------------------------------------------------------------------------
 // The line — metric-lines/1 (CRIT_X D1). The fixture's grammar, once: 17-docs pins references/verification.md's line to it.
@@ -47,7 +47,8 @@ const RE_CONTROL = /[\u0000-\u001f\u007f]+/g;
 // The index the line of the keyword at i starts at, when only blanks, '#' and CSI sequences stand before it on that line — a
 // pre-filter, linear over the whole walk (a scan stops at the first other character: an earlier "METRIC" stops it at its 'C'),
 // bounded to candidateBytes characters back; RE_CANDIDATE then decides. → the start · -1 (not a line start) · -2 (a prefix past
-// the candidate bound: a dropped candidate)
+// the candidate bound: a dropped candidate) · -3 (blanks or '#' up to the read's first character, which is no line start: the read
+// bound cut what may be a candidate — said as readBytes)
 function lineStartOf(s, i, lo) {
   const floor = Math.max(lo, i - METRIC_BOUNDS.candidateBytes - 1);
   let j = i;
@@ -63,7 +64,9 @@ function lineStartOf(s, i, lo) {
     return -1;
   }
   if (floor > lo) return -2; // still blanks / '#' / CSI 513 characters back
-  return lo === 0 || s.charCodeAt(lo - 1) === 10 ? lo : -1; // the read's first line is whole only at a line start
+  if (lo === 0 || s.charCodeAt(lo - 1) === 10) return lo; // the read's first line is whole only at a line start
+  const c = s.charCodeAt(lo - 1);
+  return c === 32 || c === 9 || c === 35 ? -3 : -1;
 }
 
 // One candidate line (CSI removed) → { kind: "metric", reading } · { kind: "malformed" } · { kind: "ignored" }.
@@ -130,6 +133,7 @@ function metricLinesOf(input) {
       if (next !== 32 && next !== 9 && next !== 27) continue; // METRICS, METRIC alone at the end, METRIC=…
       const start = lineStartOf(s, i, lo);
       if (start === -1) continue;
+      if (start === -3) { dropped.add("readBytes"); continue; }
       // the candidate line: from its start to its LF (a CR before it dropped), read at most candidateBytes + 2 characters
       // past its start (bytes ≥ characters: a longer line is over the bound) — a prefix past the bound (-2) is over it too
       let line = null, over = start === -2;
@@ -176,8 +180,7 @@ function metricLinesOf(input) {
 // A JS number as an exact decimal { n: BigInt, s: scale } (value = n / 10^s): its shortest round-trip text — the printed
 // decimal itself for every value of up to 15 significant digits, which is all the grammar's number keeps exactly.
 function decimalOf(v) {
-  const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([-+]?\d+))?$/i.exec(String(v));
-  if (!m) return null;
+  const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([-+]?\d+))?$/i.exec(String(v)); // a finite number always matches (readingOf, the grammar)
   const frac = m[3] || "";
   let n = BigInt(m[2] + frac);
   let s = frac.length - (m[4] ? parseInt(m[4], 10) : 0);
@@ -205,7 +208,7 @@ function judgeMetric(ref, cur) {
   const why = [];
   if (ref.better == null) why.push("better");
   if (ref.tolerance == null) why.push("tolerance");
-  const unitChanged = (ref.unit == null ? null : ref.unit) !== (cur.unit == null ? null : cur.unit);
+  const unitChanged = ref.unit !== cur.unit; // (a reading's absent term is always null — the reader's and readingOf's shape)
   const refTol = ref.tolerance ? toleranceAmount(ref.tolerance, R) : null, curTol = cur.tolerance ? toleranceAmount(cur.tolerance, R) : null;
   const S = Math.max(R.s, C.s, refTol ? refTol.s : 0, curTol ? curTol.s : 0);
   const tolLoose = !!refTol && (!curTol || scaled(curTol, S) > scaled(refTol, S));
@@ -251,8 +254,7 @@ const readingsOf = (list, withCheck) => (Array.isArray(list) ? list.map((x) => r
 // counts said on the result (malformed, dropped), never stored. output: a string or several commands' outputs.
 function runMetricsOf(output) {
   const read = metricLinesOf(output);
-  const res = { stored: read.metrics.map((r) => storedReading(r)), read };
-  return res;
+  return { stored: read.metrics.map((r) => storedReading(r)), read };
 }
 // The result fields of a run's reading (spec_complete_task / recordedChecks[]): metrics (the readings) · metricsMalformed ·
 // metricsDropped · metricsLastMalformed — only the ones that say something.
@@ -287,15 +289,15 @@ function walkFeatureStates(projectDir, visitors, skipDir) {
 }
 // a folder's finished record → { t (finished.at), at, list: [readings with check] } | null
 function finishedMetricsOf(state) {
-  const fin = isObj(state) && isObj(state.finished) ? state.finished : null;
+  const fin = isObj(state.finished) ? state.finished : null; // (stateFromFile always hands an object)
   if (!fin || !Array.isArray(fin.metrics)) return null;
   const t = timeOf(fin.at);
   return t == null ? null : { t, at: fin.at, list: readingsOf(fin.metrics, true) };
 }
 
 // ---------------------------------------------------------------------------
-// spec_finish — the comparison (CRIT_S2 #4: keyed by (check, name), the project checks' latest PASSING runs only — the guardian
-// check never read —, ordered by finished.at; only finish compares, never the tick).
+// spec_finish — the comparison (CRIT_S2 #4: keyed by (check, name), the project checks' latest PASSING runs only — a guardian check's
+// run never carries readings: recordFinishChecks never reads it —, ordered by finished.at; only finish compares, never the tick).
 // ---------------------------------------------------------------------------
 const MAX_LISTED = 5; // the warning names at most this many readings, then "and N more"
 const pairKey = (check, name) => check + "\u0000" + name;
@@ -306,9 +308,8 @@ function finishMetrics(projectDir, dir, state, suite, tracks, lng, slug) {
   const fc = isObj(state.finishChecks) ? state.finishChecks : {};
   const current = [];
   for (const it of suite.items) {
-    if (it.status !== "pass" || isGuardianCheck(it.name, it.command)) continue;
-    const rec = Object.prototype.hasOwnProperty.call(fc, it.name) && isObj(fc[it.name]) ? fc[it.name] : null;
-    for (const r of readingsOf(rec && rec.metrics, false)) current.push({ check: it.name, ...r });
+    if (it.status !== "pass") continue; // (a check's name is never a prototype key — validCheckName)
+    for (const r of readingsOf(isObj(fc[it.name]) ? fc[it.name].metrics : null, false)) current.push({ check: it.name, ...r });
   }
   const res = { items: [], record: current.map((r) => storedReading(r, r.check)), unmeasured: [], summaryLines: [] };
   // the design's Silent Regressions rows name what a check should print: said when no passing run printed it — only once every
