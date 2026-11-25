@@ -909,7 +909,7 @@ exports.run = async ({
     // 1.36.0 review 4 (D4-1): the merge summary written before an accept (or a lift) still names the test as changed and shows no
     // accept — /spec-finish step 1 says to run it again after one, as do the accept's note (EN / PT / ES) and verification.md
     const d41 = [
-      ["spec-finish step 1: run it again after the accept", finishCmd, /After the accept \(or a lift\), run step 1 again \(`spec_finish \{name, write: true\}`\): the merge summary then lists the accept and no longer names the test as changed — the one written before it still does\. 2\. \*\*Verify fresh/],
+      ["spec-finish step 1: run it again after a protected test's accept", finishCmd, /After a protected test's accept \(or a lift\), run step 1 again \(`spec_finish \{name, write: true\}`\): the merge summary then lists the accept and no longer names the test as changed — the one written before it still does\. 2\. \*\*Verify fresh/],
       ["verification.md: the accept bullet", ref("verification.md"), /the merge summary of every written finish of that work cycle shows it — after the accept \(or a lift\), finish again with write \(`dev-spec finish <feature> --write`\): the summary written before it still names the test as changed\./],
       ["the accept's note (en)", S.msg("en").protectedTests.accepted("t.test.js", "alpha"), /Finish it again \([\s\S]*?finish alpha --write\): the merge summary then lists the accept and no longer names the test as changed\.$/],
       ["the accept's note (pt)", S.msg("pt").protectedTests.accepted("t.test.js", "alpha"), /Volta a fechá-la \([\s\S]*?finish alpha --write\): o resumo do merge passa a listar a aceitação e deixa de nomear o teste como alterado\.$/],

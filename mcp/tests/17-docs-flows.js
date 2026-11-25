@@ -282,7 +282,7 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
     const missing = Object.entries(files).flatMap(([f, t]) => LESSON_CAUSES.filter((c) => !t.includes("`" + c + "`")).map((c) => f + ": " + c));
     const lessons = (sub.split("### 7b. Lessons")[1] || "").split("### 8. Complete")[0];
     const finish = ws(rd("commands", "spec-finish.md"));
-    const batch = (finish.split("**The finish batch — ONE question.**")[1] || "").split("After the accept (or a lift)")[0];
+    const batch = (finish.split("**The finish batch — ONE question.**")[1] || "").split("After a protected test's accept (or a lift)")[0];
     const props = {
       codes: !missing.length && LESSON_CAUSES.length === 5,
       // the self-report is checked before it is recorded, the three a file can show
