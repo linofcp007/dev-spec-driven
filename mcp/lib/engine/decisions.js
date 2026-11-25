@@ -646,10 +646,10 @@ function lessonCounts(v) {
   for (const c of LESSON_CAUSES) { const n = all.filter((x) => x.cause === c).length; if (n) byCause[c] = n; }
   return { total: all.length, open: v.open.length, byCause, unread: v.unread.slice() };
 }
-// spec_metrics' project lessons, over the feature folders the metrics walk hands it — ACTIVE and ARCHIVED: [{ feature, archived, dir,
-// view? }] (a folder without `view` is read here and given one — the walk passes it on to that feature's own metrics); at most
-// LESSON_FEATURES_MAX folders read, `truncated` counts the rest. → { total, open, byCause, unread: [{feature, id, archived?}],
-// repeated: [{cause, target, features, lessons}], truncated? } | null (no lesson anywhere).
+// spec_metrics' project lessons, over the feature folders lessonsBlock collected from the metrics walk — ACTIVE and ARCHIVED:
+// [{ feature, archived, dir, view }] (the first LESSON_FEATURES_MAX each with the `view` the walk read; `truncated` counts the rest,
+// never read). → { total, open, byCause, unread: [{feature, id, archived?}], repeated: [{cause, target, features, lessons}],
+// truncated? } | null (no lesson anywhere).
 // REPEATED: one (cause, target) in two features or more — the target as a project path (projectPath: `./x` is `x`), case-folded where
 // the file system folds case, and only OUTSIDE .specs/ (a copied file, a script): a steering file is the home of every rule —
 // "money → tech.md" and "logging → tech.md" are two lessons, never one repeated. Without a target, a lesson is never repeated.
@@ -659,7 +659,6 @@ function projectLessons(projectDir, folders) {
   let total = 0, open = 0;
   const unread = [], groups = new Map(), counted = [];
   for (const f of read) {
-    if (!("view" in f)) f.view = lessonView(f.dir);
     if (!f.view) continue;
     const label = (f.archived ? "_archive/" : "") + f.feature;
     const all = f.view.open.concat(f.view.closed);
@@ -1195,5 +1194,5 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
 
 module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, decisionLog, retiredDecisions, safeSpecText, appendSpecText,
   decisionEntryLines, decide, decisionsTrace, affectsWarnings, decisionDoctorChecks, briefDecisions, decisionSummaryLines,
-  catalogDecisions, exportAdr, LESSON_CAUSES, lessonView, briefLessons, lessonCounts, projectLessons, lessonsBlock, SPIKE_FILE, validIsoDay, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeDoctor,
+  catalogDecisions, exportAdr, LESSON_CAUSES, lessonView, briefLessons, lessonCounts, lessonsBlock, SPIKE_FILE, validIsoDay, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeDoctor,
   spikeNextAction, spikeFinish, __link };
