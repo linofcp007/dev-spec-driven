@@ -291,6 +291,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
     const run = { command: PASS, exitCode: 0 };
     S.completeTask(p, f.slug, 1, run);
     const naImpl = S.nextAction(p, f.slug);
+    S.completeTask(p, f.slug, 2); // ticked without its run: the verify step (the finish step's own branch — never the hint there)
+    const naVerify = S.nextAction(p, f.slug);
     S.completeTask(p, f.slug, 2, run);
     const na = S.nextAction(p, f.slug);
     const mcp = await call("spec_next_action", { name: f.slug, projectDir: p });
@@ -299,9 +301,10 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
     const hint = F.naHint([F.naItem("test", "3 min 10 s", 5, "2 min"), F.naItem("type_check", "30 s", 3, "10 s")].join("; "),
       [S.DEV_SPEC + ' backlog add "friction-test" "' + F.backlogNote("3 min 10 s", 5, "2 min") + '"', S.DEV_SPEC + ' backlog add "friction-type_check" "' + F.backlogNote("30 s", 3, "10 s") + '"'].join(" · "));
     const checksAt = na.recommendation.indexOf("Project checks are configured");
-    all("1.41 friction: next_action's finish step ends with the friction hint — each over-budget check's platform item, its `backlog add` line — and carries friction {over} (MCP = engine); never at implement (got " +
-      js([naImpl.step, naImpl.friction, na.step, na.recommendation, na.friction]) + ")", {
+    all("1.41 friction: next_action's finish step ends with the friction hint — each over-budget check's platform item, its `backlog add` line — and carries friction {over} (MCP = engine); never at implement or verify (got " +
+      js([naImpl.step, naImpl.friction, naVerify.step, naVerify.friction, na.step, na.recommendation, na.friction]) + ")", {
       implement: () => naImpl.step === "implement" && naImpl.friction === undefined && !naImpl.recommendation.includes(F.naHint("", "").slice(0, 10)),
+      verify: () => naVerify.step === "verify" && naVerify.friction === undefined && !naVerify.recommendation.includes(F.naHint("", "").slice(0, 10)),
       finish: () => na.step === "finish" && na.recommendation.endsWith(" " + hint) && js(na.friction) === js({ over }),
       last: () => checksAt > 0 && checksAt < na.recommendation.indexOf(hint),
       mcp: () => js(mcp.friction) === js({ over }) && mcp.recommendation === na.recommendation,
