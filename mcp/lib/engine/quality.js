@@ -21,7 +21,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsPath, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
   closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf,
   naAnswer, uiStateNames; // markdown.js — 1.38 doctor's ui-states (an n/a cell; the state labels of every language, from the corpus)
@@ -34,7 +34,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsPath, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
   closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf, naAnswer, uiStateNames } = E); }
 
@@ -2300,6 +2300,32 @@ function briefDesignSystem(root, design) {
 }
 
 // ---------------------------------------------------------------------------
+// A project path and whether it is there (1.41: moved verbatim from design-system.js, which links them back — the registry's
+// stalePath reads them, and so do a lesson's _Target:_ and a Reference Examples row's Copy cell, eager readers)
+// ---------------------------------------------------------------------------
+// A word of a registry row's path cell as a project path — decided on its TEXT before any fs call (the Reuse section's rule: a
+// network path, an absolute path elsewhere or a `..` out of the project names nothing) — or null when it is no path of the
+// project: a package (`@mui/x-data-grid`), `n/a`, a URL, prose. A `:12` / `#L12` anchor is dropped (implementsPath).
+function projectPath(root, word) {
+  const w = implementsPath(word);
+  if (!w || w.startsWith("@") || /^https?:/i.test(w) || /^n\/a$/i.test(w) || !/[/.]/.test(w) || /[<>"|?*]/.test(w) || isNetworkPath(w)) return null;
+  const abs = path.resolve(root, w);
+  return abs !== root && isInsideDir(root, abs) ? toPosix(path.relative(root, abs)) : null;
+}
+// Does the project path name something on disk — reached WITHOUT following a link: a symlink or a junction on the way (it may
+// lead out of the project, or to a share) is where the walk stops, and counts as there.
+function onDisk(root, rel) {
+  let cur = root;
+  for (const seg of rel.split("/")) {
+    cur = path.join(cur, seg);
+    let st;
+    try { st = fs.lstatSync(cur); } catch { return false; }
+    if (st.isSymbolicLink()) return true;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Clarify — surface ambiguities/gaps in requirements before designing
 // ---------------------------------------------------------------------------
 
@@ -3164,4 +3190,4 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
   designSystemDeprecatedCheck, dsReplacement, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,
-  UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, __link };
+  UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, projectPath, onDisk, __link };
