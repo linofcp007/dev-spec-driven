@@ -2034,6 +2034,11 @@ const msg = {
       median: "mediana",
       medianLeads: (list) => `  mediana del tiempo desde la creación: ${list}`,
       totals: (done, total, pass, runs, changes, reopened) => `  total: tareas ${done}/${total} · ${runs ? `evidencia ${pass} de ${runs} ejecución(es) correctas` : "ninguna ejecución registrada"} · solicitudes de cambio ${changes} · tareas reabiertas ${reopened}`,
+      // 1.41 las lecciones (las entradas _Kind: lesson_ de decisions.md) — los códigos de la causa siguen en inglés
+      lessonsLine: (total, open, by) => `  lecciones: ${total} (${open} abiertas)${by ? " — " + by : ""}`,
+      lessonsUnread: (list) => `  lecciones cuya causa no es ninguno de los cinco códigos (¿una edición a mano?): ${list}`,
+      lessonsTruncated: (n) => `  lecciones: ${n} carpeta(s) de funcionalidad más allá de las primeras 1000 sin leer`,
+      lessonsRepeated: (cause, target, features, n) => `  repetida: ${cause} → ${target} — ${n} lecciones en ${features}`,
       retroText: {
         title: (f) => `# Retrospectiva: ${f}`,
         intro: (date) => `> Generada por dev-spec el ${date} a partir de .state.json, .history/ y los artefactos. Los números se calculan localmente; el resto te toca a ti. Nada de esto se aplica automáticamente.`,
@@ -2063,6 +2068,9 @@ const msg = {
         sigReopened: (n) => `${n} tarea(s) reabierta(s) por solicitudes de cambio`,
         sigPass: (rate) => `solo el ${rate}% de las ejecuciones de verificación pasaron`,
         sigClar: (n) => `${n} marcador(es) de aclaración aún abiertos`,
+        sigLessons: (n, open) => `${n} lección(es) de las revisiones, ${open} abierta(s)`,
+        // 1.41: una línea por lección bajo el título de los cambios — la causa, el target, la regla y el estado
+        lessonLine: (x) => `- ${x.id} (${x.cause || "?"}${x.target ? " → " + x.target : ""}): ${x.text} — ${x.closedBy ? "cerrada por " + x.closedBy : "abierta"}`,
         amend: "## Cambios propuestos al steering o a la constitución",
         amendNote: "<!-- Para aprobación humana — nunca se aplican automáticamente. Indica el fichero (.specs/steering/constitution.md, tech.md, …), el cambio exacto y por qué. -->",
         followUps: "## Seguimiento",
@@ -3263,13 +3271,19 @@ const msg = {
      la decisión; una decisión posterior que reemplace a otra dice _Supersedes: D-n_. Los descubrimientos (hechos
      aprendidos durante el trabajo) usan el mismo registro (_Kind: discovery_). -->
 `,
-      labels: { context: "Contexto", decision: "Decisión", discovery: "Descubrimiento", consequences: "Consecuencias" },
-      kinds: { decision: "decisión", discovery: "descubrimiento" },
+      labels: { context: "Contexto", decision: "Decisión", discovery: "Descubrimiento", lesson: "Lección", consequences: "Consecuencias" },
+      kinds: { decision: "decisión", discovery: "descubrimiento", lesson: "lección" },
       titleRequired: "una decisión necesita un título (una línea de texto).",
-      decisionRequired: "una decisión necesita su texto — decision: qué se decidió (en un descubrimiento: qué se descubrió).",
+      decisionRequired: "una decisión necesita su texto — decision: qué se decidió (en un descubrimiento: qué se descubrió; en una lección: la regla).",
       badText: (field) => `${field} debe ser texto.`,
       tooLong: (field, max) => `${field} es demasiado largo (como máximo ${max} caracteres).`,
-      badKind: (v) => `kind debe ser decision o discovery (recibido: ${v}).`,
+      badKind: (v) => `kind debe ser decision, discovery o lesson (recibido: ${v}).`,
+      // 1.41 el tipo lección: por qué ocurrió un hallazgo confirmado en una revisión (los códigos de la causa siguen en inglés)
+      causeRequired: (list) => `una lección necesita su causa — una de ${list}, tal como la dio el agente que escribió el código (nunca una suposición). No se escribió nada.`,
+      badCause: (v, list) => `causa desconocida ${v} — la causa de una lección es una de ${list}. No se escribió nada.`,
+      lessonOnly: "cause y target pertenecen a una lección (kind: lesson) — una decisión o un descubrimiento no tiene ninguno de los dos. No se escribió nada.",
+      badTarget: (v) => `el target ${v} no es una ruta dentro del proyecto (una ruta de red, una ruta absoluta en otro lugar o una salida con .. no indican ninguna; un fichero en la raíz: ./Makefile). No se escribió nada.`,
+      targetGone: (rel, cause) => `el target ${rel} no existe — con la causa ${cause}, el target es un fichero que existe (la orientación que estaba mal, el código que se copió). No se escribió nada.`,
       badAffectsChange: (list) => `referencia(s) _Affects:_ desconocida(s): ${list} — un cambio nombra un AC ID que su change.md define, o un título de sección de change.md (Resumen, Criterios de Aceptación, Enfoque, Tareas). No se escribió nada.`,
       badAffects: (list) => `referencia(s) _Affects:_ desconocida(s): ${list} — un AC ID debe estar definido en requirements.md, un T-ID planificado en test-plan.md, un ID EC/NFR/SC escrito en requirements.md; cualquier otra debe ser un título de sección de design.md (bug.md / design.md en un bugfix, spike.md en un spike). No se escribió nada.`,
       badSupersedes: (list) => `_Supersedes:_ debe indicar decisiones que ya están en este registro (D-n): ${list}. No se escribió nada.`,
@@ -3278,6 +3292,10 @@ const msg = {
       briefHeading: "## Decisiones",
       briefIntro: "Decisiones y descubrimientos (decisions.md) que citan los criterios o pruebas de esta tarea — respétalos:",
       briefOmitted: (list) => `…y ${list} — ver decisions.md.`,
+      briefLessonsHeading: "## Lecciones de las revisiones de esta funcionalidad",
+      briefLessonsIntro: "Hallazgos confirmados de tareas anteriores y por qué ocurrieron (decisions.md) — no los repitas:",
+      // spec_finish: las lecciones abiertas — la ÚNICA pregunta del cierre (commands/spec-finish.md), nunca un bloqueo
+      finishOpen: (ids, slug) => `${ids.length} lección(es) a la espera de la decisión del usuario (${ids.join(", ")}): propón todos los cambios en UNA sola pregunta, edita cada fichero una sola vez y luego ciérralas con una decisión que las reemplace (spec_decide {name: "${slug}", supersedes: [${ids.map((x) => JSON.stringify(x)).join(", ")}]}).`,
       supersedesNote: (list) => `reemplaza ${list}`,
       prHeading: "## Decisiones",
       catalogLine: (n, list) => `Decisiones (${n}): ${list}`,
@@ -3552,6 +3570,11 @@ const quality = {
     dsTruncated: (read, total) => `el registro tiene ${total} componentes — solo los primeros ${read} se leen con sus detalles (recórtalo: solo se lee este fichero)`,
     dsTable: { components: "| Componente | Ruta | Variantes | Notas |" },
     dsRegistered: (list) => `añadido al registro del design system (.specs/steering/design-system.md): ${list}`,
+    // 1.41 el reference-examples del doctor (la tabla ## Ejemplos de Referencia de structure.md)
+    refExamplesGone: (list, more, file) => `${file} → Ejemplos de Referencia nombra ficheros que ya no existen: ${list}${more ? ` (+${more})` : ""} — apunta la fila al fichero que hay que copiar ahora, o elimínala (un brief la nombra, nunca la cita)`,
+    refExamplesTruncated: (n, max, file) => `${file} → Ejemplos de Referencia: ${n} fila(s) más allá de las primeras ${max} sin leer — limita la tabla a los patrones que importan`,
+    refExamplesUnread: (file) => `${file} → Ejemplos de Referencia no tiene tabla — no se lee (un brief cita las filas de una tabla: Patrón | Copiar | Se aplica a)`,
+    refExamplesOk: (n, file) => `${file} → Ejemplos de Referencia: ${n} fila(s), todos los ficheros existen`,
   };
 
 // every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
@@ -3633,6 +3656,12 @@ const brief = {
     reuseOmitted: (n) => `${n} elemento(s) más coinciden — léelos en design.md (Reutilización e Integración).`,
     reuseNoMatch: (n) => `La sección Reutilización e Integración del diseño enumera ${n} elemento(s), ninguno con los ficheros ni los criterios de esta tarea — léela antes de crear nada nuevo.`,
     reuseFiles: "Ficheros de código existentes junto a los de esta tarea — mira aquí primero:",
+    // 1.41: las filas de Ejemplos de Referencia de structure.md para los ficheros de esta tarea (acotadas por el motor; un fichero que ya no existe se nombra, nunca se cita)
+    examples: "## Ejemplos de referencia",
+    examplesRule: (file) => `Copia la forma de estos ficheros para el mismo patrón (\`${file}\` → Ejemplos de Referencia):`,
+    examplesGone: (list) => `Ya no existen — nunca los copies, y di en tu informe que su fila está desactualizada: ${list}`,
+    examplesOmitted: (n, file) => `${n} fila(s) más que coinciden — léelas en \`${file}\`.`,
+    examplesNoMatch: (n, file) => `\`${file}\` → Ejemplos de Referencia lista ${n} fila(s); ninguna es para los ficheros de esta tarea.`,
     reuseFilesMore: (n, atLeast) => (!atLeast ? `…y ${n} más en la(s) misma(s) carpeta(s).`
       : n ? `…y al menos ${n} más en la(s) misma(s) carpeta(s) — una carpeta grande: solo se leyeron sus primeras entradas.`
         : "…y posiblemente más en la(s) misma(s) carpeta(s) — una carpeta grande: solo se leyeron sus primeras entradas."),

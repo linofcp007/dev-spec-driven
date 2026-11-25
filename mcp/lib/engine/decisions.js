@@ -23,7 +23,8 @@ let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTra
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
   waiverSummaryLines, writeFileAtomic, mergeSummaryOf, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck,
   backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
-  removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot;
+  removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot,
+  projectPath, onDisk, FOLD_CASE; // quality.js · files.js — 1.41 a lesson's _Target:_, the repeated lessons' grouping
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers,
   existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
@@ -34,7 +35,8 @@ function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, dayOf, today, de
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
   waiverSummaryLines, writeFileAtomic, mergeSummaryOf, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck,
   backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
-  removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot } = E); }
+  removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot,
+  projectPath, onDisk, FOLD_CASE } = E); }
 
 // ---------------------------------------------------------------------------
 // the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
@@ -106,6 +108,21 @@ const DECISION_LABELS = {
   consequences: ["consequences", "consequências", "consequencias", "consecuencias"],
 };
 const RE_DECISION_LABEL = new RegExp("^\\s*\\*\\*(" + Object.values(DECISION_LABELS).flat().join("|") + "):\\*\\*[ \\t]*(.*)$", "iu");
+// (1.41) THE LESSON KIND — why a confirmed review finding happened, as the agent that wrote the code gave it (never a guess):
+//   ## D-4 — <title>
+//   - _Kind: lesson_ · - _Date:_ · - _Cause: <one of LESSON_CAUSES>_ · - _Target: <a project path>_ (optional) · _Affects:_ / _Supersedes:_
+//   **Context:** …  **Lesson:** (PT **Lição:**, ES **Lección:**) the rule …  **Consequences:** …
+// Its two markers and its label are read ONLY inside a lesson entry, its _Kind:_ read first (the writer's order): a decision's
+// `_Cause:_` line or `**Lesson:**` paragraph stays its text, as 1.40 read it. A later entry's _Supersedes:_ CLOSES a lesson; finish
+// lists the open ones (a warning, never a blocker), the brief quotes them, spec_metrics counts them by cause.
+const DECISION_KINDS = ["decision", "discovery", "lesson"];
+const LESSON_CAUSES = Object.freeze(["guidance-missing", "guidance-wrong", "example-copied", "tool-friction", "model-error"]);
+const LESSON_TARGET_THERE = new Set(["guidance-wrong", "example-copied"]); // the wrong line, the copied file exist by definition
+const RE_LESSON_MARKER_HEAD = /^\s*(?:[-*+]\s+)?_(Cause|Target):/i;
+const lessonMarker = (line) => underscoreMarkerLine(line, RE_LESSON_MARKER_HEAD);
+const RE_LESSON_LABEL = /^\s*\*\*(lesson|lição|licao|lección|leccion):\*\*[ \t]*(.*)$/iu;
+const LESSON_CAUSE_MAX = 64;
+const LESSON_TARGET_MAX = 1024;
 const BRIEF_DECISIONS_MAX = 5; // entries a brief carries…
 const BRIEF_DECISIONS_CHARS = 2000; // …and the characters of their titles + texts (the most recent kept first)
 const RE_LEADING_BOM = new RegExp("^" + BOM_CHAR);
@@ -185,25 +202,28 @@ function decisionLog(text) {
       continue;
     }
     if (!cur) continue;
-    const mk = seg === "body" ? decisionMarker(line) : null;
+    const lesson = cur.kind === "lesson";
+    const mk = seg === "body" ? decisionMarker(line) || (lesson ? lessonMarker(line) : null) : null;
     if (mk) {
       const key = mk.label.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
         const v = mk.value.trim();
-        if (key === "kind") cur.kind = /^discovery$/i.test(v.replace(/`/g, "").trim()) ? "discovery" : "decision";
+        if (key === "kind") { const k = v.replace(/`/g, "").trim(); cur.kind = /^discovery$/i.test(k) ? "discovery" : /^lesson$/i.test(k) ? "lesson" : "decision"; }
         else if (key === "date") cur.date = v.replace(/`/g, "").trim();
+        else if (key === "cause" || key === "target") cur[key] = v.replace(/`/g, "").trim() || null; // (a lesson's)
         else cur[key] = splitRefs(v);
       }
       continue;
     }
-    const lb = line.match(RE_DECISION_LABEL);
+    const lb = line.match(RE_DECISION_LABEL) || (lesson ? line.match(RE_LESSON_LABEL) : null);
     if (lb) { seg = decisionLabelKey(lb[1]); cur.parts[seg].push(lb[2]); continue; }
     cur.parts[seg].push(line);
   }
   const txt = (arr) => arr.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   return entries.map(({ parts, level: _l, ...e }) => ({
     ...e,
+    ...(e.kind === "lesson" ? { cause: e.cause || null, target: e.target || null } : {}),
     at: e.date ? timeOf(e.date) : null,
     supersedes: e.supersedes.map(normDecisionId).filter(Boolean),
     context: txt(parts.context),
@@ -272,14 +292,16 @@ function trimBlanksEnd(l) {
 }
 // User text written into a spec file (a decision's paragraphs, a spike's question): a line that would read as a heading, an
 // entry marker or a label is escaped, an HTML comment opener neutralized, an unclosed code fence closed — nothing a caller
-// writes can hide or fake the entries after it.
-function safeSpecText(s) {
+// writes can hide or fake the entries after it. lesson: a lesson entry's text — its label escaped too (in any other text it is
+// plain text, as every reader reads it; its _Cause:_ / _Target:_ need none: a paragraph's lines follow its label, never read as
+// markers).
+function safeSpecText(s, lesson) {
   const st = { fence: null };
   const out = String(s).replace(/\r\n?/g, "\n").replace(/<!--/g, "&lt;!--").split("\n").map(trimBlanksEnd).map((l) => {
     if (fenceStep(st, l)) return l;
     if (/^\s{0,3}#{1,6}(?:\s|$)/.test(l)) return l.replace("#", "\\#");
     if (decisionMarker(l) || outcomeMarker(l)) return l.replace("_", "\\_");
-    if (RE_DECISION_LABEL.test(l)) return l.replace("**", "\\*\\*");
+    if (RE_DECISION_LABEL.test(l) || (lesson && RE_LESSON_LABEL.test(l))) return l.replace("**", "\\*\\*");
     return l;
   });
   if (st.fence) out.push(" ".repeat(st.fence.indent) + st.fence.mark);
@@ -332,8 +354,21 @@ function decisionInput(input, D) {
   let kind = "decision";
   if (o.kind != null) {
     const k = typeof o.kind === "string" ? o.kind.trim().toLowerCase() : null;
-    if (k !== "decision" && k !== "discovery") return { error: D.badKind(JSON.stringify(o.kind)) };
+    if (!DECISION_KINDS.includes(k)) return { error: D.badKind(JSON.stringify(o.kind)) };
     kind = k;
+  }
+  // (1.41) a lesson's cause — one of LESSON_CAUSES, required — and its optional target (decide() checks the path); neither on a
+  // decision or a discovery
+  const cause = str("cause", LESSON_CAUSE_MAX, false);
+  if (cause.error) return cause;
+  const target = str("target", LESSON_TARGET_MAX, false);
+  if (target.error) return target;
+  if (kind !== "lesson" && (cause.value != null || target.value != null)) return { error: D.lessonOnly };
+  let causeCode = null;
+  if (kind === "lesson") {
+    if (cause.value == null) return { error: D.causeRequired(LESSON_CAUSES.join(", ")) };
+    causeCode = cause.value.trim().toLowerCase();
+    if (!LESSON_CAUSES.includes(causeCode)) return { error: D.badCause(JSON.stringify(cause.value), LESSON_CAUSES.join(", ")) };
   }
   const list = (k) => {
     const v = o[k];
@@ -348,13 +383,14 @@ function decisionInput(input, D) {
   if (supersedes.error) return supersedes;
   // affectItems: the raw values — decide() rejoins their pieces against the feature's sections (affectsRefs)
   return { title: t1, decision: decision.value, context: context.value, consequences: consequences.value, kind, affects: affects.value, affectItems: affects.items,
-    supersedes: supersedes.value };
+    supersedes: supersedes.value, cause: causeCode, target: target.value };
 }
-// One entry's lines (no line ends).
+// One entry's lines (no line ends). The markers in their order: Kind · Date · Cause · Target (a lesson's) · Affects · Supersedes.
 function decisionEntryLines(e, D) {
+  const lesson = e.kind === "lesson";
   const para = (label, text) => {
     if (!text) return [];
-    const body = safeSpecText(text);
+    const body = safeSpecText(text, lesson);
     return body ? ["", `**${label}:** ` + body] : [];
   };
   return [
@@ -362,12 +398,25 @@ function decisionEntryLines(e, D) {
     "",
     `- _Kind: ${e.kind}_`,
     `- _Date: ${e.at}_`,
+    ...(lesson ? [`- _Cause: ${e.cause}_`, ...(e.target ? [`- _Target: ${e.target}_`] : [])] : []),
     ...(e.affects.length ? [`- _Affects: ${e.affects.map(quoteRef).join(", ")}_`] : []), // a heading with a "," / ";" quoted
     ...(e.supersedes.length ? [`- _Supersedes: ${e.supersedes.join(", ")}_`] : []),
     ...para(D.labels.context, e.context),
-    ...para(e.kind === "discovery" ? D.labels.discovery : D.labels.decision, e.decision),
+    ...para(e.kind === "discovery" ? D.labels.discovery : lesson ? D.labels.lesson : D.labels.decision, e.decision),
     ...para(D.labels.consequences, e.consequences),
   ].join("\n").split("\n");
+}
+// (1.41) a lesson's _Target:_ → { target: its project path | null } | { error }: decided on its TEXT before any fs call
+// (projectPath — no network path, no absolute path elsewhere, no `..` out; backticks dropped; a line break or a control
+// character is none), then — for the causes whose target exists by definition — whether it is there (onDisk).
+function lessonTarget(projectDir, raw, cause, D) {
+  if (raw == null) return { target: null };
+  const t = raw.replace(/`/g, "").trim();
+  const root = path.resolve(projectDir);
+  const rel = /[\u0000-\u001f\u007f]/.test(t) ? null : projectPath(root, t);
+  if (rel == null) return { error: D.badTarget(JSON.stringify(raw)) };
+  if (LESSON_TARGET_THERE.has(cause) && !onDisk(root, rel)) return { error: D.targetGone(rel, cause) };
+  return { target: rel };
 }
 
 // spec_decide {name, title, decision, context?, consequences?, affects?, supersedes?, kind?} / `dev-spec decide`: append one
@@ -398,9 +447,12 @@ function decide(projectDir, name, input) {
   const resolved = refs.map((r) => resolveAffect(r, targets));
   const unknown = resolved.filter((r) => !r.ok).map((r) => r.ref);
   if (unknown.length) return { ok: false, unknownAffects: unknown, error: (kind === "change" ? D.badAffectsChange : D.badAffects)(unknown.join(", ")) };
+  const lt = lessonTarget(projectDir, inp.target, inp.cause, D); // (a lesson's — inp.target is null on any other kind)
+  if (lt.error) return { ok: false, error: lt.error };
   const n = Math.max(0, ...log.map((e) => e.n)) + 1;
   const entry = { id: "D-" + n, title: inp.title, kind: inp.kind, at: new Date().toISOString(), affects: [...new Set(resolved.map((r) => r.ref))],
-    supersedes: [...new Set(sup.map((x) => x.id))], context: inp.context, decision: inp.decision, consequences: inp.consequences };
+    supersedes: [...new Set(sup.map((x) => x.id))], context: inp.context, decision: inp.decision, consequences: inp.consequences,
+    cause: inp.cause, target: lt.target };
   const lines = decisionEntryLines(entry, D);
   let out;
   if (raw == null) {
@@ -415,6 +467,7 @@ function decide(projectDir, name, input) {
   maybeRefreshRoadmap(projectDir); // + SPECS.md once it exists (the catalog lists the decisions)
   const rel = ".specs/" + slug + "/" + DECISIONS_FILE;
   return { ok: true, feature: slug, id: entry.id, n, kind: entry.kind, title: entry.title, affects: entry.affects, supersedes: entry.supersedes, at: entry.at,
+    ...(entry.kind === "lesson" ? { cause: entry.cause, target: entry.target } : {}),
     file: rel, created: raw == null, message: D.recorded(entry.id, D.kinds[entry.kind] || entry.kind, rel) };
 }
 
@@ -455,7 +508,7 @@ function decisionDoctorChecks(projectDir, slug, dir, state, kind, lng, tr) {
   const hits = [];
   const phases = [];
   for (const e of log) {
-    if (retired.has(e.id) || e.at == null) continue;
+    if (retired.has(e.id) || e.at == null || e.kind === "lesson") continue; // (1.41) a lesson decides nothing the spec says
     const res = entryRefs(e.affects, t).map((r) => resolveAffect(r, t)).filter((r) => r.ok);
     const reqRefs = res.filter((r) => r.type === "ac" || r.type === "secondary").map((r) => r.ref);
     const desRefs = res.filter((r) => r.type === "section").map((r) => r.ref);
@@ -489,7 +542,7 @@ function briefDecisions(dir, acIds, testIds, blockText) {
     if ((m = r.match(/^(EC|NFR|SC)-(\d+)$/i))) return sec.has(idKey(m[1].toUpperCase(), m[2]));
     return false;
   };
-  const hits = log.filter((e) => !retired.has(e.id) && e.affects.some(cites));
+  const hits = log.filter((e) => !retired.has(e.id) && e.kind !== "lesson" && e.affects.some(cites)); // (1.41) lessons: briefLessons
   const kept = [];
   let budget = BRIEF_DECISIONS_CHARS;
   for (const e of hits.slice().reverse()) {
@@ -514,16 +567,119 @@ function decisionSummaryLines(dir, lang) {
   const retired = retiredDecisions(log);
   return [D.prHeading, ...log.map((e) => {
     const head = `**${e.id}** — ${e.title}`;
-    const meta = [D.kinds[e.kind] || e.kind, e.affects.join(", "), e.supersedes.length ? D.supersedesNote(e.supersedes.join(", ")) : ""].filter(Boolean).join(" · ");
+    const meta = [D.kinds[e.kind] || e.kind, e.kind === "lesson" && e.cause ? e.cause + (e.target ? " → " + e.target : "") : "", e.affects.join(", "), e.supersedes.length ? D.supersedesNote(e.supersedes.join(", ")) : ""].filter(Boolean).join(" · ");
     const text = oneLiner(e.decision, 300);
     return retired.has(e.id) ? `- ~~${head}~~ _(${D.superseded}: ${retired.get(e.id)})_` : `- ${head} _(${meta})_` + (text ? ": " + text : "");
   })];
 }
-// spec_export {format: "catalog"}: { count, items: [{ id, title, kind, superseded? }] }.
+// (1.41) The entries that only close lessons: a decision whose _Supersedes:_ names lessons alone (the finish batch's "Lessons of
+// <f>: amended …") — a record of the process like the lessons it closes, never a product decision: no ADR, no catalog row.
+function lessonCloses(log) {
+  const kindOf = new Map();
+  for (const e of log) if (!kindOf.has(e.id)) kindOf.set(e.id, e.kind);
+  return new Set(log.filter((e) => e.kind === "decision" && e.supersedes.length && e.supersedes.every((s) => kindOf.get(s) === "lesson")).map((e) => e.id));
+}
+// spec_export {format: "catalog"}: { count, items: [{ id, title, kind, superseded? }] } — the decisions and discoveries (1.41: never a
+// lesson nor an entry that only closes lessons; count = the items).
 function catalogDecisions(dir) {
   const log = decisionLog(readIfExists(path.join(dir, DECISIONS_FILE)) || "");
   const retired = retiredDecisions(log);
-  return { count: log.length, items: log.map((e) => Object.assign({ id: e.id, title: e.title, kind: e.kind }, retired.has(e.id) ? { supersededBy: retired.get(e.id) } : {})) };
+  const closes = lessonCloses(log);
+  const items = log.filter((e) => e.kind !== "lesson" && !closes.has(e.id))
+    .map((e) => Object.assign({ id: e.id, title: e.title, kind: e.kind }, retired.has(e.id) ? { supersededBy: retired.get(e.id) } : {}));
+  return { count: items.length, items };
+}
+
+// ---------------------------------------------------------------------------
+// (1.41) the lessons — spec_finish's `lessons`, the brief's Lessons part, spec_metrics' counts. A lesson is OPEN until a later entry
+// supersedes it (the finish batch's one closing decision); its cause reads as one of LESSON_CAUSES, else it is `unread` (a hand
+// edit) — listed, never counted under a cause.
+// ---------------------------------------------------------------------------
+const BRIEF_LESSONS_MAX = 5; // open lessons a brief quotes, newest first…
+const BRIEF_LESSONS_CHARS = 1200; // …and the characters of their titles + rules
+const LESSON_FEATURES_MAX = 1000; // feature folders project metrics reads lessons from (`truncated` counts the rest)
+const lessonCause = (e) => (LESSON_CAUSES.includes(e.cause) ? e.cause : null);
+const lessonsOf = (dir) => {
+  const raw = readIfExists(path.join(dir, DECISIONS_FILE));
+  if (raw == null) return null;
+  const log = decisionLog(raw);
+  return { log, lessons: log.filter((e) => e.kind === "lesson") };
+};
+// One feature folder's lessons → { open: [{id, title, cause, target, affects}], closed: [{id, title, cause, target, closedBy}], unread:
+// [D-n] } | null (no lesson: the readers' keys stay absent). opts.text: each one's rule (`text`, one line) too — the retro's lines.
+function lessonView(dir, opts = {}) {
+  const l = lessonsOf(dir);
+  if (!l || !l.lessons.length) return null;
+  const retired = retiredDecisions(l.log);
+  const item = (e) => Object.assign({ id: e.id, title: e.title, cause: lessonCause(e), target: e.target }, opts.text ? { text: oneLiner(e.decision, 400) || "" } : {});
+  return {
+    open: l.lessons.filter((e) => !retired.has(e.id)).map((e) => ({ ...item(e), affects: e.affects })),
+    closed: l.lessons.filter((e) => retired.has(e.id)).map((e) => ({ ...item(e), closedBy: retired.get(e.id) })),
+    unread: l.lessons.filter((e) => !lessonCause(e)).map((e) => e.id),
+  };
+}
+// spec_task_brief's Lessons part: the feature's OPEN lessons, newest first — at most BRIEF_LESSONS_MAX within BRIEF_LESSONS_CHARS (a
+// longer one skipped for an older that fits), the rest named. → { items: [{id, title, cause, target, text}], omitted: [D-n] }
+function briefLessons(dir) {
+  const l = lessonsOf(dir);
+  if (!l) return { items: [], omitted: [] };
+  const retired = retiredDecisions(l.log);
+  const open = l.lessons.filter((e) => !retired.has(e.id)).sort((a, b) => b.n - a.n);
+  const items = [];
+  let budget = BRIEF_LESSONS_CHARS;
+  for (const e of open) {
+    const text = oneLiner(e.decision, 400) || "";
+    const cost = e.title.length + text.length;
+    if (items.length >= BRIEF_LESSONS_MAX || cost > budget) continue;
+    budget -= cost;
+    items.push({ id: e.id, title: e.title, cause: lessonCause(e), target: e.target, text });
+  }
+  const ids = new Set(items.map((x) => x.id));
+  return { items, omitted: open.filter((e) => !ids.has(e.id)).map((e) => e.id) };
+}
+// A lessonView's counts (spec_metrics, one feature) → { total, open, byCause: {<code>: n} (LESSON_CAUSES order, read causes only), unread }
+// | null without lessons.
+function lessonCounts(v) {
+  if (!v) return null;
+  const all = v.open.concat(v.closed);
+  const byCause = {};
+  for (const c of LESSON_CAUSES) { const n = all.filter((x) => x.cause === c).length; if (n) byCause[c] = n; }
+  return { total: all.length, open: v.open.length, byCause, unread: v.unread.slice() };
+}
+// spec_metrics' project lessons, over the feature folders the metrics walk hands it — ACTIVE and ARCHIVED: [{ feature, archived, dir,
+// view? }] (a folder without `view` is read here and given one — the walk passes it on to that feature's own metrics); at most
+// LESSON_FEATURES_MAX folders read, `truncated` counts the rest. → { total, open, byCause, unread: [{feature, id, archived?}],
+// repeated: [{cause, target, features, lessons}], truncated? } | null (no lesson anywhere).
+// REPEATED: one (cause, target) in two features or more — the target as a project path (projectPath: `./x` is `x`), case-folded where
+// the file system folds case, and only OUTSIDE .specs/ (a copied file, a script): a steering file is the home of every rule —
+// "money → tech.md" and "logging → tech.md" are two lessons, never one repeated. Without a target, a lesson is never repeated.
+function projectLessons(projectDir, folders) {
+  const root = path.resolve(projectDir);
+  const read = folders.slice(0, LESSON_FEATURES_MAX);
+  let total = 0, open = 0;
+  const unread = [], groups = new Map(), counted = [];
+  for (const f of read) {
+    if (!("view" in f)) f.view = lessonView(f.dir);
+    if (!f.view) continue;
+    const label = (f.archived ? "_archive/" : "") + f.feature;
+    const all = f.view.open.concat(f.view.closed);
+    total += all.length;
+    open += f.view.open.length;
+    counted.push(...all);
+    for (const id of f.view.unread) unread.push(Object.assign({ feature: f.feature, id }, f.archived ? { archived: true } : {}));
+    for (const x of all) {
+      const rel = x.cause && x.target ? projectPath(root, x.target) : null;
+      if (rel == null || rel === ".specs" || rel.startsWith(".specs/")) continue;
+      const key = x.cause + "\n" + (FOLD_CASE ? rel.toLowerCase() : rel);
+      const g = groups.get(key) || groups.set(key, { cause: x.cause, target: rel, features: [], lessons: 0 }).get(key);
+      g.lessons++;
+      if (!g.features.includes(label)) g.features.push(label);
+    }
+  }
+  if (!total) return null;
+  const byCause = lessonCounts({ open: counted, closed: [], unread: [] }).byCause;
+  const repeated = [...groups.values()].filter((g) => g.features.length >= 2);
+  return Object.assign({ total, open, byCause, unread, repeated }, folders.length > read.length ? { truncated: folders.length - read.length } : {});
 }
 
 // ---------------------------------------------------------------------------
@@ -609,6 +765,7 @@ function adrModel(projectDir, f, archived) {
   }
   const log = decisionLog(raw);
   const retired = retiredDecisions(log);
+  const closes = lessonCloses(log);
   let targets = null;
   for (const e of log) {
     if (m.byId.has(e.id)) { m.excluded.push({ feature: slug, id: e.id, title: e.title, reason: "duplicate-id" }); continue; }
@@ -616,6 +773,8 @@ function adrModel(projectDir, f, archived) {
       supersedes: e.supersedes.filter((s) => s !== e.id), supersededBy: retired.get(e.id) || null, entry: e, file: null };
     m.byId.set(e.id, x);
     if (e.kind === "discovery") { m.excluded.push({ feature: slug, id: e.id, title: e.title, reason: "discovery" }); continue; }
+    // (1.41) a lesson, and a decision that only closes lessons, are no architectural decision: left out (a link to one goes to the log)
+    if (e.kind === "lesson" || closes.has(e.id)) { m.excluded.push({ feature: slug, id: e.id, title: e.title, reason: e.kind === "lesson" ? "lesson" : "lesson-close" }); continue; }
     x.file = adrFileName(e.n, x.title);
     if (e.affects.length && !targets) targets = decisionTargets(dir, kind);
     x.affects = e.affects.length ? entryRefs(e.affects, targets).map((r) => {
@@ -1016,5 +1175,5 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
 
 module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, decisionLog, retiredDecisions, safeSpecText, appendSpecText,
   decisionEntryLines, decide, decisionsTrace, affectsWarnings, decisionDoctorChecks, briefDecisions, decisionSummaryLines,
-  catalogDecisions, exportAdr, SPIKE_FILE, validIsoDay, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeDoctor,
+  catalogDecisions, exportAdr, LESSON_CAUSES, lessonView, briefLessons, lessonCounts, projectLessons, SPIKE_FILE, validIsoDay, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeDoctor,
   spikeNextAction, spikeFinish, __link };

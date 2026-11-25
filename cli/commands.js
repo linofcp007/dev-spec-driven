@@ -107,6 +107,7 @@ const VALUE_FLAG_SPECS = [
   ["flow", { values: "@flow" }], // create --flow design-first · feature flow <name> --flow <flow>
   // spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
   ["question"], ["timebox"], ["title"], ["decision"], ["context"], ["consequences"], ["affects", { repeatable: true }], ["supersedes", { repeatable: true }],
+  ["cause"], ["target"], // decide <f> --kind lesson --cause <code> [--target <path>] (1.41: a review finding's cause)
   ["depends", { repeatable: true }], // append-tasks --depends 3,5 (repeatable)
   ["reason"], ["expires"], // undone --reason · approve --revoke --reason · approve --force --reason --expires · feature unprotect --reason
   ["file", { values: "@file" }], // feature protect|unprotect <name> --file <test file> (= spec_feature {file}) — 1.36
@@ -789,15 +790,16 @@ const COMMANDS = [
     name: "decide",
     options: TABLE,
     args: ["@feature"],
-    values: { kind: "decision discovery" },
+    values: { kind: "decision discovery lesson", cause: "guidance-missing guidance-wrong example-copied tool-friction model-error" },
     help: `  decide <feature> --title "…" --decision "…"   Append a D-n entry to decisions.md (append-only): [--context "…"]
                                   [--consequences "…"] [--affects US-1.AC-2,T-03,"Data Models"] [--supersedes D-1] [--discovery]
+                                  [--kind lesson --cause <code> [--target <path>]] (a review finding's cause)
                                   — an unknown _Affects:_ reference is refused (exit 1, nothing written)`,
     run(c) {
       // dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03]
       // [--supersedes D-1] [--discovery] — append one entry to decisions.md (= spec_decide; unknown _Affects:_ → exit 1, nothing written).
       const { flags, pos, projectDir, on, out, fail, usage, log } = c;
-      if (!pos[0] || pos.length > 1) usage('dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03] [--supersedes D-1] [--discovery | --kind decision|discovery] (--affects / --supersedes repeatable)');
+      if (!pos[0] || pos.length > 1) usage('dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03] [--supersedes D-1] [--discovery | --kind decision|discovery|lesson] [--cause <code>] [--target <path>] (--affects / --supersedes repeatable)');
       // A repeated --affects / --supersedes adds to the list (every occurrence — the shared parser kept only the last one); --kind
       // decision|discovery is the MCP `kind` (the engine validates it), --discovery its shorthand.
       const r = c.call("decide", { kind: on("discovery") ? "discovery" : flags.kind });
@@ -807,6 +809,7 @@ const COMMANDS = [
         log(D.cliRecorded(r.id, r.title, r.file));
         if (r.affects.length) log("  _Affects: " + r.affects.join(", ") + "_");
         if (r.supersedes.length) log("  _Supersedes: " + r.supersedes.join(", ") + "_");
+        if (r.kind === "lesson") log("  _Cause: " + r.cause + "_" + (r.target ? " · _Target: " + r.target + "_" : "")); // 1.41
       });
     },
   },
