@@ -40,7 +40,8 @@ let phaseFile; // state.js — the file a phase writes (tasks: an xs change's ch
 let protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines; // protect.js — 1.36 guard tests: protect / unprotect, finish's check
 let portOn, portFinishRecheck, evidenceRule; // port.js — +port's re-check of the differential check (1.36) · evidence.js
 let frictionStatus, frictionLines; // friction.js — 1.41 the friction budget: spec_metrics' project `friction` and its CLI lines
-function __link(E) { ({ frictionStatus, frictionLines, protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, portOn, portFinishRecheck, evidenceRule,
+let finishMetrics, walkFeatureStates, measuredBlock, measuredLines; // metric.js — 1.41: the METRIC readings at finish, spec_metrics' walk
+function __link(E) { ({ frictionStatus, frictionLines, finishMetrics, walkFeatureStates, measuredBlock, measuredLines, protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, portOn, portFinishRecheck, evidenceRule,
   phaseFile, duplicationReport, designSystemFinish, DESIGN_SYSTEM_FILE, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -238,6 +239,12 @@ function finishFeature(projectDir, name, opts = {}) {
   if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);
+  // 1.41 the METRIC readings (engine/metric.js): what the project checks' passing runs printed, each (check, name) against the latest
+  // OTHER finish that recorded it — ONE warning for what got worse past a stated tolerance or loosened its terms, never a blocker
+  // (readyToFinish ignores it); the design's Silent Regressions names no passing run printed, a warning too. Nothing printed: no walk.
+  const fm = finishMetrics(projectDir, dir, state, suite, tracks, lng, slug);
+  if (fm.warning) warnings.push(fm.warning);
+  if (fm.unmeasuredWarning) warnings.push(fm.unmeasuredWarning);
   // 1.30: no task names a file in _Implements:_ — the drift baseline, the duplicate check (below), the scope guard and
   // dev-guardian's attribution then see no code of this feature, silently. A warning: a feature may write no code.
   // (the file to add them to: tasks.md, an xs change's change.md — phaseFile)
@@ -306,6 +313,7 @@ function finishFeature(projectDir, name, opts = {}) {
     body.push("");
   }
   if (suite.items.length) body.push(...suiteSummaryLines(suite.items, lng), ""); // the project checks' recorded runs
+  if (fm.items.length) body.push(...fm.summaryLines, ""); // 1.41: ## Metrics — each reading against the last other finish that recorded it
   const testIds = [...testIndex(readIfExists(path.join(dir, "test-plan.md")) || "").keys()];
   if (testIds.length) body.push(F.prTests, testIds.join(", "), "");
   const decLines = decisionSummaryLines(dir, lng); // decisions.md
@@ -336,7 +344,8 @@ function finishFeature(projectDir, name, opts = {}) {
   if (ds && ds.uiChecks.total) warnings.push(F.uiChecks(ds.uiChecks.total, ds.uiChecks.top.map((x) => `${x.file}:${x.line} ${x.rule}`).join("; "), slug, unjudged));
   else if (unjudged) warnings.push(unjudged);
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
-  const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null;
+  // (+ 1.41: finished.metrics — the readings the next feature's finish compares with)
+  const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap, fm.record) : null;
   const res = {
     ok: true,
     feature: slug,
@@ -369,6 +378,10 @@ function finishFeature(projectDir, name, opts = {}) {
       ds.registered.length ? { note: i18n.msg(lng).quality.dsRegistered(ds.registered.join(", ")) } : {});
   }
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code
+  // 1.41 (stable): [{check, name, value, unit, better, tolerance, verdict (new · within · improved · regressed · unjudged), why, loosened,
+  // delta, applied, reference: null | {feature, at (its finished.at), value, unit, better, tolerance}}] · the design's unmeasured names
+  if (fm.items.length) res.metrics = fm.items;
+  if (fm.unmeasured.length) res.metricsUnmeasured = fm.unmeasured;
   if (recordedChecks) res.recordedChecks = recordedChecks; // the runs this call recorded
   if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // the roles each pending phase waits for
   if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
@@ -588,7 +601,19 @@ function metrics(projectDir, name, opts = {}) {
   const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
   // 1.41 the friction budget (project-level, never per feature): each project check's measured time against its steering/tech.md
   // budget — null with no budget, no unreadable budget line and no measured run (friction.js frictionStatus)
-  return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity, friction: frictionStatus(projectDir, lng) };
+  const res = { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity, friction: frictionStatus(projectDir, lng) };
+  // 1.41: the project blocks — ONE walk of every feature folder, its state read once (the read cache serves the reads above it)
+  const blocks = metricsBlocks(projectDir, lng);
+  walkFeatureStates(projectDir, blocks.map((b) => b.visit));
+  for (const b of blocks) { const v = b.result(); if (v != null) res[b.key] = v; }
+  return res;
+}
+// spec_metrics' project blocks (1.41): each { key, visit(fd {slug, dir, archived}, state), result() → the value of `key` in the
+// project result, or null (no key) } — fed by ONE walk of every feature folder (metric.js walkFeatureStates: active, then archived,
+// each state read once; none of them writes). M: `measured` (each METRIC reading across finishes). A block of another concern is one
+// more entry here, built by its own module (its lines: metricsLines, after measured's).
+function metricsBlocks(projectDir, lng) {
+  return [measuredBlock(projectDir, lng)];
 }
 
 // 0.5 → "30m", 5 → "5h", 60 → "2.5d" (same units in EN/PT/ES); null → "—".
@@ -644,6 +669,7 @@ function metricsLines(r) {
   if (r.totals.fastTicks) out.push(i18n.msg(r.lang).fastCheck.metricsTotals(r.totals.fastTicks, r.totals.fastTicksClean)); // 1.36
   if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // 1.14 B4
   out.push(...frictionLines(r.friction, r.lang)); // 1.41 the friction budget
+  out.push(...measuredLines(r.measured, r.lang)); // 1.41: each METRIC reading across finishes (the creep view)
   return out;
 }
 
@@ -1562,8 +1588,9 @@ function baselineFiles(projectDir, tasksText, globCap, known) {
   }
   return { files: [...out.values()], truncated };
 }
-// state.finished = { at, files: { '<rel>': sha1 | null } } — latest finish wins.
-function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
+// state.finished = { at, files: { '<rel>': sha1 | null }, metrics? } — latest finish wins. metrics (1.41): the METRIC readings of the
+// project checks' passing runs [{check, name, value, unit?, better?, tolerance?}] (finishMetrics' record) — none: no key.
+function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap, metrics) {
   const st = readState(projectDir, slug);
   if (st.invalid) return { recorded: false, error: st.invalid };
   const root = path.resolve(projectDir);
@@ -1581,10 +1608,12 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
   const firstAt = prevFin && typeof prevFin.firstAt === "string" ? prevFin.firstAt : prevFin && typeof prevFin.at === "string" ? prevFin.at : null;
   st.finished = firstAt ? { at, firstAt, files: map } : { at, files: map };
   if (truncated) st.finished.truncated = true;
+  if (Array.isArray(metrics) && metrics.length) st.finished.metrics = metrics;
   writeFileAtomic(statePath(dir), JSON.stringify(st, null, 2));
   maybeRefreshCatalog(projectDir); // the feature now reads as finished
   const res = { recorded: true, at, files: files.length, missing: files.filter((r) => map[r] === null).length };
   if (truncated) res.truncated = true;
+  if (st.finished.metrics) res.metrics = st.finished.metrics.length; // 1.41: the readings recorded
   if (replaced) res.replaced = replaced; // the drift this finish accepted: {at, changed, missing, nowPresent}
   return res;
 }

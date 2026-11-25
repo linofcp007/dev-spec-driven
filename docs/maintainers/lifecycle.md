@@ -21,6 +21,9 @@ first; how they came to be — the releases and review findings — is in Histor
 - **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished` `{at, files: {rel: sha1|null}}`
   over its `_Implements:_` files (folders expanded, inside the project). `fileHash()` reads `FILE_HASH_CHUNK` (1 MiB) pieces
   (`readSync`), CRLF-normalized across pieces — never a whole-file read; mcp/tests/12-lifecycle.js pins its digests.
+  1.41: + `metrics` [{check, name, value, unit?, better?, tolerance?}] — the METRIC readings of the project checks' passing runs
+  (none: no key); the next feature's finish compares each (check, name) with the latest OTHER folder's record by `finished.at`,
+  archived folders included (tasks-and-evidence.md → Metrics that regress silently). A re-finish replaces the record whole.
 - **`spec_drift`** hashes only those files. Open tasks → `reopened`; changed since its finish (`staleFinish()`) → `stale` (CLI
   exit 1; the catalog says `complete`), yet still hashed: a drifted file gives verdict `drift` — a stale baseline never hides a
   change. An unreadable state is `error`. SessionStart: one line per drifted ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
@@ -242,6 +245,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   next_action's `drift` step (`next.drifted`) and the upgrade audit's drift line (`upgrade.item.drift`) now name
   `/spec-review <f> converge`, which reads the code AC by AC from the drifted files (from google/elephant-goldfish-model's
   semantic drift report).
+- **1.41.0** — `finished.metrics`: the drift baseline also carries the finish's METRIC readings, the reference of the next feature's
+  comparison. No project baseline file nor roadmap key (every finish would write one: parallel branches conflict where the merge
+  driver isn't installed) — the reference is "the latest other finish", read across the folders.
 
 ### A feature's own git branch
 - **1.25** — `create --branch` / `spec_create {branch}`: the record, the name rules, the engine reading the repository as files,

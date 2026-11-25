@@ -29,7 +29,8 @@ let dayOf; // core.js — the local calendar date (today / dayOf)
 let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
 let guardLevel, protectOnTick, protectedCount, tickRecorded; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
 let portTask, portSchedule, portHeldNumbers; // port.js — +port's fence (1.36; next_task passes over the tasks it holds — review 1; the batch: review 3)
-function __link(E) { ({ guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, portHeldNumbers, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+let runMetricsOf, metricResultFields; // metric.js — 1.41: `done --run`'s METRIC lines (stored and reported, never judged at the tick)
+function __link(E) { ({ runMetricsOf, metricResultFields, guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, portHeldNumbers, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -647,6 +648,11 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   // (its window ends at the previous tick: lastTickAt is stamped below). A tick with a run carries it on that run (`fast`: metrics).
   const fast = !alreadyDone && !failed ? fastCheckStatus(projectDir, f.dir, task, state) : null;
   if (fast && ev && ev.exitCode != null) ev.fast = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean };
+  // 1.41: `done --run` (ranBy "cli") hands the WHOLE output of its passing commands (`evidence.output` — normalizeEvidence never takes
+  // it, MCP can't pass it): their METRIC lines go on the run (`ev.metrics`, the latest run only) and into the result. Report-only:
+  // the tick never compares them — only spec_finish does.
+  const metricRead = cli && ev && ev.exitCode === 0 && !failed && isObj(evidence) && (typeof evidence.output === "string" || Array.isArray(evidence.output)) ? runMetricsOf(evidence.output) : null;
+  if (metricRead && metricRead.stored.length) ev.metrics = metricRead.stored;
   if (ev) { // every run is recorded — a failure too (never ticked), so a later note can't paper over it
     state.evidence = state.evidence || {};
     // Only THIS task's record is extended; another task's record under the same number is kept aside.
@@ -766,6 +772,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.fastCheck = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean, ...(fast.partial ? { partial: true } : {}) };
     if (["stale", "failed", "missing"].includes(fast.status)) res.note = [res.note, i18n.msg(lng).fastCheck.tickNote(n, fast.check, fast.command, fast.status, !!fast.pwsh)].filter(Boolean).join(" ");
   }
+  // 1.41 (stable): metrics [{name, value, unit, better, tolerance}] · metricsMalformed / metricsLastMalformed · metricsDropped
+  if (metricRead) Object.assign(res, metricResultFields(metricRead.read, false));
   return withObserved(res); // the observed stamp on every result
 }
 

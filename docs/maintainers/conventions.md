@@ -113,6 +113,10 @@ History at the end.
   `evidence[n]`, no rule of its own.
 - **`.specs/.execution/timings.jsonl` (1.41, the friction budget) is never merged:** git-ignored (`.execution/.gitignore`), one
   machine's measures — no state key, no run field `ms`, no rule (tasks-and-evidence.md → The friction budget).
+- **`metrics` (1.41) is a field of the LATEST run** (`evidence[n]`, `finishChecks[name]` — never in their history): it travels with
+  the record that wins (the later run), no rule of its own; the losing side's readings are dropped with its run.
+- **`finished.metrics` (1.41) lives inside `finished`**, which merges as "the later" whole: the later finish's readings, never a
+  union (cli/tests/16-conventions-merge-state.js holds both).
 - **`protectedTests` (1.36, guard tests) has its rule** (`mergeProtectedTests`): `files` file by file, 3-way (`mergeMapWith`) — a
   one-sided change (a tick's re-baseline, an added test) comes through; both sides changed one → OURS, never a conflict (finish
   hashes the content again and names a change no record explains); `at` / `via` the EARLIER snapshot's (a record without a time
@@ -404,6 +408,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `LIFT_ID` gained `accepted`, so it never merges into a lift or an end of the same file, time and user (no new key).
 - **1.41.0 (chain F)** — the friction budget adds no state: its `ms` per run was cut from `.state.json` (a per-machine number
   nothing judges, churning a committed file on every re-run) and lives in the git-ignored timings.jsonl.
+- **1.41.0** — two new state fields and no merge rule: a run's `metrics` (as 1.36's `fast`) and `finished.metrics` ride with the
+  record their existing rules already pick (the later run, the later finish).
 
 ### The locks
 - **1.13** — the cross-process feature lock: two MCP servers (or MCP + `dev-spec done`) on one feature lost ticks and evidence

@@ -1060,7 +1060,9 @@ const DOCTOR_CHECKS = [
   // integration-plan.md → Integration Points answers a missing / empty Reuse & Integration section. 1.28: for a plain feature of size
   // m / l (designReuseGated) the Reuse & Integration section is an approval check of the design — design-reuse FAILS there (the gate
   // refuses it: `design-weigh:reuse`), unless the design was approved before the rule (no `reuseGate` stamp: the warning it had).
-  { id: "design-weigh", emits: ["design-tradeoffs", "design-risks", "design-reuse"], phase: 2, applies: (c) => designed(c) && !c.laterFiles.includes("design.md"),
+  // 1.41: at m / l (the same `gate`) also design-silent-regressions — a WARN only (never in a gate), a design approved without the
+  // `silent` stamp passes with a note.
+  { id: "design-weigh", emits: ["design-tradeoffs", "design-risks", "design-reuse", "design-silent-regressions"], phase: 2, applies: (c) => designed(c) && !c.laterFiles.includes("design.md"),
     run: (c) => designWeighChecks(c.designActive, c.lang, { approval: c.approvals && c.approvals.design, integrationPlan: c.read("integration-plan.md"),
       gate: designReuseGated(c.kind, c.size) ? c.size : null }),
     gate: { reuse: (c) => {

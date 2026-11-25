@@ -351,7 +351,8 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, remeasure, requ
     const upF = (S.specUpgrade(p).features || []).find((x) => x.name === f.slug) || {};
     const doc = upF.doctor || {};
     all("1.38 spec_upgrade: a design whose state matrix has a gap lists ui-states among the feature's warnings, and that warn alone adds no `warnings` attention (got " + js({ approvals, doc, attention: upF.attention }) + ")", {
-      listed: () => approvals.every((a) => a === true) && js(doc.warnings) === js(["ui-states"]),
+      // (1.41: a size m design's unanswered Silent Regressions warns too — design-silent-regressions, no attention either)
+      listed: () => approvals.every((a) => a === true) && js(doc.warnings) === js(["design-silent-regressions", "ui-states"]),
       advisory: () => js(upF.attention) === js([]),
     });
   }

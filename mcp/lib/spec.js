@@ -75,6 +75,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   isDevSpecDir, isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
   manageFeature, markdownToHtml, markRoadmapStale, matrixCsv, maybeRefreshCatalog, mdPlainText, refreshStaleRoadmap, ROADMAP_STALE_FILE, roadmapStale, staleGeneratedText, MERGE_ATTRIBUTE_LINES,
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, templatesLines, upgradeLines, milestone,
+  METRIC_GRAMMAR, metricLineText, metricItemLines,
   MILESTONE_ACTIONS, networkPathInside, nextAction, nextTask, normalizeLang,
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, recordTiming, OPTIONAL_TRACKS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
   recordSpecEdit, runStartStamp, isGuardianCheck, guardianRecord, guardianLines, guardianPreRun, guardianDiffBase, GUARDIAN_DIFF_BASE_ENV,
@@ -168,6 +169,9 @@ module.exports = {
   resolveTask,
   verificationStatus,
   summarizeRunOutput,
+  METRIC_GRAMMAR, // 1.41: the METRIC line's form (metric-lines/1) — done --run / finish --run name it when a line was not read
+  metricLineText, // a reading in its line's form (done --run's METRIC lines)
+  metricItemLines, // spec_finish's `metrics` items as the report's lines (finish)
   isGuardianCheck, // 1.29: does a project check run dev-guardian's gate (the check `guardian`, a `dev-guardian … scan`)? — finish --run
   guardianRecord, // its run → the verdict finish records (its exit code + JSON report; the feature's own findings first)
   guardianLines, // that verdict → the localized lines finish --run prints

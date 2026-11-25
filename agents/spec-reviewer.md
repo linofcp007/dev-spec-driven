@@ -66,7 +66,8 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 - **An existing test file the diff changes, deletes or renames that the task's `_Implements:_` doesn't name** is
   **Critical** when it loosens the test (an assertion removed or relaxed, a skip, `.only`, an early return) and **Important**
   otherwise — a test made to pass is a weakened test (under `meta.guard: "tests"` the guard protects them; finish names any
-  that changed).
+  that changed). A diff that raises or drops a METRIC line's `tolerance=`, flips or drops its `better=`, changes its unit or
+  removes the line (a number that can get worse while the tests stay green) is **Important**.
 
 ### 3. Track checks (only for active tracks)
 - **+tdd:** the report shows RED for the right reason before GREEN for each new behaviour's test (a guard test, a

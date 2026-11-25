@@ -418,7 +418,9 @@ it is never a gate — spec_metrics' `friction` and next_action's finish-step hi
   execution gate (Bugfix and finish → +port's execution gate) holds at every size.
 - **m / l**: the full chain — and the design's **Reuse & Integration is an approval check** (1.28, `designReuseGated`):
   doctor fails `design-reuse` and the design gate refuses it until the section names what is reused, extended or new; a
-  design approved before 1.28 (no `reuseGate` stamp) keeps the warning (quality.md → Reuse & Integration). At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
+  design approved before 1.28 (no `reuseGate` stamp) keeps the warning (quality.md → Reuse & Integration). 1.41: the m / l design
+  also gets `## Silent Regressions` (an empty table, no slot) and doctor WARNS `design-silent-regressions` until it is answered —
+  never a refusal, never a gate (quality.md → Silent Regressions); s / xs / unsized / bugfix / spike / change see nothing new. At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
   Considerations under +sec, Testing Strategy under +tdd) drops the core section, Complexity Tracking has no example row,
   Reuse & Integration one, Error Handling points at the IF…THEN criteria, and `TRACK_OVERLAPS` / `TRACK_TASK_OVERLAPS`
   (tracks.js) write a section / task two tracks ask for once (with +obs the +saas telemetry line goes); **+api / +dist
@@ -656,6 +658,8 @@ here. "r5 review" is 1.23's fifth review.
   there), so doctor's verdict and the gate agree; s / xs / unsized / bugfix / spike / change keep the warning.
 - **1.41.0 (chain F)** — the friction budget stays out of every size rule and gate (CRIT_X D9: sizes none / s see nothing new
   unless a check is over its budget); its designed doctor entry was cut — it warned every feature at every size.
+- **1.41.0** — the m / l design's Silent Regressions: a WARN (DECISIONS: "a doctor warn until answered, never a refusal"), so
+  unlike Reuse & Integration it joins no gate; its `silent` stamp only spares a design approved before 1.41.
 
 ### Bugfix and finish
 - **v1.12** — the bugfix kind.

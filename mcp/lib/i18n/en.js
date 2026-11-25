@@ -429,6 +429,15 @@ Each IF…THEN criterion in requirements.md already names a failure and its reco
 | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|---|---|---|---|
 | [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |`,
+    // 1.41, sizes m / l: no slot — an unanswered section is `empty` (doctor's design-silent-regressions warns), never a refusal
+    silent: `## Silent Regressions
+<!-- What number can get worse while every test stays green — bundle size, p95 latency, queries per request, tokens per
+     call, memory, build time? One row per number: the name a project check prints it under (a line METRIC <name>=<value>
+     <unit> better=lower|higher tolerance=<n>%) — finish compares it with the last finish that recorded it and warns past
+     the stated tolerance. A track's budget section (Performance Budget, Token Economics, UI Performance Budget) sets the
+     targets: a row here names the check that prints the number. "None — <why>" is an answer; blank is not. -->
+| Metric | Why it can regress silently | Printed by |
+|---|---|---|`,
     constitution: `## Constitution Check
 Verify this design against each principle in \`steering/constitution.md\`. GATE: must pass before
 implementation; re-check after any design change.
@@ -2336,6 +2345,28 @@ const msg = {
       backlogNote: (median, n, budget) => `median ${median} over the ${budget} budget (steering/tech.md, last ${n} passing runs)`,
       naHint: (items, cmds) => `Friction: ${items} — over budget (steering/tech.md). Before closing, propose a platform item to the user — ${cmds} (spec_roadmap_edit {kind: "backlog", action: "add", name, note}) — never a fix inside this feature; or the user raises or removes that budget line.`,
     },
+    // 1.41 the METRIC line (metric-lines/1, engine/metric.js) — a number a check prints that can get worse while every test stays green.
+    // The line's form, `better=` / `tolerance=`, the verdict codes and the check / feature names stay English.
+    metric: {
+      verdict: { within: "within its tolerance", improved: "better past its tolerance", regressed: "worse past its tolerance" },
+      unjudged: (why) => (why.includes("unit") ? "not compared — the unit changed" : `not judged — the earlier line states no ${why.map((w) => w + "=").join(" and no ")}`),
+      loosened: (term, was, now) => `loosened ${term === "unit" ? "the unit" : term + "="} (${was} → ${now}) — judged by the earlier finish's terms`,
+      // one reading against the last OTHER finish that recorded it (the merge summary's ## Metrics, the CLI's finish report)
+      line: (name, check, now, ref, feature, day, delta, judged) => `${name} (${check}): ${now} — ${ref} at ${feature}'s finish (${day})${delta == null ? "" : " · " + delta} · ${judged}`,
+      lineNew: (name, check, now) => `${name} (${check}): ${now} — first measure: the next finish compares with it`,
+      summaryHead: "## Metrics",
+      flagged: (name, check, ref, now, feature, day, delta, applied, verdict) => `${name} (check ${check}): ${ref} → ${now} since ${feature}'s finish on ${day} (` +
+        [delta, verdict === "unjudged" ? (delta == null ? "not compared" : "not judged") : `${({ within: "within", improved: "better than", regressed: "past" })[verdict]} its tolerance ${applied}`].filter(Boolean).join(", ") + ")",
+      // the finish warning — never a blocker; worded without blaming this feature (the number holds every change merged since)
+      finishWarn: (n, list, more) => `${n} METRIC reading(s) got worse past the tolerance their line states, or loosened its terms, since the last finish that recorded them: ${list}${more ? ` — and ${more} more (spec_finish's metrics)` : ""}. Every change merged since that finish is in the number, not only this feature's: tell the user before the merge — and never loosen, flip or drop a METRIC line to pass.`,
+      unmeasured: (names, slug) => `${slug}'s design.md names ${names} under Silent Regressions, but no project check's passing run printed a METRIC line of that name — add the line to the check that measures it (references/verification.md → Metrics that regress silently), or correct the row.`,
+      notRead: (n, last, grammar) => `${n} METRIC line(s) not read — the form is ${grammar}${last ? ` (the last: ${last})` : ""}`,
+      dropped: (bounds) => `METRIC lines past a reader bound were not read (${bounds}): at most 20 names, 1,000 candidate lines of at most 512 bytes, the output's last 64 MiB — the lines printed last are kept`,
+      reportHead: "METRIC readings (each against the last other finish that recorded it):",
+      recorded: (n) => `recorded ${n} METRIC reading(s) with this finish: the next feature's finish compares with them`,
+      measuredHead: "  METRIC readings across finishes:",
+      measuredLine: (name, check, first, last, n, change) => `${name} (${check}): ${first} → ${last} over ${n} finish(es) (${change})`,
+    },
     // 1.36 the review panel (roadmap.json meta.reviewModels · spec_init {reviewModels} · `dev-spec init --review-models`). Model names,
     // `meta.reviewModels`, `diverse` and the slash commands stay English.
     reviewModels: {
@@ -2703,6 +2734,7 @@ const msg = {
         "tradeoffs-missing": "no Alternatives & Trade-offs section — doctor warns (design-tradeoffs) on every feature scaffolded from it.",
         "risks-missing": "no Risks section — doctor warns (design-risks) on every feature scaffolded from it.",
         "reuse-missing": "no Reuse & Integration section — doctor warns (design-reuse) on every feature scaffolded from it.",
+        "silent-missing": "no Silent Regressions section — doctor warns (design-silent-regressions) on every size m / l feature scaffolded from it.",
         "no-criteria": "no acceptance criterion (a US-n.AC-m line with SHALL) — nothing for EARS, trace_check or the test plan to follow.",
         "ac-duplicate": (ids) => `duplicate AC IDs: ${ids} — doctor fails on every feature scaffolded from it.`,
         "phantom-ac": (ids, file) => `cites AC IDs ${file} does not define: ${ids} — trace_check reports them as phantoms.`,
@@ -3846,6 +3878,14 @@ const designWeigh = {
       empty: () => "Reuse & Integration is empty — name what is reused or extended, or say in a line why nothing is (greenfield); blank is not",
       few: () => "Reuse & Integration names nothing",
       integration: (n) => `covered by integration-plan.md → Integration Points${n ? ` (${n} item(s))` : ""}`,
+    },
+    // 1.41, sizes m / l: the Silent Regressions section (a warn, never a refusal)
+    "design-silent-regressions": {
+      filled: (n) => (n ? `${n} number(s) named that can get worse while the tests stay green` : "written (no row — 'None — why' counts)"),
+      missing: () => "no Silent Regressions section — name what number can get worse while every test stays green (a bundle's size, a p95, queries per request, tokens per call), one row per METRIC line a project check prints, or say 'None — why' (a track's budget section sets targets; this names the check that prints the number — references/verification.md → Metrics that regress silently)",
+      template: () => "Silent Regressions is still the template — name the numbers a project check prints as METRIC lines, or say 'None — why'",
+      empty: () => "Silent Regressions is empty — a row per number a project check prints as a METRIC line, or 'None — why'; blank is not an answer",
+      few: () => "Silent Regressions names nothing",
     },
     legacyApproval: (d, v = "1.17") => `design approved before ${v} — asked only from its next approval (${d})`,
     // 1.28: a size m / l design's Reuse & Integration is an approval check (doctor fails it; one approved before the rule warns)

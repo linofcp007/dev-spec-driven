@@ -17,7 +17,7 @@ let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValid
   isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock, packCorpusSets, packOf,
   packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText, langOption, PROTO_KEYS,
   RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY, RE_TODO_SENTINEL, RE_WIN_RESERVED,
-  readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN, ROOT_CAUSE_SYN, slugify,
+  readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN, SILENT_SYN, ROOT_CAUSE_SYN, slugify,
   specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription, taskMarkerValues,
   tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel, trackMarker,
   trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection, writeIfAbsent;
@@ -29,7 +29,7 @@ function __link(E) { ({ taskBlocks, headingEntries, today, acDuplicates, artifac
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
   langOption, PROTO_KEYS, RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY,
   RE_TODO_SENTINEL, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN,
-  ROOT_CAUSE_SYN, slugify, specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription,
+  SILENT_SYN, ROOT_CAUSE_SYN, slugify, specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription,
   taskMarkerValues, tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel,
   trackMarker, trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection,
   writeIfAbsent } = E); }
@@ -518,6 +518,8 @@ function initTemplates(projectDir, key, lang, lng) {
   return { ok: true, action: "init", dir: tdir, lang: lng, created, kept };
 }
 
+// two template texts the same but for a BOM, line endings and the blank lines at the end (an editor's re-save of a copy)
+const sameText = (a, b) => a != null && b != null && [a, b].map((t) => { const x = String(t).replace(/\r\n/g, "\n").replace(/\s+$/, ""); return x.charCodeAt(0) === 0xfeff ? x.slice(1) : x; }).reduce((x, y) => x === y);
 // The checks of one template text (raw: with its variables; the checks read it rendered with sample values).
 function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
   const P = i18n.msg(lng).templates.problems;
@@ -544,6 +546,9 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
     if (weighSection(rendered, RISKS_SYN) == null) add("warn", "risks-missing", P["risks-missing"]);
     // no Reuse & Integration heading — doctor would warn (design-reuse) on every feature scaffolded from it.
     if (weighSection(rendered, REUSE_SYN) == null) add("warn", "reuse-missing", P["reuse-missing"]);
+    // 1.41: no Silent Regressions heading — doctor warns (design-silent-regressions) on every size m / l feature scaffolded from
+    // it. Never on the built-in's own copy (templates init — the no-size design, which has no such section: it checks clean).
+    if (weighSection(rendered, SILENT_SYN) == null && !sameText(raw, builtInTemplate(k, fileLang || lng))) add("warn", "silent-missing", P["silent-missing"]);
     for (const tr of markerTracks()) { // + the track packs
       const marker = trackMarker(tr);
       if (!headingHasMarker(raw, marker)) continue; // no heading of the track: the engine appends its whole block
