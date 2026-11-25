@@ -540,6 +540,13 @@ exports.run = async ({
         /the controller runs every probe \(you never edit a file to make one\)/.test(rev) && /a pruned test is removed whole\./.test(rev),
       description: /, a simplification or pruning pass — /.test(desc) && desc.length <= 250,
       skill: /\(also the final review, converge, the simplification pass, the pruning pass\)\./.test(skill),
+      // the mode lists: the three READMEs' command row, tooling-reference's, a workflows row of its own
+      lists: [["README.md", /`\/spec-review \[branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt\]` \| Review against the spec — the branch, a converge, simplification or pruning pass,/],
+        ["README.pt.md", /`\/spec-review \[branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt\]` \| Revisão face à spec — o branch, uma passagem de convergência, de simplificação ou de poda,/],
+        ["README.es.md", /`\/spec-review \[branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt\]` \| Revisión frente a la spec — la rama, una pasada de convergencia, de simplificación o de poda,/]]
+        .every(([f, re]) => re.test(fs.readFileSync(path.join(root, f), "utf8"))) &&
+        /\| `\/spec-review branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt` \|[^\n]*· `prune`: optional — the tests that no longer earn their place/.test(rd("skills", "dev-spec-driven", "references", "tooling-reference.md")) &&
+        /\| `\/spec-review prune` \| Optional, a \+tdd feature with every task done[^|]*\| `references\/subagent-execution\.md` \|/.test(rd("skills", "dev-spec-driven", "references", "workflows.md")),
     });
     // W (CRIT_X D7): verification.md says what finish shows of dev-guardian's own checks below the gate
     all("1.41.0 W (CRIT_X D7): verification.md — dev-guardian's test-integrity and suppressions checks below the gate are ONE finish warning, never a blocker, labelled per check; --compact names none; before 3.17 tests only; the pruning bullet points at it", {
