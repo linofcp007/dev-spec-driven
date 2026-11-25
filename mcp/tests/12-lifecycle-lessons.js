@@ -346,7 +346,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, cliIn, requir
     const until = Date.now() + 3; while (Date.now() < until) { /* a later finished.at */ }
     const r = finish(subj, "METRIC bundle=110 kB better=lower tolerance=1%\n", [TI("low", "test-skipped", "tests/b.test.js", 9)], false);
     const w = r.warnings || [];
-    const at = { stale: w.findIndex((s) => /stale accept_timeouts/.test(s)), integrity: w.findIndex((s) => /^dev-guardian: \d+ new finding\(s\) of its test-integrity and suppression checks/.test(s)),
+    const at = { stale: w.findIndex((s) => /stale accept_timeouts/.test(s)), integrity: w.findIndex((s) => /^dev-guardian: \d+ new finding\(s\) of its test-integrity (?:and suppression checks|check) below/.test(s)),
       metrics: w.indexOf(I.msg("en").metric.finishWarn(1, I.msg("en").metric.flagged("bundle", "size", "100 kB", "110 kB", "base-line", E.dayOf(r.metrics[0].reference.at), "+10", "1", "regressed"), 0)),
       lessons: w.indexOf(D().finishOpen(["D-1"], subj)) };
     // the prose: the batch paragraph names the four in this order

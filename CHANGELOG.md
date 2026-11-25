@@ -78,16 +78,19 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   PT / ES) says a test earns its place when it guards an AC or a past bug and fails when that behaviour breaks (adding it
   to an existing `testing-standards.md` re-reviews every +tdd feature it governed — add it between features);
   test-patterns.md holds the criteria (`retired-ac`, `same-path`, `no-kill`), the never-pruned list and "remove a test
-  whole". `/spec-review <feature> prune`: candidates from `trace_check {matrix, code}`, the reviewer's prune mode (prune ·
-  keep · retrace · strengthen), probes only on a tracked, clean file restored from a hash-checked copy, each test of a pair
-  run alone, no probe without a shell; each pruning approved by the user, recorded through spec_impact's `retire` and
-  `feature protect --accept --reason "pruned: …"`. No engine change, no new tool argument.
+  whole". `/spec-review <feature> prune`: candidates from `trace_check {matrix, code}` (a test whose every row a shipped
+  feature retired, at least one an AC — never one that covers an EC / NFR / SC row), the reviewer's prune mode (prune ·
+  keep · retrace · strengthen; a prune names what still guards each criterion), probes only on a tracked, clean file
+  restored from a hash-checked copy, each test of a pair run alone, no probe without a shell; each pruning approved by the
+  user, recorded through spec_impact's `retire` and `feature protect --accept --reason "pruned: …"`, then the re-approvals
+  (unforced: see Changed). No new tool argument.
 - **dev-guardian's own findings below the gate.** finish names the new findings that do not block from dev-guardian's
   test-integrity check (`guardian-test-integrity`: a skip, a deleted test file, fewer assertions) and, with dev-guardian
   3.17, its suppressions check (`guardian-suppressions`: an added `nosemgrep`, `nosec`, `eslint-disable` …) in ONE
   warning, never a blocker — each labelled by its check (weakened test · suppression added), the first 3 by severity, the
-  rest counted — and stores them as `finishChecks.guardian.testIntegrity` {count, top}; 1.40 only counted them in "(N new
-  below it)". A `--compact` report lists the blocking findings only, so none is named there.
+  rest counted, the head naming only the checks they come from; a finding the report lists as blocking is never one — and
+  stores them as `finishChecks.guardian.testIntegrity` {count, top, kinds}; 1.40 only counted them in "(N new below it)". A
+  `--compact` report lists the blocking findings only, so none is named there (the MCP run hint says so).
 
 ### Changed
 - **finish's warnings:** the new ones come in the batch's order — dev-guardian's findings below the gate the last of
@@ -102,6 +105,10 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   Important. spec-implementer never loosens, flips, re-units or drops a METRIC line to pass.
 - At a non-default `--fail-on medium` an approved test pruning blocks like any medium finding (dev-guardian reads no
   dev-spec approval; at the default `high` it never blocks).
+- **An AC a shipped feature retired needs no planned test** (`_Supersedes:_`): trace_check's `uncoveredByTests`, doctor's
+  traceability, the test-plan approval and the matrix's `no-test` leave it out, so the pruning pass's re-approvals complete
+  unforced (1.40 named it "ACs with no planned test"). A draft's declaration, one added after the ship and a live AC still
+  need one.
 - The references: verification.md (The friction budget, Metrics that regress silently, dev-guardian's findings below the
   gate, a pruning under dev-guardian's gate), subagent-execution.md (§7b Lessons, The pruning pass), test-patterns.md (Test
   value and pruning), steering-templates.md (friction budgets, Reference Examples), phase-guide.md (Silent Regressions),
@@ -111,6 +118,9 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
 ### Fixed
 - **The `# nosec` examples name the rule and the reason** — `# nosec <id>  # <reason>` (finish's hint EN / PT / ES,
   AGENTS.md, verification.md): the bare `# nosec` they showed silences every Bandit rule on its line.
+- dev-guardian's report text (a finding's rule and file, in the blocker, the merge summary and the warnings) drops the bidi
+  controls and zero-width characters (U+200B–U+200F, U+202A–U+202E, U+2066–U+2069): a U+202E reordered the line. The
+  feature's own files are compared the same way, so such a file is still `[this feature]`.
 
 ### Compatibility
 - **1.40 garbles a lesson:** an older engine reads `_Kind: lesson_` as a decision, its `_Cause:_` / `_Target:_` lines as
@@ -135,9 +145,11 @@ deleted file failed trace on 43 % of real test files), a cause enum in the tool 
 **Cost.** A run without a METRIC line costs the reader one `lastIndexOf`; 64 MiB of output with one line reads in ~1× a
 bare `lastIndexOf` of it (a split would be 6–9×). finish without a reading opens no other feature; with readings it opens
 each other feature's state once. `spec_metrics` reads each feature's state and `decisions.md` once — the lessons ride the
-metrics' one walk. The findings below dev-guardian's gate make no file-system call; `reference-examples` `lstat`s each
-Copy path's folders once per engine call (spec_upgrade over 6 features as over 2), never lists one (the lean doctor skips
-it once another check warns); the timings log is read once per engine call (at most 4 × 64 KB).
+metrics' one walk. trace_check reads the other features' `_Supersedes:_` only when an AC has no test entry (the index the
+matrix reads), so a trace with none reads no other feature. The findings below dev-guardian's gate make no file-system
+call; `reference-examples` `lstat`s each Copy path's folders once per engine call (spec_upgrade over 6 features as over
+2), never lists one (the lean doctor skips it once another check warns); the timings log is read once per engine call (at
+most 4 × 64 KB).
 
 ### Tests
 - `node mcp/test.js` 3107 assertions (was 3014), `node cli/test-cli.js` 716 (was 707). New files by area: 09

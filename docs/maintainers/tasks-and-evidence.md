@@ -63,8 +63,9 @@ Phase 6, opt-in.
   ONE finding fresh (80+ opens a fix round, 50–79 is ledgered as unconfirmed, below 50 refuted); its **simplify** mode reviews
   `/spec-review simplify`'s diff; its **prune** mode (1.41) gives each candidate test of `/spec-review prune` a verdict —
   prune · keep · retrace · strengthen — and asks for the probes the controller runs (the pass is prose end to end: the
-  candidates are the matrix's retired rows, the record spec_impact's `retire` and the protected-test accept — no engine
-  part; `references/subagent-execution.md` → The pruning pass, `test-patterns.md` → Test value and pruning); it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
+  candidates are the T-IDs whose every matrix row is retired, at least one an AC — review 1, R1-PZ-2 —, the record
+  spec_impact's `retire` and the protected-test accept — no engine part but trace's: an AC a shipped feature retired needs no
+  planned test, so the re-approvals complete, markdown-and-trace.md → What trace_check counts; `references/subagent-execution.md` → The pruning pass, `test-patterns.md` → Test value and pruning); it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
   rewritten lines' history. **Lessons (1.41):** a fix round 1–3 asks the implementer each confirmed finding's cause (its
   report's `### Causes` block), the controller checks the three a file can show and records it with
   `spec_decide {kind: "lesson"}`; the finish batch amends the guidance once (§7b; lifecycle.md → Decisions and spikes — the engine's part is the
@@ -351,16 +352,21 @@ Engine: the `B5` block of `engine/evidence.js`.
     accept_timeouts entries no step reported a timeout on), testIntegrity? (1.41.0, W — `integrityFindings`: the `new_findings` of
     dev-guardian's own passes, `GUARDIAN_INTEGRITY_KINDS` — `guardian-test-integrity` → kind `test`, `guardian-suppressions`
     (3.17, `GUARDIAN_SUPPRESSIONS`) → kind `suppression` — whose severity is under the command's `--fail-on` (`severityRank`:
-    dev-guardian's own blocking rule, gate.ts; unknown → under every level): `{count, top ≤ 3: [{severity, rule, file, line,
-    kind}]}`, by severity then the report's order; no fs call — `findingFacts` is the blocking items' reader, `mine()` never
-    runs for it; a `--compact` report lists only the blocking findings, so none is read), message?,
+    dev-guardian's own blocking rule, gate.ts; unknown → under every level) and that is not one of the report's
+    `blocking_findings` (by rule + file + line, `blockedFacts` — review 1: dev-spec reads the command's FIRST `--fail-on`,
+    dev-guardian its last): `{count, top ≤ 3: [{severity, rule, file, line, kind}], kinds}` (`kinds`, review 1: the kinds among
+    ALL of them — the warning's head names those checks), by severity then the report's order; no fs call — `findingFacts` is
+    the blocking items' reader, `mine()` never runs for it; a `--compact` report lists only the blocking findings, so none is
+    read), message?,
     baseline? ("absent": `baseline_absent` / `baseline_status`), tool? (`tool_version`), update? (no
     `tool_version`, one below `GUARDIAN_MIN_VERSION` 3.2.1, or "Cannot find package" — 3.2.0 from a plugin install), override?
     (the `DEV_GUARDIAN_CLI` the launcher said it ran)}`. Every scan step repeats a non-gating line under its own name
     (`security_scan_full: …`, `map_attack_surface: …`): `distinctLines` reads each fact once, without its step. The lines
     themselves (`acceptedLines` / `noteLines`, ≤ 3 each, + `acceptedMore`) are for finish --run's output — never stored
     (`guardianStored`). `unused_partial_parse_acceptances` is not read (the acceptance is on the check's own command). Every report-derived text is one inert line (`cleanLine`: line breaks
-    folded, control characters spaces — review 8: a `file_path` holding "\n## Approved…" wrote lines into the merge summary).
+    folded, control characters spaces — review 8: a `file_path` holding "\n## Approved…" wrote lines into the merge summary;
+    the bidi controls and zero-width format characters dropped — 1.41.0 review 1, `RE_REPORT_FORMAT`, tested first; the `own`
+    set reads each `_Implements:_` file through `cleanLine` too, so a name holding one still matches the report's).
     Verdicts (stable): `pass` (0) · `blocked` (1) · `incomplete` (2) · `config` (3, dev-guardian's own "error: …" /
     "dev-guardian: …" lines — never the launcher's DEV_GUARDIAN_CLI line) · `not-found` (3 + the launcher's "dev-guardian not
     found") · `no-launcher` (a run of `.specs/guardian.cjs` while it is missing, any non-zero exit; or 1 + node's "Cannot find
@@ -395,7 +401,8 @@ Engine: the `B5` block of `engine/evidence.js`.
     `remedy` for the rest (another scanner's timeout, `taint_timeout`, `scanner_failed`, `skipped`, `other`), the generic
     `incompleteHint` without details · `updateHint` · `configHint`); a guardian check still
     needing a run adds `guardian.mcpRun` (Claude Code: `finish <f> --run` with the Bash tool's 600000 timeout or in the
-    background — it records the report itself; elsewhere run the command, `--compact`, report it with `report`). next_action's
+    background — it records the report itself; elsewhere run the command, `--compact`, report it with `report` — a full report,
+    without `--compact`, names the findings below the gate, review 1). next_action's
     `finish` / `verify` steps append the same (`suiteGuardianHint`). spec_finish's `warnings` say "update dev-guardian"
     and, for a pass with accepted gaps, the feature's own among them by name — "… — review it by hand" (`acceptedOwnWarn`:
     the gate runs without a ref, so a file accept_timeouts lists stays accepted whatever the feature appends to it; a warning,
@@ -405,7 +412,8 @@ Engine: the `B5` block of `engine/evidence.js`.
     (`staleTimeouts`: an entry never expires) — and, LAST (the finish batch's order: dev-guardian, W, …), on any verdict, W's
     ONE line (`integrityWarning` → `guardian.integrityWarn`: the count, `--fail-on`, the top 3 each labelled by its pass —
     `guardian.finding`'s fifth argument is a kind, `test` · `suppression` · none, never one label for both —, the rest counted;
-    the first guardian check that has one) — warnings, never blockers (`guardianWarnings`). The merge summary and finish
+    the head names the one check `kinds` holds, else both — `integrityWarn`'s fourth argument, review 1: a dev-guardian before
+    3.17 has no suppressions check; the first guardian check that has one) — warnings, never blockers (`guardianWarnings`). The merge summary and finish
     --run's own lines are unchanged ("(N new below it)" still counts every new finding below the bar).
   - *finish --run* (cli/run.js): `guardianPreRun()` first — a guardian check that runs the launcher needs this version's
     (an earlier version's is rewritten, with a note; missing → `no-launcher`, anything else → `launcher-changed`: refused before
@@ -1089,7 +1097,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   missed an absolute path inside the project); a lesson is quoted once, in its own part (CRIT_S1 #2). The fix report's
   `### Causes` block is one sentence of agents/spec-implementer.md (paid per dispatch — CRIT_S1's cut of more), and the
   implementer and the reviewer each got the METRIC line's rule (never loosen, flip, re-unit or drop one to pass; a diff that
-  does is Important).
+  does is Important). Review 1: `retired-ac` read the AC rows only, so a test of a retired AC and a live EC was a candidate
+  and the EC lost its only test with trace green — a candidate's EVERY row is retired now, at least one an AC, and the
+  verdict names each criterion's guard (R1-PZ-2); the pass makes `.execution/` with its `.gitignore` (R1-PZ-3: a finished
+  feature's went at Closing); and the churn's re-approvals completed only forced until trace stopped asking a planned test of
+  a retired AC (R1-PZ-1, markdown-and-trace.md → History → Readers).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
@@ -1303,6 +1315,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   it (dev-spec read it into the last token — malformed; now one CR ends the line at the text's end too) and a bare `METRIC`
   line (dev-guardian counts it toward its 1,000 candidates, dev-spec never did; now a candidate, ignored — a flood of them
   pushes earlier readings out with `candidates` said, never unsaid). Both harnesses: 0 disagreements.
+  **Review 1 (W):** "below the gate" also leaves out a finding the report lists in `blocking_findings` (R1-PZ-4: dev-spec
+  reads the command's first `--fail-on`, dev-guardian its last — `--fail-on high --fail-on medium` named a medium as the
+  blocker AND as "They do not block"; a subtraction, the rule checked before a key is built); `kinds` and a head naming only
+  those checks (R1-PZ-5: 3.8–3.16 has no suppressions check — stored, since the top 3 may hide a kind), mcpRun's full-report
+  clause; an unknown-severity fixture at `--fail-on info` (R1-PZ-6); `cleanLine` drops the bidi controls and zero-width format
+  characters (a U+202E reordered the warning and the blocker), tested before its replace — a second global replace on each
+  fact of a 120k-finding report cost W a quarter more.
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful

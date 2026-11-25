@@ -120,6 +120,12 @@ matrix. The rules come first; how they came to be — the releases and review fi
   or a heading led by a T-ID (+ its body). An AC named only outside the entries (a Gaps / Out of Scope note) stays a gap —
   accepting it is a forced approval — and the warning `justifiedTestGaps` (+tdd, `TRACE_WARNING_ORDER` after the secondary
   kinds) lists it.
+- **An AC a SHIPPED feature retired needs no planned test** (1.41.0 review 1): `uncoveredByTests` leaves out an AC whose key
+  (`dirKey(dir)` + AC) `supersededByIndex().live` holds — lifecycle.md → Catalog, drift, restore's rule, so a draft's or a
+  post-ship declaration (`supersedePending`) and an archived-unshipped feature's still need one. Read only when an AC has no
+  test entry, and shared with the matrix (`opts.supBy`). The matrix's `no-test` follows; `uncoveredByTasks` and
+  `coveredByTests` (the ACs a test entry covers) do not move. The pruning pass removes a retired AC's every test
+  (subagent-execution.md): its re-approvals complete unforced.
 - **Scaffolded test rows:** only those of the track ACs requirements.md has (`testPlanTracks()` — spec_create on an existing
   feature, spec_add_track).
 - **A removed track's criteria:** the REQUIRED ACs are the ACTIVE requirements' (`activeDesign`), covered by the ACTIVE tasks
@@ -209,7 +215,8 @@ matrix. The rules come first; how they came to be — the releases and review fi
   mcp/tests/05-markdown-readers.js bounds the matrix at max(1.5 s, 4 × the plain trace).
 - **Stable codes:** `status` (`RTM_STATUSES`): `untraced` · `planned` (a linked task open, or none yet) · `implemented` (all
   done, one unverified) · `verified` (all done and verified; nothingToVerify counts). `gaps`: `no-task` · `no-test` (+tdd)
-  · `no-coverage` (EC / NFR / SC; never an untouched template row) — exactly trace_check's gaps and warnings for that ID.
+  · `no-coverage` (EC / NFR / SC; never an untouched template row) — exactly trace_check's gaps and warnings for that ID (so
+  no `no-test` for an AC a shipped feature retired, 1.41.0).
   Labels: `i18n.msg(lang).rtm`.
 - **Surfaces:** `trace_check {matrix: true}` (informational; with `code`, ONE walk); `dev-spec trace <f> --matrix`
   (`printMatrix`) / `--csv` (the data alone — no BOM, no marker; exit code = trace gaps); `spec_export {format: "csv"}` /
@@ -328,6 +335,16 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.39.0** — BS-3's key of the answering cells was designed again and CUT (CRIT_X cut 4: 1.39's only new refusal, at size
   s, through `sectionLineKey`, which every track's and pack's tables share): the row key and 1.38's prose stand (quality.md →
   History → UI state matrix, 1.39.0).
+- **1.41.0 review 1** (R1-PZ-1) — the pruning pass (subagent-execution.md) removes every test of an AC a shipped feature
+  retired, and its protocol re-approves test-plan, then tests and tasks; `uncoveredByTests` still named the AC ("ACs with no
+  planned test"), so each re-approval completed only forced, doctor's traceability failed and blocked the finish — every
+  `retired-ac` candidate set did it. `uncoveredByTests` now leaves out what `supersededByIndex().live` holds (the catalog's
+  retired rule, never a draft's `supersedePending`); replayed on 1.40.0 and the release tip, the one new accept is exactly
+  that AC (a retired AC also leaves `justifiedTestGaps`; `uncoveredByTasks` / `coveredByTests` unchanged). The reviewer's
+  other option, prose (a forced approval, or a /spec-change removing the AC), was set aside: a second round per pruning.
+  The index is read only on a gap — a COUNT pins that a gapless trace opens no other feature's file (read on every call, 120
+  bare traces of gapless features took 22 s against 1.2 s); a gapful bare trace pays one walk (~1 ms a feature), as the
+  matrix always has.
 
 ### Requirements traceability matrix
 - **1.14 F5** — the matrix: `trace_check {matrix: true}`, `trace --matrix` / `--csv`, the export's section and `.rtm.csv`.
@@ -338,3 +355,5 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   requirements and tasks.
 - **1.25.1** — linear: each row scanned every task, test entry, section and decision; 2,800 stories (8,400 rows) took the
   matrix 5.5–6.4 s beside a 0.5 s trace — now ~0.5 s, the same rows.
+- **1.41.0 review 1** (R1-PZ-1) — `no-test` follows trace_check's new rule (Readers, 1.41.0): an AC a shipped feature retired
+  has none, so its row reads `planned` / `implemented` / `verified` by its tasks (a pending one keeps `no-test`).

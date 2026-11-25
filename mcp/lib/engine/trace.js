@@ -685,8 +685,15 @@ function traceCheck(projectDir, name, opts = {}) {
     unresolvedImplGlobs, // globs whose bounded walk ended (COVERAGE_CAP) before a match: neither present nor missing
   };
 
+  let supIdx = null; // supersededByIndex(), read only when an AC has no test entry — and shared with the matrix (opts.matrix)
   if (tracks.includes("tdd")) {
-    const uncoveredByTests = [...requiredAcs].filter((id) => !acsInTestPlan.has(id));
+    const untested = [...requiredAcs].filter((id) => !acsInTestPlan.has(id));
+    // 1.41.0 review 1 (R1-PZ-1): an AC a SHIPPED feature retired (_Supersedes:_ — supersededByIndex().live, the catalog's rule) needs
+    // no planned test: the pruning pass removes its every test, and the plan's re-approval completed only forced. A declaration not
+    // shipped yet (supersedePending) retires nothing: still a gap. Its tasks are another kind — uncoveredByTasks is unchanged.
+    if (untested.length) supIdx = supersededByIndex(projectDir);
+    const retiredKey = dirKey(dir) + "\n";
+    const uncoveredByTests = untested.filter((id) => !supIdx.live.has(retiredKey + id));
     // Reverse: AC IDs the test plan names that requirements.md doesn't define (a typo, a removed criterion, a template
     // row for a track the requirements never got) — a fenced example is no reference (planIdText), as for tasks.
     const phantomAcsInTests = [...acsNamedInPlan].filter((id) => !definedAcs.has(id));
@@ -701,7 +708,7 @@ function traceCheck(projectDir, name, opts = {}) {
     const testsNotInTasks = [...planTestIds].filter(([k]) => !tasksTestIds.has(k)).map(([, id]) => id);
     // Reverse: test IDs referenced by tasks that aren't in the test plan (typos).
     const phantomTestsInTasks = [...tasksTestIds].filter(([k]) => !planTestIds.has(k)).map(([, id]) => id);
-    result.coveredByTests = requiredAcs.size - uncoveredByTests.length;
+    result.coveredByTests = requiredAcs.size - untested.length; // the ACs a test entry covers (a retired one with none is not covered)
     result.uncoveredByTests = uncoveredByTests;
     result.phantomAcsInTests = phantomAcsInTests;
     result.plannedTests = planTestIds.size;
@@ -739,7 +746,7 @@ function traceCheck(projectDir, name, opts = {}) {
   result.warnings = traceWarnings(result);
   Object.assign(result, supersedesTrace(projectDir, dir, rawReqs)); // informational: never a gap, never the verdict
   Object.assign(result, decisionsTrace(dir, stateFromFile(projectDir, statePath(dir)).kind)); // phantom _Affects:_ (warnings)
-  if (opts.matrix) { const { ok: _ok, ...mx } = buildTraceMatrix(projectDir, f, { code: opts.code, scan }); result.matrix = mx; } // informational
+  if (opts.matrix) { const { ok: _ok, ...mx } = buildTraceMatrix(projectDir, f, { code: opts.code, scan, ...(supIdx ? { supBy: supIdx } : {}) }); result.matrix = mx; } // informational
   return result;
 }
 
@@ -1271,7 +1278,8 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
 //   approval    the requirements approval (at, by, forced) and whether THIS row changed since (the approved snapshot's text
 //               for the ID; an approval without a snapshot knows only whether the file changed: null = unknown)
 // status (stable codes):
-//   untraced    a trace gap names it — `gaps`: no-task (an AC no task cites), no-test (+tdd: an AC no test-plan ENTRY covers),
+//   untraced    a trace gap names it — `gaps`: no-task (an AC no task cites), no-test (+tdd: an AC no test-plan ENTRY covers, unless a
+//               SHIPPED feature retired it — 1.41),
 //               no-coverage (an EC / NFR no task or planned test covers; an SC no test-plan row or quickstart.md line) —
 //               exactly trace_check's gaps and its secondary warnings for that ID
 //   planned     traced, but no linked task is done yet — one is still open, or none is linked (a planned test only)
@@ -1508,9 +1516,11 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       tasks.push(task);
     }
     const gaps = [];
+    const supKey = dirKey(dir) + "\n" + row.id;
     if (row.kind === "ac") {
       if (!tasksAcs.has(row.id)) gaps.push("no-task");
-      if (planOn && !planAcs.has(row.id)) gaps.push("no-test");
+      // (trace_check's uncoveredByTests: an AC a SHIPPED feature retired needs no planned test — R1-PZ-1)
+      if (planOn && !planAcs.has(row.id) && !(supBy.live && supBy.live.has(supKey))) gaps.push("no-test");
     } else if (!row.secTemplate && (row.kind === "sc" ? !planSec.has(row.key) && !quickSec.has(row.key) : !tasksSec.has(row.key) && !planSec.has(row.key))) {
       gaps.push("no-coverage"); // a scaffold's untouched EC/NFR/SC row is no gap — trace_check warns about none
     }
@@ -1534,7 +1544,6 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     };
     // Declared only by features not shipped yet: "to be superseded", never retired (supersededByIndex().live); a
     // retired AC names its shipped declarers only.
-    const supKey = dirKey(dir) + "\n" + row.id;
     if (r.supersededBy.length && supBy.live && !supBy.live.has(supKey)) r.supersedePending = true;
     else if (r.supersededBy.length && supBy.liveBy && supBy.liveBy.has(supKey)) r.supersededBy = supBy.liveBy.get(supKey).slice();
     return r;
