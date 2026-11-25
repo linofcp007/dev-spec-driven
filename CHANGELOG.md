@@ -18,9 +18,9 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
 
 ### Added
 - **Lessons — why a confirmed review finding happened.** `spec_decide {kind: "lesson", cause, target}` (CLI
-  `dev-spec decide <feature> --kind lesson --cause <code> [--target <path>]`) records it in `decisions.md`: one of five causes —
-  `guidance-missing` · `guidance-wrong` · `example-copied` · `tool-friction` · `model-error` — and the file a fix changes
-  (a project path; it must exist for `guidance-wrong` / `example-copied`). In subagent execution a fix round asks the
+  `dev-spec decide <feature> --kind lesson --cause <code> [--target <path>]`) records it in `decisions.md`: one of five
+  causes — `guidance-missing` · `guidance-wrong` · `example-copied` · `tool-friction` · `model-error` — and the file a fix
+  changes (a project path; it must exist for `guidance-wrong` / `example-copied`). In subagent execution a fix round asks the
   implementer each finding's cause (its fix report's `### Causes`, never a guess); the controller checks the three a file
   can show before recording one, and a rule the user states at a checkpoint goes straight to steering, no lesson. Every
   later brief of the feature quotes its open lessons (at most 5, 1,200 characters); `spec_finish` lists them (`lessons`
@@ -45,8 +45,9 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   has no such section: a project without the table sees nothing.
 - **METRIC lines — numbers that get worse while the tests stay green.** A project check prints
   `METRIC <name>=<number>[ <unit>][ better=lower|higher][ tolerance=<n>[%]]` (`metric-lines/1`, the line dev-guardian
-  3.17's `metrics` command reads too); `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read it from a passing run's whole output
-  (its last 64 MiB, 1,000 candidate lines from the end, 20 names — a line past a bound is said). The tick prints and stores
+  3.17's `metrics` command reads too); `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read it
+  from a passing run's whole output (its last 64 MiB, 1,000 candidate lines from the end, 20 names — a line past a bound
+  is said). The tick prints and stores
   the readings, never judges. `spec_finish` compares each (check, name) with the latest OTHER feature's finish that
   recorded it, archived ones included: `metrics`, each with its verdict (`new` · `within` · `improved` · `regressed` ·
   `unjudged`) and `loosened` for a flipped or dropped `better=`, a raised or dropped tolerance or a changed unit — ONE
