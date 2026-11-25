@@ -3587,7 +3587,7 @@ const msg = {
       briefLessonsHeading: "## Lessons from this feature's reviews",
       briefLessonsIntro: "Confirmed findings of earlier tasks and why they happened (decisions.md) — don't repeat them:",
       // spec_finish: the open lessons — the finish batch's ONE question (commands/spec-finish.md), never a blocker
-      finishOpen: (ids, slug) => `${ids.length} lesson(s) wait for the user's decision (${ids.join(", ")}): propose every amendment in ONE question, edit each file once, then close them with one decision that supersedes them (spec_decide {name: "${slug}", supersedes: [${ids.map((x) => JSON.stringify(x)).join(", ")}]}).`,
+      finishOpen: (ids, slug) => `${ids.length} lesson(s) wait for the user's decision (${ids.join(", ")}): propose every amendment in ONE question, edit each file once, then close them with one decision that supersedes them (spec_decide {name: "${slug}", title: "Lessons of ${slug}: amended …", decision: "<per lesson: applied → file, or declined → why>", supersedes: [${ids.map((x) => JSON.stringify(x)).join(", ")}]} · ${DEV_SPEC} decide ${slug} --title "Lessons of ${slug}: amended …" --decision "<per lesson: applied → file, or declined → why>" --supersedes ${ids.join(",")}).`,
       supersedesNote: (list) => `supersedes ${list}`,
       prHeading: "## Decisions",
       catalogLine: (n, list) => `Decisions (${n}): ${list}`,

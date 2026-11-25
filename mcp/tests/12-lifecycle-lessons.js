@@ -8,7 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, require, __dirname }) => {
+exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, cliIn, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const E = require(path.join(__dirname, "lib", "engine", "index.js"));
   const I = require(path.join(__dirname, "lib", "i18n.js"));
@@ -362,6 +362,113 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, require, __di
       metricsThenLessons: at.metrics < at.lessons,
       lessonsLast: at.lessons === w.length - 1,
       prose: prose.every((i) => i >= 0) && prose.every((i, k) => k === 0 || prose[k - 1] < i),
+    });
+  }
+
+  // --- 1.41.0 review 1: a root-level target is WRITTEN in its `./` form (`./Makefile`, never the bare `Makefile` no reader finds
+  // again), so `repeated` groups it and every reader shows it as written (R1-L-1) — a bare word a hand edit wrote (`none`) is no
+  // path, never grouped; `.specs/` left out case-folded where the file system folds case (R1-L-7); the write refuses a line
+  // separator in a target (R1-L-6). With the fixtures 1.41.0's left out (R1-L-4 / R1-L-10's mutants):
+  // two lessons of one (cause, target) in ONE feature are never repeated (M18), the key folds case (M6), a target's and a hand-written
+  // marker's backticks are dropped (M7, M26). E.FOLD_CASE decides what a case-only difference is: one file on Windows / macOS, two on Linux.
+  {
+    const p = demo("repeated-r1");
+    fs.writeFileSync(path.join(p, "Makefile"), "test:\n\tnode x\n");
+    fs.writeFileSync(path.join(p, "gradlew"), "#!/bin/sh\n");
+    const w = [];
+    for (const f of ["api-keys", "usage-metering"]) {
+      w.push(lesson(p, f, { title: "make is slow", cause: "tool-friction", target: "./Makefile" }));
+      w.push(lesson(p, f, { title: "gradlew copied", target: "./gradlew" }));
+      w.push(lesson(p, f, { title: "no target", cause: "model-error", target: undefined })); // never a "null" target
+      w.push(lesson(p, f, { title: "steering, upper case", cause: "guidance-missing", target: ".SPECS/steering/tech.md" }));
+    }
+    w.push(lesson(p, "api-keys", { title: "check script", cause: "tool-friction", target: "scripts/check.sh" }));
+    w.push(lesson(p, "usage-metering", { title: "check script again", cause: "tool-friction", target: "Scripts/Check.sh" })); // one file where case folds
+    w.push(lesson(p, "usage-metering", { title: "only here", cause: "tool-friction", target: "scripts/only-here.sh" }));
+    w.push(lesson(p, "usage-metering", { title: "only here again", cause: "tool-friction", target: "scripts/only-here.sh" })); // ONE feature: never repeated
+    w.push(lesson(p, "usage-metering", { title: "lib", cause: "tool-friction", target: "src/api-keys/lib.js" }));
+    // a hand-written target: absolute, inside the project (read as its project path — the twin of usage-metering's)
+    const abs = path.join(path.resolve(p), "src", "api-keys", "lib.js").split(path.sep).join("/");
+    fs.appendFileSync(path.join(p, ".specs", "api-keys", "decisions.md"), "\n## D-90 — lib, by hand\n\n- _Kind: lesson_\n- _Cause: tool-friction_\n- _Target: " + abs + "_\n\n**Lesson:** x\n");
+    // a hand-written bare word in both features: a doubt, never guessed into `./none`
+    for (const f of ["api-keys", "usage-metering"]) fs.appendFileSync(path.join(p, ".specs", f, "decisions.md"), "\n## D-91 — none, by hand\n\n- _Kind: lesson_\n- _Cause: model-error_\n- _Target: none_\n\n**Lesson:** x\n");
+    const bt = lesson(p, "api-keys", { title: "backticked", target: "`src/api-keys/service.js`" });
+    const SEPS = [String.fromCharCode(0x2028), String.fromCharCode(0x2029)]; // (built: a literal U+2028 in a source is a line break)
+    const sep = SEPS.map((c) => lesson(p, "api-keys", { title: "separator", cause: "guidance-missing", target: "src/new" + c + "file.js" }));
+    const rep = S.metrics(p).lessons.repeated.map((g) => [g.cause, g.target, g.features.join("+"), g.lessons].join(" ")).sort();
+    const both = "api-keys+usage-metering";
+    const want = ["tool-friction ./Makefile " + both + " 2", "example-copied ./gradlew " + both + " 2", "tool-friction src/api-keys/lib.js " + both + " 2"]
+      .concat(E.FOLD_CASE ? ["tool-friction scripts/check.sh " + both + " 2"] : ["guidance-missing .SPECS/steering/tech.md " + both + " 2"]).sort();
+    const hand = E.decisionLog("# Decisions: X\n\n## D-1 — by hand\n\n- _Kind: lesson_\n- _Cause: `model-error`_\n- _Target: `src/a.js`_\n\n**Lesson:** r\n")[0];
+    const text = rd(p, ".specs", "api-keys", "decisions.md");
+    // every reader shows what the file holds: finish's `lessons`, the merge summary — and (one lesson of its own) the brief, the retro
+    const fin = S.finishFeature(p, "api-keys", {});
+    const summary = E.decisionSummaryLines(path.join(p, ".specs", "api-keys"), "en");
+    const p1 = demo("target-form");
+    fs.writeFileSync(path.join(p1, "Makefile"), "x");
+    lesson(p1, "api-keys", { title: "make is slow", cause: "tool-friction", target: "./Makefile" });
+    const brief = S.taskBrief(p1, "api-keys", 5, {});
+    S.metrics(p1, "api-keys", { write: true });
+    const retro = rd(p1, ".specs", "api-keys", "retro.md");
+    all("1.41.0 review 1: `repeated` — `./Makefile` / `./gradlew` written in their `./` form group with their twins, as does an absolute target inside the project; a hand-written bare `none` never; no target never; `.specs/` left out in any case where case folds (a case-only twin is one file there, two elsewhere); two lessons in ONE feature never; a target's backticks dropped on write, a hand-written marker's on read; a U+2028 / U+2029 in a target is badTarget, nothing written (got " +
+      js({ rep, w01: [w[0].target, w[1].target], bt: [bt.ok, bt.target, bt.error], sep: sep.map((r) => r.error), hand: [hand.cause, hand.target] }) + ")", {
+      written: w.every((r) => r.ok) && w[0].target === "./Makefile" && w[1].target === "./gradlew" && text.includes("\n- _Target: ./Makefile_\n") &&
+        E.decisionLog(text).find((e) => e.id === w[0].id).target === "./Makefile",
+      readers: fin.lessons && fin.lessons.open.find((x) => x.id === w[0].id).target === "./Makefile" &&
+        summary.some((l) => l.includes("**" + w[0].id + "**") && l.includes("tool-friction → ./Makefile")) &&
+        brief.lessons && brief.lessons.quoted[0].target === "./Makefile" && brief.brief.includes("(tool-friction → ./Makefile)") &&
+        retro.includes("- D-1 (tool-friction → ./Makefile): "),
+      repeated: js(rep) === js(want),
+      backticks: bt.ok === true && bt.target === "src/api-keys/service.js",
+      separator: sep.every((r, i) => r.ok === false && r.error === D().badTarget(js("src/new" + SEPS[i] + "file.js"))) && !SEPS.some((c) => text.includes("src/new" + c)),
+      handMarker: hand.cause === "model-error" && hand.target === "src/a.js",
+    });
+  }
+
+  // --- 1.41.0 review 1 (M13): a brief's lesson budget that overflows skips a longer lesson for an older one that fits ------------------
+  {
+    const p = demo("brief-overflow");
+    for (let i = 1; i <= 4; i++) lesson(p, "api-keys", { title: "L" + i, decision: i === 1 ? "short." : "y".repeat(600), cause: "model-error", target: undefined });
+    const b = S.taskBrief(p, "api-keys", 5, {});
+    all("1.41.0 review 1: the brief's lessons — two long ones fill 1,200 characters but a third, the short oldest fits after the one skipped (got " + js(b.lessons) + ")", {
+      quoted: b.lessons && b.lessons.quoted.map((x) => x.id).join() === "D-4,D-3,D-1",
+      omitted: b.lessons && js(b.lessons.omitted) === js(["D-2"]),
+    });
+  }
+
+  // --- 1.41.0 review 1 (R1-L-9): the open lessons' warning gives a closing call that runs — spec_decide with its title and decision
+  // placeholders, and the CLI line — in each language; the call as printed closes them (the engine, and the CLI in this process) ------
+  {
+    const closing = (lang, slug, ids) => {
+      const s = D(lang).finishOpen(ids, slug);
+      const m = new RegExp('spec_decide \\{name: "' + slug + '", title: ("[^"]+"), decision: ("[^"]+"), supersedes: \\[' + ids.map((x) => js(x)).join(", ") + "\\]\\}").exec(s);
+      const c = s.includes(I.DEV_SPEC + " decide " + slug + " --title ") ? /--title ("[^"]+") --decision ("[^"]+") --supersedes ([^\s).]+)/.exec(s) : null;
+      return { s, mcp: m && { title: JSON.parse(m[1]), decision: JSON.parse(m[2]) }, cli: c && { title: JSON.parse(c[1]), decision: JSON.parse(c[2]), supersedes: c[3] } };
+    };
+    const shapes = ["en", "pt", "es"].map((l) => closing(l, "usage-metering", ["D-1", "D-2"]));
+    const p = demo("finish-close"), p2 = demo("finish-close-cli");
+    for (const x of [p, p2]) { lesson(x, "usage-metering", {}); lesson(x, "usage-metering", { title: "Logs", cause: "guidance-missing", target: ".specs/steering/logging.md" }); }
+    const warn = S.finishFeature(p, "usage-metering", {}).warnings.slice(-1)[0];
+    const en = shapes[0];
+    const viaEngine = en.mcp && S.decide(p, "usage-metering", Object.assign({ supersedes: ["D-1", "D-2"] }, en.mcp));
+    const viaCli = en.cli && cliIn(["decide", "usage-metering", "--title", en.cli.title, "--decision", en.cli.decision, "--supersedes", en.cli.supersedes, "--project", p2], { cwd: p2, env: process.env });
+    const after = [S.finishFeature(p, "usage-metering", {}), S.finishFeature(p2, "usage-metering", {})];
+    all("1.41.0 review 1: the open lessons' warning ends with a closing call that runs — spec_decide {name, title, decision, supersedes} with placeholders and the `decide … --supersedes` CLI line, EN / PT / ES; made as printed, it closes the lessons (got " +
+      js({ warn, shapes: shapes.map((x) => [x.mcp, x.cli]), cli: viaCli && [viaCli.status, viaCli.stderr.slice(0, 200)], after: after.map((f) => f.lessons && f.lessons.open.length) }) + ")", {
+      shapes: shapes.every((x) => x.mcp && x.cli && x.cli.supersedes === "D-1,D-2" && x.cli.title === x.mcp.title && x.cli.decision === x.mcp.decision),
+      warning: warn === en.s,
+      engine: viaEngine && viaEngine.ok === true && js(viaEngine.supersedes) === js(["D-1", "D-2"]),
+      cli: viaCli && viaCli.status === 0,
+      closed: after.every((f) => f.lessons && f.lessons.open.length === 0 && !f.warnings.some((s) => s === en.s)),
+    });
+  }
+
+  // --- 1.41.0 review 1 (R1-L-8): pt-BR derives the lessons' and the gone examples' second person as você ----------------------------
+  {
+    const intro = D("pt-BR").briefLessonsIntro, gone = I.brief("pt-BR").examplesGone("`x`");
+    all("1.41.0 review 1: pt-BR — \"não os repita\", \"nunca os copie, e diga no seu relatório\" (got " + js([intro, gone]) + ")", {
+      intro: /não os repita:$/.test(intro),
+      gone: gone.startsWith("Já não existem — nunca os copie, e diga no seu relatório"),
     });
   }
 };

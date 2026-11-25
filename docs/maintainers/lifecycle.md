@@ -140,14 +140,18 @@ first; how they came to be — the releases and review findings — is in Histor
   <code> [--target <path>]`): `cause` one of `LESSON_CAUSES` (`guidance-missing` · `guidance-wrong` · `example-copied` ·
   `tool-friction` · `model-error` — a string in the schema, the refusal lists them: `causeRequired`, `badCause`); `cause` /
   `target` on another kind → `lessonOnly`; `target` decided on its TEXT (`lessonTarget`: backticks dropped, a control character
-  none, then quality.js `projectPath` — `badTarget`) and, for `guidance-wrong` / `example-copied` (`LESSON_TARGET_THERE`: the
-  wrong line, the copied file exist by definition), `onDisk` (`targetGone`) — stored as its project path. The entry: markers
+  or a line terminator — U+2028 / U+2029 too, `RE_LINE_TERMINATOR`: the marker reader ends the line there — none, then
+  quality.js `projectPath` — `badTarget`) and, for `guidance-wrong` / `example-copied` (`LESSON_TARGET_THERE`: the
+  wrong line, the copied file exist by definition), `onDisk` (`targetGone`) — stored as its project path, a root-level name with
+  no `/` and no `.` in its `./` form (`lessonTargetForm`: `./Makefile` — the result's `target` is what the file holds, and
+  every reader shows it so: finish's `lessons`, the brief, the merge summary, the retro, `repeated`). The entry: markers
   Kind · Date · `_Cause:_` · `_Target:_` · Affects · Supersedes, the paragraph labelled **Lesson** / **Lição** / **Lección**
   (`labels.lesson`). The reader takes `_Cause:_` / `_Target:_` (`RE_LESSON_MARKER_HEAD`) and the label (`RE_LESSON_LABEL`)
   ONLY inside an entry whose `_Kind: lesson_` came first — a decision's `**Lesson:**` paragraph or `_Cause:_` line stays its
   text, as 1.40 read it; `safeSpecText(s, lesson)` escapes them only in a lesson's own text. A later entry's `_Supersedes:_`
   CLOSES a lesson. **Who reads it:** `lessonView` (finish's `lessons` {open, closed, unread} + ONE warning — the last, never a
-  blocker), `briefLessons` (the brief's Lessons part: open ones, newest first, `BRIEF_LESSONS_MAX` 5 within
+  blocker, ending with the closing call that runs: `spec_decide {name, title, decision, supersedes}` with placeholders and the
+  `decide … --supersedes` CLI line), `briefLessons` (the brief's Lessons part: open ones, newest first, `BRIEF_LESSONS_MAX` 5 within
   `BRIEF_LESSONS_CHARS` 1,200), `lessonCounts` / `projectLessons` (spec_metrics — below), the retro (one amendments line each).
   **Who leaves it out:** briefDecisions (never quoted twice), `decision-affects-approved` (a lesson changes nothing the spec
   says), the ADR export (`excluded` reason `lesson`) and the catalog (`catalogDecisions`' `count` is the items it lists — every
@@ -160,9 +164,11 @@ first; how they came to be — the releases and review findings — is in Histor
   `metricsBlocks` → metric.js `walkFeatureStates` — tasks-and-evidence.md → spec_metrics' ONE walk) over every folder,
   ACTIVE and ARCHIVED (`featureDirs`; at most `LESSON_FEATURES_MAX` 1,000 read, `truncated` the rest): + `unread` [{feature, id,
   archived?}] and `repeated` [{cause, target, features, lessons}] — one (cause, target) in two features or more, the target
-  as its project path (`./x` = `x`, case-folded where the file system folds case) and only OUTSIDE `.specs/` (a steering
-  file is every rule's home — "money → tech.md" and "logging → tech.md" are two lessons); no target never repeats. A folder
-  the walk reads keeps its `view`: the walk runs BEFORE the features' own metrics and `viewOf(dir)` hands an active folder's to
+  as its project path (`./x` = `x`, the group showing a root-level name in its `./` form; a bare word a hand edit wrote —
+  `none`, `Makefile` — is no path: a doubt, never grouped; case-folded where the file system folds case) and only OUTSIDE
+  `.specs/` (tested folded too: a steering file is every rule's home — "money → tech.md" and "logging → tech.md" are two
+  lessons); no target never repeats. A folder the walk reads keeps its `view`: the walk runs BEFORE the features' own
+  metrics and `viewOf(dir)` hands an active folder's to
   that feature's (`featureMetrics(…, lv)`), one read of each decisions.md — a COUNT (12-lifecycle-lessons: lessons in an active
   and an archived feature make exactly the fs calls of a twin without them, each decisions.md read once, cached or not).
   **No state key:** the entry is the record (why: conventions.md → History, Merging the spec state, 1.41.0).
@@ -321,7 +327,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   tools/list characters against the round's 235 reserve — the string form, +64), the `causes` display names (the codes print as
   codes), the header's extra sentence. **1.40 garbles a lesson:** it reads `_Kind: lesson_` as a decision, its
   `_Cause:_` / `_Target:_` lines become the Decision text (body fallback) and the `**Lesson:**` paragraph joins Context — an
-  older engine exports it as an ADR (the CHANGELOG says so).
+  older engine exports it as an ADR (the CHANGELOG says so). Review 1: `repeated` never grouped a root-level extensionless file
+  (`./Makefile` was stored `Makefile`, which projectPath refuses — R1-L-1: the WRITER keeps the `./` form; a reader guessing
+  `./` before a bare word grouped a hand-written `_Target: none_` too, so none guesses) and counted `.SPECS/` where case folds
+  (R1-L-7); a U+2028 target was written and read back as none (R1-L-6); the finish warning's closing call lacked the title
+  and decision spec_decide requires, and had no CLI line (R1-L-9); fixtures for the mutants 1.41.0 left alive (M18 one
+  feature, M13 the overflowing brief budget, M6 the key's fold, M7 / M26 the backticks — R1-L-4).
 
 ### Forecasts and cross-feature overlap
 - **1.14** — sizes, tick times, velocity, ETAs and the cross-feature overlaps. Tasks ticked before 1.14 have no tick time (the

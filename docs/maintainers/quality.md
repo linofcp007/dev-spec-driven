@@ -2130,22 +2130,31 @@ view needs (the detail points there), tooling-reference.md's id.
   path (`exemplarPath`: backticks stripped, a markdown link unwrapped); it is gone only when `projectPath` reads it as a
   project path with a file extension (`RE_EXEMPLAR_FILE`), its first segment is on disk and the file is not. Everything else
   — a folder, a package, an alias, a root-level file, a gone first folder, `file.py::func`, `x.ts#name`, a URL, prose — is
-  not judged; no document rule (a `docs/runbook-template.md` exemplar is a file to copy). One reading per cell.
+  not judged; no document rule (a `docs/runbook-template.md` exemplar is a file to copy). One reading per cell. **A list is a
+  doubt** (`exemplarMany`, 1.41.0 review 1): a cell holding more than one path-like word (a `/`, or a `.` before a letter or
+  digit) — in two code spans, or in two parts split by `,` / `;` / ` and ` / ` e ` / ` y ` (`RE_EXEMPLAR_LIST`) — is never
+  judged gone (read as ONE path, "`a.js`, `b.js`" and "src/ui/, src/ui/Card.tsx" were gone files), and the brief quotes it
+  as written; a note beside one path ("x.ts (see README.md)", "x.ts (the old one, with its verify)") is no list.
 - **Doctor `reference-examples`** (`referenceExamplesCheck`, project-level like `steering`): a warn naming the gone files
   (the first `REF_GONE_LISTED` 6, `+N more`) and / or the rows past 30; a pass with the row count, or saying a section
   without a table is not read; no entry without the section or with slot rows only. Never a fail, never an approval check.
   **Lean = full:** a `last: true` entry under cross-feature-acs' rule — the lean doctor (next_action's, finish's) runs it
   while every other check passes and skips it once one warns or fails (it only warns: the verdict can't change). spec_upgrade
   leaves it out of `attention` (`REF_EXAMPLES_CHECK`, beside `UI_STATES_CHECK`): every feature reads the same project table.
+  **Read once per call** (`referenceExamplesRead`): the table and each row's gone file, memoized in the read-cache scope under
+  `REF_EXAMPLES_MEMO` + the project's key (friction's timings memo), held with structure.md's text — a write of it in the call
+  (forgetCached drops the text) reads the table again; each feature's doctor words it in its own language.
 - **The brief's part** (`briefExamples(projectDir, targets)` — targets: `briefTargets`, the paths a fileMatch pattern
   matches): a row whose Applies-to globs (split on blanks / `,` / `;`, backticks dropped) match a target as `steeringGlobMatch`
   does (a folder as `dir/`), or — without a glob — whose Copy file sits in a target's folder (a file target's folder, a
-  folder target itself, case-folded where the file system folds case); a gone file is named (`gone`), never quoted; at most
+  folder target itself, case-folded where the file system folds case); an Applies-to FOLDER matches nothing without `/**`
+  (the references say so — no folder rule of its own); a gone file is named (`gone`), never quoted; a list cell is quoted
+  as written (`asWritten`: the renderer prints it without a code span of its own around it); at most
   `REF_BRIEF_ROWS` (6) rows within `REF_BRIEF_CHARS` (1,200), `omitted` counts the rest; rows but none for the task → the
   count line. `null` without a real row.
 - **Cost:** a count (15-quality-reference-examples.js, `fsCalls`): 30 rows of a 4-segment gone path → exactly 2 lstats per
   row under `src/` (the first-segment read, then the walk to the first missing segment); a lean doctor that already warns
-  reads none.
+  reads none; spec_upgrade over 6 features lstats exactly what it does over 2 (the memo — 714 against 238 before it).
 
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
@@ -4057,4 +4066,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `pathWords` / `stalePath` / `DS_PATH_WORDS` untouched, no `words` knob, no check-vs-stalePath ratio guard (it measured
   the parse only — 1.3 on Linux) but an exact lstat count; a gone predicate of its own (ONE path per cell, no RE_DOC_EXT);
   lean = full (the design's full-doctor-only `applies: !c.lean` would have made next_action say pass where spec_doctor
-  warns). Not built: the steering stub's section and slot row (CRIT_X D9: the default project has no table).
+  warns). Not built: the steering stub's section and slot row (CRIT_X D9: the default project has no table). Review 1: a Copy
+  cell listing two files was read as ONE gone path — a false warn, and the brief named a garbled path gone (R1-L-2: a list is
+  a doubt, quoted as written; path-like words, not file names only — a folder-and-file list was the same false warn);
+  spec_upgrade lstat'ed every Copy path's folders once per feature (R1-L-3: 30 rows, 40 features — 131 → 7,291 lstats, +46 %;
+  memoized per call); an Applies-to folder without `/**` matches nothing (R1-L-5: said in the references, no new matching);
+  a fixture for the brief's case fold (M22).

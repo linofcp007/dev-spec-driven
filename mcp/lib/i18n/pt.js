@@ -3337,7 +3337,7 @@ const msg = {
       briefLessonsHeading: "## Lições das revisões desta feature",
       briefLessonsIntro: "Achados confirmados de tarefas anteriores e porque aconteceram (decisions.md) — não os repitas:",
       // spec_finish: as lições abertas — a ÚNICA pergunta do fecho (commands/spec-finish.md), nunca um bloqueio
-      finishOpen: (ids, slug) => `${ids.length} lição(ões) à espera da decisão do utilizador (${ids.join(", ")}): propõe todas as alterações numa ÚNICA pergunta, edita cada ficheiro uma só vez e depois fecha-as com uma decisão que as substitua (spec_decide {name: "${slug}", supersedes: [${ids.map((x) => JSON.stringify(x)).join(", ")}]}).`,
+      finishOpen: (ids, slug) => `${ids.length} lição(ões) à espera da decisão do utilizador (${ids.join(", ")}): propõe todas as alterações numa ÚNICA pergunta, edita cada ficheiro uma só vez e depois fecha-as com uma decisão que as substitua (spec_decide {name: "${slug}", title: "Lições de ${slug}: alterado …", decision: "<por lição: aplicada → alvo, ou recusada → motivo>", supersedes: [${ids.map((x) => JSON.stringify(x)).join(", ")}]} · ${DEV_SPEC} decide ${slug} --title "Lições de ${slug}: alterado …" --decision "<por lição: aplicada → alvo, ou recusada → motivo>" --supersedes ${ids.join(",")}).`,
       supersedesNote: (list) => `substitui ${list}`,
       prHeading: "## Decisões",
       catalogLine: (n, list) => `Decisões (${n}): ${list}`,

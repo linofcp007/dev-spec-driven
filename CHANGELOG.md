@@ -24,10 +24,11 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   implementer each finding's cause (its fix report's `### Causes`, never a guess); the controller checks the three a file
   can show before recording one, and a rule the user states at a checkpoint goes straight to steering, no lesson. Every
   later brief of the feature quotes its open lessons (at most 5, 1,200 characters); `spec_finish` lists them (`lessons`
-  {open, closed, unread}) in ONE warning, the last, never a blocker; `spec_metrics` counts them by cause, per feature and
-  for the project over active AND archived features, with `repeated` — one cause and file in two features or more (a file
-  outside `.specs/`); a retro's amendments start from them. `/spec-review feedback` records the cause of each confirmed
-  fix too. A lesson, and the decision that only closes lessons, is neither an ADR nor a catalog row.
+  {open, closed, unread}) in ONE warning, the last, never a blocker, ending with the closing call (`spec_decide` and its
+  `decide … --supersedes` CLI line, the title and decision as placeholders); `spec_metrics` counts them by cause, per
+  feature and for the project over active AND archived features, with `repeated` — one cause and file in two features or
+  more (a file outside `.specs/`); a retro's amendments start from them. `/spec-review feedback` records the cause of each
+  confirmed fix too. A lesson, and the decision that only closes lessons, is neither an ADR nor a catalog row.
 - **The finish batch — ONE question.** `/spec-finish` asks one question for every warning that needs the user, in this
   order: dev-guardian's, test integrity's, the metrics', the lessons'. Per lesson its amendment, grouped by target — a
   steering line (`constitution.md`, `tech.md` / `structure.md`, a track's file, `ui.md`'s Taste), a Reference Examples row
@@ -39,8 +40,9 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   `/guardian-improve` writes the same key.
 - **Reference Examples.** An optional `## Reference Examples` table in `.specs/steering/structure.md` — Pattern · Copy ·
   Applies to (PT `Exemplos de Referência`, ES `Ejemplos de Referencia`): the files agents copy the shape of. A task's brief
-  quotes the rows for its files (an Applies-to glob that matches, or the Copy file's own folder; at most 6, 1,200
-  characters; a gone file named, never quoted); doctor's project-level `reference-examples` warns when a Copy file is gone
+  quotes the rows for its files (an Applies-to glob that matches — a folder needs `/**` —, or the Copy file's own folder;
+  at most 6, 1,200 characters; a gone file named, never quoted; a cell naming several paths quoted as written, never
+  judged); doctor's project-level `reference-examples` warns when a Copy file is gone
   or rows past the first 30 are not read — never a fail, never an approval check, never an upgrade to-do. The steering stub
   has no such section: a project without the table sees nothing.
 - **METRIC lines — numbers that get worse while the tests stay green.** A project check prints
@@ -86,8 +88,8 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   below it)". A `--compact` report lists the blocking findings only, so none is named there.
 
 ### Changed
-- **finish's warnings** come in the batch's order: dev-guardian's (the findings below the gate the last of them), the
-  METRIC warnings, the others as before, the lessons' last.
+- **finish's warnings:** the new ones come in the batch's order — dev-guardian's findings below the gate the last of
+  dev-guardian's warnings, then the METRIC warnings, …, the lessons' the very last; every warning 1.40 gave keeps its place.
 - `spec_decide`'s `kind` takes `lesson`, with `cause` and `target` (a `cause` / `target` on another kind is refused,
   nothing written); `decisions.md` entries of `_Kind: lesson_` carry `_Cause:_` / `_Target:_` and a **Lesson** / **Lição**
   / **Lección** paragraph, read only inside a lesson (a decision's own `**Lesson:**` paragraph reads as in 1.40).
@@ -132,8 +134,8 @@ deleted file failed trace on 43 % of real test files), a cause enum in the tool 
 bare `lastIndexOf` of it (a split would be 6–9×). finish without a reading opens no other feature; with readings it opens
 each other feature's state once. `spec_metrics` reads each feature's state and `decisions.md` once — the lessons ride the
 metrics' one walk. The findings below dev-guardian's gate make no file-system call; `reference-examples` `lstat`s each
-Copy path's folders, never lists one (the lean doctor skips it once another check warns); the timings log is read once
-per engine call (at most 4 × 64 KB).
+Copy path's folders once per engine call (spec_upgrade over 6 features as over 2), never lists one (the lean doctor skips
+it once another check warns); the timings log is read once per engine call (at most 4 × 64 KB).
 
 ### Tests
 - `node mcp/test.js` 3107 assertions (was 3014), `node cli/test-cli.js` 716 (was 707). New files by area: 09

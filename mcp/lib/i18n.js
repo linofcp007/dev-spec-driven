@@ -152,10 +152,11 @@ function renderBrief(d, lang) {
     if (r.files.length && (r.more || r.truncated)) push(t.reuseFilesMore(r.more, !!r.truncated));
   }
   // 1.41: structure.md's Reference Examples rows for this task's files (a gone file named, never quoted), or that none is for them
+  // (1.41.0 review 1: a cell naming several files — asWritten — is quoted as the table wrote it, its own code spans kept)
   if (d.examples) {
     const x = d.examples;
     if (x.quoted.length || x.gone.length) {
-      push("", t.examples, t.examplesRule(x.file), ...x.quoted.map((r) => `- **${r.pattern || "—"}** — \`${r.copy}\`` + (r.appliesTo ? ` (${r.appliesTo})` : "")));
+      push("", t.examples, t.examplesRule(x.file), ...x.quoted.map((r) => `- **${r.pattern || "—"}** — ` + (r.asWritten ? r.copy : "`" + r.copy + "`") + (r.appliesTo ? ` (${r.appliesTo})` : "")));
       if (x.gone.length) push(t.examplesGone(x.gone.map((p) => "`" + p + "`").join(", ")));
       if (x.omitted) push(t.examplesOmitted(x.omitted, x.file));
     } else push("", t.examples, t.examplesNoMatch(x.total, x.file));
