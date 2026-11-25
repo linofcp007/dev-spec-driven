@@ -2251,7 +2251,7 @@ module.exports = { normalizeEvidence, taskStamp, isRecord, evidenceRecords, ownR
   expectFailRefusal, expectFailResult, gitEvidence, OBSERVED_MAX_BYTES, evidenceMode, evidenceRule, evidenceModeInput,
   setEvidenceMode, observedRun, observedAny, observedStamp, stripCdPrefix, runRootStamp, proofIncomplete, runProvesVerify,
   observeRun, observedNorm, observedBodies, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks,
-  appendLog, readLogTail, observedKey, OBSERVED_MAX_COMMAND, validCheckName, // 1.41 friction.js: the one appender / tail reader, the run's key, a check name
+  appendLog, readLogTail, validCheckName, // 1.41 friction.js: the one appender and tail reader of the .execution/ logs, a check-shaped name
   fastCheckOf, fastCheckInput, fastPlan, setFastCheck, fastCheckStatus, fastCheckOffer, fixerCommand, // 1.36 the fast check (meta.fastCheck)
   suiteStatus, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, parseGitLog, taskCommits,
   unverifiedLabel, specChangedSince, untickedSince, __link };

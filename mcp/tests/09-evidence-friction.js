@@ -103,6 +103,18 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
     const oneOf = S.recordTiming(two, { check: "b", command: "npm test", exitCode: 0, ms: 2, by: "cli" }).timed;
     ok(js(both) === '["a","b"]' && js(oneOf) === '["b"]' && js(lines(two).map((l) => [l.check, l.ms])) === js([["a", 1], ["b", 1], ["b", 2]]),
       "1.41 friction: a run of a command two checks share is timed for both; finish --run's `check` times the one it ran (got " + js([both, oneOf]) + ")");
+    // the matcher decides, never the text: `npm test` is in `npm test -- --coverage`'s text but no run of it; a worktree's `cd <its root> &&`
+    // (one of the run's roots — the hook passes them) is stripped as observeRun strips it; a run that throws is nothing (never a throw)
+    const cov = project("proj-fr-cov", { cov: "npm test -- --coverage" });
+    const wt = path.join(tmp, "proj-fr-cov-wt");
+    fs.mkdirSync(wt, { recursive: true });
+    const sub = S.recordTiming(cov, { command: "npm test", exitCode: 0, ms: 1, by: "cli" }).timed;
+    const viaWt = S.recordTiming(cov, { command: "cd " + wt + " && npm test -- --coverage", roots: [wt], cwd: wt, exitCode: 0, ms: 2, by: "hook" }).timed;
+    const thrown = safe(() => S.recordTiming(cov, { get command() { throw new Error("boom"); }, exitCode: 0, ms: 3, by: "cli" }));
+    all("1.41 friction: the matcher decides, never the text (a check whose command holds the run's text is no check run); a worktree's cd prefix (one of the run's roots) is stripped; a run that throws is nothing (got " +
+      js([sub, viaWt, thrown]) + ")", {
+      sub: () => js(sub) === "[]", wt: () => js(viaWt) === '["cov"]', thrown: () => js(thrown) === js({ timed: [] }),
+    });
     // W12: observeRun forwards a measured run (by: cli for done --run's event, hook otherwise) — none without ms
     const o = project("proj-fr-observe");
     const o1 = S.observeRun(o, { command: "npm test", exitCode: 0, event: "cli", ms: 10, cwd: o });
@@ -153,7 +165,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
     ], checks);
     // malformed lines: skipped (else type_check would have 3+ runs)
     fs.appendFileSync(tfile(p), [{ check: "type_check", checkCmd: checks.type_check, exitCode: 0, ms: "5" }, { check: "type_check", checkCmd: checks.type_check, exitCode: 0, ms: -1 },
-      { check: "type_check", exitCode: 0, ms: 5 }, { check: "type_check", checkCmd: checks.type_check, exitCode: "0", ms: 5 }].map((x) => js(x) + "\n").join("") + "not json\n");
+      { check: "type_check", checkCmd: checks.type_check, exitCode: 0, ms: 90000000 }, { check: "type_check", exitCode: 0, ms: 5 }, { check: "nope2", exitCode: 0, ms: 5 },
+      { check: "type_check", checkCmd: checks.type_check, exitCode: "0", ms: 5 }].map((x) => js(x) + "\n").join("") + "not json\n");
     const st = safe(() => E.frictionStatus(p, "en"));
     eq(st, {
       checks: [
@@ -203,6 +216,13 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
     const size = fs.statSync(tfile(big)).size;
     const read = safe(() => E.frictionStatus(big, "en").read);
     ok(size > 4 * E.TIMINGS_MAX_BYTES && read === 4 * E.TIMINGS_MAX_BYTES, "1.41 friction: the reader reads a log's newest 4 × TIMINGS_MAX_BYTES bytes at most (got " + js({ size, read }) + ")");
+    // the durations as every language prints them, and the bounds' line
+    const fmt = require(path.join(__dirname, "lib", "i18n.js")).fmtMs;
+    eq([850, 999.4, 999.6, 4200, 9949, 9950, 48000, 59600, 190000, 3599600, 3600000, 3900000, -1, NaN, "5"].map((v) => fmt(v)),
+      ["850 ms", "999 ms", "1 s", "4.2 s", "9.9 s", "10 s", "48 s", "1 min", "3 min 10 s", "1 h", "1 h", "1 h 5 min", "—", "—", "—"],
+      "1.41 friction: fmtMs — ms below a second, one decimal below 10 s, whole seconds, min + s, h + min (a zero part left out), — for no number");
+    ok(js(E.frictionLines({ checks: [], invalid: [], truncated: true }, "en")) === js(["    ▲ " + F.truncated]) && js(E.frictionLines(null, "en")) === "[]",
+      "1.41 friction: the CLI says a bound that dropped markers (truncated); nothing without friction");
   }
 
   { // H1–H5: the observe hook — Claude Code's duration_ms on a check's run → a timings line (by hook, rounded); none without it, none for a
@@ -271,8 +291,9 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
       mcp: () => js(mcp.friction) === js({ over }) && mcp.recommendation === na.recommendation,
       allDone: () => na.recommendation.startsWith(ms.allDone(f.slug).slice(0, 20)),
     });
-    // filed: a backlog entry (case-insensitive, by slug: Friction-Type_Check) or a feature — active, then archived — stops each check's hint
-    S.backlog(p, "add", "Friction-Type_Check", "slow types");
+    // filed: a backlog entry (by slug, as the backlog matches names: "Friction Type_Check") or a feature — active, then archived — stops each
+    // check's hint
+    S.backlog(p, "add", "Friction Type_Check", "slow types");
     const one = S.nextAction(p, f.slug);
     S.createFeature(p, { name: "friction-test", tracks: ["core"] });
     const filed = S.nextAction(p, f.slug);
@@ -280,7 +301,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
     fs.mkdirSync(archived, { recursive: true });
     fs.renameSync(path.join(p, ".specs", "friction-test"), path.join(archived, "friction-test"));
     const arch = S.nextAction(p, f.slug);
-    all("1.41 friction: the hint stops per check once the backlog holds friction-<check> (case-insensitive, by slug) or a feature answers to it — active or archived (got " +
+    all("1.41 friction: the hint stops per check once the backlog holds friction-<check> (by slug) or a feature answers to it — active or archived (got " +
       js([one.friction, filed.friction, arch.friction, filed.recommendation.slice(-200)]) + ")", {
       backlog: () => js(one.friction) === js({ over: [over[0]] }) && !one.recommendation.includes("friction-type_check"),
       feature: () => filed.step === "finish" && filed.friction === undefined && !filed.recommendation.includes(F.naHint("", "").slice(0, 10)),
@@ -304,13 +325,36 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
     const diff = minus(count(withText), count(plainText));
     const noChecks = path.join(tmp, "proj-fr-next-nochecks");
     S.initProject(noChecks, ["core"], "en");
-    const hintCalls = fsCalls(noChecks + path.sep, () => S.withReadCache(() => { E.loadRoadmap(noChecks); E.frictionHint(noChecks, "en"); }));
+    const hintCalls = fsCalls(noChecks + path.sep, () => S.withReadCache(() => { E.loadRoadmap(noChecks); E.frictionHint(noChecks, "en"); E.frictionStatus(noChecks, "en"); }));
     const loadCalls = fsCalls(noChecks + path.sep, () => S.withReadCache(() => { E.loadRoadmap(noChecks); }));
-    all("1.41 friction: a check within its budget (or with too few runs) gives no hint; the cost is a COUNT — with _Budget:_ lines next_action makes the fs calls of the same call without them plus ONE open (timings.jsonl); without meta.checks the hint reads nothing (got " +
+    all("1.41 friction: a check within its budget (or with too few runs) gives no hint; the cost is a COUNT — with _Budget:_ lines next_action makes the fs calls of the same call without them plus ONE open (timings.jsonl); without meta.checks the hint and the status read nothing (got " +
       js({ naW: [naW.step, naW.friction], diff, hintCalls, loadCalls }) + ")", {
       none: () => naW.step === "finish" && naW.friction === undefined,
       count: () => js(diff) === js({ openSync: 1 }),
       noChecks: () => js(hintCalls) === js(loadCalls),
+    });
+    // once per call: spec_upgrade runs next_action per feature — two features at their finish step open timings.jsonl ONCE; a timing written
+    // in the same call drops the memo (the next read sees it)
+    tech(w, withText); // (the count above left the plain text)
+    const fw2 = S.createFeature(w, { name: "Logout", tracks: ["core"] });
+    for (const [n, t] of [["classification.md", CLASS], ["requirements.md", REQ], ["design.md", DESIGN], ["tasks.md", TASKS]]) fs.writeFileSync(path.join(fw2.dir, n), t);
+    S.approvePhase(w, fw2.slug, null, "u", { through: "tasks" });
+    S.completeTask(w, fw2.slug, 1, run);
+    S.completeTask(w, fw2.slug, 2, run);
+    const atFinish = [S.nextAction(w, fw.slug).step, S.nextAction(w, fw2.slug).step];
+    // (the opens of this project's timings.jsonl by name — spec_upgrade may spell the project's folder another way than `w`)
+    const opens = (fn) => { const orig = fs.openSync; let n = 0; fs.openSync = function (f, ...rest) { if (typeof f === "string" && path.basename(f) === "timings.jsonl" && f.includes("proj-fr-next-within")) n++; return orig.call(this, f, ...rest); };
+      try { fn(); } finally { fs.openSync = orig; } return n; };
+    const upg = { openSync: opens(() => S.specUpgrade(w)) };
+    const inScope = S.withReadCache(() => {
+      const before = E.frictionStatus(w, "en").checks.find((c) => c.check === "type_check").runs;
+      S.recordTiming(w, { command: "npx tsc --noEmit", exitCode: 0, ms: 30000, by: "cli" });
+      return [before, E.frictionStatus(w, "en").checks.find((c) => c.check === "type_check").runs];
+    });
+    all("1.41 friction: the timings are read once per engine call (spec_upgrade over two features at their finish step: one open) and a timing written in the call is seen by its next read (got " +
+      js({ atFinish, upg, inScope }) + ")", {
+      once: () => js(atFinish) === '["finish","finish"]' && js(upg) === js({ openSync: 1 }),
+      fresh: () => js(inScope) === "[2,3]",
     });
   }
 };

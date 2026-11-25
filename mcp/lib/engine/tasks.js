@@ -1344,14 +1344,7 @@ function taskMarkerSpans(line) {
 // 1.41 the same reader for a marker of ANOTHER label — steering/tech.md's `_Budget: <check> <duration>_` lines (engine/friction.js):
 // one closer grammar, never a second copy (the task markers' labels never read it, nor it theirs). Not memoized (a few lines, read
 // once per call). label: a plain word (a regex-safe constant).
-const LABEL_OPEN_RE = new Map();
-function labelMarkerSpans(line, label) {
-  const s = String(line == null ? "" : line);
-  if (!s.includes(":")) return NO_MARKER_SPANS;
-  let re = LABEL_OPEN_RE.get(label);
-  if (!re) LABEL_OPEN_RE.set(label, (re = markerOpenRe([label])));
-  return scanMarkerSpans(s, re);
-}
+const labelMarkerSpans = (line, label) => scanMarkerSpans(String(line == null ? "" : line), markerOpenRe([label]));
 function scanMarkerSpans(s, open = RE_TASK_MARKER_OPEN) {
   const out = [];
   // The characters inside inline code spans (a backtick run closed by a run of the same length — backtickRuns, linear).

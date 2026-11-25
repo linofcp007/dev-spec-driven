@@ -22,12 +22,12 @@
 const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
+const { CTX } = require("./ctx.js"); // load time — the read-cache scope the timings read is memoized in
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let appendLog, isDirSafe, isObj, labelMarkerSpans, locateFeatures, OBSERVED_MAX_COMMAND, observedBodies, observedKey, observedNorm, projectChecks,
-  readIfExists, readLogTail, readRoadmap, runProvesVerify, scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic;
-function __link(E) { ({ appendLog, isDirSafe, isObj, labelMarkerSpans, locateFeatures, OBSERVED_MAX_COMMAND, observedBodies, observedKey, observedNorm,
-  projectChecks, readIfExists, readLogTail, readRoadmap, runProvesVerify, scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName,
-  writeFileAtomic } = E); }
+let appendLog, isObj, labelMarkerSpans, locateFeatures, observedBodies, observedNorm, projectChecks, readCacheKey, readIfExists, readLogTail,
+  readRoadmap, runProvesVerify, scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic;
+function __link(E) { ({ appendLog, isObj, labelMarkerSpans, locateFeatures, observedBodies, observedNorm, projectChecks, readCacheKey, readIfExists,
+  readLogTail, readRoadmap, runProvesVerify, scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic } = E); }
 
 const TIMINGS_LOG = "timings.jsonl";
 const TIMINGS_MAX_BYTES = 64 * 1024; // past this the log keeps, per check, its newest FRICTION_KEEP passing lines (read: 4 × this at most)
@@ -40,9 +40,20 @@ const BUDGET_TEXT_MAX = 256 * 1024; // the characters of tech.md read for them (
 const PLATFORM_PREFIX = "friction-"; // the platform item's name: friction-<check> (a backlog entry or a feature, by slug)
 
 const timingsFile = (projectDir) => path.join(specsRoot(projectDir), ".execution", TIMINGS_LOG);
-// a timings line as the writer writes it (a hand-made or garbled one is skipped)
-const timingLine = (e) => typeof e.check === "string" && typeof e.checkCmd === "string" && Number.isInteger(e.exitCode) &&
-  Number.isInteger(e.ms) && e.ms >= 0 && e.ms <= FRICTION_MAX_MS;
+// a timings line as the writer writes it — a hand-made or garbled one is skipped (its check and exit code are read by a compare with
+// meta.checks' command and with 0: no other test is needed for them)
+const timingLine = (e) => typeof e.checkCmd === "string" && Number.isInteger(e.ms) && e.ms >= 0 && e.ms <= FRICTION_MAX_MS;
+// The log's records ONCE per engine call (spec_upgrade runs next_action per feature): memoized in the read-cache scope under a key of
+// its own, dropped by recordTiming's append. → readLogTail's { records, read }.
+const TIMINGS_MEMO = "\u0000timings:";
+function readTimings(projectDir) {
+  const file = timingsFile(projectDir);
+  const k = CTX.READ_CACHE ? TIMINGS_MEMO + readCacheKey(file) : null;
+  if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
+  const v = readLogTail(file, 4 * TIMINGS_MAX_BYTES);
+  if (k !== null) CTX.READ_CACHE.set(k, v);
+  return v;
+}
 
 // A budget's duration → ms, or null: a number (≤ 6 digits, ≤ 3 decimals), optional blanks, a unit — ms · s · m / min (minutes) · h,
 // any case; 1 ms – 24 h.
@@ -71,7 +82,7 @@ function frictionBudgets(projectDir, checks) {
   if (head.length > BUDGET_TEXT_MAX) { head = head.slice(0, BUDGET_TEXT_MAX); out.truncated = true; }
   const lines = scanTaskLines(head);
   let read = 0;
-  for (let i = 0; i < lines.length && !(read > BUDGET_MARKERS_MAX); i++) {
+  for (let i = 0; i < lines.length; i++) {
     if (lines[i].code) continue;
     const vis = lines[i].vis;
     for (const sp of labelMarkerSpans(vis, "Budget")) {
@@ -92,13 +103,13 @@ function frictionBudgets(projectDir, checks) {
 // One measured run → a timings line per project check it is a run of → { timed: [check names] }. run: {command, exitCode, ms, by:
 // "cli" | "hook", at?, cwd?, roots?, tool?, check?} — `check` (finish --run: the check it ran, still in meta.checks) names it; else every
 // check whose command the run proves AS ONE COMMAND (runProvesVerify — never observeRun's plain-step fallback: one step's time is no
-// check's), its leading `cd <root> &&` stripped as observeRun strips it (stripCdPrefix, the same roots). ms: rounded, 0 – FRICTION_MAX_MS,
-// else nothing. .specs/ must exist (never created); the line goes through the appender that makes .execution/ ignore itself (appendLog).
-// Never throws.
+// check's), its leading `cd <root> &&` stripped as observeRun strips it (stripCdPrefix, the same roots — a worktree's). ms: rounded,
+// 0 – FRICTION_MAX_MS, else nothing. Without .specs/ nothing is written (appendLog never creates it, and there is no check); the line goes
+// through the appender that makes .execution/ ignore itself. Never throws.
 function recordTiming(projectDir, run) {
   try {
     const pdir = path.resolve(projectDir);
-    if (!run || typeof run !== "object" || !isDirSafe(specsRoot(pdir))) return { timed: [] };
+    if (!run || typeof run !== "object") return { timed: [] };
     const ms = typeof run.ms === "number" && Number.isFinite(run.ms) ? Math.round(run.ms) : NaN;
     if (!(ms >= 0 && ms <= FRICTION_MAX_MS) || !Number.isInteger(run.exitCode) || (run.by !== "cli" && run.by !== "hook")) return { timed: [] };
     const { checks } = projectChecks(pdir);
@@ -106,8 +117,8 @@ function recordTiming(projectDir, run) {
     if (typeof run.check === "string") hit = checks.filter((c) => c.name === run.check);
     else {
       const roots = [pdir, ...(Array.isArray(run.roots) ? run.roots : [])];
-      const key = observedKey(stripCdPrefix(run.command, roots, typeof run.cwd === "string" && run.cwd ? run.cwd : pdir));
-      const bodies = key && key.length <= OBSERVED_MAX_COMMAND ? observedBodies(key) : [];
+      const key = stripCdPrefix(run.command, roots, typeof run.cwd === "string" && run.cwd ? run.cwd : pdir);
+      const bodies = observedBodies(key);
       // (the cheap text test first — the observe hook's pre-filter reading — then the matcher)
       if (bodies.length) hit = checks.filter((c) => { const t = observedNorm(c.command); return bodies.every((b) => t.includes(b)) && runProvesVerify({ command: key }, [c.command], pdir); });
     }
@@ -119,6 +130,7 @@ function recordTiming(projectDir, run) {
       const line = { check: c.name, checkCmd: c.command, exitCode: run.exitCode, ms, at, by: run.by, ...tool };
       if (appendLog(exDir, TIMINGS_LOG, line, (file) => trimTimings(file, checks))) timed.push(c.name);
     }
+    if (CTX.READ_CACHE) CTX.READ_CACHE.delete(TIMINGS_MEMO + readCacheKey(timingsFile(pdir))); // this call's memo may be stale now
     return { timed };
   } catch {
     return { timed: [] };
@@ -126,11 +138,9 @@ function recordTiming(projectDir, run) {
 }
 // Past TIMINGS_MAX_BYTES: per check meta.checks holds now, the newest FRICTION_KEEP passing lines stamped with its command now — failed
 // runs, a changed command's lines and a removed check's dropped (no reader counts them); replaced atomically. Per check, never by newest
-// bytes. Two appends while one trims can lose a line (one run fewer in a median).
+// bytes. Two appends while one trims can lose a line (one run fewer in a median). (Called by appendLog, which catches.)
 function trimTimings(file, checks) {
-  let size;
-  try { size = fs.statSync(file).size; } catch { return; }
-  if (size <= TIMINGS_MAX_BYTES) return;
+  if (fs.statSync(file).size <= TIMINGS_MAX_BYTES) return;
   const live = new Map(checks.map((c) => [c.name, c.command]));
   const kept = new Map();
   const keep = [];
@@ -152,7 +162,7 @@ function trimTimings(file, checks) {
 function checkTimings(projectDir, checks) {
   const cmd = new Map(checks.map((c) => [c.name, c.command]));
   const runs = new Map(checks.map((c) => [c.name, []]));
-  const { records, read } = readLogTail(timingsFile(projectDir), 4 * TIMINGS_MAX_BYTES);
+  const { records, read } = readTimings(projectDir);
   for (let i = records.length - 1; i >= 0; i--) {
     const e = records[i];
     if (!timingLine(e) || e.exitCode !== 0 || cmd.get(e.check) !== e.checkCmd) continue;
