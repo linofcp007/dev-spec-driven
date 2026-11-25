@@ -2584,7 +2584,7 @@ const msg = {
         "tradeoffs-missing": "sin sección Alternativas y Compensaciones — doctor avisa (design-tradeoffs) en todas las funciones creadas con ella.",
         "risks-missing": "sin sección Riesgos — doctor avisa (design-risks) en todas las funciones creadas con ella.",
         "reuse-missing": "sin sección Reutilización e Integración — doctor avisa (design-reuse) en todas las funciones creadas con ella.",
-        "silent-missing": "sin sección Regresiones Silenciosas — doctor avisa (design-silent-regressions) en todas las funciones de tamaño m / l creadas con ella.",
+        "silent-missing": "sin sección Regresiones Silenciosas — una función de tamaño m / l creada con ella recibe la del built-in al final (doctor avisa design-silent-regressions hasta que se responda); añádela donde la plantilla la quiera.",
         "no-criteria": "ningún criterio de aceptación (una línea US-n.AC-m con DEBE) — nada que seguir para EARS, trace_check o el plan de pruebas.",
         "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — doctor falla en todas las funciones creadas con ella.`,
         "phantom-ac": (ids, file) => `cita IDs de AC que ${file} no define: ${ids} — trace_check los reporta como fantasmas.`,

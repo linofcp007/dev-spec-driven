@@ -681,7 +681,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     const tothers = [S.createFeature(pt, "Tpl s", ["core"], "x", undefined, "en", undefined, { size: "s" }), S.createFeature(pt, "Tpl none", ["core"], "x", undefined, "en")];
     for (const f of [...tml, ...tothers]) { for (const a of ["classification.md", "requirements.md"]) fill(path.join(f.dir, a)); approveBefore(pt, f.slug, "design"); }
     const tFresh = tdoc(tml[0].slug);
-    const tdm = tml[0], tText = designOf(tdm);
+    const tTexts = tml.map(designOf); // as scaffolded (the first is answered below)
+    const tdm = tml[0], tText = tTexts[0];
     fs.writeFileSync(path.join(tdm.dir, "design.md"), tText.replace(/## Silent Regressions[\s\S]*$/, "## Silent Regressions\n| Metric | Why | Printed by |\n|---|---|---|\n| `bundle-size` | a chart | size |\n"));
     const tAnswered = tdoc(tdm.slug);
     const po = path.join(tmp, "m41-design-template-own");
@@ -691,8 +692,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     fs.writeFileSync(otf, fs.readFileSync(otf, "utf8") + "\n## Silent Regressions\nNone — the team's own wording.\n");
     const own = S.createFeature(po, "Own m", ["core"], "x", undefined, "en", undefined, { size: "m" });
     all("1.41.0 review 1 R1-MF-3: an m / l feature scaffolded from a project design template without Silent Regressions gets the built-in's section (doctor: as on a built-in scaffold — empty, answered by a row; never missing), size s and unsized get none, a template's own section is kept alone, the built-in scaffold has one (got " +
-      js({ heads: [...tml, ...tothers].map((f) => heads(designOf(f))), tFresh, tAnswered, own: heads(designOf(own)), builtIn: scaffolds.map(heads) }) + ")", {
-      appended: tml.every((f) => heads(designOf(f)) === 1 && /\n## Silent Regressions\n<!--[\s\S]*?-->\n\| Metric \| Why it can regress silently \| Printed by \|\n\|---\|---\|---\|\n?$/.test(designOf(f))),
+      js({ heads: [...tTexts, ...tothers.map(designOf)].map(heads), tFresh, tAnswered, own: heads(designOf(own)), builtIn: scaffolds.map(heads) }) + ")", {
+      appended: tTexts.every((t) => heads(t) === 1 && /\n## Silent Regressions\n<!--[\s\S]*?-->\n\| Metric \| Why it can regress silently \| Printed by \|\n\|---\|---\|---\|\n?$/.test(t)),
       doctor: !!tFresh && tFresh.status === fresh.status && tFresh.detail === fresh.detail && tAnswered.status === "pass",
       notOthers: tothers.every((f) => heads(designOf(f)) === 0 && tdoc(f.slug) === null),
       ownKept: heads(designOf(own)) === 1 && designOf(own).includes("None — the team's own wording."),

@@ -2746,7 +2746,7 @@ const msg = {
         "tradeoffs-missing": "no Alternatives & Trade-offs section — doctor warns (design-tradeoffs) on every feature scaffolded from it.",
         "risks-missing": "no Risks section — doctor warns (design-risks) on every feature scaffolded from it.",
         "reuse-missing": "no Reuse & Integration section — doctor warns (design-reuse) on every feature scaffolded from it.",
-        "silent-missing": "no Silent Regressions section — doctor warns (design-silent-regressions) on every size m / l feature scaffolded from it.",
+        "silent-missing": "no Silent Regressions section — a size m / l feature scaffolded from it gets the built-in one at the end (doctor warns design-silent-regressions until it is answered); add it where the template wants it.",
         "no-criteria": "no acceptance criterion (a US-n.AC-m line with SHALL) — nothing for EARS, trace_check or the test plan to follow.",
         "ac-duplicate": (ids) => `duplicate AC IDs: ${ids} — doctor fails on every feature scaffolded from it.`,
         "phantom-ac": (ids, file) => `cites AC IDs ${file} does not define: ${ids} — trace_check reports them as phantoms.`,

@@ -2584,7 +2584,7 @@ const msg = {
         "tradeoffs-missing": "sem secção Alternativas e Compromissos — o doctor avisa (design-tradeoffs) em todas as features criadas a partir dele.",
         "risks-missing": "sem secção Riscos — o doctor avisa (design-risks) em todas as features criadas a partir dele.",
         "reuse-missing": "sem secção Reutilização e Integração — o doctor avisa (design-reuse) em todas as features criadas a partir dele.",
-        "silent-missing": "sem secção Regressões Silenciosas — o doctor avisa (design-silent-regressions) em todas as features de tamanho m / l criadas a partir dele.",
+        "silent-missing": "sem secção Regressões Silenciosas — uma feature de tamanho m / l criada a partir dele recebe a do built-in no fim (o doctor avisa design-silent-regressions até ser respondida); acrescenta-a onde o template a quer.",
         "no-criteria": "nenhum critério de aceitação (uma linha US-n.AC-m com DEVE) — nada para o EARS, o trace_check ou o plano de testes seguirem.",
         "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — o doctor falha em todas as features criadas a partir dele.`,
         "phantom-ac": (ids, file) => `cita IDs de AC que ${file} não define: ${ids} — o trace_check reporta-os como fantasmas.`,
