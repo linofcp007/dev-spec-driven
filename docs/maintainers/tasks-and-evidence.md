@@ -340,7 +340,12 @@ Engine: the `B5` block of `engine/evidence.js`.
     12 R1: those files that are the feature's own `_Implements:_` files — the `own` set behind `[this feature]`, read lazily
     (`mine()`): `{count, files ≤ 3: [{file, kind}]}`), notes?
     (`coverage_notes`, 3.4+: their count), staleTimeouts? (`unused_timeout_acceptances`, 3.4+: `{count, files ≤ 3}` — distinct
-    accept_timeouts entries no step reported a timeout on), message?,
+    accept_timeouts entries no step reported a timeout on), testIntegrity? (1.41.0, W — `integrityFindings`: the `new_findings` of
+    dev-guardian's own passes, `GUARDIAN_INTEGRITY_KINDS` — `guardian-test-integrity` → kind `test`, `guardian-suppressions`
+    (3.17, `GUARDIAN_SUPPRESSIONS`) → kind `suppression` — whose severity is under the command's `--fail-on` (`severityRank`:
+    dev-guardian's own blocking rule, gate.ts; unknown → under every level): `{count, top ≤ 3: [{severity, rule, file, line,
+    kind}]}`, by severity then the report's order; no fs call — `findingFacts` is the blocking items' reader, `mine()` never
+    runs for it; a `--compact` report lists only the blocking findings, so none is read), message?,
     baseline? ("absent": `baseline_absent` / `baseline_status`), tool? (`tool_version`), update? (no
     `tool_version`, one below `GUARDIAN_MIN_VERSION` 3.2.1, or "Cannot find package" — 3.2.0 from a plugin install), override?
     (the `DEV_GUARDIAN_CLI` the launcher said it ran)}`. Every scan step repeats a non-gating line under its own name
@@ -389,7 +394,11 @@ Engine: the `B5` block of `engine/evidence.js`.
     not a blocker — dev-guardian refuses a listed file that changed since scan.yml did) — and that those files go unanalysed —
     review a change to them by hand (`acceptedWarn`),
     and, on any verdict, the stale accept_timeouts entries — remove them, or a future timeout on that file is accepted unseen
-    (`staleTimeouts`: an entry never expires) — warnings, never blockers (`guardianWarnings`).
+    (`staleTimeouts`: an entry never expires) — and, LAST (the finish batch's order: dev-guardian, W, …), on any verdict, W's
+    ONE line (`integrityWarning` → `guardian.integrityWarn`: the count, `--fail-on`, the top 3 each labelled by its pass —
+    `guardian.finding`'s fifth argument is a kind, `test` · `suppression` · none, never one label for both —, the rest counted;
+    the first guardian check that has one) — warnings, never blockers (`guardianWarnings`). The merge summary and finish
+    --run's own lines are unchanged ("(N new below it)" still counts every new finding below the bar).
   - *finish --run* (cli/run.js): `guardianPreRun()` first — a guardian check that runs the launcher needs this version's
     (an earlier version's is rewritten, with a note; missing → `no-launcher`, anything else → `launcher-changed`: refused before
     anything runs, nothing recorded). For a guardian check it prints `guardianLines()` (the head, the findings, then each
@@ -1098,6 +1107,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   of the fmt script). No name list tells `pants fmt lint` from `swift format lint`: the runner list is gone and `RE_LINT_MODE` is
   positive — swift-format's own subcommand only (`swift format lint`, `swift-format lint`, by any path). The split's
   `$(… | …)`-then-flag refusal (`ruff format $(git ls-files | grep -v x) --check`) is a documented limit, not a shell-aware split.
+- **1.41.0** (the gardening round, W — CRIT_X D7) — a new finding of dev-guardian's own passes below the gate (a test skipped or
+  deleted, assertions removed; from 3.17 an added suppression) read only as "(N new below it)". It is now `testIntegrity`
+  and ONE finish warning, never a blocker, each finding labelled by its pass. dev-guardian 3.17 gives suppressions a pass of
+  their own (CRIT_G1 #5): reported under `guardian-test-integrity` they would have read "weakened test: scanner-suppression-
+  added". The name `guardian-suppressions` is DECISIONS' (dev-guardian's chain had not committed one when this was built) —
+  one constant, `GUARDIAN_SUPPRESSIONS`. An older dev-guardian has no such pass: its test findings only, nothing else changes.
+  "Below the gate" is the gate's own rule (severity under `--fail-on`), not "absent from `blocking_findings`". Not built:
+  a label on a BLOCKING suppression finding (at `--fail-on medium` it reads as its rule id, as in 1.40), W in the merge summary
+  or finish --run's own lines. The same round rewrote the five bare `# nosec` examples (fixHint EN / PT / ES, AGENTS.md,
+  verification.md) as `# nosec <id>  # <reason>` — a bare one silences every Bandit rule on its line (CRIT_G1 #6; 17-docs
+  reads every surface for one).
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful

@@ -3225,7 +3225,10 @@ const msg = {
       // dev-guardian older than 3.2.1, a report with no tool_version (≤ 3.2.1), a package it could not load (3.2.0 from a plugin install)
       update: (v) => `update dev-guardian (Claude Code: /plugin) — ${v ? "this run used " + v + ", the gate needs 3.2.1 or later" : "this run named no version (3.3.0 and later do); the gate needs 3.2.1 or later"}`,
       updateHint: (slug) => `Update the dev-guardian plugin (3.2.1 or later — Claude Code: /plugin), then run the check again: ${DEV_SPEC} finish ${slug} --run.`,
-      finding: (at, rule, severity, own, test) => `${at} ${test ? "weakened test: " : ""}${rule} (${severity})` + (own ? " [this feature]" : ""),
+      // kind: "test" (dev-guardian's test-integrity pass) · "suppression" (1.41.0: its suppressions pass) · "" — never one label for both
+      finding: (at, rule, severity, own, kind) => `${at} ${kind === "test" ? "weakened test: " : kind === "suppression" ? "suppression added: " : ""}${rule} (${severity})` + (own ? " [this feature]" : ""),
+      // W (1.41.0): dev-guardian's own passes found a weakened test or an added suppression below --fail-on — one finish warning, never a blocker
+      integrityWarn: (n, failOn, list) => `dev-guardian: ${n} new finding(s) of its test-integrity and suppression checks below --fail-on ${failOn}${list ? " — " + list : ""}. They do not block: the user decides each — one they intended stays (a test removal they approved, a suppression with its reason); otherwise fix it and run the check again.`,
       blocker: (name, text) => `the project check '${name}' failed — ${text}.`,
       more: (n) => `+${n} more`,
       // review 8: never `baseline update` to accept ONE finding — it accepts every current finding, the feature's own included

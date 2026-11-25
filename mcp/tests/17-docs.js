@@ -541,6 +541,12 @@ exports.run = async ({
       description: /, a simplification or pruning pass — /.test(desc) && desc.length <= 250,
       skill: /\(also the final review, converge, the simplification pass, the pruning pass\)\./.test(skill),
     });
+    // W (CRIT_X D7): verification.md says what finish shows of dev-guardian's own checks below the gate
+    all("1.41.0 W (CRIT_X D7): verification.md — dev-guardian's test-integrity and suppressions checks below the gate are ONE finish warning, never a blocker, labelled per check; --compact names none; before 3.17 tests only; the pruning bullet points at it", {
+      w: /\*\*Its own checks' findings below the gate\*\* \(1\.41\) — the new findings that do not block from dev-guardian's test-integrity check \(`guardian-test-integrity`, 3\.8\+: a skip, a deleted test file, fewer assertions\) and its suppressions check \(`guardian-suppressions`, 3\.17\+:[^)]*\) — are ONE finish warning, never a blocker: each labelled by its check \(weakened test · suppression added\), the first 3 by severity, the rest counted\./.test(ver),
+      limits: /A `--compact` report lists the blocking findings only, so none is named there; a dev-guardian before 3\.17 has no suppressions check — its test findings only\./.test(ver),
+      pointer: /Below the default `--fail-on high` they never block — the warning below names them\./.test(ver) && /they never block \(`\/spec-finish` names them in one warning\)/.test(sub),
+    });
   }
 
   // 1.14 full review (D) — docs and prose.
