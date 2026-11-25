@@ -253,9 +253,10 @@ async function runChecks(feature, deps) {
     spec.recordTiming(projectDir, { check: c.name, command: c.command, exitCode: x.code, ms: x.ms, by: "cli" });
     if (x.code !== 0 && sh.cmd && spec.windowsShellFailure(x.output, x.code)) cmdFailed = true;
     // a guardian check: its JSON report (stdout) and its raw stderr (its own message, node's — the summary keeps only the last lines);
-    // any other: its whole output (1.41 — the engine reads a passing run's METRIC lines from it; never stored)
+    // any other: its whole output as [stdout, stderr] (1.41 — the engine reads a passing run's METRIC lines from it, stderr's line of a
+    // name winning; two texts, never joined end to end — 1.41.0 review 1; never stored)
     evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary,
-      ...(guardian ? { report: x.stdout, stderr: x.stderr, ...(uncommitted ? { diffBaseUncommitted: true } : {}) } : { output: x.output }), ...git });
+      ...(guardian ? { report: x.stdout, stderr: x.stderr, ...(uncommitted ? { diffBaseUncommitted: true } : {}) } : { output: [x.stdout, x.stderr] }), ...git });
   }
   if (cmdFailed) deps.warn(M.taskDone.shellHint);
   return { ok: true, evidence };
