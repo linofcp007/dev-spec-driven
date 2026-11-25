@@ -262,12 +262,14 @@ function beforeFirstTaskSection(text, section, orNull) {
 // opts: only — the tracks to add blocks for (a built-in scaffold: its track packs; the i18n builders wrote the rest);
 // planText: () => the feature's test-plan.md (a track pack's tasks make its planned tests green); vars: { name, slug } for a pack
 // fragment's {{name}} / {{slug}}. A track pack's criteria go right after the US-1 criteria (insertPackRequirements) and its
-// checklist items at the end of checklist.md.
+// checklist items at the end of checklist.md. size (a project template's design only — spec_create): an m / l feature's design
+// without a Silent Regressions heading gets the built-in's section, before the track blocks (1.41.0 review 1).
 function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
   const want = (tr) => tracks.includes(tr) && (!opts.only || opts.only.includes(tr));
   const vars = opts.vars;
   let out = text;
   if (key === "design") {
+    if ((opts.size === "m" || opts.size === "l") && weighSection(out, SILENT_SYN) == null) out = out.trimEnd() + "\n\n" + i18n.designSilent(lang) + "\n";
     for (const tr of ["tdd", ...markerTracks()]) {
       if (!want(tr)) continue;
       const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(out)) : headingHasMarker(out, trackMarker(tr));
@@ -322,8 +324,9 @@ function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
   return out.endsWith("\n") ? out : out + "\n";
 }
 // The scaffold of one artifact → { text, template } — the project's template (variables substituted; opts.tracks: the track
-// blocks it lacks) when there is one (template = its .specs/templates/… path), else builtIn() (template null) + the blocks of the
-// active track packs — the built-in builders only know the built-in tracks.
+// blocks it lacks; opts.size: a sized feature's — its design's Silent Regressions at m / l) when there is one (template = its
+// .specs/templates/… path), else builtIn() (template null) + the blocks of the active track packs — the built-in builders only
+// know the built-in tracks (and write a sized design's sections themselves).
 function scaffoldText(projectDir, key, lang, vars, builtIn, opts = {}) {
   const o = templateOverride(projectDir, key, lang);
   const packVars = { name: vars && vars.name != null ? String(vars.name) : undefined, slug: vars && vars.slug != null ? String(vars.slug) : undefined };
@@ -335,7 +338,7 @@ function scaffoldText(projectDir, key, lang, vars, builtIn, opts = {}) {
     return { text: withTrackBlocks(key, text, tracks, lang, opts.reqText, { only: packs, planText: opts.planText, vars: packVars }), template: null };
   }
   let text = renderTemplate(o.text, templateVars(vars, lang));
-  if (opts.tracks) text = withTrackBlocks(key, text, normalizeTracks(opts.tracks), lang, opts.reqText, { planText: opts.planText, vars: packVars });
+  if (opts.tracks) text = withTrackBlocks(key, text, normalizeTracks(opts.tracks), lang, opts.reqText, { planText: opts.planText, vars: packVars, size: opts.size });
   return { text: text.endsWith("\n") ? text : text + "\n", template: o.rel };
 }
 // A steering stub: the project's template for that file when there is one, else the built-in (or custom) stub.

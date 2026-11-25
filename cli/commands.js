@@ -1199,9 +1199,10 @@ const COMMANDS = [
             // nothing recorded (couldNotRun "no-tests"; the engine refuses a reported summary that shows it the same way).
             const none = spec.vacuousRun(x.output);
             if (none) return fail({ ok: false, couldNotRun: "no-tests", error: M.runGate.noTests(cmd, none.text) });
-            passed.push({ cmd, output: x.output, summary: x.summary });
-            // (output: every passing command's whole output — 1.41, the engine reads their METRIC lines; never stored)
-            evidence = { command: cmds.join(" && "), exitCode: 0, summary: RUN.runSummaries(passed), output: passed.map((p) => p.output), ...git };
+            passed.push({ cmd, output: x.output, summary: x.summary, streams: [x.stdout, x.stderr] });
+            // (output: every passing command's stdout and stderr as TWO texts each, in run order — 1.41, the engine reads their METRIC
+            // lines, a later text's line of a name winning; never joined end to end — 1.41.0 review 1; never stored)
+            evidence = { command: cmds.join(" && "), exitCode: 0, summary: RUN.runSummaries(passed), output: passed.flatMap((p) => p.streams), ...git };
           }
           return tick();
         })();

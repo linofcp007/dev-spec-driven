@@ -1026,7 +1026,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // size S has no classification.md (its Phase 0 is the size and the tracks recorded in .state.json: one approval less).
   if (size !== "s") put("classification.md", scaf("classification", () => classificationMd(name, t, writtenSummary, clsR, lng)));
   put("requirements.md", scaf("requirements", () => requirementsMd(name, t, writtenSummary, lng, size), { tracks: t }));
-  put("design.md", scaf("design", () => designMd(name, t, lng, size), { tracks: t }));
+  put("design.md", scaf("design", () => designMd(name, t, lng, size), { tracks: t, size })); // (size: a project template's m / l Silent Regressions)
   if (t.includes("tdd")) {
     // The same rule as spec_add_track: a template test row only for the track criteria requirements.md has — on an
     // EXISTING feature given +tdd with +saas/+ai the requirements predate those tracks, and their rows would cite

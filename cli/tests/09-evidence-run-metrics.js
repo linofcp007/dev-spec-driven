@@ -44,10 +44,10 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
   all("1.41 done --run reads every passing command's WHOLE output: the line printed before 50 noise lines, the first command's own name, the second command's reading of a shared name winning; the readings go on the run (never its history), into --json and as METRIC lines in the human output, a reader bound said; a --evidence note holding a METRIC line yields none (got " +
     JSON.stringify({ tick: tick.out.slice(0, 400), tickJ: tickJ && tickJ.metrics, rec: st.evidence["1"].metrics, note: note && note.metrics, rec2: st.evidence["2"], many: many.out.slice(-300) }) + ")", {
     human: tick.code === 0 && tick.out.includes("  METRIC first_only=1\n") && tick.out.includes("  METRIC queries_per_request=6 better=lower tolerance=0\n") && tick.out.includes("  METRIC heap_mb=48.25 MB\n"),
-    json: !!tickJ && JSON.stringify(tickJ.metrics) === JSON.stringify([{ name: "first_only", value: 1, unit: null, better: null, tolerance: null },
-      { name: "queries_per_request", value: 6, unit: null, better: "lower", tolerance: { amount: 0, percent: false } }, { name: "heap_mb", value: 48.25, unit: "MB", better: null, tolerance: null }]),
-    stored: JSON.stringify(st.evidence["1"].metrics) === JSON.stringify([{ name: "first_only", value: 1 }, { name: "queries_per_request", value: 6, better: "lower", tolerance: { amount: 0, percent: false } },
-      { name: "heap_mb", value: 48.25, unit: "MB" }]) && st.evidence["1"].history.every((h) => h.metrics === undefined),
+    json: !!tickJ && JSON.stringify(tickJ.metrics) === JSON.stringify([{ name: "first_only", value: 1, text: "1", unit: null, better: null, tolerance: null },
+      { name: "queries_per_request", value: 6, text: "6", unit: null, better: "lower", tolerance: { amount: 0, percent: false } }, { name: "heap_mb", value: 48.25, text: "48.25", unit: "MB", better: null, tolerance: null }]),
+    stored: JSON.stringify(st.evidence["1"].metrics) === JSON.stringify([{ name: "first_only", value: 1, text: "1" }, { name: "queries_per_request", value: 6, text: "6", better: "lower", tolerance: { amount: 0, percent: false } },
+      { name: "heap_mb", value: 48.25, text: "48.25", unit: "MB" }]) && st.evidence["1"].history.every((h) => h.metrics === undefined),
     manual: !!note && note.ok && note.metrics === undefined && st.evidence["2"].metrics === undefined,
     bound: many.code === 0 && many.out.includes("  ⚠ " + MT.dropped("names") + "\n") && st.evidence["3"].metrics.length === 20,
   });
@@ -66,8 +66,8 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
   const day = S.dayOf(fin1 && fin1.at);
   all("1.41 finish --run reads each project check's whole output — a size script's line before 50 noise lines, node --test's TAP '# METRIC' of a nested subtest — says the malformed line per check, records the readings on a ready written finish; the next feature's finish compares each (check, name): the size that grew past its tolerance is ONE ▲ warning (exit 0: ready), the report's METRIC lines and --json's metrics (got " +
     JSON.stringify({ f1: f1.out.slice(0, 900), fin1: fin1 && fin1.metrics, f2: f2.out.slice(0, 1200), f2j: f2j && [f2j.readyToFinish, f2j.metrics, f2j.recordedChecks] }) + ")", {
-    readFirst: f1.code === 0 && JSON.stringify(fin1.metrics) === JSON.stringify([{ check: "size", name: "bundle-size", value: 120, unit: "kB", better: "lower", tolerance: { amount: 2, percent: true } },
-      { check: "tap", name: "parse.ms", value: 3, unit: "ms" }]),
+    readFirst: f1.code === 0 && JSON.stringify(fin1.metrics) === JSON.stringify([{ check: "size", name: "bundle-size", value: 120, text: "120", unit: "kB", better: "lower", tolerance: { amount: 2, percent: true } },
+      { check: "tap", name: "parse.ms", value: 3, text: "3", unit: "ms" }]),
     malformed: f1.out.includes("  ⚠ size: " + MT.notRead(1, "METRIC broken=1,5", S.METRIC_GRAMMAR) + "\n"),
     recorded: f1.out.includes("  " + MT.recorded(2)),
     warning: f2.code === 0 && (f2.out.match(/▲ \d+ METRIC reading/g) || []).length === 1 &&
@@ -83,6 +83,28 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
     const m = spawnIn(["metrics", "--project", p], { encoding: "utf8" });
     all("1.41 dev-spec metrics (the project): each METRIC reading across the finishes that recorded it, first → last (got " + (m.stdout || "").split("\n").slice(-5).join(" | ") + ")", {
       lines: m.status === 0 && (m.stdout || "").includes(MT.measuredHead + "\n    " + MT.measuredLine("bundle-size", "size", "120", "142.3 kB", 2, "+18.6 %")),
+    });
+  }
+
+  // 1.41.0 review 1 R1-MF-6: the reader gets each command's stdout and stderr as TWO texts, never joined end to end — a stdout line with
+  // no final newline is read, not glued to stderr's first line; a name printed on both streams reads stderr's value (documented order)
+  {
+    const q = path.join(tmp, "metric-streams");
+    S.initProject(q, ["core"], "en", { checks: { streams: "node scripts/streams.js" } });
+    w(q, "scripts/streams.js", "console.log(\"METRIC both=1\");\nconsole.error(\"METRIC both=2\");\nprocess.stderr.write(\"METRIC err_only=3\\n\");\nprocess.stdout.write(\"METRIC out_only=4\");\n");
+    const c = S.createFeature(q, "Streams", undefined, "x", undefined, "en", "change");
+    fs.writeFileSync(path.join(c.dir, "change.md"), "# Change: Streams\n\n## Summary\nThe change.\n\n## Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer.\n\n## Approach\nOne string.\n\n## Tasks\n- [ ] 1. [US1] Measure it\n" +
+      "  - _Requirements: US-1.AC-1_\n  - _Verify: node scripts/streams.js_\n");
+    S.approvePhase(q, c.slug, null, "t", { through: "tasks" });
+    const done = json((await run(q, ["done", c.slug, "1", "--run", "--json"])).stdout);
+    const fin = json((await run(q, ["finish", c.slug, "--run", "--json"])).stdout);
+    const fc = state(c.dir).finishChecks;
+    const names = (list) => (list || []).map((m) => m.name + "=" + m.value).sort().join(" ");
+    all("1.41.0 review 1 R1-MF-6: done --run and finish --run read stdout and stderr apart — stdout's last line without a newline is read (never glued to stderr's), a name on both streams reads stderr's value (got " +
+      JSON.stringify({ done: done && [done.metrics, done.metricsMalformed], fin: fin && fin.recordedChecks, fc: fc && fc.streams && fc.streams.metrics }) + ")", {
+      done: !!done && done.ok && names(done.metrics) === "both=2 err_only=3 out_only=4" && done.metricsMalformed === undefined,
+      finish: !!fin && JSON.stringify(fin.recordedChecks) === JSON.stringify([{ name: "streams", exitCode: 0, metrics: 3 }]) && names(fc.streams.metrics) === "both=2 err_only=3 out_only=4",
     });
   }
 };

@@ -37,20 +37,23 @@ const RE_NAME = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
 const NUMBER = "-?(?:0|[1-9][0-9]{0,14})(?:\\.[0-9]{1,9})?(?:[eE][-+]?[0-9]{1,3})?";
 const RE_NUMBER = new RegExp("^" + NUMBER + "$");
 const RE_TOLERANCE = new RegExp("^(" + NUMBER.slice(2) + ")(%?)$"); // the number without a sign: a tolerance is never negative
-const UNIT_MAX = 16;
+const UNIT_MAX = 16; // code points (an astral character is one — dev-guardian 3.17's count, R1-MF-4)
+// (past 2 × UNIT_MAX UTF-16 units a text holds more than UNIT_MAX code points: no array is built for a long one)
+const unitFits = (u) => u.length <= 2 * UNIT_MAX && [...u].length <= UNIT_MAX;
 const KEYWORD = "METRIC";
 const ESC = String.fromCharCode(27);
-const RE_CSI = new RegExp(ESC + "\\[[0-?]*[ -/]*[@-~]", "g"); // a CSI sequence (ESC [ params intermediates final) — 3b(9)
-const RE_CANDIDATE = /^[ \t]*(?:# )?[ \t]*METRIC(?=[ \t])/; // the keyword at a line's start, after blanks and one '# '
+const RE_CSI = new RegExp(ESC + "\\[[0-?]*[ -/]*[A-Za-z]", "g"); // a CSI sequence (ESC [ params intermediates, a final LETTER) — 3b(9)
+// the keyword at a line's start, after blanks and one '# ' (never blanks after it), then a blank or the line's end (a bare METRIC)
+const RE_CANDIDATE = /^[ \t]*(?:# )?METRIC(?=[ \t]|$)/;
 const RE_CONTROL = /[\u0000-\u001f\u007f]+/g;
 
 // The index the line of the keyword at i starts at, when only blanks, '#' and CSI sequences stand before it on that line — a
-// pre-filter, linear over the whole walk (a scan stops at the first other character: an earlier "METRIC" stops it at its 'C'),
-// bounded to candidateBytes characters back; RE_CANDIDATE then decides. → the start · -1 (not a line start) · -2 (a prefix past
-// the candidate bound: a dropped candidate) · -3 (blanks or '#' up to the read's first character, which is no line start: the read
-// bound cut what may be a candidate — said as readBytes)
+// pre-filter, linear over the whole walk (a scan stops at the first other character: an earlier "METRIC" stops it at its 'C', so
+// two scans never cross), its CSI test any final byte (a superset of RE_CSI's letters); RE_CANDIDATE on the cleaned line then
+// decides, and the candidate bound is the cleaned line's (R1-MF-4: a colour never counts). → the start · -1 (not a line start) · -3
+// (blanks or '#' up to the read's first character, which is no line start: the read bound cut what may be a candidate — said as readBytes)
 function lineStartOf(s, i, lo) {
-  const floor = Math.max(lo, i - METRIC_BOUNDS.candidateBytes - 1);
+  const floor = lo;
   let j = i;
   while (j > floor) {
     const c = s.charCodeAt(j - 1);
@@ -63,7 +66,6 @@ function lineStartOf(s, i, lo) {
     }
     return -1;
   }
-  if (floor > lo) return -2; // still blanks / '#' / CSI 513 characters back
   if (lo === 0 || s.charCodeAt(lo - 1) === 10) return lo; // the read's first line is whole only at a line start
   const c = s.charCodeAt(lo - 1);
   return c === 32 || c === 9 || c === 35 ? -3 : -1;
@@ -80,12 +82,13 @@ function readLine(line) {
   if (!RE_NAME.test(name) || !RE_NUMBER.test(num)) return { kind: "malformed" };
   const value = Number(num);
   if (!Number.isFinite(value)) return { kind: "malformed" };
-  const r = { name, value, unit: null, better: null, tolerance: null };
+  // text: the decimal as the line printed it — what the judge compares (R1-MF-5: past 15 significant digits a double drops digits)
+  const r = { name, value, text: num, unit: null, better: null, tolerance: null };
   const known = new Set();
   for (let k = 1; k < tokens.length; k++) {
     const t = tokens[k], at = t.indexOf("=");
-    if (at === -1) { // a unit: one token, right after the number, at most UNIT_MAX characters
-      if (k !== 1 || t.length > UNIT_MAX) return { kind: "malformed" };
+    if (at === -1) { // a unit: one token, right after the number, at most UNIT_MAX code points
+      if (k !== 1 || !unitFits(t)) return { kind: "malformed" };
       r.unit = t;
       continue;
     }
@@ -107,7 +110,7 @@ function readLine(line) {
 }
 
 // The METRIC lines of a run's output (a string, or the outputs of several commands in run order — a later one wins) →
-// { metrics: [{name, value, unit, better, tolerance}] in print order (each name's last valid line, whole), repeats (the lines a
+// { metrics: [{name, value, text, unit, better, tolerance}] in print order (each name's last valid line, whole), repeats (the lines a
 // later one of the same name replaced), malformed (failed attempts), dropped: [the bounds that dropped input], lastMalformed? }.
 // Walked from the END with lastIndexOf — never a split (a 64 MiB output costs a scan, no copy) —, so the bounds keep what was
 // printed LAST: a benchmark loop's final iteration. 3b(7): a later malformed line of a name read stays malformed; the last valid
@@ -130,27 +133,25 @@ function metricLinesOf(input) {
       if (i < lo) break;
       from = i - 1;
       const next = s.charCodeAt(i + KEYWORD.length);
-      if (next !== 32 && next !== 9 && next !== 27) continue; // METRICS, METRIC alone at the end, METRIC=…
+      // METRICS, METRIC=…: no keyword; a bare METRIC (LF, CR, the text's end after it) is one — a candidate, as dev-guardian 3.17 counts it
+      if (next !== 32 && next !== 9 && next !== 27 && next !== 10 && next !== 13 && i + KEYWORD.length !== s.length) continue;
       const start = lineStartOf(s, i, lo);
       if (start === -1) continue;
       if (start === -3) { dropped.add("readBytes"); continue; }
-      // the candidate line: from its start to its LF (a CR before it dropped), read at most candidateBytes + 2 characters
-      // past its start (bytes ≥ characters: a longer line is over the bound) — a prefix past the bound (-2) is over it too
-      let line = null, over = start === -2;
-      if (!over) {
-        const lim = Math.min(s.length, start + B.candidateBytes + 2);
-        const nl = s.slice(i, lim).indexOf("\n");
-        let end = nl === -1 ? lim : i + nl;
-        over = nl === -1 && lim < s.length; // the line goes on past the bound
-        if (!over && nl !== -1 && s.charCodeAt(end - 1) === 13) end--;
-        const raw = s.slice(start, end);
-        if (!over && Buffer.byteLength(raw, "utf8") > B.candidateBytes) over = true;
-        line = raw.indexOf(ESC) === -1 ? raw : raw.replace(RE_CSI, "");
-        if (!RE_CANDIDATE.test(line)) continue; // "## METRIC", "#METRIC": no candidate
-      }
+      // the candidate line: from its start to its LF (ONE CR before it dropped — or at the text's end, no LF after it: dev-guardian
+      // 3.17's line end too), its CSI sequences removed — the candidate bound is
+      // the CLEANED line's bytes (R1-MF-4, as dev-guardian 3.17 reads it: a colour never pushes a line over). Each line is read once:
+      // only its first keyword can follow nothing but blanks, '#' and CSI sequences.
+      const nl = s.indexOf("\n", i);
+      let end = nl === -1 ? s.length : nl;
+      if (s.charCodeAt(end - 1) === 13) end--;
+      const raw = s.slice(start, end);
+      const line = raw.indexOf(ESC) === -1 ? raw : raw.replace(RE_CSI, "");
+      if (!RE_CANDIDATE.test(line)) continue; // "## METRIC", "#METRIC", "#  METRIC", a '#' run of any length: no candidate
       if (candidates === B.candidates) { dropped.add("candidates"); stop = true; break; }
       candidates++;
-      if (over) { dropped.add("candidateBytes"); continue; } // 3b(6): a drop, never malformed
+      // 3b(6): over the bound is a drop, never malformed (a UTF-16 unit is at least one UTF-8 byte: the length decides most lines)
+      if (line.length > B.candidateBytes || Buffer.byteLength(line, "utf8") > B.candidateBytes) { dropped.add("candidateBytes"); continue; }
       const got = readLine(line);
       if (got.kind === "ignored") continue;
       if (got.kind === "malformed") {
@@ -177,8 +178,9 @@ function metricLinesOf(input) {
 // states a direction AND a tolerance, else `unjudged` with its delta and `why` (the reference's missing terms); n% is n percent
 // of |reference|; the boundary inclusive; symmetric (3b.1): improved / regressed only past the applied tolerance.
 // ---------------------------------------------------------------------------
-// A JS number as an exact decimal { n: BigInt, s: scale } (value = n / 10^s): its shortest round-trip text — the printed
-// decimal itself for every value of up to 15 significant digits, which is all the grammar's number keeps exactly.
+// A reading's printed text — or a JS number — as an exact decimal { n: BigInt, s: scale } (value = n / 10^s). A number is read
+// by its shortest round-trip text, which is the printed decimal only up to 15 significant digits: the grammar prints up to 24
+// (15 integer + 9 fraction digits), so the judge reads the line's own text when both readings carry one (R1-MF-5).
 function decimalOf(v) {
   const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([-+]?\d+))?$/i.exec(String(v)); // a finite number always matches (readingOf, the grammar)
   const frac = m[3] || "";
@@ -204,7 +206,9 @@ function toleranceAmount(t, ref) {
 function judgeMetric(ref, cur) {
   const out = { verdict: "new", why: null, loosened: null, delta: null, applied: null };
   if (!ref) return out;
-  const R = decimalOf(ref.value), C = decimalOf(cur.value);
+  // the printed texts when BOTH readings carry one (a reading without — a hand edit, another writer — is judged on the two values)
+  const exact = ref.text != null && cur.text != null;
+  const R = decimalOf(exact ? ref.text : ref.value), C = decimalOf(exact ? cur.text : cur.value);
   const why = [];
   if (ref.better == null) why.push("better");
   if (ref.tolerance == null) why.push("tolerance");
@@ -228,25 +232,27 @@ function judgeMetric(ref, cur) {
 // ---------------------------------------------------------------------------
 // Readings in the state: an ARRAY (never an object keyed by name — no name is a prototype key there either), null terms left out.
 // ---------------------------------------------------------------------------
-// a reading as stored: {name, value, unit?, better?, tolerance?} (+ check: finished.metrics' entries)
+// a reading as stored: {name, value, text?, unit?, better?, tolerance?} (+ check: finished.metrics' entries)
 function storedReading(r, check) {
   const o = check ? { check, name: r.name, value: r.value } : { name: r.name, value: r.value };
+  if (r.text != null) o.text = r.text;
   if (r.unit != null) o.unit = r.unit;
   if (r.better != null) o.better = r.better;
   if (r.tolerance != null) o.tolerance = { amount: r.tolerance.amount, percent: r.tolerance.percent };
   return o;
 }
-// a stored reading read back (a hand edit, another version's record) → the reader's shape {check?, name, value, unit, better,
-// tolerance} or null — what the grammar could not have printed is skipped
+// a stored reading read back (a hand edit, another version's record) → the reader's shape {check?, name, value, text, unit, better,
+// tolerance} or null — what the grammar could not have printed is skipped (a text: only the grammar's number that IS the value)
 function readingOf(x, withCheck) {
   if (!isObj(x) || typeof x.name !== "string" || !RE_NAME.test(x.name) || typeof x.value !== "number" || !Number.isFinite(x.value)) return null;
   if (withCheck && (typeof x.check !== "string" || !x.check || x.check.length > 40)) return null;
-  const unit = typeof x.unit === "string" && x.unit && x.unit.length <= UNIT_MAX && !/[\s=]/.test(x.unit) ? x.unit : null;
+  const text = typeof x.text === "string" && RE_NUMBER.test(x.text) && Number(x.text) === x.value ? x.text : null;
+  const unit = typeof x.unit === "string" && x.unit && unitFits(x.unit) && !/[\s=]/.test(x.unit) ? x.unit : null;
   const better = x.better === "lower" || x.better === "higher" ? x.better : null;
   const t = x.tolerance;
   const tolerance = isObj(t) && typeof t.amount === "number" && Number.isFinite(t.amount) && t.amount >= 0 && typeof t.percent === "boolean"
     ? { amount: t.amount, percent: t.percent } : null;
-  const r = { name: x.name, value: x.value, unit, better, tolerance };
+  const r = { name: x.name, value: x.value, text, unit, better, tolerance };
   return withCheck ? { check: x.check, ...r } : r;
 }
 const readingsOf = (list, withCheck) => (Array.isArray(list) ? list.map((x) => readingOf(x, withCheck)).filter(Boolean) : []);
@@ -313,8 +319,10 @@ function finishMetrics(projectDir, dir, state, suite, tracks, lng, slug) {
   }
   const res = { items: [], record: current.map((r) => storedReading(r, r.check)), unmeasured: [], summaryLines: [] };
   // the design's Silent Regressions rows name what a check should print: said when no passing run printed it — only once every
-  // project check passes (a missing run is the suite-evidence blocker's to say)
-  if (!suite.missing.length) {
+  // project check passes (a missing run is the suite-evidence blocker's to say) AND each of those runs is the CLI's (observed "cli":
+  // finish --run). A run reported over MCP never carries a reading — what it printed is a doubt, never judged (R1-MF-1).
+  const cliRuns = suite.items.every((it) => (isObj(fc[it.name]) ? fc[it.name].observed : null) === "cli");
+  if (!suite.missing.length && cliRuns) {
     const names = designMetricNames(activeDesign(readIfExists(path.join(dir, "design.md")) || "", tracks));
     const printed = new Set(current.map((r) => r.name));
     res.unmeasured = names.filter((n) => !printed.has(n));
@@ -344,7 +352,8 @@ function finishMetrics(projectDir, dir, state, suite, tracks, lng, slug) {
   }
   if (flagged.length) {
     const listed = flagged.slice(0, MAX_LISTED).map((x) => flaggedText(x, T)).join("; ");
-    res.warning = T.finishWarn(flagged.length, listed, flagged.length - Math.min(flagged.length, MAX_LISTED));
+    // a warning naming only unit changes says so (none was compared — never "got worse past the tolerance")
+    res.warning = T.finishWarn(flagged.length, listed, flagged.length - Math.min(flagged.length, MAX_LISTED), flagged.every((x) => x.loosened === "unit"));
   }
   res.summaryLines = [T.summaryHead, ...res.items.map((x) => "- " + itemText(x, T))];
   return res;

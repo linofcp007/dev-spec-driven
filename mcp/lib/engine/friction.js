@@ -65,12 +65,16 @@ function parseDuration(text) {
   const ms = Math.round(parseFloat(m[1]) * DURATION_UNITS[m[2].toLowerCase()]);
   return ms >= 1 && ms <= FRICTION_MAX_MS ? ms : null;
 }
+// Words whose LAST word is a duration (parseDuration's, `90 s` too) — a marker naming a command where the check goes (1.41.0 review 1)
+const RE_LAST_DURATION = /(?:^|[ \t])(\d{1,6}(?:\.\d{1,3})?[ \t]*(?:ms|min|s|m|h))$/i;
+const endsInDuration = (words) => { const t = RE_LAST_DURATION.exec(String(words == null ? "" : words).trim()); return !!t && parseDuration(t[1]) != null; };
 
 // steering/tech.md's budget markers → { budgets: [{check, ms, line}], invalid: [{line, text, why}], truncated } — tech.md through the
 // call's read cache (readIfExists). A marker is `_Budget: <check> <duration>_` (or `*…*`, any case — the task markers' reader under
 // its own label: their closer, code spans, fences and HTML comments), anywhere on a visible line; <check> a meta.checks name (backticks
 // allowed), text after the closer a comment. Readings: a check + a duration → a budget · a check + anything else → `duration` ·
-// another check-shaped name + a duration → `no-check` · a second budget of one check → `duplicate` (the first counts) · anything else
+// another check-shaped name + a duration — or + words whose last is a duration: a command where the check goes, `_Budget: npm test
+// 2m_` (1.41.0 review 1) — → `no-check` · a second budget of one check → `duplicate` (the first counts) · anything else
 // (`_Budget: $500/month_`, a bold `**Budget:**` label) → not ours, silent. Bounds, each said (`truncated`): the first BUDGET_TEXT_MAX
 // characters, the first BUDGET_MARKERS_MAX markers. Not enumerable: `scanned` — the lines read for markers (the cost guard's count: a
 // tech.md that never says "budget:" is not scanned — ~110× on 250 KB).
@@ -94,7 +98,7 @@ function frictionBudgets(projectDir) {
       if (!m) continue;
       const name = m[2], ms = parseDuration(m[3] || "");
       const bad = (why) => out.invalid.push({ line: i + 1, text: vis.slice(sp.start, sp.end).slice(0, 120), why });
-      if (!names.has(name)) { if (validCheckName(name) && ms != null) bad("no-check"); }
+      if (!names.has(name)) { if (validCheckName(name) && (ms != null || endsInDuration(m[3]))) bad("no-check"); }
       else if (ms == null) bad("duration");
       else if (out.budgets.some((b) => b.check === name)) bad("duplicate");
       else out.budgets.push({ check: name, ms, line: i + 1 });

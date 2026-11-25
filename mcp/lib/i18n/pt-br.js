@@ -162,7 +162,7 @@ const PTBR_PHRASES = {
   "repõe a ligação": "restaura o vínculo", "ligação ao harness": "integração com o harness",
   "um pool de ligações": "um pool de conexões",
   // "para lá de" (beyond) is European; Brazil says "além de"
-  "para lá da": "além da", "para lá dela": "além dela", "para lá deles": "além deles",
+  "para lá da": "além da", "para lá dela": "além dela", "para lá deles": "além deles", "para lá de": "além de", "para lá do": "além do",
   // a link is a "link" (a "ligação" is a phone call, "liga-o" reads "call him / turn it on")
   "uma ligação (link simbólico)": "um link simbólico", "apaga só a ligação": "apaga só o link", "remover a ligação": "remover o link",
   "liga-o em": "coloque o link em", "liga-o aqui": "coloque o link aqui",
@@ -211,6 +211,7 @@ const PTBR_YOU_SUBJ = {
   mexas: "mexa", toques: "toque", reescrevas: "reescreva", apresentes: "apresente", declares: "declare", afirmes: "afirme",
   tires: "tire", forces: "force", // "Nunca forces o finish" → "Nunca force o finish"
   repitas: "repita", copies: "copie", // 1.41: "não os repitas" (the brief's lessons) · "nunca os copies" (its gone examples)
+  afrouxes: "afrouxe", invertas: "inverta", retires: "retire", // the METRIC warning: "nunca afrouxes, invertas nem retires uma linha METRIC"
 };
 const PTBR_POSSESSIVE = { teu: "seu", tua: "sua", teus: "seus", tuas: "suas" };
 

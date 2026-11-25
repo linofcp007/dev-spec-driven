@@ -119,6 +119,77 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
       "1.41 the judge: a changed unit is THE loosened term (before a flipped better=), and `why` names the reference's missing terms then the unit");
   }
 
+  // --- 1.41.0 review 1 (R1-MF-4): the five shapes the fixture is silent on, read as dev-guardian 3.17's reader reads them (mcp/src/metrics/
+  // metricLine.ts — each expected value below is what that reader gives the same line, checked with the review's differential harness) ---
+  {
+    const sum = (t) => { const r = E.metricLinesOf(t); return { metrics: r.metrics.map((m) => [m.name, m.value, m.unit]), malformed: r.malformed, dropped: r.dropped }; };
+    const none = { metrics: [], malformed: 0, dropped: [] };
+    const a1 = { metrics: [["a", 1, null]], malformed: 0, dropped: [] };
+    const shapes = {
+      // (1) ONE '# ' — never a second run of blanks after it (`[ \t]*(?:# )?METRIC`)
+      hash: [["#  METRIC a=1\n", none], ["# \tMETRIC a=1\n", none], ["\t#  METRIC a=1\n", none], ["  #   METRIC a=1\n", none], ["\t# METRIC a=1\n", a1]],
+      // (2) a CSI sequence ends at a LETTER: `ESC [ 2 ~` is no colour and stays in the line
+      csiLetter: [[ESC + "[2~METRIC a=1\n", none], ["METRIC " + ESC + "[2~a=1\n", { metrics: [], malformed: 1, dropped: [] }], [ESC + "[1;31mMETRIC a=1" + ESC + "[0m\n", a1]],
+      // (3) the 512-byte bound is the CLEANED line's: colours before or after the reading never push it over
+      csiBytes: [["METRIC a=1 k=" + "x".repeat(498) + ESC + "[0m\n", a1], [(ESC + "[0m").repeat(200) + "METRIC a=1\n", a1],
+        [(ESC + "[0m").repeat(200) + "METRIC a=1 k=" + "x".repeat(520) + "\n", { metrics: [], malformed: 0, dropped: ["candidateBytes"] }]],
+      // (4) a unit's 16 is counted in code points (an astral character is one)
+      unitPoints: [["METRIC a=1 " + "\u{1F600}".repeat(9) + "\n", { metrics: [["a", 1, "\u{1F600}".repeat(9)]], malformed: 0, dropped: [] }],
+        ["METRIC a=1 " + "\u{1F600}".repeat(16) + "\n", { metrics: [["a", 1, "\u{1F600}".repeat(16)]], malformed: 0, dropped: [] }],
+        ["METRIC a=1 " + "\u{1F600}".repeat(17) + "\n", { metrics: [], malformed: 1, dropped: [] }]],
+      // (5) '#' runs before the keyword are no candidate at any length (one '# ' at most) — nothing dropped; blanks past 512 still are
+      hashRun: [["#".repeat(600) + " METRIC a=1\n", none], ["#".repeat(10) + " METRIC a=1\n", none],
+        [" ".repeat(600) + "METRIC a=1\n", { metrics: [], malformed: 0, dropped: ["candidateBytes"] }]],
+      // (6, the controller's ruling) a CR at a text's very end, no LF after it, ends the line like CR LF — one CR, never two
+      finalCr: [["METRIC a=1\r", a1], ["x\nMETRIC b=2\r", { metrics: [["b", 2, null]], malformed: 0, dropped: [] }],
+        ["METRIC a=1 ms\r", { metrics: [["a", 1, "ms"]], malformed: 0, dropped: [] }], ["# METRIC a=1\r", a1],
+        ["METRIC a=1\r\r", { metrics: [], malformed: 1, dropped: [] }], ["METRIC a=1\r\n", a1]],
+      // (7, the controller's ruling) a bare `METRIC` (nothing after it on its line — LF, CR LF, the text's end, a colour) is a candidate:
+      // ignored, but counted toward the 1,000 — the 1,001st says `candidates`
+      bareKeyword: [["METRIC\n".repeat(3), none],
+        [Array.from({ length: 1001 }, () => "METRIC").join("\n") + "\nMETRIC z=1\n", { metrics: [["z", 1, null]], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\n" + "METRIC\n".repeat(1000), { metrics: [], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\r\n" + "METRIC\r\n".repeat(1000), { metrics: [], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\n" + "METRIC\n".repeat(999) + "METRIC", { metrics: [], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\n" + ("METRIC" + ESC + "[0m\n").repeat(1000), { metrics: [], malformed: 0, dropped: ["candidates"] }],
+        ["METRIC early=1\n" + "METRIC\n".repeat(999), { metrics: [["early", 1, null]], malformed: 0, dropped: [] }],
+        ["METRIC\rx\nMETRIC early=1\n", { metrics: [["early", 1, null]], malformed: 0, dropped: [] }]],
+    };
+    const names = { hash: "(1) one '# ' prefix", csiLetter: "(2) a CSI sequence ends at a letter", csiBytes: "(3) the 512-byte bound after CSI removal",
+      unitPoints: "(4) a unit's 16 in code points", hashRun: "(5) a '#' run before the keyword", finalCr: "(6) a final CR with no LF ends the line",
+      bareKeyword: "(7) a bare METRIC line is a candidate, ignored" };
+    for (const [k, rows] of Object.entries(shapes)) {
+      const got = rows.map(([t]) => sum(t));
+      ok(rows.every(([, want], i) => js(got[i]) === js(want)), "1.41.0 review 1 R1-MF-4 parity with dev-guardian 3.17 metricLine.ts: " + names[k] + " (got " + js(got) + ")");
+    }
+  }
+
+  // --- 1.41.0 review 1 (R1-MF-2, R1-MF-5): the judge's exact decimals — exponent forms (JS prints < 1e-6 and ≥ 1e21 that way) and
+  // values of more than 15 significant digits (judged on the printed text) — each verdict, delta and applied as dev-guardian 3.17's judge gives it ---
+  {
+    const J = (r, c) => { const j = E.judgeMetric(r, c); return { verdict: j.verdict, delta: j.delta, applied: j.applied }; };
+    const noText = (t) => { const r = one(t); return { name: r.name, value: r.value, unit: r.unit, better: r.better, tolerance: r.tolerance }; }; // a reading without its text
+    const exp = [
+      ["METRIC a=0.000001 better=lower tolerance=10%", "METRIC a=1.5e-7 better=lower tolerance=10%", { verdict: "improved", delta: -8.5e-7, applied: 1e-7 }],
+      ["METRIC a=1.5e-7 better=lower tolerance=10%", "METRIC a=0.000001 better=lower tolerance=10%", { verdict: "regressed", delta: 8.5e-7, applied: 1.5e-8 }],
+      ["METRIC a=1e21 better=lower tolerance=1%", "METRIC a=9.8e20 better=lower tolerance=1%", { verdict: "improved", delta: -20000000000000000000, applied: 10000000000000000000 }],
+      ["METRIC a=9.8e20 better=lower tolerance=1%", "METRIC a=1e21 better=lower tolerance=1%", { verdict: "regressed", delta: 20000000000000000000, applied: 9800000000000000000 }],
+    ];
+    const gotExp = exp.map(([r, c]) => [J(one(r), one(c)), J(noText(r), noText(c))]);
+    ok(exp.every(([, , want], i) => js(gotExp[i][0]) === js(want) && js(gotExp[i][1]) === js(want)),
+      "1.41.0 review 1 R1-MF-2: exponent-form values are judged exactly — 0.000001 vs 1.5e-7 (better=lower, 10 %) improved, 1e21 vs 9.8e20 (1 %) improved, and back regressed — from the line's text and from a stored value alike, as dev-guardian 3.17's judge (got " + js(gotExp) + ")");
+    const long = [
+      ["METRIC a=100000000000000.000000001 better=lower tolerance=0", "METRIC a=100000000000000.000000002 better=lower tolerance=0", { verdict: "regressed", delta: 1e-9, applied: 0 }],
+      ["METRIC a=1234567890.12345678 better=lower tolerance=0", "METRIC a=1234567890.12345679 better=lower tolerance=0", { verdict: "regressed", delta: 1e-8, applied: 0 }],
+      ["METRIC a=123456789012345.123456789 better=lower tolerance=0.000000001", "METRIC a=123456789012345.123456790 better=lower tolerance=0.000000001", { verdict: "within", delta: 1e-9, applied: 1e-9 }],
+    ];
+    const gotLong = long.map(([r, c]) => J(one(r), one(c)));
+    // only when BOTH have a text: a reading without one (a hand edit, another writer) is judged on the two values
+    const mixed = J(noText(long[0][0]), one(long[0][1]));
+    ok(long.every(([, , want], i) => js(gotLong[i]) === js(want)) && one(long[0][0]).text === "100000000000000.000000001" && js(mixed) === js({ verdict: "within", delta: 0, applied: 0 }),
+      "1.41.0 review 1 R1-MF-5: a value of more than 15 significant digits is judged on the decimal the line printed (its `text`) — 100000000000000.000000001 → …002 at tolerance 0 regressed, as dev-guardian 3.17's judge; with one side's text missing, on the values (got " + js({ gotLong, mixed }) + ")");
+  }
+
   // --- cost (the same work on both sides): the walk is linear on hostile input UNDER the cap, and a 64 MiB output costs one scan ---
   {
     const hostile = (n) => {
@@ -186,12 +257,12 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     const fc3 = stateOf(p, slug).finishChecks;
     all("1.41 a run's METRIC readings: done --run's passing commands (several outputs, the later winning) go on the LATEST run — never in its history — and into the result (metrics, metricsMalformed); a run reported without ranBy \"cli\" (MCP, a facade call) and a failed run carry none, and drop the older run's; finish --run's passing checks the same, recordedChecks counting them (got " +
       js({ tick: [tick.metrics, tick.metricsMalformed], st1: [st1.metrics, st1.history.map((h) => h.metrics)], st2: st2.metrics, st3: st3.metrics, rec: fin.recordedChecks, fc: [fc.size.metrics, fc.size.history.some((h) => h.metrics)], fc2: fc2.size.metrics, fc3: fc3.size.metrics }) + ")", {
-      tick: tick.ok && js(tick.metrics) === js([{ name: "t", value: 2, unit: "ms", better: null, tolerance: null }]) && tick.metricsMalformed === 1 && tick.metricsLastMalformed === "METRIC u=1,5",
-      latestOnly: js(st1.metrics) === js([{ name: "t", value: 2, unit: "ms" }]) && st1.history.every((h) => h.metrics === undefined),
+      tick: tick.ok && js(tick.metrics) === js([{ name: "t", value: 2, text: "2", unit: "ms", better: null, tolerance: null }]) && tick.metricsMalformed === 1 && tick.metricsLastMalformed === "METRIC u=1,5",
+      latestOnly: js(st1.metrics) === js([{ name: "t", value: 2, text: "2", unit: "ms" }]) && st1.history.every((h) => h.metrics === undefined),
       notCli: noCli.ok && noCli.metrics === undefined && st2.metrics === undefined,
       notFailed: failed.ok === false && failed.metrics === undefined && st3.metrics === undefined,
       finishRun: js(fin.recordedChecks) === js([{ name: "size", exitCode: 0, metrics: 1 }, { name: "test", exitCode: 0, metrics: 1 }]) &&
-        js(fc.size.metrics) === js([{ name: "bundle-size", value: 120, unit: "kB" }]) && !fc.size.history.some((h) => h.metrics),
+        js(fc.size.metrics) === js([{ name: "bundle-size", value: 120, text: "120", unit: "kB" }]) && !fc.size.history.some((h) => h.metrics),
       finishFailed: fc2.size.exitCode === 1 && fc2.size.metrics === undefined,
       finishFacade: facade.ok && fc3.size.metrics === undefined && !facade.recordedChecks.some((r) => r.metrics),
     });
@@ -314,10 +385,10 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     // not ready (an open task): no record, the comparison still shown
     const other = change(p, "Not ready", true);
     const notReady = finishWith(p, other, { size: "METRIC a=3\n", test: "METRIC b=2\n" }, { checks: { size: CHECKS.size, test: 'node -e "process.exit(0)" --test --again' } });
-    all("1.41 finished.metrics: recorded by a ready WRITTEN finish only ([{check, name, value, unit?, better?, tolerance?}], baseline.metrics counts it), from the project checks' passing runs — never a task's reading, never a check whose run no longer passes (`changed`), never a not-ready finish (got " +
+    all("1.41 finished.metrics: recorded by a ready WRITTEN finish only ([{check, name, value, text, unit?, better?, tolerance?}], baseline.metrics counts it), from the project checks' passing runs — never a task's reading, never a check whose run no longer passes (`changed`), never a not-ready finish (got " +
       js({ noRecord, rec, rec2, baseline: written.baseline, stale: [stale.readyToFinish, stale.suiteChecks.map((s) => s.status)], notReady: [notReady.readyToFinish, stateOf(p, other).finished, notReady.metrics && notReady.metrics.length] }) + ")", {
       reportOnly: report.readyToFinish && noRecord === undefined,
-      written: js(rec) === js([{ check: "size", name: "a", value: 1 }, { check: "test", name: "b", value: 2 }]) && written.baseline.metrics === 2,
+      written: js(rec) === js([{ check: "size", name: "a", value: 1, text: "1" }, { check: "test", name: "b", value: 2, text: "2" }]) && written.baseline.metrics === 2,
       noTask: !js(rec).includes("task_only"),
       notPassing: stale.readyToFinish === false && js((stale.metrics || []).map((m) => m.check)) === js(["size"]) && js(rec2) === js(rec),
       notReady: notReady.readyToFinish === false && stateOf(p, other).finished === undefined && notReady.metrics.length === 2,
@@ -446,6 +517,105 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     });
   }
   {
+    // 1.41.0 review 1 R1-MF-4: a stored reading read back counts its unit as the reader does (code points) — a recorded 9-astral unit is
+    // kept, so the next finish compares (no `unit` loosened)
+    const unit9 = "\u{1F600}".repeat(9);
+    const p = proj("unit-points");
+    finishWith(p, change(p, "Astral first"), { size: "METRIC emoji=5 " + unit9 + " better=lower tolerance=1\n" });
+    const r = finishWith(p, change(p, "Astral next"), { size: "METRIC emoji=5 " + unit9 + " better=lower tolerance=1\n" }, { write: false });
+    const m = (r.metrics || [])[0] || {};
+    ok(m.verdict === "within" && m.loosened === null && !!m.reference && m.reference.unit === unit9,
+      "1.41.0 review 1 R1-MF-4 parity with dev-guardian 3.17 metricLine.ts: (4) a recorded unit of 9 astral characters is read back whole — the next finish compares it (got " + js(m) + ")");
+  }
+  {
+    // 1.41.0 review 1 R1-MF-5: the printed text rides the reading — the run's and finished.metrics — so the next finish judges a value of
+    // more than 15 significant digits exactly; a text read back that the grammar could not print, or that is not the value's, is dropped
+    // (judged on the values), and so is a judgment against a reading without one
+    const safe = (fn) => { try { return fn(); } catch (e) { return { threw: e.message }; } };
+    const p = proj("long-digits");
+    const a = change(p, "Long first");
+    finishWith(p, a, { size: "METRIC d=100000000000000.000000001 better=lower tolerance=0\nMETRIC m=100000000000000.000000001 better=lower tolerance=0\n" +
+      "METRIC x=100000000000000 better=lower tolerance=0\nMETRIC y=16 better=lower tolerance=0\n" });
+    const st = stateOf(p, a);
+    const rec = js(st.finished.metrics.filter((e) => e.name === "d")), run = js(st.finishChecks.size.metrics.filter((e) => e.name === "d"));
+    for (const e of st.finished.metrics) {
+      if (e.name === "m") delete e.text; // a reading recorded without its text
+      if (e.name === "x") e.text = "999"; // not the value's decimal
+      if (e.name === "y") e.text = "0x10"; // Number() reads it as 16, the grammar never prints it
+    }
+    writeState(p, a, st);
+    const r = safe(() => finishWith(p, change(p, "Long next"), { size: "METRIC d=100000000000000.000000002 better=lower tolerance=0\nMETRIC m=100000000000000.000000002 better=lower tolerance=0\n" +
+      "METRIC x=100000000000000 better=lower tolerance=0\nMETRIC y=16 better=lower tolerance=0\n" }, { write: false }));
+    const v = (n) => { const m = ((r && r.metrics) || []).find((i) => i.name === n); return m ? [m.verdict, m.delta] : null; };
+    all("1.41.0 review 1 R1-MF-5: a reading keeps the decimal its line printed (`text`) on the run and in finished.metrics; the next finish judges 100000000000000.000000001 → …002 at tolerance 0 regressed (dev-guardian 3.17's verdict); a recorded reading without a text, with one that is not its value's or one outside the grammar is judged on the values (got " +
+      js({ rec, run, threw: r && r.threw, d: v("d"), m: v("m"), x: v("x"), y: v("y") }) + ")", {
+      stored: rec === js([{ check: "size", name: "d", value: 100000000000000, text: "100000000000000.000000001", better: "lower", tolerance: { amount: 0, percent: false } }]) &&
+        run === js([{ name: "d", value: 100000000000000, text: "100000000000000.000000001", better: "lower", tolerance: { amount: 0, percent: false } }]),
+      exact: js(v("d")) === js(["regressed", 1e-9]),
+      bothOnly: js(v("m")) === js(["within", 0]),
+      notItsValue: js(v("x")) === js(["within", 0]),
+      grammar: js(v("y")) === js(["within", 0]),
+    });
+  }
+  {
+    // 1.41.0 review 1 R1-MF-1: over MCP a run carries no reading, so a name a Silent Regressions row declares is a doubt there — never "no
+    // passing run printed it": metricsUnmeasured (and its warning) only when every passing check's latest run is the CLI's (observed "cli")
+    const p = proj("unmeasured-mcp");
+    const slug = change(p, "Reported");
+    fs.writeFileSync(path.join(p, ".specs", slug, "design.md"), "# Design\n\n## Silent Regressions\n| Metric | Why | Printed by |\n|---|---|---|\n| `bundle-size` | grows | size |\n");
+    const unm = (r) => [r.metricsUnmeasured, (r.warnings || []).filter((w) => /Silent Regressions/.test(w)).length];
+    const observed = () => Object.keys(CHECKS).map((n) => stateOf(p, slug).finishChecks[n].observed);
+    later();
+    const overMcp = payload(await rpc("tools/call", { name: "spec_finish", arguments: { projectDir: p, name: slug, evidence: evidenceOf({}).map(({ output, ...e }) => ({ ...e, summary: "METRIC bundle-size=120 kB" })) } }));
+    const mcpObs = observed();
+    later();
+    S.finishFeature(p, slug, { evidence: [evidenceOf({ size: "METRIC other=1\n" })[0]], ranBy: "cli" }); // size through finish --run…
+    later();
+    const mixed = S.finishFeature(p, slug, { evidence: [{ name: "test", command: CHECKS.test, exitCode: 0, summary: "ok" }] }); // …test over MCP
+    const mixedObs = observed();
+    for (const c of Object.values(CHECKS)) S.observeRun(p, { command: c, exitCode: 0, event: "PostToolUse", cwd: p }); // the harness saw both runs
+    later();
+    const seen = S.finishFeature(p, slug, { evidence: evidenceOf({}).map(({ output, ...e }) => e) });
+    const seenObs = observed();
+    const viaCli = finishWith(p, slug, { size: "METRIC other=1\n" }, { write: false });
+    all("1.41.0 review 1 R1-MF-1: a finish whose checks were reported over MCP (spec_finish {evidence}) claims no unmeasured name — nor one with a single check reported so, nor one the observe hook saw; every check run by finish --run still does (got " +
+      js({ overMcp: [overMcp.ok, mcpObs, unm(overMcp)], mixed: [mixedObs, unm(mixed)], seen: [seenObs, unm(seen)], viaCli: unm(viaCli) }) + ")", {
+      overMcp: overMcp.ok && js(mcpObs) === js([false, false]) && js(unm(overMcp)) === js([null, 0]),
+      mixed: js(mixedObs) === js(["cli", false]) && js(unm(mixed)) === js([null, 0]),
+      seen: js(seenObs) === js([true, true]) && js(unm(seen)) === js([null, 0]),
+      viaCli: js(unm(viaCli)) === js([["bundle-size"], 1]),
+    });
+  }
+  {
+    // 1.41.0 review 1 R1-MF-7: a changed unit is not compared — its loosened form never says "judged by", and a warning holding only unit
+    // changes never says "got worse past the tolerance"; one with a regressed reading too keeps the general head
+    const p = proj("unit-change");
+    const a = change(p, "Unit base");
+    finishWith(p, a, { size: "METRIC size=120 kB better=lower tolerance=2%\nMETRIC speed=100 ms better=lower tolerance=1%\n" });
+    const day = E.dayOf(stateOf(p, a).finished.at);
+    const onlyUnit = finishWith(p, change(p, "Unit only"), { size: "METRIC size=0.2 MB better=lower tolerance=2%\nMETRIC speed=100 ms better=lower tolerance=1%\n" }, { write: false });
+    const both = finishWith(p, change(p, "Unit and worse"), { size: "METRIC size=0.2 MB better=lower tolerance=2%\nMETRIC speed=150 ms better=lower tolerance=1%\n" }, { write: false });
+    const warnOf = (r) => (r.warnings || []).filter((w) => /METRIC/.test(w));
+    const unitItem = MT().flagged("size", "size", "120 kB", "0.2 MB", a, day, null, null, "unjudged") + " " + MT().loosened("unit", "kB", "MB");
+    const worse = MT().flagged("speed", "size", "100 ms", "150 ms", a, day, "+50", "1", "regressed");
+    const langs = ["en", "pt", "es", "pt-BR"];
+    all("1.41.0 review 1 R1-MF-7: a unit change reads as not compared — no \"judged by\" in its loosened form (EN / PT / ES), a unit-only warning's own head (never \"got worse past the tolerance\"), the general head once a reading regressed too (got " +
+      js({ onlyUnit: warnOf(onlyUnit), both: warnOf(both), line: E.metricItemLines(onlyUnit.metrics, "en")[0] }) + ")", {
+      unitOnly: js(warnOf(onlyUnit)) === js([MT().finishWarn(1, unitItem, 0, true)]) && !/worse past the tolerance|judged by/.test(warnOf(onlyUnit)[0]),
+      general: js(warnOf(both)) === js([MT().finishWarn(2, unitItem + "; " + worse, 0, false)]) && /got worse past the tolerance/.test(warnOf(both)[0]),
+      line: !/judged by/.test(E.metricItemLines(onlyUnit.metrics, "en")[0]),
+      langs: langs.every((l) => MT(l).finishWarn(1, "L", 0, true) !== MT(l).finishWarn(1, "L", 0, false) &&
+        !MT(l).loosened("unit", "a", "b").includes(MT(l).loosened("tolerance", "a", "b").split(" — ").pop())),
+    });
+  }
+  {
+    // 1.41.0 review 1 R1-MF-8: pt-BR derives the metric strings' second person and "beyond" ("para lá de" → "além de")
+    const br = MT("pt-BR");
+    const texts = [br.finishWarn(2, "L", 1, false), br.finishWarn(1, "L", 0, true), br.dropped("names"), br.loosened("unit", "kB", "MB"), br.verdict.regressed];
+    ok(/nunca afrouxe, inverta nem retire/.test(texts[0]) && /além de um limite/.test(texts[2]) && texts.every((t) => !/afrouxes|invertas|retires|para lá d/.test(t)),
+      "1.41.0 review 1 R1-MF-8: pt-BR's metric warning says \"nunca afrouxe, inverta nem retire\" and the reader bound \"além de um limite\" (got " + js(texts) + ")");
+  }
+  {
     // the series bound and its arithmetic, on the block alone: 12 finishes visited out of order → ordered by finished.at, the last 10
     const blk = E.measuredBlock();
     for (let k = 11; k >= 0; k--) blk.visit({ slug: "f" + k }, { finished: { at: new Date(Date.UTC(2026, 0, 1 + k)).toISOString(), metrics: [{ check: "c", name: "n", value: k }] } });
@@ -511,6 +681,38 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
       notOthers: others.every((f) => doc(f.slug) === null) && !/Silent Regressions/.test(designOf(others[0]) + designOf(others[1])),
       legacy: legacy.status === "pass" && legacy.detail === i18n.msg("en").designWeigh.legacyApproval(i18n.msg("en").designWeigh["design-silent-regressions"].missing(), "1.41"),
       upgrade: up.ok && E.DESIGN_WEIGH_IDS.has("design-silent-regressions") && !js((up.features || []).filter((f) => f.name === dm.slug).map((f) => f.attention)).includes("design-silent"),
+    });
+
+    // 1.41.0 review 1 R1-MF-3: a project design template without Silent Regressions (templates init's own copy) — an m / l feature
+    // scaffolded from it gets the built-in's section at the end, as a track's design block is added to a project template: doctor reads
+    // it as it reads the built-in scaffold's (empty until answered — never `missing`); size s and unsized get none; a template that has
+    // the section keeps its own, never a second
+    const heads = (text) => (text.match(/^## Silent Regressions\s*$/gm) || []).length;
+    const pt = path.join(tmp, "m41-design-template");
+    S.initProject(pt, ["core"], "en", { checks: CHECKS });
+    S.templates(pt, "init", { artifact: "design" });
+    const tdoc = (slug) => (S.specDoctor(pt, slug).checks || []).find((c) => c.id === "design-silent-regressions") || null;
+    const tml = ["m", "l"].map((size) => S.createFeature(pt, "Tpl " + size, ["core"], "x", undefined, "en", undefined, { size }));
+    const tothers = [S.createFeature(pt, "Tpl s", ["core"], "x", undefined, "en", undefined, { size: "s" }), S.createFeature(pt, "Tpl none", ["core"], "x", undefined, "en")];
+    for (const f of [...tml, ...tothers]) { for (const a of ["classification.md", "requirements.md"]) fill(path.join(f.dir, a)); approveBefore(pt, f.slug, "design"); }
+    const tFresh = tdoc(tml[0].slug);
+    const tTexts = tml.map(designOf); // as scaffolded (the first is answered below)
+    const tdm = tml[0], tText = tTexts[0];
+    fs.writeFileSync(path.join(tdm.dir, "design.md"), tText.replace(/## Silent Regressions[\s\S]*$/, "## Silent Regressions\n| Metric | Why | Printed by |\n|---|---|---|\n| `bundle-size` | a chart | size |\n"));
+    const tAnswered = tdoc(tdm.slug);
+    const po = path.join(tmp, "m41-design-template-own");
+    S.initProject(po, ["core"], "en", { checks: CHECKS });
+    S.templates(po, "init", { artifact: "design" });
+    const otf = path.join(po, ".specs", "templates", "design.md");
+    fs.writeFileSync(otf, fs.readFileSync(otf, "utf8") + "\n## Silent Regressions\nNone — the team's own wording.\n");
+    const own = S.createFeature(po, "Own m", ["core"], "x", undefined, "en", undefined, { size: "m" });
+    all("1.41.0 review 1 R1-MF-3: an m / l feature scaffolded from a project design template without Silent Regressions gets the built-in's section (doctor: as on a built-in scaffold — empty, answered by a row; never missing), size s and unsized get none, a template's own section is kept alone, the built-in scaffold has one (got " +
+      js({ heads: [...tTexts, ...tothers.map(designOf)].map(heads), tFresh, tAnswered, own: heads(designOf(own)), builtIn: scaffolds.map(heads) }) + ")", {
+      appended: tTexts.every((t) => heads(t) === 1 && /\n## Silent Regressions\n<!--[\s\S]*?-->\n\| Metric \| Why it can regress silently \| Printed by \|\n\|---\|---\|---\|\n?$/.test(t)),
+      doctor: !!tFresh && tFresh.status === fresh.status && tFresh.detail === fresh.detail && tAnswered.status === "pass",
+      notOthers: tothers.every((f) => heads(designOf(f)) === 0 && tdoc(f.slug) === null),
+      ownKept: heads(designOf(own)) === 1 && designOf(own).includes("None — the team's own wording."),
+      builtInOnce: scaffolds.every((t) => heads(t) === 1),
     });
   }
   {

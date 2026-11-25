@@ -362,6 +362,9 @@ const LAYOUTS = {
     secs.push(D.constitution, D.complexity);
     return secs.join("\n\n") + "\n" + extra + "\n" + D.footerSized(a.label, a.size) + "\n";
   },
+  // The m / l design's Silent Regressions section alone (1.41.0 review 1): what an m / l feature scaffolded from a project design
+  // template without one gets at the end (engine/templates.js withTrackBlocks — the way a track's block is added).
+  designSilent(T) { return T.design.silent; },
 
   // tasks.md, organized by user story: a track block's lead part first (+port's baseline — 1.36), Setup, Foundational, US-1 (its core
   // task and a parallel one), the active tracks' task blocks (trackTasks, numbered on), US-2, Polish. Size S: the lead part, one core
@@ -569,6 +572,7 @@ module.exports = {
   requirements: (a, lang) => L(lang).requirements(a),
   trackDesignBlock: (track, lang) => L(lang).trackDesignBlock(track),
   design: (a, lang) => L(lang).design(a),
+  designSilent: (lang) => L(lang).designSilent(), // 1.41.0 review 1: the m / l design's Silent Regressions section alone
   tasks: (a, lang) => L(lang).tasks(a),
   testPlan: (name, lang, tracks, acs, size) => L(lang).testPlan(name, tracks, acs, size), // tracks: which template ACs get a planned test; acs: the real AC IDs instead (one generic row each); size: S plans its two core criteria
   templateAcIds: (tracks, size) => Object.keys(templateTests(tracks, size)), // the template AC IDs a test plan scaffolded for these tracks (and size) covers

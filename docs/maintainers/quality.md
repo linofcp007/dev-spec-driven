@@ -165,9 +165,15 @@ review findings — is in History at the end.
   as before, and the reuse gate's `[2]` is unchanged). States as Risks' (min 0: a row or a line of prose — "None — why" — answers;
   the empty table reads `empty`); a WARN, never a fail nor a gate; the size-S merged section never answers it (`sized`). Its stamp
   `silent` (`DESIGN_WEIGH_STAMPS.silent = "1.41"`, approvePhase on every design approval and its record): a design approved before
-  passes with `legacyApproval`. In DESIGN_WEIGH_IDS, so spec_upgrade never counts it toward `attention`. `templates check` warns
-  `silent-missing` on a project design template without the heading — never on the built-in's own copy (`templates init` copies the
-  no-size design, which has none: `sameText`, BOM / CRLF / final blanks aside — its pristine copy checks clean, as in 1.40).
+  passes with `legacyApproval`. In DESIGN_WEIGH_IDS, so spec_upgrade never counts it toward `attention`. **A project design
+  template** replaces the sized builder whole, so an m / l feature scaffolded from one without the heading (weighSection(…,
+  SILENT_SYN) null — doctor's own `missing` test) gets the built-in section at the end, before the track blocks:
+  templates.js `withTrackBlocks` (design) appends `i18n.designSilent(lang)` (the m / l builder's `D.silent`) when `opts.size` is m
+  / l — the size reaches it only from spec_create's design scaffold (`scaffoldText`'s opts.size); the built-in path never passes
+  it (its m / l design holds the section). Doctor then reads it as the built-in scaffold's (empty until answered). `templates
+  check` warns `silent-missing` on a project design template without the heading — saying the m / l features scaffolded from it
+  get the built-in one at the end — never on the built-in's own copy (`templates init` copies the no-size design, which has
+  none: `sameText`, BOM / CRLF / final blanks aside — its pristine copy checks clean, as in 1.40).
   `SILENT_SYN`: silent regression(s) / silent metrics / regression metrics / metrics that regress silently, PT regressões
   silenciosas / regressão silenciosa / métricas de regressão, ES regresiones silenciosas / regresión silenciosa / métricas de
   regresión, unaccented twins — never "Metrics" alone (+saas Observability's). The rows' METRIC names are what finish's
@@ -2254,7 +2260,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   "None — why". The designer's scaffold had a slotted example row: CRIT_S2 #7 — a slot is a `placeholders` refusal of every fresh
   m / l design, more than the owner's warn — so the table is empty and an unanswered section reads `empty`. The templates-check
   warning trade-offs and risks have is restored (`silent-missing`), skipping the built-in's own copy: the no-size design `templates
-  init` writes has no such section, and a pristine copy checked clean in 1.40.
+  init` writes has no such section, and a pristine copy checked clean in 1.40. Review 1 (R1-MF-3): that exemption left every m / l
+  feature scaffolded from the pristine copy without the section — doctor warned `missing` on each while templates check passed.
+  1.40 had no sized-section mechanism for a project template (it replaces the sized builder whole), so the smallest append rides
+  the track blocks' (`withTrackBlocks`, `opts.size` from spec_create only); the exemption stays, `silent-missing`'s text now says
+  what the scaffold does.
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the

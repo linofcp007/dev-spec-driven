@@ -2229,13 +2229,15 @@ const msg = {
     metric: {
       verdict: { within: "dentro de su tolerancia", improved: "mejor más allá de su tolerancia", regressed: "peor más allá de su tolerancia" },
       unjudged: (why) => (why.includes("unit") ? "no comparada — la unidad cambió" : `no evaluada — la línea anterior no declara ${why.map((w) => w + "=").join(" ni ")}`),
-      loosened: (term, was, now) => `relajó ${term === "unit" ? "la unidad" : term + "="} (${was} → ${now}) — evaluada con los términos del finish anterior`,
+      loosened: (term, was, now) => (term === "unit" ? `cambió la unidad (${was} → ${now}) — no comparada` : `relajó ${term}= (${was} → ${now}) — evaluada con los términos del finish anterior`),
       line: (name, check, now, ref, feature, day, delta, judged) => `${name} (${check}): ${now} — ${ref} en el finish de ${feature} (${day})${delta == null ? "" : " · " + delta} · ${judged}`,
       lineNew: (name, check, now) => `${name} (${check}): ${now} — primera medición: el próximo finish compara con ella`,
       summaryHead: "## Métricas",
       flagged: (name, check, ref, now, feature, day, delta, applied, verdict) => `${name} (check ${check}): ${ref} → ${now} desde el finish de ${feature} el ${day} (` +
         [delta, verdict === "unjudged" ? (delta == null ? "no comparada" : "no evaluada") : `${({ within: "dentro de", improved: "mejor que", regressed: "más allá de" })[verdict]} su tolerancia ${applied}`].filter(Boolean).join(", ") + ")",
-      finishWarn: (n, list, more) => `${n} lectura(s) METRIC empeoraron más allá de la tolerancia que declara su línea, o relajaron sus términos, desde el último finish que las registró: ${list}${more ? ` — y ${more} más (las metrics de spec_finish)` : ""}. Cada cambio integrado desde ese finish está en el número, no solo los de esta función: díselo al usuario antes del merge — y nunca relajes, inviertas ni quites una línea METRIC para pasar.`,
+      finishWarn: (n, list, more, unitOnly) => (unitOnly
+        ? `${n} lectura(s) METRIC cambiaron de unidad desde el último finish que las registró — no comparadas (sin conversión): ${list}${more ? ` — y ${more} más (las metrics de spec_finish)` : ""}. Díselo al usuario antes del merge: el próximo finish compara en la nueva unidad — y nunca cambies la unidad, ni relajes, inviertas o quites una línea METRIC para pasar.`
+        : `${n} lectura(s) METRIC empeoraron más allá de la tolerancia que declara su línea, o relajaron sus términos, desde el último finish que las registró: ${list}${more ? ` — y ${more} más (las metrics de spec_finish)` : ""}. Cada cambio integrado desde ese finish está en el número, no solo los de esta función: díselo al usuario antes del merge — y nunca relajes, inviertas ni quites una línea METRIC para pasar.`),
       unmeasured: (names, slug) => `El design.md de ${slug} indica ${names} en Regresiones Silenciosas, pero ninguna ejecución correcta de un check del proyecto imprimió una línea METRIC con ese nombre — añade la línea al check que lo mide (references/verification.md → Metrics that regress silently), o corrige la fila.`,
       notRead: (n, last, grammar) => `${n} línea(s) METRIC no leída(s) — la forma es ${grammar}${last ? ` (la última: ${last})` : ""}`,
       dropped: (bounds) => `líneas METRIC más allá de un límite del lector no se leyeron (${bounds}): como máximo 20 nombres, 1000 líneas candidatas de como máximo 512 bytes, los últimos 64 MiB de la salida — se quedan las líneas impresas al final`,
@@ -2582,7 +2584,7 @@ const msg = {
         "tradeoffs-missing": "sin sección Alternativas y Compensaciones — doctor avisa (design-tradeoffs) en todas las funciones creadas con ella.",
         "risks-missing": "sin sección Riesgos — doctor avisa (design-risks) en todas las funciones creadas con ella.",
         "reuse-missing": "sin sección Reutilización e Integración — doctor avisa (design-reuse) en todas las funciones creadas con ella.",
-        "silent-missing": "sin sección Regresiones Silenciosas — doctor avisa (design-silent-regressions) en todas las funciones de tamaño m / l creadas con ella.",
+        "silent-missing": "sin sección Regresiones Silenciosas — una función de tamaño m / l creada con ella recibe la del built-in al final (doctor avisa design-silent-regressions hasta que se responda); añádela donde la plantilla la quiera.",
         "no-criteria": "ningún criterio de aceptación (una línea US-n.AC-m con DEBE) — nada que seguir para EARS, trace_check o el plan de pruebas.",
         "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — doctor falla en todas las funciones creadas con ella.`,
         "phantom-ac": (ids, file) => `cita IDs de AC que ${file} no define: ${ids} — trace_check los reporta como fantasmas.`,
