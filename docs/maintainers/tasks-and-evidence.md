@@ -66,8 +66,8 @@ Phase 6, opt-in.
   candidates are the matrix's retired rows, the record spec_impact's `retire` and the protected-test accept — no engine
   part; `references/subagent-execution.md` → The pruning pass, `test-patterns.md` → Test value and pruning); it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
   rewritten lines' history. **Lessons (1.41):** a fix round 1–3 asks the implementer each confirmed finding's cause (its
-  report's `### Causes` block), the controller checks the three a file can show and records it with `spec_decide {kind:
-  "lesson"}`; the finish batch amends the guidance once (§7b; lifecycle.md → Decisions and spikes — the engine's part is the
+  report's `### Causes` block), the controller checks the three a file can show and records it with
+  `spec_decide {kind: "lesson"}`; the finish batch amends the guidance once (§7b; lifecycle.md → Decisions and spikes — the engine's part is the
   entry, its readers and finish's warning). The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
@@ -1237,13 +1237,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and ONE finish warning, never a blocker, each finding labelled by its pass. dev-guardian 3.17 gives suppressions a pass of
   their own (CRIT_G1 #5): reported under `guardian-test-integrity` they would have read "weakened test: scanner-suppression-
   added". The name `guardian-suppressions` is DECISIONS' (dev-guardian's chain had not committed one when this was built;
-  3.17's pass carries that name) — one constant, `GUARDIAN_SUPPRESSIONS`. An older dev-guardian has no such pass: its test findings only, nothing else changes.
-  "Below the gate" is the gate's own rule (severity under `--fail-on`), not "absent from `blocking_findings`". Not built:
+  3.17's pass carries that name) — one constant, `GUARDIAN_SUPPRESSIONS`. An older dev-guardian has no such pass: its test
+  findings only, nothing else changes. "Below the gate" is the gate's own rule (severity under `--fail-on`), not "absent
+  from `blocking_findings`". Not built:
   a label on a BLOCKING suppression finding (at `--fail-on medium` it reads as its rule id, as in 1.40), W in the merge summary
   or finish --run's own lines. The same round rewrote the five bare `# nosec` examples (fixHint EN / PT / ES, AGENTS.md,
   verification.md) as `# nosec <id>  # <reason>` — a bare one silences every Bandit rule on its line (CRIT_G1 #6; 17-docs
-  reads every surface for one). **The friction budget** (Project checks → The friction budget), S3 as CRIT_S3 cut it: the git-ignored,
-  name-stamped timings.jsonl (the writer stamps `check` + `checkCmd`, so the reader is a string compare — the designed reader ran
+  reads every surface for one). **The friction budget** (Project checks → The friction budget), S3 as CRIT_S3 cut it: the
+  git-ignored, name-stamped timings.jsonl (the writer stamps `check` + `checkCmd`, so the reader is a string compare — the designed reader ran
   the matcher per line, 10–30 next_action calls of CPU on a worst-case log), trimmed per check (a byte trim let the fast check's
   flood push the suite's runs out before they reached 3), `_Budget:_` read by the task markers' span reader under its own label
   (a second closer grammar would drift — MARKER_CLOSE_PUNCT already differs from the design's), spec_metrics' project `friction`,
@@ -1252,9 +1253,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   next_action per feature). Cut: `ms` on `.state.json` runs (and its internal CLI key), the feature-scope run times, doctor
   `friction` (every feature, every size, spec_upgrade regrouping them all — and no project-level doctor exists), the `took` line
   (a budgeted check's too: the decision lists none — the narrower reading). observed.jsonl's appender and tail reader became `appendLog` /
-  `readLogTail`, shared; the observed lines are 1.40's byte for byte (the oracle replay and 09-evidence-friction). **Metrics that
-  regress silently** (S2 as CRIT_S2 cut it, under the round's Shared 1–3 + 3b): a number a check prints —
-  the `METRIC name=value` line agent benchmark loops print, with an optional unit, `better=` and `tolerance=` — is read, stored and
+  `readLogTail`, shared; the observed lines are 1.40's byte for byte (the oracle replay and 09-evidence-friction). **Metrics
+  that regress silently** (S2 as CRIT_S2 cut it, under the round's Shared 1–3 + 3b): a number a check prints — the
+  `METRIC name=value` line agent benchmark loops print, with an optional unit, `better=` and `tolerance=` — is read, stored and
   compared at finish (Metrics that regress silently, above). One contract with dev-guardian 3.17 (`metric-lines.v1.json`), two
   readers. Cut on the way (CRIT_S2): the tools/list words (prose in verification.md instead), `vanished` (the lookup can't see a
   name nobody printed, and it never ends), task values in a finish's record, a judgment at the tick (no cross-feature walk per
