@@ -72,15 +72,18 @@ function parseDuration(text) {
 // allowed), text after the closer a comment. Readings: a check + a duration → a budget · a check + anything else → `duration` ·
 // another check-shaped name + a duration → `no-check` · a second budget of one check → `duplicate` (the first counts) · anything else
 // (`_Budget: $500/month_`, a bold `**Budget:**` label) → not ours, silent. Bounds, each said (`truncated`): the first BUDGET_TEXT_MAX
-// characters, the first BUDGET_MARKERS_MAX markers. checks: meta.checks' list (projectChecks), when the caller has it.
+// characters, the first BUDGET_MARKERS_MAX markers. checks: meta.checks' list (projectChecks), when the caller has it. Not enumerable:
+// `scanned` — the lines read for markers (the cost guard's count: a tech.md that never says "budget:" is not scanned — ~110× on 250 KB).
 function frictionBudgets(projectDir, checks) {
   const out = { budgets: [], invalid: [], truncated: false };
+  Object.defineProperty(out, "scanned", { value: 0, writable: true });
   const text = readIfExists(path.join(specsRoot(projectDir), "steering", "tech.md"));
   if (!text || !/budget:/i.test(text)) return out;
   const names = new Set((checks || projectChecks(projectDir).checks).map((c) => c.name));
   let head = text;
   if (head.length > BUDGET_TEXT_MAX) { head = head.slice(0, BUDGET_TEXT_MAX); out.truncated = true; }
   const lines = scanTaskLines(head);
+  out.scanned = lines.length;
   let read = 0;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].code) continue;

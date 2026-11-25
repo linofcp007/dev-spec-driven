@@ -49,18 +49,22 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
       invalid: [{ line: 4, text: "_Budget: lint 2mn_", why: "duration" }, { line: 5, text: "_Budget: build_", why: "duration" }, { line: 6, text: "_Budget: type_check 0ms_", why: "duration" }],
       truncated: false,
     }, "1.41 friction: a marker mid-sentence is read (the task markers' reader, no line-start rule); a check with `2mn`, with no duration or with 0 ms → duration");
-    eq(["2m", "2 min", "2M", "90 s", "1500ms", "1.5h", "24h", "1ms", "0.5s", "1.2345s", "0ms", "25h", "2mn", "", "1e3s", "-1s", "1000000s"].map((d) => E.parseDuration(d)),
-      [120000, 120000, 120000, 90000, 1500, 5400000, 86400000, 1, 500, null, null, null, null, null, null, null, null],
-      "1.41 friction: a duration — ms · s · m / min · h, any case, ≤ 3 decimals, 1 ms – 24 h; anything else null");
+    eq(["2m", "2 min", "2M", "90 s", "1500ms", "1.5h", "24h", "1ms", "0.5s", "999999ms", "1.2345s", "0ms", "25h", "2mn", "", "1e3s", "-1s", "1000000s", "1000000ms"].map((d) => E.parseDuration(d)),
+      [120000, 120000, 120000, 90000, 1500, 5400000, 86400000, 1, 500, 999999, null, null, null, null, null, null, null, null, null],
+      "1.41 friction: a duration — ≤ 6 digits, ≤ 3 decimals, ms · s · m / min · h, any case, 1 ms – 24 h; anything else null");
     // B14 the 20-marker bound, B17 the head bound — each said
     const r = project("proj-fr-bounds");
     tech(r, ["# Tech", "", ...Array.from({ length: 21 }, (_, i) => "- _Budget: x" + i + " 1s_")]);
     const twenty = safe(() => E.frictionBudgets(r));
     tech(r, ["# Tech", "", "x".repeat(256 * 1024), "- _Budget: test 2m_"]);
     const head = safe(() => E.frictionBudgets(r));
-    all("1.41 friction: at most 20 _Budget:_ markers are read and a longer tech.md is read to 256 KB — each bound says it (truncated) (got " + js([twenty.invalid && twenty.invalid.length, twenty.truncated, head]) + ")", {
+    tech(r, ["# Tech", "", ...Array.from({ length: 500 }, (_, i) => "- line " + i + ": a convention, `code`, no marker")]);
+    const plain = safe(() => E.frictionBudgets(r));
+    all("1.41 friction: at most 20 _Budget:_ markers are read and a longer tech.md is read to 256 KB — each bound says it (truncated); a tech.md that never says `budget:` is not scanned (a COUNT: its lines scanned) (got " +
+      js([twenty.invalid && twenty.invalid.length, twenty.truncated, head, twenty.scanned, plain.scanned]) + ")", {
       markers: () => twenty.invalid.length === 20 && twenty.invalid.every((x) => x.why === "no-check") && twenty.invalid[19].text === "_Budget: x19 1s_" && twenty.truncated === true,
       head: () => head.budgets.length === 0 && head.truncated === true,
+      scanned: () => twenty.scanned === 24 && plain.scanned === 0 && js(plain) === js({ budgets: [], invalid: [], truncated: false }),
     });
     // B15 the label is the reader's own: the task markers never read it, nor it theirs
     const task = "- [ ] 1. Fix _Budget: test 2m_ now _Verify: npm test_";
@@ -105,13 +109,14 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
       "1.41 friction: a run of a command two checks share is timed for both; finish --run's `check` times the one it ran (got " + js([both, oneOf]) + ")");
     // the matcher decides, never the text: `npm test` is in `npm test -- --coverage`'s text but no run of it; a worktree's `cd <its root> &&`
     // (one of the run's roots — the hook passes them) is stripped as observeRun strips it; a run that throws is nothing (never a throw)
-    const cov = project("proj-fr-cov", { cov: "npm test -- --coverage" });
+    const cov = project("proj-fr-cov", { cov: "npm test -- --coverage", both: "npm run build && npm run lint" });
     const wt = path.join(tmp, "proj-fr-cov-wt");
     fs.mkdirSync(wt, { recursive: true });
-    const sub = S.recordTiming(cov, { command: "npm test", exitCode: 0, ms: 1, by: "cli" }).timed;
+    const sub = [...S.recordTiming(cov, { command: "npm test", exitCode: 0, ms: 1, by: "cli" }).timed,
+      ...S.recordTiming(cov, { command: "npm run build", exitCode: 0, ms: 1, by: "cli" }).timed]; // (one step of a joined check: none — observeRun's fallback is not the timer's)
     const viaWt = S.recordTiming(cov, { command: "cd " + wt + " && npm test -- --coverage", roots: [wt], cwd: wt, exitCode: 0, ms: 2, by: "hook" }).timed;
     const thrown = safe(() => S.recordTiming(cov, { get command() { throw new Error("boom"); }, exitCode: 0, ms: 3, by: "cli" }));
-    all("1.41 friction: the matcher decides, never the text (a check whose command holds the run's text is no check run); a worktree's cd prefix (one of the run's roots) is stripped; a run that throws is nothing (got " +
+    all("1.41 friction: the matcher decides, never the text (a check whose command holds the run's text is no check run, one step of a joined check neither); a worktree's cd prefix (one of the run's roots) is stripped; a run that throws is nothing (got " +
       js([sub, viaWt, thrown]) + ")", {
       sub: () => js(sub) === "[]", wt: () => js(viaWt) === '["cov"]', thrown: () => js(thrown) === js({ timed: [] }),
     });
