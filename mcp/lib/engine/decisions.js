@@ -406,7 +406,7 @@ function decisionEntryLines(e, D) {
     ...para(D.labels.consequences, e.consequences),
   ].join("\n").split("\n");
 }
-// (1.41) a lesson's _Target:_ → { target: its project path | null } | { error }: decided on its TEXT before any fs call
+// (1.41) a lesson's _Target:_ → { target: its project path, as written | null } | { error }: decided on its TEXT before any fs call
 // (projectPath — no network path, no absolute path elsewhere, no `..` out; backticks dropped; a line break — U+2028 / U+2029 too,
 // RE_LINE_TERMINATOR: the marker reader ends a line there, so it read back as no target — or a control character is none), then —
 // for the causes whose target exists by definition — whether it is there (onDisk).
@@ -416,9 +416,13 @@ function lessonTarget(projectDir, raw, cause, D) {
   const root = path.resolve(projectDir);
   const rel = /[\u0000-\u001f\u007f]/.test(t) || RE_LINE_TERMINATOR.test(t) ? null : projectPath(root, t);
   if (rel == null) return { error: D.badTarget(JSON.stringify(raw)) };
-  if (LESSON_TARGET_THERE.has(cause) && !onDisk(root, rel)) return { error: D.targetGone(rel, cause) };
-  return { target: rel };
+  if (LESSON_TARGET_THERE.has(cause) && !onDisk(root, rel)) return { error: D.targetGone(lessonTargetForm(rel), cause) };
+  return { target: lessonTargetForm(rel) };
 }
+// (1.41.0 review 1) A target as it is written and shown: its project path — a root-level name with no `/` and no `.` in the `./`
+// form spec_decide accepts (`./Makefile`): bare, `Makefile` is no path to projectPath, so `repeated` never found it again, and a
+// bare word a hand edit wrote (`none`) is a doubt, never guessed into a path.
+const lessonTargetForm = (rel) => (/[\/.]/.test(rel) ? rel : "./" + rel);
 
 // spec_decide {name, title, decision, context?, consequences?, affects?, supersedes?, kind?} / `dev-spec decide`: append one
 // entry to decisions.md (created with its localized header when absent). Under the feature lock (featureLocked).
@@ -651,11 +655,11 @@ function lessonCounts(v) {
 // [{ feature, archived, dir, view }] (the first LESSON_FEATURES_MAX each with the `view` the walk read; `truncated` counts the rest,
 // never read). → { total, open, byCause, unread: [{feature, id, archived?}], repeated: [{cause, target, features, lessons}],
 // truncated? } | null (no lesson anywhere).
-// REPEATED: one (cause, target) in two features or more — the target as a project path (projectPath: `./x` is `x`; a stored target
-// with no `/` or `.` is a root-level file the writer keeps bare — `./Makefile` is stored `Makefile` — so it reads as `./Makefile`),
-// case-folded where the file system folds case, and only OUTSIDE .specs/ (that test folded too — `.SPECS/` is `.specs/` there): a
-// copied file, a script; a steering file is the home of every rule — "money → tech.md" and "logging → tech.md" are two lessons,
-// never one repeated. Without a target, a lesson is never repeated.
+// REPEATED: one (cause, target) in two features or more — the target as a project path (projectPath: `./x` is `x`; the writer keeps
+// a root-level name in its `./` form, lessonTargetForm, which the group shows; a bare word a hand edit wrote is no path: never
+// grouped), case-folded where the file system folds case, and only OUTSIDE .specs/ (that test folded too — `.SPECS/` is `.specs/`
+// there): a copied file, a script; a steering file is the home of every rule — "money → tech.md" and "logging → tech.md" are two
+// lessons, never one repeated. Without a target, a lesson is never repeated.
 function projectLessons(projectDir, folders) {
   const root = path.resolve(projectDir);
   const read = folders.slice(0, LESSON_FEATURES_MAX);
@@ -670,12 +674,11 @@ function projectLessons(projectDir, folders) {
     counted.push(...all);
     for (const id of f.view.unread) unread.push(Object.assign({ feature: f.feature, id }, f.archived ? { archived: true } : {}));
     for (const x of all) {
-      const t = x.cause ? x.target : null; // (an unread cause, no target: never grouped — and never the text "./null")
-      const rel = t == null ? null : projectPath(root, /[\/.]/.test(t) ? t : "./" + t);
+      const rel = x.cause ? projectPath(root, x.target) : null; // (no target: projectPath names none — the text "null" is no path)
       const fold = rel == null ? null : FOLD_CASE ? rel.toLowerCase() : rel;
       if (fold == null || fold === ".specs" || fold.startsWith(".specs/")) continue;
       const key = x.cause + "\n" + fold;
-      const g = groups.get(key) || groups.set(key, { cause: x.cause, target: rel, features: [], lessons: 0 }).get(key);
+      const g = groups.get(key) || groups.set(key, { cause: x.cause, target: lessonTargetForm(rel), features: [], lessons: 0 }).get(key);
       g.lessons++;
       if (!g.features.includes(label)) g.features.push(label);
     }

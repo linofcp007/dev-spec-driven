@@ -365,9 +365,10 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, cliIn, requir
     });
   }
 
-  // --- 1.41.0 review 1: `repeated` reads every stored target as its project path — a root-level file the writer keeps bare
-  // (`./Makefile` → `Makefile`) as `./Makefile` (R1-L-1), `.specs/` left out case-folded where the file system folds case (R1-L-7) —
-  // and the write refuses a line separator in a target (R1-L-6). With the fixtures 1.41.0's left out (R1-L-4 / R1-L-10's mutants):
+  // --- 1.41.0 review 1: a root-level target is WRITTEN in its `./` form (`./Makefile`, never the bare `Makefile` no reader finds
+  // again), so `repeated` groups it and every reader shows it as written (R1-L-1) — a bare word a hand edit wrote (`none`) is no
+  // path, never grouped; `.specs/` left out case-folded where the file system folds case (R1-L-7); the write refuses a line
+  // separator in a target (R1-L-6). With the fixtures 1.41.0's left out (R1-L-4 / R1-L-10's mutants):
   // two lessons of one (cause, target) in ONE feature are never repeated (M18), the key folds case (M6), a target's and a hand-written
   // marker's backticks are dropped (M7, M26). E.FOLD_CASE decides what a case-only difference is: one file on Windows / macOS, two on Linux.
   {
@@ -389,18 +390,34 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, cliIn, requir
     // a hand-written target: absolute, inside the project (read as its project path — the twin of usage-metering's)
     const abs = path.join(path.resolve(p), "src", "api-keys", "lib.js").split(path.sep).join("/");
     fs.appendFileSync(path.join(p, ".specs", "api-keys", "decisions.md"), "\n## D-90 — lib, by hand\n\n- _Kind: lesson_\n- _Cause: tool-friction_\n- _Target: " + abs + "_\n\n**Lesson:** x\n");
+    // a hand-written bare word in both features: a doubt, never guessed into `./none`
+    for (const f of ["api-keys", "usage-metering"]) fs.appendFileSync(path.join(p, ".specs", f, "decisions.md"), "\n## D-91 — none, by hand\n\n- _Kind: lesson_\n- _Cause: model-error_\n- _Target: none_\n\n**Lesson:** x\n");
     const bt = lesson(p, "api-keys", { title: "backticked", target: "`src/api-keys/service.js`" });
     const SEPS = [String.fromCharCode(0x2028), String.fromCharCode(0x2029)]; // (built: a literal U+2028 in a source is a line break)
     const sep = SEPS.map((c) => lesson(p, "api-keys", { title: "separator", cause: "guidance-missing", target: "src/new" + c + "file.js" }));
     const rep = S.metrics(p).lessons.repeated.map((g) => [g.cause, g.target, g.features.join("+"), g.lessons].join(" ")).sort();
     const both = "api-keys+usage-metering";
-    const want = ["tool-friction Makefile " + both + " 2", "example-copied gradlew " + both + " 2", "tool-friction src/api-keys/lib.js " + both + " 2"]
+    const want = ["tool-friction ./Makefile " + both + " 2", "example-copied ./gradlew " + both + " 2", "tool-friction src/api-keys/lib.js " + both + " 2"]
       .concat(E.FOLD_CASE ? ["tool-friction scripts/check.sh " + both + " 2"] : ["guidance-missing .SPECS/steering/tech.md " + both + " 2"]).sort();
     const hand = E.decisionLog("# Decisions: X\n\n## D-1 — by hand\n\n- _Kind: lesson_\n- _Cause: `model-error`_\n- _Target: `src/a.js`_\n\n**Lesson:** r\n")[0];
     const text = rd(p, ".specs", "api-keys", "decisions.md");
-    all("1.41.0 review 1: `repeated` — `./Makefile` / `./gradlew` (stored bare) and an absolute target inside the project group with their twins; no target never; `.specs/` left out in any case where case folds (a case-only twin is one file there, two elsewhere); two lessons in ONE feature never; a target's backticks dropped on write, a hand-written marker's on read; a U+2028 / U+2029 in a target is badTarget, nothing written (got " +
-      js({ rep, bt: [bt.ok, bt.target, bt.error], sep: sep.map((r) => r.error), hand: [hand.cause, hand.target] }) + ")", {
-      written: w.every((r) => r.ok) && w[0].target === "Makefile" && w[1].target === "gradlew",
+    // every reader shows what the file holds: finish's `lessons`, the merge summary — and (one lesson of its own) the brief, the retro
+    const fin = S.finishFeature(p, "api-keys", {});
+    const summary = E.decisionSummaryLines(path.join(p, ".specs", "api-keys"), "en");
+    const p1 = demo("target-form");
+    fs.writeFileSync(path.join(p1, "Makefile"), "x");
+    lesson(p1, "api-keys", { title: "make is slow", cause: "tool-friction", target: "./Makefile" });
+    const brief = S.taskBrief(p1, "api-keys", 5, {});
+    S.metrics(p1, "api-keys", { write: true });
+    const retro = rd(p1, ".specs", "api-keys", "retro.md");
+    all("1.41.0 review 1: `repeated` — `./Makefile` / `./gradlew` written in their `./` form group with their twins, as does an absolute target inside the project; a hand-written bare `none` never; no target never; `.specs/` left out in any case where case folds (a case-only twin is one file there, two elsewhere); two lessons in ONE feature never; a target's backticks dropped on write, a hand-written marker's on read; a U+2028 / U+2029 in a target is badTarget, nothing written (got " +
+      js({ rep, w01: [w[0].target, w[1].target], bt: [bt.ok, bt.target, bt.error], sep: sep.map((r) => r.error), hand: [hand.cause, hand.target] }) + ")", {
+      written: w.every((r) => r.ok) && w[0].target === "./Makefile" && w[1].target === "./gradlew" && text.includes("\n- _Target: ./Makefile_\n") &&
+        E.decisionLog(text).find((e) => e.id === w[0].id).target === "./Makefile",
+      readers: fin.lessons && fin.lessons.open.find((x) => x.id === w[0].id).target === "./Makefile" &&
+        summary.some((l) => l.includes("**" + w[0].id + "**") && l.includes("tool-friction → ./Makefile")) &&
+        brief.lessons && brief.lessons.quoted[0].target === "./Makefile" && brief.brief.includes("(tool-friction → ./Makefile)") &&
+        retro.includes("- D-1 (tool-friction → ./Makefile): "),
       repeated: js(rep) === js(want),
       backticks: bt.ok === true && bt.target === "src/api-keys/service.js",
       separator: sep.every((r, i) => r.ok === false && r.error === D().badTarget(js("src/new" + SEPS[i] + "file.js"))) && !SEPS.some((c) => text.includes("src/new" + c)),
