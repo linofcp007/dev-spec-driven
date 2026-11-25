@@ -2400,16 +2400,17 @@ function exemplarPath(cell) {
   const link = /^\[[^\]]*\]\(\s*([^)\s]+)\s*\)$/.exec(t);
   return link ? stripEnds(link[1], unitIn("`<>")) : t;
 }
-// (1.41.0 review 1) A Copy cell naming MORE than one file — a second code span naming one, or `,` / `;` / and (PT e, ES y) between
-// two file names: "`a.js`, `b.js`", "a.js and b.js" — is a DOUBT: which one the row means is not read, so it is never judged gone and
-// the brief quotes the cell as written. A note beside ONE path ("x.ts (see README.md)", "x.ts (the old one, with its verify)") is no
-// list. A file name: a word whose path (implementsPath — a :12 / #L12 anchor dropped; brackets, quotes, backticks off) has an extension.
+// (1.41.0 review 1) A Copy cell naming MORE than one path — a second code span holding one, or `,` / `;` / and (PT e, ES y) between
+// two of them: "`a.js`, `b.js`", "a.js and b.js", "src/ui/, src/ui/Card.tsx" — is a DOUBT: which one the row means is not read, so it
+// is never judged gone and the brief quotes the cell as written. A note beside ONE path ("x.ts (see README.md)", "x.ts (the old one,
+// with its verify)") is no list. Path-like: a word holding a `/`, or a `.` before a letter or digit (`a.js`, `src/ui`, also `e.g` —
+// a doubt is only never judged).
 const RE_EXEMPLAR_LIST = /[,;]|\s(?:and|e|y)\s/i;
-const namesFile = (text) => text.split(/\s+/).some((w) => RE_EXEMPLAR_FILE.test(implementsPath(w.replace(/[`()[\]<>"']/g, ""))));
+const pathLike = (text) => text.split(/\s+/).some((w) => /\/|\.[\p{L}\p{N}]/u.test(w));
 function exemplarMany(cell) {
   const s = String(cell || "");
-  if ((s.match(/`[^`]*`/g) || []).filter(namesFile).length > 1) return true;
-  return s.replace(/`/g, " ").split(RE_EXEMPLAR_LIST).filter(namesFile).length > 1;
+  if ((s.match(/`[^`]*`/g) || []).filter(pathLike).length > 1) return true;
+  return s.replace(/`/g, " ").split(RE_EXEMPLAR_LIST).filter(pathLike).length > 1;
 }
 // Is a Copy cell a file that is gone? Only when it is a project path (projectPath — its text decides first) naming a file (an
 // extension), its first segment is on disk and the file is not. Anything else — a folder, a package, a root-level file, a gone first

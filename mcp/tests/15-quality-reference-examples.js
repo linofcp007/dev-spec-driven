@@ -187,8 +187,8 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     ok(!("examples" in b0) && !b0.brief.includes(B().examples), "1.41 reference examples: a brief without the table has no Reference examples part and no key");
   }
 
-  // --- 1.41.0 review 1 (R1-L-2): a Copy cell naming MORE than one file — a second code span, or `,` / `;` / and (e / y) between two
-  // file names — is a doubt: never judged gone, quoted by the brief as written (`asWritten`); a note beside ONE path is no list ----
+  // --- 1.41.0 review 1 (R1-L-2): a Copy cell naming MORE than one path — a second code span, or `,` / `;` / and (e / y) between two
+  // paths — is a doubt: never judged gone, quoted by the brief as written (`asWritten`); a note beside ONE path is no list ----------
   {
     const p = demo("doubt");
     write(p, "src/api-keys/service.test.js", "x");
@@ -202,6 +202,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
       ["Noted", "src/api-keys/gone-note.js (the old one, with its verify)", A], // ONE file name: a note, still judged
       ["Plain", "src/api-keys/service.js", A],
       ["PT", "src/api-keys/gone-a.js e src/api-keys/gone-b.js", "lib/**"], ["ES", "src/api-keys/gone-a.js y src/api-keys/gone-b.js", "lib/**"],
+      ["Folder, file", "src/api-keys/, src/api-keys/service.js", "lib/**"], // a folder is path-like too (read as ONE path it was a gone file)
     ];
     structure(p, table(["Pattern", "Copy", "Applies to"], rows));
     const d = check(p);
