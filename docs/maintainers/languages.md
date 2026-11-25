@@ -124,7 +124,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   say "gestor" of software only — a person in charge is "o responsável". The lint's `EU_ONLY` holds `gestor(es)`.
 - **1.41.0** — the lesson kind's label read in three spellings each (Lição / Licao, Lección / Leccion — accents optional, as
   `DECISION_LABELS`) and only inside a lesson entry: in a decision a `**Lição:**` paragraph stays its text. Its `_Cause:_` codes are
-  never translated (no `causes` display names — the codes print as codes in every language).
+  never translated (no `causes` display names — the codes print as codes in every language). Review 1 (R1-L-8): the brief's
+  "não os repitas" / "nunca os copies, e diz no teu relatório" kept their European second person in pt-BR — `repitas` / `copies`
+  joined `PTBR_YOU_SUBJ`, and "e diz no teu relatório" is an override (the imperative chain only follows an imperative, never a
+  negated subjunctive). The finish warning's closing call keeps its placeholders inside the `{…}` snippet (held whole in stage 0):
+  their PT words are ones pt-BR shares (alvo, motivo — never ficheiro).
 
 ### Localization gotchas
 - **1.19** — the eval run showed agents relaying `dev-spec done <f> <n> --run` to users who had no `dev-spec` on PATH (only
