@@ -1756,4 +1756,80 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     ok(inert === "1. **AC" + BS + "-1** — WHEN x THE SYSTEM SHALL y; see US-7" + BS + ".AC-2 and AC" + BS + "-3" && E.fpInert(inert) === inert && !E.RE_BARE_AC.test(inert),
       "1.22 review 4 (6d): fpInert escapes a bare AC-n (`AC\\-1`), leaves an escaped US-7\\.AC-2 as it is, and is idempotent (got " + js(inert) + ")");
   }
+
+  // 1.41.0 review 1 (R1-PZ-1): an AC a SHIPPED feature retired (_Supersedes:_ — supersededByIndex().live) needs no planned test: the
+  // pruning pass removes its every test, and the re-approval of test-plan, then tests and tasks, completed only forced (trace's
+  // uncoveredByTests named it, doctor's traceability failed and blocked the finish). Nothing else moves: a draft's declaration
+  // (supersedePending), one a change request added after the ship, an archived-unshipped feature's, a live AC — each still a gap
+  // with no test; a retired AC no task cites is still uncoveredByTasks; coveredByTests still counts the ACs a test entry covers.
+  {
+    const js = (v) => JSON.stringify(v);
+    const rp = path.join(tmp, "proj-141-retired");
+    S.initProject(rp, ["tdd"], "en");
+    const put = (rel, s) => { const p = path.join(rp, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
+    const req = (title, acs, extra) => ["# Feature: " + title, "", "## Summary", title + ".", "", "### US-1 (P1): " + title, "#### Acceptance Criteria (EARS)",
+      ...acs.map((a, i) => (i + 1) + ". **US-1.AC-" + (i + 1) + "** — " + a), "", ...(extra || [])].join("\n") + "\n";
+    const plan = (rows) => "# Test Plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" + rows.map((r) => "| " + r.join(" | ") + " |\n").join("");
+    // (A) the pruning pass end to end (the reviewer's prune.js shape, its candidates as the pass reads them now: T-02 and T-03 cover the
+    // retired AC alone; EC-1 keeps its own test)
+    const co = S.createFeature(rp, "Checkout", ["tdd"], "", undefined, "en");
+    put(".specs/checkout/requirements.md", req("Checkout", ["WHEN the shopper pays THE SYSTEM SHALL charge the total", "IF the card is declined THEN THE SYSTEM SHALL keep the cart"],
+      ["## Edge Cases", "- **EC-1** — WHEN the PSP times out THE SYSTEM SHALL retry once."]));
+    put(".specs/checkout/test-plan.md", plan([["T-01", "unit", "example", "charge", "US-1.AC-1", "`test/charge.test.js`"], ["T-02", "unit", "example", "decline", "US-1.AC-2", "`test/decline.test.js`"],
+      ["T-03", "unit", "example", "decline again", "US-1.AC-2", "`test/decline2.test.js`"], ["T-04", "unit", "example", "timeout retry", "EC-1", "`test/retry.test.js`"]]));
+    put(".specs/checkout/tasks.md", "# Tasks\n\n- [ ] 1. Charge\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Implements: src/charge.js, test/charge.test.js_\n" +
+      "- [ ] 2. Decline\n  - _Requirements: US-1.AC-2, EC-1_\n  - _Makes green: T-02, T-03, T-04_\n  - _Implements: src/decline.js, test/decline.test.js, test/decline2.test.js, test/retry.test.js_\n");
+    put("src/charge.js", "module.exports = 1;\n"); put("src/decline.js", "module.exports = 2;\n");
+    put("test/charge.test.js", "test('T-01 charges', () => {});\n"); put("test/decline.test.js", "test('T-02 keeps the cart', () => {});\n");
+    put("test/decline2.test.js", "test('T-03 keeps the cart', () => {});\n"); put("test/retry.test.js", "test('T-04 retries a timeout', () => {});\n");
+    for (const ph of ["classification", "requirements", "design", "test-plan", "tests", "tasks"]) S.approvePhase(rp, co.slug, ph, "alice", { force: true });
+    S.completeTask(rp, co.slug, 1, { summary: "by hand" }); S.completeTask(rp, co.slug, 2, { summary: "by hand" });
+    // the declarers: v2 shipped (retires checkout's AC-2 and ledger's AC-2 / AC-6), a draft, one archived without shipping, one whose
+    // declaration a change request added after it shipped
+    ["Checkout v2", "Draft", "Abandoned", "Later"].forEach((n) => S.createFeature(rp, n, ["core"], "", undefined, "en"));
+    const led = S.createFeature(rp, "Ledger", ["tdd"], "", undefined, "en");
+    put(".specs/checkout-v2/requirements.md", req("Checkout v2", ["IF the card is declined THEN THE SYSTEM SHALL offer another card _Supersedes: checkout/US-1.AC-2, ledger/US-1.AC-2, ledger/US-1.AC-6_"]));
+    shipFeature(rp, "checkout-v2");
+    put(".specs/draft/requirements.md", req("Draft", ["WHEN d THE SYSTEM SHALL d _Supersedes: ledger/US-1.AC-3_"]));
+    put(".specs/abandoned/requirements.md", req("Abandoned", ["WHEN z THE SYSTEM SHALL z _Supersedes: ledger/US-1.AC-5_"]));
+    S.manageFeature(rp, "archive", "abandoned");
+    put(".specs/later/requirements.md", req("Later", ["WHEN l THE SYSTEM SHALL l"]));
+    S.approvePhase(rp, "later", "requirements", "t", { force: true });
+    shipFeature(rp, "later", new Date().toISOString());
+    put(".specs/later/requirements.md", req("Later", ["WHEN l THE SYSTEM SHALL l _Supersedes: ledger/US-1.AC-7_"]));
+    // the batch: T-02 and T-03 out of the plan, their files deleted and out of task 2's markers
+    put(".specs/checkout/test-plan.md", plan([["T-01", "unit", "example", "charge", "US-1.AC-1", "`test/charge.test.js`"], ["T-04", "unit", "example", "timeout retry", "EC-1", "`test/retry.test.js`"]]));
+    put(".specs/checkout/tasks.md", "# Tasks\n\n- [x] 1. Charge\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Implements: src/charge.js, test/charge.test.js_\n" +
+      "- [x] 2. Decline\n  - _Requirements: US-1.AC-2, EC-1_\n  - _Makes green: T-04_\n  - _Implements: src/decline.js, test/retry.test.js_\n");
+    fs.unlinkSync(path.join(rp, "test/decline.test.js")); fs.unlinkSync(path.join(rp, "test/decline2.test.js"));
+    const coTr = S.traceCheck(rp, co.slug, { matrix: true });
+    const tp = S.approvePhase(rp, co.slug, "test-plan", "alice", {}), te = S.approvePhase(rp, co.slug, "tests", "alice", {}), ta = S.approvePhase(rp, co.slug, "tasks", "alice", {});
+    const coDoc = (S.specDoctor(rp, co.slug).checks || []).find((c) => c.id === "traceability") || {};
+    const coFin = S.finishFeature(rp, co.slug, {});
+    const coRow = (coTr.matrix.rows || []).find((r) => r.id === "US-1.AC-2") || {};
+    // (B) every other shape, one AC each: AC-1 tested · AC-2 retired (shipped), a task, no test · AC-3 a draft's · AC-4 live · AC-5 an
+    // abandoned feature's · AC-6 retired, no task, no test · AC-7 declared after the ship
+    put(".specs/ledger/requirements.md", req("Ledger", ["WHEN a THE SYSTEM SHALL a", "WHEN b THE SYSTEM SHALL b", "WHEN c THE SYSTEM SHALL c", "WHEN e THE SYSTEM SHALL e",
+      "WHEN f THE SYSTEM SHALL f", "WHEN g THE SYSTEM SHALL g", "WHEN h THE SYSTEM SHALL h"]));
+    put(".specs/ledger/test-plan.md", plan([["T-01", "unit", "example", "a", "US-1.AC-1", "`test/ledger.test.js`"]]));
+    put(".specs/ledger/tasks.md", "# Tasks\n\n- [ ] 1. Ledger\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-1.AC-5, US-1.AC-7_\n  - _Makes green: T-01_\n");
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(rp, led.slug, ph, "alice", { force: true });
+    const lTr = S.traceCheck(rp, led.slug, { matrix: true });
+    const lAp = S.approvePhase(rp, led.slug, "test-plan", "alice", {});
+    const gaps = Object.fromEntries((lTr.matrix.rows || []).filter((r) => r.kind === "ac").map((r) => [r.id, (r.gaps || []).join("+") + (r.supersedePending ? "(pending)" : r.supersededBy.length ? "(retired)" : "")]));
+    all("1.41.0 review 1 (R1-PZ-1): an AC a SHIPPED feature retired needs no planned test — the pruning pass's re-approvals complete unforced and the finish is not blocked by traceability; a draft's / a post-ship / an abandoned feature's declaration and a live AC still need one; a retired AC no task cites is still a task gap (got " +
+      js({ coTr: [coTr.uncoveredByTests, coTr.coveredByTests, coTr.verdict, coRow.gaps], tp: tp.error || tp.ok, te: te.error || te.ok, ta: ta.error || ta.ok, coDoc, coFin: coFin.blockers,
+        lTr: [lTr.uncoveredByTests, lTr.uncoveredByTasks, lTr.coveredByTests, lTr.verdict], lAp: lAp.error || lAp.ok, gaps }) + ")", {
+      prunedTrace: js(coTr.uncoveredByTests) === "[]" && coTr.coveredByTests === 1 && coTr.verdict === "pass" && js(coRow.gaps) === "[]" && js(coRow.supersededBy) === '["checkout-v2/US-1.AC-1"]',
+      reapproved: tp.ok === true && te.ok === true && ta.ok === true && !tp.forced && !te.forced && !ta.forced,
+      doctor: coDoc.status === "pass",
+      finish: Array.isArray(coFin.blockers) && !coFin.blockers.some((b) => /traceability/.test(b)),
+      stillGaps: js(lTr.uncoveredByTests) === '["US-1.AC-3","US-1.AC-4","US-1.AC-5","US-1.AC-7"]' && lTr.verdict === "gaps-found",
+      tasksUnchanged: js(lTr.uncoveredByTasks) === '["US-1.AC-6"]',
+      covered: lTr.coveredByTests === 1 && lTr.totalAcs === 7,
+      refused: lAp.ok === false && /failing checks: traceability\.\n {2}✗ traceability — ACs with no planned test: US-1\.AC-3, US-1\.AC-4, US-1\.AC-5, US-1\.AC-7\n/.test(lAp.error || ""),
+      matrix: js(gaps) === js({ "US-1.AC-1": "", "US-1.AC-2": "(retired)", "US-1.AC-3": "no-test(pending)", "US-1.AC-4": "no-test", "US-1.AC-5": "no-test",
+        "US-1.AC-6": "no-task(retired)", "US-1.AC-7": "no-test(pending)" }),
+    });
+  }
 };
