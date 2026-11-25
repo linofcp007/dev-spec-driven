@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname, hookIn, handRoadmap }) => {
+exports.run = async ({ ok, all, remeasure, fsCalls, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname, hookIn, handRoadmap }) => {
 
   { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
     const call9 = async (args) => payload(await rpc("tools/call", { name: "trace_check", arguments: args }));
@@ -1817,6 +1817,14 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     const lTr = S.traceCheck(rp, led.slug, { matrix: true });
     const lAp = S.approvePhase(rp, led.slug, "test-plan", "alice", {});
     const gaps = Object.fromEntries((lTr.matrix.rows || []).filter((r) => r.kind === "ac").map((r) => [r.id, (r.gaps || []).join("+") + (r.supersedePending ? "(pending)" : r.supersededBy.length ? "(retired)" : "")]));
+    // the cost: the index (every other feature's requirements.md) is read only when an AC has no test entry — a gapless trace reads
+    // no other feature (120 bare traces of gapless features took 22 s with it read every time, 1.2 s without)
+    const gl = S.createFeature(rp, "Gapless", ["tdd"], "", undefined, "en");
+    put(".specs/gapless/requirements.md", req("Gapless", ["WHEN q THE SYSTEM SHALL q"]));
+    put(".specs/gapless/test-plan.md", plan([["T-01", "unit", "example", "q", "US-1.AC-1", "`test/q.test.js`"]]));
+    put(".specs/gapless/tasks.md", "# Tasks\n\n- [ ] 1. Q\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n");
+    const others = (fn) => Object.values(fsCalls(path.join(rp, ".specs", "draft") + path.sep, fn)).reduce((a, b) => a + b, 0);
+    const readsGapless = others(() => S.traceCheck(rp, gl.slug)), readsLedger = others(() => S.traceCheck(rp, led.slug));
     all("1.41.0 review 1 (R1-PZ-1): an AC a SHIPPED feature retired needs no planned test — the pruning pass's re-approvals complete unforced and the finish is not blocked by traceability; a draft's / a post-ship / an abandoned feature's declaration and a live AC still need one; a retired AC no task cites is still a task gap (got " +
       js({ coTr: [coTr.uncoveredByTests, coTr.coveredByTests, coTr.verdict, coRow.gaps], tp: tp.error || tp.ok, te: te.error || te.ok, ta: ta.error || ta.ok, coDoc, coFin: coFin.blockers,
         lTr: [lTr.uncoveredByTests, lTr.uncoveredByTasks, lTr.coveredByTests, lTr.verdict], lAp: lAp.error || lAp.ok, gaps }) + ")", {
@@ -1830,6 +1838,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
       refused: lAp.ok === false && /failing checks: traceability\.\n {2}✗ traceability — ACs with no planned test: US-1\.AC-3, US-1\.AC-4, US-1\.AC-5, US-1\.AC-7\n/.test(lAp.error || ""),
       matrix: js(gaps) === js({ "US-1.AC-1": "", "US-1.AC-2": "(retired)", "US-1.AC-3": "no-test(pending)", "US-1.AC-4": "no-test", "US-1.AC-5": "no-test",
         "US-1.AC-6": "no-task(retired)", "US-1.AC-7": "no-test(pending)" }),
+      readOnlyOnAGap: readsGapless === 0 && readsLedger > 0,
     });
   }
 };

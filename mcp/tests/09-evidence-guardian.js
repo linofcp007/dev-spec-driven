@@ -1169,6 +1169,15 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
     const gX = E.guardianRecord(x.p, null, CMD, 1, r(1, [bad], [bad, TI("low", "test-skipped" + ch(0x200f, 0x202a), "tests/" + ch(0x2069) + "x.test.js", 5)]), "");
     const RE_FMT = new RegExp("[" + ch(0x200b) + "-" + ch(0x200f) + ch(0x202a) + "-" + ch(0x202e) + ch(0x2066) + "-" + ch(0x2069) + "]");
     const xLines = [...E.guardianLines(gX, "en"), ...warnOf(gX)];
+    // … and the feature's own files read the same way: one whose name holds U+200B is still its own (the blocker's [this feature],
+    // the accepted timeout's "review it by hand") — the report side drops the character, so the _Implements:_ side does too
+    const zw = "src/a" + ch(0x200b) + ".js", fdirX = path.join(x.p, ".specs", x.slug);
+    write(x.p, zw, "module.exports = 2;\n");
+    write(fdirX, "tasks.md", "- [x] 1. Build it\n  _Implements: src/login.js, " + zw + "_\n");
+    const zHit = F("semgrep", "high", "js.xss", zw, 2);
+    const gZ = E.guardianRecord(x.p, fdirX, CMD, 1, js({ exit_code: 1, tool_version: "3.17.0", baseline_status: "present", coverage: "partial", coverage_gaps: [],
+      accepted_gaps: ["security_scan_full: semgrep timed out on " + zw + " — accepted (.guardian/scan.yml semgrep.accept_timeouts)"],
+      accepted_gap_details: [{ tool: "semgrep", kind: "file_timeout", file: zw, reason: "Timeout" }], new_findings: [zHit], blocking_findings: [zHit], baseline_absent: false }), "");
     all("1.41.0 review 1 (R1-PZ-4/5/6, cleanLine): W leaves out a finding the report lists as blocking (rule + file + line); its head names only the checks it counts; the MCP-run hint names the full report; an unknown severity is under --fail-on info; report text drops bidi / zero-width characters (got " +
       js({ g4: [g4.failOn, g4.testIntegrity, g4.top, w4], gT: gT.testIntegrity, gS: gS.testIntegrity, gB: gB.testIntegrity, g6: g6.testIntegrity, gX: [gX.top, gX.testIntegrity, xLines] }) + ")", {
       notBlocking: g4.failOn === "high" && g4.verdict === "blocked" && g4.top[0].rule === "test-skipped" && g4.top[0].file === "tests/a.test.js" && g4.top[0].line === 3 &&
@@ -1194,6 +1203,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         { severity: "?", rule: "r-q", file: "src/q.js", line: 2, kind: "suppression" }], kinds: ["suppression"] }),
       cleaned: gX.top[0].rule === "rtxt.exe" && gX.top[0].file === "src/a.js" && gX.testIntegrity.top[0].rule === "test-skipped" && gX.testIntegrity.top[0].file === "tests/x.test.js" &&
         xLines.length > 1 && xLines.every((l) => !RE_FMT.test(l)) && xLines.some((l) => l.includes("src/a.js:1")) && xLines.some((l) => l.includes("tests/x.test.js:5")),
+      ownStillOwn: gZ.top[0].file === "src/a.js" && gZ.top[0].own === true && gZ.own === 1 && js(gZ.acceptedOwn) === js({ count: 1, files: [{ file: "src/a.js", kind: "file_timeout" }] }),
     });
   }
 

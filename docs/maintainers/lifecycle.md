@@ -17,7 +17,8 @@ first; how they came to be — the releases and review findings — is in Histor
   current; `counts.supersedePending`); a retired AC names only its shipped declarers. A shipped feature counts only the
   declarations of its requirements snapshot approved at or before its latest ship (`shippedSupersedeKeys()`; no snapshot → all);
   one archived without shipping declares nothing and its ACs are not current. `supersededByIndex()` (`.live`, `.liveBy`) and
-  `catalogData()` (`supLiveBy`) share the rule.
+  `catalogData()` (`supLiveBy`) share the rule. A retired AC needs no planned test (1.41: trace's `uncoveredByTests`, the
+  matrix's `no-test` — markdown-and-trace.md → What trace_check counts); a pending one still does.
 - **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished` `{at, files: {rel: sha1|null}}`
   over its `_Implements:_` files (folders expanded, inside the project). `fileHash()` reads `FILE_HASH_CHUNK` (1 MiB) pieces
   (`readSync`), CRLF-normalized across pieces — never a whole-file read; mcp/tests/12-lifecycle.js pins its digests.
@@ -278,7 +279,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   semantic drift report).
 - **1.41.0** — `finished.metrics`: the drift baseline also carries the finish's METRIC readings, the reference of the next feature's
   comparison. No project baseline file nor roadmap key (every finish would write one: parallel branches conflict where the merge
-  driver isn't installed) — the reference is "the latest other finish", read across the folders.
+  driver isn't installed) — the reference is "the latest other finish", read across the folders. Review 1 (R1-PZ-1): a retired
+  AC (`supersededByIndex().live`) needs no planned test in trace (markdown-and-trace.md → History → Readers, 1.41.0) — the
+  pruning pass removed its tests and every re-approval after it completed only forced.
 
 ### A feature's own git branch
 - **1.25** — `create --branch` / `spec_create {branch}`: the record, the name rules, the engine reading the repository as files,

@@ -627,7 +627,8 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output, unco
   const mine = () => {
     if (mineSet) return mineSet;
     const tasksText = dir ? activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "" : "";
-    return (mineSet = new Set(tasksText ? baselineFiles(root, tasksText).files.map(fold) : []));
+    // (each read as rel() reads a report's file — cleanLine: a name holding a zero-width or bidi character still matches, 1.41.0 review 1)
+    return (mineSet = new Set(tasksText ? baselineFiles(root, tasksText).files.map((f) => fold(cleanLine(f, 300))) : []));
   };
   const rel = (f) => { // a report's file, project-relative with forward slashes, one inert line
     let p = f.replace(/\\/g, "/").replace(/^\.\//, "");
