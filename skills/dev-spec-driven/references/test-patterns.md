@@ -514,7 +514,7 @@ a deletion. The pass proposes, the user approves each pruning, and nothing is re
 
 | Criterion | What it means | Where it comes from |
 |---|---|---|
-| `retired-ac` | every AC the test covers was retired by a shipped feature (`_Supersedes:_`) | `trace_check {matrix, code}` — the row's `supersededBy` without `supersedePending` |
+| `retired-ac` | every requirement row the test covers was retired by a shipped feature (`_Supersedes:_`), at least one of them an AC — never a test that covers an EC / NFR / SC row | `trace_check {matrix, code}` — each row's non-empty `supersededBy` without `supersedePending` |
 | `same-path` | another test covers the same AC through the same path | the reviewer's proposal, confirmed by probes: every break that reddens this test reddens the kept one |
 | `no-kill` | it stays green when the behaviour it names breaks | the reviewer's proposal, confirmed by a probe |
 

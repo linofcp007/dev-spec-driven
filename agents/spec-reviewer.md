@@ -241,8 +241,9 @@ Stay read-only: you propose, the human approves, the controller appends.
 The question is "does each candidate test still earn its place?" — it guards an AC or a past bug and fails when that
 behaviour breaks (the plugin's `skills/dev-spec-driven/references/test-patterns.md` → Test value and pruning). Read the
 test plan, each candidate's test and the code it tests. One verdict per candidate:
-- **prune** — name what still guards each AC it covers (the kept test's T-ID and file), or, for `retired-ac`, the shipped
-  feature that retired every one of them;
+- **prune** — name what still guards EACH criterion it covers, an AC or an EC / NFR / SC (the kept test's T-ID and file),
+  or, for a retired AC, the shipped feature that retired it — a criterion left with no guard is no prune (a `retired-ac`
+  candidate covers only retired rows, at least one an AC: a test that also covers an EC / NFR / SC row is never one);
 - **keep** — why it earns its place (a journey, real wiring no lower test reaches);
 - **retrace** — a `retired-ac` test that now asserts the superseding feature's AC: its row belongs in that feature's plan;
 - **strengthen** — its AC's only test, and the behaviour can break with it green.

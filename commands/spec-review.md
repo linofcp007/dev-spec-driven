@@ -62,12 +62,14 @@ Never "behaviour unchanged" without the runs.
 
 **prune** — optional, a +tdd feature with every task done (or a finished one, which then reopens): the tests that no longer
 earn their place (`test-patterns.md` → Test value and pruning), removed only on the user's word. Candidates:
-`trace_check {name, matrix: true, code: true}` — a T-ID whose every AC row has `supersededBy` and no `supersedePending`
-(`retired-ac`; its files, the row's `tests[].files`) — then a prune-mode `dev-spec-driven:spec-reviewer` (inline without a
-subagent tool): prune · keep · retrace · strengthen per candidate, plus `same-path` / `no-kill` probe requests. You run the
-probes — a tracked, clean file only, restored from a hash-checked copy, each test of a pair run alone; no shell, no probe,
-so `retired-ac` only (`subagent-execution.md` → The pruning pass). The report: `.specs/<feature>/.execution/prune-report.md`.
-Say the churn first (test-plan, then tests, then tasks — on a finished feature execution and a new finish too) and batch
+`trace_check {name, matrix: true, code: true}` — a T-ID whose every row has a non-empty `supersededBy` and no
+`supersedePending`, at least one an AC (`retired-ac`; never one that covers an EC / NFR / SC row; its files, the row's
+`tests[].files`) — then a prune-mode `dev-spec-driven:spec-reviewer` (inline without a subagent tool): prune (what still
+guards each criterion the test covers) · keep · retrace · strengthen per candidate, plus `same-path` / `no-kill` probe
+requests. You run the probes — a tracked, clean file only, restored from a hash-checked copy, each test of a pair run
+alone; no shell, no probe, so `retired-ac` only (`subagent-execution.md` → The pruning pass). The report:
+`.specs/<feature>/.execution/prune-report.md`. Say the churn first (test-plan, then tests, then tasks — each unforced: a
+retired AC needs no planned test; on a finished feature execution and a new finish too) and batch
 the feature's prunings. On the user's yes: the rows out of `test-plan.md`, `spec_impact {name, phase: "test-plan"}`'s
 `retire` applied, a deleted file out of every done task's `_Implements:_`, each test removed whole, each changed protected
 test accepted (`feature protect <feature> <file> --accept --reason "pruned: …"`), then the re-approvals.
