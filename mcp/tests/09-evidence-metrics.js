@@ -750,4 +750,32 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
       st("Decisions, reuse & risks") === "missing",
       "1.41 designWeighChecks runs design-silent-regressions only with the size gate (m / l); the size-S merged section never answers it");
   }
+
+  // --- 1.41.0 review 2 (area MF) ---
+  {
+    // R2-MF-1: a Silent Regressions name its check DID print — as a line the reader could not read (malformed: `12.5kB`; past a bound: the
+    // first of 21 names) — is no proof the line is missing: the warning claims no READABLE line and points at the run's note; a name truly
+    // absent reads the same (the claim holds either way)
+    const ck = { size: CHECKS.size };
+    const p = proj("unmeasured-unread", ck);
+    const slug = change(p, "Unread");
+    fs.writeFileSync(path.join(p, ".specs", slug, "design.md"), "# Design\n\n## Silent Regressions\n| Metric | Why | Printed by |\n|---|---|---|\n" +
+      "| `bundle-size` | grows | size |\n| `p95_ms` | slow | size |\n| `first_name` | x | size |\n");
+    const mal = finishWith(p, slug, { size: "METRIC bundle-size=12.5kB better=lower tolerance=2%\n" }, { checks: ck, write: false });
+    const bound = finishWith(p, slug, { size: "METRIC first_name=1\n" + Array.from({ length: 20 }, (_, k) => "METRIC n" + k + "=1").join("\n") + "\n" }, { checks: ck, write: false });
+    const warnOf = (r) => (r.warnings || []).filter((w) => /Silent Regressions/.test(w));
+    const doubt = {
+      en: /printed no readable METRIC line of that name \(a malformed line, or one past a reader bound, is not read — the run's note names it\)/,
+      pt: /não imprimiram nenhuma linha METRIC legível com esse nome \(uma linha malformada, ou uma para lá de um limite do leitor, não é lida — a nota da execução diz qual\)/,
+      es: /no imprimieron ninguna línea METRIC legible con ese nombre \(una línea malformada, o una más allá de un límite del lector, no se lee — la nota de la ejecución dice cuál\)/,
+      "pt-BR": /não imprimiram nenhuma linha METRIC legível com esse nome \(uma linha malformada, ou uma além de um limite do leitor, não é lida — a nota da execução diz qual\)/,
+    };
+    all("1.41.0 review 2 R2-MF-1: a Silent Regressions name printed as a malformed METRIC line, or past a reader bound, is said as no READABLE line (the run's note names the unread one) — never as no line at all; a name truly absent reads the same; EN / PT / ES / pt-BR (got " +
+      js({ mal: [mal.metricsUnmeasured, mal.recordedChecks, warnOf(mal)], bound: [bound.metricsUnmeasured, bound.recordedChecks] }) + ")", {
+      malformed: js(mal.metricsUnmeasured) === js(["bundle-size", "p95_ms", "first_name"]) && mal.recordedChecks[0].metricsMalformed === 1 &&
+        js(warnOf(mal)) === js([MT().unmeasured("`bundle-size`, `p95_ms`, `first_name`", slug)]),
+      pastBound: js(bound.metricsUnmeasured) === js(["bundle-size", "p95_ms", "first_name"]) && js(bound.recordedChecks[0].metricsDropped) === js(["names"]),
+      words: Object.entries(doubt).every(([l, re]) => re.test(MT(l).unmeasured("`x`", "f"))),
+    });
+  }
 };

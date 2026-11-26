@@ -444,9 +444,10 @@ build's time. A project check prints each as a METRIC line — the form dev-guar
   in a code span in the first cell and the check that prints it — or `None — <why>`. Doctor warns
   `design-silent-regressions` while it is missing or blank (never a refusal; a design approved before 1.41 is not asked); a
   track's budget section (Performance Budget, Token Economics, UI Performance Budget) holds the targets, this row the check
-  that prints the number. finish warns when a name a row declares was printed by no passing check — once `finish --run` ran
-  every check (a run reported over MCP carries no reading, so it says nothing). Sizes s, xs and none get nothing new unless a
-  check prints a METRIC line with stated terms.
+  that prints the number. finish warns when no passing check printed a readable METRIC line of a name a row declares (a
+  malformed line, or one past a reader bound, is not read — the run's note names it) — once `finish --run` ran every check
+  (a run reported over MCP carries no reading, so it says nothing). Sizes s, xs and none get nothing new unless a check
+  prints a METRIC line with stated terms.
 - **The trend:** `dev-spec metrics` (spec_metrics, the project) lists each `(check, name)` across the finishes — a 1.9 %
   step at each finish never warns, but the series shows it.
 

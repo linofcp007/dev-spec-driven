@@ -107,4 +107,27 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
       finish: !!fin && JSON.stringify(fin.recordedChecks) === JSON.stringify([{ name: "streams", exitCode: 0, metrics: 3 }]) && names(fc.streams.metrics) === "both=2 err_only=3 out_only=4",
     });
   }
+
+  // 1.41.0 review 2 R2-MF-1: a Silent Regressions name the check printed as a MALFORMED line (`12.5kB`) — finish --run says the line was
+  // not read, then the unmeasured warning names that doubt (no READABLE line, the run's note), never "printed no METRIC line"
+  {
+    const q = path.join(tmp, "metric-unread");
+    S.initProject(q, ["core"], "en", { checks: { size: "node size.js" } });
+    w(q, "size.js", "console.log(\"METRIC bundle-size=12.5kB better=lower tolerance=2%\");\n");
+    const c = S.createFeature(q, "Unread", undefined, "x", undefined, "en", "change");
+    fs.writeFileSync(path.join(c.dir, "change.md"), "# Change: Unread\n\n## Summary\nThe change.\n\n## Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer.\n\n## Approach\nOne string.\n\n## Tasks\n- [ ] 1. [US1] Do it\n" +
+      "  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"0\"_\n");
+    fs.writeFileSync(path.join(c.dir, "design.md"), "# Design\n\n## Silent Regressions\n| Metric | Why | Printed by |\n|---|---|---|\n| `bundle-size` | grows | size |\n");
+    S.approvePhase(q, c.slug, null, "t", { through: "tasks" });
+    S.completeTask(q, c.slug, 1, { command: "node -e \"0\"", exitCode: 0, summary: "ok" });
+    const f = await run(q, ["finish", c.slug, "--run"]);
+    const note = "  ⚠ size: " + MT.notRead(1, "METRIC bundle-size=12.5kB better=lower tolerance=2%", S.METRIC_GRAMMAR) + "\n";
+    const warn = "▲ " + MT.unmeasured("`bundle-size`", c.slug);
+    all("1.41.0 review 2 R2-MF-1: finish --run over a check that printed its Silent Regressions name as a malformed line says the line was not read, then warns of no READABLE METRIC line of that name — the run's note names it (got " + JSON.stringify(f.out.slice(0, 1400)) + ")", {
+      note: f.code === 0 && f.out.includes(note),
+      warning: f.out.includes(warn) && f.out.indexOf(note) < f.out.indexOf(warn),
+      words: /printed no readable METRIC line of that name \(a malformed line, or one past a reader bound, is not read — the run's note names it\)/.test(warn),
+    });
+  }
 };

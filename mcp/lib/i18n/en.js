@@ -2371,7 +2371,9 @@ const msg = {
       finishWarn: (n, list, more, unitOnly) => (unitOnly
         ? `${n} METRIC reading(s) changed their unit since the last finish that recorded them — not compared (no conversion): ${list}${more ? ` — and ${more} more (spec_finish's metrics)` : ""}. Tell the user before the merge: the next finish compares in the new unit — and never change the unit, loosen, flip or drop a METRIC line to pass.`
         : `${n} METRIC reading(s) got worse past the tolerance their line states, or loosened its terms, since the last finish that recorded them: ${list}${more ? ` — and ${more} more (spec_finish's metrics)` : ""}. Every change merged since that finish is in the number, not only this feature's: tell the user before the merge — and never loosen, flip or drop a METRIC line to pass.`),
-      unmeasured: (names, slug) => `${slug}'s design.md names ${names} under Silent Regressions, but no project check's passing run printed a METRIC line of that name — add the line to the check that measures it (references/verification.md → Metrics that regress silently), or correct the row.`,
+      // a name its check printed as a line the reader could not read (malformed, past a bound) is no proof the line is missing: the
+      // claim is "no READABLE line", the run's note names the unread one (1.41.0 review 2)
+      unmeasured: (names, slug) => `${slug}'s design.md names ${names} under Silent Regressions, but the project checks' passing runs printed no readable METRIC line of that name (a malformed line, or one past a reader bound, is not read — the run's note names it) — add the line to the check that measures it (references/verification.md → Metrics that regress silently), or correct the row.`,
       notRead: (n, last, grammar) => `${n} METRIC line(s) not read — the form is ${grammar}${last ? ` (the last: ${last})` : ""}`,
       dropped: (bounds) => `METRIC lines past a reader bound were not read (${bounds}): at most 20 names, 1,000 candidate lines of at most 512 bytes, the output's last 64 MiB — the lines printed last are kept`,
       reportHead: "METRIC readings (each against the last other finish that recorded it):",
