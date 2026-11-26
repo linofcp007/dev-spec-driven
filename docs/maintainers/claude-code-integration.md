@@ -101,7 +101,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   stdin asynchronously (never `fs.readFileSync(0)`), runs `decide(raw, {timedOut})` once — at stdin's end or from the 2 s safety net
   (`SAFETY_NET_MS`; `timedOut` true: the approval hook's `partial` path) — and finishes with its answer; it turns an exception or a
   stdin error into a silent exit 0 (past its pre-check the approval hook catches its own and asks), feeds a terminal stdin `"{}"`
-  and, past `maxInput` characters (the observe and plan hooks, 4 MB), drains the rest and hands `decide` `""`. `finish` prints at
+  and, past `maxInput` characters (the observe and plan hooks, 4 MB), drains the rest and hands `decide` `""` — or, with `keepHead`
+  (the approval hook, 1.41.1), the first `maxInput` characters and `{tooBig: true}`. A `decide` may answer with a promise (the
+  approval hook's worker): `finish` runs with what it resolves to, a rejection silent. `finish` prints at
   most one JSON object and exits in the write's callback (conventions.md → Flush stdout before exiting). `payloadOf(raw)` is the
   payload object or null (not JSON, or no object: the hook exits), `eventOf(p)` its event name — the approval hook alone parses its
   own (a partial payload asks). A hook keeps only its decision: its pre-filter still runs first in its `decide`, and hook-utils.js
@@ -114,7 +116,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   edit guard's `pathWords`), split first (`mayWrite`'s `find … -delete`), walk segments or the text by hand (`guardedFileOf`,
   `trimSlashEnd`). mcp/tests/10-guards-hooks-cost.js times each reader by SHAPE (16 K vs 64 K characters of a hostile input: ≤ 8×)
   and the report's 120 K payload through the hook process. The engine's lexer and readers past the pre-filter read ≤
-  `APPROVAL_COMMAND_MAX` (64 K) and stay linear (review 8 swept them: ~0.1–0.2 s at the cap).
+  `APPROVAL_COMMAND_MAX` (64 K) and stay linear (review 8 swept them: ~0.1–0.2 s at the cap; 1.41.1's sweep found and replaced
+  `/[^\\/]*$/` — a separator-free run rescanned from each character: `dirPart` — and two `/[\\/]+$/` trims: `trimSlashEnd`). The
+  approval hook adds a net under them (Human approval guard → The deadline): a reader that turns slow is asked about, never let
+  through — but a prompt at deny is still a regression, so the readers stay linear.
 - **What the hooks share before the engine loads — `hooks/hook-utils.js`** (not a hook; Node core and probe.js only, the
   probe loaded on first use): the runner above, `probe()`, the probe's readers (`readJson`, `textOf` …: a UTF-16 BOM decides,
   else UTF-8 — files.js `decodeText`; Windows PowerShell 5.1 writes UTF-16, and a UTF-8-only reader sees the guards "off"; the
@@ -244,6 +249,26 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   gate), the strictest level's first, the strictest ANSWER wins (`permissionDecision`, + `systemMessage` for deny). One meta for
   every project (the strictest level's) let an outer project at deny without the check drop a nested one's dev-guardian files
   (review 9). Its own trouble before that point exits 0; past it, an engine failure ASKS (`failClosed`).
+- **The deadline: the hook never answers by timing out (1.41.1).** A PreToolUse hook past Claude Code's timeout lets the call through,
+  so every slow reader was a way past the guard (R1 and review 1's S1-F1 / F2 / F3). As a process, the hook's MAIN thread arms a timer
+  at the process's start (`DEADLINE_MS` = 6 s from `process.uptime()`'s origin), reads stdin with a cap (`MAX_INPUT` = 16 M
+  characters — past it, its head is read as a partial payload: `runHook`'s `keepHead`) and runs the pre-check alone (`needsDecision` =
+  decide's `preCheck`, text only: a call that can't be an approval exits silent, no worker, nothing read from disk). Everything else —
+  the candidate projects, their roadmap.json, the engine, the decision — runs in a `worker_threads` worker (this same file, its
+  `workerData` marked) with `resourceLimits` (`WORKER_LIMITS`: 512 MB old space); `decide` is unchanged and still exported for the
+  in-process tests (`onLevel`: the worker tells the main thread the strictest level and the project's language before it loads the
+  engine). No answer by the deadline (why `timeout`, its own sentence), a worker error or out-of-memory, an exit without an answer, a
+  worker that could not start (why `error`): ask, in the project's language once the worker named it. The margin, measured on
+  Windows 11 (the hook as a process, a project at deny, 25 runs): idle — a normal approve 294 ms (p50) / 402 ms (max), the answer
+  past the deadline (a busy worker: the reason's i18n load, the write, the exit) 91 / 131 ms, the spawn to the process's start 35 / 47
+  ms; with four test suites running — 772 / 1,443 ms, 178 / 517 ms, 78 / 192 ms. So a legitimate decision stays ≥ 4× under the
+  deadline and hooks.json's 10 s leaves 4 s for ≤ 0.7 s measured past it; the timeout stays 10 s. The worker costs a candidate
+  ~15 ms (spin-up and its own module loads); a call that can't be an approval pays only requiring `worker_threads` (~1.5 ms).
+  `DEV_SPEC_TEST_APPROVAL_DEADLINE_MS` LOWERS the deadline (tests: the hermetic chains keep `DEV_SPEC_TEST_*`; a higher or malformed
+  value is the default). Not covered: a worker inside one native call that never returns (a read of a FIFO, a dead network share) —
+  Node joins its workers at exit, so the process ends only when that call does (Claude Code's own timeout then applies); the
+  process failing to start in 10 s. mcp/tests/10-guards-hooks-cost.js drives each path through the process (a `-r` preload counts the
+  workers and makes the worker slow, out of memory, throw, exit or print).
 - **The candidate projects** (hook-utils.js `approvalProjects`, ≤ 12 the call names, then the session's own — always kept) follow
   where the CLI acts: the folders the call names (MCP `projectDir`, the edited file's project, `--project`, `SPEC_PROJECT_DIR=` /
   `$env:` assignments), each `cd` / `Set-Location` target (chained and from cwd alone), the folder holding each `.specs/` /
@@ -381,13 +406,24 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `psParams`), output redirections only (`seg.writes`), and `[IO.File]::` methods. Each path is read (`shellPathReadings()`)
   with the same command's variables (`shellTrack()`), after its `cd`, through brace expansion (`braceExpand()`) and as a glob
   (`shellGlob()`: Bash's leading `*` never matches a dot, PowerShell's / cmd's do; an unknown variable `SHELL_VAR` matches
-  anything but never `.specs`; `SHELL_ANY` matches dot folders) → `shellPathFacts()`. **Every glob the guard reads goes through
-  ONE matcher, `globMayName()`** (shellGlob, `devSpecGlob()`, `cliSubcommandGlob()`; 1.41.1): a dynamic program over (token,
-  position), linear in glob × name — never a RegExp built from the glob (a `*` per character backtracked C(n + k, k) ways on a
-  name it fails: 18 stars took the approval hook past its timeout). Each `?`, set and literal is the one-character RegExp the old
-  builder made of it, so case folding, `[!…]` / `[^…]`, an unclosed `[` and a set no RegExp reads (null: `[z-a]`) answer as
-  before; mcp/tests/10-guards-hooks-cost.js runs the old builders as the oracle. core.js `globMatcher` can't carry it: its `*`
-  / `?` stop at `/` alone, it folds case by `FOLD_CASE`, has no sets and reads `**` across folders. Actions: an
+  anything but never `.specs`; `SHELL_ANY` matches dot folders) → `shellPathFacts()`, which reads each segment's glob once for
+  every name it asks (`shellSegReader`). **Every glob the guard reads goes through ONE matcher, `globMayName()`** (shellGlob,
+  `devSpecGlob()`, `cliSubcommandGlob()`; 1.41.1) — never a RegExp built from the glob (a `*` per character backtracked C(n + k, k)
+  ways on a name it fails: 18 stars took the approval hook past its timeout). Reading the glob is ONE pass with no RegExp: a `[`
+  looks for its `]` only while one is left after it (`lastIndexOf`, once — an `indexOf` from every `[` of a run with none was
+  quadratic, S1-F2) and a set's validity is read by hand (`globSetValid`: the old builder's class holds no escape of its own, so the
+  grammar's ranges are code units). A name is matched by a dynamic program over (token, position) that reads at most 2n + 2 tokens
+  for a name of n code units: each `?`, set and literal takes one, so a glob taking more than the name holds fails it at once — a
+  set-heavy 48 K segment against `.specs` builds no token and no RegExp (S1-F1: each set's RegExp was built per call, per name, per
+  reading). Each `?`, set and literal is the one-character RegExp the old builder made of it, made when the program first reaches it,
+  so case folding, `[!…]` / `[^…]`, an unclosed `[` and a set no RegExp reads (null: `[z-a]`) answer as before;
+  mcp/tests/10-guards-hooks-cost.js runs the old builders as the oracle (and the validity reading against V8 on every set body of up
+  to 5 of the characters it turns on). core.js `globMatcher` can't carry it: its `*` / `?` stop at `/` alone, it folds case by
+  `FOLD_CASE`, has no sets and reads `**` across folders. **What tracking adds is bounded** (`shellGrow`, 1.41.1 S1-F3): a value put
+  in (`A=$A$A` doubles — 21 doublings of 8 characters are 16 M) and a `cd` folder put before a path count toward the command's read;
+  past `APPROVAL_COMMAND_MAX` the command is `too-long` (`expanded`: its own sentence — deny at deny, as a command past the limit),
+  every variable reading as unknown from then on — never just an unknown variable (`$D/..` of a long `.specs/…` value would miss the
+  removal of .specs). Actions: an
   exact guarded file → its setting; `.specs/` removed / moved → `roadmap`; a write that may hit a guarded file, or a removal /
   move / extraction / recursive copy on `.specs/` or under it (`rm -rf .specs/*`) → **`specs`**; a link to `.specs/` or under it
   → **`link`**. Allowed: spec documents, `.execution/` (but the observed log), lock files, read-only git. **Fail closed:** a
@@ -775,8 +811,19 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.41.1** — the guard's globs were RegExps built from the glob, a `*` → `[^/\\]*` (devSpecGlob) / `[\s\S]*` (shellGlobRe): a
   program word or a path segment of k stars and a letter, tested against the short fixed names, cost ~C(n + k, k) — 12 stars
   0.4 s, 16 stars 5 s, 18 past the hook's 10 s timeout, and a timed-out PreToolUse hook lets the call through (the approve after
-  it went unguarded at deny). One linear matcher now, `globMayName()` (Human approval guard → One reader of a simple command's
-  file operations); the hook at 40 stars answers deny at once (10-guards-hooks-cost.js, in a child process with a timeout).
+  it went unguarded at deny). One matcher now, `globMayName()` (Human approval guard → One reader of a simple command's file
+  operations); the hook at 40 stars answers deny at once (10-guards-hooks-cost.js, in a child process with a timeout).
+- **1.41.1 review 1** — the same hook-timeout class through three more inputs. **S1-F1 (HIGH, introduced):** the new matcher read the
+  WHOLE glob again on every name asked and built a RegExp for every set (V8 caches none of distinct sources): a set-heavy segment under
+  brace expansion (`cd x; cp x .specs/{a,b}…*` and 16,000 distinct sets, 48 K) took the hook 10.7–17.9 s, twice the parent's 5–8 s — a deny it had
+  answered went past the timeout. **S1-F2:** `indexOf("]")` from every `[` of a run with none — quadratic, under braces an 8 K command
+  past the timeout (pre-existing). **S1-F3:** `A=$A$A` doubled a tracked value, read again by every path after it — 321 characters, 22 s
+  (pre-existing). **S1-F4:** a 33 K-literal segment threw in the parent's RegExp (ask at deny), now deny. Fixed by reading the glob
+  in one pass without a RegExp (the code units it takes, the validity by hand, a `]` looked for once), tokens and RegExps made only
+  where a name reaches them, each segment read once per path (`shellSegReader`), and tracking's growth bounded (`shellGrow`:
+  too-long); the sweep replaced `/[^\\/]*$/` (Rename-Item of a 64 K name: 12.5 s) and `/[\\/]+$/` (a 64 K slash run copied into
+  .specs/: 8 s), and bounded a long cd folder put before every path (54 K: 14 s). And the net the review proposed (its Q4): **the
+  deadline** (Human approval guard → The deadline), the decision in a worker, ask past it.
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import

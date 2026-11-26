@@ -27,7 +27,8 @@
  * against accidents and casual workarounds, not a sandbox: an inline or written script is not read.
  *
  * It NEVER blocks on its own trouble BEFORE the pre-check passes: a malformed payload or any error there exits 0 silently — past it
- * (a guarded project, a call that may be an approval) an engine failure ASKS. It FAILS CLOSED on a
+ * (a guarded project, a call that may be an approval) an engine failure ASKS. As a process it never answers by timing out (1.41.1): the
+ * decision runs in a worker, and none by the deadline asks (runAsProcess, below). It FAILS CLOSED on a
  * roadmap.json that exists and doesn't parse: the strictest "approvalGuard": "ask" | "deny" its raw text names still holds
  * (appending a byte to the file must not switch the guard off; a BOM-less UTF-16 file is read through its NULs), on a missing one
  * while the .specs/ holds features (ask), on a projectDir that is no local path (a bad file:// URI — ask), and
