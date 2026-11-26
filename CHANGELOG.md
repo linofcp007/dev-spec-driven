@@ -3,6 +3,73 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.41.1] — 2026-11-26
+
+A security patch from a full triage of dev-guardian 3.17's scan of this repository (629 findings: 600 false positives,
+29 real, each settled against the code). The approval guard can no longer be run out of time, and nothing below `.specs/` is
+read through a link. Nothing 1.41.0 passed on a project without links is refused, and ordinary commands answer as before.
+
+### Fixed
+- **The approval guard never lets a call through by running out of time.** Claude Code lets a tool call through when a
+  PreToolUse hook passes its timeout, so a command that was slow for the guard to read went unguarded, even at `deny`. The
+  approval hook now decides in a worker thread with a heap limit; with no decision by its deadline (6 s, under the hook's
+  10 s timeout), or a worker that fails, runs out of memory or exits without an answer, the hook asks you. A call that
+  cannot be an approval is decided in the hook itself and starts no worker; on an idle machine a call that may be one
+  takes no measurable extra time. A tool payload over 64 M characters is not read: the hook asks. A command built to be
+  slow for the guard's readers can still make it ask at the deadline instead of refuse — never silent, never past the timeout;
+  you refuse at the prompt.
+- **The readers that ran it out of time are fast again.** Globs in a command are matched by one matcher that builds no
+  regular expression from them (it answers exactly what the old check answered), and what the guard tracks while it reads
+  a command — a variable's value, the `cd` folder, a `sh -c` script with its arguments — is bounded: past 65,536 characters
+  for one text, or 2,097,152 for all the path readings together, a command that names dev-spec or `.specs/` is refused at
+  `deny` as a command too long to read already was (the reason says which limit). Monorepo build loops, `FLAGS="$FLAGS …"`
+  appends, `cd pkg && … && cd ..` chains, CI scripts and long PowerShell scripts stay well under both.
+- **The approval hook never opens a file that is not a regular file** (a FIFO or a device named `roadmap.json` /
+  `ROADMAP.md`): it reads as a missing one, and the hook asks when that project holds features. Such a file made by a
+  script where the guard does not look is listed among the guards' known limits.
+- **Nothing below `.specs/` is read through a link.** Writes there have been refused since 1.24 when a folder or file on the
+  way is a symbolic link or junction; reads still followed one, so a linked feature folder, `steering/` or spec file could
+  have text from outside the project copied into next_task, the task brief, trace_check, the catalog, retro.md or a merge
+  summary. Every read now goes through the write gate's own rule, and what lies behind a link — or an entry that is neither a
+  file nor a folder — reads as absent. `.specs/` itself may still be a link.
+- **Both gates stand on the project's own `.specs/`**, never on the nearest folder that merely has that name (a link named
+  `.specs` deeper inside is refused like any other; a project below a folder called `.specs` has only its own specs checked;
+  `.SPECS`, 8.3 and NTFS stream spellings are matched as the file system matches them; each project of a monorepo stands on
+  its own). Every tool, command and resource, and the hooks' engine calls, record the project they work in.
+- **A linked feature folder is reported as `feature-linked`, never "not found"** — by every reader that takes a feature name,
+  `drift`, milestones, dependencies and `backlog add` included. Removing such a folder still removes the link alone, and the
+  1.24 refusals and `linked: true` answers are unchanged.
+- **Where absence could relax a guard, it fails closed:** a linked `roadmap.json` counts as a deleted one (the approval guard
+  asks — engine, hook and MCP server alike —, the stop gate stays on, guard mode takes your default); a linked `.state.json`
+  approves nothing; an approved artifact replaced by a link is "changed since approval".
+- **Project files are read by their real path:** a protected-tests entry that is no file of the project is never hashed nor
+  counted (finish names it); protecting or accepting a test through a junction out of the project is refused
+  (`outside-project`); the status line, doctor and the spec-kit / OpenSpec / BMAD importers never read or list through a
+  junction that leads out, and the importers' warnings no longer depend on what such a link points at. `ears <file>`, Tab
+  completion and the CLI's language never read through a link below `.specs/`.
+
+### Added
+- **doctor `specs-links`** (a warn) names each link below `.specs/` that dev-spec now reads as absent — a linked feature
+  folder, `steering/`, `_archive/`, a symlinked spec file — so nothing you relied on goes silent. Replace each with a plain
+  folder or file.
+
+### Changed
+- `cli/run.js`: the inline suppression on the one call that runs a `_Verify:_` or project check now names both rules it covers
+  and gives its reason on the line (dev-guardian 3.17 reads `nosemgrep: <id>[, <id>] -- <reason>`). The maintainer notes say
+  where `--run`'s trust ends: a project check added, or a `_Verify:_` added or edited, is no guard-down; `done --run` /
+  `finish --run` run what roadmap.json and tasks.md hold at that moment, and print each command before running it.
+
+### Performance
+- The link check costs at most one `lstat` per spec file read: a listing of `.specs/` already proves each plain folder it names,
+  so a project-wide `drift` (the SessionStart check), the feature list, the status line and doctor pay no extra call per feature.
+
+### Tests
+- mcp/tests/12-lifecycle-read-gate.js, -root.js, -scope.js (+ the CLI twin): every operation, resource, CLI command, hook and the
+  MCP server driven on projects full of links under an fs tracer; each guard decision where absence would relax it; the gate's
+  root; the counts. mcp/tests/10-guards-hooks-cost.js: the approval hook's deadline paths through the real process, the
+  matcher against the old one (random and exhaustive tables), 19 real-shaped legit commands answering as 1.41.0, the hostile
+  shapes as ratios. Totals: MCP <N> · CLI <M>.
+
 ## [1.41.0] — 2026-11-26
 
 The gardening round — tending what agents write code in: the guidance they read (each confirmed review finding's cause
