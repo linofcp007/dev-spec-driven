@@ -455,6 +455,16 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     for (const [w, want] of DEV_ROWS) rows["devSpecGlob(" + js(w) + ") " + want] = oldDevSpecGlob(w) === want && E.devSpecGlob(w) === want;
     for (const [g, mode, name, want] of SHELL_ROWS) rows["shellGlob(" + js(g) + ", " + mode + ")(" + js(name) + ") " + want] = oldShell(g, mode, name) === want && newShell(g, mode, name) === want;
     all("1.41.1 (R1): the linear glob matcher answers each row as the parent's RegExp builders do (a row false: the oracle or the matcher disagrees with it)", rows);
+    // (a set no RegExp reads, where each reader takes it — a path segment then may be no guarded name, the CLI's subcommand is
+    // unreadable, a program word is no glob of the CLI's script: the decisions the parent made, never a throw)
+    const decide = (tool, command) => {
+      try { return E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command } }, "deny", { meta: {}, lang: "en" }).decision; } catch (e) { return "threw: " + e.message; }
+    };
+    const INVALID = [["Bash", "cp x .specs/[z-a]*", "allow"], ["PowerShell", "Remove-Item .s[z-a]* -Recurse", "allow"],
+      ["Bash", "node cli/dev-spec.js [z-a]pprove feat requirements", "ask"], ["Bash", "node cli/dev-spe[z-a].js approve feat requirements", "allow"]];
+    const invalidGot = INVALID.map(([tool, command]) => decide(tool, command));
+    all("1.41.1 (R1): a glob holding a range out of order answers as the parent did — a path segment no guarded name, the CLI's subcommand unreadable (ask), no glob of the CLI's script (got " + js(invalidGot) + ")",
+      Object.fromEntries(INVALID.map(([tool, command, want], i) => [tool + " " + command + " → " + want, invalidGot[i] === want])));
     let seed = 1411;
     const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
     const ALPHA = ["*", "?", "[", "]", "!", "^", "-", ".", "d", "e", "v", "s", "p", "c", "j", "D", "S", "/", "\\", "a", "z", "x", "\n", SV, SA, "K", "k", "K", "{", "(", "+", "$", "|"];
