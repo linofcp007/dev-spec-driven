@@ -850,6 +850,11 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       hostileRows[name + " — " + want + (kind ? " (too-long: " + kind + ", the reason naming its bound)" : " (no too-long)")] = r.decision === want &&
         (kind ? !!tl && tl.expanded === kind && tl.length === (kind === "total" ? 2 * 1024 * 1024 : 64 * 1024) && r.reason.includes(ACT.tooLongExpanded(kind, tl.length)) : !tl);
     }
+    // (R2H-F5) a value built past the read limit stops growing there, the other variables are still read: the edit guard keeps
+    // ed680c92's target after a doubling ×14 (`D=tests` — round 1 read every variable after the bound as unknown and lost it)
+    const egCmd = "A=xxxxxxxx; " + "A=$A$A; ".repeat(14) + "D=tests; echo hi > $D/protected.test.js; cat .specs/x";
+    hostileRows["the edit guard after a doubling ×14: tests/protected.test.js still a target (as ed680c92); the decision too-long (value)"] =
+      E.shellWriteTargets(egCmd, "bash", false).includes("tests/protected.test.js") && decide("Bash", egCmd, "deny", false).s === "deny|unreadable:too-long";
     all("1.41.1 fix round 2 (R2H-F2 / F4): the hostile shapes are too long — a value built past 65,536 characters (A=$A$A, PowerShell's \"$a$a\", sh -c '$1' / '$@' ×16,000), the paths' work past 2,097,152 " +
       "(a 30 K cd folder before 3,000 paths, a 1,000-character value put in 2,098 paths — 2,097 still read), a cd / cd .. chain ×2,000 and PowerShell's ×1,000 folded, read (got " + js(hostileGot) + ")", hostileRows);
     // the cd folder folded reads every path as ed680c92 read it (the edit guard's targets, normalized as the path readers normalize):

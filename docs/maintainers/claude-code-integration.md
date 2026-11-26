@@ -443,12 +443,14 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   readers on Windows 11, so ≤ 0.6 s at the bound) is `too-long`, `expanded: "total"`. An assignment copies its value and reads nothing
   (a 32 K value copied by 10,000 assignments: 0.2 s), so it costs no work: round 1 counted every re-read against the 64 K read limit
   and refused monorepo commands of 3–4 K (`FLAGS="$FLAGS --x"` ×76, a `cd ../next` chain ×80). Either is denied at deny, as a command
-  past the limit, and every variable reads as unknown from then on — never only an unknown variable (`$D/..` of a long `.specs/…`
-  value would miss the removal of .specs); the reason names the bound passed (`tooLongExpanded(what, max)`).
+  past the limit — never only an unknown variable (`$D/..` of a long `.specs/…` value would miss the removal of .specs); the reason
+  names the first bound passed (`tooLongExpanded(what, max)`). Past the value bound only that reference reads as unknown (the value
+  stops growing there; `D=tests` after a doubling is still read), past the work bound every variable does (`ctx.workOut`).
   mcp/tests/10-guards-hooks-cost.js pins 19 legit monorepo / CI / PowerShell commands (3–28 K) to ed680c92's four decisions and the
   edit guard's targets, the hostile shapes to too-long, and the work bound from both sides (2,097 × 1,000 characters read, 2,098 not).
-  The edit guard shares the bounds: on the legit corpus it reports exactly ed680c92's targets; past a bound (hostile shapes only) its
-  variables read as unknown and a path starting with one is left out — its fail-open policy, unchanged. Actions: an
+  The edit guard shares the bounds: on the legit corpus it reports exactly ed680c92's targets, and after a value past the bound it
+  still reads the other variables (a test write through `$D` after a doubling ×14 is kept); past the WORK bound (hostile shapes
+  only) its variables read as unknown and a path starting with one is left out — its fail-open policy, unchanged. Actions: an
   exact guarded file → its setting; `.specs/` removed / moved → `roadmap`; a write that may hit a guarded file, or a removal /
   move / extraction / recursive copy on `.specs/` or under it (`rm -rf .specs/*`) → **`specs`**; a link to `.specs/` or under it
   → **`link`**. Allowed: spec documents, `.execution/` (but the observed log), lock files, read-only git. **Fail closed:** a

@@ -1086,14 +1086,15 @@ const GUARDED_NAMES = ["roadmap.json", ".state.json", "observed.jsonl"];
 const isGuardianSetting = (h) => !!h && /^guardian-/.test(String(h.setting || ""));
 const RE_SHELL_WILD = /[*?[\u0001\u0002]/;
 // What tracking may build, and what it may make the readers read again (1.41.1; review 1 S1-F3, review 2 R2H-F2 / F4). ctx (a reading's —
-// approvalGuardDecision's, shellWriteTargets'): ctx.tooLong is set — the approval guard's `too-long`, every variable reading as SHELL_VAR
-// from then on — by "value": a text tracking BUILDS past APPROVAL_COMMAND_MAX, the read limit (a variable's value, a word with its
-// variables put in, the cd folder, a `-c` script with its positional parameters: `A=$A$A` doubles — 21 doublings of 8 characters are
-// 16 M), or "total": the text the PATHS are read with past APPROVAL_TRACK_WORK (each value put in a path word, each cd folder put
-// before a relative one — what the path readers read again). An assignment costs the work of copying its value only: `FLAGS="$FLAGS
-// --x"` ×500 builds 12 K and reads nothing (review 2: counting every re-read as the read limit refused monorepo commands of 3–4 K).
-// APPROVAL_TRACK_WORK, measured (claude-code-integration.md → Human approval guard): ~0.3 µs a character through the path readers on
-// Windows 11 — 2 M is ≤ 1 s at the bound, well under the hook's deadline.
+// approvalGuardDecision's, shellWriteTargets'): ctx.tooLong — the approval guard's `too-long`, the first bound passed — is "value": a
+// text tracking BUILDS past APPROVAL_COMMAND_MAX, the read limit (a variable's value, a word with its variables put in, the cd folder,
+// a `-c` script with its positional parameters: `A=$A$A` doubles — 21 doublings of 8 characters are 16 M) — that reference reads as
+// SHELL_VAR (a value stops growing there; the other variables keep being read: `D=tests` after it, as the edit guard needs), or
+// "total": the text the PATHS are read with past APPROVAL_TRACK_WORK (each value put in a path word, each cd folder put before a
+// relative one — what the path readers read again) — every variable reads as SHELL_VAR from then on (ctx.workOut). An assignment costs
+// the work of copying its value only: `FLAGS="$FLAGS --x"` ×500 builds 12 K and reads nothing (review 2: counting every re-read
+// against the read limit refused monorepo commands of 3–4 K). APPROVAL_TRACK_WORK, measured (claude-code-integration.md → Human
+// approval guard): ~0.3 µs a character through the path readers on Windows 11 — 2 M is ≤ 1 s at the bound, under the hook's deadline.
 const APPROVAL_TRACK_WORK = 2 * 1024 * 1024;
 // A word with the variables the same command assigned put in (`D=.specs; … $D/roadmap.json`), any other one marked SHELL_VAR. inPath:
 // a path word (the work budget too).
@@ -1102,7 +1103,7 @@ function shellVarText(w, vars, ctx, inPath) {
   let size = s.length;
   return s.replace(/\$\{(?:env:)?([A-Za-z_]\w*)\}|\$\{[^{}]*\}|\$(?:env:)?([A-Za-z_]\w*)|\$[0-9@*#?$!]|%([A-Za-z_]\w*)%/gi, (m, a, b, c) => {
     const k = String(a || b || c || "").toLowerCase();
-    if (!(k && vars && own(vars, k)) || (ctx && ctx.tooLong)) return SHELL_VAR;
+    if (!(k && vars && own(vars, k)) || (ctx && ctx.workOut)) return SHELL_VAR;
     const v = vars[k];
     size += v.length - m.length;
     if (!shellBuilt(ctx, size) || (inPath && !shellWork(ctx, v.length))) return SHELL_VAR;
@@ -1118,10 +1119,11 @@ function shellBuilt(ctx, size) {
 }
 function shellWork(ctx, n) {
   if (!ctx) return true;
-  if (ctx.tooLong) return false;
+  if (ctx.workOut) return false;
   ctx.work = (ctx.work || 0) + n;
   if (ctx.work <= APPROVAL_TRACK_WORK) return true;
-  ctx.tooLong = "total";
+  ctx.workOut = true;
+  if (!ctx.tooLong) ctx.tooLong = "total";
   return false;
 }
 // Bash's brace expansion of a word (`{.specs,x}/roadmap.json`, `roadmap.json{,}`, `appro{v,}e`) → its words (at most `cap`); a group
