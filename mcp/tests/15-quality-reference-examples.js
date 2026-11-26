@@ -249,6 +249,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
       G + " (v1.2, v2.0)",
       G + " – copy its error handling, not the v2.x API",
       G + " - its error path; e.g. 404.json",
+      "` " + G + "` (the v2.1, v3.0 shape)", // read as the reader reads it: exemplarPath first (the blank inside the span trimmed)
     ];
     const got = cells.map((c) => {
       structure(p, table(["Pattern", "Copy", "Applies to"], [["Handler", c, "src/api-keys/**"]]));

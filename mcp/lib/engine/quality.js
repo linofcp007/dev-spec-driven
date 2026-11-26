@@ -2406,15 +2406,16 @@ function exemplarPath(cell) {
 // two of them: "`a.js`, `b.js`", "a.js and b.js", "src/ui/, src/ui/Card.tsx" — is a DOUBT: which one the row means is not read, so it
 // is never judged gone and the brief quotes the cell as written. A note beside ONE path ("x.ts (see README.md)", "x.ts (the old one,
 // with its verify)") is no list. Path-like: a word holding a `/`, or a `.` before a letter or digit (`a.js`, `src/ui`, also `e.g` —
-// a doubt is only never judged). (1.41.0 review 2) A cell in the ANNOTATED single-path form — a path, a blank, then `(`, `—`, `–` or
-// `- ` (RE_IMPL_ANNOTATED, the form implementsPath reads as ONE path) — is no list, whatever its note holds: the list test read the
-// note too, and a gone file beside "res.json(), then …" or "(see `docs/README.md`)" became a doubt the brief quoted. The rule is one
-// file per Copy cell — two files are two rows; this doubt is only the safety net for a cell that lists them anyway.
+// a doubt is only never judged). (1.41.0 review 2) A cell whose path reading (exemplarPath — what projectPath / implementsPath read)
+// is in the ANNOTATED single-path form — a path, a blank, then `(`, `—`, `–` or `- ` (RE_IMPL_ANNOTATED, the form implementsPath
+// reads as ONE path) — is no list, whatever its note holds: the list test read the note too, and a gone file beside "res.json(),
+// then …" or "(see `docs/README.md`)" became a doubt the brief quoted. The rule is one file per Copy cell — two files are two rows;
+// this doubt is only the safety net for a cell that lists them anyway.
 const RE_EXEMPLAR_LIST = /[,;]|\s(?:and|e|y)\s/i;
 const pathLike = (text) => text.split(/\s+/).some((w) => /\/|\.[\p{L}\p{N}]/u.test(w));
 function exemplarMany(cell) {
   const s = String(cell || "");
-  if (RE_IMPL_ANNOTATED.test(s)) return false;
+  if (RE_IMPL_ANNOTATED.test(exemplarPath(s))) return false;
   if ((s.match(/`[^`]*`/g) || []).filter(pathLike).length > 1) return true;
   return s.replace(/`/g, " ").split(RE_EXEMPLAR_LIST).filter(pathLike).length > 1;
 }
