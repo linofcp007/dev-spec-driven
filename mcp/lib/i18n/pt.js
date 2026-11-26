@@ -1224,7 +1224,7 @@ const msg = {
     doctor: {
       steeringMissing: (list) => `em falta: ${list}`,
       steeringOk: "steering essencial presente (incl. constituição)",
-      specsLinks: (list, more) => `ligações em .specs/ que o dev-spec nunca lê nem escreve — são lidas como ausentes: ${list}${more ? ` e mais ${more}` : ""}. Substitui cada uma por uma pasta ou um ficheiro normal (copia o conteúdo para lá).`,
+      specsLinks: (list, more) => `ligações em .specs/ através das quais o dev-spec nunca lê nem escreve — são lidas como ausentes: ${list}${more ? ` e mais ${more}` : ""}. Substitui cada uma por uma pasta ou um ficheiro normal (copia o conteúdo para lá).`,
       requirementsMissing: "requirements.md em falta",
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] por resolver — resolve antes do design`,
       clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] por resolver no change.md — resolve antes de aprovar o plano`,
@@ -3300,7 +3300,7 @@ const msg = {
       finishWarn: (slug, list, more) => `Testes protegidos de ${slug} alterados sem motivo registado (nenhuma tarefa os voltou a registar, nenhum levantamento os cobre): ${list}${more ? ` e mais ${more}` : ""} — confirma que cada alteração é intencional (um teste alterado para passar é um teste enfraquecido); se for, aceita-a: ${DEV_SPEC} feature protect ${slug} <ficheiro> --accept --reason "…".`,
       changed: (file) => `${file} (alterado)`,
       deleted: (file) => `${file} (apagado)`,
-      ignored: (slug, list, more) => `Testes protegidos de ${slug}: ${list}${more ? ` e mais ${more}` : ""} — listados em .state.json, mas não são ficheiros deste projeto pelo caminho real (fora dele, ou atrás de uma ligação): nunca são calculados nem contados; remove essas entradas à mão.`,
+      ignored: (slug, list, more) => `Testes protegidos de ${slug}: ${list}${more ? ` e mais ${more}` : ""} — listados em .state.json, mas não são ficheiros deste projeto pelo caminho real (fora dele, ou atrás de uma ligação): nunca têm o hash calculado nem são contados; remove essas entradas à mão.`,
       summaryHead: "## Testes protegidos",
       summaryLine: (n, k) => `${n} ficheiro(s) de teste protegido(s); ${k} alterado(s) sem motivo registado.`,
       summaryLift: (file, by, reason) => `- proteção levantada: ${file} — por ${by}: "${reason}"`,

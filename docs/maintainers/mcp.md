@@ -191,7 +191,8 @@ An argument error is the tool's JSON `{ok: false, error, code, …}` (`argError`
 (+ `unknown` [{argument, didYouMean?}]) · `missing-arguments` (+ `missing`) · `invalid-arguments` (+ `invalid`, the paths) ·
 `inapplicable-arguments` · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` ·
 `project-no-specs`. Callers branch on the code (English); the message is in the project language. The feature resolver's
-refusals carry `feature-not-found` · `feature-name-invalid` · `feature-name-reserved`, on every tool and the CLI's `--json`.
+refusals carry `feature-not-found` · `feature-name-invalid` · `feature-name-reserved` · `feature-linked` (1.41.1: the
+name reaches a feature folder that is a link — `linked: true`, `path`), on every tool and the CLI's `--json`.
 An argument the ENGINE refuses (the CLI hands it the raw word the schema would have refused over MCP — depend's order, a
 backlog action, impact's phase, a task number) answers in the validator's words with the same code (`invalid-arguments` +
 `invalid`); `spec_approve` without a phase is `missing-arguments` [phase] on both surfaces (the CLI no longer stops it as
