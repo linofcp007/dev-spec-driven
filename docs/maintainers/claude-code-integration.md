@@ -377,8 +377,14 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (`APPROVAL_WRITERS_ANY` / `_INPLACE` / `_TARGET` / `_OTHER`, `APPROVAL_REMOVERS`, `APPROVAL_MOVERS`, `PS_FILE_CMDLETS` by
   `psParams`), output redirections only (`seg.writes`), and `[IO.File]::` methods. Each path is read (`shellPathReadings()`)
   with the same command's variables (`shellTrack()`), after its `cd`, through brace expansion (`braceExpand()`) and as a glob
-  (`shellGlobRe()`: Bash's leading `*` never matches a dot, PowerShell's / cmd's do; an unknown variable `SHELL_VAR` matches
-  anything but never `.specs`; `SHELL_ANY` matches dot folders) → `shellPathFacts()`. Actions: an
+  (`shellGlob()`: Bash's leading `*` never matches a dot, PowerShell's / cmd's do; an unknown variable `SHELL_VAR` matches
+  anything but never `.specs`; `SHELL_ANY` matches dot folders) → `shellPathFacts()`. **Every glob the guard reads goes through
+  ONE matcher, `globMayName()`** (shellGlob, `devSpecGlob()`, `cliSubcommandGlob()`; 1.41.1): a dynamic program over (token,
+  position), linear in glob × name — never a RegExp built from the glob (a `*` per character backtracked C(n + k, k) ways on a
+  name it fails: 18 stars took the approval hook past its timeout). Each `?`, set and literal is the one-character RegExp the old
+  builder made of it, so case folding, `[!…]` / `[^…]`, an unclosed `[` and a set no RegExp reads (null: `[z-a]`) answer as
+  before; mcp/tests/10-guards-hooks-cost.js runs the old builders as the oracle. core.js `globMatcher` can't carry it: its `*`
+  / `?` stop at `/` alone, it folds case by `FOLD_CASE`, has no sets and reads `**` across folders. Actions: an
   exact guarded file → its setting; `.specs/` removed / moved → `roadmap`; a write that may hit a guarded file, or a removal /
   move / extraction / recursive copy on `.specs/` or under it (`rm -rf .specs/*`) → **`specs`**; a link to `.specs/` or under it
   → **`link`**. Allowed: spec documents, `.execution/` (but the observed log), lock files, read-only git. **Fail closed:** a
@@ -762,6 +768,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.36.0 review 3** — a protected test's accept (`spec_feature {action: "protect", accept: true}`, `feature protect <f> <file>
   --accept`) is a guard-down (setting `accept`) on every path — MCP, elicitation, the CLI through a shell; `accept` joined
   `CLI_SWITCHES` (the hook's lexer must not read the file after it as its value) and `--accept` `RE_APPROVAL_VERB`.
+- **1.41.1** — the guard's globs were RegExps built from the glob, a `*` → `[^/\\]*` (devSpecGlob) / `[\s\S]*` (shellGlobRe): a
+  program word or a path segment of k stars and a letter, tested against the short fixed names, cost ~C(n + k, k) — 12 stars
+  0.4 s, 16 stars 5 s, 18 past the hook's 10 s timeout, and a timed-out PreToolUse hook lets the call through (the approve after
+  it went unguarded at deny). One linear matcher now, `globMayName()` (Human approval guard → One reader of a simple command's
+  file operations); the hook at 40 stars answers deny at once (10-guards-hooks-cost.js, in a child process with a timeout).
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import
