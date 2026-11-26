@@ -107,10 +107,11 @@ History at the end.
   .specs/ answered from the gate's lstat, no existsSync of its own), `readDirCached` / `walkProject`, `safeReaddir`, `isDirSafe`,
   `readFileHead(s)` (the pool gets a path no open accepts), `readBytes` (a tick's bytes), `specsStat` (an mtime / a size); the bounded
   readers outside files.js ask `specsReadBlocked` first (`readLogTail`, `readStopReport`, `fileHash`, the save hook's lint, spec_upgrade's
-  `.gitignore`, the roadmap row signature, historyText — which takes `.history/<one file name>` only, as text, before any read).
-  Outside mcp/lib (fix round 1): mcp/server.js's approval meta asks `specsReadBlocked` of roadmap.json (a linked one is gone: the
-  engine's own answer); the engine-free CLI readers keep the one project rule with a one-line lstat — the completion's archived names
-  (a linked `_archive/` lists none) and status-line signature (a link signed as itself), cli/main.js's light language (a linked
+  `.gitignore`, the roadmap row signature); `historyText` takes `.history/<one file name>` only, as text, before its (gated) read.
+  Outside mcp/lib (fix round 1): mcp/server.js's approval meta asks `specsReadBlocked` of roadmap.json (a linked one is unknown —
+  every weakening counts, as the approval hook reads it); `ears <file>` (cli/commands.js) asks it of the file it names (behind a link:
+  no such file); the engine-free CLI readers keep the one project rule with a one-line lstat — the completion's archived names (a
+  linked `_archive/` lists none) and status-line signature (a link signed as itself), cli/main.js's light language (a linked
   roadmap.json picks none). A WRITE target's name (rename / archive / restore onto it, a snapshot's number, an import's
   folder) is `entryAt` — lstat, a link there is taken. `specsFileContained` / `readContained` ARE the gate's verdict (a regular file or
   absent). The dry-run sink is read first (its records passed the write gate).
