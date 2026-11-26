@@ -1430,4 +1430,4 @@ module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensu
   readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, readFileHeads, decodeText, existsCached,
   existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
   FOLD_CASE, toPosix, isInsideDir, writeInsideProject, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO,
-  specsReadBlocked, readBytes, specsStat, entryAt, projectFileReal, realRootOf, seedParts, gateRootOf, __link };
+  specsReadBlocked, readBytes, specsStat, entryAt, projectFileReal, realRootOf, seedParts, __link };

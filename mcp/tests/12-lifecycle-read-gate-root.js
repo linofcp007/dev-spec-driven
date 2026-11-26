@@ -483,38 +483,48 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
   // fix round 2 — the save hook's project, the NTFS stream spelling, a FIFO, BMAD's folders, the write gate on the root, a base that
   // holds no path
   // ---------------------------------------------------------------------------------------------------------------------------
-  // R2-R-2: the save hook's project is the gates' own root — an edit through `.specs/f/.history/.specs -> <another project's .specs>`
-  // reaches the engine as THIS project's: nothing of the other project traced into the context, its .state.json and stamp untouched
+  // The save hook's project (fix round 3 — round 2's gate-root choice taken out): the NEAREST folder named .specs, a text walk. On a
+  // link-free project below a folder named .specs (B-1) whose session anchor does not hold the saved file — Claude Code started in a
+  // subfolder (CLAUDE_PROJECT_DIR or SPEC_PROJECT_DIR = <P>/src), no anchor at all, a save in a sibling checkout — the hand-ticked box
+  // is stamped in THIS project (lastEditAt) and the Stop hook sends "All tasks are done." back; a sibling's save is linted. (Round 2's
+  // rule fell back to the outermost .specs: the outer folder as the project, a silent hook, a silent stop gate.) The nested-link edit
+  // R2-R-2 named stays a documented limit (conventions.md → The read gate).
   {
-    const p = project("hooknested"), op = project("hooknested-other");
-    S.createFeature(p, { name: "f" });
-    S.createFeature(op, { name: "x" });
-    fs.writeFileSync(path.join(op, ".specs", "x", "requirements.md"), "# Feature: x\n\n## User Stories\n\n### US-1: OUTSIDE-STORY (P1)\nAs a user I want OUTSIDE-WANT so that OUTSIDE-SO.\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN OUTSIDE-AC THE SYSTEM SHALL OUTSIDE-SHALL\n");
-    fs.writeFileSync(path.join(op, ".specs", "x", "tasks.md"), "# Tasks\n\n- [ ] 1. a task for US-1.AC-9\n  - _Requirements: US-1.AC-9_\n");
-    if (link(path.join(op, ".specs"), path.join(p, ".specs", "f", ".history", ".specs"))) {
-      const st0 = fs.readFileSync(path.join(op, ".specs", "x", ".state.json"), "utf8");
-      // with the session's project exported, and without (no anchor: the path's own outermost .specs is the project)
-      const bare = { ...process.env };
-      delete bare.CLAUDE_PROJECT_DIR; delete bare.SPEC_PROJECT_DIR;
-      const outs = [{ ...process.env, CLAUDE_PROJECT_DIR: p }, bare].flatMap((env) => ["tasks.md", "requirements.md"].map((file) => hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), {
-        input: js({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: path.join(p, ".specs", "f", ".history", ".specs", "x", file) }, cwd: p }),
-        cwd: p, env }).stdout));
-      all("1.41.1 fix round 2 (R2-R-2): the save hook's project is the gates' own root (the session's project recorded) — an edit through a link NAMED .specs below .specs/ traces / lints nothing of the project behind it, stamps neither its .state.json nor its roadmap (got " + js(outs) + ")", {
-        noLeak: () => outs.every((o) => !/OUTSIDE|US-1\.AC-9|US-1\.AC-1/.test(o)),
-        stateUntouched: () => fs.readFileSync(path.join(op, ".specs", "x", ".state.json"), "utf8") === st0,
-        noStamp: () => !fs.existsSync(path.join(op, ".specs", ".execution", "roadmap-stale")),
-      });
-    } else ok(true, "1.41.1 fix round 2 (R2-R-2): links not creatable here — skipped");
-    // … and a project below a folder NAMED .specs is the session's project, recorded: its own save is linted as ever (the outermost
-    // .specs of the bare path would make the outer folder the project — no dev-spec project, a silent hook)
-    const b1 = path.join(tmp, "rgr-hookb1", ".specs", "app");
-    fs.mkdirSync(b1, { recursive: true });
-    S.initProject(b1, ["core"], "en");
-    const fb = S.createFeature(b1, { name: "feat" });
-    fs.writeFileSync(path.join(fb.dir, "requirements.md"), REQ);
-    const lint = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: js({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: path.join(fb.dir, "requirements.md") }, cwd: b1 }),
-      cwd: b1, env: { ...process.env, CLAUDE_PROJECT_DIR: b1 } }).stdout;
-    ok(/EARS/.test(lint), "1.41.1 fix round 2 (R2-R-2): the save hook on a project below a folder named .specs (CLAUDE_PROJECT_DIR) lints its saved requirements.md — the session's project is the base (got " + js(lint.slice(0, 160)) + ")");
+    const HK = path.join(__dirname, "..", "hooks");
+    const bare = { ...process.env };
+    delete bare.CLAUDE_PROJECT_DIR; delete bare.SPEC_PROJECT_DIR;
+    const TICK = (x) => "# Tasks\n\n- [" + x + "] 1. [US1] Store it for US-1.AC-1\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/a.js_\n  - _Verify: node -e \"process.exit(1)\"_\n";
+    const build = (p) => {
+      put(path.join(p, "src", "a.js"), "module.exports = 1;\n");
+      S.initProject(p, ["core"], "en", {});
+      const f = S.createFeature(p, { name: "alpha", tracks: ["core"] });
+      fs.writeFileSync(path.join(f.dir, "requirements.md"), REQ);
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), TICK(" "));
+      S.approvePhase(p, "alpha", null, "t", { through: "tasks", force: true, reason: "r" });
+      return f.dir;
+    };
+    const rows = {};
+    for (const [mode, anchor, at] of [["CLAUDE_PROJECT_DIR=<P>/src", "CLAUDE_PROJECT_DIR", "src"], ["SPEC_PROJECT_DIR=<P>/src", "SPEC_PROJECT_DIR", "src"], ["no anchor", null, ""]]) {
+      const P = path.join(tmp, "rgr-b1save-" + Object.keys(rows).length, ".specs", "app");
+      const dir = build(P);
+      const cwd = at ? path.join(P, at) : P;
+      const env = anchor ? { ...bare, [anchor]: cwd } : bare;
+      const tasks = path.join(dir, "tasks.md");
+      fs.writeFileSync(tasks, TICK("x")); // the box ticked by hand (the Edit tool), no evidence
+      const save = hookIn(path.join(HK, "spec-hook.js"), { input: js({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: tasks, old_string: "[ ]", new_string: "[x]" }, cwd }), cwd, env }).stdout;
+      const st = JSON.parse(fs.readFileSync(path.join(dir, ".state.json"), "utf8"));
+      const stop = hookIn(path.join(HK, "stop-hook.js"), { input: js({ hook_event_name: "Stop", last_assistant_message: "All tasks are done.", cwd }), cwd, env }).stdout;
+      rows[mode] = { save: save.slice(0, 90), lastEditAt: !!st.lastEditAt, blocks: /"decision":"block"/.test(stop) };
+    }
+    // a sibling checkout below the same folder named .specs (`git worktree add ../app-wt`): its save is its own project's, linted
+    const outer = path.join(tmp, "rgr-b1sib", ".specs", "work");
+    const A = path.join(outer, "app"), B = path.join(outer, "app-wt");
+    for (const p of [A, B]) { fs.mkdirSync(p, { recursive: true }); S.initProject(p, ["core"], "en"); const f = S.createFeature(p, { name: "alpha" }); fs.writeFileSync(path.join(f.dir, "requirements.md"), REQ); }
+    const sib = hookIn(path.join(HK, "spec-hook.js"), { input: js({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: path.join(B, ".specs", "alpha", "requirements.md") }, cwd: A }),
+      cwd: A, env: { ...bare, CLAUDE_PROJECT_DIR: A } }).stdout;
+    all("1.41.1 fix round 3 (R3-R-1): on a link-free project below a folder named .specs the save hook takes the NEAREST .specs as its project whatever the session's anchor — Claude Code in a subfolder (CLAUDE_PROJECT_DIR or SPEC_PROJECT_DIR), no anchor: the hand tick is stamped (lastEditAt) and the Stop hook blocks \"All tasks are done.\"; a sibling checkout's save is linted (got " + js({ rows, sib: sib.slice(0, 90) }) + ")", {
+      stamped: () => Object.values(rows).every((r) => r.lastEditAt), stopBlocks: () => Object.values(rows).every((r) => r.blocks), sibling: () => /EARS/.test(sib),
+    });
   }
   // R2-R-3 (win32): an NTFS stream spelling of .specs (`.specs::$INDEX_ALLOCATION`, `.specs:$I30:$INDEX_ALLOCATION`) or of a part below
   // it reads as absent — the gate blocks it, and trace / coverage answer the same whether a link's outside target exists or not
@@ -537,7 +547,14 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
       blocked: () => e.gate.every((g) => js(g) === js([true, null, false])), oracle: () => e.trace === m.trace && e.cov === m.cov,
     });
     else ok(true, "1.41.1 fix round 2 (R2-R-3): links not creatable here — skipped");
-  } else ok(true, "1.41.1 fix round 2 (R2-R-3): NTFS stream syntax is a win32 spelling — a ':' is an ordinary name character here");
+  } else {
+    // (fix round 3, R3-R-3) off Windows a ':' is an ordinary name character: a spec file named notes:v2.md below .specs/ reads as present
+    const p = project("colon"), f = S.createFeature(p, { name: "feat" });
+    const named = path.join(f.dir, "notes:v2.md");
+    fs.writeFileSync(named, "# notes\n");
+    const r = E.withReadCache(() => { E.specsRoot(p); return [E.readIfExists(named), E.existsRaw(named), E.specsReadBlocked(named)]; });
+    eq(r, ["# notes\n", true, false], "1.41.1 fix round 3 (R3-R-3): off Windows a file named notes:v2.md below .specs/ reads as present — the ':' rule (NTFS stream syntax) is win32's alone");
+  }
   // the hook review's FIFO: a part below .specs/ that is neither a file nor a folder (a FIFO, a socket, a device) reads as absent — the
   // gate's own lstat, no open (a FIFO's open waits for a writer: the call never returned). A real FIFO where the platform makes one
   // (mkfifo), and the same lstat answer stubbed everywhere

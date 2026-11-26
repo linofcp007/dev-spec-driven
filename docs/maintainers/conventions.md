@@ -28,8 +28,9 @@ History at the end.
   (12-lifecycle-write-gate.js G1, unchanged): `featureLocked` (files.js), archive, rename, remove, its preview,
   `removeLinkedFeatureLocked`, restore's `archivedFeature` (finish.js) and protect / unprotect (`protectTests`, protect.js: its lock
   refuses). Nothing else accepts one (every other `f.linked` test refuses with it). Restore of a name that is NOT archived while
-  `_archive/` itself is a link answers that refusal (`linked: true`, `.specs/_archive/`) rather than the parent's "Nothing is archived as …": behind the link dev-spec can't see what is archived, and the link is why
-  no restore can work — the more informative answer, kept on purpose (1.41.1 fix round 1).
+  `_archive/` itself is a link answers that refusal (`linked: true`, `.specs/_archive/`) rather than the parent's "Nothing is
+  archived as …": behind the link dev-spec can't see what is archived, and the link is why no restore can work — the more
+  informative answer, kept on purpose (1.41.1 fix round 1).
 - **`spec_feature remove` needs `confirm: true`** (CLI `--yes`); without it the result (`needsConfirm`) previews what would go
   (`removePreview()`, `lstat`: a link is never followed). Prefer archive. A feature folder that is itself a link is removed as
   the link alone (`removeLinkEntry`), under the roadmap lock only — a feature lock would be created THROUGH it.
@@ -105,12 +106,18 @@ History at the end.
 - **Every entry records its project (fix round 2):** a scope records a project only when the call reaches `specsRoot(projectDir)`. An
   entry whose facade call takes a folder or a file rather than the project — the scan op (`scanCodebase(<folder>)`), the MCP server's
   approval meta, `ears <file>`, `dev-spec spike`'s `spikeInfo(<dir>)`, the resources' `isFeatureFolder` — opens ONE scope that records
-  it first (`withReadCache(() => { specsRoot(dir); … })`). The save hook's project is the gates' own root (`spec.gateRootOf` with the
-  session's project recorded — never the nearest folder named `.specs`). Pinned by a property, not a list:
+  it first (`withReadCache(() => { specsRoot(dir); … })`). Pinned by a property, not a list:
   mcp/tests/12-lifecycle-read-gate-scope.js runs every entry the surfaces call (the operations table, the resources / prompts /
   completions, every CLI command, the hooks — the approval hook as a process too —, the MCP server) on a project below a folder named
-  `.specs` whose `.specs/` is a junction, and fails on any read-gate call standing on the outer folder. **Known limit:** an engine
+  `.specs` whose `.specs/` is a junction, and fails on any read-gate call standing on the outer folder. **Known limits:** an engine
   call outside any scope (a test calling `engine/index.js` directly) records no project: the outermost `.specs` in the path stands.
+  The SAVE HOOK takes its project by text — the nearest folder named `.specs` above the saved file (spec-hook.js `findProjectDir`, a
+  pure text walk, no file-system call: a network path is never touched) — so a save the model itself made THROUGH a committed link
+  named `.specs` below `.specs/` (`.specs/f/.history/.specs -> <another project's .specs>`) reaches the engine as the project behind
+  the link: the hook traces / lints that project's spec and stamps its `.state.json` (review 2's R2-R-2). No new capability — the
+  model's own Write / Edit already went through the link, and Read follows it too. Round 2 answered it with the gates' root rule and
+  broke the plain case (fix round 3, R3-R-1: on a project below a folder named `.specs` whose session anchor holds no saved file —
+  Claude Code in a subfolder, a sibling checkout, no anchor — the hook went silent and the stop gate with it); taken out.
 - **What a listing proved is not asked again (`seedParts`, fix round 1):** every listing of `.specs/` or of a folder below it the gate
   let through (`readDirDisk`, `safeReaddir`, `featureDirs`, `listFeatures`) seeds the memo with its plain entries — a Dirent that says
   "directory" / "file" is no reparse point at all (Windows types every reparse point as a link; POSIX: d_type, Node's own lstat for
@@ -130,9 +137,10 @@ History at the end.
   every weakening counts, as the approval hook reads it); `ears <file>` (cli/commands.js) asks it of the file it names (behind a link:
   no such file) — both in one scope with the project recorded (fix round 2); the engine-free CLI readers keep the one project rule
   with a one-line lstat — the completion's archived names (a linked `_archive/` lists none) and status-line signature (a link signed
-  as itself), cli/main.js's light language (a linked roadmap.json picks none). A WRITE target's name (rename / archive / restore onto it, a snapshot's number, an import's
-  folder) is `entryAt` — lstat, a link there is taken. `specsFileContained` / `readContained` ARE the gate's verdict (a regular file or
-  absent). The dry-run sink is read first (its records passed the write gate).
+  as itself), cli/main.js's light language (a linked roadmap.json picks none). A WRITE target's name (rename / archive / restore
+  onto it, a snapshot's number, an import's folder) is `entryAt` — lstat, a link there is taken. `specsFileContained` /
+  `readContained` ARE the gate's verdict (a regular file or absent). The dry-run sink is read first (its records passed the write
+  gate).
 - **Not gated, on purpose:** `.specs` itself; the project rule (`PROBE_IO`, probe.js `isDevSpecProject`) — which folder IS the project is
   one answer for the engine, the hooks, the status line and the completion (10-guards-probe.js's linked layouts), the spec text behind a
   link stays unread; the engine-free hooks' 1-bit pre-filters (observe `mentioned`, stop `recentActivity`) — they only decide whether the
@@ -458,9 +466,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   gates. A project-wide drift paid +2 lstat +1 realpath per feature folder its own listing had named: the listings seed the memo.
 - **1.41.1 fix round 2** — review 2: five entries read in a scope that never reached `specsRoot` (spec_scan, the server's approval
   meta, `ears <file>`, the resources' `isFeatureFolder`, and — found by the new property — `dev-spec spike`'s `spikeInfo`): on a
-  project below a folder named `.specs` whose `.specs/` is a junction they stood on the outer folder. The save hook still took the
-  nearest folder named `.specs` as its project. The NTFS stream spelling of `.specs` was no root; a FIFO part was opened (the hook
-  review: the call never returned); BMAD's `isDir` read the last part only (an oracle on the outside folder's contents).
+  project below a folder named `.specs` whose `.specs/` is a junction they stood on the outer folder. The save hook took the
+  nearest folder named `.specs` as its project (round 2 changed it; round 3 took that out — the known limit above). The NTFS
+  stream spelling of `.specs` was no root; a FIFO part was opened (the hook review: the call never returned); BMAD's `isDir` read
+  the last part only (an oracle on the outside folder's contents).
+- **1.41.1 fix round 3** — review 3 (R3-R-1, MEDIUM): round 2's save-hook project (the gates' root with the env anchors) fell back
+  to the outermost `.specs` when no anchor held the saved file — on a link-free project below a folder named `.specs` the hook went
+  silent, no `lastEditAt`, and the Stop gate no longer blocked a hand-ticked "all done". Reverted to the nearest-`.specs` text
+  walk (which also drops R3-R-2's realpath of a UNC `~1` segment); R2-R-2 is a known limit.
 
 ### The dry-run sink
 - **1.25** — the sink (`withDryRun`), for `spec_import {dryRun}`: one switch in the write primitives, made possible by the 1.24

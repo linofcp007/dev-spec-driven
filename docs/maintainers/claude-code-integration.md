@@ -55,7 +55,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (~100 ms) only past a raw pre-check. **The spec hook** (PostToolUse Write|Edit) lints the save — requirements.md: EARS +
   placeholders; tasks.md: trace gaps + EC/NFR/SC warnings; design.md: `designSaveCheck()` — and stamps a tasks.md / change.md
   save in `.state.json lastEditAt` (`recordSpecEdit()`, the stop gate's activity); it skips `/.execution/`, `.specs/templates/`
-  and `.specs/tracks/` (unless the folder holds a `.state.json`) and generated files (mcp/tests/10-guards-stop-gate.js). It never
+  and `.specs/tracks/` (unless the folder holds a `.state.json`) and generated files (mcp/tests/10-guards-stop-gate.js). Its project
+  is the nearest folder named `.specs` above the saved file, by text (`findProjectDir`): a project below a folder named `.specs`, a
+  session started in a subfolder or a sibling checkout keep their lint and their `lastEditAt` stamp (12-lifecycle-read-gate-root.js);
+  a save through a link named `.specs` below `.specs/` is the known limit (conventions.md → The read gate). It never
   refreshes ROADMAP.md / SPECS.md: a save leaves `.specs/.execution/roadmap-stale` (`markRoadmapStale`) for the Stop /
   SubagentStop hook to refresh at the end of the turn (lifecycle.md → Roadmap files). **SessionStart** fires in every session of
   every project (the plugin is user-wide), so `sessionMayBeDevSpec()` runs the raw probe first — a superset of what
