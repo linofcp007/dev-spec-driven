@@ -28,7 +28,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   under an fs tracer, `feature-linked`, doctor `specs-links`, where absence relaxes a decision, the cost as counts, R3's project
   files by real path) and its CLI twin `cli/tests/12-lifecycle-read-gate.js`, with `12-lifecycle-read-gate-root.js` (the gate's ROOT —
   the project's own .specs/, never a folder merely named so —, the listing's seed and its counts, the readers outside the primitives,
-  the review's surviving mutants). **A file is named after its topic** — `10-guards-shell-writes.js`,
+  the review's surviving mutants) and `12-lifecycle-read-gate-scope.js` (every entry the surfaces call reads with its project
+  recorded — a property over the operations, resources, CLI commands, hooks and the MCP server). **A file is named after its topic** — `10-guards-shell-writes.js`,
   `12-lifecycle-branch.js` — never after a release or a review round: 1.27 renamed the 23 that were (`10-guards-review7.js`
   → `10-guards-shell-writes.js`, `13-imports-1-25.js` → `13-imports-steering.js`, `18-reviews.js` → `18-cross-area.js`…) and
   merged six small ones into their area's topic file (`05-markdown-r7-readers.js` into `05-markdown-readers.js`). An
