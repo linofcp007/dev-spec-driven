@@ -392,11 +392,12 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       S.initProject(real, ["tdd"], "en");
       const f = S.createFeature(real, { name: "login", tracks: ["tdd"] });
       fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Do it for US-1.AC-1\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -v_\n");
+      put(path.join(f.dir, "tests", "login.test.js"), "// T-01 US-1.AC-1\n"); // the feature's own tests: read through a listing of .specs/ itself
       fs.cpSync(path.join(real, ".specs"), shared, { recursive: true });
       if (link(shared, path.join(lp, ".specs"))) {
-        const view = (p) => { const r = [S.statusFeature(p, "login"), S.nextTask(p, "login"), S.traceCheck(p, "login", {}), S.taskBrief(p, "login", 1, {}).task, S.specDoctor(p, "login").checks.map((c) => c.id + c.status)];
+        const view = (p) => { const r = [S.statusFeature(p, "login"), S.nextTask(p, "login"), S.traceCheck(p, "login", { code: true }), S.taskBrief(p, "login", 1, {}).task, S.specDoctor(p, "login").checks.map((c) => c.id + c.status)];
           return js(r).split(p).join("<P>").split(fold(p)).join("<P>"); };
-        eq(view(lp), view(real), "1.41.1 read gate: a project whose .specs/ IS a link reads every spec as a plain .specs/ does (status, next_task, trace, the brief, doctor) — only what lies BELOW .specs/ is gated");
+        eq(view(lp), view(real), "1.41.1 read gate: a project whose .specs/ IS a link reads every spec as a plain .specs/ does (status, next_task, trace {code} — its own tests/ found through a listing of .specs/ itself —, the brief, doctor) — only what lies BELOW .specs/ is gated");
       } else ok(true, "1.41.1 read gate (.specs a link): links not creatable here — skipped");
     }
 
