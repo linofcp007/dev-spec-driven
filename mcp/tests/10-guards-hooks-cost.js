@@ -527,6 +527,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       "  if (process.env.R1411H_COUNT) process.on('exit', () => fs.writeFileSync(process.env.R1411H_COUNT, String(n)));",
       "  if (process.env.R1411H_MAIN === 'delay') spin(800);",
       "} else {",
+      "  if (process.env.R1411H_LIMITS) fs.writeFileSync(process.env.R1411H_LIMITS, JSON.stringify(wt.resourceLimits));",
       "  const mode = process.env.R1411H_WORKER;",
       "  if (mode === 'busy') spin(20000);",
       "  if (mode === 'oom') { const a = []; for (;;) a.push(new Array(1e6).fill(Math.random())); }",
@@ -560,8 +561,11 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const T = hooksJson.hooks.PreToolUse.flatMap((e) => e.hooks).find((h) => (h.args || []).some((a) => /approval-hook\.js$/.test(a))).timeout * 1000;
     const big = (file) => js({ hook_event_name: "PreToolUse", tool_name: "Write", cwd: pd, tool_input: { file_path: path.join(pd, file), content: "x".repeat(AH.MAX_INPUT + 1024 * 1024) } });
     const partialReason = E.approvalGuardDecision({ hook_event_name: "PreToolUse" }, "deny", { lang: "pt", meta: { approvalGuard: "deny", lang: "pt" }, partial: true }).reason;
+    const LIMITS = path.join(tmp, "r1411h-limits.json");
+    // (each sentence also read from its locale table: the expected text above is built by the same i18n.js the hook loads)
+    const ACT = { en: require("./lib/i18n/en.js").text.approvalActions, pt: require("./lib/i18n/pt.js").text.approvalActions };
     const R = {
-      approve: run(bash(APPROVE)),
+      approve: run(bash(APPROVE), { R1411H_LIMITS: LIMITS }),
       notCandidate: run(bash("ls -la src")),
       garbage: run("dev-spec approve feat requirements (not JSON)"),
       late: run(bash(APPROVE), { DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "1" }),
@@ -583,6 +587,9 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       "out-of-memory, exited or absent worker, the deadline never raised by the test variable, a stdin past MAX_INPUT read as a partial payload (got " + js(brief) + ")", {
       "the margin: hooks.json's timeout − the deadline ≥ 3 s (measured past the deadline under 4 suites: ≤ 0.7 s with the process's start)": () => D < T && T - D >= 3000,
       "a normal approve at deny: deny, through one worker": () => R.approve.d === "deny" && R.approve.workers === 1,
+      "…that worker runs under the hook's heap limits (WORKER_LIMITS)": () => { const l = JSON.parse(fs.readFileSync(LIMITS, "utf8")); return ["maxOldGenerationSizeMb", "maxYoungGenerationSizeMb", "stackSizeMb"].every((k) => l[k] === AH.WORKER_LIMITS[k]); },
+      "the deadline's and the failure's sentences, as their locale tables write them (en, pt)": () => R.late.reason.includes(ACT.en.timeout(1)) && R.slowEngine.reason.includes(ACT.pt.timeout(3)) &&
+        R.oom.reason.includes(ACT.en.error) && R.exited.reason.includes(ACT.en.error),
       "a call that can't be an approval: silent, no worker": () => R.notCandidate.d === "silent" && R.notCandidate.workers === 0,
       "a payload that is no JSON (stdin ended): silent, no worker": () => R.garbage.d === "silent" && R.garbage.workers === 0,
       "the deadline past before the pre-check: ask, no worker started": () => R.late.d === "ask" && R.late.workers === 0 && R.late.reason === ask("en", "timeout", 1),
@@ -681,7 +688,8 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       slashSrc: dec("Bash", "cp evil/roadmap.json/ .specs/"),
     };
     all("1.41.1 fix round 1 (S1-F3 / F4, the sweep): in-process, each shape's decision and action (got " + js(Object.fromEntries(Object.entries(IN).map(([k, r]) => [k, r.decision + " " + acts(r).join(",")]))) + ")", {
-      "A=$A$A ×22 then a reader of .specs/: too long to read — deny, its own sentence": () => IN.dbl22.decision === "deny" && js(acts(IN.dbl22)) === js(["unreadable:too-long+expanded"]) && IN.dbl22.reason === tooLongReason,
+      "A=$A$A ×22 then a reader of .specs/: too long to read — deny, its own sentence": () => IN.dbl22.decision === "deny" && js(acts(IN.dbl22)) === js(["unreadable:too-long+expanded"]) && IN.dbl22.reason === tooLongReason &&
+        IN.dbl22.reason.includes(require("./lib/i18n/en.js").text.approvalActions.tooLongExpanded(64 * 1024)),
       "…×5 (under the limit): read as before — allow": () => IN.dbl5.decision === "allow",
       "PowerShell's $a = \"$a$a\" ×24: too long — deny": () => IN.ps24.decision === "deny" && acts(IN.ps24).includes("unreadable:too-long+expanded"),
       "a 30 K cd folder before 3,000 paths: too long — deny; a 300-character one before 30: allow": () => IN.cdLong.decision === "deny" && acts(IN.cdLong).includes("unreadable:too-long+expanded") && IN.cdShort.decision === "allow",
@@ -701,7 +709,12 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const setsCmd = "cd x; cp x .specs/" + B5 + "*" + distinct(16000) + "; " + APPROVE, plainCmd = "cd x; cp x .specs/" + B5 + "a".repeat(distinct(16000).length + 1) + "; " + APPROVE;
     dec("Bash", setsCmd); dec("Bash", plainCmd); // (each once first: a literal's RegExp is made once per process)
     const nSets = countRegExps(() => dec("Bash", setsCmd)), nPlain = countRegExps(() => dec("Bash", plainCmd));
-    all("1.41.1 fix round 1 (S1-F1): a glob of 5,300 distinct sets under 32 brace expansions makes no RegExp more than a plain twin (got " + js({ nSets, nPlain }) + ")",
-      { same: nSets === nPlain });
+    // …and its glob is read once per path read, never once per name asked (guards.js shellSegReader; the engine's own counts,
+    // globMayName.reads / shellPathFacts.reads — not enumerable): every path here holds that one glob segment
+    E.globMayName.reads = 0; E.shellPathFacts.reads = 0;
+    dec("Bash", setsCmd);
+    const reads = { globs: E.globMayName.reads, paths: E.shellPathFacts.reads };
+    all("1.41.1 fix round 1 (S1-F1): a glob of 5,300 distinct sets under 32 brace expansions makes no RegExp more than a plain twin, and is read once per path (got " + js({ nSets, nPlain, reads }) + ")",
+      { noRegExp: nSets === nPlain, oncePerPath: reads.paths > 0 && reads.globs === reads.paths });
   }
 };

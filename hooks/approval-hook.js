@@ -343,9 +343,10 @@ function runAsWorker() {
 }
 
 module.exports = { decide, candidate, needsDecision, deadlineMs, DEADLINE_MS, MAX_INPUT, WORKER_LIMITS };
-// As a process: the main thread (runAsProcess), or the worker it starts (the same file, its workerData marked).
-if (require.main === module) {
+// As a process: the main thread (runAsProcess), or the worker it starts (the same file, its workerData marked — whatever require.main
+// says there).
+{
   const wt = require("worker_threads");
-  if (wt.isMainThread) runAsProcess();
-  else if (isObj(wt.workerData) && wt.workerData.approvalHook === true) runAsWorker();
+  if (!wt.isMainThread && isObj(wt.workerData) && wt.workerData.approvalHook === true) runAsWorker();
+  else if (wt.isMainThread && require.main === module) runAsProcess();
 }

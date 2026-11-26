@@ -449,7 +449,11 @@ function globSetValid(glob, from, to) {
   }
   return true;
 }
+// (globMayName.reads / shellPathFacts.reads — not enumerable, in-process only: the globs read and the paths read, the count
+// 10-guards-hooks-cost.js keeps to see each segment's glob read once per path, never once per name asked)
+const countReads = (fn) => Object.defineProperty(fn, "reads", { value: 0, writable: true, enumerable: false });
 function globMayName(glob, opts) {
+  globMayName.reads++;
   const isStar = (c) => c === "*" || (!!opts.wild && opts.wild.includes(c));
   const lastClose = glob.lastIndexOf("]");
   const setEnd = (i) => (glob[i] === "[" && i + 2 <= lastClose ? glob.indexOf("]", i + 2) : -1);
@@ -503,6 +507,7 @@ function globMayName(glob, opts) {
     return cur[n] === 1;
   };
 }
+countReads(globMayName);
 // a glob that names the CLI's script (`node cli/dev-sp?c.js approve …` — the shell expands it) — its last
 // path segment, read as a glob (* ? [set]), matches one of the script's names. Bounded: a word over 200 characters is no glob here.
 const DEVSPEC_NAMES = ["dev-spec", "dev-spec.js", "dev-spec.cjs", "dev-spec.mjs", "dev-spec.cmd", "dev-spec.ps1", "dev-spec.exe"];
@@ -1150,6 +1155,7 @@ function shellSegReader(seg, mode) {
 // (guardianGuardFilter drops them), so every reading takes them as an action ADDED to what the path is without them — `git restore
 // .specs/guardian.cjs` stays a feature folder's restore (approvalGuardedDir) as in 1.29, the launcher's guard-down beside it.
 function shellPathFacts(t0, mode) {
+  shellPathFacts.reads++;
   const t = approvalPathText(t0);
   const segs = t.split("/").filter(Boolean);
   const n = segs.length;
@@ -1182,6 +1188,7 @@ function shellPathFacts(t0, mode) {
     folder: wild ? !/\.[A-Za-z0-9]{1,10}$/.test(tail) : !/^[^.][\s\S]*\.[A-Za-z0-9]{1,10}$/.test(last),
     execution: specs >= 0 && segs.slice(specs + 1).some((s) => s.toLowerCase() === ".execution"), lock: !wild && /\.lock$/i.test(last) };
 }
+countReads(shellPathFacts);
 // A path word → its readings: each brace expansion (Bash), as written and — after a `cd` earlier in the same command — under that folder;
 // on win32 (ctx.win) each also as Windows reads it (shellWinReading: an 8.3 alias, a trailing dot / space).
 function shellPathReadings(w, mode, ctx) {
@@ -3204,6 +3211,7 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, AP
   reviewModelsInput, reviewModelsSetting, setReviewModels, // 1.36 the review panel (meta.reviewModels)
   stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, recordSpecEdit, stopCheck, devSpecGlob, shellGlob,
   globMayName, DEVSPEC_GLOB, // 1.41.1 the guard's one glob matcher (its devSpecGlob reading — tested where no CLI name reaches it)
+  shellPathFacts, // 1.41.1 fix round 1: its `reads` beside globMayName's (each segment's glob read once per path)
   guardTargetPath, SESSION_MAX_UP, worktreeProject, sessionProject, sessionPath, readStopReport, approvalEditTargets,
   approvalCommand, // 1.36 guard tests: the lift line a protected test's ask names (protect.js) — the approval guard's own builder
   // the shell's file operations, fed scripts, MCP file tools, the edit guard on the shell
