@@ -957,7 +957,8 @@ const COMMANDS = [
       // A file path is read from the project when it was named (--project / the env), else from the working folder (argPath).
       const file = c.argPath(pos[0]);
       // (1.41.1) a file below .specs/ behind a link is none — the read gate's answer, as every engine reader's (`ears .specs/lnk/x.md`)
-      const isFile = !spec.specsReadBlocked(file) && fs.existsSync(file) && fs.statSync(file).isFile();
+      // (fix round 2) in ONE scope that names the project: the gate stands on its .specs/, never a folder merely named so above it
+      const isFile = !spec.withReadCache(() => { spec.specsRoot(projectDir); return spec.specsReadBlocked(file); }) && fs.existsSync(file) && fs.statSync(file).isFile();
       if (isFile) return report(lint(spec.decodeText(fs.readFileSync(file))), c.cliText(textLang)); // UTF-16 too
       // a word that reads as a PATH (a separator, or a .md / .markdown / .txt name) and is no file — nor a feature of that
       // name — is "no such file", never "Feature 'missing-md' not found" (its slug).
