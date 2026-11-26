@@ -24,7 +24,8 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir, approvedContentSame, wsText, headingEntries;
 let readDirCached; // files.js — the read gate's listing (1.41.1)
-function __link(E) { ({ readDirCached, acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
+let existsRaw, projectFileReal, realRootOf; // files.js — the read gate (1.41.1)
+function __link(E) { ({ existsRaw, projectFileReal, realRootOf, readDirCached, acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
   codeBlockLines, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, FOLD_CASE,
   gitEvidence, globFiles, GUARD_CODE_EXT, historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord,
@@ -650,7 +651,7 @@ function traceCheck(projectDir, name, opts = {}) {
     const abs = path.resolve(projRoot, p);
     const inRoot = withinRoot(projRoot, abs); // a drive root (C:\) already ends in a separator
     if (!inRoot) outOfRoot.add(f);
-    return !inRoot || !fs.existsSync(abs);
+    return !inRoot || !existsRaw(abs); // below .specs/ through the read gate (a path behind a link there: missing)
   });
   // A file that doesn't exist YET is a gap only once a task claiming it is done: an OPEN task's _Implements:_ is
   // the plan (next --batch needs those markers before a line is written) — reported as plannedImplFiles. A marker
@@ -1150,11 +1151,13 @@ function outsideCodeTemplates(projectDir, dir, tracks, greenDone) {
   const samples = new Set([SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL].map((x) => JSON.stringify(JSON.parse(x))));
   useTemplateScopeOf(dir); // the project's own templates are template text too
   const judged = new Map(); // file token → template?
+  let rootReal = null;
   const isTemplate = (t) => {
     if (judged.has(t)) return judged.get(t);
     let res = false;
-    const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
-    const abs = [path.resolve(dir, t), path.resolve(root, t)].find((p) => withinRoot(root, p) && isFile(p));
+    // a file of the project by its REAL path (1.41.1 R3: a `docs/lnk/plan.md` through a link out of the project was stat'ed and read)
+    const fileOf = (p) => { const a = projectFileReal(root, rootReal || (rootReal = realRootOf(root)), path.relative(root, p)); try { return a && fs.statSync(a).isFile() ? a : null; } catch { return null; } };
+    const abs = [path.resolve(dir, t), path.resolve(root, t)].map(fileOf).find(Boolean);
     const ext = path.extname(t).toLowerCase();
     if (abs && (ext === ".md" || ext === ".markdown")) res = artifactState({ file: abs }) === "placeholder";
     else if (abs && ext === ".json") { const j = readJson(abs); res = !!j.data && samples.has(JSON.stringify(j.data)); }

@@ -339,9 +339,14 @@ function importSourceAt(projectDir, t, source, W, lang0) {
   const rel = toPosix(path.relative(realRoot, dir)) || ".";
   const read = (file) => {
     try {
-      if (!fs.existsSync(file)) return null;
-      const real = fs.realpathSync.native(file);
-      if (!isInsideDir(realRoot, real) || importHiddenPart(toPosix(path.relative(realRoot, real))) || !importFileKind(file, IMPORT_READ_EXT) || !importFileKind(real, IMPORT_READ_EXT)) {
+      // decided on the ENTRY, never on what a link names (1.41.1: a live link out of the project warned, a dangling one was silent — the
+      // answer told whether an outside target exists): its folder by real path first (list's rule), then an entry there at all
+      const folder = path.dirname(file);
+      if (!realOk(folder)) { warnFolder(folder); return null; }
+      try { fs.lstatSync(file); } catch { return null; } // no entry: nothing
+      let real = null;
+      try { real = fs.realpathSync.native(file); } catch { real = null; } // a dangling link: the warning a live one out gets
+      if (!real || !isInsideDir(realRoot, real) || importHiddenPart(toPosix(path.relative(realRoot, real))) || !importFileKind(file, IMPORT_READ_EXT) || !importFileKind(real, IMPORT_READ_EXT)) {
         readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file))));
         return null;
       }
@@ -361,12 +366,15 @@ function importSourceAt(projectDir, t, source, W, lang0) {
   // one warning naming the FOLDER, never what it holds. kind(p): "dir" | "file" by the real path the same way, else null.
   const realOk = (p) => { try { const real = fs.realpathSync.native(p); return isInsideDir(realRoot, real) && !importHiddenPart(toPosix(path.relative(realRoot, real))) ? real : null; } catch { return null; } };
   const warned = new Set();
+  // one warning per folder that is an ENTRY (lstat — a link dangling or not alike) whose real path is no folder of the project
+  const warnFolder = (d) => {
+    const r = toPosix(path.relative(realRoot, d));
+    let entry = true;
+    try { fs.lstatSync(d); } catch { entry = false; }
+    if (entry && !warned.has(r)) { warned.add(r); readWarnings.push(W.wUnreadable(r)); }
+  };
   const list = (d) => {
-    if (!realOk(d)) {
-      const r = toPosix(path.relative(realRoot, d));
-      if (fs.existsSync(d) && !warned.has(r)) { warned.add(r); readWarnings.push(W.wUnreadable(r)); }
-      return null;
-    }
+    if (!realOk(d)) { warnFolder(d); return null; }
     try { return fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)); } catch { return null; }
   };
   const kind = (p) => { const real = realOk(p); if (!real) return null; try { const st = fs.statSync(real); return st.isDirectory() ? "dir" : st.isFile() ? "file" : null; } catch { return null; } };
