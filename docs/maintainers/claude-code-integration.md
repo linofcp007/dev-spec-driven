@@ -101,8 +101,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   stdin asynchronously (never `fs.readFileSync(0)`), runs `decide(raw, {timedOut})` once — at stdin's end or from the 2 s safety net
   (`SAFETY_NET_MS`; `timedOut` true: the approval hook's `partial` path) — and finishes with its answer; it turns an exception or a
   stdin error into a silent exit 0 (past its pre-check the approval hook catches its own and asks), feeds a terminal stdin `"{}"`
-  and, past `maxInput` characters (the observe and plan hooks, 4 MB), drains the rest and hands `decide` `""` — or, with `keepHead`
-  (the approval hook, 1.41.1), the first `maxInput` characters and `{tooBig: true}`. A `decide` may answer with a promise (the
+  and, past `maxInput` characters (the observe and plan hooks, 4 MB; the approval hook, 64 M), drains the rest and hands `decide` `""`
+  and `{tooBig: true}` (the approval hook then asks, 1.41.1). A `decide` may answer with a promise (the
   approval hook's worker): `finish` runs with what it resolves to, a rejection silent. `finish` prints at
   most one JSON object and exits in the write's callback (conventions.md → Flush stdout before exiting). `payloadOf(raw)` is the
   payload object or null (not JSON, or no object: the hook exits), `eventOf(p)` its event name — the approval hook alone parses its
@@ -249,16 +249,20 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   gate), the strictest level's first, the strictest ANSWER wins (`permissionDecision`, + `systemMessage` for deny). One meta for
   every project (the strictest level's) let an outer project at deny without the check drop a nested one's dev-guardian files
   (review 9). Its own trouble before that point exits 0; past it, an engine failure ASKS (`failClosed`).
-- **The deadline: the hook never answers by timing out (1.41.1).** A PreToolUse hook past Claude Code's timeout lets the call through,
-  so every slow reader was a way past the guard (R1 and review 1's S1-F1 / F2 / F3). As a process, the hook's MAIN thread arms a timer
-  at the process's start (`DEADLINE_MS` = 6 s from `process.uptime()`'s origin), reads stdin with a cap (`MAX_INPUT` = 16 M
-  characters — past it, its head is read as a partial payload: `runHook`'s `keepHead`) and runs the pre-check alone (`needsDecision` =
-  decide's `preCheck`, text only: a call that can't be an approval exits silent, no worker, nothing read from disk). Everything else —
+- **The deadline: the hook decides by a deadline, not by Claude Code's timeout (1.41.1).** A PreToolUse hook past Claude Code's timeout
+  lets the call through, so every slow reader was a way past the guard (R1 and review 1's S1-F1 / F2 / F3). As a process, the hook's
+  MAIN thread arms a timer at the process's start (`DEADLINE_MS` = 6 s from `process.uptime()`'s origin), reads stdin (≤ `MAX_PAYLOAD`
+  = 64 M characters: past it the payload is not held — `runHook` drains it — and the hook asks, why `partial`, whatever the level) and
+  runs the pre-check alone (`needsDecision` = decide's `preCheck`, text only: a call that can't be an approval exits silent, no worker,
+  nothing read from disk; a payload past `MAX_INPUT` = 16 M is never parsed on the main thread — the worker decides on it WHOLE, as on
+  a small one: review 2, R2H-F3 — round 1 read its head as a partial payload, the session's projects only, so an oversized Write of
+  ANOTHER guarded project's roadmap.json went through). Everything else —
   the candidate projects, their roadmap.json, the engine, the decision — runs in a `worker_threads` worker (this same file, its
   `workerData` marked) with `resourceLimits` (`WORKER_LIMITS`: 512 MB old space); `decide` is unchanged and still exported for the
   in-process tests (`onLevel`: the worker tells the main thread the strictest level and the project's language before it loads the
   engine). No answer by the deadline (why `timeout`, its own sentence), a worker error or out-of-memory, an exit without an answer, a
-  worker that could not start (why `error`): ask, in the project's language once the worker named it. The margin, measured on
+  worker that could not start (why `error`): ask, in the project's language once the worker named it — silent once the worker said
+  level 0, no project the call may act on guarded (R2H-F7). The margin, measured on
   Windows 11 (the hook as a process, a project at deny, 20–25 runs): idle — a normal approve 294 ms (p50) / 402 ms (max), the answer
   past the deadline (a busy worker: the reason's i18n load, the write, the exit) 91 / 131 ms, the spawn to the process's start 35 / 47
   ms; with four test suites running (both suites of two checkouts, `--jobs 6` each) — 1,253 / 2,324 ms, 339 / 1,116 ms, 127 / 642
@@ -268,10 +272,15 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `worker_threads` (~1.5 ms); a Write whose path passes the text pre-check but is no guarded file (a `~1` short name in it) now
   starts a worker to read its real path: +18 ms.
   `DEV_SPEC_TEST_APPROVAL_DEADLINE_MS` LOWERS the deadline (tests: the hermetic chains keep `DEV_SPEC_TEST_*`; a higher or malformed
-  value is the default). Not covered: a worker inside one native call that never returns (a read of a FIFO, a dead network share) —
-  Node joins its workers at exit, so the process ends only when that call does (Claude Code's own timeout then applies); the
-  process failing to start in 10 s. mcp/tests/10-guards-hooks-cost.js drives each path through the process (a `-r` preload counts the
-  workers and makes the worker slow, out of memory, throw, exit or print).
+  value is the default). **What the deadline does not cover:** the process ends only when its worker does — Node joins its workers at
+  exit — so a worker inside ONE native call that never returns keeps it alive past Claude Code's timeout, and the call goes through
+  (review 2, R2H-F1: a FIFO named roadmap.json under a folder a command `cd`s into). The readers before the engine therefore open no
+  file that is not a regular one (probe.js `openRegular`: an lstat first — rawLevel —, then `O_NONBLOCK` where the platform has it and
+  the fd's own `fstat`: rawLevel's roadmap.json, the rule's ROADMAP.md head), and the engine's read gate reads none below `.specs/`
+  (files.js — conventions.md → The read gate); what is left is a known limit (below), as is the process failing to start in 10 s.
+  mcp/tests/10-guards-hooks-cost.js drives each path through the process (a `-r` preload counts the workers and makes the worker
+  slow, out of memory, throw, exit, print or hold after its level-0 report; a FOLDER named roadmap.json in a candidate project with
+  features asks — gone —; on POSIX a FIFO roadmap.json / ROADMAP.md under a cd target is answered and the process ends well before T).
 - **The candidate projects** (hook-utils.js `approvalProjects`, ≤ 12 the call names, then the session's own — always kept) follow
   where the CLI acts: the folders the call names (MCP `projectDir`, the edited file's project, `--project`, `SPEC_PROJECT_DIR=` /
   `$env:` assignments), each `cd` / `Set-Location` target (chained and from cwd alone), the folder holding each `.specs/` /
@@ -422,11 +431,24 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   so case folding, `[!…]` / `[^…]`, an unclosed `[` and a set no RegExp reads (null: `[z-a]`) answer as before;
   mcp/tests/10-guards-hooks-cost.js runs the old builders as the oracle (and the validity reading against V8 on every set body of up
   to 5 of the characters it turns on). core.js `globMatcher` can't carry it: its `*` / `?` stop at `/` alone, it folds case by
-  `FOLD_CASE`, has no sets and reads `**` across folders. **What tracking adds is bounded** (`shellGrow`, 1.41.1 S1-F3): a value put
-  in (`A=$A$A` doubles — 21 doublings of 8 characters are 16 M) and a `cd` folder put before a path count toward the command's read;
-  past `APPROVAL_COMMAND_MAX` the command is `too-long` (`expanded`: its own sentence — deny at deny, as a command past the limit),
-  every variable reading as unknown from then on — never just an unknown variable (`$D/..` of a long `.specs/…` value would miss the
-  removal of .specs). Actions: an
+  `FOLD_CASE`, has no sets and reads `**` across folders. **What tracking builds, and what it makes the path readers read, is bounded**
+  (1.41.1: review 1 S1-F3, review 2 R2H-F2 / F4). `shellBuilt`: a text tracking BUILDS — a variable's value, a word with its variables
+  put in, the cd folder (`cdJoin`: `.` dropped and `..` folded into the plain segment before it, as `path.posix.normalize` reads every
+  path after it — the same facts, and `cd pkg && … && cd ..` ×300 no longer grows by `/..` each time), a `-c` script with its
+  positional parameters put in (`withPositionals`, its replacement-string reading of `$$`, `$&`, `$'` and the backtick form kept, built
+  piece by piece) —
+  past `APPROVAL_COMMAND_MAX` (64 K) is `too-long`, `expanded: "value"` (`A=$A$A` doubles: 21 doublings of 8 characters are 16 M;
+  `sh -c '$1'`×16,000 with a 30 K argument built 480 M). `shellWork`: the text the PATHS are read with — each value put in a path
+  word, each cd folder put before a relative one — past `APPROVAL_TRACK_WORK` (2 M; measured ~0.3 µs a character through the path
+  readers on Windows 11, so ≤ 0.6 s at the bound) is `too-long`, `expanded: "total"`. An assignment copies its value and reads nothing
+  (a 32 K value copied by 10,000 assignments: 0.2 s), so it costs no work: round 1 counted every re-read against the 64 K read limit
+  and refused monorepo commands of 3–4 K (`FLAGS="$FLAGS --x"` ×76, a `cd ../next` chain ×80). Either is denied at deny, as a command
+  past the limit, and every variable reads as unknown from then on — never only an unknown variable (`$D/..` of a long `.specs/…`
+  value would miss the removal of .specs); the reason names the bound passed (`tooLongExpanded(what, max)`).
+  mcp/tests/10-guards-hooks-cost.js pins 19 legit monorepo / CI / PowerShell commands (3–28 K) to ed680c92's four decisions and the
+  edit guard's targets, the hostile shapes to too-long, and the work bound from both sides (2,097 × 1,000 characters read, 2,098 not).
+  The edit guard shares the bounds: on the legit corpus it reports exactly ed680c92's targets; past a bound (hostile shapes only) its
+  variables read as unknown and a path starting with one is left out — its fail-open policy, unchanged. Actions: an
   exact guarded file → its setting; `.specs/` removed / moved → `roadmap`; a write that may hit a guarded file, or a removal /
   move / extraction / recursive copy on `.specs/` or under it (`rm -rf .specs/*`) → **`specs`**; a link to `.specs/` or under it
   → **`link`**. Allowed: spec documents, `.execution/` (but the observed log), lock files, read-only git. **Fail closed:** a
@@ -470,7 +492,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `am`, `git stash pop`, `git reset --hard`, a branch switch), an archive extracted into the project root without naming
   `.specs/`, `patch` without a file operand, a link to a guarded FILE (not a folder) made by one of those routes and then
   edited through (only its folder's real path is read), and an 8.3 short name SET by hand (`fsutil file setshortname .specs ZZZ` —
-  administrator rights; any name, no `~N`: the rule can't know it). Outside Claude Code the elicitation path gates spec_approve /
+  administrator rights; any name, no `~N`: the rule can't know it), and a file the approval hook's worker reads that never answers —
+  a FIFO, a device or a pipe the agent made by such an inline script where neither the hook's readers nor the read gate look, `.specs`
+  itself linked to `\\.\pipe\` (Windows, a link privilege), a dead network share: the worker blocks in one native call, Node joins it
+  at exit, and Claude Code's timeout lets the call through (Human approval guard → The deadline). Outside Claude Code the elicitation path gates spec_approve /
   spec_feature / spec_init only (not a `spec_add_track {remove}` — gates-and-approvals.md → Approvals the user confirmed over
   MCP).
 
@@ -827,6 +852,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   too-long); the sweep replaced `/[^\\/]*$/` (Rename-Item of a 64 K name: 12.5 s) and `/[\\/]+$/` (a 64 K slash run copied into
   .specs/: 8 s), and bounded a long cd folder put before every path (54 K: 14 s). And the net the review proposed (its Q4): **the
   deadline** (Human approval guard → The deadline), the decision in a worker, ask past it.
+- **1.41.1 review 2** — **R2H-F1 (HIGH, older):** a FIFO named roadmap.json under a folder a command `cd`s into kept the worker in
+  one read; the main thread printed `ask` at 6 s, but Node joins its workers at exit, so the process outlived Claude Code's 10 s and
+  the call went through (Linux; on Windows a WSL FIFO or `.specs` linked to `\\.\pipe\`). Sized by the threat model to a cheap
+  hardening: rawLevel and the rule's ROADMAP.md head open only a regular file (`openRegular`); the rest is a known limit. **R2H-F2
+  (introduced by round 1):** the growth bound counted every re-read against the 64 K read limit and refused legit monorepo commands
+  of 3–4 K: what tracking BUILDS is bounded now, the paths' reading by a measured work bound of its own, the cd folder folded.
+  **R2H-F3 (introduced):** past 16 M the payload was read as a partial one (the session's projects only) — the worker decides on it
+  whole. **R2H-F4 (older):** `withPositionals` built k × |argument| characters — bounded, too-long. **F5** the edit guard keeps
+  ed680c92's targets on the legit corpus; **F6** the heap limit pinned as numbers; **F7** silent after a level-0 report.
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import
