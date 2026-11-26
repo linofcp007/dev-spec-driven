@@ -321,5 +321,14 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     const st = rd("steering-templates.md"), tr = rd("tooling-reference.md");
     const says = (t) => /Applies-to folder needs `\/\*\*`/.test(t);
     ok(says(st) && says(tr), "1.41.0 review 1: steering-templates.md and tooling-reference.md say an Applies-to folder needs `/**` (`src/api-keys/**`, never `src/api-keys/`)");
+    // (1.41.0 review 2, R2-L-2 / R2-L-3: prose, no new separator or matching) the references give the form — one file per Copy cell,
+    // two files are two rows, a note after the path no second file —; quality.md says the list doubt is only the safety net
+    const qm = fs.readFileSync(path.join(__dirname, "..", "docs", "maintainers", "quality.md"), "utf8").replace(/\s+/g, " ");
+    const form = (t) => /one file per Copy cell — two files are two rows/i.test(t);
+    all("1.41.0 review 2: steering-templates.md and tooling-reference.md say one file per Copy cell — two files are two rows; steering-templates.md says a note after the path is no second file; quality.md calls the list doubt the safety net, not the form", {
+      references: form(st) && form(tr),
+      note: /a note after the path \(.{0,80}?\) is no second file — the path is judged/.test(st),
+      safetyNet: qm.includes("**A list is a doubt** — the safety net, not the form") && form(qm),
+    });
   }
 };

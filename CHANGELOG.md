@@ -41,8 +41,9 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
 - **Reference Examples.** An optional `## Reference Examples` table in `.specs/steering/structure.md` — Pattern · Copy ·
   Applies to (PT `Exemplos de Referência`, ES `Ejemplos de Referencia`): the files agents copy the shape of. A task's brief
   quotes the rows for its files (an Applies-to glob that matches — a folder needs `/**` —, or the Copy file's own folder;
-  at most 6, 1,200 characters; a gone file named, never quoted; a cell naming several paths quoted as written, never
-  judged); doctor's project-level `reference-examples` warns when a Copy file is gone
+  at most 6, 1,200 characters; a gone file named, never quoted; one file per Copy cell — two files are two rows: a cell
+  naming several paths anyway is quoted as written, never judged, while a note after the one path is no second file);
+  doctor's project-level `reference-examples` warns when a Copy file is gone
   or rows past the first 30 are not read — never a fail, never an approval check, never an upgrade to-do. The steering stub
   has no such section: a project without the table sees nothing.
 - **METRIC lines — numbers that get worse while the tests stay green.** A project check prints

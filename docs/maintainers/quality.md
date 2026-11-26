@@ -2136,11 +2136,17 @@ view needs (the detail points there), tooling-reference.md's id.
   path (`exemplarPath`: backticks stripped, a markdown link unwrapped); it is gone only when `projectPath` reads it as a
   project path with a file extension (`RE_EXEMPLAR_FILE`), its first segment is on disk and the file is not. Everything else
   — a folder, a package, an alias, a root-level file, a gone first folder, `file.py::func`, `x.ts#name`, a URL, prose — is
-  not judged; no document rule (a `docs/runbook-template.md` exemplar is a file to copy). One reading per cell. **A list is a
-  doubt** (`exemplarMany`, 1.41.0 review 1): a cell holding more than one path-like word (a `/`, or a `.` before a letter or
-  digit) — in two code spans, or in two parts split by `,` / `;` / ` and ` / ` e ` / ` y ` (`RE_EXEMPLAR_LIST`) — is never
-  judged gone (read as ONE path, "`a.js`, `b.js`" and "src/ui/, src/ui/Card.tsx" were gone files), and the brief quotes it
-  as written; a note beside one path ("x.ts (see README.md)", "x.ts (the old one, with its verify)") is no list.
+  not judged; no document rule (a `docs/runbook-template.md` exemplar is a file to copy). One reading per cell. **The form:
+  one file per Copy cell — two files are two rows** (the references say so: steering-templates.md, tooling-reference.md).
+  **A list is a doubt** — the safety net, not the form (`exemplarMany`, 1.41.0 review 1): a cell holding more than one
+  path-like word (a `/`, or a `.` before a letter or digit) — in two code spans, or in two parts split by `,` / `;` / ` and ` /
+  ` e ` / ` y ` (`RE_EXEMPLAR_LIST`) — is never judged gone (read as ONE path, "`a.js`, `b.js`" and "src/ui/, src/ui/Card.tsx"
+  were gone files), and the brief quotes it as written. A net only: no more separators (` or `, ` + `, ` & `, ` / `, PT ` ou `,
+  ES ` o ` still join two files into one gone path — the form answers it, 1.41.0 review 2), and a folder whose name holds a
+  separator ("src/search and replace/x.js") is a doubt too. **A note beside one path is no list** (1.41.0 review 2): a cell
+  whose path reading (`exemplarPath`, what projectPath / implementsPath read) is in the ANNOTATED single-path form — a path, a
+  blank, then `(` / `—` / `–` / `- ` (`RE_IMPL_ANNOTATED`, core.js's own, exported for it — never a copy) — is judged by that
+  path whatever its note holds ("x.ts — validation first, then res.json()", "`x.ts` (see `docs/README.md`)").
 - **Doctor `reference-examples`** (`referenceExamplesCheck`, project-level like `steering`): a warn naming the gone files
   (the first `REF_GONE_LISTED` 6, `+N more`) and / or the rows past 30; a pass with the row count, or saying a section
   without a table is not read; no entry without the section or with slot rows only. Never a fail, never an approval check.
@@ -2155,7 +2161,8 @@ view needs (the detail points there), tooling-reference.md's id.
   does (a folder as `dir/`), or — without a glob — whose Copy file sits in a target's folder (a file target's folder, a
   folder target itself, case-folded where the file system folds case); an Applies-to FOLDER matches nothing without `/**`
   (the references say so — no folder rule of its own); a gone file is named (`gone`), never quoted; a list cell is quoted
-  as written (`asWritten`: the renderer prints it without a code span of its own around it); at most
+  as written (`asWritten`: the renderer prints it without a code span of its own around it) — and with no glob its Copy
+  folder is read off the cell as ONE path, so it may match no task (1.41.0 review 2: said, no matching of its own); at most
   `REF_BRIEF_ROWS` (6) rows within `REF_BRIEF_CHARS` (1,200), `omitted` counts the rest; rows but none for the task → the
   count line. `null` without a real row.
 - **Cost:** a count (15-quality-reference-examples.js, `fsCalls`): 30 rows of a 4-segment gone path → exactly 2 lstats per
@@ -4081,4 +4088,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   a doubt, quoted as written; path-like words, not file names only — a folder-and-file list was the same false warn);
   spec_upgrade lstat'ed every Copy path's folders once per feature (R1-L-3: 30 rows, 40 features — 131 → 7,291 lstats, +46 %;
   memoized per call); an Applies-to folder without `/**` matches nothing (R1-L-5: said in the references, no new matching);
-  a fixture for the brief's case fold (M22).
+  a fixture for the brief's case fold (M22). Review 2: the list test read an annotated cell's NOTE too — a gone file beside
+  "e.g. `toCents()`", "res.json()", "(see ADR-3, v2.1)" or a second code span became a doubt: doctor passed and the brief
+  quoted it to copy (R2-L-1, made by review 1's list rule: the annotated single-path form is no list — RE_IMPL_ANNOTATED
+  reused on the cell's exemplarPath reading; 14 annotated shapes warn again as before the list rule, the list fixtures
+  unchanged); ` or ` / ` + ` / ` & ` / ` / ` / ` ou ` / ` o ` joining two files, and a list cell with no Applies-to glob
+  matching no task (R2-L-2 / R2-L-3: prose — one file per Copy cell, two files are two rows; no new separator, the doubt
+  documented as the safety net).
