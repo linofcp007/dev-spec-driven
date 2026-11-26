@@ -100,7 +100,9 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   the list lives in `.state.json`, which only the approval guard keeps agents from editing; any feature with a finish recorded,
   open tasks or not: a lift of its own recorded before that finish and still in force — end it, `feature protect <f> <file>`, or
   accept the content, `--accept --reason "…"`) ·
-  `steering` (core files missing, or files still holding template placeholders) · `success-criteria` ·
+  `steering` (core files missing, or files still holding template placeholders) · `specs-links` (1.41.1 — each link below
+  `.specs/` — a linked feature folder, `steering/`, `_archive/`, a symlinked spec file — that dev-spec reads as absent and never
+  writes through, named, never what it points at; replace it with a plain folder or file) · `success-criteria` ·
   `priorities` · `mermaid` (no mermaid code block outside comments, or only the template's own diagram) ·
   `constitution-check` (a `## Constitution Check` section with written content — the design gate's reader; a mention in a
   comment or a "TBD" is none) · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,

@@ -30,8 +30,8 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines, trackLabel,
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
-  branchNameOk, branchView, // 1.25 (create --branch)
-  existsRaw, specsStat, entryAt, specsReadBlocked, projectFileReal, realRootOf; // files.js — the read gate (1.41.1), the project file by real path
+  branchNameOk, branchView; // 1.25 (create --branch)
+let existsRaw, specsStat, entryAt, specsReadBlocked, projectFileReal, realRootOf; // files.js — the read gate (1.41.1), the project file by real path
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
 let designSystemFinish; // design-system.js — raw values in a +ui feature's view files, its New components into the registry (1.35), its UI checks (1.37)
 let DESIGN_SYSTEM_FILE; // quality.js — the registry's file name (a rename follows its `_From:_` rows)

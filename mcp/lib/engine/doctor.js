@@ -910,7 +910,7 @@ const protectOpen = (c) => !!c.approvals.tasks && c.blocks.some((b) => !b.done);
 // and the feature folder's (`dir`, SPECS_LINKS_DEPTH levels) — each a `.specs/…` path, sorted, at most SPECS_LINKS_MAX. A listing's
 // link entry is confirmed by the gate's lstat (a cloud-file placeholder lists as one on Windows), a folder by the gate (its real
 // path); a regular file can't redirect. Listings through readDirCached: the ones doctor reads anyway.
-const SPECS_LINKS_SHOWN = 8, SPECS_LINKS_MAX = 200, SPECS_LINKS_DEPTH = 3;
+const SPECS_LINKS_SHOWN = 12, SPECS_LINKS_MAX = 200, SPECS_LINKS_DEPTH = 3;
 function specsLinks(root, dir) {
   const out = new Set();
   const scan = (d, depth) => {

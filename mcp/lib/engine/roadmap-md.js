@@ -19,8 +19,8 @@ let activeDesign, activeTasks, chainPlaceholders, changedSinceApproval, clarific
   waiverView,
   featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles, isSpikeDir, spikePhase;
 let today; // core.js — the local calendar date (today / dayOf)
-let specsStat; // files.js — the read gate (1.41.1)
-function __link(E) { ({ specsStat, today, activeDesign, activeTasks, chainPlaceholders, changedSinceApproval,
+let specsStat, specsReadBlocked; // files.js — the read gate (1.41.1)
+function __link(E) { ({ specsStat, specsReadBlocked, today, activeDesign, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
   milestoneStatuses, normalizeLang, ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readContained, readIfExists, readJson,
@@ -104,11 +104,13 @@ const ROW_OPTS = { racyMs: 3000 }; // the racy window (tests set it)
 const ROW_SCRATCH = /^(?:\.execution|\.lock(?:\.reclaim)?|.*\.tmp)$/;
 function rowStatSig(dir, depth, now, acc) {
   let ents;
+  if (specsReadBlocked(dir)) { acc.push("-"); return; } // the read gate (1.41.1): a linked folder is none — signed as absent, never listed
   try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { acc.push("-"); return; }
   ents.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   for (const e of ents.slice(0, 400)) {
     if (ROW_SCRATCH.test(e.name)) continue;
     const p = path.join(dir, e.name);
+    if (specsReadBlocked(p)) { acc.push(e.name + ":L"); continue; } // an entry behind a link: its name alone (never stat'ed through)
     let s;
     try { s = fs.statSync(p); } catch { acc.push(e.name + ":?"); continue; }
     if (Math.max(s.mtimeMs, s.ctimeMs) > now - ROW_OPTS.racyMs) acc.racy = true;
@@ -119,7 +121,12 @@ function rowStatSig(dir, depth, now, acc) {
 }
 function rowProjectSig(root, now) {
   const acc = [];
-  for (const f of ["roadmap.json"]) { try { const s = fs.statSync(path.join(root, f)); if (Math.max(s.mtimeMs, s.ctimeMs) > now - ROW_OPTS.racyMs) acc.racy = true; acc.push(f + ":" + s.size + ":" + s.mtimeMs + ":" + s.ctimeMs + ":" + s.ino); } catch { acc.push(f + ":-"); } }
+  for (const f of ["roadmap.json"]) {
+    const s = specsStat(path.join(root, f)); // the read gate (1.41.1): a linked roadmap.json is signed as absent
+    if (!s) { acc.push(f + ":-"); continue; }
+    if (Math.max(s.mtimeMs, s.ctimeMs) > now - ROW_OPTS.racyMs) acc.racy = true;
+    acc.push(f + ":" + s.size + ":" + s.mtimeMs + ":" + s.ctimeMs + ":" + s.ino);
+  }
   for (const d of ["steering", "templates", "tracks"]) { acc.push(d + "{"); rowStatSig(path.join(root, d), 2, now, acc); acc.push("}"); }
   return { sig: acc.join("\n"), racy: !!acc.racy };
 }

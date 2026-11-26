@@ -50,6 +50,9 @@ function userStopCheckOff() {
 // user's option too (spec.stopCheckEnabled's rule — DEV_SPEC_STOP_CHECK=off used to be ignored while the file didn't parse).
 // Read raw: the engine is loaded only when the gate may have something to say.
 function gateOff(dir) {
+  // (1.41.1) a roadmap.json that is a LINK is none — the engine's read gate never reads through it (stopCheckEnabled: the user's option,
+  // else on): its target's stopCheck: false never turns the gate off
+  try { if (fs.lstatSync(path.join(dir, ".specs", "roadmap.json")).isSymbolicLink()) return userStopCheckOff(); } catch { /* absent: below */ }
   try {
     const j = probe().readJsonFile(path.join(dir, ".specs", "roadmap.json"));
     const meta = !!j && typeof j === "object" && !!j.meta && typeof j.meta === "object" ? j.meta : {};
