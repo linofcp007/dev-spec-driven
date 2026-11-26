@@ -335,7 +335,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `./` before a bare word grouped a hand-written `_Target: none_` too, so none guesses) and counted `.SPECS/` where case folds
   (R1-L-7); a U+2028 target was written and read back as none (R1-L-6); the finish warning's closing call lacked the title
   and decision spec_decide requires, and had no CLI line (R1-L-9); fixtures for the mutants 1.41.0 left alive (M18 one
-  feature, M13 the overflowing brief budget, M6 the key's fold, M7 / M26 the backticks — R1-L-4).
+  feature, M13 the overflowing brief budget, M6 the key's fold, M7 / M26 the backticks — R1-L-4). Review 2: two assertions for
+  the fix's own survivors (R2-L-4 — N2, the `./` form on a `/` alone: `package.json` was written `./package.json`; N4, the
+  targetGone refusal naming the bare `Makefile`).
 
 ### Forecasts and cross-feature overlap
 - **1.14** — sizes, tick times, velocity, ETAs and the cross-feature overlaps. Tasks ticked before 1.14 have no tick time (the
