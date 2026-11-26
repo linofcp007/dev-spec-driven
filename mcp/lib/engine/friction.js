@@ -19,15 +19,14 @@
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
-const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // load time — the read-cache scope the timings read is memoized in
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let appendLog, labelMarkerSpans, locateFeatures, projectChecks, readCacheKey, readIfExists, readLogTail, readRoadmap, runProvesVerify,
-  scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic;
+  scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic, specsStat;
 function __link(E) { ({ appendLog, labelMarkerSpans, locateFeatures, projectChecks, readCacheKey, readIfExists, readLogTail, readRoadmap,
-  runProvesVerify, scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic } = E); }
+  runProvesVerify, scanTaskLines, slugify, specsRoot, stripCdPrefix, validCheckName, writeFileAtomic, specsStat } = E); }
 
 const TIMINGS_LOG = "timings.jsonl";
 const TIMINGS_MAX_BYTES = 64 * 1024; // past this the log keeps, per check, its newest FRICTION_KEEP passing lines (read: 4 × this at most)
@@ -144,7 +143,8 @@ function recordTiming(projectDir, run) {
 // runs, a changed command's lines and a removed check's dropped (no reader counts them); replaced atomically. Per check, never by newest
 // bytes. Two appends while one trims can lose a line (one run fewer in a median). (Called by appendLog, which catches.)
 function trimTimings(file, checks) {
-  if (fs.statSync(file).size <= TIMINGS_MAX_BYTES) return;
+  const st = specsStat(file); // through the read gate (1.41.1): a linked log is never trimmed
+  if (!st || st.size <= TIMINGS_MAX_BYTES) return;
   const live = new Map(checks.map((c) => [c.name, c.command]));
   const kept = new Map();
   const keep = [];

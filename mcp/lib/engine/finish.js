@@ -30,7 +30,8 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines, trackLabel,
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
-  branchNameOk, branchView; // 1.25 (create --branch)
+  branchNameOk, branchView, // 1.25 (create --branch)
+  existsRaw, specsStat, entryAt, specsReadBlocked, projectFileReal, realRootOf; // files.js — the read gate (1.41.1), the project file by real path
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
 let designSystemFinish; // design-system.js — raw values in a +ui feature's view files, its New components into the registry (1.35), its UI checks (1.37)
 let DESIGN_SYSTEM_FILE; // quality.js — the registry's file name (a rename follows its `_From:_` rows)
@@ -59,7 +60,7 @@ function __link(E) { ({ frictionStatus, frictionLines, finishMetrics, walkFeatur
   suiteSummaryLines, taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines,
   trackLabel, unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject,
   withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
-  branchNameOk, branchView } = E); }
+  branchNameOk, branchView, existsRaw, specsStat, entryAt, specsReadBlocked, projectFileReal, realRootOf } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_finish — close a feature LOCALLY: readiness report + a merge summary generated from the spec chain
@@ -323,7 +324,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (protectedTests) body.push(...protectedSummaryLines(protectedTests, lng), ""); // 1.36 guard tests: the list, what changed, the lifts
   body.push(F.prChecks, ...checks.map((c) => "- [ ] " + c), "");
   const specFiles = ["requirements.md", "change.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE] // a change's one file
-    .filter((x) => fs.existsSync(path.join(dir, x)));
+    .filter((x) => existsRaw(path.join(dir, x)));
   body.push(F.prSpec, ...specFiles.map((x) => "- `.specs/" + slug + "/" + x + "`"));
 
   const write = !!opts.write;
@@ -433,7 +434,8 @@ function featureMetrics(projectDir, slug, dir, lv) {
     const seen = [...(history || []).map((h) => timeOf(h.at)), ...Object.values(approvals).map((a) => (isRecord(a) ? timeOf(a.at) : null))].filter((t) => t != null);
     if (seen.length) { created = Math.min(...seen); createdSource = "approval"; }
     else {
-      try { const st = fs.statSync(dir); created = st.birthtimeMs > 0 ? st.birthtimeMs : st.mtimeMs > 0 ? st.mtimeMs : null; createdSource = created != null ? "filesystem" : null; } catch { /* unknown */ }
+      const st = specsStat(dir); // the read gate
+      if (st) { created = st.birthtimeMs > 0 ? st.birthtimeMs : st.mtimeMs > 0 ? st.mtimeMs : null; createdSource = created != null ? "filesystem" : null; }
     }
   }
   // First approval of each phase: the history; a phase approved only before 1.13 falls back to its (latest) approval —
@@ -473,7 +475,7 @@ function featureMetrics(projectDir, slug, dir, lv) {
       for (const r of recs) for (const k of ["at", "noteAt"]) { const x = timeOf(r[k]); if (x != null) stamps.push(x); }
     }
     let t = stamps.length ? Math.max(...stamps) : null;
-    if (t == null) { try { t = fs.statSync(path.join(dir, "tasks.md")).mtimeMs; } catch { /* unknown */ } }
+    if (t == null) { const st = specsStat(path.join(dir, "tasks.md")); if (st) t = st.mtimeMs; }
     if (t != null) leadTime.complete = { at: isoOf(t), hours: hoursFrom(created, t), ...(!stamps.length || !everyTask ? { approximate: true } : {}) };
   }
   // Finished, when recorded: the earliest of the execution phase's first approval (gated on spec_finish's readiness since
@@ -737,7 +739,7 @@ function pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived) {
 // about over elicitation; another folder under that name now, or the same one edited since, is refused (changedSincePreview).
 function removeFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error, code: f.code };
+  if (!f.ok && !f.linked) return { ok: false, error: f.error, code: f.code }; // a linked folder (1.41.1 feature-linked): below
   sweepTombstones(f.root);
   // a feature folder that is a LINK (a symbolic link, a junction): only the link goes — the folder it points at and
   // its files stay — under the roadmap lock alone: the feature lock would be created THROUGH the link (it was: a .lock left in the
@@ -757,7 +759,7 @@ function isLinkEntry(p) {
 }
 function removeLinkedFeatureLocked(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error, code: f.code };
+  if (!f.ok && !f.linked) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -811,7 +813,7 @@ function sweepTombstones(root) {
     if (!n.startsWith(TOMBSTONE_PREFIX)) continue;
     const p = path.join(root, n);
     try {
-      if (Date.now() - fs.statSync(p).mtimeMs < TOMBSTONE_SWEEP_AGE_MS) continue;
+      if (Date.now() - fs.lstatSync(p).mtimeMs < TOMBSTONE_SWEEP_AGE_MS) continue; // its own age: a link is never followed
       fs.rmSync(p, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 });
     } catch { /* best-effort: still held open — the next remove tries again */ }
   }
@@ -838,7 +840,7 @@ function removeFeatureLocked(projectDir, name, opts = {}) {
 
 function archiveFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error, code: f.code };
+  if (!f.ok && !f.linked) return { ok: false, error: f.error, code: f.code }; // linked: the lock's refusal (withMoveLock)
   const res = withMoveLock(projectDir, f.dir, f.slug, null, (moved) => withRoadmapLock(projectDir, () => archiveFeatureLocked(projectDir, name, moved)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
@@ -856,7 +858,7 @@ function archiveFeatureLocked(projectDir, name, moved) {
   const archRoot = path.join(root, "_archive");
   ensureDir(archRoot);
   const dest = path.join(archRoot, slug);
-  if (fs.existsSync(dest)) return { ok: false, error: errs(projectDir).alreadyArchived(slug) };
+  if (entryAt(dest)) return { ok: false, error: errs(projectDir).alreadyArchived(slug) }; // an entry there, a link included, is taken
   const record = { at: new Date().toISOString(), ...archiveRecord(readRoadmap(projectDir), slug) };
   // What the prune does to the roadmap, said out loud: every feature that depended on this one stops being blocked by it —
   // silently turning a blocked feature into a ready one when the archived work was never finished (roadmap's rule: a dep
@@ -884,7 +886,7 @@ function archiveFeatureLocked(projectDir, name, moved) {
 function renameFeature(projectDir, name, newName) {
   if (newName == null || !String(newName).trim()) return { ok: false, error: errs(projectDir).renameNeedsName };
   const from = existingFeature(projectDir, name);
-  if (!from.ok) return { ok: false, error: from.error, code: from.code };
+  if (!from.ok && !from.linked) return { ok: false, error: from.error, code: from.code }; // linked: the lock's refusal
   const res = withMoveLock(projectDir, from.dir, from.slug, null, (moved) => withRoadmapLock(projectDir, () => renameFeatureLocked(projectDir, name, newName, moved)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
@@ -899,10 +901,10 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   if (newSlug === oldSlug) return { ok: false, error: errs(projectDir).sameSlug };
   const oldDir = from.dir;
   const newDir = to.dir;
-  if (fs.existsSync(newDir)) return { ok: false, error: errs(projectDir).alreadyExists(newSlug) };
+  if (entryAt(newDir)) return { ok: false, error: errs(projectDir).alreadyExists(newSlug) }; // a link there is taken (a dangling one too)
   // never onto an ARCHIVED feature's slug: the two could then neither be archived (alreadyArchived) nor restored
   // (activeExists) without another rename — and the archived records naming that slug would read as this feature.
-  if (fs.existsSync(path.join(to.root, "_archive", newSlug))) return { ok: false, archivedName: true, error: errs(projectDir).renameArchived(newSlug) };
+  if (entryAt(path.join(to.root, "_archive", newSlug))) return { ok: false, archivedName: true, error: errs(projectDir).renameArchived(newSlug) };
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
   // Every other reference to the feature follows it — planned while the old folder still resolves, written after the move.
@@ -976,7 +978,7 @@ function renamePlan(projectDir, oldDir, oldSlug, newSlug) {
     }
     if (!fd.archived) continue;
     const sf = statePath(fd.dir);
-    if (!fs.existsSync(sf)) continue;
+    if (!existsRaw(sf)) continue;
     const st = stateFromFile(projectDir, sf);
     if (st.invalid) {
       if ((readIfExists(sf) || "").includes(JSON.stringify(oldSlug))) return { error: st.invalid };
@@ -1035,7 +1037,7 @@ function renameSupersedesRefs(projectDir, fromDir, raw, oldKey, newSlug) {
 // What `remove` would delete, returned INSTEAD of deleting when the caller hasn't confirmed.
 function removePreview(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error, code: f.code };
+  if (!f.ok && !f.linked) return { ok: false, error: f.error, code: f.code };
   // Same order as removeFeature: never preview (and promise) a delete that the confirmed call would refuse.
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -1400,7 +1402,8 @@ function archivedFeature(projectDir, name) {
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { error: f.error };
   const archRoot = path.join(f.root, "_archive");
-  const slug = [slugify(name), legacySlugify(name)].find((s) => s && isFeatureFolder(s, archRoot) && isDirSafe(path.join(archRoot, s)));
+  // (1.41.1) a name behind a link (a linked _archive/, _archive/<slug> -> …) is found as it was: the restore's lock refuses it (linked)
+  const slug = [slugify(name), legacySlugify(name)].find((s) => s && isFeatureFolder(s, archRoot) && (isDirSafe(path.join(archRoot, s)) || specsReadBlocked(path.join(archRoot, s))));
   if (!slug) return { error: i18n.msg(projectLang(projectDir)).restore.notArchived(f.slug) };
   return { f, slug, from: path.join(archRoot, slug) };
 }
@@ -1418,7 +1421,7 @@ function restoreFeatureLocked(projectDir, name, moved) {
   const { f, slug, from } = a;
   const R0 = i18n.msg(projectLang(projectDir)).restore;
   const to = path.join(f.root, slug);
-  if (fs.existsSync(to)) return { ok: false, error: R0.activeExists(slug) };
+  if (entryAt(to)) return { ok: false, error: R0.activeExists(slug) };
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
   const st = stateFromFile(projectDir, statePath(from));
@@ -1545,7 +1548,7 @@ const CRLF_BYTES = Buffer.from([0x0d, 0x0a]);
 function fileHash(abs, chunk = FILE_HASH_CHUNK) {
   let fd = null;
   try {
-    if (!fs.statSync(abs).isFile()) return null;
+    if (specsReadBlocked(abs) || !fs.statSync(abs).isFile()) return null; // the read gate (1.41.1): never through a link below .specs/
     fd = fs.openSync(abs, "r");
     const h = require("crypto").createHash("sha1");
     const buf = Buffer.allocUnsafe(Math.max(1, Math.floor(chunk) || FILE_HASH_CHUNK));
@@ -1566,18 +1569,7 @@ function fileHash(abs, chunk = FILE_HASH_CHUNK) {
     if (fd != null) try { fs.closeSync(fd); } catch { /* already closed */ }
   }
 }
-// A project-relative path → its absolute path, or null when it leaves the project (by path or through a symlink).
-function projectFile(root, rootReal, rel) {
-  if (typeof rel !== "string" || !rel.trim() || path.isAbsolute(rel) || /^[A-Za-z]:/.test(rel)) return null;
-  const abs = path.resolve(root, rel);
-  if (abs === root || !isInsideDir(root, abs)) return null;
-  try {
-    return isInsideDir(rootReal, fs.realpathSync.native(abs)) ? abs : null;
-  } catch {
-    return abs; // missing: judged by its path alone
-  }
-}
-const realRootOf = (root) => { try { return fs.realpathSync.native(root); } catch { return root; } };
+// (a project-relative path → its absolute path by its real path: files.js projectFileReal, 1.41.1 — it was projectFile here)
 // The files a feature's _Implements:_ markers name, project-relative with forward slashes: a file (existing or not) or
 // every file under a folder, or the files a glob matches now (globFiles — trace_check's reading) — only inside the
 // project, at most BASELINE_CAP.
@@ -1597,7 +1589,7 @@ function baselineFiles(projectDir, tasksText, globCap, known) {
     const k = fold(rel);
     if (out.has(k)) return;
     if (out.size >= BASELINE_CAP) { truncated = true; return; }
-    if ((known && known.has(k)) || projectFile(root, rootReal, rel)) out.set(k, rel);
+    if ((known && known.has(k)) || projectFileReal(root, rootReal, rel)) out.set(k, rel);
   };
   for (const ref of Array.isArray(tasksText) ? tasksText : implementsRefs(tasksText)) {
     const p = implementsPath(ref).replace(/^\.\//, "");
@@ -1820,7 +1812,7 @@ function drift(projectDir, name, opts = {}) {
     if (opts.maxBytes == null) return false;
     let bytes = 0;
     for (const { fin } of withBase) for (const rel of Object.keys(fin.files)) {
-      const abs = projectFile(root, rootReal, rel);
+      const abs = projectFileReal(root, rootReal, rel);
       try { if (abs) bytes += fs.statSync(abs).size; } catch { /* missing */ }
       if (bytes > opts.maxBytes) return true;
     }
@@ -1851,7 +1843,7 @@ function baselineDrift(root, rootReal, fin) {
   const changed = [], missing = [], nowPresent = [], ignored = [];
   let unchanged = 0;
   for (const [rel, was] of Object.entries(isObj(fin && fin.files) ? fin.files : {})) {
-    const abs = projectFile(root, rootReal, rel);
+    const abs = projectFileReal(root, rootReal, rel);
     if (!abs || (was !== null && typeof was !== "string")) { ignored.push(rel); continue; }
     const now = fileHash(abs);
     if (was === null) { if (now === null) unchanged++; else nowPresent.push(rel); }
@@ -1865,5 +1857,5 @@ function baselineDrift(root, rootReal, fin) {
 module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, commitTitle, mergeSummaryOf, finishFeature, timeOf, round1, round2,
   stats, metrics, metricsLines, removeFeature, archiveFeature, renameFeature, manageFeature, stripSupersedes, blockLines,
   lineMap, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, acOneLine, catalogData,
-  catalog, maybeRefreshCatalog, restoreFeature, fileHash, realRootOf, baselineFiles, recordFinishBaseline, staleFinish,
+  catalog, maybeRefreshCatalog, restoreFeature, fileHash, baselineFiles, recordFinishBaseline, staleFinish,
   changesSince, sameApprovedContent, executionSignOffStale, signOffWhyText, staleFinishText, drift, baselineDrift, __link };
