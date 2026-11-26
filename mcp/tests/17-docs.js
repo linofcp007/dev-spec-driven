@@ -573,16 +573,17 @@ exports.run = async ({
         !/trace_check reads the other features' `_Supersedes:_` only when an AC has no test entry/.test(log),
     });
     // W (CRIT_X D7): verification.md says what finish shows of dev-guardian's own checks below the gate
-    all("1.41.0 W (CRIT_X D7): verification.md — dev-guardian's test-integrity and suppressions checks below the gate are ONE finish warning, never a blocker, labelled per check; --compact names none; before 3.17 tests only; the pruning bullet points at it; review 2 (RX-1, RX-9): only finish --run hands the base the two checks read — a run reported over MCP names none —, only a suppression with no reason or naming no rule is reported, the action is to give it one; the CHANGELOG's W bullet says the same", {
+    all("1.41.0 W (CRIT_X D7): verification.md — dev-guardian's test-integrity and suppressions checks below the gate are ONE finish warning, never a blocker, labelled per check; --compact names none; before 3.17 tests only; the pruning bullet points at it; review 2 (RX-1, RX-9): only finish --run hands the base the two checks read — a run reported over MCP names none —, only a suppression with no reason is reported, the action is to give it one; RX2-2: dev-guardian 3.17's rule — no reason and naming no rule, or a whole-file one with no reason even naming its rules; one with a reason only counted —, never \"or name its rule\"; the CHANGELOG's W bullet says the same", {
       w: /\*\*Its own checks' findings below the gate\*\* \(1\.41\) — the new findings that do not block from dev-guardian's test-integrity check \(`guardian-test-integrity`, 3\.8\+: a skip, a deleted test file, fewer assertions\) and its suppressions check \(`guardian-suppressions`, 3\.17\+:[^)]*\) — are ONE finish warning, never a blocker: each labelled by its check \(weakened test · suppression added\), the first 3 by severity, the rest counted\./.test(ver),
       limits: /A `--compact` report lists the blocking findings only, so none is named there; a dev-guardian before 3\.17 has no suppressions check — its test findings only\./.test(ver),
       pointer: /Below the default `--fail-on high` they never block — the warning below names them\./.test(ver) && /they never block \(`finish <feature> --run` names them in one warning\)/.test(sub),
       onlyRun: /Both checks read the change since the feature's base, which only `finish <feature> --run` hands the launcher: a run of the check's command reported over MCP \(`spec_finish \{evidence\}`\) has no base, so it names none\./.test(ver) &&
         /Both checks read the change since the feature's base, which only `finish --run` hands the launcher: a run reported over MCP names none \(the MCP run hint says so\), nor does a `--compact` report\./.test(log) &&
         !/a full report, without --compact, names the findings below the gate/.test(ver + log),
-      reasonless: /`eslint-disable` … with no reason or naming no rule — only such a one is reported\) — are ONE finish warning/.test(ver) &&
-        /The user decides each: a pruning they approved stays; a suppression they intended gets a reason or names its rule; otherwise fix it and run the check again\./.test(ver) &&
-        /`eslint-disable` … with no reason or naming no rule — only such a one is reported\) in ONE warning/.test(log) && !/a suppression with its reason\)/.test(ver),
+      reasonless: /`eslint-disable` … with no reason that names no rule, or a whole-file one with no reason even when it names its rules; one with a reason is only counted\) — are ONE finish warning/.test(ver) &&
+        /The user decides each: a pruning they approved stays; a suppression they intended gets a reason; otherwise fix it and run the check again\./.test(ver) &&
+        /`eslint-disable` … with no reason that names no rule, or a whole-file one with no reason even when it names its rules; one with a reason is only counted\) in ONE warning/.test(log) &&
+        !/a suppression with its reason\)|or naming no rule|or names its rule/.test(ver + log),
       noteKeepsHead: /and the suppressions check while a `guardian-suppressions: ` note says it left changed files unread/.test(log),
     });
   }
@@ -2285,10 +2286,16 @@ exports.run = async ({
         !LOG.includes("the reader's own 64 MiB bound is past what the CLI runs"),
       boundNotes: TE.includes("`finish --run` reads each check alone, so it never reaches the bound; several `_Verify:_` commands of one `done --run` are read together and can — `metricsDropped` says `readBytes`") &&
         !TE.includes("from the CLI the bound is never reached"),
-      bom: flat.includes("Print each name on ONE stream and both read the same value. A byte-order mark at the start of stderr is read past by dev-spec, while a `2>&1` capture holds it mid-file, and dev-guardian reads nothing there."),
+      // (RX2-4) the stream printed second, not stderr: with a BOM on both and stderr first, a `2>&1` capture holds stdout's mid-file
+      bom: flat.includes("Print each name on ONE stream and both read the same value. A byte-order mark at the start of the stream printed second is read past by dev-spec, while a `2>&1` capture holds it mid-file, and dev-guardian reads nothing there.") &&
+        !flat.includes("at the start of stderr") && TE.includes("RX-3 — the stream printed second's too, which a `2>&1` capture holds mid-file") && !TE.includes("RX-3 — stderr's too"),
       shown: LOG.includes("values and tolerances compare as the exact decimals printed and show as printed (120 → 122.4 at 2 % is `within`); the delta and the applied tolerance print as numbers.") &&
         !LOG.includes("compare — and show — as the exact decimals") && flat.includes("the warning and `## Metrics` show them as printed (the delta and the applied tolerance as numbers)"),
-      failOn: LOG.includes("The gate's `--fail-on` is the command's LAST one, as dev-guardian reads it (an unquoted flag of the check's own command: a quoted one is not read, as in 1.40, nor one after `;` / `&&` / `|`): 1.40 read the first"),
+      // (RX2-1) the first segment that carries a --fail-on, its last flag: a `cd . &&` prefix is read past
+      failOn: LOG.includes("The gate's `--fail-on` is the LAST one of the first part of the command that has one, as dev-guardian reads it (the command cut at `;` / `&&` / `|` / a line break: `cd . && <check> --fail-on medium` reads medium, a later `echo --fail-on low` is not read; a quoted one is not read, as in 1.40): 1.40 read the first") &&
+        !LOG.includes("an unquoted flag of the check's own command") && TE.includes("of the FIRST segment that carries one, the command cut at `;` / `&&` / `||` / `|` / a line break"),
+      // (RX2-3) the blocked gate's hint names the real choices for a weakened or deleted test
+      fixHintLog: LOG.includes("finish's hint for a blocked gate says a weakened or deleted test (dev-guardian's test-integrity check) takes no inline suppression: restore the test, or the user decides — at `--fail-on medium` an approved pruning blocks by design."),
       // (R3-B-1) the W bullet quotes the diff-base line as the engine prints it
       diffBase: LOG.includes("The verdict's line says \"" + require(path.join(__dirname, "lib", "i18n.js")).msg("en").guardian.diffBase("<base>").replace(/^ · /, "") + "\" — one text, true for every version."),
       prune: TOOLF.includes("each removal the user's, recorded through spec_impact's `retire` and, at guard level tests, the protected-test accept · `feedback`") &&

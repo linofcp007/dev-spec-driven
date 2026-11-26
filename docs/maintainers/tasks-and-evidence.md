@@ -352,7 +352,10 @@ Engine: the `B5` block of `engine/evidence.js`.
     accept_timeouts entries no step reported a timeout on), testIntegrity? (1.41.0, W — `integrityFindings`: the `new_findings` of
     dev-guardian's own passes, `GUARDIAN_INTEGRITY_KINDS` — `guardian-test-integrity` → kind `test`, `guardian-suppressions`
     (3.17, `GUARDIAN_SUPPRESSIONS`) → kind `suppression` — whose severity is under the command's LAST `--fail-on` (`failOn`,
-    as dev-guardian reads it — review 2; of the check's own command, never one after `;` / `&&` / `||` / `|` / a line break — review 3; `severityRank`: dev-guardian's own blocking rule, gate.ts; unknown → under every
+    as dev-guardian reads it — review 2; of the FIRST segment that carries one, the command cut at `;` / `&&` / `||` / `|` / a
+    line break: a later `echo --fail-on low` is not dev-guardian's — review 3 —, nor a prefix, `cd . &&` / `chcp 65001 >NUL &&` —
+    RX2-1; a property of the text, never a name list, so `echo --fail-on low && <check> --fail-on medium` reads low, as 1.40
+    did; `severityRank`: dev-guardian's own blocking rule, gate.ts; unknown → under every
     level) and that is not one of the report's `blocking_findings` (by rule + file + line, `blockedFacts` — review 1: dev-spec
     read the first `--fail-on`; dev-guardian also unquotes a shell-quoted one dev-spec does not read):
     `{count, top ≤ 3: [{severity, rule, file, line, kind}], kinds}` (`kinds`, review 1: the kinds among ALL of them — the
@@ -394,7 +397,9 @@ Engine: the `B5` block of `engine/evidence.js`.
     changes the status (the exit code decides it). `suiteBlocker()`
     (finish's `suite-evidence`) lists the other missing checks as before and a failed gate apart — `guardian.blocker` + how to
     clear it (`fixHint`: fix it; ONE reviewed finding suppressed inline with a reason — never `baseline update`, which accepts
-    every current finding, the feature's own included; never forced · + `baselineHint` with no baseline · an incomplete scan by
+    every current finding, the feature's own included; a test-integrity finding takes no inline suppression — restore the
+    test, or the user decides, an approved pruning blocking at `--fail-on medium` by design (RX2-3); never forced · +
+    `baselineHint` with no baseline · an incomplete scan by
     its gaps' kinds — `incompleteHint(g)`: install only a `missing_tool`, a lockfile for `no_lockfile`, a Semgrep `file_timeout`
     → `gap.timeout` (dev-guardian's own remedy, localized: a larger `semgrep.timeout`, or the reviewed file under
     `semgrep.accept_timeouts`, in the committed `.guardian/scan.yml` — whose settings are Semgrep's); a `changed` one (listed,
@@ -566,8 +571,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   guard a cost guard — no array for a long unit) (a bare word elsewhere, a known key twice, a negative tolerance:
   malformed); unknown keys ignored; names in a Map (`__proto__` is a name); ONE leading U+FEFF of each text dropped (a stream
   starting with a UTF-8 byte-order mark, as dev-guardian 3.17's file decoding drops it — a second one or one mid-text stays;
-  built with 0xfeff, never a literal; RX-3 — stderr's too, which a `2>&1` capture holds mid-file, where dev-guardian reads
-  nothing: verification.md → One stream per name says so, R3-A-2). Each reading carries `text`, its number as
+  built with 0xfeff, never a literal; RX-3 — the stream printed second's too, which a `2>&1` capture holds mid-file, where
+  dev-guardian reads nothing: verification.md → One stream per name says so, R3-A-2, RX2-4). Each reading carries `text`, its number as
   printed, and its tolerance its own `text` (the judge's inputs; what the warning, `## Metrics` and a tick's line show).
   **The walk** — from the END with `lastIndexOf`, never a split: `lineStartOf()` scans back over blanks, `#` and CSI sequences
   only (any final byte: a superset of RE_CSI's — a pre-filter; an earlier `METRIC` stops
@@ -1365,7 +1370,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   mid-file (R3-A-2); the CHANGELOG's "compare — and show — as the exact decimals" — the delta and the applied tolerance
   print as numbers (R3-A-3); two judge rows no reader prints — a current tolerance without its text, a reference without
   its value text but a long tolerance text — kill the mutants reading `tolExact` off the reference alone or only with both
-  value texts (R3-A-4).
+  value texts (R3-A-4). **Cross-plugin pass 2:** R3-A-2's sentence named stderr only — with a BOM on both streams and stderr
+  printed first, a `2>&1` capture holds stdout's mid-file: verification.md and this note say "the stream printed second"
+  (RX2-4, prose).
   **Review 1 (W):** "below the gate" also leaves out a finding the report lists in `blocking_findings` (R1-PZ-4: dev-spec
   reads the command's first `--fail-on`, dev-guardian its last — `--fail-on high --fail-on medium` named a medium as the
   blocker AND as "They do not block"; a subtraction, the rule checked before a key is built); `kinds` and a head naming only
@@ -1388,6 +1395,18 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   version branch: "checked for weakened tests (and, with dev-guardian 3.17+, added suppressions)" (R3-B-1: the reviewer's
   g1.js with 3.16.1, 3.8.0 and 3.17.0); a fixture with a `guardian-suppressions: ` note beside suppression-only findings —
   the head names the suppressions check only (R3-B-5, killing the mutant that let the note add the test-integrity check).
+  Review 3's last `--fail-on` read the command's first segment only (`;` / `&&` / `||` / `|` / a line break), so a later
+  `echo --fail-on low` is not dev-guardian's. **Cross-plugin pass 2 (W):** that first segment made a prefixed check
+  (`cd . && <check> --fail-on medium`, Windows' `chcp 65001 >NUL && …`) read high where 1.40 read medium — the FIRST segment
+  that carries a `--fail-on` decides now, its last flag (RX2-1: a text property, never a name list; 8 mutants killed — the
+  first segment only, no break, no split, the first flag, the default, `&&` or the line break dropped from the cut, a bare
+  `--fail-on` word choosing the segment; the residual `echo --fail-on low && <check>` reads low, as in 1.40). W's closing
+  said "give it a reason or name its rule", and verification.md / the CHANGELOG "no reason or naming no rule — only such a
+  one is reported": in 3.17 a whole-file directive with no reason is reported even naming its rules
+  (`/* eslint-disable no-console */`, `#![allow(dead_code)]`) — "give it a reason" alone, and the rule as 3.17's Upgrading
+  section states it (RX2-2). fixHint offered only an inline suppression for a blocking test-integrity finding, which reads
+  none — it says restore the test or the user decides, an approved pruning blocking at `--fail-on medium` by design (RX2-3,
+  pre-existing).
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
