@@ -93,9 +93,11 @@ function rawLevel(dir) {
   // (1.41.1) a roadmap.json that is a LINK reads as gone — the engine's read gate never reads through it (approvalRoadmapGone): fail
   // closed at ask while the .specs/ holds features, as for a deleted one (its target's meta is never read). So does anything else that
   // is no regular file (review 2, R2H-F1): a FIFO, a device, a socket, a folder — never opened by its lstat, and opened without
-  // waiting and judged by its fd after (probe.js readRegularText: a swap after the lstat): a FIFO's read never returns.
+  // waiting and judged by its fd after (probe.js readRegularText: a swap after the lstat): a FIFO's read never returns. Opened ONLY
+  // when the lstat says a regular file (review 3, R3H-F3): an lstat that throws reads as gone too — through \\wsl.localhost\ a Linux
+  // FIFO's lstat throws EISDIR, and win32 has no O_NONBLOCK, so its open waited for a writer. Missing (ENOENT) is the same answer.
   const st = lstatOf(file);
-  if (st && !st.isFile()) return { level: roadmapGone(dir) ? 1 : 0 };
+  if (!st || !st.isFile()) return { level: roadmapGone(dir) ? 1 : 0 };
   let text;
   try {
     text = probe().readRegularText(file);
