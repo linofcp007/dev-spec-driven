@@ -283,7 +283,7 @@ function decide(raw, opts = {}) {
 // from disk). EVERYTHING else — the candidate projects, their roadmap.json, the engine, the decision — runs in a worker_threads worker
 // with a heap limit (WORKER_LIMITS), this same file. No answer by the deadline, a worker error, its exit without an answer, an
 // out-of-memory, a worker that could not start: ASK (failClosed: why "timeout" / "error", in the project's language once the worker
-// named it) — silent only when the worker had said no project the call may act on has the guard on. hooks.json's timeout (10 s) minus
+// named it — the worker tells the candidate projects' strictest level before it loads the engine). hooks.json's timeout (10 s) minus
 // DEADLINE_MS is the margin for the process's start and the answer's write (measured: claude-code-integration.md → Human approval guard).
 // Not covered: a worker stuck inside one native call that never returns (a read of a FIFO, a dead network share) — Node joins its
 // workers at exit, so the process then ends only when the call does. DEV_SPEC_TEST_APPROVAL_DEADLINE_MS lowers the deadline (tests only:
@@ -310,8 +310,8 @@ function runAsProcess() {
   const { Worker } = require("worker_threads");
   const deadline = deadlineMs();
   let late = false, settle = null, known = null; // known: the worker's strictest level once it read the projects ({ level, meta })
-  // the answer without the worker's: silent where it said no project has the guard on, else ask
-  const failed = (why) => (known && known.level === 0 ? null : failClosed(known && known.meta, why, Math.ceil(deadline / 1000)));
+  // the answer without the worker's: ask, in the project's language once the worker named it
+  const failed = (why) => failClosed(known && known.meta, why, Math.ceil(deadline / 1000));
   setTimeout(() => { late = true; if (settle) settle(failed("timeout")); }, Math.max(0, deadline - process.uptime() * 1000));
   runHook((raw, opts) => {
     const timedOut = !!(opts.timedOut || opts.tooBig);

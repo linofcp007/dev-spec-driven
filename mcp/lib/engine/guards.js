@@ -354,8 +354,9 @@ const APPROVAL_EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit
 // never one. Their path-like arguments (probe.js mcpPathArgs) are read as an Edit's path.
 // The `unreadable` reasons that ask at both levels (never refused outright — it may be no approval at all): a form the lexer can't
 // follow, a partial payload, a script fed to a shell out of sight, an unknown program run on .specs/ files, the hook's own
-// failure past its pre-check, no decision by the hook's deadline (1.41.1), a projectDir the hook can't read.
-const APPROVAL_ASK_WHYS = ["unparsed", "partial", "fed", "specs-arg", "error", "timeout", "project"];
+// failure past its pre-check, a projectDir the hook can't read. (The hook's deadline — why "timeout", 1.41.1 — is the hook's own ask:
+// it never reaches a decision here.)
+const APPROVAL_ASK_WHYS = ["unparsed", "partial", "fed", "specs-arg", "error", "project"];
 // (The guarded files — .specs/roadmap.json, a .state.json below .specs/ and a harness-observed run log: hooks/observe-hook.js appends
 // the runs Claude Code SAW to .specs/<f>/.execution/observed.jsonl, .specs/.execution/observed.jsonl for a project check, and an agent
 // writing it forges observed evidence — are probe.js guardedFileOf's, read on the path's segments.)
