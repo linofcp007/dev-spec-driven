@@ -265,12 +265,13 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       const P2 = maze("pt", "pt");
       const st = S.statusFeature(M.p, "lnk"), pt = S.statusFeature(P2.p, "lnk"), nx = S.nextTask(M.p, "lnk"), d = S.specDoctor(M.p, "lnk");
       const ap = S.approvePhase(M.p, "lnk", "requirements", "t", { force: true });
+      const pr = S.manageFeature(M.p, "protect", "lnk", null, {});
       all("1.41.1 read gate: a feature folder that is a link answers `feature-linked` (its message by the entry, EN / PT) to every reader — status, next_task, doctor — while a mutator still meets the write gate's refusal at its lock (linked: true, the 1.24 message) (got " + js([st.error, pt.error, ap.error]) + ")", {
         code: () => [st, nx, d].every((r) => r.ok === false && r.code === "feature-linked"),
         en: () => st.error === S.msg("en").err.featureLinked(".specs/lnk/"),
         pt: () => pt.error === S.msg("pt").err.featureLinked(".specs/lnk/"),
         es: () => typeof S.msg("es").err.featureLinked(".specs/lnk/") === "string" && S.msg("es").err.featureLinked("x") !== S.msg("en").err.featureLinked("x"),
-        mutator: () => ap.ok === false && ap.linked === true && ap.error === S.msg("en").err.specsLinked(".specs/lnk/"),
+        mutator: () => [ap, pr].every((r) => r.ok === false && r.linked === true && r.error === S.msg("en").err.specsLinked(".specs/lnk/")),
       });
     }
 
@@ -401,6 +402,24 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       } else ok(true, "1.41.1 read gate (.specs a link): links not creatable here — skipped");
     }
 
+    // meta.evidence observed: a feature's observed log behind a link holds no run — the tick is refused as unobserved, and since no log
+    // holds one, "never observed" is said (the parent counted the linked file's matching record)
+    if (M.links.files) {
+      const p = path.join(tmp, "proj-rg-observed");
+      S.initProject(p, ["core"], "en", { evidence: "observed" });
+      const f = S.createFeature(p, { name: "obs", tracks: ["core"] });
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Do it for US-1.AC-1\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -v_\n");
+      const logOut = path.join(tmp, "proj-rg-observed-log.jsonl");
+      put(logOut, js({ command: "node -v", exitCode: 0, at: new Date().toISOString(), tool: "Bash" }) + "\n");
+      fs.mkdirSync(path.join(f.dir, ".execution"), { recursive: true });
+      fileLink(logOut, path.join(f.dir, ".execution", "observed.jsonl"));
+      const r = S.completeTask(p, "obs", 1, { command: "node -v", exitCode: 0, summary: "ok" });
+      const st = S.statusFeature(p, "obs");
+      all("1.41.1 read gate (meta.evidence observed): a feature's observed log behind a link holds no run — the tick stays unverified (unobserved) and the note says no run was ever observed here (got " + js([r.ok, r.reason, String(r.note || r.error || "").slice(0, 120)]) + ")", {
+        unobserved: () => js(r).includes(S.msg("en").observed.unobservedNote(1, "obs").slice(0, 40)) && st.tasks.list[0].verified === false,
+        neverObserved: () => js(r).includes(S.msg("en").observed.neverObserved.slice(0, 40)),
+      });
+    }
     // the read-ahead pool (readFileHeads with workers: DEV_SPEC_TEST_AHEAD=on, ≥ 96 files) never reads a file behind a link either
     {
       const p = path.join(tmp, "proj-rg-pool");
