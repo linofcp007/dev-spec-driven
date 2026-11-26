@@ -83,7 +83,8 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   feature), the reviewer's prune mode (`same-path` / `no-kill` candidates, then prune · keep · strengthen; a prune names
   what still guards each criterion), probes only on a tracked, clean file restored from a hash-checked copy, each test of a
   pair run alone, no probe — and so no pruning — without a shell; each pruning approved by the user, recorded through
-  spec_impact's `retire` and `feature protect --accept --reason "pruned: …"`, then the re-approvals (unforced: every
+  spec_impact's `retire` and, at guard level tests, `feature protect --accept --reason "pruned: …"` (without guard tests
+  the test-plan re-approval is the record dev-guardian's finding is answered with), then the re-approvals (unforced: every
   criterion keeps a planned test). No new tool argument.
 - **dev-guardian's own findings below the gate.** finish names the new findings that do not block from dev-guardian's
   test-integrity check (`guardian-test-integrity`: a skip, a deleted test file, fewer assertions) and, with dev-guardian

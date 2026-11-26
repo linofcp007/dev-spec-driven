@@ -71,8 +71,10 @@ strengthen per candidate. You run the probes — a tracked, clean file only, res
 a pair run alone; no shell, no probe, so no pruning (`subagent-execution.md` → The pruning pass). The report:
 `.specs/<feature>/.execution/prune-report.md`. Say the churn first (test-plan, then tests, then tasks — each unforced: every
 criterion keeps a planned test; on a finished feature execution and a new finish too) and batch the feature's prunings. On the user's yes: the rows out of `test-plan.md`, `spec_impact {name, phase: "test-plan"}`'s
-`retire` applied, a deleted file out of every done task's `_Implements:_`, each test removed whole, each changed protected
-test accepted (`feature protect <feature> <file> --accept --reason "pruned: …"`), then the re-approvals.
+`retire` applied, a deleted file out of every done task's `_Implements:_`, each test removed whole, at guard level tests each
+changed protected test accepted (`feature protect <feature> <file> --accept --reason "pruned: …"` — the record
+dev-guardian's test-integrity finding is answered with; without guard tests that record is the test-plan re-approval),
+then the re-approvals.
 
 **feedback `<comments>`** — read them all, verify each against the code and the spec
 (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/review-feedback.md`): an AC violation → fix it, cite the AC ·

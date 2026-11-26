@@ -393,9 +393,10 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
 - **A test pruning the user approved** (`/spec-review <feature> prune` — `subagent-execution.md` → The pruning pass) removes
   tests, and dev-guardian's test-integrity check reports each removal (`test-file-deleted`, `test-assertions-removed` —
   medium). Below the default `--fail-on high` they never block — the warning below names them. At a non-default
-  `--fail-on medium` an approved pruning blocks like any medium finding: dev-guardian reads no dev-spec approval (the
-  user's accept, `feature protect <feature> <file> --accept --reason "pruned: …"`, is dev-spec's record) and has no accept
-  of its own for such a finding, so the finish stays blocked until the user decides — never forced.
+  `--fail-on medium` an approved pruning blocks like any medium finding: dev-guardian reads no dev-spec approval (dev-spec's
+  record is the user's accept at guard level tests, `feature protect <feature> <file> --accept --reason "pruned: …"`, else
+  the feature's test-plan re-approval) and has no accept of its own for such a finding, so the finish stays blocked until
+  the user decides — never forced.
 - **Its own checks' findings below the gate** (1.41) — the new findings that do not block from dev-guardian's
   test-integrity check (`guardian-test-integrity`, 3.8+: a skip, a deleted test file, fewer assertions) and its suppressions
   check (`guardian-suppressions`, 3.17+: an added `nosemgrep`, Bandit `nosec`, `eslint-disable` … with no reason or naming

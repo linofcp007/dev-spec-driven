@@ -560,7 +560,9 @@ It never runs mid-task: an implementer who thinks a test worthless reports it as
    case, or the file —, never an empty body, a skip or a constant assertion. At guard level tests (`meta.guard: "tests"`)
    the record of each protected file the pruning changed or deleted is the user's accept: `feature protect <feature> <file>
    --accept --reason "pruned: <criterion> — <what still guards it>"` (a guard-down, asked with the file and the reason; the
-   merge summary prints it). Without guard tests the removed row in the approval history is the record.
+   merge summary prints it) — dev-guardian's test-integrity finding is answered with it. Without guard tests the removed row
+   in the approval history is the record (no accept: it would start a protected-tests list of its own): when dev-guardian
+   asks why the test went, answer with that feature's test-plan re-approval.
 6. **The churn — tell the user before step 5.** The plan's re-approval makes the Phase 4 sign-off stale: re-approve
    `test-plan`, then `tests` (every remaining planned T-ID still in code), then `tasks`; on a finished feature also
    `execution` and a new `/spec-finish` — `spec_drift` names the gone file until then, and each re-approval counts as rework
