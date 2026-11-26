@@ -42,27 +42,29 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   Applies to (PT `Exemplos de Referência`, ES `Ejemplos de Referencia`): the files agents copy the shape of. A task's brief
   quotes the rows for its files (an Applies-to glob that matches — a folder needs `/**` —, or the Copy file's own folder;
   at most 6, 1,200 characters; a gone file named, never quoted; one file per Copy cell — two files are two rows: a cell
-  naming several paths anyway is quoted as written, never judged, while a note after the one path is no second file);
-  doctor's project-level `reference-examples` warns when a Copy file is gone
-  or rows past the first 30 are not read — never a fail, never an approval check, never an upgrade to-do. The steering stub
-  has no such section: a project without the table sees nothing.
+  naming several paths anyway is quoted as written, never judged; a note after the one path — `path (note)` or
+  `path — note` — is no second file, whatever it names: the path is judged, the cell quoted as written; a `,` or `;`
+  note makes the cell a list, which is never judged); doctor's project-level `reference-examples` warns when a Copy file
+  is gone or rows past the first 30 are not read — never a fail, never an approval check, never an upgrade to-do. The
+  steering stub has no such section: a project without the table sees nothing.
 - **METRIC lines — numbers that get worse while the tests stay green.** A project check prints
   `METRIC <name>=<number>[ <unit>][ better=lower|higher][ tolerance=<n>[%]]` (`metric-lines/1`, the line dev-guardian
   3.17's `metrics` command reads too); `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read it
   from a passing run's whole output, stdout and stderr apart, a byte-order mark at a stream's start dropped (1,000
-  candidate lines from the end, 20 names — a line past a bound is said; the reader's own 64 MiB bound is past what the CLI
-  runs: a run printing more records nothing). Print a name on one stream: dev-guardian reads a `2>&1` capture in print
-  order, dev-spec stderr after stdout. The tick prints and stores the readings, never judges. `spec_finish` compares each
-  (check, name) with the latest OTHER feature's finish that
+  candidate lines from the end, 20 names — a line past a bound is said; `finish --run` reads each check alone, under the
+  CLI's 64 MB cap, so it never reaches the reader's 64 MiB bound; several `_Verify:_` commands of one `done --run` are
+  read together and can reach it, and then `metricsDropped` says `readBytes`). Print a name on one stream: dev-guardian
+  reads a `2>&1` capture in print order, dev-spec stderr after stdout. The tick prints and stores the readings, never
+  judges. `spec_finish` compares each (check, name) with the latest OTHER feature's finish that
   recorded it, archived ones included: `metrics`, each with its verdict (`new` · `within` · `improved` · `regressed` ·
   `unjudged`) and `loosened` for a flipped or dropped `better=`, a raised or dropped tolerance or a changed unit (never
   compared) — ONE warning for a reading worse past its stated tolerance or a loosened line, worded as what it is (the
   number holds every change merged since, not only this feature's), never a blocker; `## Metrics` in the merge summary; a
   ready written finish records the readings (`finished.metrics`) for the next one. No defaults: a reading is judged only
   when the earlier line states both `better=` and `tolerance=`; the current line may only tighten them; values and
-  tolerances compare — and show — as the exact decimals printed (120 → 122.4 at 2 % is `within`). `spec_metrics` (the
-  project) lists each reading across the finishes (`measured`, the last 10). An MCP report carries none — the CLI reads the
-  whole output.
+  tolerances compare as the exact decimals printed and show as printed (120 → 122.4 at 2 % is `within`); the delta and
+  the applied tolerance print as numbers. `spec_metrics` (the project) lists each reading across the finishes
+  (`measured`, the last 10). An MCP report carries none — the CLI reads the whole output.
 - **Silent Regressions (size m / l).** The m / l design gets `## Silent Regressions` — one row per number (its METRIC name
   in a code span, the check that prints it) or "None — why". Doctor warns `design-silent-regressions` until it is
   answered — never a refusal, and a design approved before 1.41 is not asked; finish warns when no passing check printed a
@@ -99,7 +101,9 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   the suppressions check while a `guardian-suppressions: ` note says it left changed files unread); a finding the report
   lists as blocking is never one — and stores them as `finishChecks.guardian.testIntegrity` {count, top, kinds}; 1.40 only
   counted them in "(N new below it)". Both checks read the change since the feature's base, which only `finish --run` hands
-  the launcher: a run reported over MCP names none (the MCP run hint says so), nor does a `--compact` report.
+  the launcher: a run reported over MCP names none (the MCP run hint says so), nor does a `--compact` report. The
+  verdict's line says "the change since <base> checked for weakened tests (and, with dev-guardian 3.17+, added
+  suppressions)" — one text, true for every version.
 
 ### Changed
 - **finish's warnings:** the new ones come in the batch's order — dev-guardian's findings below the gate the last of
@@ -127,8 +131,8 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   controls and the zero-width space (U+200B, U+200E–U+200F, U+202A–U+202E, U+2066–U+2069): a U+202E reordered the line.
   ZWNJ and ZWJ stay — they spell names (Persian, Indic, an emoji sequence). The feature's own files are compared the same
   way, so such a file is still `[this feature]`.
-- The gate's `--fail-on` is the command's LAST one, as dev-guardian reads it: 1.40 read the first, so `--fail-on low
-  --fail-on high` said "no new finding at or above low".
+- The gate's `--fail-on` is the command's LAST one, as dev-guardian reads it (an unquoted flag; a quoted one is not read,
+  as in 1.40): 1.40 read the first, so `--fail-on low --fail-on high` said "no new finding at or above low".
 
 ### Compatibility
 - **1.40 garbles a lesson:** an older engine reads `_Kind: lesson_` as a decision, its `_Cause:_` / `_Target:_` lines as
@@ -161,7 +165,7 @@ dev-guardian's gate make no file-system call; `reference-examples` `lstat`s each
 log is read once per engine call (at most 4 × 64 KB).
 
 ### Tests
-- `node mcp/test.js` 3150 assertions (was 3014), `node cli/test-cli.js` 719 (was 707). New files by area: 09
+- `node mcp/test.js` 3155 assertions (was 3014), `node cli/test-cli.js` 719 (was 707). New files by area: 09
   `09-evidence-friction.js` / `09-evidence-metrics.js` and their CLI twins `09-evidence-run-friction.js` /
   `09-evidence-run-metrics.js` (real children through `done --run` / `finish --run`), 12 `12-lifecycle-lessons.js`, 15
   `15-quality-reference-examples.js`; W in each suite's `09-evidence-guardian.js`. The METRIC contract is one fixture,

@@ -2431,7 +2431,9 @@ function exemplarGone(root, cell) {
 // The rows a task's brief quotes (targets: its _Implements:_ paths, briefTargets): a row whose Applies-to globs match one (a glob
 // as a fileMatch pattern matches — steeringGlobMatch, a folder as "dir/"), or — without a glob — whose Copy file sits in a target's
 // folder. A gone file is named, never quoted; a cell naming several files (exemplarMany) is quoted as written (`asWritten`), never
-// judged; at most REF_BRIEF_ROWS rows within REF_BRIEF_CHARS (`omitted` counts the rest).
+// judged; at most REF_BRIEF_ROWS rows within REF_BRIEF_CHARS (`omitted` counts the rest). (1.41.0 review 3) A cell in the annotated
+// single-path form (RE_IMPL_ANNOTATED on its exemplarPath reading) is quoted as written too — as its path reading the brief wrapped
+// "`a.js` (note)" in a span of its own (a stray backtick) and nested the spans of "Svc (`a.js`, `b.js`)"; judged by its path still.
 // → { file, quoted: [{pattern, copy (its path — the cell itself when asWritten), appliesTo, asWritten?}], gone: [path], omitted, total }
 // | null (no row in the table).
 function briefExamples(projectDir, targets) {
@@ -2450,14 +2452,14 @@ function briefExamples(projectDir, targets) {
   const quoted = [], gone = [];
   let omitted = 0, budget = REF_BRIEF_CHARS;
   for (const r of ref.rows.filter(matches)) {
-    const many = exemplarMany(r.copy);
-    const copy = many ? r.copy : exemplarPath(r.copy);
+    const asWritten = exemplarMany(r.copy) || RE_IMPL_ANNOTATED.test(exemplarPath(r.copy));
+    const copy = asWritten ? r.copy : exemplarPath(r.copy);
     const lost = exemplarGone(root, r.copy);
     if (lost) { gone.push(lost); continue; }
     const cost = r.pattern.length + copy.length + r.appliesTo.length;
     if (quoted.length >= REF_BRIEF_ROWS || cost > budget) { omitted++; continue; }
     budget -= cost;
-    quoted.push(Object.assign({ pattern: r.pattern, copy, appliesTo: r.appliesTo }, many ? { asWritten: true } : {}));
+    quoted.push(Object.assign({ pattern: r.pattern, copy, appliesTo: r.appliesTo }, asWritten ? { asWritten: true } : {}));
   }
   return { file: ref.file, quoted, gone, omitted, total: ref.total };
 }

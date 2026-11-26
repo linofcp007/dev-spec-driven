@@ -426,19 +426,22 @@ build's time. A project check prints each as a METRIC line — the form dev-guar
   byte-order mark at a stream's start.
 - **Only the CLI reads them:** `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read each passing
   command's whole output, stdout and stderr apart (at most 1,000 candidate lines of 512 bytes from the end, 20 names — a
-  line past a bound is said; the reader's own bound, an output's last 64 MiB, is past what the CLI runs: a run whose
-  output passes 64 MB records nothing — `output-too-large`, above). The tick prints and stores them; it never judges. An
-  MCP report carries none.
+  line past a bound is said). The reader's own bound is an output's last 64 MiB: `finish --run` reads each check alone,
+  under the CLI's 64 MB cap (a run whose output passes it records nothing — `output-too-large`, above), so it never
+  reaches that bound; several `_Verify:_` commands of one `done --run` are read together and can reach it, and then
+  `metricsDropped` says `readBytes`. The tick prints and stores them; it never judges. An MCP report carries none.
 - **One stream per name.** dev-spec reads stdout, then stderr, as two texts: a name printed on both reads stderr's line.
   dev-guardian's `metrics` reads one file — a CI job that captures `2>&1` reads it in print order, the last printed
-  winning. Print each name on ONE stream and both read the same value.
+  winning. Print each name on ONE stream and both read the same value. A byte-order mark at the start of stderr is read
+  past by dev-spec, while a `2>&1` capture holds it mid-file, and dev-guardian reads nothing there.
 - **finish compares.** Each `(check, name)` a project check's passing run printed is set against the LATEST other
   feature's finish that recorded it (`finished.at`, archived features included; never the feature's own). Judged only
   when that earlier line states BOTH `better=` and `tolerance=` — no defaults: otherwise the result shows the delta,
   `unjudged`. Its terms decide; a new line may only tighten (the smaller tolerance applies). A flipped or dropped
   `better=`, a raised or dropped tolerance or a changed unit is said as `loosened` (a new unit is not compared). `n%` is n
   percent of the earlier value; the boundary counts as within; values and tolerances compare as the exact decimals the lines
-  printed (120 → 122.4 at 2 % is within), and the warning and `## Metrics` show them so. Verdicts: `new` · `within` ·
+  printed (120 → 122.4 at 2 % is within), and the warning and `## Metrics` show them as printed (the delta and the applied
+  tolerance as numbers). Verdicts: `new` · `within` ·
   `improved` · `regressed` · `unjudged`.
 - **The warning, never a blocker.** A reading worse past the tolerance, or a loosened line, is ONE finish warning and the
   merge summary's `## Metrics`; a ready written finish records the readings (`finished.metrics`) for the next feature.
