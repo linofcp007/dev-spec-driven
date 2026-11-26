@@ -589,7 +589,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       "a normal approve at deny: deny, through one worker": () => R.approve.d === "deny" && R.approve.workers === 1,
       "…that worker runs under the hook's heap limits (WORKER_LIMITS)": () => { const l = JSON.parse(fs.readFileSync(LIMITS, "utf8")); return ["maxOldGenerationSizeMb", "maxYoungGenerationSizeMb", "stackSizeMb"].every((k) => l[k] === AH.WORKER_LIMITS[k]); },
       "the deadline's and the failure's sentences, as their locale tables write them (en, pt)": () => R.late.reason.includes(ACT.en.timeout(1)) && R.slowEngine.reason.includes(ACT.pt.timeout(3)) &&
-        R.oom.reason.includes(ACT.en.error) && R.exited.reason.includes(ACT.en.error),
+        R.thrown.reason.includes(ACT.en.error) && R.exited.reason.includes(ACT.en.error),
       "a call that can't be an approval: silent, no worker": () => R.notCandidate.d === "silent" && R.notCandidate.workers === 0,
       "a payload that is no JSON (stdin ended): silent, no worker": () => R.garbage.d === "silent" && R.garbage.workers === 0,
       "the deadline past before the pre-check: ask, no worker started": () => R.late.d === "ask" && R.late.workers === 0 && R.late.reason === ask("en", "timeout", 1),
@@ -597,7 +597,10 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       "a worker past the deadline: ask, the timeout's sentence, before hooks.json's timeout": () => R.busy.d === "ask" && R.busy.workers === 1 && R.busy.reason === ask("en", "timeout", 2) && R.busy.ms < 1500 + (T - D),
       "…past it once it named the project: the project's language and level (pt, deny)": () => R.slowEngine.d === "ask" && R.slowEngine.reason === ask("pt", "timeout", 3, "deny"),
       "the test variable never raises the deadline: ask by the default one": () => R.raise.d === "ask" && R.raise.reason === ask("en", "timeout", secs(D)) && R.raise.ms < T,
-      "an out-of-memory worker (its heap limit): ask, the failure's sentence, before the deadline": () => R.oom.d === "ask" && R.oom.reason === ask("en", "error") && R.oom.ms < D,
+      // (node 22+ ends the worker at its heap limit within ~0.4 s — the failure's sentence; node 18 kept it collecting past the deadline
+      // in the Linux containers — the deadline's: either way an ask before hooks.json's timeout. The limits row above proves them passed.)
+      "an out-of-memory worker: ask — the failure's sentence (its heap limit) or the deadline's — before hooks.json's timeout": () => R.oom.d === "ask" && R.oom.ms < T &&
+        (R.oom.reason === ask("en", "error") || R.oom.reason === ask("en", "timeout", secs(D))),
       "a worker that throws: ask": () => R.thrown.d === "ask" && R.thrown.reason === ask("en", "error"),
       "a worker that exits without an answer: ask at once": () => R.exited.d === "ask" && R.exited.reason === ask("en", "error") && R.exited.ms < D / 2,
       "a worker that can't start: ask": () => R.noWorker.d === "ask" && R.noWorker.reason === ask("en", "error"),
