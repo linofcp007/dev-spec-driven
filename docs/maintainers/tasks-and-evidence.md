@@ -566,7 +566,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   guard a cost guard — no array for a long unit) (a bare word elsewhere, a known key twice, a negative tolerance:
   malformed); unknown keys ignored; names in a Map (`__proto__` is a name); ONE leading U+FEFF of each text dropped (a stream
   starting with a UTF-8 byte-order mark, as dev-guardian 3.17's file decoding drops it — a second one or one mid-text stays;
-  built with 0xfeff, never a literal; RX-3). Each reading carries `text`, its number as
+  built with 0xfeff, never a literal; RX-3 — stderr's too, which a `2>&1` capture holds mid-file, where dev-guardian reads
+  nothing: verification.md → One stream per name says so, R3-A-2). Each reading carries `text`, its number as
   printed, and its tolerance its own `text` (the judge's inputs; what the warning, `## Metrics` and a tick's line show).
   **The walk** — from the END with `lastIndexOf`, never a split: `lineStartOf()` scans back over blanks, `#` and CSI sequences
   only (any final byte: a superset of RE_CSI's — a pre-filter; an earlier `METRIC` stops
@@ -578,8 +579,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   reading that sequence alone (`RE_CSI_AT`, sticky) — until the text holds more than 512 units AND a character past the keyword:
   over the bound, and RE_CANDIDATE reads the same characters as on the whole line. **The bounds, one set (`METRIC_BOUNDS` =
   the fixture's):** the last `readBytes` CHARACTERS of the output (run.js caps bytes; a character is ≥ 1 byte — and since 1.23
-  run.js refuses a run past MAX_OUTPUT, 64 MiB of both streams: from the CLI the bound is never reached, it guards a facade
-  caller; RX-4) — `readBytes`
+  run.js refuses a run past MAX_OUTPUT, 64 MiB of both streams: `finish --run` reads each check alone, so it never reaches
+  the bound; several `_Verify:_` commands of one `done --run` are read together and can — `metricsDropped` says `readBytes`
+  —, and a facade caller; RX-4, R3-A-1) — `readBytes`
   said when a METRIC lies
   before them, or when the bound cuts the blanks / `#` in front of one (`lineStartOf` → -3: maybe a candidate; mid-line
   text before it is none) —, a candidate (a line passing RE_CANDIDATE, an attempt or not) of ≤ 512 UTF-8 bytes AFTER CSI
@@ -1357,7 +1359,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   cross-plugin review:** a stream starting with a UTF-8 byte-order mark read nothing (dev-guardian's file decoding drops it) —
   one leading U+FEFF of each text is dropped now (RX-3; against dev-guardian's string reader, which never sees a BOM, the
   harnesses' BOM rows now differ — through its readMetricFile, 0 of 7 do); the prose said "its last 64 MiB" of a bound the
-  CLI never reaches (RX-4) and nothing of the two readers' stream order (RX-6).
+  CLI never reaches (RX-4) and nothing of the two readers' stream order (RX-6). **Review 3 (area MF, prose and fixtures):**
+  RX-4's "never reaches" held for `finish --run` only — one `done --run` reads every `_Verify:_` command's streams together,
+  and two of 40 MiB said `readBytes` (R3-A-1); a BOM at stderr's start is read past here while a `2>&1` capture holds it
+  mid-file (R3-A-2); the CHANGELOG's "compare — and show — as the exact decimals" — the delta and the applied tolerance
+  print as numbers (R3-A-3); two judge rows no reader prints — a current tolerance without its text, a reference without
+  its value text but a long tolerance text — kill the mutants reading `tolExact` off the reference alone or only with both
+  value texts (R3-A-4).
   **Review 1 (W):** "below the gate" also leaves out a finding the report lists in `blocking_findings` (R1-PZ-4: dev-spec
   reads the command's first `--fail-on`, dev-guardian its last — `--fail-on high --fail-on medium` named a medium as the
   blocker AND as "They do not block"; a subtraction, the rule checked before a key is built); `kinds` and a head naming only

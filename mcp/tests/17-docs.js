@@ -2270,8 +2270,29 @@ exports.run = async ({
     // output —, and a name printed on both streams reads stderr's here, print order in dev-guardian's `2>&1` file: one stream per name
     const flat = sec.replace(/\n\s*/g, " ");
     all("1.41.0 RX-4 / RX-6 docs: verification.md keeps the reader's 64 MiB bound apart from what the CLI runs, and gives the one-stream rule for a name both plugins read", {
-      bound: flat.includes("the reader's own bound, an output's last 64 MiB, is past what the CLI runs: a run whose output passes 64 MB records nothing") && !flat.includes("(its last 64 MiB"),
+      // (review 3, R3-A-1: done --run reads its several _Verify:_ commands together — those can reach the bound)
+      bound: flat.includes("The reader's own bound is an output's last 64 MiB: `finish --run` reads each check alone, under the CLI's 64 MB cap (a run whose output passes it records nothing — `output-too-large`, above), so it never reaches that bound; several `_Verify:_` commands of one `done --run` are read together and can reach it, and then `metricsDropped` says `readBytes`.") &&
+        !flat.includes("(its last 64 MiB") && !flat.includes("is past what the CLI runs"),
       streams: flat.includes("**One stream per name.** dev-spec reads stdout, then stderr, as two texts: a name printed on both reads stderr's line. dev-guardian's `metrics` reads one file — a CI job that captures `2>&1` reads it in print order, the last printed winning. Print each name on ONE stream"),
+    });
+    // 1.41.0 review 3 (prose): R3-A-1 the bound in the CHANGELOG and tasks-and-evidence.md too; R3-A-2 a BOM at stderr's start, read past
+    // here, sits mid-file in a `2>&1` capture; R3-A-3 values and tolerances show as printed, the delta and the applied tolerance as
+    // numbers; R3-B-1 the W bullet's diff-base line; R3-B-4 a quoted --fail-on is not read; R3-B-6 the prune row's accept at guard level tests
+    const LOG = rd("CHANGELOG.md").replace(/\s+/g, " "), TE = rd("docs", "maintainers", "tasks-and-evidence.md").replace(/\s+/g, " ");
+    const TOOLF = TOOL.replace(/\s+/g, " ");
+    all("1.41.0 review 3 docs (R3-A-1/2/3, R3-B-1/4/6): the reader's bound reachable only by several _Verify:_ commands of one done --run; stderr's BOM; values shown as printed, the delta and the applied tolerance as numbers; a quoted --fail-on not read; the diff-base line quoted as printed; the prune row's accept at guard level tests", {
+      boundLog: LOG.includes("`finish --run` reads each check alone, under the CLI's 64 MB cap, so it never reaches the reader's 64 MiB bound; several `_Verify:_` commands of one `done --run` are read together and can reach it, and then `metricsDropped` says `readBytes`") &&
+        !LOG.includes("the reader's own 64 MiB bound is past what the CLI runs"),
+      boundNotes: TE.includes("`finish --run` reads each check alone, so it never reaches the bound; several `_Verify:_` commands of one `done --run` are read together and can — `metricsDropped` says `readBytes`") &&
+        !TE.includes("from the CLI the bound is never reached"),
+      bom: flat.includes("Print each name on ONE stream and both read the same value. A byte-order mark at the start of stderr is read past by dev-spec, while a `2>&1` capture holds it mid-file, and dev-guardian reads nothing there."),
+      shown: LOG.includes("values and tolerances compare as the exact decimals printed and show as printed (120 → 122.4 at 2 % is `within`); the delta and the applied tolerance print as numbers.") &&
+        !LOG.includes("compare — and show — as the exact decimals") && flat.includes("the warning and `## Metrics` show them as printed (the delta and the applied tolerance as numbers)"),
+      failOn: LOG.includes("The gate's `--fail-on` is the command's LAST one, as dev-guardian reads it (an unquoted flag; a quoted one is not read, as in 1.40): 1.40 read the first"),
+      // (R3-B-1) the W bullet quotes the diff-base line as the engine prints it
+      diffBase: LOG.includes("The verdict's line says \"" + require(path.join(__dirname, "lib", "i18n.js")).msg("en").guardian.diffBase("<base>").replace(/^ · /, "") + "\" — one text, true for every version."),
+      prune: TOOLF.includes("each removal the user's, recorded through spec_impact's `retire` and, at guard level tests, the protected-test accept · `feedback`") &&
+        TE.includes("the record spec_impact's `retire` and, at guard level tests, the protected-test accept"),
     });
   }
 

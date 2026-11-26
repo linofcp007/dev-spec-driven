@@ -916,6 +916,19 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     const bad = rows.map(([r, c, want], i) => (js(J(r, c)) === js(want) ? null : i + " → " + js(J(r, c)))).filter(Boolean);
     ok(!bad.length && js(one("METRIC a=1 tolerance=2.50%").tolerance) === js({ amount: 2.5, percent: true, text: "2.50" }),
       "1.41.0 review 1 R1-DG-H-7 parity with dev-guardian 3.17 judge.ts: a tolerance of more than 15 significant digits is applied and compared on the decimal its line printed (`tolerance.text`) — the delta at a long tolerance within, a raise past a double's digits loosened, a long current tolerance tightening (bad: " + js(bad) + ")");
+    // (review 3, R3-A-4) two readings no reader prints — a hand-edited state, another writer: the tolerances are exact when EVERY one the
+    // two lines state carries its text, whatever the values carry. (T3) the CURRENT reading's tolerance without its text → both on their
+    // numbers (read from the reference alone, the current's text was undefined — a throw); (T4) a reference with no value text but a long
+    // tolerance text → the values on their numbers, the tolerance on its text: 100000000.000000009 < the delta 100000000.00000001 (read
+    // only when both VALUES had texts, its double 100000000.00000001 made the delta within)
+    const bare = (r, k) => { const x = JSON.parse(js(r)); if (k === "tolerance") delete x.tolerance.text; else delete x.text; return x; };
+    const jsafe = (r, c) => { try { const j = E.judgeMetric(r, c); return { verdict: j.verdict, loosened: j.loosened, delta: j.delta, applied: j.applied }; } catch (e) { return { threw: e.message }; } };
+    const curNoTolText = jsafe(one("METRIC a=0 better=lower tolerance=100000000.000000001"), bare(one("METRIC a=100000000.00000001 better=lower tolerance=100000000.000000002"), "tolerance"));
+    const refNoValueText = jsafe(bare(one("METRIC a=0 better=lower tolerance=100000000.000000009"), "value"), one("METRIC a=100000000.00000001 better=lower"));
+    all("1.41.0 review 3 R3-A-4: a current reading whose tolerance lacks its text is judged on the two tolerances' numbers; a reference without its value text but with a long tolerance text applies that text (got " + js({ curNoTolText, refNoValueText }) + ")", {
+      curNoTolText: js(curNoTolText) === js({ verdict: "regressed", loosened: null, delta: 100000000.00000001, applied: 100000000 }),
+      refNoValueText: js(refNoValueText) === js({ verdict: "regressed", loosened: "tolerance", delta: 100000000.00000001, applied: 100000000.00000001 }),
+    });
     // the stored path: finished.metrics keeps the tolerance's text and the next finish judges on it; a recorded tolerance without one, with
     // one that is not its amount's or one outside the grammar is read back on its number — and then both tolerances are judged on numbers
     const safe = (fn) => { try { return fn(); } catch (e) { return { threw: e.message }; } };
@@ -950,7 +963,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     // RX-3 (the cross-plugin review): an output that starts with a UTF-8 byte-order mark (EF BB BF — the CLI decodes a stream as UTF-8,
     // so it arrives as U+FEFF) reads its first line: ONE leading U+FEFF of each text is dropped, as dev-guardian 3.17's `metrics` file
     // decoding drops it (textEncoding.ts decodeText); a second one, or one mid-text, stays there too — each row is what dev-guardian's
-    // readMetricFile gives the same bytes (the differential harness: 0 of 7 disagree)
+    // readMetricFile gives the same bytes (the differential harness: 0 of 7 disagree). (Review 3, R3-A-2: stderr's leading BOM, the
+    // second text, is dropped too — a `2>&1` capture holds that one mid-file, where dev-guardian reads nothing: verification.md says so.)
     const utf8 = (...parts) => Buffer.concat(parts.map((p) => (typeof p === "string" ? Buffer.from(p, "utf8") : p))).toString("utf8");
     const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
     const sum = (t) => { const r = E.metricLinesOf(t); return { metrics: r.metrics.map((m) => [m.name, m.value, m.unit, m.better]), malformed: r.malformed, dropped: r.dropped }; };

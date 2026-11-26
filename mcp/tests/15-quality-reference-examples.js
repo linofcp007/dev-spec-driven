@@ -258,12 +258,45 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     });
     const bad = got.filter((g) => !(g.d === "warn" && g.detail === Q().refExamplesGone("`" + G + "`", 0, FILE) && g.x && js(g.x.gone) === js([G]) && !g.x.quoted.length && g.gone && !g.quotedLine));
     ok(bad.length === 0, "1.41.0 review 2: a gone file in the annotated form (`path` — note, `path` (note), path – note, path - note) warns and the brief names it gone, never quoted, whatever the note holds — a comma, ; , and, a dotted word, a second code span (got " + js(bad.map((g) => [g.c, g.d, g.x && { quoted: g.x.quoted.length, gone: g.x.gone }])) + ")");
-    // a still-pass row: the annotated form whose path is THERE — judged by that path alone (its note never read as a second file)
-    structure(p, table(["Pattern", "Copy", "Applies to"], [["There", "`src/api-keys/service.js` (and `src/api-keys/gone-x.js`, `src/api-keys/gone-y.js`)", "src/api-keys/**"]]));
+    // a still-pass row: the annotated form whose path is THERE — judged by that path alone (its note never read as a second file); the
+    // brief quotes the cell as written (review 3, R3-B-2)
+    const THERE = "`src/api-keys/service.js` (and `src/api-keys/gone-x.js`, `src/api-keys/gone-y.js`)";
+    structure(p, table(["Pattern", "Copy", "Applies to"], [["There", THERE, "src/api-keys/**"]]));
     const d2 = check(p), b2 = S.taskBrief(p, "api-keys", 5, {});
     const q2 = (b2.examples && b2.examples.quoted) || [];
-    ok(d2 && d2.status === "pass" && q2.length === 1 && !("asWritten" in q2[0]) && !b2.examples.gone.length,
-      "1.41.0 review 2: an annotated cell whose path is there passes, its row quoted by that path (got " + js([d2, b2.examples]) + ")");
+    ok(d2 && d2.status === "pass" && q2.length === 1 && q2[0].copy === THERE && q2[0].asWritten === true && !b2.examples.gone.length,
+      "1.41.0 review 2: an annotated cell whose path is there passes, its row quoted as written (got " + js([d2, b2.examples]) + ")");
+  }
+
+  // --- 1.41.0 review 3 (R3-B-2): the brief quotes an annotated cell AS WRITTEN (`asWritten`) — review 2 made it one path, so the brief
+  // wrapped the cell in a code span of its own: "`src/x.js` (… setup)`" (a stray backtick) and "`Service (`a.js`, `b.js`)`" (nested
+  // spans). Judging is unchanged: the gone check still reads its path — a gone annotated cell warns and is named, never quoted.
+  {
+    const p = demo("annotated-shown");
+    const H = "src/api-keys/service.js", G = "src/api-keys/gone.js";
+    const rows = [
+      ["Setup", "`" + H + "` (the handler shape, not its Express.js setup)", "src/api-keys/**"], // the reviewer's two shapes (q3.js), the file there
+      ["Svc", "Service (`" + H + "`, `" + G + "`)", "src/api-keys/**"],
+      ["Gone", "`" + G + "` (the handler shape, not its Express.js setup)", "src/api-keys/**"], // a gone annotated cell
+      ["Plain", "`" + H + "`", "src/api-keys/**"], // a single path, its own span: quoted as its path
+      ["Blank", "` " + H + "` (the v2.1, v3.0 shape)", "src/api-keys/**"], // annotated as the reader reads it: exemplarPath first
+    ];
+    structure(p, table(["Pattern", "Copy", "Applies to"], rows));
+    const d = check(p), b = S.taskBrief(p, "api-keys", 5, {});
+    const q = (b.examples && b.examples.quoted) || [];
+    const row = (pattern) => q.find((r) => r.pattern === pattern) || {};
+    const lines = b.brief.split("\n").filter((l) => /^- \*\*(?:Setup|Svc|Gone|Plain|Blank)\*\*/.test(l));
+    // a code span's backticks pair up on every line (no stray one) and none sits inside another (no "``" run, no "`Service (`")
+    const spans = (l) => (l.match(/`/g) || []).length % 2 === 0 && !/``/.test(l) && !/`[^`\s][^`]* \(`/.test(l);
+    all("1.41.0 review 3 (R3-B-2): the brief quotes an annotated Copy cell as written — no stray or nested backtick —, a plain one as its path; a gone annotated cell still warns and is named, never quoted (got " +
+      js({ d, quoted: q, gone: b.examples && b.examples.gone, lines }) + ")", {
+      asWritten: row("Setup").copy === rows[0][1] && row("Setup").asWritten === true && row("Svc").copy === rows[1][1] && row("Svc").asWritten === true &&
+        row("Blank").copy === rows[4][1] && row("Blank").asWritten === true && row("Plain").copy === H && !("asWritten" in row("Plain")),
+      printed: b.brief.includes("- **Setup** — " + rows[0][1] + " (src/api-keys/**)") && b.brief.includes("- **Svc** — " + rows[1][1] + " (src/api-keys/**)") &&
+        b.brief.includes("- **Plain** — `" + H + "` (src/api-keys/**)") && lines.length === 4 && lines.every(spans),
+      gone: d && d.status === "warn" && d.detail === Q().refExamplesGone("`" + G + "`", 0, FILE) && js(b.examples.gone) === js([G]) && !row("Gone").pattern &&
+        b.brief.includes(B().examplesGone("`" + G + "`")),
+    });
   }
 
   // --- 1.41.0 review 1 (M22): without a glob, a Copy file's folder matches a target's folder case-folded where the file system folds case
@@ -327,8 +360,17 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     const form = (t) => /one file per Copy cell — two files are two rows/i.test(t);
     all("1.41.0 review 2: steering-templates.md and tooling-reference.md say one file per Copy cell — two files are two rows; steering-templates.md says a note after the path is no second file; quality.md calls the list doubt the safety net, not the form", {
       references: form(st) && form(tr),
-      note: /a note after the path \(.{0,80}?\) is no second file — the path is judged/.test(st),
+      // (review 3, R3-B-3: the annotated forms named exactly — a `, i.e. …` / `; e.g. …` note is a list, never judged)
+      note: /A note after the one path — `path \(note\)` or `path — note` \(.{0,80}?\) — is no second file, whatever it names: the path is judged and the brief quotes the cell as written\. A `,` or `;` note \(.{0,60}?\) makes the cell a list, which is never judged\./.test(st),
       safetyNet: qm.includes("**A list is a doubt** — the safety net, not the form") && form(qm),
+    });
+    // 1.41.0 review 3 (R3-B-3, prose): tooling-reference.md and the CHANGELOG name the annotated forms the same way
+    const log = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8").replace(/\s+/g, " ");
+    const FORMS = "a note after the one path — `path (note)` or `path — note` — is no second file, whatever it names: the path is judged, the cell quoted as written; a `,` or `;` note makes the cell a list, which is never judged";
+    all("1.41.0 review 3: tooling-reference.md and the CHANGELOG name the annotated forms — `path (note)` / `path — note` is no second file, the cell quoted as written; a `,` / `;` note makes the cell a list, never judged", {
+      tooling: tr.includes(FORMS + ") — `examples` {file, quoted [{pattern, copy, appliesTo, `asWritten` on a list or annotated cell}]"),
+      changelog: log.includes("a cell naming several paths anyway is quoted as written, never judged; " + FORMS + "); doctor's project-level `reference-examples`") &&
+        !log.includes("while a note after the one path is no second file"),
     });
   }
 };

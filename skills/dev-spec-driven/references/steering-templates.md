@@ -262,11 +262,12 @@ the Copy column a path, Applies to its globs, at most 30 rows. A task's brief qu
 files (an Applies-to glob that matches, or with none the Copy file's own folder — an Applies-to folder needs `/**`:
 `src/api/**`, never `src/api/`); `spec_doctor` warns `reference-examples` when a Copy file is gone. One file per Copy
 cell — two files are two rows: a cell that names two anyway (`a.ts`, `b.ts`) is never judged and the brief quotes it as
-written, and without an Applies-to glob it may match no task; a note after the path (`` `a.ts` — the error mapping ``,
-`a.ts (the v2 shape)`) is no second file — the path is judged. A lesson's `example-copied`
-amendment adds a row here — the good file, never the copied one. Why here and not a `fileMatch` steering file: front
-matter makes a file govern approvals, and an exemplar changes with the code; `structure.md` without front matter governs
-nothing.
+written, and without an Applies-to glob it may match no task. A note after the one path — `path (note)` or
+`path — note` (`` `a.ts` — the error mapping ``, `a.ts (the v2 shape)`) — is no second file, whatever it names: the path
+is judged and the brief quotes the cell as written. A `,` or `;` note (`` `a.ts`, i.e. the handler ``) makes the cell a
+list, which is never judged. A lesson's `example-copied` amendment adds a row here — the good file, never the copied
+one. Why here and not a `fileMatch` steering file: front matter makes a file govern approvals, and an exemplar changes
+with the code; `structure.md` without front matter governs nothing.
 
 ---
 

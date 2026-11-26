@@ -132,7 +132,8 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
   }
 
   // 1.41.0 RX-3: a command whose stdout and stderr each start with a UTF-8 byte-order mark (EF BB BF) — done --run reads the first
-  // METRIC line of both (one leading BOM of each stream dropped, as dev-guardian's file decoding drops it)
+  // METRIC line of both (one leading BOM of each stream dropped: stdout's as dev-guardian's file decoding drops it; stderr's dev-spec
+  // reads past alone — a `2>&1` capture holds it mid-file, where dev-guardian reads nothing: verification.md → One stream per name)
   {
     const q = path.join(tmp, "metric-bom");
     S.initProject(q, ["core"], "en", {});

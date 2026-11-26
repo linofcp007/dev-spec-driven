@@ -152,7 +152,8 @@ function renderBrief(d, lang) {
     if (r.files.length && (r.more || r.truncated)) push(t.reuseFilesMore(r.more, !!r.truncated));
   }
   // 1.41: structure.md's Reference Examples rows for this task's files (a gone file named, never quoted), or that none is for them
-  // (1.41.0 review 1: a cell naming several files — asWritten — is quoted as the table wrote it, its own code spans kept)
+  // (1.41.0 review 1: a cell naming several files — asWritten — is quoted as the table wrote it, its own code spans kept; review 3:
+  // an annotated one, "`a.js` (note)", too)
   if (d.examples) {
     const x = d.examples;
     if (x.quoted.length || x.gone.length) {

@@ -2160,8 +2160,10 @@ view needs (the detail points there), tooling-reference.md's id.
   matches): a row whose Applies-to globs (split on blanks / `,` / `;`, backticks dropped) match a target as `steeringGlobMatch`
   does (a folder as `dir/`), or — without a glob — whose Copy file sits in a target's folder (a file target's folder, a
   folder target itself, case-folded where the file system folds case); an Applies-to FOLDER matches nothing without `/**`
-  (the references say so — no folder rule of its own); a gone file is named (`gone`), never quoted; a list cell is quoted
-  as written (`asWritten`: the renderer prints it without a code span of its own around it) — and with no glob its Copy
+  (the references say so — no folder rule of its own); a gone file is named (`gone`), never quoted; a list cell, and an
+  annotated one (1.41.0 review 3: read as its path, the brief wrapped "`x.ts` (note)" in a span of its own — a stray backtick
+  — and nested the spans of "Svc (`a.ts`, `b.ts`)"), is quoted as written (`asWritten`: the renderer prints it without a
+  code span of its own around it; the gone check still reads the annotated cell's path) — and with no glob its Copy
   folder is read off the cell as ONE path, so it may match no task (1.41.0 review 2: said, no matching of its own); at most
   `REF_BRIEF_ROWS` (6) rows within `REF_BRIEF_CHARS` (1,200), `omitted` counts the rest; rows but none for the task → the
   count line. `null` without a real row.
@@ -4094,4 +4096,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   reused on the cell's exemplarPath reading; 14 annotated shapes warn again as before the list rule, the list fixtures
   unchanged); ` or ` / ` + ` / ` & ` / ` / ` / ` ou ` / ` o ` joining two files, and a list cell with no Applies-to glob
   matching no task (R2-L-2 / R2-L-3: prose — one file per Copy cell, two files are two rows; no new separator, the doubt
-  documented as the safety net).
+  documented as the safety net). Review 3: R2-L-1 made an annotated cell one path, and the brief then quoted its path reading
+  in a span of its own — "`` `src/x.js` (… setup)` ``" a stray backtick, "`` `Service (`a.js`, `b.js`)` ``" nested spans
+  (R3-B-2): such a cell is quoted as written (`asWritten`), judged by its path as before (the reviewer's q3.js / q2b.js: every
+  doctor status the same on 9a16f5b6). The references name the annotated forms — `path (note)` / `path — note` — and say a
+  `,` / `;` note makes the cell a list (R3-B-3, prose). Left: a `,` note with no path-like word ("`x.ts`, the handler") is
+  neither a list nor annotated — never judged (no extension at its end), but the brief still wraps its path reading (a stray
+  backtick), as on 9a16f5b6; a rule for it would be one more predicate.
