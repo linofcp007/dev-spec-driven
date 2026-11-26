@@ -1147,10 +1147,11 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
     const G = S.msg("en").guardian;
     const warnOf = (g) => E.guardianWarnings([{ name: "guardian", command: CMD, guardian: g }], "en");
     const ch = (...c) => String.fromCharCode(...c);
-    // R1-PZ-4: --fail-on high --fail-on medium (dev-guardian reads the last): the medium blocks; W keeps the two lows beside it — one at
-    // its rule + file on another line, one at its rule + line in another file
+    // R1-PZ-4: --fail-on high --fail-on "medium" (dev-guardian reads the last, shell-unquoted; dev-spec reads the last unquoted one —
+    // review 2 — so high): the medium blocks; W keeps the two lows beside it — one at its rule + file on another line, one at its rule +
+    // line in another file
     const med = TI("medium", "test-skipped", "tests/a.test.js", 3);
-    const g4 = E.guardianRecord(x.p, null, CMD.replace("--fail-on high", "--fail-on high --fail-on medium"), 1,
+    const g4 = E.guardianRecord(x.p, null, CMD.replace("--fail-on high", "--fail-on high --fail-on \"medium\""), 1,
       r(1, [med], [med, TI("low", "test-skipped", "tests/a.test.js", 4), TI("low", "test-skipped", "tests/b.test.js", 3)]), "");
     const w4 = warnOf(g4);
     // R1-PZ-5: the head by kinds — tests only, suppressions only, both (the suppression counted, not listed: 3 mediums before it)
@@ -1167,7 +1168,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
     // cleanLine: the bidi controls and zero-width characters dropped — in a blocking finding and in W
     const bad = F("semgrep", "high", "r" + ch(0x202e) + "txt.exe" + ch(0x200b), "src/a" + ch(0x2066) + ".js", 1);
     const gX = E.guardianRecord(x.p, null, CMD, 1, r(1, [bad], [bad, TI("low", "test-skipped" + ch(0x200f, 0x202a), "tests/" + ch(0x2069) + "x.test.js", 5)]), "");
-    const RE_FMT = new RegExp("[" + ch(0x200b) + "-" + ch(0x200f) + ch(0x202a) + "-" + ch(0x202e) + ch(0x2066) + "-" + ch(0x2069) + "]");
+    const RE_FMT = new RegExp("[" + ch(0x200b) + ch(0x200e) + "-" + ch(0x200f) + ch(0x202a) + "-" + ch(0x202e) + ch(0x2066) + "-" + ch(0x2069) + "]"); // (ZWNJ / ZWJ kept — review 2)
     const xLines = [...E.guardianLines(gX, "en"), ...warnOf(gX)];
     // … and the feature's own files read the same way: one whose name holds U+200B is still its own (the blocker's [this feature],
     // the accepted timeout's "review it by hand") — the report side drops the character, so the _Implements:_ side does too
@@ -1204,6 +1205,52 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
       cleaned: gX.top[0].rule === "rtxt.exe" && gX.top[0].file === "src/a.js" && gX.testIntegrity.top[0].rule === "test-skipped" && gX.testIntegrity.top[0].file === "tests/x.test.js" &&
         xLines.length > 1 && xLines.every((l) => !RE_FMT.test(l)) && xLines.some((l) => l.includes("src/a.js:1")) && xLines.some((l) => l.includes("tests/x.test.js:5")),
       ownStillOwn: gZ.top[0].file === "src/a.js" && gZ.top[0].own === true && gZ.own === 1 && js(gZ.acceptedOwn) === js({ count: 1, files: [{ file: "src/a.js", kind: "file_timeout" }] }),
+    });
+  }
+
+  // 1.41.0 review 2: (R2-PZ-3) cleanLine drops U+200B, U+200E–U+200F, U+202A–U+202E and U+2066–U+2069 only — ZWNJ (U+200C) and ZWJ
+  // (U+200D) spell names (Persian, Indic, an emoji sequence): dropped, the blocker and W printed paths that do not exist, and a name
+  // folded into its twin in the own-file match; (pre-existing) the command's LAST --fail-on is read, as dev-guardian reads it — the
+  // first one made `--fail-on low --fail-on high` say "no new finding at or above low" while a medium weakened test was in neither W
+  // nor the blocker.
+  {
+    const x = project("g-fin-w-r2", "en");
+    const F = (tool, severity, rule, file, line) => ({ fingerprint: rule + file + line, tool, severity, category: "quality", title: rule, rule_id: rule, file_path: file, line_start: line, fix_available: false });
+    const TI = (sev, rule, file, line) => F("guardian-test-integrity", sev, rule, file, line);
+    const r = (exit, blocking, fresh) => js({ exit_code: exit, tool_version: "3.17.0", baseline_status: "present", coverage: "full", coverage_gaps: [], new_findings: fresh,
+      new_findings_count: fresh.length, blocking_findings: blocking, baseline_absent: false });
+    const G = S.msg("en").guardian;
+    const warnOf = (cmd, g) => E.guardianWarnings([{ name: "guardian", command: cmd, guardian: g }], "en");
+    const ch = (...c) => String.fromCharCode(...c);
+    // the reviewer's three names (zwnj.js) and the Persian one's twin without its ZWNJ — four files on disk
+    const persian = "tests/" + "ثبت" + ch(0x200c) + "نام.test.js", twin = "tests/" + "ثبتنام.test.js";
+    const emoji = "assets/" + ch(0xd83d, 0xdc68) + ch(0x200d) + ch(0xd83d, 0xdcbb) + ".test.js", hindi = "src/" + "क" + ch(0x94d) + ch(0x200d) + "ष.js";
+    for (const n of [persian, twin, emoji, hindi]) write(x.p, n, "x\n");
+    const fdir = path.join(x.p, ".specs", x.slug);
+    write(fdir, "tasks.md", "- [x] 1. Build it\n  _Implements: src/login.js, " + persian + ", " + hindi + "_\n");
+    const blocking = [F("semgrep", "high", "js.xss", hindi, 3), F("semgrep", "high", "js.xss", twin, 4)];
+    const gN = E.guardianRecord(x.p, fdir, CMD, 1, r(1, blocking, [...blocking, TI("medium", "test-skipped", persian, 2), TI("medium", "test-assertions-removed", emoji, 1),
+      TI("low", "test-skipped", "tests/" + ch(0x202e) + "y.test.js", 5)]), "");
+    const nLines = [...E.guardianLines(gN, "en"), ...warnOf(CMD, gN)];
+    const shown = [...gN.top.map((f) => f.file), ...gN.testIntegrity.top.map((f) => f.file)];
+    // --fail-on, both orders (the reviewer's wrev.js shape: a medium weakened test the gate lets pass), and single ones
+    const med = TI("medium", "test-skipped", "tests/a.test.js", 3);
+    const C_LH = CMD.replace("--fail-on high", "--fail-on low --fail-on high"), C_HL = CMD.replace("--fail-on high", "--fail-on high --fail-on low");
+    const gLH = E.guardianRecord(x.p, null, C_LH, 0, r(0, [], [med]), "");
+    const gHL = E.guardianRecord(x.p, null, C_HL, 1, r(1, [med], [med]), "");
+    const gEq = E.guardianRecord(x.p, null, CMD.replace("--fail-on high", "--fail-on=critical"), 0, r(0, [], [med]), "");
+    const gOne = E.guardianRecord(x.p, null, CMD.replace("--fail-on high", "--fail-on medium"), 1, r(1, [med], [med]), "");
+    const lh = [...E.guardianLines(gLH, "en"), ...warnOf(C_LH, gLH)], hl = [...E.guardianLines(gHL, "en"), ...warnOf(C_HL, gHL)];
+    all("1.41.0 review 2 (R2-PZ-3, --fail-on): ZWNJ / ZWJ stay in a report's names — printed as written, each an existing file, the own file matched and its ZWNJ-less twin not —, U+202E still dropped; the LAST --fail-on is read, both orders (got " +
+      js({ gN: [gN.top, gN.own, gN.testIntegrity], nLines, gLH: [gLH.failOn, gLH.verdict, gLH.testIntegrity, lh], gHL: [gHL.failOn, gHL.verdict, gHL.testIntegrity, hl], gEq: gEq.failOn, gOne: gOne.failOn }) + ")", {
+      asWritten: js(gN.top.map((f) => [f.file, f.own])) === js([[hindi, true], [twin, false]]) && gN.own === 1 &&
+        js(gN.testIntegrity.top.map((f) => f.file)) === js([persian, emoji, "tests/y.test.js"]) && shown.slice(0, 4).every((f) => fs.existsSync(path.join(x.p, f))),
+      printed: [hindi + ":3", twin + ":4", persian + ":2", emoji + ":1", "tests/y.test.js:5"].every((s) => nLines.some((l) => l.includes(s))) && nLines.every((l) => !l.includes(ch(0x202e))),
+      lastLowHigh: gLH.failOn === "high" && gLH.verdict === "pass" && lh.includes(G.pass("high", 1)) &&
+        js(gLH.testIntegrity) === js({ count: 1, top: [{ severity: "medium", rule: "test-skipped", file: "tests/a.test.js", line: 3, kind: "test" }], kinds: ["test"] }) &&
+        lh.some((l) => l.startsWith("dev-guardian: 1 new finding(s) of its test-integrity check below --fail-on high — tests/a.test.js:3 weakened test: test-skipped (medium)")),
+      lastHighLow: gHL.failOn === "low" && gHL.verdict === "blocked" && !("testIntegrity" in gHL) && !hl.some((l) => /below --fail-on/.test(l)) && hl.some((l) => /at or above low/.test(l)),
+      single: gEq.failOn === "critical" && gOne.failOn === "medium",
     });
   }
 

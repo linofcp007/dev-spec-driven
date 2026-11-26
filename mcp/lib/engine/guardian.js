@@ -374,10 +374,12 @@ const SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
 // (the class built from character codes: an editor turns the escapes of U+2028 / U+2029 into the characters, which end a regex literal)
 const RE_REPORT_CONTROL = new RegExp("[" + String.fromCharCode(0) + "-" + String.fromCharCode(0x1f) + String.fromCharCode(0x7f) + "-" +
   String.fromCharCode(0x9f) + String.fromCharCode(0x2028, 0x2029) + "]+", "g");
-// … and the bidi controls and zero-width format characters dropped (U+200B–U+200F, U+202A–U+202E, U+2066–U+2069 — 1.41.0 review 1: a
-// U+202E in a rule or a file reordered the warning's and the blocker's text). Tested before the replace: most lines hold none, and a
-// second global replace on every one of a 120k-finding report's facts cost W a quarter more.
-const REPORT_FORMAT_SRC = "[" + String.fromCharCode(0x200b) + "-" + String.fromCharCode(0x200f) + String.fromCharCode(0x202a) + "-" +
+// … and the bidi controls and the zero-width space dropped (U+200B, U+200E–U+200F, U+202A–U+202E, U+2066–U+2069 — 1.41.0 review 1: a
+// U+202E in a rule or a file reordered the warning's and the blocker's text). ZWNJ / ZWJ (U+200C / U+200D) stay: they spell names — a
+// Persian word, an Indic conjunct, an emoji sequence (review 2: dropped, a printed path named no file and a name folded into its twin).
+// Tested before the replace: most lines hold none, and a second global replace on every one of a 120k-finding report's facts cost W a
+// quarter more.
+const REPORT_FORMAT_SRC = "[" + String.fromCharCode(0x200b) + String.fromCharCode(0x200e) + "-" + String.fromCharCode(0x200f) + String.fromCharCode(0x202a) + "-" +
   String.fromCharCode(0x202e) + String.fromCharCode(0x2066) + "-" + String.fromCharCode(0x2069) + "]";
 const RE_REPORT_FORMAT = new RegExp(REPORT_FORMAT_SRC, "g"), RE_REPORT_FORMAT_ANY = new RegExp(REPORT_FORMAT_SRC);
 const cleanLine = (v, max) => {
@@ -455,8 +457,8 @@ function findingFacts(f, rel) {
 // blocks) → { count, top: ≤ GUARDIAN_INTEGRITY_TOP [{severity, rule, file, line, kind}], by severity, then the report's order, kinds: the
 // kinds among ALL of them, GUARDIAN_INTEGRITY_KINDS' order — the warning's head names those checks only } | null.
 // A --compact report lists the blocking findings only: none to read there (newFindings still counts them). blocked(facts): one of the
-// report's blocking_findings (blockedFacts) — never W's (1.41.0 review 1: dev-spec reads the command's FIRST --fail-on, dev-guardian its
-// last).
+// report's blocking_findings (blockedFacts) — never W's (1.41.0 review 1: dev-spec read the command's FIRST --fail-on, dev-guardian its
+// last; both read the last since review 2, but dev-guardian unquotes a shell-quoted one dev-spec does not read).
 function integrityFindings(fresh, failOn, rel, blocked) {
   if (!fresh) return null;
   const bar = severityRank(failOn), below = [];
@@ -551,7 +553,7 @@ const wholeLine = (v) => {
 };
 // A guardian check's run → its summary (finishChecks[name].guardian, suiteChecks[].guardian): { verdict — stable: pass · blocked ·
 // incomplete · config · not-found (the launcher found no dev-guardian) · no-launcher (.specs/guardian.cjs is missing) · exit (any
-// other code) —, exit, failOn (the command's --fail-on, else high), parsed (the JSON report was read), blocking?, newFindings? (the
+// other code) —, exit, failOn (the command's LAST --fail-on, as dev-guardian reads it, else high), parsed (the JSON report was read), blocking?, newFindings? (the
 // report's new_findings_count — --compact —, else its new_findings), own? (blocking findings in the feature's _Implements:_ files),
 // top? (≤ GUARDIAN_TOP: {severity, rule, file, line, own} — own first, then by severity, then the report's order), gaps? (coverage
 // gaps, ≤ 3, each whole up to GUARDIAN_LINE_MAX), gapDetails? (the gating coverage_gap_details, ≤ 5: {tool, kind, remedy?, changed?
@@ -560,7 +562,8 @@ const wholeLine = (v) => {
 // other — gaps of another shape}: accepted_gap_details per line when present, else the line), acceptedOwn? (those files that are the
 // feature's own _Implements:_ files: {count, files ≤ GUARDIAN_SAID: [{file, kind}]}), notes? (the coverage_notes, each once),
 // staleTimeouts? (unused_timeout_acceptances: {count, files ≤ GUARDIAN_SAID}), testIntegrity? (1.41.0 — W: the new findings of
-// dev-guardian's test-integrity and suppression passes below --fail-on, integrityFindings: {count, top ≤ 3}), message? (config: dev-guardian's own),
+// dev-guardian's test-integrity and suppression passes below --fail-on that are not among the report's blocking_findings,
+// integrityFindings: {count, top ≤ 3, kinds — the passes among all of them, which W's head names}), message? (config: dev-guardian's own),
 // baseline? ("absent": every existing finding counted as new), tool? (the report's tool_version), update? (dev-guardian is older
 // than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran),
 // diffBase? (the --diff-base the launcher announced — 1.33), diffBaseUncommitted? (true: that base already contains HEAD, so only
@@ -572,7 +575,9 @@ const wholeLine = (v) => {
 function guardianRecord(projectDir, dir, command, exitCode, report, output, uncommitted) {
   const code = Number.isInteger(exitCode) ? exitCode : parseInt(exitCode, 10);
   const cmd = String(command || "");
-  const fo = /--fail-on[=\s]+(info|low|medium|high|critical)\b/i.exec(cmd);
+  // the LAST --fail-on, as dev-guardian reads it (review 2: the first one made `--fail-on low --fail-on high` say "at or above low")
+  let fo = null;
+  for (const m of cmd.matchAll(/--fail-on[=\s]+(info|low|medium|high|critical)\b/gi)) fo = m;
   const text = String(output || "");
   const j = guardianJson(report);
   const g = { verdict: "exit", exit: Number.isInteger(code) ? code : null, failOn: fo ? fo[1].toLowerCase() : "high", parsed: !!j };
