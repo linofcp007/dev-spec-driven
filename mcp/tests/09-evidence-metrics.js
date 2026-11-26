@@ -946,4 +946,26 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
       grammar: js(v("y")) === js(["regressed", "tolerance"]),
     });
   }
+  {
+    // RX-3 (the cross-plugin review): an output that starts with a UTF-8 byte-order mark (EF BB BF — the CLI decodes a stream as UTF-8,
+    // so it arrives as U+FEFF) reads its first line: ONE leading U+FEFF of each text is dropped, as dev-guardian 3.17's `metrics` file
+    // decoding drops it (textEncoding.ts decodeText); a second one, or one mid-text, stays there too — each row is what dev-guardian's
+    // readMetricFile gives the same bytes (the differential harness: 0 of 7 disagree)
+    const utf8 = (...parts) => Buffer.concat(parts.map((p) => (typeof p === "string" ? Buffer.from(p, "utf8") : p))).toString("utf8");
+    const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+    const sum = (t) => { const r = E.metricLinesOf(t); return { metrics: r.metrics.map((m) => [m.name, m.value, m.unit, m.better]), malformed: r.malformed, dropped: r.dropped }; };
+    const none = { metrics: [], malformed: 0, dropped: [] };
+    const rows = [
+      [utf8(BOM, "METRIC a=1\n"), { metrics: [["a", 1, null, null]], malformed: 0, dropped: [] }],
+      [utf8(BOM, "# METRIC a=1 ms\r\n"), { metrics: [["a", 1, "ms", null]], malformed: 0, dropped: [] }],
+      [utf8(BOM, "  METRIC a=1 better=lower tolerance=2%\n"), { metrics: [["a", 1, null, "lower"]], malformed: 0, dropped: [] }],
+      [utf8(BOM, BOM, "METRIC a=1\n"), none], [utf8("x\n", BOM, "METRIC a=1\n"), none],
+      [utf8(BOM, "\nMETRIC b=2\n"), { metrics: [["b", 2, null, null]], malformed: 0, dropped: [] }], [utf8(BOM, "\n"), none],
+    ];
+    const got = rows.map(([t]) => sum(t));
+    const bad = rows.map(([, want], i) => (js(got[i]) === js(want) ? null : i + " → " + js(got[i]))).filter(Boolean);
+    const each = sum([utf8(BOM, "METRIC out_bom=1\n"), utf8(BOM, "METRIC err_bom=2\n")]); // stdout and stderr, each starting with one
+    ok(!bad.length && js(each.metrics) === js([["out_bom", 1, null, null], ["err_bom", 2, null, null]]),
+      "1.41.0 RX-3 parity with dev-guardian 3.17 metricFile.ts: an output starting with a UTF-8 byte-order mark reads its first METRIC line — one leading U+FEFF of each text dropped, never a second one nor one mid-text (bad: " + js({ bad, each }) + ")");
+  }
 };

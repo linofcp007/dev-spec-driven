@@ -130,4 +130,22 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
       words: /printed no readable METRIC line of that name \(a malformed line, or one past a reader bound, is not read — the run's note names it\)/.test(warn),
     });
   }
+
+  // 1.41.0 RX-3: a command whose stdout and stderr each start with a UTF-8 byte-order mark (EF BB BF) — done --run reads the first
+  // METRIC line of both (one leading BOM of each stream dropped, as dev-guardian's file decoding drops it)
+  {
+    const q = path.join(tmp, "metric-bom");
+    S.initProject(q, ["core"], "en", {});
+    w(q, "scripts/bom.js", "const BOM = Buffer.from([0xef, 0xbb, 0xbf]);\nprocess.stdout.write(Buffer.concat([BOM, Buffer.from(\"METRIC out_bom=1\\n\")]));\n" +
+      "process.stderr.write(Buffer.concat([BOM, Buffer.from(\"METRIC err_bom=2\\n\")]));\n");
+    const c = S.createFeature(q, "Bom", undefined, "x", undefined, "en", "change");
+    fs.writeFileSync(path.join(c.dir, "change.md"), "# Change: Bom\n\n## Summary\nThe change.\n\n## Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer.\n\n## Approach\nOne string.\n\n## Tasks\n- [ ] 1. [US1] Measure it\n" +
+      "  - _Requirements: US-1.AC-1_\n  - _Verify: node scripts/bom.js_\n");
+    S.approvePhase(q, c.slug, null, "t", { through: "tasks" });
+    const done = json((await run(q, ["done", c.slug, "1", "--run", "--json"])).stdout);
+    all("1.41.0 RX-3: done --run over a command whose stdout and stderr each start with a UTF-8 byte-order mark reads both streams' first METRIC line (got " + JSON.stringify(done && [done.ok, done.metrics]) + ")", {
+      read: !!done && done.ok && (done.metrics || []).map((m) => m.name + "=" + m.value).sort().join(" ") === "err_bom=2 out_bom=1",
+    });
+  }
 };

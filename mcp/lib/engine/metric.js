@@ -144,9 +144,11 @@ function readLine(line) {
 // later one of the same name replaced), malformed (failed attempts), dropped: [the bounds that dropped input], lastMalformed? }.
 // Walked from the END with lastIndexOf — never a split (a 64 MiB output costs a scan, no copy) —, so the bounds keep what was
 // printed LAST: a benchmark loop's final iteration. 3b(7): a later malformed line of a name read stays malformed; the last valid
-// reading stands. 3b(5): names live in a Map — `__proto__` is an ordinary name.
+// reading stands. 3b(5): names live in a Map — `__proto__` is an ordinary name. ONE leading U+FEFF of each text is dropped: a
+// stream that starts with a UTF-8 byte-order mark (EF BB BF, decoded as UTF-8) reads its first line, as dev-guardian 3.17's file
+// decoding drops it (RX-3) — a second one, or one mid-text, stays, there too.
 function metricLinesOf(input) {
-  const texts = (Array.isArray(input) ? input : [input]).map((t) => (typeof t === "string" ? t : ""));
+  const texts = (Array.isArray(input) ? input : [input]).map((t) => (typeof t !== "string" ? "" : t.charCodeAt(0) === 0xfeff ? t.slice(1) : t));
   const B = METRIC_BOUNDS;
   const kept = new Map(); // name → { reading, ti, at }
   const dropped = new Set();
