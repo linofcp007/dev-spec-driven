@@ -493,9 +493,12 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
     fs.writeFileSync(path.join(op, ".specs", "x", "tasks.md"), "# Tasks\n\n- [ ] 1. a task for US-1.AC-9\n  - _Requirements: US-1.AC-9_\n");
     if (link(path.join(op, ".specs"), path.join(p, ".specs", "f", ".history", ".specs"))) {
       const st0 = fs.readFileSync(path.join(op, ".specs", "x", ".state.json"), "utf8");
-      const outs = ["tasks.md", "requirements.md"].map((file) => hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), {
+      // with the session's project exported, and without (no anchor: the path's own outermost .specs is the project)
+      const bare = { ...process.env };
+      delete bare.CLAUDE_PROJECT_DIR; delete bare.SPEC_PROJECT_DIR;
+      const outs = [{ ...process.env, CLAUDE_PROJECT_DIR: p }, bare].flatMap((env) => ["tasks.md", "requirements.md"].map((file) => hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), {
         input: js({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: path.join(p, ".specs", "f", ".history", ".specs", "x", file) }, cwd: p }),
-        cwd: p, env: { ...process.env, CLAUDE_PROJECT_DIR: p } }).stdout);
+        cwd: p, env }).stdout));
       all("1.41.1 fix round 2 (R2-R-2): the save hook's project is the gates' own root (the session's project recorded) — an edit through a link NAMED .specs below .specs/ traces / lints nothing of the project behind it, stamps neither its .state.json nor its roadmap (got " + js(outs) + ")", {
         noLeak: () => outs.every((o) => !/OUTSIDE|US-1\.AC-9|US-1\.AC-1/.test(o)),
         stateUntouched: () => fs.readFileSync(path.join(op, ".specs", "x", ".state.json"), "utf8") === st0,
