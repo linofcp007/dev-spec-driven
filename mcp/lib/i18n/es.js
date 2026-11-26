@@ -1138,6 +1138,7 @@ const msg = {
       notGenerated: (file) => `${file} existe y no lo generó dev-spec — no se ha modificado.`,
       specsLinked: (rel) => `Se rechazó escribir en ${rel}: esa carpeta es un enlace (simbólico o junction) o apunta fuera de .specs/ — sustitúyela por una carpeta normal y vuelve a intentarlo. No se escribió nada.`,
       specsLinkedFile: (rel) => `Se rechazó escribir ${rel}: ese fichero es un enlace (simbólico) o apunta fuera de .specs/ — sustitúyelo por un fichero normal y vuelve a intentarlo. No se escribió.`,
+      featureLinked: (rel) => `${rel} es un enlace (simbólico o junction) o apunta fuera de .specs/ — dev-spec nunca lee ni escribe una funcionalidad a través de un enlace: sustitúyelo por una carpeta normal.`,
       specsNotFolder: (rel) => `${rel} es un fichero donde dev-spec necesita una carpeta — renómbralo o muévelo y vuelve a intentarlo. No se escribió nada allí.`,
       specsNotFile: (rel) => `${rel} es una carpeta donde dev-spec escribe un fichero — renómbrala o muévela y vuelve a intentarlo. No se escribió.`,
       roadmapNotWritten: (file, broken) => `${broken} ${file} no se regeneró — generado a partir de lo que roadmap.json aún da, perdería las dependencias, el backlog y los hitos que no puede leer. Corrige .specs/roadmap.json y vuelve a ejecutar ${DEV_SPEC} roadmap --write.`,
@@ -1223,6 +1224,7 @@ const msg = {
     doctor: {
       steeringMissing: (list) => `falta: ${list}`,
       steeringOk: "steering esencial presente (incl. constitución)",
+      specsLinks: (list, more) => `enlaces en .specs/ a través de los cuales dev-spec nunca lee ni escribe — se leen como ausentes: ${list}${more ? ` y ${more} más` : ""}. Sustituye cada uno por una carpeta o un fichero normal (copia allí su contenido).`,
       requirementsMissing: "falta requirements.md",
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] sin resolver — resuelve antes del diseño`,
       clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] sin resolver en change.md — resuelve antes de aprobar el plan`,
@@ -3298,6 +3300,7 @@ const msg = {
       finishWarn: (slug, list, more) => `Pruebas protegidas de ${slug} cambiadas sin motivo registrado (ninguna tarea las volvió a registrar, ningún levantamiento las cubre): ${list}${more ? ` y ${more} más` : ""} — comprueba que cada cambio es intencionado (una prueba cambiada para pasar es una prueba debilitada); si lo es, acéptalo: ${DEV_SPEC} feature protect ${slug} <fichero> --accept --reason "…".`,
       changed: (file) => `${file} (cambiada)`,
       deleted: (file) => `${file} (borrada)`,
+      ignored: (slug, list, more) => `Pruebas protegidas de ${slug}: ${list}${more ? ` y ${more} más` : ""} — están en .state.json, pero no son ficheros de este proyecto por su ruta real (fuera de él, o tras un enlace): nunca se calculan ni se cuentan; elimina esas entradas a mano.`,
       summaryHead: "## Pruebas protegidas",
       summaryLine: (n, k) => `${n} fichero(s) de prueba protegido(s); ${k} cambiado(s) sin motivo registrado.`,
       summaryLift: (file, by, reason) => `- protección levantada: ${file} — por ${by}: "${reason}"`,

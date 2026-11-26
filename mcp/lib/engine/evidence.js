@@ -17,7 +17,7 @@ let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, c
   extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest, isBacktickUnit,
   isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap, realPathLoose,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
-  traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps, gitDirsOf;
+  traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps, gitDirsOf, specsReadBlocked, specsStat;
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact; // guardian.js — dev-guardian's gate: which check runs it, its run read, its verdict, what is refused / stored, --compact
 let fastCheckCandidates; // scan.js — 1.36: what the root manifests suggest as the fast check (fastCheckOffer)
@@ -27,7 +27,8 @@ function __link(E) { ({ recordTiming, runMetricsOf, metricResultFields, fastChec
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
-  taskProse, timeOf, tKey, toPosix, traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps, gitDirsOf } = E); }
+  taskProse, timeOf, tKey, toPosix, traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps, gitDirsOf,
+  specsReadBlocked, specsStat } = E); }
 
 // Verification evidence (verification-before-completion): a task that declares _Verify: <command>_ is only
 // trustworthy when its result was recorded. Evidence lives in .state.json → evidence[<task number>].
@@ -1404,6 +1405,7 @@ function readObservedLog(file) {
 function readLogTail(file, max) {
   let text = "", read = 0;
   let fd;
+  if (specsReadBlocked(file)) return { records: [], read }; // the read gate (1.41.1): a linked log is none (never counted as runs)
   try {
     fd = fs.openSync(file, "r");
     const size = fs.fstatSync(fd).size;
@@ -1485,7 +1487,7 @@ const observedKey = (s) => String(s == null ? "" : s).replace(/\s+/g, " ").trim(
 function observedAny(projectDir) {
   const files = [observedLogFile(projectDir, null), ...featureDirs(projectDir).filter((f) => !f.archived).slice(0, OBSERVED_MAX_FEATURES)
     .map((f) => path.join(f.dir, ".execution", OBSERVED_LOG))];
-  return files.some((f) => { try { return fs.statSync(f).size > 0; } catch { return false; } });
+  return files.some((f) => { const st = specsStat(f); return !!st && st.size > 0; }); // through the read gate
 }
 // The stamp of a reported run: "cli" when the CLI ran it itself (`done --run`, `finish --run`), else what the log says about a
 // run of the EXPECTED command (expected: the task's _Verify:_ values / [the check's command] — observedRun).
@@ -1656,9 +1658,8 @@ function appendLog(exDir, name, entry, trim) {
 // Bounded: past OBSERVED_MAX_BYTES the log keeps its newest lines, up to half of that (replaced atomically). Two hooks
 // appending while one trims can lose a line — the run then reads unobserved and is simply run again.
 function trimObservedLog(file) {
-  let size;
-  try { size = fs.statSync(file).size; } catch { return; }
-  if (size <= OBSERVED_MAX_BYTES) return;
+  const st = specsStat(file); // through the read gate (a linked log: none — never trimmed, never read)
+  if (!st || st.size <= OBSERVED_MAX_BYTES) return;
   const keep = [];
   let bytes = 0;
   const entries = readObservedLog(file);

@@ -9,7 +9,6 @@
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
-const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
@@ -24,7 +23,7 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, briefDesignSystem, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize;
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize, readBytes;
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
 let guardLevel, protectOnTick, protectedCount, tickRecorded; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
@@ -42,7 +41,7 @@ function __link(E) { ({ runMetricsOf, metricResultFields, briefLessons, briefExa
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, briefDesignSystem, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize } = E); }
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize, readBytes } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -511,7 +510,7 @@ function taskNumberError(lang, v) {
 // The file's bytes (a change's change.md for its tasks.md — writeFileAtomic's alias), or null.
 function tasksBytes(file) {
   const real = existsRaw(file) ? file : changeAlias(file) || file;
-  try { return fs.readFileSync(real); } catch { return null; }
+  return readBytes(real); // the read gate (1.41.1): never through a link below .specs/
 }
 // The encoding decodeText read the bytes in: a UTF-16 BOM decides, anything else is UTF-8.
 const textEncoding = (raw) => (raw.length >= 2 && raw[0] === 0xff && raw[1] === 0xfe ? "utf16le" : raw.length >= 2 && raw[0] === 0xfe && raw[1] === 0xff ? "utf16be" : "utf8");

@@ -87,9 +87,14 @@ const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 // meta = the parsed roadmap.json meta (what a spec_init / `init` change is compared with), undefined when the file is broken.
 // UTF-8 or UTF-16 with a BOM (Windows PowerShell 5.1's Out-File: read as UTF-8 it was "off").
 function rawLevel(dir) {
+  const file = path.join(dir, ".specs", "roadmap.json");
+  // (1.41.1) a roadmap.json that is a LINK reads as gone — the engine's read gate never reads through it (approvalRoadmapGone): fail
+  // closed at ask while the .specs/ holds features, as for a deleted one (its target's meta is never read)
+  const st = lstatOf(file);
+  if (st && st.isSymbolicLink()) return { level: roadmapGone(dir) ? 1 : 0 };
   let text;
   try {
-    text = HU.readText(path.join(dir, ".specs", "roadmap.json"));
+    text = HU.readText(file);
   } catch (e) {
     // missing while the .specs/ holds features (a feature folder's .state.json) — deleted: fail closed at ask, as
     // the engine's approvalGuardLevel (meta unknown). Missing in a .specs/ without features, or unreadable: out of the way.
@@ -136,15 +141,24 @@ function partial(raw) {
     return failClosed(s.meta);
   }
 }
-// a .specs/ without roadmap.json that holds features (a feature folder's .state.json) — rawLevel fails closed on it.
+// a .specs/ without roadmap.json that holds features (a feature folder's .state.json) — rawLevel fails closed on it. A folder that
+// is a link (its Dirent: no folder) or a .state.json that is one holds no feature — the engine's read gate reads them as absent (1.41.1).
 function roadmapGone(dir) {
   const fs = require("fs");
   const root = path.join(dir, ".specs");
   try {
-    return fs.readdirSync(root, { withFileTypes: true }).some((d) => d.isDirectory() && !d.name.startsWith(".") && fs.existsSync(path.join(root, d.name, ".state.json")));
+    return fs.readdirSync(root, { withFileTypes: true }).some((d) => {
+      if (!d.isDirectory() || d.name.startsWith(".")) return false;
+      const st = lstatOf(path.join(root, d.name, ".state.json"));
+      return !!st && !st.isSymbolicLink();
+    });
   } catch {
     return false;
   }
+}
+// lstat, never followed → the Stats or null.
+function lstatOf(p) {
+  try { return require("fs").lstatSync(p); } catch { return null; }
 }
 // past the pre-check — a project the call may act on has the guard on and the call may be an approval —
 // the engine failed (a broken install, an exception): ASK, never a silent allow. The reason comes from the i18n tables when they load

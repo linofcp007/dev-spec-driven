@@ -20,7 +20,8 @@ let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, cr
 let guardianOffer, guardianLauncherAudit; // guardian.js — 1.29 (1.30: the launcher's audit / rewrite): dev-guardian's gate offered (never set) when it is installed or the project has .guardian/
 let fastCheckOffer; // evidence.js — 1.36: the fast check the root manifests suggest (offered, never set)
 let UI_STATES_CHECK, REF_EXAMPLES_CHECK; // quality.js — 1.38: doctor's ui-states, an advisory warn · 1.41: reference-examples, the project's table
-function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, CRITICAL_FLOW_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
+let specsReadBlocked; // files.js — the read gate (1.41.1)
+function __link(E) { ({ specsReadBlocked, activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, CRITICAL_FLOW_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir,
   isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,
   maybeRefreshRoadmap, missingPackTracks, nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile,
@@ -107,6 +108,7 @@ function stampSpecVersion(projectDir) {
 // file there is left alone, like ensureLockIgnore does.
 function missingIgnoreLines(specsDir) {
   let cur;
+  if (specsReadBlocked(path.join(specsDir, ".gitignore"))) return []; // a linked one is left alone (ensureLockIgnore's rule), never read
   try { cur = fs.readFileSync(path.join(specsDir, ".gitignore"), "utf8"); } catch (e) { return e.code === "ENOENT" ? LOCK_IGNORE_LINES.slice() : []; }
   const have = new Set(cur.replace(/^\uFEFF/, "").split(/\r?\n/).map((l) => l.trim()));
   return LOCK_IGNORE_LINES.filter((l) => !have.has(l));

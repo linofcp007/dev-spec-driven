@@ -359,7 +359,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, fsCalls, __dir
     all("1.41 friction: a check within its budget (or with too few runs) gives no hint; the cost is a COUNT — with _Budget:_ lines next_action makes the fs calls of the same call without them plus ONE open (timings.jsonl); without meta.checks the hint and the status read nothing (got " +
       js({ naW: [naW.step, naW.friction], diff, hintCalls, loadCalls }) + ")", {
       none: () => naW.step === "finish" && naW.friction === undefined,
-      count: () => js(diff) === js({ openSync: 1 }),
+      // (1.41.1: and the read gate's lstat of timings.jsonl — its .execution/ folder the call without them checked already)
+      count: () => js(diff) === js({ lstatSync: 1, openSync: 1 }),
       noChecks: () => js(hintCalls) === js(loadCalls),
     });
     // once per call: spec_upgrade runs next_action per feature — two features at their finish step open timings.jsonl ONCE; a timing written

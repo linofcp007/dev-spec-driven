@@ -44,9 +44,14 @@ const { unexpandedVar, expandHome, isNetwork: isNetworkPath } = PROBE;
 function resolveProjectDir(arg) {
   return PROBE.resolveProjectDir(arg, { io: PROBE_IO });
 }
-// The probe's rule through the engine's view of the disk: a dry run's folders and files seen as made (isDirSafe, readFileHead,
-// safeReaddir). doctor.js isDevSpecDir reads the rule with it.
-const PROBE_IO = { isDir: (p) => isDirSafe(p), exists: (p) => fs.existsSync(p), head: (p) => readFileHead(p, 4000) || "", folders: (p) => safeReaddir(p) };
+// The probe's rule through the engine's view of the disk: a dry run's folders and files seen as made (the sink, safeReaddir).
+// doctor.js isDevSpecDir reads the rule with it. NOT the read gate (1.41.1): which folder IS the project is ONE answer for the engine,
+// the hooks, the status line and the completion (probe.js reads the disk itself) — a marker behind a link counts there as here; the
+// spec text behind it is still never read. (folders reads .specs/ itself, which the gate never blocks.)
+const PROBE_IO = {
+  isDir: (p) => { if (CTX.DRY_RUN) { const e = dryEntry(p); if (e) return !!e.dir; } return statIsDir(p); },
+  exists: (p) => fs.existsSync(p), head: (p) => headOf(p, 4000) || "", folders: (p) => safeReaddir(p),
+};
 // The nearest folder at or above `start` that holds a dev-spec .specs/ (the probe's rule: roadmap.json, steering/, a generated
 // ROADMAP.md or a feature folder with its .state.json or classification.md) — `start` itself also with any .specs/ folder (one made
 // by hand before init) — or null, at most PROBE.PROJECT_MAX_UP levels up. A network path is never walked (no stat goes up a share).
@@ -531,7 +536,8 @@ function featureLocked(fn, when) {
     const args = arguments;
     if (when && !when(args)) return fn.apply(this, args);
     const f = existingFeature(projectDir, isObj(name) ? name.name : name); // the options form: (projectDir, { name, … })
-    if (!f.ok) return fn.apply(this, args);
+    // a folder that is a link (1.41.1: `feature-linked` for the readers) goes on to its lock — the write gate's refusal there, as ever
+    if (!f.ok && !f.linked) return fn.apply(this, args);
     return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: (b) => featureBusyResult(projectDir, f.slug, null, b),
       onRefused: (e) => gateRefusal(e, featureLangSafe(projectDir, f.slug)) }); // a linked feature folder: refused up front
   };
@@ -737,20 +743,14 @@ function specsFileContained(projectDir, file) {
   if (k !== null) CTX.READ_CACHE.set(k, v);
   return v;
 }
+// (1.41.1) the read gate's verdict: absent → true; a regular file the gate lets through → true; behind a link, or no regular file →
+// false. The file's nearest .specs/ is the gate's; a file outside every .specs/ is judged by its lstat alone.
 function specsFileContainedNow(projectDir, file) {
+  const g = specsReadGate(file);
+  if (g) return !g.blocked && (g.kind === "none" || g.kind === "file");
   let st;
   try { st = fs.lstatSync(file); } catch { return true; }
-  if (st.isSymbolicLink() || !st.isFile()) return false;
-  try {
-    const root = specsRoot(projectDir);
-    const rk = CTX.READ_CACHE ? CONTAINED_KEY + "root:" + readCacheKey(root) : null;
-    let realRoot = rk !== null ? CTX.READ_CACHE.get(rk) : undefined;
-    if (realRoot === undefined) { realRoot = fs.realpathSync.native(root); if (rk !== null) CTX.READ_CACHE.set(rk, realRoot); }
-    const real = fs.realpathSync.native(file);
-    return real !== realRoot && withinRoot(realRoot, real);
-  } catch {
-    return false;
-  }
+  return !st.isSymbolicLink() && st.isFile();
 }
 // a file the engine is about to WRITE below .specs/ (an export's document): no folder between .specs/ and it,
 // nor the file itself, is a link (a symbolic link, a junction), and each resolves inside the real .specs/ — a committed
@@ -845,9 +845,91 @@ function specsWriteBlock(root, target, opts = {}) {
         try { real = path.join(fs.realpathSync.native(path.dirname(deepest)), path.basename(deepest)); } catch { real = null; }
       }
     }
-    if (!realRoot || !real || real === realRoot || !withinRoot(realRoot, real)) return { kind: "link", at: deepest, file: deepest === target && !opts.dir };
+    if (!realRoot || !real || !realInsideSpecs(realRoot, real)) return { kind: "link", at: deepest, file: deepest === target && !opts.dir };
   }
   return null;
+}
+// THE predicate both gates share: a real path strictly inside the real .specs/ (a part resolving to .specs itself is a link back to it).
+const realInsideSpecs = (realRoot, real) => real !== realRoot && withinRoot(realRoot, real);
+
+// ---------------------------------------------------------------------------
+// THE read gate (1.41.1): below a project's .specs/ nothing is READ through a link — the write gate's rule, read the other way
+// ---------------------------------------------------------------------------
+// Below the nearest .specs (specsRootOf — never .specs itself, which may be a link: a project keeping its specs elsewhere), a part
+// between it and the target that is a symbolic link / junction (lstat), that lstat can't read (EACCES…), or a folder whose real path
+// is not strictly inside the real .specs/ (realInsideSpecs — another reparse point: a mount point) makes the target read as ABSENT.
+// Every engine reader of the disk asks it first — readRaw (readIfExists, readJson, readContained), existsRaw (existsCached),
+// readDirCached (walkProject), safeReaddir, isDirSafe, readFileHead(s), readBytes, specsStat — and the bounded readers outside this
+// module ask specsReadBlocked (readLogTail, readStopReport, fileHash). Why: a committed `.specs/<feature> -> ~/notes`, a linked
+// steering/ or `tasks.md -> ~/.ssh/config` had its text quoted into briefs, the catalog, SPECS.md, retro.md and merge summaries (the
+// write gate refused every write through them; the reads followed). The memo lives in the call's read-cache scope: one lstat per
+// distinct part, one realpath per distinct FOLDER (a regular file can't redirect: its folder's real path is checked); a write drops
+// the written path's entries and its folders' (forgetCached). lstat, never a Dirent's type: Windows lists a cloud-file placeholder
+// (OneDrive) as a link, its lstat doesn't.
+const PART_KEY = "\u0000part:";
+const REALDIR_KEY = "\u0000realdir:";
+// One part as lstat reads it → "link" | "dir" | "file" | "other" | "none" (ENOENT / ENOTDIR) | "error" (anything else: never read through).
+function partKind(p) {
+  const k = CTX.READ_CACHE ? PART_KEY + readCacheKey(p) : null;
+  if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
+  let v;
+  try {
+    const st = fs.lstatSync(p);
+    v = st.isSymbolicLink() ? "link" : st.isDirectory() ? "dir" : st.isFile() ? "file" : "other";
+  } catch (e) {
+    v = e && (e.code === "ENOENT" || e.code === "ENOTDIR") ? "none" : "error";
+  }
+  if (k !== null) CTX.READ_CACHE.set(k, v);
+  return v;
+}
+// A folder's real path (memoized like partKind), or null when it can't be resolved.
+function realDirOf(p) {
+  const k = CTX.READ_CACHE ? REALDIR_KEY + readCacheKey(p) : null;
+  if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
+  let v;
+  try { v = fs.realpathSync.native(p); } catch { v = null; }
+  if (k !== null) CTX.READ_CACHE.set(k, v);
+  return v;
+}
+// → null (not below a .specs/, or .specs itself) | { blocked: true, at } (the part that refuses it) | { blocked: false, kind } (the
+// target's own lstat kind — "none" when it, or a part above it, is not there).
+function specsReadGate(p) {
+  const abs = path.resolve(String(p));
+  if (abs.indexOf(path.sep + ".specs") === -1) return null; // a text test first: a project's code never pays a disk call here
+  const root = specsRootOf(abs);
+  if (!root || root === abs) return null;
+  const segs = path.relative(root, abs).split(path.sep);
+  let cur = root, folder = root, kind = "none";
+  for (let i = 0; i < segs.length; i++) {
+    cur = path.join(cur, segs[i]);
+    kind = partKind(cur);
+    if (kind === "link" || kind === "error") return { blocked: true, at: cur };
+    if (kind === "none") break;
+    if (kind === "dir") { folder = cur; continue; }
+    if (i < segs.length - 1) kind = "none"; // a file on the way: nothing below it
+    break;
+  }
+  if (folder !== root) {
+    const realRoot = realSpecsRoot(root), real = realDirOf(folder);
+    if (!realRoot || !real || !realInsideSpecs(realRoot, real)) return { blocked: true, at: folder };
+  }
+  return { blocked: false, kind };
+}
+// Is `p` behind a link below a .specs/ (it reads as absent)?
+const specsReadBlocked = (p) => { const g = specsReadGate(p); return !!g && g.blocked; };
+// A gate verdict that leaves nothing to read: blocked, or (below a .specs/) not there — the read is skipped, no failed open.
+const gateNothing = (g) => !!g && (g.blocked || g.kind === "none");
+// fs.statSync of a path through the gate → its Stats, or null (absent, unreadable, behind a link below .specs/). Uncached, like the
+// stats it replaces (a stamp that comes and goes, an mtime) — only the gate's parts are memoized.
+function specsStat(p) {
+  if (specsReadBlocked(p)) return null;
+  try { return fs.statSync(p); } catch { return null; }
+}
+// Is there an ENTRY at p — anything, a link included (lstat, never followed)? A write target's name (rename / archive / restore onto
+// it, a snapshot's number, a create's re-run): a link there is taken. Behind a link on the way (its folder blocked): nothing to see.
+function entryAt(p) {
+  if (specsReadBlocked(path.dirname(path.resolve(String(p))))) return false;
+  try { fs.lstatSync(p); return true; } catch { return false; }
 }
 // ".specs/feature/x.md" — a gate path as the messages name it (a folder ends in "/").
 function gateRel(root, at, folder) {
@@ -927,6 +1009,10 @@ function readIfExists(file) {
 // null when the file can't be read. Uncached (not the read cache): these readers visit each file once per call.
 let HEAD_BUF = null; // one scratch buffer, reused (the reads are synchronous)
 function readFileHead(file, maxChars) {
+  return gateNothing(specsReadGate(file)) ? null : headOf(file, maxChars); // the read gate (1.41.1): never through a link below .specs/
+}
+// The head itself, ungated — the project rule's reading (PROBE_IO: which folder IS the project is one answer everywhere).
+function headOf(file, maxChars) {
   const chars = Math.max(1, Math.floor(maxChars) || 1);
   const max = chars * 4;
   if (!HEAD_BUF || HEAD_BUF.length < max) HEAD_BUF = Buffer.allocUnsafe(max);
@@ -995,7 +1081,10 @@ function readFileHeads(files, maxChars) {
     const text = readFileHead(files[k++], chars);
     spent += process.hrtime.bigint() - t0;
     if (k === AHEAD_PROBE && files.length - k >= AHEAD_MIN && mode !== "off" && (mode === "on" || mode === "fail"
-      || (spent >= BigInt(AHEAD_PROBE * AHEAD_SLOW_US * 1000) && BigInt(files.length - k) * spent >= BigInt(AHEAD_PROBE * AHEAD_START_US * 1000)))) pool = aheadPool(files.slice(k), chars, mode === "fail");
+      || (spent >= BigInt(AHEAD_PROBE * AHEAD_SLOW_US * 1000) && BigInt(files.length - k) * spent >= BigInt(AHEAD_PROBE * AHEAD_START_US * 1000)))) {
+      // the read gate first: a file behind a link below .specs/ is handed to the pool as a path no open accepts (its head: null)
+      pool = aheadPool(files.slice(k).map((f) => (specsReadBlocked(f) ? "\u0000" : f)), chars, mode === "fail");
+    }
     return text;
   };
   return { next, stop: () => { if (pool) pool.stop(); } };
@@ -1064,12 +1153,18 @@ function readRaw(file) {
   if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
   let text;
   try {
-    text = decodeText(fs.readFileSync(file));
+    text = gateNothing(specsReadGate(file)) ? null : decodeText(fs.readFileSync(file)); // the read gate: never through a link below .specs/
   } catch {
     text = null;
   }
   if (k !== null) CTX.READ_CACHE.set(k, text);
   return text;
+}
+// A spec file's BYTES (a tick rewrites tasks.md's checkbox bytes and nothing else: tasks.js tasksBytes) through the read gate — or null.
+// Uncached: the caller writes them back at once.
+function readBytes(file) {
+  if (gateNothing(specsReadGate(file))) return null;
+  try { return fs.readFileSync(file); } catch { return null; }
 }
 // A file's bytes (the first n of buf) as text, the way a Windows editor or shell wrote them: a UTF-16 BOM decides
 // — FF FE is UTF-16LE (Windows PowerShell 5.1's `>` / Out-File, Notepad's "Unicode"), FE FF UTF-16BE (swapped, then read as LE) —
@@ -1099,6 +1194,8 @@ function existsCached(p) {
 }
 function existsRaw(p) {
   if (CTX.DRY_RUN) { const e = dryEntry(p); if (e) return e.dir || e.text !== null; } // 1.25
+  const g = specsReadGate(p); // below .specs/: the read gate's own lstat answers (a link on the way: absent) — no stat of its own
+  if (g) return !g.blocked && g.kind !== "none";
   if (!CTX.READ_CACHE) return fs.existsSync(p);
   const k = EXISTS_KEY + readCacheKey(p);
   if (CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
@@ -1116,6 +1213,7 @@ function readDirDisk(d) {
   if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
   let entries = null;
   try {
+    if (gateNothing(specsReadGate(d))) throw new Error("not read"); // the read gate: a linked folder below .specs/ lists nothing
     entries = fs.readdirSync(d, { withFileTypes: true });
     entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   } catch {
@@ -1140,6 +1238,8 @@ function forgetCached(file, opts = {}) {
   for (;;) {
     CTX.READ_CACHE.delete(EXISTS_KEY + k);
     CTX.READ_CACHE.delete(DIR_KEY + k);
+    CTX.READ_CACHE.delete(PART_KEY + k); // the read gate's lstat / realpath of it (a folder made, a file created)
+    CTX.READ_CACHE.delete(REALDIR_KEY + k);
     const up = path.dirname(k);
     if (up === k) break;
     k = up;
@@ -1169,7 +1269,7 @@ function invalidateReadCache() {
 function safeReaddir(p) {
   let names;
   try {
-    names = fs.readdirSync(p);
+    names = gateNothing(specsReadGate(p)) ? [] : fs.readdirSync(p); // the read gate: a linked folder below .specs/ lists nothing
   } catch {
     names = [];
   }
@@ -1185,8 +1285,11 @@ function withinRoot(root, p) {
 
 const isDirSafe = (p) => {
   if (CTX.DRY_RUN) { const e = dryEntry(p); if (e) return !!e.dir; } // 1.25
-  try { return fs.statSync(p).isDirectory(); } catch { return false; }
+  const g = specsReadGate(p); // below .specs/: the read gate's lstat (a linked folder is no folder of the specs)
+  if (g) return !g.blocked && g.kind === "dir";
+  return statIsDir(p);
 };
+const statIsDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 // Windows and macOS file systems are case-insensitive: `_Implements: SRC/App.js_` names src/app.js there.
 const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
 const toPosix = (p) => String(p).split(path.sep).join("/");
@@ -1211,6 +1314,20 @@ function writeInsideProject(projectDir, abs) {
 // and symlinks resolved) of its nearest EXISTING ancestor, plus the segments below it. null when nothing resolves (EACCES, ELOOP…:
 // no answer). The probe's (mcp/lib/probe.js realPathLoose — the guards' readings of a path walk the same way): one copy.
 const realPathLoose = (p) => PROBE.realPathLoose(p);
+// THE project file by its real path (1.41.1; finish.js projectFile until then): `rel` — project-relative TEXT (a task's marker, a
+// .state.json key, a baseline's file) — → its absolute path when it names a path inside the project by its text (a string, not
+// blank, not absolute, no drive — `C:x` —, inside root, not root) AND by its real path (realPathLoose: an existing path's own, a
+// missing one's nearest existing ancestor's — a file behind a junction out answers null whether or not it is there: no existence
+// oracle) AND, below .specs/, not behind a link (the read gate); else null. rootReal: realRootOf(root).
+function projectFileReal(root, rootReal, rel) {
+  if (typeof rel !== "string" || !rel.trim() || path.isAbsolute(rel) || /^[A-Za-z]:/.test(rel)) return null;
+  const abs = path.resolve(root, rel);
+  if (abs === root || !isInsideDir(root, abs)) return null;
+  const real = realPathLoose(abs);
+  if (!real || !isInsideDir(rootReal, real)) return null;
+  return specsReadBlocked(abs) ? null : abs;
+}
+const realRootOf = (root) => { try { return fs.realpathSync.native(root); } catch { return root; } };
 // A network path in its plain UNC spelling (`\\?\UNC\host\share\…` and `\\.\UNC\…` → `\\host\share\…`), for a text comparison.
 function plainUnc(p) {
   const s = String(p);
@@ -1253,4 +1370,5 @@ module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensu
   ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel, shapeError, withReadCache,
   readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, readFileHeads, decodeText, existsCached,
   existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
-  FOLD_CASE, toPosix, isInsideDir, writeInsideProject, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO, __link };
+  FOLD_CASE, toPosix, isInsideDir, writeInsideProject, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO,
+  specsReadBlocked, readBytes, specsStat, entryAt, projectFileReal, realRootOf, __link };

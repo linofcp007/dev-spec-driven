@@ -1217,7 +1217,8 @@ exports.run = async ({ ok, all, eq, remeasure, fsCalls, rpc, payload, S, tmp, ho
   }
 
   { // 1.36.0 review 4 (R4-PT-5): protect <file> and the accept read an existing file by its real path, as the guard does — through a
-    // junction they end the real file's lift and add no second key; a junction out of the project keeps the typed path
+    // junction they end the real file's lift and add no second key; a junction out of the project is outside-project (1.41.1 R3: it hashed
+    // the outside file under the typed path — the accept's dry run returned that hash)
     const p = project("accept-junction", { approvalGuard: "ask" });
     const out = path.join(tmp, "pt-outside-tests");
     w(p, "src/x.js", "x\n"); w(p, "test/auth.test.js", "auth\n"); w(out, "x.test.js", "x\n");
@@ -1236,11 +1237,11 @@ exports.run = async ({ ok, all, eq, remeasure, fsCalls, rpc, payload, S, tmp, ho
     const k2 = keys(), gEnd = g(p, "test/auth.test.js");
     const outside = S.manageFeature(p, "protect", "alpha", "t3/x.test.js", {});
     const k3 = keys();
-    all("1.36.0 review 4 (R4-PT-5) guard tests: the accept and protect <file> through a junction (t2/ → test/) act on the real file — its lift ended, no second key, the guard asks again; a junction out of the project keeps the typed key (got " +
-      js({ acc: [acc.ok, acc.unlifted, acc.accepted && acc.accepted.file], k1, gAcc: gAcc.why, end: [end.ok, end.unlifted], k2, gEnd: gEnd.why, outside: outside.ok, k3 }) + ")", {
+    all("1.36.0 review 4 (R4-PT-5) guard tests: the accept and protect <file> through a junction (t2/ → test/) act on the real file — its lift ended, no second key, the guard asks again; a junction out of the project is outside-project, nothing listed (1.41.1 R3) (got " +
+      js({ acc: [acc.ok, acc.unlifted, acc.accepted && acc.accepted.file], k1, gAcc: gAcc.why, end: [end.ok, end.unlifted], k2, gEnd: gEnd.why, outside: [outside.ok, outside.code], k3 }) + ")", {
       accept: () => acc.ok && acc.unlifted === "test/auth.test.js" && acc.accepted.file === "test/auth.test.js" && k1 === "test/auth.test.js" && gAcc.why === "protected-test",
       protect: () => end.ok && end.unlifted === "test/auth.test.js" && end.protectedTests.added === 0 && k2 === "test/auth.test.js" && gEnd.why === "protected-test",
-      outside: () => outside.ok && k3 === "t3/x.test.js,test/auth.test.js",
+      outside: () => outside.ok === false && outside.code === "outside-project" && k3 === "test/auth.test.js",
     });
   }
 

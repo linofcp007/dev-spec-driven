@@ -474,8 +474,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   `implementsRefs` reads them: backticks off), past `BASELINE_CAP` — the planned walk's files passed as `known` (no second
   realpath check) and dated once, its glob and folder listings the call's memoized ones (1.36.0 review 2: a second walk doubled a
   big glob's brief; `09-evidence-fast-check` COUNTS it since 1.40 — the brief and next_task with the fast check make, under the
-  project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's; a 2.5×
-  timed backstop beside, testing.md → Adding a test) → `clean` · `stale` (run older than an edit) · `failed` ·
+  project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's (1.41.1: and
+  the read gate's two lstats and one realpath of its path); a 2.5× timed backstop beside, testing.md → Adding a test) → `clean` · `stale` (run older than an edit) · `failed` ·
   `missing` · `unknown` (`observedAny` false: no harness log — no note); `partial: true` when the planned set stopped at its cap
   (no other status, no note). A file date is never a blocker (gates-and-approvals.md), so this only ever warns. The log line's
   `tool` (the observe hook passes it for a PowerShell run only) gives `pwsh`: the latest run came from the PowerShell tool, whose
@@ -841,7 +841,8 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
 - **The list** — `.state.json → protectedTests` `{at, via: approval | protect, files: {"<rel>": "<16 hex>" | null}, truncated?,
   lifts: [{file, at, by, reason, confirmed?} | {file, at, by, revoked: true} | {file, at, by, reason, accepted: true,
   confirmed?}]}` (the hash: finish.js `fileHash`, CRLF-normalized,
-  shortened; null: unreadable or gone). `stateFromFile` refuses a wrong shape (`jsonShape.protectedTests`); protect.js `listOf`
+  shortened; null: unreadable or gone — 1.41.1: or no file of the project by its REAL path, files.js `projectFileReal`: a `..` / absolute /
+  `C:x` path, a junction out of the project, a link below .specs/ — never hashed, `hashRel`). `stateFromFile` refuses a wrong shape (`jsonShape.protectedTests`); protect.js `listOf`
   tolerates any shape on its own (guardCheck reads the file raw).
 - **The snapshot** — at a feature's FIRST complete tasks approval at level tests (`approvePhase`: `p === "tasks"`, the approval
   complete — a role's waiting sign-off takes none; a fast-forward through tasks passes it on): `protectWalk(projectDir, first)` —
@@ -905,7 +906,8 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   order — `recordedHashes`, finish's union, gains nothing; `knownWalk` maps a walk; 1.36.0 review 4): a plain protect (no
   guard-down), a snapshot or a run never authorises new content; only a file no live feature lists gets its hash now. `protect <f>
   <file>` and the accept read an EXISTING file by its real path (`realRel`, as the decision does — one through a junction is
-  the real file's key; a real path outside the project keeps the typed one). **In force** (`activeLifts`, over the live features' states — `liveStatesWith`; guardCheck's
+  the real file's key; a real path outside the project — a junction out — is `outside-project`, never hashed: 1.41.1 R3, the accept's
+  dry run returned the outside file's hash). **In force** (`activeLifts`, over the live features' states — `liveStatesWith`; guardCheck's
   `ctx.states`): per file the LATEST record across every feature's lifts — a lift until a `revoked` record of any feature
   follows it. Nothing else ends one: no expiry, no finish, no open-task test (1.36.0 review 3 went back to this, the 1.36 rule —
   History). An accept record is no lift (`activeLifts` skips it; the accept's own `revoked` record ends a lift).
@@ -922,7 +924,10 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   by, reason, accepted: true, confirmed?}`. Result: protect's (`protectedTests`, `lifts` — an accept record marked `accepted`,
   `unlifted`) + `accepted` and the `accepted` note. Plain `protect` stays no guard-down. The CLI takes `--reason` on protect only
   with `--accept`. The merge driver unites the accept record with the lifts by identity (`LIFT_ID` holds `accepted`).
-- **Finish** (`protectedTestsFinish`, after the gate-only return): each listed file hashed again — a hash matching NO record of
+- **Finish** (`protectedTestsFinish`, after the gate-only return): a listed key that is no file of the project by its real path
+  (`projectFileReal` — `.state.json` is the repository's, its keys untrusted) is SKIPPED — not hashed, not counted, never unexplained, so
+  finish's answer never depends on what it names (1.41.1 R3: `changed` or not told a guessed content apart) — and NAMED: `ignored`
+  in the result, one line in finish's warning (`protectedTests.ignored`). Each other listed file is hashed again — a hash matching NO record of
   any live feature (snapshot, tick, accept) and no lift in force (`activeLifts` over every live feature, the finishing one's state
   read under the lock) → `unexplained` {file, status: changed | deleted}; a lift in force explains a change (`lifted`). A warning
   naming the first 5 (+ how many more) whose line is the ACCEPT (`finishWarn` — never a lift: a lift lasts) and the merge

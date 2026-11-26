@@ -353,7 +353,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, hookIn, remeasure, fsC
     const st = S.taskBrief(p, f.slug, 1).fastCheck;
     all("1.36 review 2 (FC2-3): a big-glob task's brief and next_task with the fast check make, under the project root, the fs calls of the call without it plus the planned walk's and ONE open more (the observed log's) — each file realpath-checked and dated once —, and four of them cost at most ×2.5 four of the call without it plus the walk (a backstop) (got " +
       js({ counted, walk, s, tries: [s.brief.tries, s.next.tries], st }) + ")", {
-      counted: () => js(counted) === js({ brief: { openSync: 1 }, next: { openSync: 1 } }),
+      // (1.41.1: and the read gate's calls for the log — lstat of .execution/ and of the log, one realpath of .execution/)
+      counted: () => js(counted) === js({ brief: { lstatSync: 2, "realpathSync.native": 1, openSync: 1 }, next: { lstatSync: 2, "realpathSync.native": 1, openSync: 1 } }),
       walkSeen: () => walk.statSync > 0 && walk["realpathSync.native"] > 0, // (a spy that saw nothing would make every difference 0)
       backstop: () => s.brief.ratio <= 2.5 && s.next.ratio <= 2.5,
       status: () => st && st.status === "clean" && st.partial === true,

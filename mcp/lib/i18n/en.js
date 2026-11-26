@@ -1160,6 +1160,8 @@ const msg = {
       specsLinked: (rel) => `Refused to write into ${rel}: that folder is a link (a symbolic link, a junction) or resolves outside .specs/ — replace it with a plain folder, then retry. Nothing was written.`,
       // the write gate (engine/files.js specsWriteGate): a FILE that is a link, a path of the wrong kind
       specsLinkedFile: (rel) => `Refused to write ${rel}: that file is a link (a symbolic link) or resolves outside .specs/ — replace it with a plain file, then retry. It was not written.`,
+      // the read gate (1.41.1, engine/files.js specsReadGate): a feature folder that is a link — read as absent, never read through
+      featureLinked: (rel) => `${rel} is a link (a symbolic link, a junction) or resolves outside .specs/ — dev-spec never reads or writes a feature through a link: replace it with a plain folder.`,
       specsNotFolder: (rel) => `${rel} is a file where dev-spec needs a folder — rename or move it, then retry. Nothing was written there.`,
       specsNotFile: (rel) => `${rel} is a folder where dev-spec writes a file — rename or move it, then retry. It was not written.`,
       roadmapNotWritten: (file, broken) => `${broken} ${file} was not regenerated — rendered from what roadmap.json still gives, it would lose the dependencies, backlog and milestones it can't read. Fix .specs/roadmap.json, then run ${DEV_SPEC} roadmap --write again.`,
@@ -1241,6 +1243,8 @@ const msg = {
     doctor: {
       steeringMissing: (list) => `missing: ${list}`,
       steeringOk: "core steering present (incl. constitution)",
+      // 1.41.1 the read gate: the links below .specs/ the reads treat as absent (named — never what they point at)
+      specsLinks: (list, more) => `links below .specs/ dev-spec never reads or writes through — they read as absent: ${list}${more ? ` and ${more} more` : ""}. Replace each with a plain folder or file (copy its content in).`,
       requirementsMissing: "requirements.md missing",
       clarificationsOpen: (n) => `${n} unresolved [NEEDS CLARIFICATION] — resolve before design`,
       clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change
@@ -3553,6 +3557,8 @@ const msg = {
       finishWarn: (slug, list, more) => `Protected tests of ${slug} changed with no recorded reason (no task re-baselined them, no lift covers them): ${list}${more ? ` and ${more} more` : ""} — check each change is intended (a test made to pass is a weakened test); if it is, accept it: ${DEV_SPEC} feature protect ${slug} <file> --accept --reason "…".`,
       changed: (file) => `${file} (changed)`,
       deleted: (file) => `${file} (deleted)`,
+      // 1.41.1: a listed key that is no file of the project by its real path — never hashed, never counted (nothing about what it names)
+      ignored: (slug, list, more) => `Protected tests of ${slug}: ${list}${more ? ` and ${more} more` : ""} — listed in .state.json but no file of this project by its real path (outside it, or behind a link): never hashed nor counted; remove the entries by hand.`,
       summaryHead: "## Protected tests",
       summaryLine: (n, k) => `${n} protected test file(s); ${k} changed with no recorded reason.`,
       summaryLift: (file, by, reason) => `- lifted: ${file} — by ${by}: "${reason}"`,

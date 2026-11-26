@@ -18,19 +18,20 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isCodeFile, isImplementsGlob, isObj, isRecord, isTestFixture,
   isSlashUnit, isTestFile, isWsUnit, readFileHead, testNamed, italic, latestSnapshot, mdCell, mdPlainText, normWs, oneLiner, ownEvidence,
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
-  requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions, safeReaddir,
+  requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions,
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
   criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir, approvedContentSame, wsText, headingEntries;
-function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
+let readDirCached; // files.js — the read gate's listing (1.41.1)
+function __link(E) { ({ readDirCached, acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
   codeBlockLines, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, FOLD_CASE,
   gitEvidence, globFiles, GUARD_CODE_EXT, historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord,
   isCodeFile, isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isTestFixture, readFileHead, testNamed, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
   readIfExists, readJson, realLines, requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes,
-  retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
+  retiredDecisions, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
   statePath, stripEnd, stripEnds, criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
   trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
@@ -942,11 +943,13 @@ const CODE_TRACE_FILES_PER_ID = 10; // files listed per ID (every one still coun
 // them now, with PowerShell's, shell's, C/C++'s, Lua's, R's, Erlang's, Haskell's, Clojure's, Objective-C / VB's and Perl's.
 const isTestCodePath = (rel) => isTestFile(rel);
 const tKey = (num) => "T-" + parseInt(num, 10);
-// The feature folders under .specs/ (live, then archived — their tests may still be in the tree).
+// The feature folders under .specs/ (live, then archived — their tests may still be in the tree). FOLDERS only (1.41.1): a link's Dirent is
+// none (the read gate reads nothing through it anyway), and a root file (ROADMAP.md, roadmap.json) was read as a folder.
 function specFeatureDirs(projectDir) {
-  const root = specsRoot(projectDir);
-  return safeReaddir(root).filter((n) => !n.startsWith(".") && n !== "_archive" && !reservedSlug(n, root)).map((n) => path.join(root, n))
-    .concat(safeReaddir(path.join(root, "_archive")).map((n) => path.join(root, "_archive", n)));
+  const root = specsRoot(projectDir), arch = path.join(root, "_archive");
+  const dirs = (d) => (readDirCached(d) || []).filter((e) => e.isDirectory()).map((e) => e.name);
+  return dirs(root).filter((n) => !n.startsWith(".") && n !== "_archive" && !reservedSlug(n, root)).map((n) => path.join(root, n))
+    .concat(dirs(arch).map((n) => path.join(arch, n)));
 }
 // One bounded, read-only walk of the project (walkProject: SCAN_IGNORE, hidden dirs and .specs skipped) over its TEST
 // files — code in any language of CODE_EXT (isCodeFile: a .bats suite and Perl's t/*.t too) that isTestFile says is a test:

@@ -1138,6 +1138,7 @@ const msg = {
       notGenerated: (file) => `${file} existe e não foi gerado pelo dev-spec — não foi alterado.`,
       specsLinked: (rel) => `Recusado escrever em ${rel}: essa pasta é uma ligação (link simbólico, junction) ou aponta para fora de .specs/ — substitui-a por uma pasta normal e tenta de novo. Nada foi escrito.`,
       specsLinkedFile: (rel) => `Recusado escrever ${rel}: esse ficheiro é uma ligação (link simbólico) ou aponta para fora de .specs/ — substitui-o por um ficheiro normal e tenta de novo. Não foi escrito.`,
+      featureLinked: (rel) => `${rel} é uma ligação (link simbólico, junction) ou aponta para fora de .specs/ — o dev-spec nunca lê nem escreve uma funcionalidade através de uma ligação: substitui-a por uma pasta normal.`,
       specsNotFolder: (rel) => `${rel} é um ficheiro onde o dev-spec precisa de uma pasta — muda-lhe o nome ou move-o e tenta de novo. Nada foi escrito lá.`,
       specsNotFile: (rel) => `${rel} é uma pasta onde o dev-spec escreve um ficheiro — muda-lhe o nome ou move-a e tenta de novo. Não foi escrito.`,
       roadmapNotWritten: (file, broken) => `${broken} ${file} não foi regenerado — gerado a partir do que o roadmap.json ainda dá, perderia as dependências, o backlog e os marcos que não consegue ler. Corrige .specs/roadmap.json e corre ${DEV_SPEC} roadmap --write de novo.`,
@@ -1223,6 +1224,7 @@ const msg = {
     doctor: {
       steeringMissing: (list) => `em falta: ${list}`,
       steeringOk: "steering essencial presente (incl. constituição)",
+      specsLinks: (list, more) => `ligações em .specs/ que o dev-spec nunca lê nem escreve — são lidas como ausentes: ${list}${more ? ` e mais ${more}` : ""}. Substitui cada uma por uma pasta ou um ficheiro normal (copia o conteúdo para lá).`,
       requirementsMissing: "requirements.md em falta",
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] por resolver — resolve antes do design`,
       clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] por resolver no change.md — resolve antes de aprovar o plano`,
@@ -3298,6 +3300,7 @@ const msg = {
       finishWarn: (slug, list, more) => `Testes protegidos de ${slug} alterados sem motivo registado (nenhuma tarefa os voltou a registar, nenhum levantamento os cobre): ${list}${more ? ` e mais ${more}` : ""} — confirma que cada alteração é intencional (um teste alterado para passar é um teste enfraquecido); se for, aceita-a: ${DEV_SPEC} feature protect ${slug} <ficheiro> --accept --reason "…".`,
       changed: (file) => `${file} (alterado)`,
       deleted: (file) => `${file} (apagado)`,
+      ignored: (slug, list, more) => `Testes protegidos de ${slug}: ${list}${more ? ` e mais ${more}` : ""} — listados em .state.json, mas não são ficheiros deste projeto pelo caminho real (fora dele, ou atrás de uma ligação): nunca são calculados nem contados; remove essas entradas à mão.`,
       summaryHead: "## Testes protegidos",
       summaryLine: (n, k) => `${n} ficheiro(s) de teste protegido(s); ${k} alterado(s) sem motivo registado.`,
       summaryLift: (file, by, reason) => `- proteção levantada: ${file} — por ${by}: "${reason}"`,

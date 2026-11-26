@@ -6,7 +6,6 @@
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
-const fs = require("fs");
 const path = require("path");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let blankFacts, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings, mdListItems, mdRange,
@@ -68,7 +67,7 @@ function specKitStoryHeading(text) {
   }
   return null;
 }
-function parseSpecKit(dir, read, W) {
+function parseSpecKit(dir, read, W, src) {
   const spec = read(path.join(dir, "spec.md"));
   const plan = read(path.join(dir, "plan.md"));
   const tasks = read(path.join(dir, "tasks.md"));
@@ -161,7 +160,7 @@ function parseSpecKit(dir, read, W) {
   // research.md, data-model.md, contracts/ and quickstart.md are design — each under its own heading after plan.md
   // (they were skipped with a warning: "not imported"). Read through `read` like every source file: inside the project, a file
   // over the import cap refuses the import.
-  const docs = specKitDesignDocs(dir, read, W, model);
+  const docs = specKitDesignDocs(dir, read, W, model, src);
   if (plan != null || docs) model.design = { text: [plan, docs].filter((x) => x != null).join("\n\n"), file: "plan.md" };
   if (plan == null) model.warnings.push(docs ? W.wNoPlanDocs("plan.md") : W.wNoDesign("plan.md"));
   // a task's [USn] tag → _Requirements:_ (that story's ACs, resolved by importSpec), the paths it names → _Implements:_
@@ -241,7 +240,7 @@ function specKitTaskMarkers(text) {
 const SPECKIT_CONTRACTS_MAX = 30;
 const SPECKIT_CONTRACT_EXT = { md: "", markdown: "", yaml: "yaml", yml: "yaml", json: "json", jsonc: "json", graphql: "graphql", gql: "graphql",
   proto: "proto", txt: "", http: "http", rest: "http", xml: "xml", avsc: "json", sql: "sql" };
-function specKitDesignDocs(dir, read, W, model) {
+function specKitDesignDocs(dir, read, W, model, src) {
   const D = W.skDocs;
   const parts = [];
   // (a document holding nothing but its title carries nothing: no empty section)
@@ -253,9 +252,9 @@ function specKitDesignDocs(dir, read, W, model) {
   const cdir = path.join(dir, "contracts");
   const files = [];
   const walk = (d, rel, depth) => {
-    let es;
-    try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
-    for (const e of es.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    const es = src && src.list ? src.list(d) : null; // importSourceAt's listing (1.41.1): a folder whose real path leaves the project is none
+    if (!es) return;
+    for (const e of es) {
       if (e.name.startsWith(".")) continue;
       const r = rel ? rel + "/" + e.name : e.name;
       if (e.isDirectory()) { if (depth < 2) walk(path.join(d, e.name), r, depth + 1); }

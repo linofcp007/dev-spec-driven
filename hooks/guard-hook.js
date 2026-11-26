@@ -101,17 +101,19 @@ function userGuardDefault() {
 // (spec.guardLevel: isDevSpecDir), so neither a folder without .specs/ nor another tool's .specs/ gets the user's default.
 function devSpecWithoutRoadmap(dir) {
   try {
-    fs.lstatSync(path.join(dir, ".specs", "roadmap.json"));
-    return false; // it exists (readable or not): its meta decides
+    // it exists (readable or not): its meta decides — but a LINK there is none (1.41.1: the engine's read gate never reads through it)
+    if (!fs.lstatSync(path.join(dir, ".specs", "roadmap.json")).isSymbolicLink()) return false;
   } catch (e) {
     if (!e || e.code !== "ENOENT") return false;
   }
   return probe().isDevSpecProject(dir);
 }
 // Guard on? Read raw — the engine (and its i18n tables) is only loaded for a guarded project. No roadmap.json in a dev-spec
-// .specs/ → the user's default (spec.guardLevel's rule); an unreadable or broken one → off.
+// .specs/ → the user's default (spec.guardLevel's rule); an unreadable or broken one → off. A linked one is no roadmap.json (as the engine
+// reads it): the user's default, its target's meta never read.
 function guardOn(dir) {
   if (userGuardDefault() && devSpecWithoutRoadmap(dir)) return true;
+  try { if (fs.lstatSync(path.join(dir, ".specs", "roadmap.json")).isSymbolicLink()) return false; } catch { /* absent: below */ }
   try {
     const j = probe().readJsonFile(path.join(dir, ".specs", "roadmap.json"));
     if (!j || typeof j !== "object" || Array.isArray(j)) return false;

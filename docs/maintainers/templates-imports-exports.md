@@ -83,7 +83,10 @@ is in History at the end.
 - **`spec_import` stays inside the project.** `importSourceAt()` (import/index.js, shared by the steering import): the
   path must resolve inside `projectDir` lexically (nothing outside is even stat'ed), then by real path; it is only read.
   No hidden segment (`importHiddenPart`, also by real path) except an importer's own folder as the first segment
-  (`IMPORT_DOT_ROOTS`) and `.claude/plans/`; a source FILE must be a document (`IMPORT_SOURCE_EXT`), every file a
+  (`IMPORT_DOT_ROOTS`) and `.claude/plans/`; a FOLDER of the source is listed through `src.list(dir)` and a path's kind read
+  through `src.kind(p)`, both by real path (1.41.1: spec-kit's `contracts/`, OpenSpec's `specs/`, BMAD's `docs/` linked out of the
+  project were listed — their names reached the warnings): a folder whose real path leaves the project lists nothing, one
+  `wUnreadable` names the folder (fluidplan's `realInside` is the same rule); a source FILE must be a document (`IMPORT_SOURCE_EXT`), every file a
   parser reads a known kind (`IMPORT_READ_EXT`, else `wUnreadable`). Codes: `import-outside`, `import-not-found`,
   `import-hidden`, `import-not-source`. Over MCP an explicit non-default `projectDir` must hold a dev-spec `.specs/` (`project-no-specs`,
   mcp.md → Argument validation); the CLI gets the engine's rules only.
