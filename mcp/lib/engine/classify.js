@@ -17,7 +17,8 @@ const { SIGNALS } = require("./tracks.js"); // load time
 let allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS, langOption,
   RE_PACK_KEYWORD, readIfExists, readRoadmap, roadmapBusyResult, specsRoot, trackLabel, trackSignalTable, withRoadmapLock,
   writeFileAtomic;
-function __link(E) { ({ allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS,
+let existsRaw; // files.js — the read gate (1.41.1)
+function __link(E) { ({ existsRaw, allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS,
   langOption, RE_PACK_KEYWORD, readIfExists, readRoadmap, roadmapBusyResult, specsRoot, trackLabel, trackSignalTable,
   withRoadmapLock, writeFileAtomic } = E); }
 
@@ -1763,7 +1764,7 @@ function learnSignalOverrides(projectDir, cls, confirmed) {
   }
   const valid = votes.map((v) => Object.assign({}, v, { word: signalWord(v.word) })).filter((v) => v.word);
   const file = path.join(specsRoot(projectDir), SIGNAL_FILE);
-  if (!valid.length && (!fs.existsSync(file) || (!contradicted.length && !agreed.length))) return null;
+  if (!valid.length && (!existsRaw(file) || (!contradicted.length && !agreed.length))) return null;
   const now = new Date().toISOString();
   const r = writeSignalRecords(projectDir, (records) => {
     const idx = new Map(records.map((x) => [signalKey(x.track, x.word), x]));

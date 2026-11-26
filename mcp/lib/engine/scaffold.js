@@ -35,7 +35,8 @@ let guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardia
 let reviewModelsInput, reviewModelsSetting, setReviewModels; // guards.js — 1.36 the review panel (init --review-models)
 let fastCheckInput, fastPlan, setFastCheck, fastCheckOf, fastCheckOffer; // evidence.js — 1.36 the fast check (init --fast-check)
 let splitLeadSection, beforeFirstTaskSection; // templates.js — 1.36 review 3: add_track puts +port's baseline before the first task section
-function __link(E) { ({ splitLeadSection, beforeFirstTaskSection, activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
+let existsRaw, entryAt; // files.js — the read gate (1.41.1)
+function __link(E) { ({ existsRaw, entryAt, splitLeadSection, beforeFirstTaskSection, activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, enumArg, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
   guardInput, guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord,
@@ -756,7 +757,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
-  const existed = fs.existsSync(dir);
+  const existed = entryAt(dir);
   // the name as the scaffolds write it (every title, {{name}}): ONE line, like a backlog name. A line break in it
   // opened a heading in every artifact ("Login\n## US-9 …\n- **US-9.AC-1** …" put a real criterion into requirements.md).
   // … and inert to HTML comments (specNameText: "<!--" / "-->" → &lt;!-- / --&gt;) — "Login <!-- v2" hid every
@@ -1518,7 +1519,7 @@ function inactiveArtifacts(dir, gone, T) {
   const tasksText = readIfExists(path.join(dir, "tasks.md")) || "";
   const out = [];
   for (const t of gone) {
-    (Object.prototype.hasOwnProperty.call(files, t) ? files[t] : []).filter((x) => fs.existsSync(path.join(dir, x))).forEach((x) => out.push(x)); // a track pack has no file of its own
+    (Object.prototype.hasOwnProperty.call(files, t) ? files[t] : []).filter((x) => existsRaw(path.join(dir, x))).forEach((x) => out.push(x)); // a track pack has no file of its own
     if (trackMarker(t) && headingHasMarker(design, trackMarker(t))) out.push(T.designSections(trackMarker(t)));
     const th = trackTaskHeading(t, tasksText);
     if (th) out.push("tasks.md (" + th + ")");

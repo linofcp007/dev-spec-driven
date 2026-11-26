@@ -19,7 +19,8 @@ let activeDesign, activeTasks, chainPlaceholders, changedSinceApproval, clarific
   waiverView,
   featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles, isSpikeDir, spikePhase;
 let today; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ today, activeDesign, activeTasks, chainPlaceholders, changedSinceApproval,
+let specsStat; // files.js — the read gate (1.41.1)
+function __link(E) { ({ specsStat, today, activeDesign, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
   milestoneStatuses, normalizeLang, ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readContained, readIfExists, readJson,
@@ -535,7 +536,9 @@ function archivedCompletions(projectDir, now, fixedNow) {
     if (!fd.archived) continue;
     if (!fixedNow) {
       let m = null;
-      try { m = fs.statSync(fd.dir).mtimeMs; } catch { continue; }
+      const st = specsStat(fd.dir); // through the read gate (1.41.1)
+      if (!st) continue;
+      m = st.mtimeMs;
       if (m < from) continue;
     }
     for (const c of forecastInputAt(fd.dir).completions) out.push(c);

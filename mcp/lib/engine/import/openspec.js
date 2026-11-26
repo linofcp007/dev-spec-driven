@@ -10,10 +10,10 @@ const fs = require("fs");
 const path = require("path");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let blankFacts, earsFromClauses, earsFromGwt, firstParagraph, headPlus, isLtUnit, isWsUnit, leftoverExtras, markRange,
-  mdBody, mdHeadings, mdRange, newImportModel, RE_LINE_TERMINATOR, safeReaddir, stripHtmlComments, tidyLines, toPosix,
+  mdBody, mdHeadings, mdRange, newImportModel, RE_LINE_TERMINATOR, stripHtmlComments, tidyLines, toPosix,
   trimClause, unusedLines;
 function __link(E) { ({ blankFacts, earsFromClauses, earsFromGwt, firstParagraph, headPlus, isLtUnit, isWsUnit,
-  leftoverExtras, markRange, mdBody, mdHeadings, mdRange, newImportModel, RE_LINE_TERMINATOR, safeReaddir,
+  leftoverExtras, markRange, mdBody, mdHeadings, mdRange, newImportModel, RE_LINE_TERMINATOR,
   stripHtmlComments, tidyLines, toPosix, trimClause, unusedLines } = E); }
 
 // $1 of each match of /FROM:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim (head: its part up to the colon, global) — by
@@ -60,10 +60,11 @@ function openSpecClause(line) {
   const text = line.slice(i);
   return RE_LINE_TERMINATOR.test(text) ? null : [line, h[1], text];
 }
-function parseOpenSpec(dir, read, W) {
+function parseOpenSpec(dir, read, W, src) {
   const walkSpecs = (d, depth, out) => {
     if (depth > 4) return out;
-    for (const n of safeReaddir(d).sort()) {
+    // importSourceAt's listing (1.41.1): a folder whose real path leaves the project is none (a `specs ->` junction was listed)
+    for (const n of ((src && src.list ? src.list(d) : null) || []).map((e) => e.name)) {
       const p = path.join(d, n);
       let st;
       try { st = fs.lstatSync(p); } catch { continue; }

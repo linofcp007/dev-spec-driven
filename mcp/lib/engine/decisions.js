@@ -25,7 +25,8 @@ let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTra
   backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
   removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot,
   projectPath, onDisk, FOLD_CASE; // quality.js · files.js — 1.41 a lesson's _Target:_, the repeated lessons' grouping
-function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers,
+let existsRaw, entryAt; // files.js — the read gate (1.41.1)
+function __link(E) { ({ existsRaw, entryAt, activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers,
   existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
@@ -787,7 +788,7 @@ function adrModel(projectDir, f, archived) {
   const file = path.join(dir, DECISIONS_FILE);
   const raw = read(DECISIONS_FILE);
   if (raw == null) {
-    if (fs.existsSync(file)) m.excluded.push({ feature: slug, reason: "unsafe-file" });
+    if (entryAt(file)) m.excluded.push({ feature: slug, reason: "unsafe-file" });
     return m;
   }
   const log = decisionLog(raw);
@@ -933,7 +934,7 @@ function exportAdr(projectDir, opts, pl) {
   const X = i18n.msg(lang).stakeholderExport;
   const rel = (p) => ".specs/" + path.relative(root, p).split(path.sep).join("/");
   // A feature folder named 'exports' from before the name was reserved: never drop documents into someone's spec.
-  if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(root, EXPORT_DIR, n)))) return { ...res, ok: false, error: X.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
+  if (["requirements.md", ".state.json"].some((n) => existsRaw(path.join(root, EXPORT_DIR, n)))) return { ...res, ok: false, error: X.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   const linked = [dir, ...docs.map((d) => d.file)].find((p) => !specsWriteContained(projectDir, p));
   if (linked) return { ...res, ok: false, error: X.exportsLinked(rel(linked)) };
   const hand = docs.find((d) => !isGeneratedOrAbsent(d.file));
@@ -1185,7 +1186,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   const forcedList = forcedApprovalList(readState(projectDir, slug).approvals, tracks); // a forced execution sign-off
   if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), "");
   body.push(F.prChecks, ...SP.finish.checks.map((c) => "- [ ] " + c), "");
-  body.push(F.prSpec, ...[SPIKE_FILE, DECISIONS_FILE, "tasks.md"].filter((x) => fs.existsSync(path.join(dir, x))).map((x) => "- `.specs/" + slug + "/" + x + "`"));
+  body.push(F.prSpec, ...[SPIKE_FILE, DECISIONS_FILE, "tasks.md"].filter((x) => existsRaw(path.join(dir, x))).map((x) => "- `.specs/" + slug + "/" + x + "`"));
   const write = !!opts.write;
   const { mergeSummary, summaryPath } = mergeSummaryOf(dir, mergeTitle, body, write); // finish.js: .execution/merge-summary.md
   const ready = blockers.length === 0;
