@@ -96,7 +96,8 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
 - **dev-guardian's own findings below the gate.** finish names the new findings that do not block from dev-guardian's
   test-integrity check (`guardian-test-integrity`: a skip, a deleted test file, fewer assertions) and, with dev-guardian
   3.17, its suppressions check (`guardian-suppressions`: an added `nosemgrep`, `nosec`, `eslint-disable` … with no reason
-  or naming no rule — only such a one is reported) in ONE warning, never a blocker — each labelled by its check (weakened
+  that names no rule, or a whole-file one with no reason even when it names its rules; one with a reason is only counted)
+  in ONE warning, never a blocker — each labelled by its check (weakened
   test · suppression added), the first 3 by severity, the rest counted, the head naming only the checks they come from (and
   the suppressions check while a `guardian-suppressions: ` note says it left changed files unread); a finding the report
   lists as blocking is never one — and stores them as `finishChecks.guardian.testIntegrity` {count, top, kinds}; 1.40 only
@@ -131,9 +132,13 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   controls and the zero-width space (U+200B, U+200E–U+200F, U+202A–U+202E, U+2066–U+2069): a U+202E reordered the line.
   ZWNJ and ZWJ stay — they spell names (Persian, Indic, an emoji sequence). The feature's own files are compared the same
   way, so such a file is still `[this feature]`.
-- The gate's `--fail-on` is the command's LAST one, as dev-guardian reads it (an unquoted flag of the check's own command:
-  a quoted one is not read, as in 1.40, nor one after `;` / `&&` / `|`): 1.40 read the first, so `--fail-on low --fail-on
-  high` said "no new finding at or above low".
+- The gate's `--fail-on` is the LAST one of the first part of the command that has one, as dev-guardian reads it (the
+  command cut at `;` / `&&` / `|` / a line break: `cd . && <check> --fail-on medium` reads medium, a later `echo --fail-on
+  low` is not read; a quoted one is not read, as in 1.40): 1.40 read the first, so `--fail-on low --fail-on high` said "no
+  new finding at or above low".
+- finish's hint for a blocked gate says a weakened or deleted test (dev-guardian's test-integrity check) takes no inline
+  suppression: restore the test, or the user decides — at `--fail-on medium` an approved pruning blocks by design. It
+  offered only the inline suppression.
 
 ### Compatibility
 - **1.40 garbles a lesson:** an older engine reads `_Kind: lesson_` as a decision, its `_Cause:_` / `_Target:_` lines as
@@ -166,7 +171,7 @@ dev-guardian's gate make no file-system call; `reference-examples` `lstat`s each
 log is read once per engine call (at most 4 × 64 KB).
 
 ### Tests
-- `node mcp/test.js` 3155 assertions (was 3014), `node cli/test-cli.js` 719 (was 707). New files by area: 09
+- `node mcp/test.js` 3156 assertions (was 3014), `node cli/test-cli.js` 719 (was 707). New files by area: 09
   `09-evidence-friction.js` / `09-evidence-metrics.js` and their CLI twins `09-evidence-run-friction.js` /
   `09-evidence-run-metrics.js` (real children through `done --run` / `finish --run`), 12 `12-lifecycle-lessons.js`, 15
   `15-quality-reference-examples.js`; W in each suite's `09-evidence-guardian.js`. The METRIC contract is one fixture,

@@ -232,7 +232,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         /- guardian: `node \.specs\/guardian\.cjs scan[^`]*` → exit 0 · dev-guardian: pass — no new finding at or above high \(1 new below it\)/.test(pass.mergeSummary),
       verdict: g1.verdict === "blocked" && g1.blocking === 3 && g1.own === 1 && g1.parsed === true && g1.failOn === "high" &&
         js(g1.top.map((f) => [f.file, f.line, f.own])) === js([["src/login.js", 12, true], ["lib/keys.js", 2, false], ["lib/other.js", 7, false]]),
-      blocker: /^the project check 'guardian' failed — dev-guardian: 3 new finding\(s\) at or above high, 1 in this feature's files — src\/login\.js:12 js\.sqli \(high\) \[this feature\], lib\/keys\.js:2 gitleaks\.aws-key \(critical\), lib\/other\.js:7 js\.xss \(high\)\. Fix the finding\(s\), then run the check again: node "[^"]*dev-spec\.js" finish login --run\. To accept ONE reviewed finding, the user suppresses it inline with a reason \(nosemgrep: <rule> -- <reason>, # nosec <id>  # <reason>\) — never `baseline update`, which accepts every current finding, this feature's included\. Never force the finish without the user\.$/.test(suiteBlocker(blocked)),
+      blocker: /^the project check 'guardian' failed — dev-guardian: 3 new finding\(s\) at or above high, 1 in this feature's files — src\/login\.js:12 js\.sqli \(high\) \[this feature\], lib\/keys\.js:2 gitleaks\.aws-key \(critical\), lib\/other\.js:7 js\.xss \(high\)\. Fix the finding\(s\), then run the check again: node "[^"]*dev-spec\.js" finish login --run\. To accept ONE reviewed finding, the user suppresses it inline with a reason \(nosemgrep: <rule> -- <reason>, # nosec <id>  # <reason>\) — never `baseline update`, which accepts every current finding, this feature's included\. A test-integrity finding \(a weakened or deleted test\) takes no inline suppression: restore the test, or the user decides — at --fail-on medium an approved pruning blocks by design\. Never force the finish without the user\.$/.test(suiteBlocker(blocked)),
       recorded: js(blocked.recordedChecks) === js([{ name: "guardian", exitCode: 1, guardian: "blocked" }]) && st.guardian && typeof st.guardian.verdict === "string" && !js(st).includes("exit_code"),
       incomplete: incomplete.suiteChecks[0].guardian.verdict === "incomplete" && /dev-guardian could not run every scanner \(incomplete scan: semgrep: not installed\)\. Install the missing scanner \(dev-guardian's \/guardian-init\), or — offline, when Semgrep could not fetch its rules — add --local-only to the check's command; the check stays failed until it passes or the user changes it\./.test(suiteBlocker(incomplete)),
       config: config.suiteChecks[0].guardian.verdict === "config" && /dev-guardian could not run — a configuration or usage error: error: --fail-on: expected one of info\|low\|medium\|high\|critical\. Fix that, then run the check again: node "[^"]*dev-spec\.js" finish login --run\./.test(suiteBlocker(config)),
@@ -1101,7 +1101,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         compact: compact.testIntegrity, v316: v316.warnings.filter(isW), v33: [v33.suiteChecks[0].guardian.testIntegrity, v33.warnings], order: order.warnings, inert: inert.testIntegrity, cW, cSame }) + ")", {
       stored: js(w.suiteChecks[0].guardian.testIntegrity) === js({ count: 5, top: TOP5, kinds: ["test", "suppression"] }) && js(wSt.guardian.testIntegrity) === js({ count: 5, top: TOP5, kinds: ["test", "suppression"] }),
       warned: js(w.warnings.filter(isW)) === js([W5]) && W5.startsWith("dev-guardian: 5 new finding(s) of its test-integrity and suppression checks below --fail-on high — tests/b.test.js:9 weakened test: test-skipped (medium), ") &&
-        W5.endsWith(", +2 more. They do not block: the user decides each — a test removal they approved stays; a suppression they intended: give it a reason or name its rule; otherwise fix it and run the check again."),
+        W5.endsWith(", +2 more. They do not block: the user decides each — a test removal they approved stays; a suppression they intended: give it a reason; otherwise fix it and run the check again."),
       neverBlocks: w.suiteChecks[0].status === "pass" && js(w.blockers) === js(plain.blockers) && !(w.blockers || []).some((b) => /weakened|suppression/.test(b)) &&
         js(w.warnings.filter((s) => !isW(s))) === js(plain.warnings) && w.suiteChecks[0].guardian.newFindings === 6,
       summary: js(w.mergeSummary.split("\n").filter((l) => /^- guardian: /.test(l))) === js(plain.mergeSummary.split("\n").filter((l) => /^- guardian: /.test(l)).map((l) => l.replace("(1 new below it)", "(6 new below it)"))),
@@ -1206,12 +1206,20 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         /\(dev-guardian 3\.3\+: añade --compact para un informe corto\) y regístralo/.test(S.msg("es").guardian.mcpRun("guardian", CMD, "login")) &&
         /dev-guardian solo busca sus findings por debajo del gate \(una prueba debilitada, una supresión añadida\) en una ejecución con la base de la funcionalidad, que solo node "[^"]*dev-spec\.js" finish login --run entrega a su launcher: una ejecución registrada así no nombra ninguno\.$/.test(S.msg("es").guardian.mcpRun("guardian", CMD, "login")) &&
         !/full report|relatório completo|informe completo/.test([G, S.msg("pt").guardian, S.msg("es").guardian].map((g) => g.mcpRun("guardian", CMD, "login")).join("\n")),
-      // (review 2, RX-9: a reported suppression has no reason or names no rule — the action is to give it one)
+      // (review 2, RX-9: a reported suppression has no reason — the action is to give it one; RX2-2: naming its rule never clears
+      // a whole-file one in dev-guardian 3.17, so the closing says "give it a reason" alone)
       wTail: ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).guardian.integrityWarn(1, "high", "x", "test")).every((s, i) => [
-        /They do not block: the user decides each — a test removal they approved stays; a suppression they intended: give it a reason or name its rule; otherwise fix it and run the check again\.$/,
-        /Não bloqueiam: o utilizador decide cada um — uma remoção de teste que aprovou fica; acrescenta um motivo ou o nome da regra à supressão que quis; senão, corrige-o e volta a correr a verificação\.$/,
-        /No bloquean: el usuario decide cada uno — una eliminación de prueba que aprobó se queda; a una supresión que quiso, dale un motivo o nombra su regla; si no, corrígelo y vuelve a ejecutar la verificación\.$/,
-        /Não bloqueiam: o usuário decide cada um — uma remoção de teste que aprovou fica; acrescente um motivo ou o nome da regra à supressão que quis; senão, corrija-o e volte a executar a verificação\.$/][i].test(s)),
+        /They do not block: the user decides each — a test removal they approved stays; a suppression they intended: give it a reason; otherwise fix it and run the check again\.$/,
+        /Não bloqueiam: o utilizador decide cada um — uma remoção de teste que aprovou fica; acrescenta um motivo à supressão que quis; senão, corrige-o e volta a correr a verificação\.$/,
+        /No bloquean: el usuario decide cada uno — una eliminación de prueba que aprobó se queda; a una supresión que quiso, dale un motivo; si no, corrígelo y vuelve a ejecutar la verificación\.$/,
+        /Não bloqueiam: o usuário decide cada um — uma remoção de teste que aprovou fica; acrescente um motivo à supressão que quis; senão, corrija-o e volte a executar a verificação\.$/][i].test(s)) &&
+        !/name its rule|nome da regra|nombra su regla/.test(["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).guardian.integrityWarn(2, "high", "x", null)).join("\n")),
+      // (RX2-3) a blocking test-integrity finding takes no inline suppression — the hint names the real choices, before "never force"
+      fixHintTests: ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).guardian.fixHint("login")).every((s, i) => [
+        / A test-integrity finding \(a weakened or deleted test\) takes no inline suppression: restore the test, or the user decides — at --fail-on medium an approved pruning blocks by design\. Never force the finish without the user\.$/,
+        / Um finding de integridade dos testes \(um teste enfraquecido ou apagado\) não aceita supressão na própria linha: repõe o teste, ou o utilizador decide — com --fail-on medium, uma poda aprovada bloqueia, como previsto\. Nunca forces o finish sem o utilizador\.$/,
+        / Un finding de integridad de las pruebas \(una prueba debilitada o eliminada\) no admite supresión en la propia línea: restaura la prueba, o el usuario decide — con --fail-on medium, una poda aprobada bloquea, como está previsto\. Nunca fuerces el finish sin el usuario\.$/,
+        / não aceita supressão na própria linha: restaure o teste, ou o usuário decide — com --fail-on medium, uma poda aprovada bloqueia, como previsto\. Nunca force o finish sem o usuário\.$/][i].test(s)),
       // (review 3, R3-B-1: true for every dev-guardian version — 3.8–3.16 run no suppressions check — with no version branch)
       diffBaseLine: S.msg("en").guardian.diffBase("main") === " · the change since main checked for weakened tests (and, with dev-guardian 3.17+, added suppressions)" &&
         S.msg("en").guardian.diffBaseUncommitted("main") === " · only the uncommitted work checked for weakened tests and, with dev-guardian 3.17+, added suppressions (main already holds this branch's commits)" &&
@@ -1277,12 +1285,26 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         lh.some((l) => l.startsWith("dev-guardian: 1 new finding(s) of its test-integrity check below --fail-on high — tests/a.test.js:3 weakened test: test-skipped (medium)")),
       lastHighLow: gHL.failOn === "low" && gHL.verdict === "blocked" && !("testIntegrity" in gHL) && !hl.some((l) => /below --fail-on/.test(l)) && hl.some((l) => /at or above low/.test(l)),
       single: gEq.failOn === "critical" && gOne.failOn === "medium",
-      // (review 3) only the check's own command is read — a later command after `;` / `&&` / `||` / `|` / a line break is not dev-guardian's
+      // (review 3) a later command after `;` / `&&` / `||` / `|` / a line break is not dev-guardian's (RX2-1, below: nor a prefix)
       firstCommand: [";", " &&", " ||", " |", "\n"].every((sep) => E.guardianRecord(x.p, null, CMD.replace("--fail-on high", "--fail-on medium") + sep + " echo --fail-on low", 0, r(0, [], []), "").failOn === "medium"),
       suppressionsNoted: js(gNote.testIntegrity && gNote.testIntegrity.kinds) === '["test","suppression"]' && gNote.testIntegrity.count === 1 &&
         warnOf(CMD, gNote)[0].startsWith("dev-guardian: 1 new finding(s) of its test-integrity and suppression checks below --fail-on high — tests/a.test.js:3 weakened test: test-skipped (medium)") &&
         !("testIntegrity" in gNoteAlone) && !warnOf(CMD, gNoteAlone).some((l) => /below --fail-on/.test(l)) &&
         js(gOther.testIntegrity.kinds) === '["test"]' && warnOf(CMD, gOther)[0].startsWith("dev-guardian: 1 new finding(s) of its test-integrity check below --fail-on high — "),
+    });
+    // (cross-plugin pass 2, RX2-1) the command cut at `;` / `&&` / `||` / `|` / a line break, the FIRST segment that carries a
+    // --fail-on decides, its LAST flag: a check behind a prefix (`cd . &&`, Windows' `chcp 65001 >NUL &&`) read high — 1.40 read medium
+    const CMD_M = CMD.replace("--fail-on high", "--fail-on medium"), foOf = (c) => E.guardianRecord(x.p, null, c, 0, r(0, [], []), "").failOn;
+    const SEG = [["cd . && " + CMD_M, "medium"], ["chcp 65001 >NUL && " + CMD_M, "medium"], ["cd .\n" + CMD_M, "medium"], [CMD_M + "; echo --fail-on low", "medium"],
+      ["cd . && " + CMD.replace("--fail-on high", "--fail-on low --fail-on high"), "high"], [CMD.replace(" --fail-on high", ""), "high"],
+      ["cd . && " + CMD.replace(" --fail-on high", ""), "high"], ["echo --fail-on && " + CMD_M, "medium"]];
+    all("1.41.0 cross-plugin pass 2 (RX2-1): --fail-on — the first segment of the command that carries one, its last flag; a prefixed check reads its own (got " +
+      js(SEG.map(([c]) => foOf(c))) + ")", {
+      prefixed: SEG.slice(0, 3).every(([c, want]) => foOf(c) === want),
+      laterCommand: foOf(SEG[3][0]) === "medium",
+      lastInSegment: foOf(SEG[4][0]) === "high",
+      none: foOf(SEG[5][0]) === "high" && foOf(SEG[6][0]) === "high",
+      bareWord: foOf(SEG[7][0]) === "medium",
     });
   }
 

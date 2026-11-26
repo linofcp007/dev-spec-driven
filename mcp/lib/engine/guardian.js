@@ -580,9 +580,13 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output, unco
   const code = Number.isInteger(exitCode) ? exitCode : parseInt(exitCode, 10);
   const cmd = String(command || "");
   // the LAST --fail-on, as dev-guardian reads it (review 2: the first one made `--fail-on low --fail-on high` say "at or above low") —
-  // of the check's own command only (review 3: a later command after `;` / `&&` / `||` / `|` / a line break is not dev-guardian's)
+  // of the FIRST segment that carries one, the command cut at `;` / `&&` / `||` / `|` / a line break (review 3: a later
+  // `echo --fail-on low` is not dev-guardian's; RX2-1: nor is a prefix — `cd . && <check> --fail-on medium` read high)
   let fo = null;
-  for (const m of cmd.split(/;|&&|\|\||\||\r?\n/)[0].matchAll(/--fail-on[=\s]+(info|low|medium|high|critical)\b/gi)) fo = m;
+  for (const seg of cmd.split(/;|&&|\|\||\||\r?\n/)) {
+    for (const m of seg.matchAll(/--fail-on[=\s]+(info|low|medium|high|critical)\b/gi)) fo = m;
+    if (fo) break;
+  }
   const text = String(output || "");
   const j = guardianJson(report);
   const g = { verdict: "exit", exit: Number.isInteger(code) ? code : null, failOn: fo ? fo[1].toLowerCase() : "high", parsed: !!j };
