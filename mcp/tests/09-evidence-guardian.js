@@ -226,7 +226,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
     const st = stored(en);
     all("1.29 spec_finish reads the guardian check: no run → the blocker names how to run it (Claude Code: finish --run with a long timeout; elsewhere run the command and report it with its JSON stdout); exit 0 passes; exit 1 → 'the project check 'guardian' failed — dev-guardian: N new finding(s) at or above high', the feature's own file first, how to clear it (fix it; one reviewed finding suppressed inline — never `baseline update`, never forced); 2 → incomplete scan + install the scanner / --local-only; 3 → its own message, or not found; an unreadable report → the exit code alone; the verdict in suiteChecks[].guardian, finishChecks and recordedChecks; the report itself never stored (got " +
       js([suiteBlocker(noRun), g1, suiteBlocker(blocked).slice(0, 600), suiteBlocker(incomplete).slice(0, 300), suiteBlocker(config).slice(0, 300)]) + ")", {
-      noRun: /The 'guardian' check runs dev-guardian's scan \(minutes\)\. In Claude Code run node "[^"]*dev-spec\.js" finish login --run \(Bash timeout 600000, or in the background\): it runs the check and records its report itself\. Elsewhere run `node \.specs\/guardian\.cjs scan --project \. --fail-on high --format json` from the project root \(dev-guardian 3\.3\+: add --compact for a short report; a full report, without --compact, names the findings below the gate\) and report it with spec_finish \{evidence: \[\{name: "guardian", command, exitCode, summary: its stderr's last lines, report: its JSON stdout\}\]\} — a pass needs its report\./.test(suiteBlocker(noRun)),
+      noRun: /The 'guardian' check runs dev-guardian's scan \(minutes\)\. In Claude Code run node "[^"]*dev-spec\.js" finish login --run \(Bash timeout 600000, or in the background\): it runs the check and records its report itself\. Elsewhere run `node \.specs\/guardian\.cjs scan --project \. --fail-on high --format json` from the project root \(dev-guardian 3\.3\+: add --compact for a short report\) and report it with spec_finish \{evidence: \[\{name: "guardian", command, exitCode, summary: its stderr's last lines, report: its JSON stdout\}\]\} — a pass needs its report\. dev-guardian looks for its findings below the gate \(a weakened test, an added suppression\) only in a run with the feature's base, which only node "[^"]*dev-spec\.js" finish login --run hands its launcher: a run reported this way names none\./.test(suiteBlocker(noRun)),
       pass: pass.suiteChecks[0].status === "pass" && pass.suiteChecks[0].guardian.verdict === "pass" && pass.suiteChecks[0].guardian.newFindings === 1 && !suiteBlocker(pass) &&
         pass.suiteChecks[0].guardian.tool === "3.3.0" && !pass.suiteChecks[0].guardian.update && !(pass.warnings || []).some((w) => /update dev-guardian/.test(w)) &&
         /- guardian: `node \.specs\/guardian\.cjs scan[^`]*` → exit 0 · dev-guardian: pass — no new finding at or above high \(1 new below it\)/.test(pass.mergeSummary),
@@ -1101,7 +1101,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         compact: compact.testIntegrity, v316: v316.warnings.filter(isW), v33: [v33.suiteChecks[0].guardian.testIntegrity, v33.warnings], order: order.warnings, inert: inert.testIntegrity, cW, cSame }) + ")", {
       stored: js(w.suiteChecks[0].guardian.testIntegrity) === js({ count: 5, top: TOP5, kinds: ["test", "suppression"] }) && js(wSt.guardian.testIntegrity) === js({ count: 5, top: TOP5, kinds: ["test", "suppression"] }),
       warned: js(w.warnings.filter(isW)) === js([W5]) && W5.startsWith("dev-guardian: 5 new finding(s) of its test-integrity and suppression checks below --fail-on high — tests/b.test.js:9 weakened test: test-skipped (medium), ") &&
-        W5.endsWith(", +2 more. They do not block: the user decides each — one they intended stays (a test removal they approved, a suppression with its reason); otherwise fix it and run the check again."),
+        W5.endsWith(", +2 more. They do not block: the user decides each — a test removal they approved stays; a suppression they intended: give it a reason or name its rule; otherwise fix it and run the check again."),
       neverBlocks: w.suiteChecks[0].status === "pass" && js(w.blockers) === js(plain.blockers) && !(w.blockers || []).some((b) => /weakened|suppression/.test(b)) &&
         js(w.warnings.filter((s) => !isW(s))) === js(plain.warnings) && w.suiteChecks[0].guardian.newFindings === 6,
       summary: js(w.mergeSummary.split("\n").filter((l) => /^- guardian: /.test(l))) === js(plain.mergeSummary.split("\n").filter((l) => /^- guardian: /.test(l)).map((l) => l.replace("(1 new below it)", "(6 new below it)"))),
@@ -1197,9 +1197,25 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         /^dev-guardian: 1 finding\(s\) nuevo\(s\) de su verificación de integridad de las pruebas por debajo de --fail-on high\. /.test(head("es", "test")) &&
         /^dev-guardian: 1 finding\(s\) nuevo\(s\) de su verificación de supresiones por debajo de --fail-on high\. /.test(head("es", "suppression")) &&
         /da sua verificação de integridade dos testes abaixo de/.test(head("pt-BR", "test")) && /das suas verificações de integridade dos testes e de supressões/.test(head("pt", null)),
-      mcpRun: /add --compact for a short report; a full report, without --compact, names the findings below the gate\)/.test(G.mcpRun("guardian", CMD, "login")) &&
-        /junta --compact para um relatório curto; um relatório completo, sem --compact, nomeia os findings abaixo do gate\)/.test(S.msg("pt").guardian.mcpRun("guardian", CMD, "login")) &&
-        /añade --compact para un informe corto; un informe completo, sin --compact, nombra los findings por debajo del gate\)/.test(S.msg("es").guardian.mcpRun("guardian", CMD, "login")),
+      // (review 2, RX-1: a full report over MCP names none — both diff passes need --diff-base, which only finish --run hands the launcher)
+      mcpRun: /\(dev-guardian 3\.3\+: add --compact for a short report\) and report it/.test(G.mcpRun("guardian", CMD, "login")) &&
+        /— a pass needs its report\. dev-guardian looks for its findings below the gate \(a weakened test, an added suppression\) only in a run with the feature's base, which only node "[^"]*dev-spec\.js" finish login --run hands its launcher: a run reported this way names none\.$/.test(G.mcpRun("guardian", CMD, "login")) &&
+        /\(dev-guardian 3\.3\+: junta --compact para um relatório curto\) e regista/.test(S.msg("pt").guardian.mcpRun("guardian", CMD, "login")) &&
+        /O dev-guardian só procura os seus findings abaixo do gate \(um teste enfraquecido, uma supressão adicionada\) numa execução com a base da feature, que só o node "[^"]*dev-spec\.js" finish login --run entrega ao seu launcher: uma execução registada assim não nomeia nenhum\.$/.test(S.msg("pt").guardian.mcpRun("guardian", CMD, "login")) &&
+        /uma execução registrada assim não nomeia nenhum\.$/.test(S.msg("pt-BR").guardian.mcpRun("guardian", CMD, "login")) &&
+        /\(dev-guardian 3\.3\+: añade --compact para un informe corto\) y regístralo/.test(S.msg("es").guardian.mcpRun("guardian", CMD, "login")) &&
+        /dev-guardian solo busca sus findings por debajo del gate \(una prueba debilitada, una supresión añadida\) en una ejecución con la base de la funcionalidad, que solo node "[^"]*dev-spec\.js" finish login --run entrega a su launcher: una ejecución registrada así no nombra ninguno\.$/.test(S.msg("es").guardian.mcpRun("guardian", CMD, "login")) &&
+        !/full report|relatório completo|informe completo/.test([G, S.msg("pt").guardian, S.msg("es").guardian].map((g) => g.mcpRun("guardian", CMD, "login")).join("\n")),
+      // (review 2, RX-9: a reported suppression has no reason or names no rule — the action is to give it one)
+      wTail: ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).guardian.integrityWarn(1, "high", "x", "test")).every((s, i) => [
+        /They do not block: the user decides each — a test removal they approved stays; a suppression they intended: give it a reason or name its rule; otherwise fix it and run the check again\.$/,
+        /Não bloqueiam: o utilizador decide cada um — uma remoção de teste que aprovou fica; acrescenta um motivo ou o nome da regra à supressão que quis; senão, corrige-o e volta a correr a verificação\.$/,
+        /No bloquean: el usuario decide cada uno — una eliminación de prueba que aprobó se queda; a una supresión que quiso, dale un motivo o nombra su regla; si no, corrígelo y vuelve a ejecutar la verificación\.$/,
+        /Não bloqueiam: o usuário decide cada um — uma remoção de teste que aprovou fica; acrescente um motivo ou o nome da regra à supressão que quis; senão, corrija-o e volte a executar a verificação\.$/][i].test(s)),
+      diffBaseLine: S.msg("en").guardian.diffBase("main") === " · the change since main checked for weakened tests and added suppressions" &&
+        /checked for weakened tests and added suppressions \(main already holds/.test(S.msg("en").guardian.diffBaseUncommitted("main")) &&
+        /à procura de testes enfraquecidos e supressões adicionadas$/.test(S.msg("pt").guardian.diffBase("main")) && /procurando testes enfraquecidos e supressões adicionadas$/.test(S.msg("pt-BR").guardian.diffBase("main")) &&
+        /pruebas debilitadas y supresiones añadidas$/.test(S.msg("es").guardian.diffBase("main")),
       unknownUnderInfo: g6.failOn === "info" && js(g6.testIntegrity) === js({ count: 2, top: [{ severity: "?", rule: "r-num", file: "src/n.js", line: 1, kind: "suppression" },
         { severity: "?", rule: "r-q", file: "src/q.js", line: 2, kind: "suppression" }], kinds: ["suppression"] }),
       cleaned: gX.top[0].rule === "rtxt.exe" && gX.top[0].file === "src/a.js" && gX.testIntegrity.top[0].rule === "test-skipped" && gX.testIntegrity.top[0].file === "tests/x.test.js" &&
@@ -1241,6 +1257,12 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
     const gEq = E.guardianRecord(x.p, null, CMD.replace("--fail-on high", "--fail-on=critical"), 0, r(0, [], [med]), "");
     const gOne = E.guardianRecord(x.p, null, CMD.replace("--fail-on high", "--fail-on medium"), 1, r(1, [med], [med]), "");
     const lh = [...E.guardianLines(gLH, "en"), ...warnOf(C_LH, gLH)], hl = [...E.guardianLines(gHL, "en"), ...warnOf(C_HL, gHL)];
+    // (RX-7) a `guardian-suppressions: ` coverage note — the pass left changed files unread (its 500-file bound, an unreadable file) —
+    // keeps the suppressions check in W's head (kinds) with no suppression finding; another tool's note does not; a note alone is no W
+    const noted = (notes, fresh) => E.guardianRecord(x.p, null, CMD, 0, js({ exit_code: 0, tool_version: "3.17.0", baseline_status: "present", coverage: "full", coverage_gaps: [],
+      coverage_notes: notes, new_findings: fresh, new_findings_count: fresh.length, blocking_findings: [], baseline_absent: false }), "");
+    const SUPP_NOTE = "guardian-suppressions: 3 more changed file(s) with a suppression token past the first 500 were not read";
+    const gNote = noted([SUPP_NOTE], [med]), gNoteAlone = noted([SUPP_NOTE], []), gOther = noted(["semgrep: taint analysis incomplete in src/a.js (not gating)"], [med]);
     all("1.41.0 review 2 (R2-PZ-3, --fail-on): ZWNJ / ZWJ stay in a report's names — printed as written, each an existing file, the own file matched and its ZWNJ-less twin not —, U+202E still dropped; the LAST --fail-on is read, both orders (got " +
       js({ gN: [gN.top, gN.own, gN.testIntegrity], nLines, gLH: [gLH.failOn, gLH.verdict, gLH.testIntegrity, lh], gHL: [gHL.failOn, gHL.verdict, gHL.testIntegrity, hl], gEq: gEq.failOn, gOne: gOne.failOn }) + ")", {
       asWritten: js(gN.top.map((f) => [f.file, f.own])) === js([[hindi, true], [twin, false]]) && gN.own === 1 &&
@@ -1251,6 +1273,10 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         lh.some((l) => l.startsWith("dev-guardian: 1 new finding(s) of its test-integrity check below --fail-on high — tests/a.test.js:3 weakened test: test-skipped (medium)")),
       lastHighLow: gHL.failOn === "low" && gHL.verdict === "blocked" && !("testIntegrity" in gHL) && !hl.some((l) => /below --fail-on/.test(l)) && hl.some((l) => /at or above low/.test(l)),
       single: gEq.failOn === "critical" && gOne.failOn === "medium",
+      suppressionsNoted: js(gNote.testIntegrity && gNote.testIntegrity.kinds) === '["test","suppression"]' && gNote.testIntegrity.count === 1 &&
+        warnOf(CMD, gNote)[0].startsWith("dev-guardian: 1 new finding(s) of its test-integrity and suppression checks below --fail-on high — tests/a.test.js:3 weakened test: test-skipped (medium)") &&
+        !("testIntegrity" in gNoteAlone) && !warnOf(CMD, gNoteAlone).some((l) => /below --fail-on/.test(l)) &&
+        js(gOther.testIntegrity.kinds) === '["test"]' && warnOf(CMD, gOther)[0].startsWith("dev-guardian: 1 new finding(s) of its test-integrity check below --fail-on high — "),
     });
   }
 

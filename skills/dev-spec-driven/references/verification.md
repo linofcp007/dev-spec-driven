@@ -398,11 +398,14 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   of its own for such a finding, so the finish stays blocked until the user decides — never forced.
 - **Its own checks' findings below the gate** (1.41) — the new findings that do not block from dev-guardian's
   test-integrity check (`guardian-test-integrity`, 3.8+: a skip, a deleted test file, fewer assertions) and its suppressions
-  check (`guardian-suppressions`, 3.17+: an added `nosemgrep`, Bandit `nosec`, `eslint-disable` …) — are ONE finish warning,
-  never a blocker: each labelled by its check (weakened test · suppression added), the first 3 by severity, the rest
-  counted. The user decides each: an intended one stays (a pruning they approved, a suppression with its reason); otherwise
-  fix it and run the check again. A `--compact` report lists the blocking findings only, so none is named there; a
-  dev-guardian before 3.17 has no suppressions check — its test findings only.
+  check (`guardian-suppressions`, 3.17+: an added `nosemgrep`, Bandit `nosec`, `eslint-disable` … with no reason or naming
+  no rule — only such a one is reported) — are ONE finish warning, never a blocker: each labelled by its check (weakened
+  test · suppression added), the first 3 by severity, the rest counted. The user decides each: a pruning they approved
+  stays; a suppression they intended gets a reason or names its rule; otherwise fix it and run the check again. Both checks
+  read the change since the feature's base, which only `finish <feature> --run` hands the launcher: a run of the check's
+  command reported over MCP (`spec_finish {evidence}`) has no base, so it names none. A `--compact` report lists the
+  blocking findings only, so none is named there; a dev-guardian before 3.17 has no suppressions check — its test findings
+  only.
 - **Duplication budget:** when `.guardian/budgets.yml` sets `quality.duplication_pct`, `dev-spec dupes` (no feature) /
   `spec_scan {duplicates: true}` shows the project's duplicated share beside it (`budget`), and finish's duplicate warning
   says when the project is over it. dev-spec counts windows of code lines, dev-guardian measures with jscpd — close, not

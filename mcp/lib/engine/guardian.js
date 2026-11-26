@@ -458,8 +458,10 @@ function findingFacts(f, rel) {
 // kinds among ALL of them, GUARDIAN_INTEGRITY_KINDS' order — the warning's head names those checks only } | null.
 // A --compact report lists the blocking findings only: none to read there (newFindings still counts them). blocked(facts): one of the
 // report's blocking_findings (blockedFacts) — never W's (1.41.0 review 1: dev-spec read the command's FIRST --fail-on, dev-guardian its
-// last; both read the last since review 2, but dev-guardian unquotes a shell-quoted one dev-spec does not read).
-function integrityFindings(fresh, failOn, rel, blocked) {
+// last; both read the last since review 2, but dev-guardian unquotes a shell-quoted one dev-spec does not read). suppressionsNoted: the
+// report's coverage_notes hold a `guardian-suppressions: ` line (the pass left changed files unread — its 500-file bound, an
+// unreadable file): `kinds` keeps the suppressions check, so W's head never reads as if that check had seen the whole change (RX-7).
+function integrityFindings(fresh, failOn, rel, blocked, suppressionsNoted) {
   if (!fresh) return null;
   const bar = severityRank(failOn), below = [];
   for (const f of fresh) {
@@ -470,7 +472,8 @@ function integrityFindings(fresh, failOn, rel, blocked) {
   }
   if (!below.length) return null;
   below.sort((a, b) => severityRank(b.severity) - severityRank(a.severity)); // stable: the report's order next
-  return { count: below.length, top: below.slice(0, GUARDIAN_INTEGRITY_TOP), kinds: [...GUARDIAN_INTEGRITY_KINDS.values()].filter((k) => below.some((x) => x.kind === k)) };
+  return { count: below.length, top: below.slice(0, GUARDIAN_INTEGRITY_TOP),
+    kinds: [...GUARDIAN_INTEGRITY_KINDS.values()].filter((k) => below.some((x) => x.kind === k) || (k === "suppression" && suppressionsNoted)) };
 }
 // The blocking findings' facts → (facts) → is it one of them, by rule + file + line (the rule first: a W finding rarely shares one, and
 // a report of 120k findings built a key for each)
@@ -673,7 +676,8 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output, unco
   // W (1.41.0, CRIT_X D7): a weakened test or an added suppression dev-guardian found below the gate — ONE finish warning, never a
   // blocker (today's "(N new below it)" counted them and said no more)
   const facts = blocking ? blocking.map((f) => findingFacts(f, rel)) : [];
-  const integrity = integrityFindings(fresh, g.failOn, rel, blockedFacts(facts));
+  const suppressionsNoted = Array.isArray(j.coverage_notes) && j.coverage_notes.some((x) => typeof x === "string" && x.trim().startsWith(GUARDIAN_SUPPRESSIONS + ": "));
+  const integrity = integrityFindings(fresh, g.failOn, rel, blockedFacts(facts), suppressionsNoted);
   if (integrity) g.testIntegrity = integrity;
   if (!blocking) return g;
   g.blocking = blocking.length;

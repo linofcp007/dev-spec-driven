@@ -61,16 +61,16 @@ each under its `meta.checks` name (`… finish <feature> --run`) — never add c
 Never "behaviour unchanged" without the runs.
 
 **prune** — optional, a +tdd feature with every task done (or a finished one, which then reopens): the tests that no longer
-earn their place (`test-patterns.md` → Test value and pruning), removed only on the user's word. Candidates:
-`trace_check {name, matrix: true, code: true}` — a T-ID whose every row has a non-empty `supersededBy` and no
-`supersedePending`, at least one an AC (`retired-ac`; never one that covers an EC / NFR / SC row; its files, the row's
-`tests[].files`) — then a prune-mode `dev-spec-driven:spec-reviewer` (inline without a subagent tool): prune (what still
-guards each criterion the test covers) · keep · retrace · strengthen per candidate, plus `same-path` / `no-kill` probe
-requests. You run the probes — a tracked, clean file only, restored from a hash-checked copy, each test of a pair run
-alone; no shell, no probe, so `retired-ac` only (`subagent-execution.md` → The pruning pass). The report:
-`.specs/<feature>/.execution/prune-report.md`. Say the churn first (test-plan, then tests, then tasks — each unforced: a
-retired AC needs no planned test; on a finished feature execution and a new finish too) and batch
-the feature's prunings. On the user's yes: the rows out of `test-plan.md`, `spec_impact {name, phase: "test-plan"}`'s
+earn their place (`test-patterns.md` → Test value and pruning), removed only on the user's word. The map:
+`trace_check {name, matrix: true, code: true}` (each row's `tests[].files`) — never a criterion's last planned test (an AC,
+EC, NFR or SC left with none) nor an eval / load row; a test of an AC a shipped feature retired (`supersededBy` without
+`supersedePending`) is never pruned: it fails once the superseding feature ships, so name it — it needs a `/spec-change` on
+its own feature. Then a prune-mode `dev-spec-driven:spec-reviewer` (inline without a subagent tool): its `same-path` /
+`no-kill` candidates with their probe requests, then prune (what still guards each criterion the test covers) · keep ·
+strengthen per candidate. You run the probes — a tracked, clean file only, restored from a hash-checked copy, each test of
+a pair run alone; no shell, no probe, so no pruning (`subagent-execution.md` → The pruning pass). The report:
+`.specs/<feature>/.execution/prune-report.md`. Say the churn first (test-plan, then tests, then tasks — each unforced: every
+criterion keeps a planned test; on a finished feature execution and a new finish too) and batch the feature's prunings. On the user's yes: the rows out of `test-plan.md`, `spec_impact {name, phase: "test-plan"}`'s
 `retire` applied, a deleted file out of every done task's `_Implements:_`, each test removed whole, each changed protected
 test accepted (`feature protect <feature> <file> --accept --reason "pruned: …"`), then the re-approvals.
 
