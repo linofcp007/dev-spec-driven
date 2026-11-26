@@ -454,6 +454,13 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const rows = {};
     for (const [w, want] of DEV_ROWS) rows["devSpecGlob(" + js(w) + ") " + want] = oldDevSpecGlob(w) === want && E.devSpecGlob(w) === want;
     for (const [g, mode, name, want] of SHELL_ROWS) rows["shellGlob(" + js(g) + ", " + mode + ")(" + js(name) + ") " + want] = oldShell(g, mode, name) === want && newShell(g, mode, name) === want;
+    // (devSpecGlob's reading where no CLI name reaches it — the names hold no separator and no line terminator: its `*` is the old
+    // `[^/\\]*`, never across / or \, its `?` RegExp's `.`, never a line terminator; the shell's cross both)
+    const dev = (g, name) => E.globMayName(g, E.DEVSPEC_GLOB)(name), sh = (g, name) => newShell(g, "ps", name);
+    Object.assign(rows, { "devSpecGlob's a*c: a/c false": dev("a*c", "a/c") === false, "devSpecGlob's a*c: a\\c false": dev("a*c", "a\\c") === false,
+      "devSpecGlob's a*c: abbc true": dev("a*c", "abbc") === true, "devSpecGlob's a?c: a\\nc false": dev("a?c", "a\nc") === false,
+      "devSpecGlob's a?c: a\\rc false": dev("a?c", "a\rc") === false, "devSpecGlob's a?c: a.c true": dev("a?c", "a.c") === true,
+      "the shell's a*c: a/c true": sh("a*c", "a/c") === true, "the shell's a?c: a\\nc true": sh("a?c", "a\nc") === true });
     all("1.41.1 (R1): the linear glob matcher answers each row as the parent's RegExp builders do (a row false: the oracle or the matcher disagrees with it)", rows);
     // (a set no RegExp reads, where each reader takes it — a path segment then may be no guarded name, the CLI's subcommand is
     // unreadable, a program word is no glob of the CLI's script: the decisions the parent made, never a throw)

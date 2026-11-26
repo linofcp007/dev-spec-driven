@@ -3126,6 +3126,7 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, AP
   approvalGuardDecision, STOP_RECENT_HOURS, guardLevel, guardInput, stopCheckEnabled, setStopCheck, stopProse,
   reviewModelsInput, reviewModelsSetting, setReviewModels, // 1.36 the review panel (meta.reviewModels)
   stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, recordSpecEdit, stopCheck, devSpecGlob, shellGlob,
+  globMayName, DEVSPEC_GLOB, // 1.41.1 the guard's one glob matcher (its devSpecGlob reading — tested where no CLI name reaches it)
   guardTargetPath, SESSION_MAX_UP, worktreeProject, sessionProject, sessionPath, readStopReport, approvalEditTargets,
   approvalCommand, // 1.36 guard tests: the lift line a protected test's ask names (protect.js) — the approval guard's own builder
   // the shell's file operations, fed scripts, MCP file tools, the edit guard on the shell
