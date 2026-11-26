@@ -23,7 +23,7 @@ exports.run = ({ ok, runIn, tmp }) => {
   let doc = null;
   try { doc = JSON.parse(dr.out.slice(dr.out.indexOf("{"))); } catch { /* not JSON */ }
   const links = doc && (doc.checks || []).find((c) => c.id === "specs-links");
-  const msg = MSG("en").err.featureLinked(".specs/lnk/");
+  const msg = typeof MSG("en").err.featureLinked === "function" ? MSG("en").err.featureLinked(".specs/lnk/") : "(no entry)";
   ok(st.code === 1 && st.out.includes(msg) && !/OUTSIDE-/.test(st.out + nx.out + sj.out) && parsed && parsed.ok === false && parsed.code === "feature-linked" && nx.code === 1 &&
     !!links && links.status === "warn" && links.detail.includes(".specs/lnk") && !/OUTSIDE-/.test(dr.out),
     "1.41.1 read gate (CLI): `status` / `next` of a linked feature folder exit 1 with feature-linked (its --json the MCP result, code feature-linked) and nothing behind the link; `doctor --json` names it in specs-links (got " +

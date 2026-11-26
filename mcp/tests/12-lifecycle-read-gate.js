@@ -300,6 +300,9 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       // absent → meta {} → off, while the raw existence check said "present")
       const a1 = fresh("guard", { approvalGuard: "ask" });
       outLink(a1, path.join(a1.root, "roadmap.json"));
+      // its target says off — a file the agent may write outside .specs/ unguarded (the parent followed the link: off)
+      const t1 = path.join(a1.out, "roadmap.json.moved");
+      fs.writeFileSync(t1, js({ ...JSON.parse(fs.readFileSync(t1, "utf8")), meta: { ...JSON.parse(fs.readFileSync(t1, "utf8")).meta, approvalGuard: "off" } }, null, 2));
       const lvl = E.withReadCache(() => E.approvalGuardLevel(a1.p));
       const h1 = hookIn(path.join(HOOKS, "approval-hook.js"), { input: js({ hook_event_name: "PreToolUse", tool_name: "mcp__plugin_dev-spec-driven_spec-driven__spec_approve", tool_input: { name: "feat", phase: "requirements", projectDir: a1.p }, cwd: a1.p }), cwd: a1.p });
       const twin = fresh("guard-twin", { approvalGuard: "off" });
@@ -413,7 +416,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         fs.lstatSync = function (q) { if (mode === "eacces" && fold(path.resolve(String(q))) === dirKey) throw Object.assign(new Error("EACCES"), { code: "EACCES" }); return ls.apply(this, arguments); };
         try { return E.withReadCache(fn); } finally { fs.realpathSync.native = rp; fs.lstatSync = ls; }
       };
-      const read = () => [E.readIfExists(tasks) === null, E.existsRaw(tasks), E.isDirSafe(f.dir), (E.readDirCached(f.dir) || null) === null, E.safeReaddir(f.dir).length, E.readFileHead(tasks, 100) === null, E.specsReadBlocked(tasks)];
+      const read = () => [E.readIfExists(tasks) === null, E.existsRaw(tasks), E.isDirSafe(f.dir), (E.readDirCached(f.dir) || null) === null, E.safeReaddir(f.dir).length, E.readFileHead(tasks, 100) === null, typeof E.specsReadBlocked === "function" ? E.specsReadBlocked(tasks) : "n/a"];
       const plain = E.withReadCache(read);
       eq({ out: withStub("out", read), root: withStub("root", read), eacces: withStub("eacces", read), plain },
         { out: [true, false, false, true, 0, true, true], root: [true, false, false, true, 0, true, true], eacces: [true, false, false, true, 0, true, true], plain: [false, true, true, false, plain[4], false, false] },
@@ -512,6 +515,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
     // the status line's tests gate: a plan's file through a junction out is never read (its T-ID counts for nothing)
     if (linked) {
       fs.writeFileSync(path.join(f.dir, "test-plan.md"), "# Test Plan: feat\n\n## Traceability Matrix\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n| T-01 | unit | example | it | US-1.AC-1 | `tests/ext/a.test.js` |\n");
+      S.approvePhase(p, "feat", null, "t", { through: "test-plan", force: true, reason: "r" });
       const reads = [];
       S.statusLine(p, { reads });
       ok(!reads.some((r) => fold(r).includes(fold(path.join("tests", "ext")))), "1.41.1 R3: the status line's tests gate never reads a plan's file through a junction out of the project (got " + js(reads) + ")");
