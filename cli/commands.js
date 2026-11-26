@@ -790,7 +790,7 @@ const COMMANDS = [
       if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
       return createRun(c, (r) => {
         const SP = spec.msg(r.lang).spike;
-        const si = spec.spikeInfo(r.dir);
+        const si = spec.withReadCache(() => { spec.specsRoot(c.projectDir); return spec.spikeInfo(r.dir); }); // (1.41.1) the project recorded: the gate's root
         if (si.question) log(SP.cliQuestion(si.question));
         if (si.timebox.state === "date") log(SP.cliUntil(si.timebox.date));
       });
