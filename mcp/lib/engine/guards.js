@@ -1085,24 +1085,43 @@ const GUARDED_NAMES = ["roadmap.json", ".state.json", "observed.jsonl"];
 // dev-guardian's settings (guardian.js — guarded only while a check runs the gate: guardianGuardFilter)
 const isGuardianSetting = (h) => !!h && /^guardian-/.test(String(h.setting || ""));
 const RE_SHELL_WILD = /[*?[\u0001\u0002]/;
-// A path word with the variables the same command assigned put in (`D=.specs; … $D/roadmap.json`), any other one marked SHELL_VAR.
-// ctx (a reading's — approvalGuardDecision's, shellWriteTargets'): what tracking adds to the text read is counted (shellGrow) — a value
-// put in, a `cd` folder put before a path. `A=$A$A` doubles a value: 21 doublings of 8 characters are 16 M, read again by every path
-// after it (review 1 of 1.41.1, S1-F3: 321 characters ran the approval hook past its timeout). Past APPROVAL_COMMAND_MAX the command
-// is too long to read (ctx.tooLong — the approval guard's `too-long`) and every variable reads as SHELL_VAR from then on.
-function shellVarText(w, vars, ctx) {
-  return String(w).replace(/\$\{(?:env:)?([A-Za-z_]\w*)\}|\$\{[^{}]*\}|\$(?:env:)?([A-Za-z_]\w*)|\$[0-9@*#?$!]|%([A-Za-z_]\w*)%/gi, (m, a, b, c) => {
+// What tracking may build, and what it may make the readers read again (1.41.1; review 1 S1-F3, review 2 R2H-F2 / F4). ctx (a reading's —
+// approvalGuardDecision's, shellWriteTargets'): ctx.tooLong is set — the approval guard's `too-long`, every variable reading as SHELL_VAR
+// from then on — by "value": a text tracking BUILDS past APPROVAL_COMMAND_MAX, the read limit (a variable's value, a word with its
+// variables put in, the cd folder, a `-c` script with its positional parameters: `A=$A$A` doubles — 21 doublings of 8 characters are
+// 16 M), or "total": the text the PATHS are read with past APPROVAL_TRACK_WORK (each value put in a path word, each cd folder put
+// before a relative one — what the path readers read again). An assignment costs the work of copying its value only: `FLAGS="$FLAGS
+// --x"` ×500 builds 12 K and reads nothing (review 2: counting every re-read as the read limit refused monorepo commands of 3–4 K).
+// APPROVAL_TRACK_WORK, measured (claude-code-integration.md → Human approval guard): ~0.3 µs a character through the path readers on
+// Windows 11 — 2 M is ≤ 1 s at the bound, well under the hook's deadline.
+const APPROVAL_TRACK_WORK = 2 * 1024 * 1024;
+// A word with the variables the same command assigned put in (`D=.specs; … $D/roadmap.json`), any other one marked SHELL_VAR. inPath:
+// a path word (the work budget too).
+function shellVarText(w, vars, ctx, inPath) {
+  const s = String(w);
+  let size = s.length;
+  return s.replace(/\$\{(?:env:)?([A-Za-z_]\w*)\}|\$\{[^{}]*\}|\$(?:env:)?([A-Za-z_]\w*)|\$[0-9@*#?$!]|%([A-Za-z_]\w*)%/gi, (m, a, b, c) => {
     const k = String(a || b || c || "").toLowerCase();
-    return k && vars && own(vars, k) && shellGrow(ctx, vars[k].length - m.length) ? vars[k] : SHELL_VAR;
+    if (!(k && vars && own(vars, k)) || (ctx && ctx.tooLong)) return SHELL_VAR;
+    const v = vars[k];
+    size += v.length - m.length;
+    if (!shellBuilt(ctx, size) || (inPath && !shellWork(ctx, v.length))) return SHELL_VAR;
+    return v;
   });
 }
-// ctx's budget: n more characters to read → may they be? (no ctx: no budget — a reading without tracking adds nothing)
-function shellGrow(ctx, n) {
+// ctx's bounds: a text of `size` characters built → may it be? n more characters for the path readers → may they be? (no ctx: no
+// bound — a reading without tracking builds nothing)
+function shellBuilt(ctx, size) {
+  if (!ctx || size <= APPROVAL_COMMAND_MAX) return true;
+  if (!ctx.tooLong) ctx.tooLong = "value";
+  return false;
+}
+function shellWork(ctx, n) {
   if (!ctx) return true;
   if (ctx.tooLong) return false;
-  ctx.grown = (ctx.grown || 0) + Math.max(0, n);
-  if (ctx.grown <= APPROVAL_COMMAND_MAX) return true;
-  ctx.tooLong = true;
+  ctx.work = (ctx.work || 0) + n;
+  if (ctx.work <= APPROVAL_TRACK_WORK) return true;
+  ctx.tooLong = "total";
   return false;
 }
 // Bash's brace expansion of a word (`{.specs,x}/roadmap.json`, `roadmap.json{,}`, `appro{v,}e`) → its words (at most `cap`); a group
@@ -1192,12 +1211,12 @@ countReads(shellPathFacts);
 // A path word → its readings: each brace expansion (Bash), as written and — after a `cd` earlier in the same command — under that folder;
 // on win32 (ctx.win) each also as Windows reads it (shellWinReading: an 8.3 alias, a trailing dot / space).
 function shellPathReadings(w, mode, ctx) {
-  const t = shellVarText(w, ctx && ctx.vars, ctx);
+  const t = shellVarText(w, ctx && ctx.vars, ctx, true);
   const out = [];
   for (const a of mode === "bash" ? braceExpand(t) : [t]) {
     const texts = [a];
     // (the cd folder put before it counts toward the command's read: `cd <60 K>; cp a b; cp a b; …` read it again for every path)
-    if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:|\u0001)/.test(a) && shellGrow(ctx, ctx.cwd.length + 1)) texts.push(ctx.cwd + "/" + a);
+    if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:|\u0001)/.test(a) && shellWork(ctx, ctx.cwd.length + 1)) texts.push(ctx.cwd + "/" + a);
     for (const x of texts) {
       out.push(shellPathFacts(x, mode));
       const wr = shellWinReading(x, ctx);
@@ -1659,7 +1678,7 @@ function shellOpActions(o, mode, ctx) {
         if ((!specsDest && !f.guardianSelf) || f.execution || (!f.folder && !f.wild && !/[\\/]$/.test(pr[0]))) continue;
         if (o.archive) { out.push(specsDest ? shellDown("specs") : guardianFolderDown()); continue; }
         for (const sp of o.sources || []) {
-          const base = trimSlashEnd(shellVarText(sp[0], ctx && ctx.vars, ctx));
+          const base = trimSlashEnd(shellVarText(sp[0], ctx && ctx.vars, ctx, true));
           const names = [base.replace(/^[\s\S]*[\\/]/, "") || "*"];
           if (o.contents && shellPathFacts(base, mode).folder) names.push("*"); // xcopy / robocopy / rsync copy a folder's CONTENTS
           // (the destination's reading already holds its cd; Windows' reading of the name landing there — BASELI~1.JSO — too)
@@ -1693,7 +1712,7 @@ function shellOpPaths(o, mode, ctx) {
   if (!["write", "replace", "into"].includes(o.op)) return [];
   const out = [];
   const read = (t) => {
-    const v = shellVarText(t, ctx && ctx.vars, ctx);
+    const v = shellVarText(t, ctx && ctx.vars, ctx, true);
     for (const a of mode === "bash" ? braceExpand(v) : [v]) {
       if (!a || a.startsWith(SHELL_VAR) || /^(?:\/dev\/|\$null$|nul$|con$)/i.test(a)) continue;
       const h0 = (/^~(?=$|[\\/])/.test(a) ? os.homedir() + a.slice(1) : a).split(SHELL_VAR).join("_").split(SHELL_ANY).join("_");
@@ -1701,7 +1720,7 @@ function shellOpPaths(o, mode, ctx) {
       // guardCheck reads each target's real path)
       for (const h of ctx && ctx.win && winPathTrim(h0) !== h0 ? [h0, winPathTrim(h0)] : [h0]) {
         out.push(h);
-        if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:)/.test(h) && shellGrow(ctx, ctx.cwd.length + 1)) out.push(ctx.cwd + "/" + h);
+        if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:)/.test(h) && shellWork(ctx, ctx.cwd.length + 1)) out.push(ctx.cwd + "/" + h);
       }
     }
   };
@@ -1882,7 +1901,7 @@ function shellApprovalActions(command, level, depth, mode, meta, ctx) {
       if (shell && /\s/.test(words[j]) && want(words[j])) add(shellApprovalActions(words[j], level, depth + 1, shell, meta, c));
       // `sh -c 'node "$0" approve x tasks' cli/dev-spec.js` — a POSIX shell's -c script with its positional
       // parameters ($0 … $9, "$@", $*) taken from the words after it, then read as a script.
-      if (posix && words[j] === "-c" && j + 1 < end && /\$(?:[0-9@*]|\{[0-9@*]\})/.test(words[j + 1])) lex(withPositionals(words[j + 1], raw.slice(j + 2, end)), "bash");
+      if (posix && words[j] === "-c" && j + 1 < end && /\$(?:[0-9@*]|\{[0-9@*]\})/.test(words[j + 1])) lex(withPositionals(words[j + 1], raw.slice(j + 2, end), c), "bash");
       const p = approvalProgram(words[j]);
       if (APPROVAL_SHELLS.has(p)) { shell = approvalShellMode(p); posix = APPROVAL_POSIX_SHELLS.has(p); }
       // the unquoted forms only where the word RUNS — the program (after launchers) or a find -exec's command: `echo cmd /c …` is text
@@ -1921,7 +1940,27 @@ function shellTrack(words, raw, mode, ctx) {
   const t = words.slice(k + 1).find((w) => !/^-[A-Za-z]|^\/d$/i.test(w)); // past cmd's /d, PowerShell's -Path / -LiteralPath
   const dir = t === undefined ? "" : shellVarText(t, ctx.vars, ctx);
   if (!dir || dir === "-" || /^~/.test(dir) || dir.includes(SHELL_VAR)) { ctx.cwd = ""; return; }
-  ctx.cwd = /^(?:[\\/]|[A-Za-z]:)/.test(dir) || !ctx.cwd ? dir : ctx.cwd + "/" + dir;
+  const cwd = cdJoin(ctx.cwd, dir);
+  ctx.cwd = shellBuilt(ctx, cwd.length) ? cwd : "";
+}
+// The folder a cd moves to (ctx.cwd): `dir` under `cwd` (an absolute one alone) — `.` dropped and a `..` folded into the plain segment
+// before it, as path.posix.normalize reads every path after it (approvalPathText: the same facts), so `cd pkg && … && cd ..` ×300 keeps
+// the folder short (1.41.1 review 2, R2H-F2: it grew by `/..` each time and every path after it read it again). One pass, only when
+// the text holds a `.` / `..` segment (else it is kept as written); both separators read as one, written `/`; a `..` with no plain
+// segment before it stays (`../x`; a drive's `C:` is never folded), `/..` at the root is the root.
+function cdJoin(cwd, dir) {
+  const text = /^(?:[\\/]|[A-Za-z]:)/.test(dir) || !cwd ? dir : cwd + "/" + dir;
+  if (!/(?:^|[\\/])\.\.?(?=[\\/]|$)/.test(text)) return text;
+  const rooted = /^[\\/]/.test(text);
+  const out = [];
+  for (const seg of text.split(/[\\/]+/)) {
+    if (seg === "" || seg === ".") continue;
+    const last = out[out.length - 1];
+    if (seg === ".." && last !== undefined && last !== ".." && !/^[A-Za-z]:$/.test(last)) { out.pop(); continue; }
+    if (seg === ".." && rooted && !out.length) continue;
+    out.push(seg);
+  }
+  return (rooted ? "/" : "") + out.join("/") || ".";
 }
 // Text fed to a shell as its script — the simple command is a shell with no script of its own reading stdin (bash /
 // sh -s / no operand, cmd without /c, pwsh / powershell without -Command / -File or with `-Command -`, `iex` / Invoke-Expression without
@@ -2034,11 +2073,33 @@ const joinScriptWords = (list) => list.map((w) => (/\s/.test(w) && !w.includes('
 // the POSIX shells whose `-c script arg0 arg1 …` hands the script its positional parameters.
 const APPROVAL_POSIX_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 // A -c script with $0 … $9, ${N}, "$@" / $@ / $* replaced by the words after it (arg0 is $0), each quoted when it holds whitespace.
-function withPositionals(script, args) {
+// ctx: the script it builds is bounded as tracking's values are (shellBuilt — 1.41.1 review 2, R2H-F4: `sh -c '$1'×16,000 … x <30 K>`
+// built 480 M characters): past the read limit nothing is put in any more, the script reads as "" and the command is too long.
+function withPositionals(script, args, ctx) {
   const q = (w) => joinScriptWords([w]);
   const rest = joinScriptWords(args.slice(1));
-  return String(script).replace(/"\$(?:@|\{@\})"|\$(?:@|\*|\{[@*]\})/g, rest)
-    .replace(/"?\$(?:([0-9])|\{([0-9])\})"?/g, (m, a, b) => { const v = args[Number(a !== undefined ? a : b)]; return v === undefined ? "" : q(v); });
+  const s0 = String(script);
+  let size = s0.length, over = false;
+  const fail = () => { over = true; shellBuilt(ctx || {}, APPROVAL_COMMAND_MAX + 1); return ""; };
+  const put = (m, v) => {
+    if (over) return "";
+    size += v.length - m.length;
+    return size > APPROVAL_COMMAND_MAX ? fail() : v;
+  };
+  // (`rest` was a replacement STRING — $$ $& $` $' read in it: the same text, built piece by piece within the bound)
+  const expand = (m, offset, str) => {
+    if (!rest.includes("$")) return rest;
+    let o = "";
+    for (const t of rest.match(/\$[$&`']|[^$]+|\$/g)) {
+      const piece = t === "$$" ? "$" : t === "$&" ? m : t === "$`" ? str.slice(0, offset) : t === "$'" ? str.slice(offset + m.length) : t;
+      if (size + o.length + piece.length > APPROVAL_COMMAND_MAX) return null;
+      o += piece;
+    }
+    return o;
+  };
+  const out = s0.replace(/"\$(?:@|\{@\})"|\$(?:@|\*|\{[@*]\})/g, (m, offset, str) => { if (over) return ""; const v = expand(m, offset, str); return v === null ? fail() : put(m, v); })
+    .replace(/"?\$(?:([0-9])|\{([0-9])\})"?/g, (m, a, b) => { const v = args[Number(a !== undefined ? a : b)]; return put(m, v === undefined ? "" : q(v)); });
+  return over ? "" : out;
 }
 // The index of a JavaScript runtime's stdin script marker in a simple command (`node - approve …`: the `-`; `node < cli/dev-spec.js`:
 // the runtime itself, no arguments), after launchers / env assignments and the runtime's options — or -1.
@@ -2278,9 +2339,10 @@ function approvalGuardDecision(payload, level, opts = {}) {
       // ctx: the payload's cwd (a relative path's folder for Windows' reading of it) and that reading's disk budget
       const ctx = { vars: Object.create(null), cwd: "", win, base: payload.cwd, disk: { left: SHORT_DISK_PATHS } };
       actions = keep(shellApprovalActions(head, lvl, 0, mode, meta, ctx));
-      // (1.41.1, review 1 S1-F3) its variables and cd folders grew the text read past the read limit (shellGrow — `A=$A$A`): too long
-      // to read, as a command past the limit is — refused at deny; every variable after the limit was read as unknown
-      if (ctx.tooLong) actions.push({ kind: "unreadable", why: "too-long", expanded: true, length: APPROVAL_COMMAND_MAX, source: "shell" });
+      // (1.41.1, review 1 S1-F3 / review 2 R2H-F2) what its tracking builds passed the read limit, or what its paths are read with passed
+      // the work bound (shellBuilt / shellWork — `A=$A$A`, `sh -c '$1'…`): too long to read, as a command past the limit is — refused
+      // at deny; every variable after it was read as unknown. `expanded` names which, `length` the bound it passed (the reason says it).
+      if (ctx.tooLong) actions.push({ kind: "unreadable", why: "too-long", expanded: ctx.tooLong, length: ctx.tooLong === "total" ? APPROVAL_TRACK_WORK : APPROVAL_COMMAND_MAX, source: "shell" });
       // fail closed: the CLI named with an approval word, in a form the lexer can't follow (a launcher it doesn't
       // know, a string built by concatenation, a glob, a variable) — the user is asked instead of the call being allowed.
       if (!actions.length && approvalUnparsed(head, mode)) actions = [{ kind: "unreadable", why: "unparsed", source: "shell" }];

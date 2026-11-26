@@ -534,6 +534,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       "  if (mode === 'throw') throw new Error('preload: boom');",
       "  if (mode === 'exit') process.exit(0);",
       "  if (mode === 'log') console.log('noise from the worker');",
+      "  if (mode === 'afterlevel') { const pp = wt.parentPort, post = pp.postMessage.bind(pp); pp.postMessage = (m) => { post(m); if (m && m.known) spin(20000); }; }",
       "  if (mode === 'slowengine') {",
       "    const Module = require('module'), load = Module._load;",
       "    Module._load = function (request) { if (String(request).split(String.fromCharCode(92)).join('/').endsWith('/mcp/lib/spec.js')) spin(20000); return load.apply(this, arguments); };",
@@ -560,7 +561,21 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const hooksJson = JSON.parse(fs.readFileSync(path.join(HOOKS, "hooks.json"), "utf8"));
     const T = hooksJson.hooks.PreToolUse.flatMap((e) => e.hooks).find((h) => (h.args || []).some((a) => /approval-hook\.js$/.test(a))).timeout * 1000;
     const big = (file) => js({ hook_event_name: "PreToolUse", tool_name: "Write", cwd: pd, tool_input: { file_path: path.join(pd, file), content: "x".repeat(AH.MAX_INPUT + 1024 * 1024) } });
-    const partialReason = E.approvalGuardDecision({ hook_event_name: "PreToolUse" }, "deny", { lang: "pt", meta: { approvalGuard: "deny", lang: "pt" }, partial: true }).reason;
+    // (fix round 2) an unguarded session beside the guarded one: R2H-F3's Write of the GUARDED project's roadmap.json past MAX_INPUT; R2H-F7's
+    // worker held after it said level 0; R2H-F1's candidate folders whose roadmap.json / ROADMAP.md is no regular file — a FOLDER in a
+    // project with features (gone: ask), and on POSIX a FIFO (answered, the process ended, well before T; win32 makes none)
+    const pu = path.join(tmp, "r1411h-open");
+    S.initProject(pu, ["core"], "en");
+    const inDir = (dir, tool, ti) => js({ session_id: "s", hook_event_name: "PreToolUse", cwd: dir, tool_name: tool, tool_input: ti });
+    const pdir = path.join(tmp, "r1411h-dirmap");
+    S.initProject(pdir, ["core"], "en", { approvalGuard: "deny" });
+    S.createFeature(pdir, "Feat", ["core"], "", undefined, "en");
+    fs.rmSync(path.join(pdir, ".specs", "roadmap.json"));
+    fs.mkdirSync(path.join(pdir, ".specs", "roadmap.json"));
+    const POSIX = process.platform !== "win32";
+    const fifoAt = (dir, name) => { fs.mkdirSync(path.join(dir, ".specs"), { recursive: true }); return spawnSync("mkfifo", [path.join(dir, ".specs", name)]).status === 0; };
+    const pf1 = path.join(tmp, "r1411h-fifo-map"), pf2 = path.join(tmp, "r1411h-fifo-md");
+    const fifos = POSIX ? [fifoAt(pf1, "roadmap.json"), fifoAt(pf2, "ROADMAP.md")] : [];
     const LIMITS = path.join(tmp, "r1411h-limits.json");
     // (each sentence also read from its locale table: the expected text above is built by the same i18n.js the hook loads)
     const ACT = { en: require("./lib/i18n/en.js").text.approvalActions, pt: require("./lib/i18n/pt.js").text.approvalActions };
@@ -581,13 +596,21 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       startLate: run(bash(APPROVE), { R1411H_MAIN: "delay", R1411H_WORKER: "busy", DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "500" }),
       bigCandidate: run(big(".specs/roadmap.json")),
       bigNot: run(big("src/a.js")),
+      bigOther: run(inDir(pu, "Write", { file_path: path.join(pd, ".specs", "roadmap.json"), content: "x".repeat(AH.MAX_INPUT + 1024 * 1024) }), { CLAUDE_PROJECT_DIR: pu }),
+      huge: run(inDir(pu, "Write", { file_path: path.join(pu, "src", "a.js"), content: "x".repeat(AH.MAX_PAYLOAD + 1024) }), { CLAUDE_PROJECT_DIR: pu }),
+      afterLevel: run(inDir(pu, "Bash", { command: APPROVE }), { CLAUDE_PROJECT_DIR: pu, R1411H_WORKER: "afterlevel", DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "1500" }),
+      dirMap: run(inDir(pu, "Bash", { command: "cd " + JSON.stringify(pdir) + " && " + APPROVE }), { CLAUDE_PROJECT_DIR: pu }),
+      fifoMap: POSIX ? run(bash("cd " + JSON.stringify(pf1) + "; cd " + JSON.stringify(pd) + "; " + APPROVE)) : null,
+      fifoMd: POSIX ? run(bash("cd " + JSON.stringify(pf2) + "; cd " + JSON.stringify(pd) + "; " + APPROVE)) : null,
     };
-    const brief = Object.fromEntries(Object.entries(R).map(([k, v]) => [k, v.d + " " + v.ms + " ms, " + v.workers + " worker(s)"]));
+    const brief = Object.fromEntries(Object.entries(R).map(([k, v]) => [k, v ? v.d + " " + v.ms + " ms, " + v.workers + " worker(s)" : "(win32: no FIFO)"]));
     all("1.41.1 fix round 1 (Q4): the approval hook answers by its deadline (" + D + " ms of hooks.json's " + T + ") — a worker only past the pre-check, ask on a late, failed, " +
-      "out-of-memory, exited or absent worker, the deadline never raised by the test variable, a stdin past MAX_INPUT read as a partial payload (got " + js(brief) + ")", {
+      "out-of-memory, exited or absent worker, the deadline never raised by the test variable, a stdin past MAX_INPUT decided whole, past MAX_PAYLOAD asked; silent after a level-0 " +
+      "report; a candidate folder's roadmap.json that is no regular file never opened (got " + js(brief) + ")", {
       "the margin: hooks.json's timeout − the deadline ≥ 3 s (measured past the deadline under 4 suites: ≤ 1.8 s with the process's start)": () => D < T && T - D >= 3000,
       "a normal approve at deny: deny, through one worker": () => R.approve.d === "deny" && R.approve.workers === 1,
-      "…that worker runs under the hook's heap limits (WORKER_LIMITS)": () => { const l = JSON.parse(fs.readFileSync(LIMITS, "utf8")); return ["maxOldGenerationSizeMb", "maxYoungGenerationSizeMb", "stackSizeMb"].every((k) => l[k] === AH.WORKER_LIMITS[k]); },
+      // (fix round 2, R2H-F6: the numbers themselves — compared with the hook's own export, a 4,096 MB limit passed)
+      "…that worker runs under a 512 MB old space, 64 MB young, an 8 MB stack": () => { const l = JSON.parse(fs.readFileSync(LIMITS, "utf8")); return l.maxOldGenerationSizeMb === 512 && l.maxYoungGenerationSizeMb === 64 && l.stackSizeMb === 8; },
       "the deadline's and the failure's sentences, as their locale tables write them (en, pt)": () => R.late.reason.includes(ACT.en.timeout(1)) && R.slowEngine.reason.includes(ACT.pt.timeout(3)) &&
         R.thrown.reason.includes(ACT.en.error) && R.exited.reason.includes(ACT.en.error),
       "a call that can't be an approval: silent, no worker": () => R.notCandidate.d === "silent" && R.notCandidate.workers === 0,
@@ -606,8 +629,16 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       "a worker that can't start: ask": () => R.noWorker.d === "ask" && R.noWorker.reason === ask("en", "error"),
       "a worker that prints: the hook's output stays one JSON object (deny)": () => R.printed.d === "deny",
       "the deadline counts from the process's start: a slow start past it starts no worker": () => R.startLate.d === "ask" && R.startLate.workers === 0,
-      "a stdin past MAX_INPUT naming .specs/: ask as a partial payload (pt)": () => R.bigCandidate.d === "ask" && R.bigCandidate.reason === partialReason,
-      "…naming nothing of the guard's: silent, no worker": () => R.bigNot.d === "silent" && R.bigNot.workers === 0,
+      // (fix round 2, R2H-F3: past MAX_INPUT the main thread parses nothing — the worker decides on the payload whole, as on a small one)
+      "a stdin past MAX_INPUT: decided whole in the worker — a Write of roadmap.json at deny is refused": () => R.bigCandidate.d === "deny" && R.bigCandidate.workers === 1,
+      "…a Write of src/: silent (one worker read it)": () => R.bigNot.d === "silent" && R.bigNot.workers === 1,
+      "…a Write of ANOTHER (guarded) project's roadmap.json from an unguarded session: deny, as ed680c92 (the 16 M head read only the session's)": () =>
+        R.bigOther.d === "deny" && R.bigOther.workers === 1,
+      "a stdin past MAX_PAYLOAD (not held): ask, the partial payload's sentence, no worker": () => R.huge.d === "ask" && R.huge.workers === 0 && R.huge.reason.includes(ACT.en.partial),
+      "a worker held after it said level 0 (no project guarded): silent at the deadline (R2H-F7)": () => R.afterLevel.d === "silent" && R.afterLevel.workers === 1 && R.afterLevel.ms < 1500 + (T - D),
+      "a cd target whose roadmap.json is a FOLDER, features in it: ask — no regular file reads as gone (R2H-F1)": () => R.dirMap.d === "ask",
+      "(POSIX) a cd target whose roadmap.json / ROADMAP.md is a FIFO: never opened — deny, the process ended well before T": () => !POSIX ||
+        (fifos.every(Boolean) && R.fifoMap.d === "deny" && R.fifoMap.ms < T - 3000 && R.fifoMd.d === "deny" && R.fifoMd.ms < T - 3000),
     });
     // in-process: the main thread's share (needsDecision), the deadline's test variable (deadlineMs), decide's onLevel
     const calls = [];
@@ -649,6 +680,10 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       "sweep: a 27 K cd folder before 3,000 paths": ["Bash", "cd " + "d".repeat(27000) + "; " + "cp a b; ".repeat(3000) + APPROVE],
       "sweep: Rename-Item of a 60 K name": ["PowerShell", "Rename-Item " + "a".repeat(60000) + "/ -NewName x; " + APPROVE],
       "sweep: a 60 K slash run copied into .specs/": ["Bash", "cp " + "/".repeat(60000) + "x .specs/; " + APPROVE],
+      // (fix round 2) R2H-F4 a -c script built from 16,000 positional parameters, the work bound's edge, a cd / cd .. chain ×2,000 folded
+      "R2H-F4 sh -c '$1'×16,000 + a 30 K argument": ["Bash", "sh -c '" + "$1".repeat(16000) + " dev-spec' x " + "a".repeat(30000) + "; " + APPROVE],
+      "R2H-F2 a 1,000-character value in 2,098 paths": ["Bash", "A=" + "a".repeat(1000) + "; " + "cp $A/x .specs/; ".repeat(2098) + APPROVE],
+      "R2H-F2 cd x && rm -f y && cd .. ×2,000": ["Bash", "cd w && " + Array.from({ length: 2000 }, () => "cd x && rm -f y && cd ..").join(" && ") + " && " + APPROVE],
     };
     const twin = (tool, command) => (tool === "PowerShell" ? "Write-Output " : "echo ") + "a".repeat(Math.max(1, command.length - APPROVE.length - 20)) + "; " + APPROVE;
     const call = (tool, command) => {
@@ -676,7 +711,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const dec = (tool, command) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command } }, "deny", { meta: {}, lang: "en" });
     const acts = (r) => (r.actions || []).map((a) => a.kind + ":" + (a.setting || a.why || a.phase) + (a.expanded ? "+expanded" : ""));
     const A = M.msg("en").approvalGuard;
-    const tooLongReason = A.deny(A.action({ kind: "unreadable", why: "too-long", expanded: true, length: 64 * 1024 }), null);
+    const tooLongReason = A.deny(A.action({ kind: "unreadable", why: "too-long", expanded: "value", length: 64 * 1024 }), null);
     const dbl = (k, tail) => "A=xxxxxxxx; " + "A=$A$A; ".repeat(k) + tail;
     const IN = {
       dbl22: dec("Bash", dbl(22, "cat .specs/roadmap.json")),
@@ -692,7 +727,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     };
     all("1.41.1 fix round 1 (S1-F3 / F4, the sweep): in-process, each shape's decision and action (got " + js(Object.fromEntries(Object.entries(IN).map(([k, r]) => [k, r.decision + " " + acts(r).join(",")]))) + ")", {
       "A=$A$A ×22 then a reader of .specs/: too long to read — deny, its own sentence": () => IN.dbl22.decision === "deny" && js(acts(IN.dbl22)) === js(["unreadable:too-long+expanded"]) && IN.dbl22.reason === tooLongReason &&
-        IN.dbl22.reason.includes(require("./lib/i18n/en.js").text.approvalActions.tooLongExpanded(64 * 1024)),
+        IN.dbl22.reason.includes(require("./lib/i18n/en.js").text.approvalActions.tooLongExpanded("value", 64 * 1024)),
       "…×5 (under the limit): read as before — allow": () => IN.dbl5.decision === "allow",
       "PowerShell's $a = \"$a$a\" ×24: too long — deny": () => IN.ps24.decision === "deny" && acts(IN.ps24).includes("unreadable:too-long+expanded"),
       "a 30 K cd folder before 3,000 paths: too long — deny; a 300-character one before 30: allow": () => IN.cdLong.decision === "deny" && acts(IN.cdLong).includes("unreadable:too-long+expanded") && IN.cdShort.decision === "allow",
@@ -719,5 +754,109 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const reads = { globs: E.globMayName.reads, paths: E.shellPathFacts.reads };
     all("1.41.1 fix round 1 (S1-F1): a glob of 5,300 distinct sets under 32 brace expansions makes no RegExp more than a plain twin, and is read once per path (got " + js({ nSets, nPlain, reads }) + ")",
       { noRegExp: nSets === nPlain, oncePerPath: reads.paths > 0 && reads.globs === reads.paths });
+  }
+
+  // 1.41.1 fix round 2 (review 2: R2H-F2 / F4 / F5) — what tracking BUILDS is bounded at the read limit (a value, a word with its variables
+  // put in, the cd folder — `.` / `..` folded —, a `-c` script with its positional parameters), and what the PATHS are read with by a work
+  // bound of its own (APPROVAL_TRACK_WORK). Round 1 counted every re-read against the 64 K read limit: monorepo commands of 3–4 K were
+  // refused. The LEGIT corpus below answers exactly as ed680c92 (= 3d74db53) did — the four decisions (deny / ask × win32 / POSIX readings)
+  // and the edit guard's targets (count + sha1 of the sorted, normalized list: R2H-F5, no target lost) pinned from it; the HOSTILE rows
+  // answer too-long (the reason names the bound it passed) and deny at deny; the work bound is pinned from both sides.
+  {
+    const E = require("./lib/engine/index.js");
+    const M = require("./lib/i18n.js");
+    const crypto = require("crypto");
+    const BS = String.fromCharCode(92);
+    const pkg = (i, w = 2) => "pkg-" + String(i).padStart(w, "0");
+    const times = (n, f, sep) => Array.from({ length: n }, (_, i) => f(i)).join(sep);
+    const CI = ["set -euo pipefail", "export NODE_ENV=production CI=true FORCE_COLOR=0", "export ARTIFACTS=\"$PWD/artifacts\"", "mkdir -p \"$ARTIFACTS\" dist logs",
+      "npm ci --no-audit --prefer-offline > logs/install.log 2>&1",
+      times(40, (i) => "( cd packages/" + pkg(i) + " && npm run lint > ../../logs/lint-" + pkg(i) + ".log && npm test -- --ci --reporters=default > ../../logs/test-" + pkg(i) + ".log )", "\n"),
+      times(40, (i) => "cp -r packages/" + pkg(i) + "/dist \"$ARTIFACTS/" + pkg(i) + "\"", "\n"), "tar -czf dist/artifacts.tgz -C \"$ARTIFACTS\" .",
+      "find logs -name '*.log' -size +1M -exec gzip {} \\;", "node cli/dev-spec.js doctor --json > logs/doctor.json"].join("\n");
+    const ALLOW = ["allow|", "allow|", "allow|", "allow|"];
+    // [tool, command, the four decisions, targets, their sha1] — ed680c92's answers
+    const LEGIT = {
+      "append FLAGS ×300 then tsc": ["Bash", "FLAGS=\"\"; " + times(300, (i) => "FLAGS=\"$FLAGS --include=src/module" + i + "\"", "; ") + "; tsc $FLAGS > build.log; node cli/dev-spec.js status", ALLOW, 1, "6bed715518e0"],
+      "append FLAGS ×500 then tsc": ["Bash", "FLAGS=\"\"; " + times(500, (i) => "FLAGS=\"$FLAGS --include=src/m" + i + "\"", "; ") + "; tsc $FLAGS > build.log; node cli/dev-spec.js status", ALLOW, 1, "6bed715518e0"],
+      "cd ../next && build ×150": ["Bash", "cd packages/" + pkg(0) + " && " + times(150, (i) => "npm run build > build.log && cd ../" + pkg(i + 1), " && ") + " && node ../../cli/dev-spec.js status", ALLOW, 33, "40eb0179c0cf"],
+      "cd pkg && rm -rf dist && cd .. ×300": ["Bash", "cd packages && " + times(300, (i) => "cd " + pkg(i, 3) + " && rm -rf dist && cd ..", " && ") + " && node ../cli/dev-spec.js status", ALLOW, 33, "e548c8ac3f16"],
+      "a 70-character cd, then rm -f of 1,000 files": ["Bash", "cd services/billing-api-gateway/internal/handlers/v2/generated/protobuf && rm -f " + times(1000, (i) => "f" + String(i).padStart(4, "0") + ".pb.go", " ") +
+        " && node ../../../../../../../cli/dev-spec.js status", ALLOW, 64, "9dbec889f913"],
+      "ROOT=<60>; cp $ROOT/src/fN $ROOT/out/fN ×700": ["Bash", "ROOT=/home/ci/workspace/monorepo/packages/frontend-dashboard; " + times(700, (i) => "cp $ROOT/src/f" + i + ".ts $ROOT/out/f" + i + ".ts", "; ") + "; node cli/dev-spec.js status", ALLOW, 64, "cf6057296854"],
+      "export PATH=\"$PATH:…\" ×200": ["Bash", times(200, (i) => "export PATH=\"$PATH:/opt/tools/bin" + i + "\"", "; ") + "; node cli/dev-spec.js doctor", ALLOW, 0, "da39a3ee5e6b"],
+      "CFLAGS=\"$CFLAGS -I$INC/pkgN\" ×150 then make": ["Bash", "INC=/usr/local/include; CFLAGS=\"\"; " + times(150, (i) => "CFLAGS=\"$CFLAGS -I$INC/" + pkg(i) + "\"", "; ") + "; make CFLAGS=\"$CFLAGS\" > make.log; node cli/dev-spec.js status", ALLOW, 1, "006d8d8d5e2c"],
+      "pushd pkg && build && popd ×200": ["Bash", times(200, (i) => "pushd packages/" + pkg(i, 3) + " && npm run build && popd", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "cd /repo && git status && cd sub && … && cd .. ×150": ["Bash", times(150, (i) => "cd /repo && git status && cd sub-" + i + " && git status && cd ..", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "a CI script of ~8 K": ["Bash", CI, ALLOW, 64, "7da8baf62a26"],
+      "a PowerShell build script": ["PowerShell", "$root = 'C:" + BS + "repo'; Set-Location $root; $out = ''; " + times(200, (i) => "$out = \"$out;$root" + BS + "packages" + BS + pkg(i, 3) + BS + "dist\"", "; ") + "; " +
+        times(50, (i) => "Set-Location \"$root" + BS + "packages" + BS + pkg(i, 3) + "\"; npm run build; Set-Location $root", "; ") + "; node cli" + BS + "dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "sh -c 'cd \"$1\" && npm test' _ pkg ×50": ["Bash", times(50, (i) => "sh -c 'cd \"$1\" && npm test' _ packages/" + pkg(i), " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "cd pkg && … && cd .. ×200, then an approve": ["Bash", "cd packages && " + times(200, (i) => "cd " + pkg(i, 3) + " && rm -rf dist && cd ..", " && ") + " && node ../cli/dev-spec.js approve feat requirements",
+        ["deny|approve:requirements", "deny|approve:requirements", "ask|approve:requirements", "ask|approve:requirements"], 33, "e548c8ac3f16"],
+      "F=\"$F -Iinclude/pkg\" ×100, then a test write": ["Bash", "F=x; " + times(100, (i) => "F=\"$F -Iinclude/" + pkg(i, 3) + "\"", "; ") + "; D=tests; echo hi > $D/protected.test.js; node cli/dev-spec.js status", ALLOW, 1, "590079460ad3"],
+      "git commit with a 3 K heredoc message": ["Bash", "git add -A && git commit -m \"$(cat <<'EOF'\nfeat: the monorepo build\n\n" + times(60, (i) => "- " + pkg(i) + ": the build script, the lint config and the test runner moved to the shared preset", "\n") +
+        "\nEOF\n)\" && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "cp dist files ×400": ["Bash", times(400, (i) => "cp packages/" + pkg(i, 3) + "/dist/index.js dist/" + pkg(i, 3) + ".js", " && ") + " && node cli/dev-spec.js status", ALLOW, 64, "43c976b4ac72"],
+      "cd ../../ chains (two up, one down) ×100": ["Bash", "cd apps/web/src && " + times(100, (i) => "cd ../../" + pkg(i) + "/src && npm run build", " && ") + " && node ../../../cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "a cd into .specs/ and out, reading": ["Bash", "cd .specs && cat roadmap.json && cd .. && " + times(100, (i) => "cat packages/" + pkg(i) + "/package.json", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+    };
+    const decide = (tool, command, level, win) => {
+      const r = E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command }, cwd: "/work/mono" }, level, { meta: {}, lang: "en", win });
+      return { s: r.decision + "|" + (r.actions || []).map((a) => a.kind + ":" + (a.why || a.setting || a.phase || "")).join(","), r };
+    };
+    const targets = (tool, command) => {
+      const l = E.shellWriteTargets(command, tool === "Bash" ? "bash" : "ps", false).map((x) => path.posix.normalize(String(x).split(BS).join("/"))).sort();
+      return [l.length, crypto.createHash("sha1").update(l.join("\n")).digest("hex").slice(0, 12)];
+    };
+    const legitGot = {}, legitRows = {};
+    for (const [name, [tool, command, want, n, sha]] of Object.entries(LEGIT)) {
+      const ds = [decide(tool, command, "deny", true).s, decide(tool, command, "deny", false).s, decide(tool, command, "ask", true).s, decide(tool, command, "ask", false).s];
+      const tg = targets(tool, command);
+      legitGot[name] = command.length + " characters: " + ds[0] + " / " + ds[2] + ", " + tg[0] + " target(s)";
+      legitRows[name + " — as ed680c92: " + want[0] + " (" + n + " target(s))"] = js(ds) === js(want) && tg[0] === n && tg[1] === sha;
+    }
+    all("1.41.1 fix round 2 (R2H-F2 / F5): " + Object.keys(LEGIT).length + " legit monorepo / CI / PowerShell commands answer exactly as ed680c92 — the four decisions and the edit guard's targets (got " + js(legitGot) + ")", legitRows);
+
+    const APPROVE = "node cli/dev-spec.js approve feat requirements";
+    const A1K = "a".repeat(1000);
+    const work = (n) => "A=" + A1K + "; " + "cp $A/x .specs/; ".repeat(n) + "cat .specs/x"; // each $A puts 1,000 characters in a path: 2,097 of them are 2,097,000
+    const HOSTILE = {
+      dbl22: ["Bash", "A=xxxxxxxx; " + "A=$A$A; ".repeat(22) + "cat .specs/roadmap.json", "deny", "value"],
+      ps24: ["PowerShell", "$a = 'xxxxxxxx'; " + "$a = \"$a$a\"; ".repeat(24) + "Get-Content .specs" + BS + "roadmap.json", "deny", "value"],
+      cd30k: ["Bash", "cd " + "d".repeat(30000) + "; " + "cp a b; ".repeat(3000) + "cat .specs/x", "deny", "total"],
+      pos1: ["Bash", "sh -c '" + "$1".repeat(16000) + " dev-spec' x " + "a".repeat(30000) + "; " + APPROVE, "deny", "value"],
+      posAt: ["Bash", "sh -c '" + "$@".repeat(16000) + " dev-spec' x " + "a ".repeat(15000) + "; " + APPROVE, "deny", "value"],
+      over: ["Bash", work(2098), "deny", "total"],
+      under: ["Bash", work(2097), "allow", null],
+      cdChain: ["Bash", "cd w && " + times(2000, () => "cd x && rm -f y && cd ..", " && ") + " && cat .specs/x", "allow", null],
+    };
+    const ACT = require("./lib/i18n/en.js").text.approvalActions;
+    const hostileGot = {}, hostileRows = {};
+    for (const [name, [tool, command, want, kind]] of Object.entries(HOSTILE)) {
+      const t = Date.now();
+      const { r } = decide(tool, command, "deny", process.platform === "win32");
+      const ms = Date.now() - t;
+      const tl = (r.actions || []).find((a) => a.why === "too-long");
+      hostileGot[name] = command.length + " characters: " + r.decision + (tl ? " " + tl.expanded + " " + tl.length : "") + ", " + ms + " ms";
+      hostileRows[name + " — " + want + (kind ? " (too-long: " + kind + ", the reason naming its bound)" : " (no too-long)")] = r.decision === want &&
+        (kind ? !!tl && tl.expanded === kind && tl.length === (kind === "total" ? 2 * 1024 * 1024 : 64 * 1024) && r.reason.includes(ACT.tooLongExpanded(kind, tl.length)) : !tl);
+    }
+    all("1.41.1 fix round 2 (R2H-F2 / F4): the hostile shapes are too long — a value built past 65,536 characters (A=$A$A, PowerShell's \"$a$a\", sh -c '$1' / '$@' ×16,000), the paths' work past 2,097,152 " +
+      "(a 30 K cd folder before 3,000 paths, a 1,000-character value put in 2,098 paths — 2,097 still read), a cd / cd .. chain ×2,000 folded, read (got " + js(hostileGot) + ")", hostileRows);
+    // the cd folder folded reads every path as ed680c92 read it (the edit guard's targets, normalized as the path readers normalize):
+    // the root, a drive, a leading `..`, `.`, both separators, PowerShell's backslashes
+    const facts = (cmd, mode) => E.shellWriteTargets(cmd, mode || "bash", false).map((x) => path.posix.normalize(String(x).split(BS).join("/")));
+    const FOLD_WANT = { root: ["b.ts", "/b.ts"], drive: ["b.ts", "b.ts"], lead: ["b.ts", "../../x/y/b.ts"], ps: ["d.ts", "a/c/d.ts"], deep: ["b.ts", "../b.ts"] }; // ed680c92's
+    const FOLD = {
+      root: ["cd /x/.. && echo a > b.ts", "bash", FOLD_WANT.root],
+      drive: ["cd C:/a/../.. && echo a > b.ts", "bash", FOLD_WANT.drive],
+      lead: ["cd ../.. && cd x/./y && echo a > b.ts", "bash", FOLD_WANT.lead],
+      ps: ["Set-Location a" + BS + "b; Set-Location .." + BS + "c; Set-Content d.ts x", "ps", FOLD_WANT.ps],
+      deep: ["cd a/b/c && cd ../../.. && cd .. && echo a > b.ts", "bash", FOLD_WANT.deep],
+    };
+    const foldGot = Object.fromEntries(Object.entries(FOLD).map(([k, [c, m]]) => [k, facts(c, m)]));
+    all("1.41.1 fix round 2 (R2H-F2): the cd folder folded reads every path as ed680c92 did — the root, a drive, a leading `..`, `.`, PowerShell's backslashes (got " + js(foldGot) + ")",
+      Object.fromEntries(Object.entries(FOLD).map(([k, [, , want]]) => [k, js(foldGot[k]) === js(want)])));
   }
 };
