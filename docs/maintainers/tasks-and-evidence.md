@@ -115,7 +115,10 @@ Phase 6, opt-in.
 ### Running it: `done --run` and the shell
 - **Only the CLI runs commands**, on an explicit flag: `done --run` (a task's `_Verify:_`) and `finish --run` (the project checks) —
   cli/run.js (`execCommand` runs, `runVerdict` judges, `runChecks` loops the checks), git through cli/git.js (`gitRun`). The MCP
-  server and the engine never run a command or git: the engine judges the output and records the evidence.
+  server and the engine never run a command or git: the engine judges the output and records the evidence. The trust is an npm
+  script's: a check or a `_Verify:_` ADDED over MCP (`spec_init {checks}`, `spec_append_tasks`) is no guard-down (changing or
+  removing a project check is one — guards.js `initGuardDowns`); `--run` runs what roadmap.json / tasks.md hold at that moment,
+  and the CLI prints each command (`$ <command>`) before it runs it.
 - **The shell** is `resolveRunShell()`'s (engine, pure — the CLI passes `git --exec-path`): the platform default (cmd.exe /
   `/bin/sh`) or `--shell bash|<path>` / `DEV_SPEC_SHELL`. On Windows a bare `bash` is Git Bash — beside `git --exec-path`, under
   `%ProgramFiles%` / `%ProgramW6432%` / `%ProgramFiles(x86)%` / `%LOCALAPPDATA%\Programs`, then the first non-WSL bash.exe on PATH;
