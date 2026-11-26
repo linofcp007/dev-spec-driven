@@ -502,6 +502,16 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
         noStamp: () => !fs.existsSync(path.join(op, ".specs", ".execution", "roadmap-stale")),
       });
     } else ok(true, "1.41.1 fix round 2 (R2-R-2): links not creatable here — skipped");
+    // … and a project below a folder NAMED .specs is the session's project, recorded: its own save is linted as ever (the outermost
+    // .specs of the bare path would make the outer folder the project — no dev-spec project, a silent hook)
+    const b1 = path.join(tmp, "rgr-hookb1", ".specs", "app");
+    fs.mkdirSync(b1, { recursive: true });
+    S.initProject(b1, ["core"], "en");
+    const fb = S.createFeature(b1, { name: "feat" });
+    fs.writeFileSync(path.join(fb.dir, "requirements.md"), REQ);
+    const lint = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: js({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: path.join(fb.dir, "requirements.md") }, cwd: b1 }),
+      cwd: b1, env: { ...process.env, CLAUDE_PROJECT_DIR: b1 } }).stdout;
+    ok(/EARS/.test(lint), "1.41.1 fix round 2 (R2-R-2): the save hook on a project below a folder named .specs (CLAUDE_PROJECT_DIR) lints its saved requirements.md — the session's project is the base (got " + js(lint.slice(0, 160)) + ")");
   }
   // R2-R-3 (win32): an NTFS stream spelling of .specs (`.specs::$INDEX_ALLOCATION`, `.specs:$I30:$INDEX_ALLOCATION`) or of a part below
   // it reads as absent — the gate blocks it, and trace / coverage answer the same whether a link's outside target exists or not
