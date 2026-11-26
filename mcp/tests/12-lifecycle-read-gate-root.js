@@ -216,13 +216,17 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     S.initProject(real, ["core"], "en");
     const f = S.createFeature(real, { name: "login" });
     fs.writeFileSync(path.join(f.dir, "tasks.md"), TASKS);
+    put(path.join(f.dir, "notes", "n.md"), "# n\n");
     fs.cpSync(path.join(real, ".specs"), shared, { recursive: true });
     if (link(shared, path.join(lp, ".specs")) && link(out, path.join(shared, "lnk"))) {
-      // the listing seeds the feature folders' real paths from the REAL .specs/ (the link's target), never the link's own path
-      const seeded = E.withReadCache(() => { E.specsRoot(lp); E.featureDirs(lp); E.safeReaddir(path.join(lp, ".specs")); return [E.readIfExists(path.join(lp, ".specs", "login", "tasks.md")), E.readIfExists(path.join(lp, ".specs", "lnk", "tasks.md"))]; });
+      // the listing seeds the feature folders' real paths from the REAL .specs/ (the link's target), never the link's own path — and a
+      // listing below it from that folder's real path (the gate's own answer)
+      const lf = path.join(lp, ".specs", "login");
+      const seeded = E.withReadCache(() => { E.specsRoot(lp); E.featureDirs(lp); E.safeReaddir(path.join(lp, ".specs")); E.readDirCached(lf);
+        return [E.readIfExists(path.join(lf, "tasks.md")), E.readIfExists(path.join(lp, ".specs", "lnk", "tasks.md")), E.readIfExists(path.join(lf, "notes", "n.md"))]; });
       const st = [S.statusFeature(lp, "login"), S.statusFeature(lp, "lnk")];
-      all("1.41.1 fix round 1: .specs ITSELF a link stays the root — its features read as ever (after a listing of it too: the seed takes the real .specs/), a feature folder that is a link inside it is still refused (got " + js({ seeded, st: st.map((r) => r.ok + ":" + (r.code || "")) }) + ")", {
-        read: () => seeded[0] === TASKS && st[0].ok === true, refused: () => seeded[1] === null && st[1].code === "feature-linked" && !has(st[1]),
+      all("1.41.1 fix round 1: .specs ITSELF a link stays the root — its features read as ever (after listings of it and of a feature folder too: the seed takes the real paths), a feature folder that is a link inside it is still refused (got " + js({ seeded, st: st.map((r) => r.ok + ":" + (r.code || "")) }) + ")", {
+        read: () => seeded[0] === TASKS && seeded[2] === "# n\n" && st[0].ok === true, refused: () => seeded[1] === null && st[1].code === "feature-linked" && !has(st[1]),
       });
     } else ok(true, "1.41.1 fix round 1 (.specs a link): links not creatable here — skipped");
   }
