@@ -875,7 +875,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   one read; the main thread printed `ask` at 6 s, but Node joins its workers at exit, so the process outlived Claude Code's 10 s and
   the call went through (Linux; on Windows a WSL FIFO or `.specs` linked to `\\.\pipe\`). Sized by the threat model to a cheap
   hardening: rawLevel and the rule's ROADMAP.md head open only a regular file (`openRegular`) — on Linux; the WSL FIFO stayed open
-  until review 3 (its lstat throws, and a throw still opened); the rest is a known limit. **R2H-F2
+  until review 3 (its lstat throws: rawLevel opened on a throw, the head had no lstat); the rest is a known limit. **R2H-F2
   (introduced by round 1):** the growth bound counted every re-read against the 64 K read limit and refused legit monorepo commands
   of 3–4 K: what tracking BUILDS is bounded now, the paths' reading by a measured work bound of its own, the cd folder folded.
   **R2H-F3 (introduced):** past 16 M the payload was read as a partial one (the session's projects only) — the worker decides on it

@@ -666,9 +666,10 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     // throws EISDIR, and win32 opens with no O_NONBLOCK — the open waited for a writer, the worker sat in that one call and the process
     // outlived hooks.json's timeout. Here fs.lstatSync throws EISDIR for one file (a stub, in-process: win32 makes no FIFO) and fs.openSync
     // counts the opens of it: rawLevel reads a candidate's roadmap.json as gone (its real meta says off — opened, it would read level 0)
-    // and the rule's ROADMAP.md head reads "" (its real text carries the generated marker). A swap between the lstat and the open (a
-    // regular file then, a FIFO at the open — on win32, where nothing opens without waiting) stays a documented race (R5, the known
-    // limits: claude-code-integration.md → Human approval guard); POSIX opens with O_NONBLOCK and judges the fd.
+    // and the rule's ROADMAP.md head reads "" (its real text carries the generated marker), as through a link to it. A swap between the
+    // lstat and the open (a regular file then, a FIFO at the open — on win32, where nothing opens without waiting) stays a documented
+    // race (R5: rawLevel's `text === null` branch, reached only by it — the known limits, claude-code-integration.md → Human approval
+    // guard); POSIX opens with O_NONBLOCK and judges the fd.
     {
       const PR = require("./lib/probe.js"), BSL = String.fromCharCode(92);
       const pl = path.join(tmp, "r1411h-lstat-throws");
@@ -692,12 +693,19 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       });
       const lvPlain = (() => { const seen = []; AH.decide(inDir(pu, "Bash", { command: "cd " + JSON.stringify(pl) + " && " + APPROVE }), { onLevel: (s) => seen.push(s.level) }); return seen; })();
       const md = stubbed("/r1411h-lstat-md/.specs/roadmap.md", (opens) => ({ is: PR.isDevSpecProject(pm), opens: opens() }));
+      // …and a ROADMAP.md that is a LINK to that file: never followed (where the OS lets the test make one — openRegular alone follows it)
+      const pk = path.join(tmp, "r1411h-link-md");
+      fs.mkdirSync(path.join(pk, ".specs"), { recursive: true });
+      let linked = false;
+      try { fs.symlinkSync(path.join(pm, ".specs", "ROADMAP.md"), path.join(pk, ".specs", "ROADMAP.md"), "file"); linked = fs.lstatSync(path.join(pk, ".specs", "ROADMAP.md")).isSymbolicLink(); } catch { linked = false; }
+      md.link = linked ? PR.isDevSpecProject(pk) : "(no link privilege)";
       all("1.41.1 fix round 3 (R3H-F3): an lstat that throws (EISDIR, a Linux FIFO through \\\\wsl.localhost\\) never opens the file — rawLevel's roadmap.json reads as gone, the rule's ROADMAP.md head as \"\" (got " +
         js({ lv, lvPlain, md, mdPlain: PR.isDevSpecProject(pm) }) + ")", {
         "rawLevel: gone, features in it — level 1 (ask), the file never opened before the level is told": () => lv.seen.length === 1 && lv.seen[0].level === 1 && lv.seen[0].opens === 0 && lv.d === "ask",
         "…its lstat answering, the same roadmap.json is read: level 0 (its meta: off)": () => js(lvPlain) === js([0]),
         "probe.head: a ROADMAP.md whose lstat throws is never opened — not a dev-spec project by it": () => md.is === false && md.opens === 0,
         "…its lstat answering, the same ROADMAP.md names one (the generated marker)": () => PR.isDevSpecProject(pm) === true,
+        "…a ROADMAP.md linked to it names none (a link is no regular file by its lstat)": () => !linked || md.link === false,
       });
     }
     // (fix round 3, review 3 — the owner's ruling) a command BUILT to be slow for the guard's readers may make the hook ask at the
