@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.41.0]
+## [1.41.0] — 2026-11-26
 
 The gardening round — tending what agents write code in: the guidance they read (each confirmed review finding's cause
 recorded as a lesson and folded back into the steering once, at the finish; Reference Examples to copy), the stakes with a
