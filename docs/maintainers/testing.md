@@ -106,7 +106,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   empty temp folder as its working folder (`<temp base>/<spec-test-|cli-test->XXXXXX`, removed once it closed — The temp base) and an
   environment without the variables that steer the plugin — `SPEC_PROJECT_DIR`, `CLAUDE_PROJECT_DIR`, `SPEC_MCP_*`,
   `CLAUDE_PLUGIN_*`, `COLUMNS` and every `DEV_SPEC_*` but the suites' own `DEV_SPEC_TEST_*` (`DEV_SPEC_TEST_CHAIN`,
-  `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`) — scripts/test-runner.js `isolate()` / `hermeticEnv()`; 1.29:
+  `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`; 1.41.1: `DEV_SPEC_TEST_APPROVAL_DEADLINE_MS`, which only lowers the
+  approval hook's deadline — a test sets it for the hook it starts, never export it) — scripts/test-runner.js `isolate()` / `hermeticEnv()`; 1.29:
   nor the maintainer's installed plugins — `DEV_GUARDIAN_CLI` is dropped and `CLAUDE_CONFIG_DIR` names an absent folder inside
   the chain's own (`no-claude-config`), so no dev-guardian plugin cache is seen (init / spec_upgrade would offer its gate on one
   machine and not on another; a test that wants one builds a fake cache and passes it); 1.30: nor Node's own steering
