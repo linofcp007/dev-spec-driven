@@ -837,6 +837,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       over: ["Bash", work(2098), "deny", "total"],
       under: ["Bash", work(2097), "allow", null],
       cdChain: ["Bash", "cd w && " + times(2000, () => "cd x && rm -f y && cd ..", " && ") + " && cat .specs/x", "allow", null],
+      psChain: ["PowerShell", "Set-Location w; " + times(1000, () => "Set-Location x" + BS + "y; Remove-Item z; Set-Location .." + BS + "..", "; ") + "; Get-Content .specs" + BS + "x", "allow", null],
     };
     const ACT = require("./lib/i18n/en.js").text.approvalActions;
     const hostileGot = {}, hostileRows = {};
@@ -850,7 +851,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
         (kind ? !!tl && tl.expanded === kind && tl.length === (kind === "total" ? 2 * 1024 * 1024 : 64 * 1024) && r.reason.includes(ACT.tooLongExpanded(kind, tl.length)) : !tl);
     }
     all("1.41.1 fix round 2 (R2H-F2 / F4): the hostile shapes are too long — a value built past 65,536 characters (A=$A$A, PowerShell's \"$a$a\", sh -c '$1' / '$@' ×16,000), the paths' work past 2,097,152 " +
-      "(a 30 K cd folder before 3,000 paths, a 1,000-character value put in 2,098 paths — 2,097 still read), a cd / cd .. chain ×2,000 folded, read (got " + js(hostileGot) + ")", hostileRows);
+      "(a 30 K cd folder before 3,000 paths, a 1,000-character value put in 2,098 paths — 2,097 still read), a cd / cd .. chain ×2,000 and PowerShell's ×1,000 folded, read (got " + js(hostileGot) + ")", hostileRows);
     // the cd folder folded reads every path as ed680c92 read it (the edit guard's targets, normalized as the path readers normalize):
     // the root, a drive, a leading `..`, `.`, both separators, PowerShell's backslashes
     const facts = (cmd, mode) => E.shellWriteTargets(cmd, mode || "bash", false).map((x) => path.posix.normalize(String(x).split(BS).join("/")));
