@@ -1212,10 +1212,14 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         /Não bloqueiam: o utilizador decide cada um — uma remoção de teste que aprovou fica; acrescenta um motivo ou o nome da regra à supressão que quis; senão, corrige-o e volta a correr a verificação\.$/,
         /No bloquean: el usuario decide cada uno — una eliminación de prueba que aprobó se queda; a una supresión que quiso, dale un motivo o nombra su regla; si no, corrígelo y vuelve a ejecutar la verificación\.$/,
         /Não bloqueiam: o usuário decide cada um — uma remoção de teste que aprovou fica; acrescente um motivo ou o nome da regra à supressão que quis; senão, corrija-o e volte a executar a verificação\.$/][i].test(s)),
-      diffBaseLine: S.msg("en").guardian.diffBase("main") === " · the change since main checked for weakened tests and added suppressions" &&
-        /checked for weakened tests and added suppressions \(main already holds/.test(S.msg("en").guardian.diffBaseUncommitted("main")) &&
-        /à procura de testes enfraquecidos e supressões adicionadas$/.test(S.msg("pt").guardian.diffBase("main")) && /procurando testes enfraquecidos e supressões adicionadas$/.test(S.msg("pt-BR").guardian.diffBase("main")) &&
-        /pruebas debilitadas y supresiones añadidas$/.test(S.msg("es").guardian.diffBase("main")),
+      // (review 3, R3-B-1: true for every dev-guardian version — 3.8–3.16 run no suppressions check — with no version branch)
+      diffBaseLine: S.msg("en").guardian.diffBase("main") === " · the change since main checked for weakened tests (and, with dev-guardian 3.17+, added suppressions)" &&
+        S.msg("en").guardian.diffBaseUncommitted("main") === " · only the uncommitted work checked for weakened tests and, with dev-guardian 3.17+, added suppressions (main already holds this branch's commits)" &&
+        S.msg("pt").guardian.diffBase("main") === " · a alteração desde main verificada à procura de testes enfraquecidos (e, com o dev-guardian 3.17+, supressões adicionadas)" &&
+        S.msg("pt").guardian.diffBaseUncommitted("main") === " · só o trabalho ainda sem commit verificado à procura de testes enfraquecidos e, com o dev-guardian 3.17+, supressões adicionadas (main já contém os commits deste ramo)" &&
+        /procurando testes enfraquecidos \(e, com o dev-guardian 3\.17\+, supressões adicionadas\)$/.test(S.msg("pt-BR").guardian.diffBase("main")) &&
+        S.msg("es").guardian.diffBase("main") === " · el cambio desde main revisado en busca de pruebas debilitadas (y, con dev-guardian 3.17+, supresiones añadidas)" &&
+        S.msg("es").guardian.diffBaseUncommitted("main") === " · solo el trabajo aún sin commit revisado en busca de pruebas debilitadas y, con dev-guardian 3.17+, supresiones añadidas (main ya contiene los commits de esta rama)",
       unknownUnderInfo: g6.failOn === "info" && js(g6.testIntegrity) === js({ count: 2, top: [{ severity: "?", rule: "r-num", file: "src/n.js", line: 1, kind: "suppression" },
         { severity: "?", rule: "r-q", file: "src/q.js", line: 2, kind: "suppression" }], kinds: ["suppression"] }),
       cleaned: gX.top[0].rule === "rtxt.exe" && gX.top[0].file === "src/a.js" && gX.testIntegrity.top[0].rule === "test-skipped" && gX.testIntegrity.top[0].file === "tests/x.test.js" &&
@@ -1277,6 +1281,31 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         warnOf(CMD, gNote)[0].startsWith("dev-guardian: 1 new finding(s) of its test-integrity and suppression checks below --fail-on high — tests/a.test.js:3 weakened test: test-skipped (medium)") &&
         !("testIntegrity" in gNoteAlone) && !warnOf(CMD, gNoteAlone).some((l) => /below --fail-on/.test(l)) &&
         js(gOther.testIntegrity.kinds) === '["test"]' && warnOf(CMD, gOther)[0].startsWith("dev-guardian: 1 new finding(s) of its test-integrity check below --fail-on high — "),
+    });
+  }
+
+  // 1.41.0 review 3: (R3-B-1) the diff-base line said "checked for weakened tests and added suppressions" for EVERY dev-guardian
+  // version, while 3.8–3.16 (3.16.1 the release before 3.17.0) run no suppressions check — the head is one text for all, true for each:
+  // the suppressions named as 3.17+'s (the reviewer's g1.js shape); (R3-B-5) a `guardian-suppressions: ` note beside suppression-only
+  // findings keeps the head naming the suppressions check ONLY — the note never adds the test-integrity check.
+  {
+    const x = project("g-fin-w-r3", "en");
+    const F = (tool, severity, rule, file, line) => ({ fingerprint: rule + file + line, tool, severity, category: "quality", title: rule, rule_id: rule, file_path: file, line_start: line, fix_available: false });
+    const rep = (v, fresh, notes) => js({ exit_code: 0, tool_version: v, baseline_status: "present", coverage: "full", coverage_gaps: [], new_findings: fresh,
+      new_findings_count: fresh.length, blocking_findings: [], baseline_absent: false, ...(notes ? { coverage_notes: notes } : {}) });
+    const OUT = "dev-guardian launcher: --diff-base main (DEV_SPEC_DIFF_BASE)\n";
+    const heads = ["3.16.1", "3.8.0", "3.17.0"].map((v) => { const g = E.guardianRecord(x.p, null, CMD, 0, rep(v, []), OUT); return { v, tool: g.tool, base: g.diffBase, en: E.guardianLines(g, "en")[0], pt: E.guardianLines(g, "pt")[0], es: E.guardianLines(g, "es")[0] }; });
+    const RULED = " · the change since main checked for weakened tests (and, with dev-guardian 3.17+, added suppressions)";
+    const SUPP_NOTE = "guardian-suppressions: 3 more changed file(s) with a suppression token past the first 500 were not read";
+    const gSupp = E.guardianRecord(x.p, null, CMD, 0, rep("3.17.0", [F("guardian-suppressions", "low", "suppression-added", "src/c.ts", 2)], [SUPP_NOTE]), "");
+    const wSupp = E.guardianWarnings([{ name: "guardian", command: CMD, guardian: gSupp }], "en");
+    all("1.41.0 review 3 (R3-B-1, R3-B-5): the diff-base head reads the same for dev-guardian 3.16.1, 3.8.0 and 3.17.0 — weakened tests checked, suppressions named as 3.17+'s, never claimed of an older one; a suppressions note beside suppression-only findings names the suppressions check only (got " +
+      js({ heads, kinds: gSupp.testIntegrity && gSupp.testIntegrity.kinds, wSupp }) + ")", {
+      everyVersion: heads.every((h) => h.tool === h.v && h.base === "main" && h.en.endsWith(RULED) && h.pt.endsWith(S.msg("pt").guardian.diffBase("main")) && h.es.endsWith(S.msg("es").guardian.diffBase("main"))) &&
+        new Set(heads.map((h) => h.en.slice(h.en.indexOf(" · ")))).size === 1,
+      neverUnqualified: heads.every((h) => ![h.en, h.pt, h.es].some((l) => /weakened tests and added suppressions|enfraquecidos e supressões|debilitadas y supresiones/.test(l))),
+      suppressionsOnly: js(gSupp.testIntegrity && gSupp.testIntegrity.kinds) === '["suppression"]' && wSupp.length === 1 &&
+        wSupp[0].startsWith("dev-guardian: 1 new finding(s) of its suppression check below --fail-on high — src/c.ts:2 suppression added: suppression-added (low)") && !/test/.test(wSupp[0].split(" — ")[0]),
     });
   }
 

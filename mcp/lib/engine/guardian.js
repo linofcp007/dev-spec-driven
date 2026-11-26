@@ -566,7 +566,8 @@ const wholeLine = (v) => {
 // feature's own _Implements:_ files: {count, files ≤ GUARDIAN_SAID: [{file, kind}]}), notes? (the coverage_notes, each once),
 // staleTimeouts? (unused_timeout_acceptances: {count, files ≤ GUARDIAN_SAID}), testIntegrity? (1.41.0 — W: the new findings of
 // dev-guardian's test-integrity and suppression passes below --fail-on that are not among the report's blocking_findings,
-// integrityFindings: {count, top ≤ 3, kinds — the passes among all of them, which W's head names}), message? (config: dev-guardian's own),
+// integrityFindings: {count, top ≤ 3, kinds — the passes among all of them, which W's head names, and the suppressions pass while a
+// `guardian-suppressions: ` coverage note says it left changed files unread — RX-7}), message? (config: dev-guardian's own),
 // baseline? ("absent": every existing finding counted as new), tool? (the report's tool_version), update? (dev-guardian is older
 // than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran),
 // diffBase? (the --diff-base the launcher announced — 1.33), diffBaseUncommitted? (true: that base already contains HEAD, so only

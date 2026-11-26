@@ -64,7 +64,7 @@ Phase 6, opt-in.
   `/spec-review simplify`'s diff; its **prune** mode (1.41) proposes the `same-path` / `no-kill` candidates of `/spec-review
   prune`, asks for the probes the controller runs and gives each a verdict — prune · keep · strengthen (the pass is prose end
   to end: the matrix says which criteria each test covers — never a criterion's last planned test, never a retired AC's test,
-  which needs a `/spec-change` on its feature —, the record spec_impact's `retire` and the protected-test accept — no engine
+  which needs a `/spec-change` on its feature —, the record spec_impact's `retire` and, at guard level tests, the protected-test accept — no engine
   part; `references/subagent-execution.md` → The pruning pass, `test-patterns.md` → Test value and pruning); it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
   rewritten lines' history. **Lessons (1.41):** a fix round 1–3 asks the implementer each confirmed finding's cause (its
   report's `### Causes` block), the controller checks the three a file can show and records it with
@@ -1375,7 +1375,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   report names them" is gone (RX-1: the reviewer's mcp-finish.js — the hint's own command over MCP, 0 findings; the same
   branch through `finish --run`, 5); a `guardian-suppressions: ` coverage note keeps the suppressions check in the head
   (RX-7); a reported suppression has no reason or names no rule, so W's closing says to give it one, and the diff-base line
-  says suppressions are read too (RX-9).
+  says suppressions are read too (RX-9). **Review 3 (W):** that line said "checked for weakened tests and added
+  suppressions" for every dev-guardian version — 3.8–3.16 run no suppressions check — so it is one text true for each, no
+  version branch: "checked for weakened tests (and, with dev-guardian 3.17+, added suppressions)" (R3-B-1: the reviewer's
+  g1.js with 3.16.1, 3.8.0 and 3.17.0); a fixture with a `guardian-suppressions: ` note beside suppression-only findings —
+  the head names the suppressions check only (R3-B-5, killing the mutant that let the note add the test-integrity check).
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
