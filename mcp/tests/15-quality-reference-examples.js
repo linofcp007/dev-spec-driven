@@ -226,6 +226,45 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     ok(d1 && d1.status === "warn" && d1.detail === Q().refExamplesGone("`src/api-keys/gone-one.js`", 0, FILE), "1.41.0 review 1: a single gone Copy path still warns (got " + js(d1) + ")");
   }
 
+  // --- 1.41.0 review 2 (R2-L-1): a cell in the ANNOTATED single-path form — a path, a blank, then `(`, `—`, `–` or `- ` (the form
+  // implementsPath reads as ONE path, RE_IMPL_ANNOTATED) — is no list, whatever its note holds: its file is judged. The list test read
+  // the note too: a `,` / `;` / and beside a dotted word (res.json(), Express.js, v2.1, p.ex.) or a second code span made a gone file a
+  // doubt — doctor passed and the brief quoted it under "Copy the shape of these files". The reviewer's shapes, each alone in the table.
+  {
+    const p = demo("annotated");
+    write(p, "docs/README.md", "x");
+    const G = "src/api-keys/handler.ts";
+    const cells = [
+      "`" + G + "` — integer cents, e.g. `toCents()`",
+      "`" + G + "` (the handler shape, not its Express.js setup)",
+      G + " — validation first, then res.json()",
+      "`" + G + "` — copy the zod schema, not the index.ts barrel",
+      "`" + G + "` — the error mapping (see ADR-3, v2.1)",
+      "`" + G + "` — copy the error mapping",
+      "`" + G + "` — validation and the res.json() shape",
+      "`" + G + "` — cêntimos inteiros, p.ex. `toCents()`",
+      G + " (the React.memo pattern and its test)",
+      "`" + G + "` — validation and error mapping",
+      "`" + G + "` (see `docs/README.md`)",
+      G + " (v1.2, v2.0)",
+      G + " – copy its error handling, not the v2.x API",
+      G + " - its error path; e.g. 404.json",
+    ];
+    const got = cells.map((c) => {
+      structure(p, table(["Pattern", "Copy", "Applies to"], [["Handler", c, "src/api-keys/**"]]));
+      const d = check(p), b = S.taskBrief(p, "api-keys", 5, {});
+      return { c, d: d && d.status, detail: d && d.detail, x: b.examples, gone: b.brief.includes(B().examplesGone("`" + G + "`")), quotedLine: b.brief.includes("**Handler**") };
+    });
+    const bad = got.filter((g) => !(g.d === "warn" && g.detail === Q().refExamplesGone("`" + G + "`", 0, FILE) && g.x && js(g.x.gone) === js([G]) && !g.x.quoted.length && g.gone && !g.quotedLine));
+    ok(bad.length === 0, "1.41.0 review 2: a gone file in the annotated form (`path` — note, `path` (note), path – note, path - note) warns and the brief names it gone, never quoted, whatever the note holds — a comma, ; , and, a dotted word, a second code span (got " + js(bad.map((g) => [g.c, g.d, g.x && { quoted: g.x.quoted.length, gone: g.x.gone }])) + ")");
+    // a still-pass row: the annotated form whose path is THERE — judged by that path alone (its note never read as a second file)
+    structure(p, table(["Pattern", "Copy", "Applies to"], [["There", "`src/api-keys/service.js` (and `src/api-keys/gone-x.js`, `src/api-keys/gone-y.js`)", "src/api-keys/**"]]));
+    const d2 = check(p), b2 = S.taskBrief(p, "api-keys", 5, {});
+    const q2 = (b2.examples && b2.examples.quoted) || [];
+    ok(d2 && d2.status === "pass" && q2.length === 1 && !("asWritten" in q2[0]) && !b2.examples.gone.length,
+      "1.41.0 review 2: an annotated cell whose path is there passes, its row quoted by that path (got " + js([d2, b2.examples]) + ")");
+  }
+
   // --- 1.41.0 review 1 (M22): without a glob, a Copy file's folder matches a target's folder case-folded where the file system folds case
   {
     const p = demo("fold");

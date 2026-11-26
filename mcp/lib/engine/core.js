@@ -358,7 +358,8 @@ function globFolderNames(g) {
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
 // a trailing ANNOTATION after the path — " (the helper)", " — new export", " - new export" — is the author's note, never part
 // of the path: `_Implements: src/lib/a.ts (the helper)_` was a missing file that blocked finish. Only after a path-like token (no
-// whitespace in it — backticks around it allowed); a path with spaces is read as written.
+// whitespace in it — backticks around it allowed); a path with spaces is read as written. (1.41.0 review 2: a Reference Examples
+// Copy cell in this form is ONE path too — quality.js's exemplarMany reads it, never a copy.)
 const RE_IMPL_ANNOTATED = /^`?([^`\s]+)`?\s+(?:\(|[—–]|-\s)/;
 const implementsPath = (ref) => {
   const raw = String(ref).trim().replace(/\\/g, "/");
@@ -461,5 +462,5 @@ const dayOf = (instant) => (instant == null || instant === "" ? "" : today(insta
 module.exports = { isWsUnit, RE_LINE_TERMINATOR, isLtUnit, stripHashComment, quotedValue, unitIn, wsOrUnitIn, isSlashUnit,
   isBacktickUnit, stripEnd, stripStart, stripEnds, restAfterBlanks, plusAfterBlanks, headRest, headPlus,
   replaceHtmlCommentSpans, codeSpans, replaceCodeSpans, atxHeading, steeringGlobMatch, globMatcher, isImplementsGlob,
-  implementsRefs, globFiles, implementsPath, colonLineAnchorAt, implementsRel, implementsKey, implementsTargets, own,
+  implementsRefs, globFiles, RE_IMPL_ANNOTATED, implementsPath, colonLineAnchorAt, implementsRel, implementsKey, implementsTargets, own,
   blankFacts, closestName, today, dayOf, __link };
