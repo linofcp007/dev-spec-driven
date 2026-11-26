@@ -685,7 +685,11 @@ function progressTokenOf(params) {
 // roadmap.json, Windows PowerShell 5.1's Out-File, read as UTF-8 was "unknown", and an unchanged spec_init setting was refused).
 function approvalMeta(pdir) {
   let text;
-  try { text = spec.decodeText(fs.readFileSync(path.join(spec.specsRoot(pdir), "roadmap.json"))); } catch (e) { return e && e.code === "ENOENT" ? {} : undefined; }
+  const file = path.join(spec.specsRoot(pdir), "roadmap.json");
+  // (1.41.1) a roadmap.json behind a link is read by no one (the read gate): its meta is unknown — every change that could weaken counts,
+  // as the approval hook reads a linked one (and the engine's level: gone → ask)
+  if (spec.specsReadBlocked(file)) return undefined;
+  try { text = spec.decodeText(fs.readFileSync(file)); } catch (e) { return e && e.code === "ENOENT" ? {} : undefined; }
   try {
     const j = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
     return TYPE_CHECK.object(j) ? (TYPE_CHECK.object(j.meta) ? j.meta : {}) : undefined;
