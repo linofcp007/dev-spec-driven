@@ -89,7 +89,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
-  changeViews, closestName, today, dayOf, decodeText, specsReadBlocked, featureBranch, IMPORT_TOOLS,
+  changeViews, closestName, today, dayOf, decodeText, specsReadBlocked, gateRootOf, featureBranch, IMPORT_TOOLS,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, commandHasControl, controlVisible, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeFileAtomic, writeRoadmapHtml, writeRoadmapMd } = engine;
 
@@ -125,6 +125,7 @@ module.exports = {
   taskBlocks,
   taskMarkers, // a task block's English-stable markers ({ requirements, "makes green", …, verify, expect }) — taskMarkerSpans' reading
   specsReadBlocked, // the read gate (1.41.1): is a path behind a link below .specs/ (it reads as absent)? — the save hook
+  gateRootOf, // the .specs/ folder both gates stand on for a path (the call's recorded project's, else the outermost) — the save hook's project
   decodeText, // a file's bytes as text: a UTF-16 BOM (FF FE / FE FF) decides, else UTF-8 (the hooks, the resources, `ears <file>`)
   stripHtmlComments, // text minus HTML comments as every reader sees it (code spans and fenced code keep their "<!--")
   taskDependsSpec, // a task block's _Depends:_ → { declared, numbers, invalid }
