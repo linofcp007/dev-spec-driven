@@ -579,9 +579,10 @@ const wholeLine = (v) => {
 function guardianRecord(projectDir, dir, command, exitCode, report, output, uncommitted) {
   const code = Number.isInteger(exitCode) ? exitCode : parseInt(exitCode, 10);
   const cmd = String(command || "");
-  // the LAST --fail-on, as dev-guardian reads it (review 2: the first one made `--fail-on low --fail-on high` say "at or above low")
+  // the LAST --fail-on, as dev-guardian reads it (review 2: the first one made `--fail-on low --fail-on high` say "at or above low") —
+  // of the check's own command only (review 3: a later command after `;` / `&&` / `||` / `|` / a line break is not dev-guardian's)
   let fo = null;
-  for (const m of cmd.matchAll(/--fail-on[=\s]+(info|low|medium|high|critical)\b/gi)) fo = m;
+  for (const m of cmd.split(/;|&&|\|\||\||\r?\n/)[0].matchAll(/--fail-on[=\s]+(info|low|medium|high|critical)\b/gi)) fo = m;
   const text = String(output || "");
   const j = guardianJson(report);
   const g = { verdict: "exit", exit: Number.isInteger(code) ? code : null, failOn: fo ? fo[1].toLowerCase() : "high", parsed: !!j };

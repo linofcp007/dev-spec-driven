@@ -2288,7 +2288,7 @@ exports.run = async ({
       bom: flat.includes("Print each name on ONE stream and both read the same value. A byte-order mark at the start of stderr is read past by dev-spec, while a `2>&1` capture holds it mid-file, and dev-guardian reads nothing there."),
       shown: LOG.includes("values and tolerances compare as the exact decimals printed and show as printed (120 → 122.4 at 2 % is `within`); the delta and the applied tolerance print as numbers.") &&
         !LOG.includes("compare — and show — as the exact decimals") && flat.includes("the warning and `## Metrics` show them as printed (the delta and the applied tolerance as numbers)"),
-      failOn: LOG.includes("The gate's `--fail-on` is the command's LAST one, as dev-guardian reads it (an unquoted flag; a quoted one is not read, as in 1.40): 1.40 read the first"),
+      failOn: LOG.includes("The gate's `--fail-on` is the command's LAST one, as dev-guardian reads it (an unquoted flag of the check's own command: a quoted one is not read, as in 1.40, nor one after `;` / `&&` / `|`): 1.40 read the first"),
       // (R3-B-1) the W bullet quotes the diff-base line as the engine prints it
       diffBase: LOG.includes("The verdict's line says \"" + require(path.join(__dirname, "lib", "i18n.js")).msg("en").guardian.diffBase("<base>").replace(/^ · /, "") + "\" — one text, true for every version."),
       prune: TOOLF.includes("each removal the user's, recorded through spec_impact's `retire` and, at guard level tests, the protected-test accept · `feedback`") &&

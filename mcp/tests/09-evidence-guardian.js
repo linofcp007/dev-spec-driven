@@ -1277,6 +1277,8 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
         lh.some((l) => l.startsWith("dev-guardian: 1 new finding(s) of its test-integrity check below --fail-on high — tests/a.test.js:3 weakened test: test-skipped (medium)")),
       lastHighLow: gHL.failOn === "low" && gHL.verdict === "blocked" && !("testIntegrity" in gHL) && !hl.some((l) => /below --fail-on/.test(l)) && hl.some((l) => /at or above low/.test(l)),
       single: gEq.failOn === "critical" && gOne.failOn === "medium",
+      // (review 3) only the check's own command is read — a later command after `;` / `&&` / `||` / `|` / a line break is not dev-guardian's
+      firstCommand: [";", " &&", " ||", " |", "\n"].every((sep) => E.guardianRecord(x.p, null, CMD.replace("--fail-on high", "--fail-on medium") + sep + " echo --fail-on low", 0, r(0, [], []), "").failOn === "medium"),
       suppressionsNoted: js(gNote.testIntegrity && gNote.testIntegrity.kinds) === '["test","suppression"]' && gNote.testIntegrity.count === 1 &&
         warnOf(CMD, gNote)[0].startsWith("dev-guardian: 1 new finding(s) of its test-integrity and suppression checks below --fail-on high — tests/a.test.js:3 weakened test: test-skipped (medium)") &&
         !("testIntegrity" in gNoteAlone) && !warnOf(CMD, gNoteAlone).some((l) => /below --fail-on/.test(l)) &&

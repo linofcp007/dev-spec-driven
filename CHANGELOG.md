@@ -131,8 +131,9 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
   controls and the zero-width space (U+200B, U+200E–U+200F, U+202A–U+202E, U+2066–U+2069): a U+202E reordered the line.
   ZWNJ and ZWJ stay — they spell names (Persian, Indic, an emoji sequence). The feature's own files are compared the same
   way, so such a file is still `[this feature]`.
-- The gate's `--fail-on` is the command's LAST one, as dev-guardian reads it (an unquoted flag; a quoted one is not read,
-  as in 1.40): 1.40 read the first, so `--fail-on low --fail-on high` said "no new finding at or above low".
+- The gate's `--fail-on` is the command's LAST one, as dev-guardian reads it (an unquoted flag of the check's own command:
+  a quoted one is not read, as in 1.40, nor one after `;` / `&&` / `|`): 1.40 read the first, so `--fail-on low --fail-on
+  high` said "no new finding at or above low".
 
 ### Compatibility
 - **1.40 garbles a lesson:** an older engine reads `_Kind: lesson_` as a decision, its `_Cause:_` / `_Target:_` lines as

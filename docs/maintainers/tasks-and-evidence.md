@@ -352,7 +352,7 @@ Engine: the `B5` block of `engine/evidence.js`.
     accept_timeouts entries no step reported a timeout on), testIntegrity? (1.41.0, W — `integrityFindings`: the `new_findings` of
     dev-guardian's own passes, `GUARDIAN_INTEGRITY_KINDS` — `guardian-test-integrity` → kind `test`, `guardian-suppressions`
     (3.17, `GUARDIAN_SUPPRESSIONS`) → kind `suppression` — whose severity is under the command's LAST `--fail-on` (`failOn`,
-    as dev-guardian reads it — review 2; `severityRank`: dev-guardian's own blocking rule, gate.ts; unknown → under every
+    as dev-guardian reads it — review 2; of the check's own command, never one after `;` / `&&` / `||` / `|` / a line break — review 3; `severityRank`: dev-guardian's own blocking rule, gate.ts; unknown → under every
     level) and that is not one of the report's `blocking_findings` (by rule + file + line, `blockedFacts` — review 1: dev-spec
     read the first `--fail-on`; dev-guardian also unquotes a shell-quoted one dev-spec does not read):
     `{count, top ≤ 3: [{severity, rule, file, line, kind}], kinds}` (`kinds`, review 1: the kinds among ALL of them — the
