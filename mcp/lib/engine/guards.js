@@ -354,8 +354,8 @@ const APPROVAL_EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit
 // never one. Their path-like arguments (probe.js mcpPathArgs) are read as an Edit's path.
 // The `unreadable` reasons that ask at both levels (never refused outright — it may be no approval at all): a form the lexer can't
 // follow, a partial payload, a script fed to a shell out of sight, an unknown program run on .specs/ files, the hook's own
-// failure past its pre-check, a projectDir the hook can't read.
-const APPROVAL_ASK_WHYS = ["unparsed", "partial", "fed", "specs-arg", "error", "project"];
+// failure past its pre-check, no decision by the hook's deadline (1.41.1), a projectDir the hook can't read.
+const APPROVAL_ASK_WHYS = ["unparsed", "partial", "fed", "specs-arg", "error", "timeout", "project"];
 // (The guarded files — .specs/roadmap.json, a .state.json below .specs/ and a harness-observed run log: hooks/observe-hook.js appends
 // the runs Claude Code SAW to .specs/<f>/.execution/observed.jsonl, .specs/.execution/observed.jsonl for a project check, and an agent
 // writing it forges observed evidence — are probe.js guardedFileOf's, read on the path's segments.)
@@ -417,41 +417,83 @@ const APPROVAL_PS_SHELLS = new Set(["powershell", "pwsh", "iex", "invoke-express
 const APPROVAL_STDIN_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "wsl", "su"]);
 const approvalShellMode = (prog) => (prog === "cmd" ? "cmd" : APPROVAL_PS_SHELLS.has(prog) ? "ps" : "bash");
 const RE_DEVSPEC_WORD = /(?:^|[\\/])dev-spec(?:\.(?:[cm]?js|cmd|ps1|exe))?$/i;
-// The guard's ONE glob matcher (devSpecGlob, shellSegCould, cliSubcommandGlob): a glob — * ? [set] [!set] [^set], an unclosed `[`
-// itself — → (name) => does it match the WHOLE name?, or null: a set no RegExp reads (a range out of order, `[z-a]`). LINEAR in glob ×
-// name — a dynamic program over (token, position), never a RegExp built from the glob: a `*` per character made a run of `[^/\\]*` /
-// `[\s\S]*` that a name it fails backtracked C(n + k, k) ways (1.41.1: `cli/` + 18 stars + `x approve; node … approve` took the
-// approval hook past its 10 s timeout, and a hook past its timeout lets the call through). Each other character is the one-character
-// RegExp the old builder made of it (`i`: case folded as RegExp folds it), so it matches what it matched. opts: star / any — the
-// one-character RegExp `*` covers and `?` is; wild — characters that are a `*` too (SHELL_VAR, SHELL_ANY); noDot — a name starting
-// with `.` never matches (Bash, dotglob off: the old `(?!\.)`). Stars in a row are one; a token that leaves no position alive ends it.
+// The guard's ONE glob matcher (devSpecGlob, shellSegReader, cliSubcommandGlob): a glob — * ? [set] [!set] [^set], an unclosed `[`
+// itself — → (name) => does it match the WHOLE name?, or null: a set no RegExp reads (a range out of order, `[z-a]`). Never a RegExp
+// built from the glob: a `*` per character made a run of `[^/\\]*` / `[\s\S]*` that a name it fails backtracked C(n + k, k) ways
+// (1.41.1: `cli/` + 18 stars + `x approve; node … approve` took the approval hook past its 10 s timeout, and a hook past its timeout
+// lets the call through). Building it is ONE pass over the glob, with no RegExp: each `[` looks for its `]` only while one is left
+// after it (lastIndexOf, once — a run of `[` with none was a scan from each of them, quadratic: review 1 of 1.41.1, S1-F2), and a set's
+// validity is read by hand (globSetValid). A name is then matched by a dynamic program over (token, position), linear in the tokens
+// it reaches: each `?`, set or literal takes ONE code unit, so a glob that takes more than the name holds fails it at once (`consume`),
+// and the program stops when no position is left alive — a name of n code units reads at most 2n + 2 tokens, whatever the glob's
+// length; the token list is built on the first name that needs it (a set-heavy 48 K segment against `.specs` builds none: S1-F1). Each
+// `?`, set and literal is the one-character RegExp the old builder made of it, made when the program first reaches it (`i`: case folded
+// as RegExp folds it), so it matches what it matched. opts: star / any — the one-character RegExp `*` covers and `?` is; wild —
+// characters that are a `*` too (SHELL_VAR, SHELL_ANY); noDot — a name starting with `.` never matches (Bash, dotglob off: the old
+// `(?!\.)`). Stars in a row are one.
 const GLOB_LITERALS = new Map(); // a literal character → its one-character RegExp (≤ one per UTF-16 code unit)
-function globMayName(glob, opts) {
-  const one = (src) => new RegExp("^" + src + "$", "i");
-  const toks = []; // null: a star; else the one-character RegExp of a ?, a set or a literal
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i];
-    if (c === "*" || (opts.wild && opts.wild.includes(c))) { if (toks[toks.length - 1] !== null) toks.push(null); continue; }
-    const end = c === "[" ? glob.indexOf("]", i + 2) : -1;
-    if (end >= 0) {
-      try { toks.push(one("[" + glob.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&") + "]")); } catch { return null; }
-      i = end;
-    } else if (c === "?") toks.push(opts.any);
-    else {
-      if (!GLOB_LITERALS.has(c)) GLOB_LITERALS.set(c, one(c.replace(/[.+^${}()|[\\]/g, "\\$&"))); // (an unclosed `[`: itself)
-      toks.push(GLOB_LITERALS.get(c));
-    }
+const GLOB_ANY = { any: true }; // globMayName's `?` token
+const globOne = (src) => new RegExp("^" + src + "$", "i");
+// A set's body glob[from, to) — a leading ! / ^ its negation — as the old builder's class read it: `\` and `]` were escaped, so it holds
+// no escape of its own, and the RegExp grammar's ranges are code units: an atom, `-`, an atom (not the last two) is a range, invalid
+// when it runs backwards. (10-guards-hooks-cost.js checks this reading against V8's on every body of up to 5 of the characters that
+// matter.)
+function globSetValid(glob, from, to) {
+  let j = from + (glob[from] === "!" || glob[from] === "^" ? 1 : 0);
+  while (j < to) {
+    if (j + 2 < to && glob.charCodeAt(j + 1) === 45) {
+      if (glob.charCodeAt(j) > glob.charCodeAt(j + 2)) return false;
+      j += 3;
+    } else j++;
   }
+  return true;
+}
+function globMayName(glob, opts) {
+  const isStar = (c) => c === "*" || (!!opts.wild && opts.wild.includes(c));
+  const lastClose = glob.lastIndexOf("]");
+  const setEnd = (i) => (glob[i] === "[" && i + 2 <= lastClose ? glob.indexOf("]", i + 2) : -1);
+  let consume = 0; // the code units the glob takes at least
+  for (let i = 0; i < glob.length; i++) {
+    if (isStar(glob[i])) continue;
+    const end = setEnd(i);
+    if (end >= 0) {
+      if (!globSetValid(glob, i + 1, end)) return null;
+      i = end;
+    }
+    consume++;
+  }
+  let toks = null; // null: a star; "?" the any one; a one-character string a literal; else { set, re } — a set's class source
+  const tokens = () => {
+    const out = [];
+    for (let i = 0; i < glob.length; i++) {
+      const c = glob[i];
+      if (isStar(c)) { if (out[out.length - 1] !== null) out.push(null); continue; }
+      const end = setEnd(i);
+      if (end >= 0) { out.push({ set: "[" + glob.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&") + "]", re: null }); i = end; }
+      else out.push(c === "?" ? GLOB_ANY : c);
+    }
+    return out;
+  };
+  const test = (t, x) => {
+    if (t === GLOB_ANY) return opts.any.test(x);
+    if (typeof t === "string") {
+      let re = GLOB_LITERALS.get(t);
+      if (!re) GLOB_LITERALS.set(t, (re = globOne(t.replace(/[.+^${}()|[\\]/g, "\\$&")))); // (an unclosed `[`: itself)
+      return re.test(x);
+    }
+    return (t.re || (t.re = globOne(t.set))).test(x);
+  };
   return (name) => {
     const s = String(name), n = s.length;
-    if (opts.noDot && s[0] === ".") return false;
+    if (consume > n || (opts.noDot && s[0] === ".")) return false;
+    if (!toks) toks = tokens();
     let cur = new Uint8Array(n + 1);
     cur[0] = 1;
     for (const t of toks) {
       const nxt = new Uint8Array(n + 1);
       let live = 0;
       for (let j = 0; j <= n; j++) {
-        nxt[j] = t === null ? (cur[j] || (j > 0 && nxt[j - 1] && opts.star.test(s[j - 1])) ? 1 : 0) : j > 0 && cur[j - 1] && t.test(s[j - 1]) ? 1 : 0;
+        nxt[j] = t === null ? (cur[j] || (j > 0 && nxt[j - 1] && opts.star.test(s[j - 1])) ? 1 : 0) : j > 0 && cur[j - 1] && test(t, s[j - 1]) ? 1 : 0;
         live |= nxt[j];
       }
       if (!live) return false;
@@ -1038,11 +1080,24 @@ const GUARDED_NAMES = ["roadmap.json", ".state.json", "observed.jsonl"];
 const isGuardianSetting = (h) => !!h && /^guardian-/.test(String(h.setting || ""));
 const RE_SHELL_WILD = /[*?[\u0001\u0002]/;
 // A path word with the variables the same command assigned put in (`D=.specs; … $D/roadmap.json`), any other one marked SHELL_VAR.
-function shellVarText(w, vars) {
+// ctx (a reading's — approvalGuardDecision's, shellWriteTargets'): what tracking adds to the text read is counted (shellGrow) — a value
+// put in, a `cd` folder put before a path. `A=$A$A` doubles a value: 21 doublings of 8 characters are 16 M, read again by every path
+// after it (review 1 of 1.41.1, S1-F3: 321 characters ran the approval hook past its timeout). Past APPROVAL_COMMAND_MAX the command
+// is too long to read (ctx.tooLong — the approval guard's `too-long`) and every variable reads as SHELL_VAR from then on.
+function shellVarText(w, vars, ctx) {
   return String(w).replace(/\$\{(?:env:)?([A-Za-z_]\w*)\}|\$\{[^{}]*\}|\$(?:env:)?([A-Za-z_]\w*)|\$[0-9@*#?$!]|%([A-Za-z_]\w*)%/gi, (m, a, b, c) => {
     const k = String(a || b || c || "").toLowerCase();
-    return k && vars && own(vars, k) ? vars[k] : SHELL_VAR;
+    return k && vars && own(vars, k) && shellGrow(ctx, vars[k].length - m.length) ? vars[k] : SHELL_VAR;
   });
+}
+// ctx's budget: n more characters to read → may they be? (no ctx: no budget — a reading without tracking adds nothing)
+function shellGrow(ctx, n) {
+  if (!ctx) return true;
+  if (ctx.tooLong) return false;
+  ctx.grown = (ctx.grown || 0) + Math.max(0, n);
+  if (ctx.grown <= APPROVAL_COMMAND_MAX) return true;
+  ctx.tooLong = true;
+  return false;
 }
 // Bash's brace expansion of a word (`{.specs,x}/roadmap.json`, `roadmap.json{,}`, `appro{v,}e`) → its words (at most `cap`); a group
 // without a comma — or after a `$` — stays as it is.
@@ -1067,17 +1122,23 @@ function braceExpand(s, cap = 32) {
   return [s];
 }
 // One path segment read as a glob → (name) => may it be that name? (case folded — a superset where the file system keeps case), or
-// null (globMayName: linear, never a RegExp built from the glob). Bash (dotglob off): a leading * ? [ never matches a dot; PowerShell /
+// null (globMayName: never a RegExp built from the glob). Bash (dotglob off): a leading * ? [ never matches a dot; PowerShell /
 // cmd.exe wildcards do. SHELL_VAR / SHELL_ANY match anything.
 const SHELL_GLOB = { star: /^[\s\S]$/, any: /^[\s\S]$/, wild: SHELL_VAR + SHELL_ANY };
 const SHELL_GLOB_BASH_LEAD = { ...SHELL_GLOB, noDot: true };
 const shellGlob = (seg, mode) => globMayName(seg, mode === "bash" && /^[*?[]/.test(seg) ? SHELL_GLOB_BASH_LEAD : SHELL_GLOB);
-// May the segment be `name`? A plain one equals it (case folded); a glob may match it; a variable never stands for .specs (varOk false).
-function shellSegCould(seg, name, mode, varOk) {
-  if (!RE_SHELL_WILD.test(seg)) return seg.toLowerCase() === name;
-  if (!varOk && seg.includes(SHELL_VAR)) return false;
-  const may = shellGlob(seg, mode);
-  return !!may && may(name);
+// May the segment be a name? → (name, varOk) => boolean: a plain one equals it (case folded); a glob may match it (read ONCE, on the
+// first name a glob is asked — shellPathFacts asks a segment up to ten names: S1-F1); a variable never stands for .specs (varOk false).
+function shellSegReader(seg, mode) {
+  const wild = RE_SHELL_WILD.test(seg);
+  const plain = wild ? null : seg.toLowerCase(), hasVar = wild && seg.includes(SHELL_VAR);
+  let may; // the glob's matcher once read (null: a set no RegExp reads)
+  return (name, varOk) => {
+    if (!wild) return plain === name;
+    if (!varOk && hasVar) return false;
+    if (may === undefined) may = shellGlob(seg, mode);
+    return !!may && may(name);
+  };
 }
 // A path (its variables already put in) → what it may name: { text, wild, specs (the first segment that is or may be .specs, else -1),
 // dir (it is — or may be — .specs itself), guarded (approvalGuardedFile: an exact path — dev-spec's own), guardianFile (dev-guardian's
@@ -1092,10 +1153,12 @@ function shellPathFacts(t0, mode) {
   const segs = t.split("/").filter(Boolean);
   const n = segs.length;
   const wild = RE_SHELL_WILD.test(t);
+  const readers = [];
+  const segCould = (i, name, varOk) => (readers[i] || (readers[i] = shellSegReader(segs[i], mode)))(name, varOk);
   let specs = -1;
-  for (let i = 0; i < n && specs < 0; i++) if (shellSegCould(segs[i], ".specs", mode, false)) specs = i;
+  for (let i = 0; i < n && specs < 0; i++) if (segCould(i, ".specs", false)) specs = i;
   const last = n ? segs[n - 1] : "";
-  const could = (name) => shellSegCould(last, name, mode, true);
+  const could = (name) => n > 0 && segCould(n - 1, name, true);
   const found = wild ? null : approvalGuardedFile(t);
   // (1.30.1) a glob that may be dev-guardian's launcher — `.specs/guard*.cjs`, `.specs/*.cjs`, `.s*/guardian.cjs`: Bash expands it to the
   // file when it exists (its baseline's glob is guardianHit below, since review 9)
@@ -1103,7 +1166,7 @@ function shellPathFacts(t0, mode) {
   const guardianFile = isGuardianSetting(found) ? found : launcherGlob;
   const guarded = isGuardianSetting(found) ? null : found;
   const may = !!guarded || (wild && specs >= 0 && ((specs === n - 2 && could("roadmap.json")) || (specs < n - 1 && could(".state.json")) ||
-    (specs < n - 2 && shellSegCould(segs[n - 2], ".execution", mode, true) && could("observed.jsonl")))) ||
+    (specs < n - 2 && segCould(n - 2, ".execution", true) && could("observed.jsonl")))) ||
     // a guarded name in a folder an unknown variable names (`$DIR/roadmap.json`, `$F/.state.json`): it may be there — fail closed
     (n >= 2 && !RE_SHELL_WILD.test(last) && segs.slice(0, -1).some((s) => s.includes(SHELL_VAR)) && GUARDED_NAMES.includes(last.toLowerCase()));
   const tail = wild ? last.replace(/^[\s\S]*[*?\]\u0001\u0002]/, "") : last;
@@ -1111,7 +1174,7 @@ function shellPathFacts(t0, mode) {
   // guardianHit, the path is it or may be its baseline.json (an entry directly in it, a glob too: `.guardian/*`) — what replacing,
   // removing or filling the folder reaches (`rm -rf .guardian`, `cp -r evil/. .guardian/`, `git checkout -- .guardian`)
   let gi = -1;
-  for (let i = 0; i < n && gi < 0; i++) if (shellSegCould(segs[i], ".guardian", mode, false)) gi = i;
+  for (let i = 0; i < n && gi < 0; i++) if (segCould(i, ".guardian", false)) gi = i;
   const guardianSelf = gi >= 0 && gi === n - 1;
   const guardianHit = guardianSelf || (gi >= 0 && gi === n - 2 && could("baseline.json"));
   return { text: t, wild, specs, dir: specs >= 0 && specs === n - 1, guarded, guardianFile, may, name: GUARDED_NAMES.some(could), guardianSelf, guardianHit,
@@ -1121,11 +1184,12 @@ function shellPathFacts(t0, mode) {
 // A path word → its readings: each brace expansion (Bash), as written and — after a `cd` earlier in the same command — under that folder;
 // on win32 (ctx.win) each also as Windows reads it (shellWinReading: an 8.3 alias, a trailing dot / space).
 function shellPathReadings(w, mode, ctx) {
-  const t = shellVarText(w, ctx && ctx.vars);
+  const t = shellVarText(w, ctx && ctx.vars, ctx);
   const out = [];
   for (const a of mode === "bash" ? braceExpand(t) : [t]) {
     const texts = [a];
-    if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:|\u0001)/.test(a)) texts.push(ctx.cwd + "/" + a);
+    // (the cd folder put before it counts toward the command's read: `cd <60 K>; cp a b; cp a b; …` read it again for every path)
+    if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:|\u0001)/.test(a) && shellGrow(ctx, ctx.cwd.length + 1)) texts.push(ctx.cwd + "/" + a);
     for (const x of texts) {
       out.push(shellPathFacts(x, mode));
       const wr = shellWinReading(x, ctx);
@@ -1233,6 +1297,9 @@ function shellProducedPaths(seg) {
   if (!paths.length) paths.push(".");
   return paths.flatMap((p) => (filters.length ? filters.flatMap((f) => [p + "/" + f, p + "/" + SHELL_ANY + "/" + f]) : [p]));
 }
+// A path's folder part — up to its last / or \ (one pass: /[^\\/]*$/ rescanned a separator-free run from each of its characters — 64 K
+// of them took 3.5 s, review 1 of 1.41.1's sweep).
+const dirPart = (s) => { const t = String(s); return t.slice(0, Math.max(t.lastIndexOf("/"), t.lastIndexOf("\\")) + 1); };
 // A simple command → its file operations: [{ op, paths: [[cooked, raw]], sources?, recursive?, archive?, kind?, producer? }] — op: write
 // (its content), replace (removed or replaced as a whole: rm, a move's source, an extracted member, git's restores — op git), into (a
 // folder receiving files: the sources, or everything — archive), link (the target a link is made to), piped (the targets come from the
@@ -1282,7 +1349,7 @@ function shellSegOps(words, raw, mode, nextSeg) {
   if (p === "ren" || p === "rename") {
     const pos = shellOperands(words, k + 1, null, slash).pos;
     if (mode === "cmd" && pos.length >= 2) {
-      const dir = words[pos[0]].replace(/[^\\/]*$/, ""), rdir = pair(pos[0])[1].replace(/[^\\/]*$/, "");
+      const dir = dirPart(words[pos[0]]), rdir = dirPart(pair(pos[0])[1]);
       ops.push({ op: "replace", paths: [pair(pos[0])] }, { op: "write", paths: [[dir + words[pos[1]], rdir + words[pos[1]]]] });
     } else if (pos.length) ops.push({ op: "replace", paths: pos.map(pair) }); // rename <expression | from to> <files…>: superset
     return ops;
@@ -1524,7 +1591,7 @@ function psFileOps(p, words, raw, k, nextSeg, piped) {
     const nn = get("newname").concat(at(1));
     if (path0.length) ops.push({ op: "replace", paths: path0 }); else piped("replace");
     for (const src of path0.length ? path0 : [["", ""]]) {
-      const d0 = String(src[0]).replace(/[^\\/]*$/, ""), d1 = String(src[1]).replace(/[^\\/]*$/, "");
+      const d0 = dirPart(src[0]), d1 = dirPart(src[1]);
       for (const n of nn) ops.push({ op: "write", paths: [[d0 + n[0], d1 + n[1]]] });
     }
   } else if (p === "expand-archive") {
@@ -1584,7 +1651,7 @@ function shellOpActions(o, mode, ctx) {
         if ((!specsDest && !f.guardianSelf) || f.execution || (!f.folder && !f.wild && !/[\\/]$/.test(pr[0]))) continue;
         if (o.archive) { out.push(specsDest ? shellDown("specs") : guardianFolderDown()); continue; }
         for (const sp of o.sources || []) {
-          const base = shellVarText(sp[0], ctx && ctx.vars).replace(/[\\/]+$/, "");
+          const base = trimSlashEnd(shellVarText(sp[0], ctx && ctx.vars, ctx));
           const names = [base.replace(/^[\s\S]*[\\/]/, "") || "*"];
           if (o.contents && shellPathFacts(base, mode).folder) names.push("*"); // xcopy / robocopy / rsync copy a folder's CONTENTS
           // (the destination's reading already holds its cd; Windows' reading of the name landing there — BASELI~1.JSO — too)
@@ -1618,20 +1685,21 @@ function shellOpPaths(o, mode, ctx) {
   if (!["write", "replace", "into"].includes(o.op)) return [];
   const out = [];
   const read = (t) => {
-    for (const a of mode === "bash" ? braceExpand(shellVarText(t, ctx && ctx.vars)) : [shellVarText(t, ctx && ctx.vars)]) {
+    const v = shellVarText(t, ctx && ctx.vars, ctx);
+    for (const a of mode === "bash" ? braceExpand(v) : [v]) {
       if (!a || a.startsWith(SHELL_VAR) || /^(?:\/dev\/|\$null$|nul$|con$)/i.test(a)) continue;
       const h0 = (/^~(?=$|[\\/])/.test(a) ? os.homedir() + a.slice(1) : a).split(SHELL_VAR).join("_").split(SHELL_ANY).join("_");
       // (1.30.1, win32 — ctx.win) also as Win32 reads it: PowerShell's `Set-Content src\a.ts. x` writes src\a.ts (the 8.3 short names:
       // guardCheck reads each target's real path)
       for (const h of ctx && ctx.win && winPathTrim(h0) !== h0 ? [h0, winPathTrim(h0)] : [h0]) {
         out.push(h);
-        if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:)/.test(h)) out.push(ctx.cwd + "/" + h);
+        if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:)/.test(h) && shellGrow(ctx, ctx.cwd.length + 1)) out.push(ctx.cwd + "/" + h);
       }
     }
   };
   for (const pr of o.paths || []) {
     if (o.op !== "into") { read(pr[0]); continue; }
-    for (const sp of o.sources || []) { const name = String(sp[0]).replace(/[\\/]+$/, "").replace(/^[\s\S]*[\\/]/, ""); if (name && !/[*?]/.test(name)) read(String(pr[0]).replace(/[\\/]+$/, "") + "/" + name); }
+    for (const sp of o.sources || []) { const name = trimSlashEnd(sp[0]).replace(/^[\s\S]*[\\/]/, ""); if (name && !/[*?]/.test(name)) read(trimSlashEnd(pr[0]) + "/" + name); }
   }
   return out;
 }
@@ -1828,7 +1896,8 @@ function shellApprovalActions(command, level, depth, mode, meta, ctx) {
 // the previous one; `cd` alone, `cd -`, `popd`: forgotten). Text only, nothing evaluated.
 function shellTrack(words, raw, mode, ctx) {
   if (!ctx || !words.length) return;
-  const set = (name, value) => { ctx.vars[String(name).replace(/^env:/i, "").toLowerCase()] = shellVarText(String(value), ctx.vars); };
+  // (a value put in counts toward the command's read — shellVarText's ctx: `A=$A$A` doubles)
+  const set = (name, value) => { ctx.vars[String(name).replace(/^env:/i, "").toLowerCase()] = shellVarText(String(value), ctx.vars, ctx); };
   let m;
   if (mode === "ps") {
     if ((m = /^\$([A-Za-z_][\w:]*)=([\s\S]*)$/.exec(words[0]))) set(m[1], m[2] !== "" ? m[2] : words[1] || "");
@@ -1842,7 +1911,7 @@ function shellTrack(words, raw, mode, ctx) {
   if (/^(?:popd|pop-location)$/.test(p)) { ctx.cwd = ""; return; }
   if (!/^(?:cd|chdir|pushd|sl|set-location|push-location)$/.test(p)) return;
   const t = words.slice(k + 1).find((w) => !/^-[A-Za-z]|^\/d$/i.test(w)); // past cmd's /d, PowerShell's -Path / -LiteralPath
-  const dir = t === undefined ? "" : shellVarText(t, ctx.vars);
+  const dir = t === undefined ? "" : shellVarText(t, ctx.vars, ctx);
   if (!dir || dir === "-" || /^~/.test(dir) || dir.includes(SHELL_VAR)) { ctx.cwd = ""; return; }
   ctx.cwd = /^(?:[\\/]|[A-Za-z]:)/.test(dir) || !ctx.cwd ? dir : ctx.cwd + "/" + dir;
 }
@@ -2201,6 +2270,9 @@ function approvalGuardDecision(payload, level, opts = {}) {
       // ctx: the payload's cwd (a relative path's folder for Windows' reading of it) and that reading's disk budget
       const ctx = { vars: Object.create(null), cwd: "", win, base: payload.cwd, disk: { left: SHORT_DISK_PATHS } };
       actions = keep(shellApprovalActions(head, lvl, 0, mode, meta, ctx));
+      // (1.41.1, review 1 S1-F3) its variables and cd folders grew the text read past the read limit (shellGrow — `A=$A$A`): too long
+      // to read, as a command past the limit is — refused at deny; every variable after the limit was read as unknown
+      if (ctx.tooLong) actions.push({ kind: "unreadable", why: "too-long", expanded: true, length: APPROVAL_COMMAND_MAX, source: "shell" });
       // fail closed: the CLI named with an approval word, in a form the lexer can't follow (a launcher it doesn't
       // know, a string built by concatenation, a glob, a variable) — the user is asked instead of the call being allowed.
       if (!actions.length && approvalUnparsed(head, mode)) actions = [{ kind: "unreadable", why: "unparsed", source: "shell" }];

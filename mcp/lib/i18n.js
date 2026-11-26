@@ -468,9 +468,10 @@ const LAYOUTS = {
 
 // What the approval guard tells the user an agent wants to do (msg.approvalGuard.action — the hook's ask / deny lines and
 // spec_approve's elicitation quote it): the case of `a` → one sentence of X (text.approvalActions). kind "remove" (a feature's
-// removal); "unreadable" (a shell command the guard can't read: too long (a.length characters) or in a form it
-// can't follow; a tool call received only in part; a script fed to a shell out of sight, an
-// unknown program on .specs/ files, the hook's own failure, a projectDir it can't read); "guard-down" (lowering this guard, or
+// removal); "unreadable" (a shell command the guard can't read: too long (a.length characters; a.expanded — its variables and cd
+// folders grew it past the read limit) or in a form it can't follow; a tool call received only in part; a script fed to a shell out of
+// sight, an unknown program on .specs/ files, the hook's own failure, no decision by its deadline (a.seconds), a projectDir it can't
+// read); "guard-down" (lowering this guard, or
 // weakening what it stands for — a.setting: the spec_init / `init` setting, a shell write of roadmap.json, a hand edit with the
 // Write / Edit tool — a.source "edit", the harness-observed run log, a gated track turned off, a .specs/ link); else an approval
 // (or a revocation) of a phase, of every phase through one, as a role, in another's name, forced.
@@ -482,8 +483,9 @@ function approvalAction(X, a) {
     if (a.why === "fed") return X.fed;
     if (a.why === "specs-arg") return X.specsArg;
     if (a.why === "error") return X.error;
+    if (a.why === "timeout") return X.timeout(a.seconds);
     if (a.why === "project") return X.project;
-    return a.why === "too-long" ? X.tooLong(a.length) : X.unreadable;
+    return a.why === "too-long" ? (a.expanded ? X.tooLongExpanded(a.length) : X.tooLong(a.length)) : X.unreadable;
   }
   if (a.kind === "guard-down") {
     if (a.setting === "roadmap" && a.source === "edit") return X.roadmapEdit;
