@@ -21,8 +21,9 @@ History at the end.
 - **Never through a link:** `linkedSpecsFolder()` (scaffold.js) refuses to scaffold through a linked `.specs/steering/` or
   `.specs/<feature>/` (`linked: true`, nothing written), and nothing is READ through one (The read gate, below). A name that
   reaches a linked feature folder is `feature-linked` (`existingFeature`: `{ok: false, linked: true, code, path, error}` —
-  `err.featureLinked`) for every reader, never "not found" — `drift {name}`, a milestone's feature list and a dependency (`depend`) included; `backlog add`
-  of the name is refused with it (a linked folder holds the name, but "already has a spec" would name a spec dev-spec can't read).
+  `err.featureLinked`) for every reader, never "not found" — `drift {name}`, a milestone's feature list and a dependency
+  (`depend`) included; `backlog add` of the name is refused with it (a linked folder holds the name, but "already has a spec"
+  would name a spec dev-spec can't read).
   Eight sites accept `f.linked` and go on to the write gate's refusal at the lock / the link's removal, as since 1.24
   (12-lifecycle-write-gate.js G1, unchanged): `featureLocked` (files.js), archive, rename, remove, its preview,
   `removeLinkedFeatureLocked`, restore's `archivedFeature` (finish.js) and protect / unprotect (`protectTests`, protect.js: its lock
