@@ -277,13 +277,22 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `DEV_SPEC_TEST_APPROVAL_DEADLINE_MS` LOWERS the deadline (tests: the hermetic chains keep `DEV_SPEC_TEST_*`; a higher or malformed
   value is the default). **What the deadline does not cover:** the process ends only when its worker does — Node joins its workers at
   exit — so a worker inside ONE native call that never returns keeps it alive past Claude Code's timeout, and the call goes through
-  (review 2, R2H-F1: a FIFO named roadmap.json under a folder a command `cd`s into). The readers before the engine therefore open no
-  file that is not a regular one (probe.js `openRegular`: an lstat first — rawLevel —, then `O_NONBLOCK` where the platform has it and
-  the fd's own `fstat`: rawLevel's roadmap.json, the rule's ROADMAP.md head), and the engine's read gate reads none below `.specs/`
-  (files.js — conventions.md → The read gate); what is left is a known limit (below), as is the process failing to start in 10 s.
+  (review 2, R2H-F1: a FIFO named roadmap.json under a folder a command `cd`s into). The readers before the engine therefore open a
+  file only when its lstat says a regular one — rawLevel's roadmap.json, the rule's ROADMAP.md head (probe.js `head`) —, and an lstat
+  that THROWS reads as no file, never opened (review 3, R3H-F3: through `\\wsl.localhost\` a Linux FIFO's lstat throws EISDIR, and
+  win32 has no `O_NONBLOCK`, so the open waited for a writer — round 2 opened on a throw, and the process ended at 10.3 s); then
+  `openRegular` opens with `O_NONBLOCK` where the platform has it and judges the fd's own `fstat` (a swap after the lstat: answered on
+  POSIX; on win32 a swap to a FIFO between the lstat and the open is a race — a known limit). The engine's read gate reads none below
+  `.specs/` (files.js — conventions.md → The read gate); what is left is a known limit (below), as is the process failing to start in
+  10 s. **What the deadline answers by choice (review 3, the owner's ruling):** a command BUILT to be slow for the guard's readers —
+  brace expansions over a long tracked value (R3H-F1: `rm -f $A{a,b}{c,d}{e,f}{g,h}{i,j}` ×18 / ×36 after `A=$A$A` ×13: under both
+  tracking bounds, read 32–128 times over the work charged), a very long `cd` fold (R3H-F2: `cd x/..` ×6,900 under a 57 K folder, each
+  one folding it again) — can make the hook answer `ask` at the deadline instead of `deny`. Never silent, never past the timeout: the
+  prompt shows, and the human refuses it. The tracking bounds and `cdJoin` are not tuned again to turn such shapes into too-long.
   mcp/tests/10-guards-hooks-cost.js drives each path through the process (a `-r` preload counts the workers and makes the worker
   slow, out of memory, throw, exit, print or hold after its level-0 report; a FOLDER named roadmap.json in a candidate project with
-  features asks — gone —; on POSIX a FIFO roadmap.json / ROADMAP.md under a cd target is answered and the process ends well before T).
+  features asks — gone —; on POSIX a FIFO roadmap.json / ROADMAP.md under a cd target is answered and the process ends well before T;
+  an lstat that throws — stubbed, EISDIR — opens neither file; the three hostile shapes above, at once: ask or deny, ended before T − 3 s).
 - **The candidate projects** (hook-utils.js `approvalProjects`, ≤ 12 the call names, then the session's own — always kept) follow
   where the CLI acts: the folders the call names (MCP `projectDir`, the edited file's project, `--project`, `SPEC_PROJECT_DIR=` /
   `$env:` assignments), each `cd` / `Set-Location` target (chained and from cwd alone), the folder holding each `.specs/` /
@@ -443,7 +452,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   past `APPROVAL_COMMAND_MAX` (64 K) is `too-long`, `expanded: "value"` (`A=$A$A` doubles: 21 doublings of 8 characters are 16 M;
   `sh -c '$1'`×16,000 with a 30 K argument built 480 M). `shellWork`: the text the PATHS are read with — each value put in a path
   word, each cd folder put before a relative one — past `APPROVAL_TRACK_WORK` (2 M; measured ~0.3 µs a character through the path
-  readers on Windows 11, so ≤ 0.6 s at the bound) is `too-long`, `expanded: "total"`. An assignment copies its value and reads nothing
+  readers on Windows 11, so ≤ 0.6 s at the bound for a word read once: a brace expansion reads it up to 32 times, uncharged — a shape
+  built on that asks at the deadline, Human approval guard → The deadline) is `too-long`, `expanded: "total"`. An assignment copies its value and reads nothing
   (a 32 K value copied by 10,000 assignments: 0.2 s), so it costs no work: round 1 counted every re-read against the 64 K read limit
   and refused monorepo commands of 3–4 K (`FLAGS="$FLAGS --x"` ×76, a `cd ../next` chain ×80). Either is denied at deny, as a command
   past the limit — never only an unknown variable (`$D/..` of a long `.specs/…` value would miss the removal of .specs); the reason
@@ -499,8 +509,12 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   edited through (only its folder's real path is read), and an 8.3 short name SET by hand (`fsutil file setshortname .specs ZZZ` —
   administrator rights; any name, no `~N`: the rule can't know it), and a file the approval hook's worker reads that never answers —
   a FIFO, a device or a pipe the agent made by such an inline script where neither the hook's readers nor the read gate look, `.specs`
-  itself linked to `\\.\pipe\` (Windows, a link privilege), a dead network share: the worker blocks in one native call, Node joins it
-  at exit, and Claude Code's timeout lets the call through (Human approval guard → The deadline). Outside Claude Code the elicitation path gates spec_approve /
+  itself linked to `\\.\pipe\` (Windows, a link privilege), a dead network share, on Windows a file swapped for a FIFO between the
+  readers' lstat and their open (a race: win32 opens with no `O_NONBLOCK`): the worker blocks in one native call, Node joins it at
+  exit, and Claude Code's timeout lets the call through (Human approval guard → The deadline); and a command built to be slow for the
+  guard's readers (brace expansions over a long tracked value, very long `cd` folds): the approval hook answers `ask` at the deadline
+  instead of `deny` — never silent, never past the timeout; the human refuses at the prompt (the owner's ruling, 1.41.1 review 3).
+  Outside Claude Code the elicitation path gates spec_approve /
   spec_feature / spec_init only (not a `spec_add_track {remove}` — gates-and-approvals.md → Approvals the user confirmed over
   MCP).
 
@@ -860,12 +874,21 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.41.1 review 2** — **R2H-F1 (HIGH, older):** a FIFO named roadmap.json under a folder a command `cd`s into kept the worker in
   one read; the main thread printed `ask` at 6 s, but Node joins its workers at exit, so the process outlived Claude Code's 10 s and
   the call went through (Linux; on Windows a WSL FIFO or `.specs` linked to `\\.\pipe\`). Sized by the threat model to a cheap
-  hardening: rawLevel and the rule's ROADMAP.md head open only a regular file (`openRegular`); the rest is a known limit. **R2H-F2
+  hardening: rawLevel and the rule's ROADMAP.md head open only a regular file (`openRegular`) — on Linux; the WSL FIFO stayed open
+  until review 3 (its lstat throws: rawLevel opened on a throw, the head had no lstat); the rest is a known limit. **R2H-F2
   (introduced by round 1):** the growth bound counted every re-read against the 64 K read limit and refused legit monorepo commands
   of 3–4 K: what tracking BUILDS is bounded now, the paths' reading by a measured work bound of its own, the cd folder folded.
   **R2H-F3 (introduced):** past 16 M the payload was read as a partial one (the session's projects only) — the worker decides on it
   whole. **R2H-F4 (older):** `withPositionals` built k × |argument| characters — bounded, too-long. **F5** the edit guard keeps
   ed680c92's targets on the legit corpus; **F6** the heap limit pinned as numbers; **F7** silent after a level-0 report.
+- **1.41.1 review 3** — **R3H-F3 (MEDIUM, introduced by round 2):** rawLevel opened roadmap.json when its lstat THREW — through
+  `\\wsl.localhost\` a Linux FIFO's lstat throws EISDIR and win32 opens with no `O_NONBLOCK`: ask at 6.2 s, the process ended at
+  10.3 s, past the timeout. A throw now reads as gone, never opened; probe.js `head` takes the same lstat first (a FIFO ROADMAP.md:
+  10 s → 36 ms). **R3H-F1 / F2 (HIGH / MEDIUM):** brace expansions over a long tracked value and a long `cd` fold read far more than
+  the work charged — past the deadline, so the hook asked where 9966bffc refused. The owner's ruling: a command built to be slow for
+  the guard's readers may ask at the deadline instead of deny (never silent, never past the timeout); the bounds and `cdJoin` are not
+  tuned again — the shapes pinned to ask or deny by the deadline. **R3H-F4 (LOW):** the cd folder's own bound and pt's two
+  too-long sentences pinned; a swap between the lstat and the open stays a documented race.
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import

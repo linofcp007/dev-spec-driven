@@ -304,10 +304,12 @@ const RE_AUTOGEN = /AUTO-GE(?:NERATED|RADO|NERADO) (?:by|por) dev-spec/;
 const HEAD_CHARS = 4000;
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 // A file's first HEAD_CHARS characters (one bounded read, decoded as the engine decodes — files.js readFileHead), else "" — a
-// regular file only (openRegular: a FIFO named ROADMAP.md is never read).
+// regular file only (openRegular: a FIFO named ROADMAP.md is never read), and only opened when its lstat says one (review 3, R3H-F3):
+// a link, a FIFO, a device or an lstat that throws (a Linux FIFO through \\wsl.localhost\: EISDIR — win32 opens with no O_NONBLOCK).
 function head(file) {
   let fd = null;
   try {
+    if (!fs.lstatSync(file).isFile()) return "";
     fd = openRegular(file);
     if (fd === null) return "";
     const buf = Buffer.alloc(HEAD_CHARS * 4);
