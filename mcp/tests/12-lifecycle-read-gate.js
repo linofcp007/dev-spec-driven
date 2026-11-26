@@ -640,12 +640,12 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
     if (l1 && l2 && l3) {
       const runs = [S.importSpec(ip, "spec-kit", "specs/001-x", { dryRun: true }), S.importSpec(ip, "openspec", "openspec/changes/add-x", { dryRun: true }), S.importSpec(ip, "bmad", "bmadsrc", { dryRun: true })];
       const W = S.msg("en").importSpec;
-      all("1.41.1 R3: spec-kit's contracts/, OpenSpec's specs/ and BMAD's docs/ linked out of the project list nothing — no outside name or text in the result, one warning naming the linked folder (got " + js(runs.map((r) => r.warnings)) + ")", {
+      all("1.41.1 R3: spec-kit's contracts/, OpenSpec's specs/ and BMAD's docs/ linked out of the project list nothing — no outside name or text in the result, one warning naming spec-kit's / OpenSpec's linked folder; BMAD's fixed folders below the link read as absent, never named (fix round 2: naming docs/stories told whether the outside folder holds one) (got " + js(runs.map((r) => r.warnings)) + ")", {
         okAll: () => runs.every((r) => r.ok === true),
         noName: () => runs.every((r) => !/private-name-one|private-story-two|OUTSIDE-/.test(js(r))),
         speckit: () => runs[0].warnings.includes(W.wUnreadable("specs/001-x/contracts")),
         openspec: () => runs[1].warnings.includes(W.wUnreadable("openspec/changes/add-x/specs")),
-        bmad: () => runs[2].warnings.includes(W.wUnreadable("bmadsrc/docs/stories")) && !runs[2].warnings.some((w) => /docs.prd\.md/.test(w)),
+        bmad: () => !runs[2].warnings.some((w) => /bmadsrc.docs./.test(w)),
       });
     } else ok(true, "1.41.1 R3 (imports): links not creatable here — skipped");
     // trace's feature folders are FOLDERS: a root file (ROADMAP.md, roadmap.json) is never read as one
