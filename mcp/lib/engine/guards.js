@@ -42,7 +42,8 @@ let folderHoldsCode; // scan.js — a folder a command removes or moves as a who
 let builtinStopGate; // markdown.js — the stop gate's lists of every language from the corpus (stopPatterns)
 let guardianShellActions, guardianGuardFilter; // guardian.js — dev-guardian's gate rules (1.30), read through the hook points below
 let protectedTestDecision; // protect.js — 1.36 guard tests: an edit of a protected test (guardCheck)
-function __link(E) { ({ protectedTestDecision, builtinStopGate, folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
+let existsRaw, specsReadBlocked; // files.js — the read gate (1.41.1): a linked roadmap.json is a gone one; a linked report is none
+function __link(E) { ({ existsRaw, specsReadBlocked, protectedTestDecision, builtinStopGate, folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, projectChecks, projectLang, readIfExists, readJson,
@@ -536,9 +537,11 @@ function approvalGuardLevel(projectDir) {
 // unknown, and it FAILS CLOSED at ask (the hook reads it the same way) until roadmap.json is back. (The engine's next roadmap write
 // recreates it with the default meta — off: deleting it from the shell is itself a guard-down.)
 function approvalRoadmapGone(projectDir) {
+  // (1.41.1) through the read gate: a roadmap.json that is a link is GONE (fail closed at ask — it reads as absent, so its meta would
+  // read as off), and a feature's linked .state.json holds no feature (hooks/approval-hook.js roadmapGone reads both the same way)
   const root = specsRoot(projectDir);
-  if (fs.existsSync(path.join(root, "roadmap.json"))) return false;
-  return safeReaddir(root).some((n) => !n.startsWith(".") && fs.existsSync(path.join(root, n, ".state.json")));
+  if (existsRaw(path.join(root, "roadmap.json"))) return false;
+  return safeReaddir(root).some((n) => !n.startsWith(".") && existsRaw(path.join(root, n, ".state.json")));
 }
 // Inside initProject's roadmap lock. Off is the default (absent = off): no write when the effective value doesn't change.
 function setApprovalGuard(projectDir, level) {
@@ -2934,6 +2937,7 @@ function reportCommandSpans(report) {
 // UTF-16 report (a BOM — Windows PowerShell 5.1's `>` / Out-File write one) is decoded as such (decodeText), its tail read from an
 // even offset so the code units stay aligned; a leading BOM is dropped.
 function readStopReport(file, tail) {
+  if (specsReadBlocked(file)) return null; // the read gate (1.41.1): a linked report is none — the gate says it is missing
   try {
     const fd = fs.openSync(file, "r");
     try {
