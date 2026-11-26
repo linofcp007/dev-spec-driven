@@ -1044,11 +1044,14 @@ function reuseSnapshot(dir, phase, history, fp, dfp) {
   if (typeof prev.designSnapshot !== "string" || !fingerprintMatches(historyText(dir, prev.designSnapshot), phase, dfp)) return null;
   return { snapshot: prev.snapshot, designSnapshot: prev.designSnapshot };
 }
-// A history file, only inside the feature's .history (a hand-edited path never reads elsewhere) → its text, or null.
+// A history file — `.history/<one file name>`, the engine's own `<phase>@<n>[.design].md`, judged as TEXT before any read (1.41.1
+// fix round 1: a hand-edited rel with a subfolder or a `..` — `.history/.specs/x.md`, `../../.SPECS/…` — never reads elsewhere) → its
+// text, or null.
+const RE_HISTORY_REL = /^\.history[\\/]([^\\/]+)$/;
 function historyText(dir, rel) {
-  if (typeof rel !== "string") return null;
-  const abs = path.resolve(dir, rel);
-  return isInsideDir(path.join(dir, HISTORY_DIR), abs) ? readIfExists(abs) : null;
+  const m = typeof rel === "string" ? RE_HISTORY_REL.exec(rel) : null;
+  if (!m || m[1] === "." || m[1] === ".." || m[1] !== m[1].trim()) return null;
+  return readIfExists(path.join(dir, HISTORY_DIR, m[1]));
 }
 
 // The snapshot of the phase's LATEST approval → { rel, text, at, record } — null when that approval has none (made

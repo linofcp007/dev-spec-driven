@@ -62,8 +62,14 @@ function nearestProject(start) {
 function specsRoot(projectDir) {
   // Always use `.specs/` at the project root.
   const root = path.join(projectDir, ".specs");
-  // The project this engine call works in: its .specs/templates/ join the placeholder corpus (projectTemplateSets).
-  if (CTX.READ_CACHE) CTX.TEMPLATE_SCOPE_ROOT = root;
+  // The project this engine call works in: its .specs/templates/ join the placeholder corpus (projectTemplateSets) — and (1.41.1
+  // fix round 1) its folder is where the read / write gates stand: their root is THIS project's .specs/ (gateRootOf), never a folder
+  // merely named .specs above it or below it.
+  if (CTX.READ_CACHE) {
+    CTX.TEMPLATE_SCOPE_ROOT = root;
+    if (!CTX.GATE_BASES) CTX.GATE_BASES = new Set();
+    CTX.GATE_BASES.add(path.resolve(String(projectDir)));
+  }
   return root;
 }
 
@@ -715,6 +721,7 @@ function withReadCache(fn) {
   CTX.TEMPLATE_MEMO = null;
   CTX.PACK_MEMO = null; // … and its track packs
   CTX.GHOST_MARKERS = null;
+  CTX.GATE_BASES = null; // the projects this call works in (specsRoot): where the gates stand (gateRootOf)
   try {
     return fn();
   } finally {
@@ -725,6 +732,7 @@ function withReadCache(fn) {
     CTX.TEMPLATE_MEMO = null;
     CTX.PACK_MEMO = null;
     CTX.GHOST_MARKERS = null;
+    CTX.GATE_BASES = null;
   }
 }
 const readCacheKey = (p) => { const r = path.resolve(String(p)); return FOLD_CASE ? r.toLowerCase() : r; };
@@ -785,16 +793,37 @@ function specsWriteContained(projectDir, file) {
 // in the project's language, `gate` { kind, rel } — that the facade (spec.js) answers as { ok: false, linked | wrongKind: true,
 // path, error } (gateRefusal); the lock paths answer it before anything is written, in the feature's language.
 const GATE_CODES = { link: "ESPECSLINK", notFolder: "ESPECSKIND", notFile: "ESPECSKIND" };
-// The .specs folder `p` lies in (the nearest ancestor named .specs — p itself for ensureDir(.specs)), or null.
-function specsRootOf(p) {
-  let d = path.resolve(String(p));
-  for (;;) {
-    if (path.basename(d) === ".specs") return d;
-    const up = path.dirname(d);
-    if (up === d) return null;
-    d = up;
+// THE root both gates stand on (1.41.1 fix round 1): the .specs folder of the PROJECT `p` belongs to — never merely a folder named
+// .specs. The nearest such ancestor was taken until then: a link NAMED .specs deep below the project's .specs/ became a root (exempt:
+// nothing above it checked), a project living below a folder named .specs had its whole code tree gated, a .SPECS spelling was no
+// root at all. base = the OUTERMOST project folder this call works in that holds p (CTX.GATE_BASES — every specsRoot(projectDir) of
+// the call records its folder); root = the OUTERMOST ancestor of p strictly below base — anywhere in p when no recorded project holds
+// it (no scope, another checkout's report) — named .specs, folded where the file system folds case (isInsideDir's rule), or on win32
+// an 8.3 alias whose real path IS `<its folder>/.specs`'s (never a guess by name). p itself for ensureDir(.specs); null: p lies below
+// no .specs folder. A deeper part named .specs is then an ordinary part (lstat'ed: a link there is refused).
+const SPECS_NAME = ".specs";
+const RE_SHORT_ALIAS = /~\d/;
+const isSpecsName = (s) => (FOLD_CASE ? s.toLowerCase() : s) === SPECS_NAME;
+function gateRootOf(p) {
+  const abs = path.resolve(String(p));
+  const shortAlias = WIN_FS && RE_SHORT_ALIAS.test(abs);
+  if ((FOLD_CASE ? abs.toLowerCase() : abs).indexOf(path.sep + SPECS_NAME) === -1 && !shortAlias) return null; // a text test first: code pays nothing
+  let base = null;
+  if (CTX.GATE_BASES) for (const b of CTX.GATE_BASES) if (isInsideDir(b, abs) && (base === null || b.length < base.length)) base = b;
+  const start = base !== null ? base : path.parse(abs).root;
+  const segs = abs.slice(start.length).split(path.sep).filter(Boolean); // (isInsideDir: the same prefix, whatever its case)
+  let cur = abs.slice(0, start.length); // abs's own spelling: the root is a prefix of the path it gates
+  for (const s of segs) {
+    cur = path.join(cur, s);
+    if (isSpecsName(s)) return cur;
+    if (shortAlias && RE_SHORT_ALIAS.test(s)) {
+      const real = realDirOf(cur), named = realDirOf(path.join(path.dirname(cur), SPECS_NAME));
+      if (real && named && real === named) return cur;
+    }
   }
+  return null;
 }
+const WIN_FS = process.platform === "win32";
 // The real path of .specs/ (memoized in the call's read-cache scope, as specsFileContained does), or null.
 function realSpecsRoot(root) {
   const rk = CTX.READ_CACHE ? CONTAINED_KEY + "root:" + readCacheKey(root) : null;
@@ -855,7 +884,7 @@ const realInsideSpecs = (realRoot, real) => real !== realRoot && withinRoot(real
 // ---------------------------------------------------------------------------
 // THE read gate (1.41.1): below a project's .specs/ nothing is READ through a link — the write gate's rule, read the other way
 // ---------------------------------------------------------------------------
-// Below the nearest .specs (specsRootOf — never .specs itself, which may be a link: a project keeping its specs elsewhere), a part
+// Below the project's .specs (gateRootOf — never .specs itself, which may be a link: a project keeping its specs elsewhere), a part
 // between it and the target that is a symbolic link / junction (lstat), that lstat can't read (EACCES…), or a folder whose real path
 // is not strictly inside the real .specs/ (realInsideSpecs — another reparse point: a mount point) makes the target read as ABSENT.
 // Every engine reader of the disk asks it first — readRaw (readIfExists, readJson, readContained), existsRaw (existsCached),
@@ -895,10 +924,9 @@ function realDirOf(p) {
 // target's own lstat kind — "none" when it, or a part above it, is not there).
 function specsReadGate(p) {
   const abs = path.resolve(String(p));
-  if (abs.indexOf(path.sep + ".specs") === -1) return null; // a text test first: a project's code never pays a disk call here
-  const root = specsRootOf(abs);
-  if (!root || root === abs) return null;
-  const segs = path.relative(root, abs).split(path.sep);
+  const root = gateRootOf(abs); // the PROJECT's .specs/ (a text test first: a project's code never pays a disk call here)
+  if (!root || root.length >= abs.length) return null; // .specs itself (it may be a link) is never gated
+  const segs = abs.slice(root.length).split(path.sep).filter(Boolean); // (root is abs's own prefix, whatever its case)
   let cur = root, folder = root, kind = "none";
   for (let i = 0; i < segs.length; i++) {
     cur = path.join(cur, segs[i]);
@@ -946,7 +974,7 @@ const projectLangOfRoot = (root) => { try { return projectLang(path.dirname(root
 const featureLangSafe = (projectDir, slug) => { try { return featureLang(projectDir, slug); } catch { return null; } };
 // → null, or the Error a write of `target` is refused with (opts as specsWriteBlock's).
 function specsGateError(target, opts = {}) {
-  const root = specsRootOf(target);
+  const root = gateRootOf(target); // the read gate's root (ONE predicate): the project's .specs/
   if (!root) return null;
   const abs = path.resolve(String(target));
   const b = specsWriteBlock(root, abs, opts);
