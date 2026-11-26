@@ -1119,8 +1119,7 @@ function shellBuilt(ctx, size) {
 }
 function shellWork(ctx, n) {
   if (!ctx) return true;
-  if (ctx.workOut) return false;
-  ctx.work = (ctx.work || 0) + n;
+  ctx.work = (ctx.work || 0) + n; // (it only grows: once past the bound, every later call is past it too)
   if (ctx.work <= APPROVAL_TRACK_WORK) return true;
   ctx.workOut = true;
   if (!ctx.tooLong) ctx.tooLong = "total";
