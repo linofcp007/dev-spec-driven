@@ -471,8 +471,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   `implementsRefs` reads them: backticks off), past `BASELINE_CAP` — the planned walk's files passed as `known` (no second
   realpath check) and dated once, its glob and folder listings the call's memoized ones (1.36.0 review 2: a second walk doubled a
   big glob's brief; `09-evidence-fast-check` COUNTS it since 1.40 — the brief and next_task with the fast check make, under the
-  project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's; a 2.5×
-  timed backstop beside, testing.md → Adding a test) → `clean` · `stale` (run older than an edit) · `failed` ·
+  project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's (1.41.1: and
+  the read gate's two lstats and one realpath of its path); a 2.5× timed backstop beside, testing.md → Adding a test) → `clean` · `stale` (run older than an edit) · `failed` ·
   `missing` · `unknown` (`observedAny` false: no harness log — no note); `partial: true` when the planned set stopped at its cap
   (no other status, no note). A file date is never a blocker (gates-and-approvals.md), so this only ever warns. The log line's
   `tool` (the observe hook passes it for a PowerShell run only) gives `pwsh`: the latest run came from the PowerShell tool, whose

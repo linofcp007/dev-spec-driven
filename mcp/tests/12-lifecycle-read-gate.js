@@ -99,7 +99,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
   // / unlink of a link itself are judged by its folder; realpath is the gates' own reading (never content). `exempt`: the frames
   // allowed to (the engine-free 1-bit pre-filters and the project rule — DESIGN §1-E).
   const NOFOLLOW = new Set(["lstatSync", "readlinkSync", "unlinkSync", "lutimesSync", "symlinkSync", "rmSync", "rmdirSync"]);
-  const EXEMPT = /\b(?:isDevSpecProject|recentActivity|mentioned|readTasksText)\b/;
+  const EXEMPT = /\b(?:isDevSpecProject|recentActivity|mentioned|readTasksText|refreshStale)\b/;
   const traced = (projectDir, outside, fn) => {
     const rp = fs.realpathSync.native;
     const proj = fold(path.resolve(projectDir));
@@ -186,7 +186,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
     // (b) THE property: every operation of the table, driven with each feature name (the plain ones, the linked folder, the planted
     // archive) in a read pass and a write pass, under the tracer — no fs call through a link below .specs/, no OUT text in any result.
     {
-      const NAMES = ["plaina", "plainb", "lnk", "planted"];
+      const NAMES = ["plaina", "plainb", "plainc", "lnk", "planted"];
       const EV = { command: "node -v", exitCode: 0, summary: "ok" };
       const GENERIC = (w, nm) => ({ name: nm, number: 1, write: w, includeBody: true, includeBrief: true, code: true, matrix: true, batch: true, waves: true,
         max: 3, evidence: w ? EV : undefined, reason: "r", phase: "requirements", by: "t", force: w, lang: "en", explain: true,
@@ -206,7 +206,15 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         "stop-check": () => [{}, { agent: "dev-spec-driven:spec-implementer", message: "**Status:** DONE\nReport: .specs/plaina/.execution/task-1-report.md" }],
         approve: (w) => [{ phase: "requirements" }, ...(w ? [{ through: "tasks", reason: "r" }] : [])],
       };
-      const P = maze("prop"), beforeP = snap(P.out);
+      const P = maze("prop");
+      const pc = S.createFeature(P.p, { name: "plainc", tracks: ["tdd"] });
+      fs.writeFileSync(path.join(pc.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Do it for US-1.AC-1\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/c.js_\n  - _Verify: node -v_\n");
+      if (P.links.files) { fs.mkdirSync(path.join(pc.dir, ".execution"), { recursive: true }); fileLink(path.join(P.out, "files", "obs.jsonl"), path.join(pc.dir, ".execution", "observed.jsonl")); }
+      put(path.join(P.out, "exec", "observed.jsonl"), js({ command: "node -v", exitCode: 0, at: now, tool: "Bash", note: "OUTSIDE-PEXEC" }) + "\n");
+      put(path.join(P.out, "exec", "roadmap-stale"), "");
+      fs.rmSync(path.join(P.root, ".execution"), { recursive: true, force: true });
+      link(path.join(P.out, "exec"), path.join(P.root, ".execution"));
+      const beforeP = snap(P.out);
       const driven = new Set();
       const bad = [], leaks = [];
       const order = OPERATIONS.filter((o) => o.id !== "feature").concat(OPERATIONS.filter((o) => o.id === "feature")); // the folder moves last
@@ -392,6 +400,49 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       } else ok(true, "1.41.1 read gate (.specs a link): links not creatable here — skipped");
     }
 
+    // the read-ahead pool (readFileHeads with workers: DEV_SPEC_TEST_AHEAD=on, ≥ 96 files) never reads a file behind a link either
+    {
+      const p = path.join(tmp, "proj-rg-pool");
+      S.initProject(p, ["tdd"], "en");
+      const f = S.createFeature(p, { name: "pool", tracks: ["tdd"] });
+      const files = [];
+      for (let i = 0; i < 110; i++) { const q = path.join(f.dir, "tests", "t" + i + ".test.js"); put(q, "// T-" + i + "\n"); files.push(q); }
+      const outF = path.join(tmp, "proj-rg-pool-out", "secret.test.js");
+      put(outF, "// OUTSIDE-POOL\n");
+      const at = path.join(f.dir, "tests", "zz-linked.test.js");
+      if (fileLink(outF, at)) {
+        files.splice(80, 0, at);
+        const ahead = process.env.DEV_SPEC_TEST_AHEAD;
+        process.env.DEV_SPEC_TEST_AHEAD = "on";
+        let got = [];
+        try { const r = E.readFileHeads(files, 100); try { for (let i = 0; i < files.length; i++) got.push(r.next()); } finally { r.stop(); } } finally { if (ahead === undefined) delete process.env.DEV_SPEC_TEST_AHEAD; else process.env.DEV_SPEC_TEST_AHEAD = ahead; }
+        ok(got[80] === null && got.filter((x) => x !== null).length === 110 && !has(got), "1.41.1 read gate: the read-ahead pool (workers on, 111 heads) gives null for a file behind a link below .specs/ and every other head as read (got " + js([got[80], got.filter((x) => x !== null).length]) + ")");
+      } else ok(true, "1.41.1 read gate (pool): file symlinks not creatable here — skipped");
+    }
+    // a rename onto a name held by a link (a dangling one too): taken — never a move onto it
+    {
+      const p = path.join(tmp, "proj-rg-rename");
+      S.initProject(p, ["tdd"], "en");
+      S.createFeature(p, { name: "alpha" });
+      if (link(path.join(tmp, "proj-rg-rename-nowhere"), path.join(p, ".specs", "beta"))) {
+        const r = S.manageFeature(p, "rename", "alpha", "beta");
+        ok(r.ok === false && r.error === S.msg("en").err.alreadyExists("beta") && fs.existsSync(path.join(p, ".specs", "alpha")), "1.41.1: a rename onto a name a dangling link holds is refused as taken (entryAt) — the feature stays (got " + js(r) + ")");
+      } else ok(true, "1.41.1 (rename onto a link): links not creatable here — skipped");
+    }
+    // roadmap.json gone, the only feature's .state.json a link: no feature on both sides (the engine's existsRaw, the hook's lstat)
+    if (M.links.files) {
+      const p = path.join(tmp, "proj-rg-gone");
+      S.initProject(p, ["tdd"], "en");
+      const f = S.createFeature(p, { name: "solo" });
+      const st = path.join(tmp, "proj-rg-gone-state.json");
+      fs.renameSync(path.join(f.dir, ".state.json"), st);
+      fileLink(st, path.join(f.dir, ".state.json"));
+      fs.rmSync(path.join(p, ".specs", "roadmap.json"));
+      const lvl = E.withReadCache(() => E.approvalGuardLevel(p));
+      const h = hookIn(path.join(HOOKS, "approval-hook.js"), { input: js({ hook_event_name: "PreToolUse", tool_name: "mcp__plugin_dev-spec-driven_spec-driven__spec_approve", tool_input: { name: "solo", phase: "requirements", projectDir: p }, cwd: p }), cwd: p });
+      ok(lvl === "off" && h.stdout === "", "1.41.1: roadmap.json gone and the only feature's .state.json a link — no feature counts, on both sides (engine off, the hook silent): one answer (got " + js([lvl, h.stdout.slice(0, 60)]) + ")");
+    }
+
     // (f) one scope, a write, then a read: the gate's memo follows the engine's writes (a file made in the call reads as made)
     {
       const p = path.join(tmp, "proj-rg-memo");
@@ -499,7 +550,8 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       for (const k of Object.keys(keys)) files[k] = hash;
       st.protectedTests = { at: now, via: "approval", files, lifts: [] };
       fs.writeFileSync(sp, js(st, null, 2));
-      if (missing) fs.renameSync(path.join(base, "secret.txt"), path.join(base, "secret.gone")); else if (fs.existsSync(path.join(base, "secret.gone"))) fs.renameSync(path.join(base, "secret.gone"), path.join(base, "secret.txt"));
+      const moves = [[path.join(base, "secret.txt"), path.join(base, "secret.gone")], [path.join(outdir, "a.test.js"), path.join(outdir, "a.test.gone")]];
+      for (const [from, to] of moves) { if (missing && fs.existsSync(from)) fs.renameSync(from, to); else if (!missing && fs.existsSync(to)) fs.renameSync(to, from); }
       const r = S.finishFeature(p, "feat", {});
       return js([r.protectedTests, (r.warnings || []).filter((w) => /Protected tests/.test(w))]);
     };
