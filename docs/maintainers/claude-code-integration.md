@@ -287,6 +287,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   roadmap.json — every feature-making write writes it, so it was deleted — reads as `ask` (`approvalGuardLevel` →
   `approvalRoadmapGone()`; the hook's `rawLevel` → `roadmapGone()`; meta unknown, so every weakening init change counts); without
   a feature, off. Deleting it from the shell is itself a guard-down; this covers a deletion the guard didn't see. A roadmap.json
+  that is a LINK is a deleted one (1.41.1 — the read gate never reads through it, conventions.md → The read gate): the engine's
+  `approvalRoadmapGone` reads roadmap.json and each feature's `.state.json` through `existsRaw`, the hook's `rawLevel` lstats it and
+  its `roadmapGone` counts no linked `.state.json` — ask on both sides, never its target's off. A roadmap.json
   that doesn't parse keeps the strictest `"approvalGuard"` its raw text names (NULs taken out: a BOM-less UTF-16 file).
 - **`approvalGuardDecision(payload, level, {lang, cli?})`** — PURE → `{decision: allow | ask | deny, why, level, …}`; `why`
   (stable): `off` · `no-payload` · `not-pre-tool-use` · `not-an-approval` · `approval`. An approval adds `actions` (`kind`:
@@ -530,7 +533,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   spec_init / spec_create / spec_import report it in `userDefaults`; `init --stop-check on` writes meta when the variable says
   off. The guard and stop hooks read them raw. A roadmap.json that doesn't parse: DEV_SPEC_STOP_CHECK still decides, the guard
   stays off. DEV_SPEC_GUARD_DEFAULT reaches a dev-spec `.specs/` without roadmap.json (`isDevSpecDir`; the hook's
-  `devSpecWithoutRoadmap()`), never another tool's. **Never plugin.json `userConfig`**: a dialog on every install / enable,
+  `devSpecWithoutRoadmap()`), never another tool's. A roadmap.json that is a link is none on both sides (1.41.1): the guard hook's
+  `guardOn` and the stop hook's `gateOff` lstat it — the user's options decide, never its target's meta (the engine reads it absent). **Never plugin.json `userConfig`**: a dialog on every install / enable,
   invisible to the Bash tool (the CLI) and other MCP clients (`CLAUDE_PLUGIN_OPTION_*` reaches hooks only); settings.json `env`
   reaches hooks, stdio MCP servers and the Bash tool alike.
 - **MCP** — `annotations` on every tool from server.js `TOOL_ANNOTATIONS`: `READ_ONLY` for the 12 no argument makes write;

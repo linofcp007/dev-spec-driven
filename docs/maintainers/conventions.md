@@ -19,7 +19,11 @@ History at the end.
   `createExisted`).
 - **The name is ONE line** (`flatText`) **and inert to HTML comments** (`specNameText`: `<!--` → `&lt;!--`) wherever it lands.
 - **Never through a link:** `linkedSpecsFolder()` (scaffold.js) refuses to scaffold through a linked `.specs/steering/` or
-  `.specs/<feature>/` (`linked: true`, nothing written); tasks.md is read through `readContained`.
+  `.specs/<feature>/` (`linked: true`, nothing written), and nothing is READ through one (The read gate, below). A name that
+  reaches a linked feature folder is `feature-linked` (`existingFeature`: `{ok: false, linked: true, code, path, error}` —
+  `err.featureLinked`) for every reader, never "not found"; the six folder-level operations — `featureLocked`, archive, rename,
+  remove (+ its preview and `removeLinkedFeatureLocked`), restore's `archivedFeature` — accept `f.linked` and go on to the write
+  gate's refusal at the lock / the link's removal, as since 1.24 (12-lifecycle-write-gate.js G1, unchanged). Nothing else may.
 - **`spec_feature remove` needs `confirm: true`** (CLI `--yes`); without it the result (`needsConfirm`) previews what would go
   (`removePreview()`, `lstat`: a link is never followed). Prefer archive. A feature folder that is itself a link is removed as
   the link alone (`removeLinkEntry`), under the roadmap lock only — a feature lock would be created THROUGH it.
@@ -69,6 +73,37 @@ History at the end.
 - **Removals go through it too:** `removeSpecFile` (a link AT the path unlinked as the link), `removeEmptySpecDir` (an EMPTY
   folder, never a link — rmdir would drop a junction). **Known limit:** a second write in one call can be refused after the
   first landed (a linked tasks.md: the evidence recorded, the tick refused) — but nothing is written THROUGH a link.
+
+### The read gate — nothing READ through a link below .specs/ (1.41.1)
+- **The write gate's predicate, read the other way** (`specsReadGate(p)`, engine/files.js, beside `specsWriteBlock`; both share
+  `realInsideSpecs`): below the nearest `.specs` (`specsRootOf` — never `.specs` itself, which may be a link), a part between it and
+  the target that is a symlink / junction (lstat), that lstat can't read (EACCES…), or a FOLDER whose real path is not strictly inside
+  the real `.specs/` (a mount point) makes the target read as ABSENT. Memoized in the call's read-cache scope (`\0part:` — one lstat per
+  distinct part — and `\0realdir:` — one realpath per distinct folder; a regular file can't redirect, its folder's real path is
+  checked); `forgetCached` drops both for a written path and its folders. lstat, never a Dirent's type (Windows lists a cloud-file
+  placeholder as a link).
+- **Where it holds:** every read primitive asks it first — `readRaw` (`readIfExists`, `readJson`, `readContained`), `existsRaw` (below
+  .specs/ answered from the gate's lstat, no existsSync of its own), `readDirCached` / `walkProject`, `safeReaddir`, `isDirSafe`,
+  `readFileHead(s)` (the pool gets a path no open accepts), `readBytes` (a tick's bytes), `specsStat` (an mtime / a size); the bounded
+  readers outside files.js ask `specsReadBlocked` first (`readLogTail`, `readStopReport`, `fileHash`, the save hook's lint, spec_upgrade's
+  `.gitignore`, the roadmap row signature). A WRITE target's name (rename / archive / restore onto it, a snapshot's number, an import's
+  folder) is `entryAt` — lstat, a link there is taken. `specsFileContained` / `readContained` ARE the gate's verdict (a regular file or
+  absent). The dry-run sink is read first (its records passed the write gate).
+- **Not gated, on purpose:** `.specs` itself; the project rule (`PROBE_IO`, probe.js `isDevSpecProject`) — which folder IS the project is
+  one answer for the engine, the hooks, the status line and the completion (10-guards-probe.js's linked layouts), the spec text behind a
+  link stays unread; the engine-free hooks' 1-bit pre-filters (observe `mentioned`, stop `recentActivity`) — they only decide whether the
+  engine runs, and its gated read decides.
+- **Reported, never silent:** a linked feature folder is `feature-linked` (Feature folders, above); doctor `specs-links` (a warn) names
+  each link below .specs/ the reads treat as absent — `.specs/`'s, `steering/`'s and `_archive/`'s own entries and the feature folder's
+  (three levels) —, never what it points at; an approval's artifact behind a link is `unreadable: true` (an entry that reads absent).
+- **Where absence would relax a decision, it fails closed:** a linked roadmap.json is a GONE one — the approval guard asks
+  (`approvalRoadmapGone` → `existsRaw`; the approval hook's `rawLevel` the same by lstat), the stop gate stays on (the Stop hook's
+  `gateOff`), guard mode takes the user's default (the guard hook) —; a linked `.state.json` approves nothing, a linked approved artifact
+  changed since its approval, a linked report is no report, a linked tasks.md covers nothing (DESIGN table: 12-lifecycle-read-gate.js
+  Addition A).
+- **Checked by a property, not a list:** mcp/tests/12-lifecycle-read-gate.js drives EVERY entry of `OPERATIONS` (and the hooks) on a
+  link maze under an fs tracer — no fs call other than lstat / realpath of a link itself lands behind one, no result carries its text; a
+  new operation without its arguments fails "not driven".
 
 ### The dry-run sink — `withDryRun(fn)`, engine/files.js
 - **ONE switch in the write primitives:** while `CTX.DRY_RUN` is set they record what they would write (`dryPut`) — after the
@@ -363,6 +398,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.25** — `removeEmptySpecDir` (the ADR export's emptied folders).
 - **1.25.1 review 7** — the raw-write guard covers mcp/evals/: the eval harness's raw fs.writeFileSync of evals/baseline.json
   followed a link under .specs/.
+
+### The read gate
+- **1.41.1 (dev-guardian 3.17 triage, R2)** — the writes were gated since 1.24, the reads followed a committed link: a linked feature
+  folder, a linked steering/ or a file link (tasks.md, requirements.md, decisions.md, test-plan.md) had its text quoted into next_task,
+  the brief, trace, the catalog / SPECS.md, retro.md, a merge summary's title, a new decisions.md's header; only the verbatim copies used
+  `readContained`. ONE predicate in the read primitives (the write gate's, memoized) + `feature-linked` in the resolver. A prototype of
+  the gate alone (no resolver) broke exactly the six 1.24 linked-folder tests — and read a linked roadmap.json as off for the approval
+  guard (meta `{}` while the raw existence check said present): hence the GONE rule on both sides.
 
 ### The dry-run sink
 - **1.25** — the sink (`withDryRun`), for `spec_import {dryRun}`: one switch in the write primitives, made possible by the 1.24

@@ -24,7 +24,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   `finish --run`); W in each suite's `09-evidence-guardian.js`; 12 — `12-lifecycle-lessons.js` (the lesson kind, finish's
   `lessons`, the brief's part, spec_metrics' lessons on the one walk, the finish batch's order against
   commands/spec-finish.md); 15 — `15-quality-reference-examples.js` (structure.md's table, doctor `reference-examples`, the
-  brief's part). **A file is named after its topic** — `10-guards-shell-writes.js`,
+  brief's part). 1.41.1: 12 — `12-lifecycle-read-gate.js` (the read gate: every `OPERATIONS` entry and the hooks on a link maze
+  under an fs tracer, `feature-linked`, doctor `specs-links`, where absence relaxes a decision, the cost as counts, R3's project
+  files by real path) and its CLI twin `cli/tests/12-lifecycle-read-gate.js`. **A file is named after its topic** — `10-guards-shell-writes.js`,
   `12-lifecycle-branch.js` — never after a release or a review round: 1.27 renamed the 23 that were (`10-guards-review7.js`
   → `10-guards-shell-writes.js`, `13-imports-1-25.js` → `13-imports-steering.js`, `18-reviews.js` → `18-cross-area.js`…) and
   merged six small ones into their area's topic file (`05-markdown-r7-readers.js` into `05-markdown-readers.js`). An

@@ -69,9 +69,10 @@ file states the CURRENT rules first; its `## History` at the end keeps how they 
   guard, the status line, user defaults, the dev-spec project probe or the plan-mode bridge: Hooks and commands · Guard
   mode · Human approval guard · Claude Code integration.
 - **`docs/maintainers/conventions.md`** — before touching feature folders, `.state.json` / roadmap.json writes (or adding a key
-  to them — the merge driver must know it), any write under .specs/ (the write gate, the dry-run sink), the locks, process
+  to them — the merge driver must know it), any write under .specs/ (the write gate, the dry-run sink) or read below it (the read
+  gate: nothing read through a link, 1.41.1), the locks, process
   I/O or the CLI's table, flags and exit codes: Conventions & gotchas — Feature folders · The project folder · The write
-  gate · The dry-run sink · JSON state · Merging the spec state · The locks · Flush stdout before exiting · Calendar dates ·
+  gate · The read gate · The dry-run sink · JSON state · Merging the spec state · The locks · Flush stdout before exiting · Calendar dates ·
   The CLI is one table and one call · CLI boolean switches · Shell completion.
 - **`docs/maintainers/testing.md`** — before adding a test (which file of `mcp/tests/` / `cli/tests/`), writing one that
   runs a command or depends on the file system, or running a part of a suite or the Linux / plugin-eval suites: The

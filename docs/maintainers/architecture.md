@@ -33,7 +33,8 @@ mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): t
 mcp/lib/engine/                ALL domain logic, one module per concern (The module rule):
   index.js · ctx.js            the loader (MODULES → the namespace E → __link(E); LAZY on first use) · CTX, the shared per-call state
   core.js                      linear text scans, own-key lookup, globs, the _Implements:_ readers, calendar dates (today, dayOf)
-  files.js                     paths, the write gate (create-only / atomic writes), JSON reads, the read cache, readFileHead,
+  files.js                     paths, the write gate (create-only / atomic writes) and the read gate (1.41.1), JSON reads, the read
+                               cache, readFileHead, projectFileReal (a project file by its real path),
                                path containment, the feature / roadmap locks, folder moves, resolveProjectDir
   state.js                     languages, the feature resolver, .state.json, PHASES, fingerprints, roadmap.json and its
                                writers, RE_AUTOGEN; the 3-way merge behind git's merge driver (mergeStateJson / mergeStateText)
