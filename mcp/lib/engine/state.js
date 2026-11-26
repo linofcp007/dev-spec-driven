@@ -570,6 +570,9 @@ function addBacklog(projectDir, name, note) {
   // ROADMAP.md (under Features and under Backlog). An archived feature's name may be planned again.
   const f = existingFeature(projectDir, nm);
   if (f.ok) return { ok: false, feature: f.slug, error: i18n.msg(projectLang(projectDir)).featureOps.backlogIsFeature(nm, f.slug) };
+  // (1.41.1) a name a linked folder holds is taken too — refused as feature-linked (the folder is there, but dev-spec never reads a
+  // feature through a link: "already has a spec" would name a spec it cannot read; the parent refused it as backlogIsFeature)
+  if (f.linked) return { ok: false, feature: f.slug, linked: true, code: f.code, path: f.path, error: f.error };
   const r = withRoadmapLock(projectDir, () => addBacklogUnlocked(projectDir, nm, note));
   if (r.ok) maybeRefreshRoadmap(projectDir); // outside the lock: the lock covers roadmap.json only
   return r;
