@@ -463,6 +463,31 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       ok(lvl === "off" && h.stdout === "", "1.41.1: roadmap.json gone and the only feature's .state.json a link — no feature counts, on both sides (engine off, the hook silent): one answer (got " + js([lvl, h.stdout.slice(0, 60)]) + ")");
     }
 
+    if (M.links.files) {
+      const p = path.join(tmp, "proj-rg-prims");
+      S.initProject(p, ["tdd"], "en");
+      const f = S.createFeature(p, { name: "prim" });
+      const inside = path.join(p, "plain.txt");
+      put(inside, "plain\n");
+      const at = path.join(f.dir, "linked.md");
+      fileLink(inside, at);
+      const rb = typeof E.readBytes === "function" ? E.readBytes : () => "n/a";
+      eq([E.fileHash(at), rb(at), typeof E.fileHash(inside), Buffer.isBuffer(rb(path.join(f.dir, "requirements.md")))], [null, null, "string", true],
+        "1.41.1 read gate: fileHash and readBytes give nothing for a file behind a link below .specs/ (even one pointing inside the project) — a plain file hashes and reads as ever");
+      const g = path.join(tmp, "proj-rg-hooks");
+      S.initProject(g, ["tdd"], "en", { guard: "scope", approvalGuard: "ask" });
+      S.createFeature(g, { name: "feat" });
+      const gOut = path.join(tmp, "proj-rg-hooks-out");
+      fs.mkdirSync(gOut, { recursive: true });
+      fs.renameSync(path.join(g, ".specs", "roadmap.json"), path.join(gOut, "roadmap.json"));
+      fileLink(path.join(gOut, "roadmap.json"), path.join(g, ".specs", "roadmap.json"));
+      const ev = (file, payload) => traced(g, gOut, () => hookIn(path.join(HOOKS, file), { input: js(payload), cwd: g, env: { ...process.env, CLAUDE_PROJECT_DIR: g } }));
+      const hk = [ev("guard-hook.js", { hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.join(g, "src", "x.js") }, cwd: g }),
+        ev("approval-hook.js", { hook_event_name: "PreToolUse", tool_name: "mcp__plugin_dev-spec-driven_spec-driven__spec_approve", tool_input: { name: "feat", phase: "requirements" }, cwd: g }),
+        ev("stop-hook.js", { hook_event_name: "Stop", last_assistant_message: "All tasks are done and verified.", cwd: g })];
+      ok(hk.every((h) => !h.bad.length), "1.41.1 read gate: the guard, approval and Stop hooks read nothing through a linked roadmap.json — their raw pre-checks lstat it and take it as none (got " + js(hk.map((h) => h.bad)) + ")");
+    }
+
     // (f) one scope, a write, then a read: the gate's memo follows the engine's writes (a file made in the call reads as made)
     {
       const p = path.join(tmp, "proj-rg-memo");
@@ -563,7 +588,10 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
     const sp = path.join(f.dir, ".state.json");
     const crypto = require("crypto");
     const h16 = (file) => crypto.createHash("sha1").update(fs.readFileSync(file)).digest("hex").slice(0, 16);
-    const keys = { "../secret.txt": null, [path.join(base, "secret.txt")]: null, "C:x.test.js": null, ...(linked ? { "tests/ext/a.test.js": null } : {}) };
+    put(path.join(p, "tests", "real.test.js"), "// T-02 inside\n");
+    const inLink = fileLink(path.join(p, "tests", "real.test.js"), path.join(f.dir, "tests", "inlink.test.js"));
+    const keys = { "../secret.txt": null, [path.join(base, "secret.txt")]: null, "C:x.test.js": null, ...(linked ? { "tests/ext/a.test.js": null } : {}),
+      ...(inLink ? { ".specs/feat/tests/inlink.test.js": null } : {}) };
     const finishWith = (hash, missing) => {
       const st = JSON.parse(fs.readFileSync(sp, "utf8"));
       const files = {};
@@ -598,6 +626,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
     put(path.join(io, "private-name-one.md"), "# OUTSIDE-IMP\n");
     put(path.join(io, "stories", "private-story-two.md"), "# Story 1.1: OUTSIDE-STORY\n");
     put(path.join(io, "cap", "spec.md"), "# OUTSIDE-SPEC\n");
+    put(path.join(io, "prd.md"), "# OUTSIDE-PRD\n");
     fs.mkdirSync(path.join(ip, ".specs"), { recursive: true });
     fs.writeFileSync(path.join(ip, ".specs", "roadmap.json"), js({ meta: { lang: "en" }, features: {} }));
     put(path.join(ip, "specs", "001-x", "spec.md"), "# Feature Specification: X\n\n## User Scenarios & Testing\n\n### User Story 1 - Do (Priority: P1)\n\nU.\n\n**Acceptance Scenarios**:\n\n1. **Given** a, **When** b, **Then** c\n");
@@ -613,7 +642,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         noName: () => runs.every((r) => !/private-name-one|private-story-two|OUTSIDE-/.test(js(r))),
         speckit: () => runs[0].warnings.includes(W.wUnreadable("specs/001-x/contracts")),
         openspec: () => runs[1].warnings.includes(W.wUnreadable("openspec/changes/add-x/specs")),
-        bmad: () => runs[2].warnings.includes(W.wUnreadable("bmadsrc/docs/stories")),
+        bmad: () => runs[2].warnings.includes(W.wUnreadable("bmadsrc/docs/stories")) && !runs[2].warnings.some((w) => /docs.prd\.md/.test(w)),
       });
     } else ok(true, "1.41.1 R3 (imports): links not creatable here — skipped");
     // trace's feature folders are FOLDERS: a root file (ROADMAP.md, roadmap.json) is never read as one
