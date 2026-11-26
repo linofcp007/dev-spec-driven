@@ -1943,24 +1943,13 @@ function shellTrack(words, raw, mode, ctx) {
   const cwd = cdJoin(ctx.cwd, dir);
   ctx.cwd = shellBuilt(ctx, cwd.length) ? cwd : "";
 }
-// The folder a cd moves to (ctx.cwd): `dir` under `cwd` (an absolute one alone) — `.` dropped and a `..` folded into the plain segment
-// before it, as path.posix.normalize reads every path after it (approvalPathText: the same facts), so `cd pkg && … && cd ..` ×300 keeps
-// the folder short (1.41.1 review 2, R2H-F2: it grew by `/..` each time and every path after it read it again). One pass, only when
-// the text holds a `.` / `..` segment (else it is kept as written); both separators read as one, written `/`; a `..` with no plain
-// segment before it stays (`../x`; a drive's `C:` is never folded), `/..` at the root is the root.
+// The folder a cd moves to (ctx.cwd): `dir` under `cwd` (an absolute one alone), normalized as every path after it is read
+// (approvalPathText: both separators as `/`, then path.posix.normalize — normalizing the folder first reads each path as before), so
+// `cd pkg && … && cd ..` ×300 keeps it short (1.41.1 review 2, R2H-F2: it grew by `/..` each time and every path after it read it
+// again). Only a text holding a `.` / `..` segment is rewritten; any other is kept as written.
 function cdJoin(cwd, dir) {
   const text = /^(?:[\\/]|[A-Za-z]:)/.test(dir) || !cwd ? dir : cwd + "/" + dir;
-  if (!/(?:^|[\\/])\.\.?(?=[\\/]|$)/.test(text)) return text;
-  const rooted = /^[\\/]/.test(text);
-  const out = [];
-  for (const seg of text.split(/[\\/]+/)) {
-    if (seg === "" || seg === ".") continue;
-    const last = out[out.length - 1];
-    if (seg === ".." && last !== undefined && last !== ".." && !/^[A-Za-z]:$/.test(last)) { out.pop(); continue; }
-    if (seg === ".." && rooted && !out.length) continue;
-    out.push(seg);
-  }
-  return (rooted ? "/" : "") + out.join("/") || ".";
+  return /(?:^|[\\/])\.\.?(?=[\\/]|$)/.test(text) ? path.posix.normalize(text.split("\\").join("/")) : text;
 }
 // Text fed to a shell as its script — the simple command is a shell with no script of its own reading stdin (bash /
 // sh -s / no operand, cmd without /c, pwsh / powershell without -Command / -File or with `-Command -`, `iex` / Invoke-Expression without

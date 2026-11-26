@@ -654,6 +654,13 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       "deadlineMs: the default, a lower test value, never a higher or a malformed one": () => AH.deadlineMs({}) === D && AH.deadlineMs(env("500")) === 500 && AH.deadlineMs(env("0")) === 0 &&
         AH.deadlineMs(env(String(D * 10))) === D && AH.deadlineMs(env("")) === D && AH.deadlineMs(env("x")) === D && AH.deadlineMs(env("-1")) === D,
       "decide tells the strictest level once, before the engine (2, pt)": () => calls.length === 1 && calls[0].level === 2 && calls[0].lang === "pt" && out.hookSpecificOutput.permissionDecision === "deny",
+      // (fix round 2, R2H-F1) judged by the fd's own fstat once opened: a device opens (NUL / /dev/null) and is no regular file
+      "probe.js openRegular / readRegularText: a device is no regular file (null), a regular file opens": () => {
+        const PR = require("./lib/probe.js"), BSL = String.fromCharCode(92);
+        const dev = process.platform === "win32" ? BSL + BSL + "." + BSL + "NUL" : "/dev/null";
+        const fd = PR.openRegular(path.join(pd, ".specs", "roadmap.json"));
+        try { return PR.openRegular(dev) === null && PR.readRegularText(dev) === null && typeof fd === "number"; } finally { if (typeof fd === "number") fs.closeSync(fd); }
+      },
     });
   }
 
