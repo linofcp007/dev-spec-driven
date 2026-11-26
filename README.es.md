@@ -178,7 +178,7 @@ en otros clientes MCP son los prompts del servidor.
 | | `/spec-change [impact \| decide \| track ±x]` | Después de una aprobación: lo que toca una edición, una entrada en el registro de decisiones, un track activado o desactivado |
 | ejecutar | `/executeTask [--subagents] \| commit` | La tarea siguiente (o la tarea N) con evidencia; `commit` redacta un commit que cita la spec |
 | | `/eval [run \| baseline \| migrate]` | (+ai) El harness de evals local con tu propia clave de API; una migración de modelo condicionada a él |
-| revisar | `/spec-review [branch \| converge \| simplify \| feedback \| prompt]` | Revisión frente a la spec — la rama, una pasada de convergencia o de simplificación, comentarios de revisión, un cambio de prompt |
+| revisar | `/spec-review [branch \| converge \| simplify \| prune \| feedback \| prompt]` | Revisión frente a la spec — la rama, una pasada de convergencia, de simplificación o de poda, comentarios de revisión, un cambio de prompt |
 | cerrar | `/spec-finish` | Comprueba que está realmente terminada, redacta el resumen del merge y después hace el merge en local o mantiene la rama |
 | | `/feature [archive \| restore \| rename \| remove \| flow]` | El ciclo de vida de una función; `flow design-first` para el trabajo que parte de una arquitectura |
 | adoptar | `/spec-adopt [scan \| reverse \| coverage \| import]` | Código existente: inventariarlo, generar specs a partir de él, medir la cobertura, importar Kiro / spec-kit / OpenSpec / planes / BMAD |
@@ -217,7 +217,7 @@ cliente MCP — llaman al mismo motor:
 | `spec_impact` | Lo que toca una edición después de una aprobación (ACs, secciones, pruebas, tareas); `reopen` desmarca las tareas hechas afectadas (nunca las de un criterio eliminado: `retire` las lista) |
 | `spec_add_track` | Activa un track en una función existente (aditivo) — `remove: true` desactiva uno, sin borrar ficheros |
 | `spec_feature` | Archiva · restaura · renombra · elimina una función (eliminar exige `confirm: true`), o fija su `flow` |
-| `spec_decide` | Añade una decisión o un descubrimiento (`D-n`) a `decisions.md`, con lo que afecta (comprobado) |
+| `spec_decide` | Añade una decisión, un descubrimiento o una lección (`D-n` — por qué ocurrió un hallazgo confirmado en una revisión: la causa, el fichero que hay que corregir) a `decisions.md`, con lo que afecta (comprobado) |
 | `ears_validate` | Valida criterios EARS — SHALL / DEVE / DEBE, IDs estables, palabras vagas, placeholders (EN / PT / ES) |
 | `trace_check` | Cada AC cubierto por una tarea (y por una prueba en +tdd), referencias fantasma; `code` busca T-IDs en los ficheros de prueba, `matrix` la matriz de trazabilidad |
 | `spec_doctor` | Una revisión de salud → "¿lista para avanzar?" (EARS, placeholders, traza, secciones, evidencia, gates, steering) |
@@ -337,7 +337,7 @@ dev-spec-driven/                      ← raíz del plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 herramientas + prompts + recursos, sin dependencias)
 │   ├── servers.json                  ← registro MCP del plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← la fachada del motor (el único objeto que cargan el servidor, la CLI y los hooks)
-│   ├── lib/engine/                   ← el motor: 30 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
+│   ├── lib/engine/                   ← el motor: 32 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← contenido localizado (en · pt · es) + la derivación pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (uno por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (tu clave de API; --dry-run sin conexión)

@@ -14,7 +14,12 @@ Phase 6, opt-in.
   IDs, ≤ 5 / 2000 characters); a `[SEC]` / `[PRIVACY]` task's track design sections; a bugfix's Reproduction + Root Cause (+
   `gated` / `gateError` when the bugfix gate would refuse it — 1.36: or +port's, with `heldBy`, the `[PORT]` tasks it waits for);
   `portRole` (`port` · `after`) + `differential` on a +port task (its definition-of-done rule, `brief.portRules`); `dependsOn` (see
-  Task dependencies); the loop's definition of done.
+  Task dependencies); the loop's definition of done. 1.41: two parts after Reuse — **Reference examples** (`briefExamples`,
+  quality.js: structure.md's `## Reference Examples` rows for the task's `briefTargets` — the same paths briefSteering's
+  fileMatch patterns match —, ≤ 6 rows / 1,200 characters, a gone file named never quoted: `examples`; quality.md →
+  Reference examples) and **Lessons** (`briefLessons`, decisions.js: the feature's OPEN lessons, newest first, ≤ 5 / 1,200
+  characters, the rest named — `lessons` {quoted, omitted}; `decisions` never quotes a lesson: lifecycle.md → Decisions and
+  spikes). `write: true` keeps `refs.examples` {quoted, gone, total} and `refs.lessons` {quoted, omitted} only.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`, 6,000 characters since 1.38: a view task keeps +ui's filled state
   matrix — `[UI] UI States`, ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views — beside the other `[UI]` sections, all five up to 2 views;
@@ -56,8 +61,15 @@ Phase 6, opt-in.
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
   ONE finding fresh (80+ opens a fix round, 50–79 is ledgered as unconfirmed, below 50 refuted); its **simplify** mode reviews
-  `/spec-review simplify`'s diff; it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
-  rewritten lines' history. The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
+  `/spec-review simplify`'s diff; its **prune** mode (1.41) proposes the `same-path` / `no-kill` candidates of `/spec-review
+  prune`, asks for the probes the controller runs and gives each a verdict — prune · keep · strengthen (the pass is prose end
+  to end: the matrix says which criteria each test covers — never a criterion's last planned test, never a retired AC's test,
+  which needs a `/spec-change` on its feature —, the record spec_impact's `retire` and, at guard level tests, the protected-test accept — no engine
+  part; `references/subagent-execution.md` → The pruning pass, `test-patterns.md` → Test value and pruning); it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
+  rewritten lines' history. **Lessons (1.41):** a fix round 1–3 asks the implementer each confirmed finding's cause (its
+  report's `### Causes` block), the controller checks the three a file can show and records it with
+  `spec_decide {kind: "lesson"}`; the finish batch amends the guidance once (§7b; lifecycle.md → Decisions and spikes — the engine's part is the
+  entry, its readers and finish's warning). The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
   runs the simplifier's, each verified before it costs a fix.
@@ -337,14 +349,30 @@ Engine: the `B5` block of `engine/evidence.js`.
     12 R1: those files that are the feature's own `_Implements:_` files — the `own` set behind `[this feature]`, read lazily
     (`mine()`): `{count, files ≤ 3: [{file, kind}]}`), notes?
     (`coverage_notes`, 3.4+: their count), staleTimeouts? (`unused_timeout_acceptances`, 3.4+: `{count, files ≤ 3}` — distinct
-    accept_timeouts entries no step reported a timeout on), message?,
+    accept_timeouts entries no step reported a timeout on), testIntegrity? (1.41.0, W — `integrityFindings`: the `new_findings` of
+    dev-guardian's own passes, `GUARDIAN_INTEGRITY_KINDS` — `guardian-test-integrity` → kind `test`, `guardian-suppressions`
+    (3.17, `GUARDIAN_SUPPRESSIONS`) → kind `suppression` — whose severity is under the command's LAST `--fail-on` (`failOn`,
+    as dev-guardian reads it — review 2; of the FIRST segment that carries one, the command cut at `;` / `&&` / `||` / `|` / a
+    line break: a later `echo --fail-on low` is not dev-guardian's — review 3 —, nor a prefix, `cd . &&` / `chcp 65001 >NUL &&` —
+    RX2-1; a property of the text, never a name list, so `echo --fail-on low && <check> --fail-on medium` reads low, as 1.40
+    did; `severityRank`: dev-guardian's own blocking rule, gate.ts; unknown → under every
+    level) and that is not one of the report's `blocking_findings` (by rule + file + line, `blockedFacts` — review 1: dev-spec
+    read the first `--fail-on`; dev-guardian also unquotes a shell-quoted one dev-spec does not read):
+    `{count, top ≤ 3: [{severity, rule, file, line, kind}], kinds}` (`kinds`, review 1: the kinds among ALL of them — the
+    warning's head names those checks —, plus `suppression` while a `coverage_notes` line starts `guardian-suppressions: `, the
+    pass having left changed files unread — review 2, RX-7), by severity then the report's order; no fs call — `findingFacts` is
+    the blocking items' reader, `mine()` never runs for it; a `--compact` report lists only the blocking findings, so none is
+    read), message?,
     baseline? ("absent": `baseline_absent` / `baseline_status`), tool? (`tool_version`), update? (no
     `tool_version`, one below `GUARDIAN_MIN_VERSION` 3.2.1, or "Cannot find package" — 3.2.0 from a plugin install), override?
     (the `DEV_GUARDIAN_CLI` the launcher said it ran)}`. Every scan step repeats a non-gating line under its own name
     (`security_scan_full: …`, `map_attack_surface: …`): `distinctLines` reads each fact once, without its step. The lines
     themselves (`acceptedLines` / `noteLines`, ≤ 3 each, + `acceptedMore`) are for finish --run's output — never stored
     (`guardianStored`). `unused_partial_parse_acceptances` is not read (the acceptance is on the check's own command). Every report-derived text is one inert line (`cleanLine`: line breaks
-    folded, control characters spaces — review 8: a `file_path` holding "\n## Approved…" wrote lines into the merge summary).
+    folded, control characters spaces — review 8: a `file_path` holding "\n## Approved…" wrote lines into the merge summary;
+    the bidi controls and the zero-width space dropped — U+200B, U+200E–U+200F, U+202A–U+202E, U+2066–U+2069, 1.41.0 review
+    1, `RE_REPORT_FORMAT`, tested first; ZWNJ / ZWJ kept, review 2: they spell names, a Persian word, an emoji sequence; the `own`
+    set reads each `_Implements:_` file through `cleanLine` too, so a name holding one still matches the report's).
     Verdicts (stable): `pass` (0) · `blocked` (1) · `incomplete` (2) · `config` (3, dev-guardian's own "error: …" /
     "dev-guardian: …" lines — never the launcher's DEV_GUARDIAN_CLI line) · `not-found` (3 + the launcher's "dev-guardian not
     found") · `no-launcher` (a run of `.specs/guardian.cjs` while it is missing, any non-zero exit; or 1 + node's "Cannot find
@@ -369,7 +397,9 @@ Engine: the `B5` block of `engine/evidence.js`.
     changes the status (the exit code decides it). `suiteBlocker()`
     (finish's `suite-evidence`) lists the other missing checks as before and a failed gate apart — `guardian.blocker` + how to
     clear it (`fixHint`: fix it; ONE reviewed finding suppressed inline with a reason — never `baseline update`, which accepts
-    every current finding, the feature's own included; never forced · + `baselineHint` with no baseline · an incomplete scan by
+    every current finding, the feature's own included; a test-integrity finding takes no inline suppression — restore the
+    test, or the user decides, an approved pruning blocking at `--fail-on medium` by design (RX2-3); never forced · +
+    `baselineHint` with no baseline · an incomplete scan by
     its gaps' kinds — `incompleteHint(g)`: install only a `missing_tool`, a lockfile for `no_lockfile`, a Semgrep `file_timeout`
     → `gap.timeout` (dev-guardian's own remedy, localized: a larger `semgrep.timeout`, or the reviewed file under
     `semgrep.accept_timeouts`, in the committed `.guardian/scan.yml` — whose settings are Semgrep's); a `changed` one (listed,
@@ -379,14 +409,21 @@ Engine: the `B5` block of `engine/evidence.js`.
     `remedy` for the rest (another scanner's timeout, `taint_timeout`, `scanner_failed`, `skipped`, `other`), the generic
     `incompleteHint` without details · `updateHint` · `configHint`); a guardian check still
     needing a run adds `guardian.mcpRun` (Claude Code: `finish <f> --run` with the Bash tool's 600000 timeout or in the
-    background — it records the report itself; elsewhere run the command, `--compact`, report it with `report`). next_action's
+    background — it records the report itself; elsewhere run the command, `--compact`, report it with `report`; W's findings
+    come only from a run with the feature's base, which only `finish --run` hands the launcher (`DEV_SPEC_DIFF_BASE`), so a
+    run reported this way names none — review 2, RX-1: review 1's "a full report names them" was false). next_action's
     `finish` / `verify` steps append the same (`suiteGuardianHint`). spec_finish's `warnings` say "update dev-guardian"
     and, for a pass with accepted gaps, the feature's own among them by name — "… — review it by hand" (`acceptedOwnWarn`:
     the gate runs without a ref, so a file accept_timeouts lists stays accepted whatever the feature appends to it; a warning,
     not a blocker — dev-guardian refuses a listed file that changed since scan.yml did) — and that those files go unanalysed —
     review a change to them by hand (`acceptedWarn`),
     and, on any verdict, the stale accept_timeouts entries — remove them, or a future timeout on that file is accepted unseen
-    (`staleTimeouts`: an entry never expires) — warnings, never blockers (`guardianWarnings`).
+    (`staleTimeouts`: an entry never expires) — and, LAST (the finish batch's order: dev-guardian, W, …), on any verdict, W's
+    ONE line (`integrityWarning` → `guardian.integrityWarn`: the count, `--fail-on`, the top 3 each labelled by its pass —
+    `guardian.finding`'s fifth argument is a kind, `test` · `suppression` · none, never one label for both —, the rest counted;
+    the head names the one check `kinds` holds, else both — `integrityWarn`'s fourth argument, review 1: a dev-guardian before
+    3.17 has no suppressions check; the first guardian check that has one) — warnings, never blockers (`guardianWarnings`). The merge summary and finish
+    --run's own lines are unchanged ("(N new below it)" still counts every new finding below the bar).
   - *finish --run* (cli/run.js): `guardianPreRun()` first — a guardian check that runs the launcher needs this version's
     (an earlier version's is rewritten, with a note; missing → `no-launcher`, anything else → `launcher-changed`: refused before
     anything runs, nothing recorded). For a guardian check it prints `guardianLines()` (the head, the findings, then each
@@ -466,11 +503,159 @@ Engine: the `B5` block of `engine/evidence.js`.
   the first files and the task's own are dated (`partial`); a clone re-dates every file (stale notes); test files planned only
   by T-ID are outside the planned set (finish's suite-evidence is the net); a lost log line (a concurrent trim) can only lose
   evidence.
+- **The friction budget (1.41, report only — never a gate, a refusal, a doctor entry or a size rule)** — engine/friction.js: how
+  long the project checks take in the dev loop against the budgets steering states. **The log:** a git-ignored, bounded
+  `.specs/.execution/timings.jsonl`, one line per measured run of a check — `{check, checkCmd, exitCode, ms, at, by: "cli" |
+  "hook", tool?}` — written by `recordTiming(projectDir, run)` (→ `{timed: [names]}`) through evidence.js's ONE appender,
+  `appendLog` (the folder's `.gitignore` first: after an MCP-only user's first `finish --run` the log is the folder's first file).
+  A run is a check's only as the matcher reads it, the check as ONE command (`runProvesVerify(…, [command])` — never observeRun's
+  plain-step fallback: one step's time is no check's; a piped, chained or joined run is none), after observeRun's `cd <root> &&`
+  strip (`stripCdPrefix`, the run's roots); `run.check` (finish --run) names the check it ran. `ms` is rounded, 0 –
+  `FRICTION_MAX_MS` (24 h), else nothing is written; `.specs/` is never created. **Writers:** cli/run.js `execCommand` measures
+  `ms`, the monotonic clock from the spawn to the command's EXIT (never the `RUN_DRAIN_MS` drain a background process adds),
+  returned through `runCommand`; `finish --run` (`runChecks`) times each check after the could-not-run refusal; `done --run`
+  forwards `ms` on its two `observeRun` calls (the fast pre-run, a `_Verify:_` that IS the fast command — timed once, there) and
+  calls `recordTiming` for every other `_Verify:_` command (a line only when it is a check's run); observeRun calls
+  `recordTiming(…, {by: event === "cli" ? "cli" : "hook"})` when the run carries `ms` (its result then adds `timed`) — the
+  observed `entry` stays 1.40's byte for byte; the observe hook passes the payload's `duration_ms` (Harness-observed
+  evidence). Nothing stores `ms` in `.state.json` (cut: per-machine churn nothing judges). **The trim** (`trimTimings`): past
+  `TIMINGS_MAX_BYTES` (64 KB) the log keeps, per check meta.checks holds now, its newest `FRICTION_KEEP` (10) PASSING lines
+  stamped with its current command — failed runs, a changed command's lines and a removed check's go; per check, never by
+  newest bytes (the fast check, run after every edit, would push the suite's few runs out). Read 4 × the cap at most
+  (`readLogTail`, observed.jsonl's tail reader generalized), once per engine call (`readTimings`: memoized in the read-cache
+  scope — spec_upgrade runs next_action per feature; recordTiming drops the memo). **The budgets** (`frictionBudgets(projectDir,
+  checks?)` → `{budgets: [{check, ms, line}], invalid: [{line, text, why}], truncated}`): `_Budget: <check> <duration>_`
+  markers of steering/tech.md (the call's read cache), read by tasks.js's span reader under its own label (`labelMarkerSpans`
+  → `scanMarkerSpans(s, open)`: one closer grammar — the task markers never read the label, nor it theirs) on `scanTaskLines`'
+  visible lines (no fenced or indented code, no HTML comment), anywhere on a line; `<check>` a meta.checks name (backticks
+  allowed), text after the closer a comment; `parseDuration`: ≤ 6 digits, ≤ 3 decimals, `ms · s · m / min · h`, any case, 1 ms
+  – 24 h. Readings: a check + a duration → a budget · a check + anything else → `duration` · another check-shaped name
+  (`validCheckName`) + a duration, or + words whose LAST is a duration (`endsInDuration`: a command where the check goes,
+  `_Budget: npm test 2m_` — 1.41.0 review 1) → `no-check` · a second budget of one check → `duplicate` (the first counts) ·
+  anything else silent (`_Budget: $500/month_`, `npm 2m test`, a backticked command, a bold label). Bounds, each said
+  (`truncated`): `BUDGET_TEXT_MAX` (256 KB), `BUDGET_MARKERS_MAX` (20). **The verdict** (`frictionStatus(projectDir,
+  lng)`): per check its newest `FRICTION_RUNS` (5) passing lines in FILE order (no clock) whose `checkCmd` is the check's
+  command now — a string compare, no matcher at read time (the designed per-line matcher cost 10–30 next_action calls on a
+  worst-case log); the median (an even count: the two middles' mean), ≥ `FRICTION_MIN_RUNS` (3) to judge → statuses
+  (stable) `over` (median > budget: the boundary is within) ·
+  `within` · `few-runs` · `no-runs` · `unbudgeted`; `null` with no check, or with no budget, no unreadable line and no run; its
+  invalid lines carry their localized `message`; not enumerable: `read` (the bytes read — the cost guard's count).
+  **Surfaces:** spec_metrics' project view `friction` (finish.js `metrics`; `frictionLines` its CLI lines) — never the feature
+  view; next_action's `finish` step, its LAST hint (doctor.js `tasksStep`, after the panel, port and project-check lines; never
+  `implement`): `frictionHint(projectDir, lng)` — each `over` check that neither a backlog entry nor a feature folder (active or
+  archived — `locateFeatures`; spec_create prunes the backlog entry it fulfils) answers to as `friction-<check>`, by slug →
+  `friction.naHint` (the `backlog add` line per check; or the user raises / removes the budget) and `res.friction {over: [{check,
+  medianMs, budgetMs, runs}]}`; without meta.checks it reads nothing, without a `_Budget:_` line only tech.md (the read cache).
+  The engine never files the item. No `.state.json` / roadmap.json key, no merge rule, no tool argument, no tools/list or
+  SKILL.md byte. Known limits (verification.md says them): per machine; a worktree's own CLI runs stay in its log; nothing over
+  MCP; failing runs never count; a contended run (a parallel wave) counts — hence "≥ 2× a quiet run"; a tech.md with
+  `inclusion: always` governs, so a budget edit re-flags approvals.
 - **Pipes** — `verifyPipeMasked()` (a small shell lexer) flags an unquoted single `|` (also `|&`, inside a subshell or a `bash -c` /
   `sh -c` / `pwsh -Command` / `cmd /c` script); never `||`, a quoted or escaped pipe (`\|`, `^|`), `>|`, one inside `$(…)` or
   backticks; only a `set -o pipefail` BEFORE the pipe (or `-o pipefail`) silences it. Surfaces: the brief's `verifyPipes`, `done
   --run`'s hint (stderr under `--json`; it still runs), doctor `verify-pipes` (warn), `spec_complete_task`'s `pipeMasked: true` —
   the verdict doesn't change.
+
+### Metrics that regress silently (1.41, engine/metric.js)
+- **The line is a contract, `metric-lines/1`.** `METRIC_GRAMMAR` = the fixture's `grammar.line` (mcp/tests/fixtures/metric-lines.v1.json,
+  byte-identical in dev-guardian 3.17 — testing.md); 17-docs pins references/verification.md's quoted line to it. `metricLinesOf(text |
+  [texts])` passes the fixture case by case (09-evidence-metrics) and the points it leaves open, which both readers follow
+  (the round's DECISIONS 3b — History, 1.41.0) and, where the fixture is silent, dev-guardian 3.17's metricLine.ts (review
+  1's seven shapes, each a "parity with dev-guardian 3.17 metricLine.ts" test): the keyword at a line's start after blanks,
+  then at most one `# ` — never blanks after it —, then a blank or the line's end (`RE_CANDIDATE`, after CSI sequences are
+  removed — `RE_CSI`, ESC [ … a final LETTER: `ESC[2~` stays in the line); a line ends at its LF or the text's end, ONE CR
+  before either dropped; a bare `METRIC` is a candidate (counted toward the 1,000, ignored) —, an ATTEMPT is a first token
+  holding `=`, a failed one `malformed` (counted,
+  the last one kept for the note, control characters folded), anything else ignored and uncounted; tokens split on runs of
+  blanks; the unit only right after the number, ≤ 16 CODE POINTS (`unitFits`, the reader and readingOf alike; its length
+  guard a cost guard — no array for a long unit) (a bare word elsewhere, a known key twice, a negative tolerance:
+  malformed); unknown keys ignored; names in a Map (`__proto__` is a name); ONE leading U+FEFF of each text dropped (a stream
+  starting with a UTF-8 byte-order mark, as dev-guardian 3.17's file decoding drops it — a second one or one mid-text stays;
+  built with 0xfeff, never a literal; RX-3 — the stream printed second's too, which a `2>&1` capture holds mid-file, where
+  dev-guardian reads nothing: verification.md → One stream per name says so, R3-A-2, RX2-4). Each reading carries `text`, its number as
+  printed, and its tolerance its own `text` (the judge's inputs; what the warning, `## Metrics` and a tick's line show).
+  **The walk** — from the END with `lastIndexOf`, never a split: `lineStartOf()` scans back over blanks, `#` and CSI sequences
+  only (any final byte: a superset of RE_CSI's — a pre-filter; an earlier `METRIC` stops
+  it at its `C`, so two scans never cross and the whole walk is linear), with no candidate floor; the line is then read to
+  its LF ONCE (only a line's first keyword can follow nothing but blanks, `#` and CSI), its CSI removed, and RE_CANDIDATE
+  decides — a `#` run of any length is no candidate. The removal stops once the bound is passed (`visibleLine`, 1.41.0 review 2: a
+  long coloured line was stripped whole first): a line of ≤ 4,096 units is cleaned whole; a longer one its head to the keyword's
+  end whole (no sequence crosses it), then 4,096-unit chunks — each cut before its last ESC, a chunk starting with its only ESC
+  reading that sequence alone (`RE_CSI_AT`, sticky) — until the text holds more than 512 units AND a character past the keyword:
+  over the bound, and RE_CANDIDATE reads the same characters as on the whole line. **The bounds, one set (`METRIC_BOUNDS` =
+  the fixture's):** the last `readBytes` CHARACTERS of the output (run.js caps bytes; a character is ≥ 1 byte — and since 1.23
+  run.js refuses a run past MAX_OUTPUT, 64 MiB of both streams: `finish --run` reads each check alone, so it never reaches
+  the bound; several `_Verify:_` commands of one `done --run` are read together and can — `metricsDropped` says `readBytes`
+  —, and a facade caller; RX-4, R3-A-1) — `readBytes`
+  said when a METRIC lies
+  before them, or when the bound cuts the blanks / `#` in front of one (`lineStartOf` → -3: maybe a candidate; mid-line
+  text before it is none) —, a candidate (a line passing RE_CANDIDATE, an attempt or not) of ≤ 512 UTF-8 bytes AFTER CSI
+  removal (a colour never pushes a line over) — a longer one is a drop (`candidateBytes`), never malformed —,
+  ≤ 1,000 candidates walked (`candidates` said on the 1,001st), ≤ 20 names (`names`) — the lines printed LAST are kept, a benchmark
+  loop's final iteration. `dropped` lists the bounds in the fixture's order. Cost (09-evidence-metrics, ratios — no count exists for a
+  CPU walk; both sides warmed): hostile lines UNDER the cap (no line of them a candidate) 64 → 256 KiB ≤ 6× (linear 4×, ~4.6×
+  measured; quadratic would be 16×), and 64 MiB of output lines (2.2 M) with one METRIC line ≤ 3× a bare `lastIndexOf` of the same
+  text, flattened first — the first scan of a concatenation pays for its copy — (~1×; a split is 6–9×); a 60 MiB coloured
+  candidate line ≤ 3× the same line plain (equal work: the keyword's scan, the line end's, one chunk; stripped whole it was ~39×).
+- **The judge, `judgeMetric(reference, current)`** → the fixture's `{verdict, why, loosened, delta, applied}`: the REFERENCE's terms;
+  judged only when it states `better=` AND `tolerance=` (else `unjudged`, `why` its missing terms, with the delta); a changed unit
+  `unjudged` + `loosened: "unit"`, no delta; `loosened` is ONE term (unit, then better, then tolerance — a flipped / dropped direction,
+  a raised / dropped tolerance), the value judged by the reference's terms; the current may only tighten (`applied` = the smaller
+  amount); `n%` of |reference|; symmetric (`improved` / `regressed` only past `applied`, the boundary within). Exact decimals
+  (`decimalOf`, a BigInt at one scale): the two readings' printed `text`s when BOTH carry one — the grammar prints up to 24
+  significant digits (15 + 9), a double keeps 15–17 — else the two values' shortest round-trip texts (a reading without a text: a
+  hand edit, another writer); the tolerances likewise (R1-DG-H-7): their printed `text`s when EVERY tolerance the two lines state
+  carries one (a line stating none needs none — the reference's long tolerance against a current without one is exact), else
+  both on their amounts' shortest texts; `delta` / `applied` read back with Number().
+- **Who reads, who stores.** Only the CLI: `done --run` hands `evidence.output` (every passing command's stdout and stderr,
+  TWO texts each, in run order — never joined end to end, so a stdout line without its newline is read; a later text's line
+  of a name wins: a name on both streams reads stderr's — dev-guardian's `metrics` reads ONE file, a CI job's `2>&1` capture in
+  print order, so the two agree on a name printed on one stream only: verification.md → One stream per name, RX-6) and
+  `finish --run` each non-guardian check's `output` (`[stdout,
+  stderr]`; `ranBy: "cli"`; never stored; normalizeEvidence never takes it, MCP can't pass it — `output` is no schema key,
+  nested keys are refused). Only a PASSING run is read (a failed command, a non-zero check, `_Expect: fail_`'s red run:
+  none); dev-guardian's gate never (`isGuardianCheck` — its output is a scan report). The readings (`runMetricsOf` →
+  `storedReading`: an ARRAY `[{name, value, text, unit?, better?, tolerance? {amount, percent, text?}}]`, null terms left out;
+  readingOf keeps a text read back only when it is the grammar's number AND Number() of it is the stored value — a tolerance's
+  only when it is the grammar's unsigned number AND Number() of it is the amount) go on the LATEST run only —
+  `recordEvidence` / `recordFinishChecks` put them on the record after `runOf` built it, so the history never carries them (20
+  names × 6 copies) and a later run without them leaves none. Results:
+  spec_complete_task `metrics` (the reader's shape, nulls kept), `metricsMalformed` / `metricsLastMalformed`, `metricsDropped` —
+  report-only: the tick never compares (no walk); `recordedChecks[]` the same with `metrics` a count. The CLI prints a tick's
+  readings as `METRIC <line>` and, per check, what it could not read (`metricRunLines`).
+- **finish compares — `finishMetrics()`**, after the readiness report, never in `gateOnly`: the readings of the project checks whose
+  suite status is `pass` (a `changed` / stale / failed check's are neither compared nor recorded), each `(check, name)` against the
+  latest OTHER folder's `finished.metrics` holding it — by `finished.at` (a re-finish moves it; never `firstAt`), active and archived
+  (`walkFeatureStates`, the feature's own folder skipped: its re-read compares the same). No reading: no walk (the COUNT —
+  09-evidence-metrics: each other folder's `.state.json` opened exactly once more than without readings, the own folder's the same,
+  the execution gate's none). Out: `metrics` [{check, name, value, text, unit, better, tolerance, verdict, why, loosened, delta,
+  applied, reference: {feature, at, value, text, unit, better, tolerance} | null}] (stable codes; each number shown as its `text`
+  when it has one — `shown()` —, a reading without one as its value), ONE warning (`metric.finishWarn`: the regressed and the
+  loosened readings, ≤ 5 named + the rest counted, worded without blaming the feature — the number holds every change merged
+  since; its 4th argument `unitOnly` — every one it names only changed its unit — gives its own head: not compared, never "got worse
+  past the tolerance"; a unit's `loosened` form says "not compared", never "judged by"), never a blocker; the merge summary's
+  `## Metrics` right after the project checks; `metricsUnmeasured` + its warning — the
+  code spans of the FIRST cell of the design's Silent Regressions data rows (`designMetricNames`; never a comment, prose or another
+  cell) no passing check printed as a READABLE line, only once every check passes AND every check's latest run is stamped
+  `observed: "cli"` (finish --run): a check reported over MCP carries no reading, so its names are a doubt — no claim (1.41.0
+  review 1); a name printed as a malformed line or one past a bound is no reading either, so the warning claims no READABLE line
+  and points at the run's note (1.41.0 review 2 — no stored flag: a later spec_finish without a run says the same). A ready
+  WRITTEN finish records them: `recordFinishBaseline(…, metrics)` → `finished.metrics` [{check, name, value, text, unit?, better?,
+  tolerance?}] (none: no key), `baseline.metrics` its count.
+- **Known limits** (verification.md says them): the baseline is the tree's — parallel branches, a commit outside a feature, another
+  machine's timings all land in the next feature's comparison; a test printing a METRIC fixture line is read; a runner capturing
+  stdout hides it; `kB` ≠ `KB`.
+- **spec_metrics' ONE walk** (finish.js `metricsBlocks` → metric.js `walkFeatureStates`): every folder (featureDirs: active, then
+  archived), its state read ONCE (stateFromFile; the read cache serves featureMetrics' and the velocity's reads of the same files —
+  the COUNT: each `.state.json` opened once per call), handed to each block `{ key, visit(fd, state), result() → value | null }`; a
+  non-null result becomes the project result's `key` (a block of another concern is one more entry of `metricsBlocks`, built by
+  its own module). The readings' block is `measuredBlock` → `measured` [{check, name, unit, better,
+  finishes, first, last, change, changePct, series ≤ 10, otherUnit?}] — per (check, name), in its latest finish's unit (another
+  unit's finishes counted apart), by finished.at; none: no key (a project without readings reads as in 1.40). Its CLI lines:
+  `measuredLines`, the last of `metricsLines`. The lessons' is `lessonsBlock` (decisions.js) → `lessons` (lifecycle.md →
+  spec_metrics' lessons); the walk runs before the features' own metrics, so the block's read of an active folder is handed on
+  (`viewOf`). The project's `friction` is no block (it reads the timings log, never a feature folder). With no active feature
+  the CLI still prints the project's lessons, friction and measured lines (`metricsLines`' no-features branch).
 
 ## Task dependencies and execution waves
 - **`_Depends: 3, 5_`** — an English-stable task marker (the task line or a sub-line, never fenced code: `taskMarkers(b).depends`).
@@ -780,7 +965,9 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   "PowerShell" on a PowerShell run — 1.36 review 1, the fast check's note reads it — none on a Bash one) to
   `.specs/<feature>/.execution/observed.jsonl` per non-archived feature with such a task, or `.specs/.execution/observed.jsonl` for a
   check; it never creates a feature folder. Bounds: past `OBSERVED_MAX_BYTES` (64 KB) the newest half is kept (atomic; a concurrent
-  append may lose a line — that run reads unobserved); `OBSERVED_MAX_COMMAND` (4000); `OBSERVED_MAX_FEATURES` (200).
+  append may lose a line — that run reads unobserved); `OBSERVED_MAX_COMMAND` (4000); `OBSERVED_MAX_FEATURES` (200). **1.41:**
+  the payload's `duration_ms` (both events; optional — an older Claude Code sends none) goes on as `ms`: observeRun times a
+  check's run in the git-ignored timings.jsonl (Project checks → The friction budget) — never on the observed line.
 - **Async:** an async hook decides nothing, its `timeout` isn't enforced (10 kept as documentation), and `claude -p` cancels one
   still running at teardown — a headless session's LAST run may go unlogged (`done --run` makes it observed). The line lands within
   ~0.2 s, before the model's next call; only a spec_complete_task in the SAME parallel batch could read the log first.
@@ -926,6 +1113,31 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   narrower choice). The brief grows to ~8.3 KB at 2 views, ~9 KB at 3. Fixture: 08-tasks (1, 2 and 3 views; it fails at
   4,000); three 1.37 fixtures sized for 4,000 were re-sized past the new budget (M15's Big file, the 1.37 view brief's
   Accessibility, RB-2's [UI] block).
+- **1.41.0** (the gardening round) — **the pruning pass** (CRIT_S4's cut form): the Test Value rule (the testing-standards
+  template, new projects only; test-patterns.md) and an optional `/spec-review <f> prune` pass, PROSE: candidates from the matrix trace_check
+  already returns (`supersededBy` without `supersedePending`, `tests[].files`), the reviewer's prune mode, the controller's
+  probes (a tracked, clean file, a hash-checked copy-restore, each test of a pair alone — `git diff --quiet` passes an
+  untracked file and `git checkout --` cannot restore one), the record through the existing flows (spec_impact `retire`,
+  `protect --accept --reason "pruned: …"`). The designed engine pass was cut: `trace_check {prune}` (the matrix has the
+  data), `no-ac` and `costlier-layer` (real plans: empty or real wiring), the `_Pruned:_` / `_Prunes:_` markers (11 readers
+  missed; a prune task naming the deleted file fails trace on 43 % of real test files), the guardian.js "approved pruning"
+  mark (text only, file-granular). The reviewer also got one line: an unreasoned suppression is a question, Important when it
+  hides a security scanner (CRIT_X D8.9). **The brief's Reference examples and Lessons parts** (each ≤ 1,200 characters,
+  CRIT_X D8.6); `briefTargets` taken out of briefSteering so both read the same paths (CRIT_S1 #11 — `implementsRel` alone
+  missed an absolute path inside the project); a lesson is quoted once, in its own part (CRIT_S1 #2). The fix report's
+  `### Causes` block is one sentence of agents/spec-implementer.md (paid per dispatch — CRIT_S1's cut of more), and the
+  implementer and the reviewer each got the METRIC line's rule (never loosen, flip, re-unit or drop one to pass; a diff that
+  does is Important). Review 1: `retired-ac` read the AC rows only, so a test of a retired AC and a live EC was a candidate
+  and the EC lost its only test with trace green — a candidate's EVERY row is retired now, at least one an AC, and the
+  verdict names each criterion's guard (R1-PZ-2); the pass makes `.execution/` with its `.gitignore` (R1-PZ-3: a finished
+  feature's went at Closing); and the churn's re-approvals completed only forced until trace stopped asking a planned test of
+  a retired AC (R1-PZ-1, markdown-and-trace.md → History → Readers). Review 2 (the user's ruling: cut the case, no new
+  mechanism): that trace rule took a namesake feature's and a reused AC ID as retired (R2-PZ-1) and was reverted; the 1.40
+  justified-gap path (the Gaps note + a forced, reasoned test-plan approval) leaves doctor's traceability failing, so finish
+  stays blocked. So `retired-ac` left the pass (the criterion and its candidate rule, R1-PZ-2's) — to the backlog: it needs a
+  gate that honours the user's forced, reasoned test-plan approval for the named ACs —, a criterion's last planned test
+  joined the never-pruned list (any AC, EC, NFR or SC — the re-approvals then complete unforced), and a retired AC's test is
+  named to the user as one needing a `/spec-change` on its feature, never pruned.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
@@ -1085,6 +1297,116 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   of the fmt script). No name list tells `pants fmt lint` from `swift format lint`: the runner list is gone and `RE_LINT_MODE` is
   positive — swift-format's own subcommand only (`swift format lint`, `swift-format lint`, by any path). The split's
   `$(… | …)`-then-flag refusal (`ruff format $(git ls-files | grep -v x) --check`) is a documented limit, not a shell-aware split.
+- **1.41.0** (the gardening round: tending what agents write code in — the guidance, the stakes with a number, early weeding;
+  three of its items here). **W (CRIT_X D7)** — a new finding of dev-guardian's own passes below the gate (a test skipped or
+  deleted, assertions removed; from 3.17 an added suppression) read only as "(N new below it)". It is now `testIntegrity`
+  and ONE finish warning, never a blocker, each finding labelled by its pass. dev-guardian 3.17 gives suppressions a pass of
+  their own (CRIT_G1 #5): reported under `guardian-test-integrity` they would have read "weakened test: scanner-suppression-
+  added". The name `guardian-suppressions` is DECISIONS' (dev-guardian's chain had not committed one when this was built;
+  3.17's pass carries that name) — one constant, `GUARDIAN_SUPPRESSIONS`. An older dev-guardian has no such pass: its test
+  findings only, nothing else changes. "Below the gate" is the gate's own rule (severity under `--fail-on`), not "absent
+  from `blocking_findings`". Not built:
+  a label on a BLOCKING suppression finding (at `--fail-on medium` it reads as its rule id, as in 1.40), W in the merge summary
+  or finish --run's own lines. The same round rewrote the five bare `# nosec` examples (fixHint EN / PT / ES, AGENTS.md,
+  verification.md) as `# nosec <id>  # <reason>` — a bare one silences every Bandit rule on its line (CRIT_G1 #6; 17-docs
+  reads every surface for one). **The friction budget** (Project checks → The friction budget), S3 as CRIT_S3 cut it: the
+  git-ignored, name-stamped timings.jsonl (the writer stamps `check` + `checkCmd`, so the reader is a string compare — the designed reader ran
+  the matcher per line, 10–30 next_action calls of CPU on a worst-case log), trimmed per check (a byte trim let the fast check's
+  flood push the suite's runs out before they reached 3), `_Budget:_` read by the task markers' span reader under its own label
+  (a second closer grammar would drift — MARKER_CLOSE_PUNCT already differs from the design's), spec_metrics' project `friction`,
+  next_action's finish-step hint stopping on a backlog item OR a feature named `friction-<check>` (spec_create prunes the backlog
+  entry: a backlog-only stop came back while the platform feature was built), the timings read once per call (spec_upgrade runs
+  next_action per feature). Cut: `ms` on `.state.json` runs (and its internal CLI key), the feature-scope run times, doctor
+  `friction` (every feature, every size, spec_upgrade regrouping them all — and no project-level doctor exists), the `took` line
+  (a budgeted check's too: the decision lists none — the narrower reading). observed.jsonl's appender and tail reader became `appendLog` /
+  `readLogTail`, shared; the observed lines are 1.40's byte for byte (the oracle replay and 09-evidence-friction). **Metrics
+  that regress silently** (S2 as CRIT_S2 cut it, under the round's Shared 1–3 + 3b): a number a check prints — the
+  `METRIC name=value` line agent benchmark loops print, with an optional unit, `better=` and `tolerance=` — is read, stored and
+  compared at finish (Metrics that regress silently, above). One contract with dev-guardian 3.17 (`metric-lines.v1.json`), two
+  readers. Cut on the way (CRIT_S2): the tools/list words (prose in verification.md instead), `vanished` (the lookup can't see a
+  name nobody printed, and it never ends), task values in a finish's record, a judgment at the tick (no cross-feature walk per
+  tick), three loosening statuses (one `loosened`), the timed lookup backstop (a COUNT), the m / l scaffold's slots (a refusal of
+  every fresh design — an empty table warns instead), an absent tolerance read as 0 (46 % of unchanged benchmark pairs warned), and
+  `metrics` in a run's history. Over MCP no reading at all — DECISIONS' "the latest CLI run only", the narrower reading of the
+  critic's `reported` summary parse: a summary is the reporter's text, and the CLI reads the whole output. Where the fixture is
+  silent the reader chose (dev-guardian's may differ — the cross-plugin review's to compare): a known key given twice is
+  malformed, a unit only right after the number, no negative tolerance, a lone CR no line start, a changed unit the
+  `loosened` term before a flipped `better=`. **At the merge** spec_metrics' lessons moved onto the metrics blocks' ONE walk
+  (the lessons chain's own walk over `featureDirs` was temporary — a COUNT pins one walk now), and finish's warning order
+  (dev-guardian's, W the last of them, the metrics', the lessons' last) was pinned against commands/spec-finish.md. **Review 1
+  (area MF)** compared the two readers on 73 lines the fixture leaves open (the review's differential harness runs dev-guardian
+  3.17's metricLine.ts / judge.ts on the same lines): 8 reader and 4 judge disagreements → 0 and 0. The reader took
+  dev-guardian's five shapes (R1-MF-4): one `# ` with no blanks after it, a CSI's final byte a letter, the 512-byte bound measured
+  after CSI removal (which dropped lineStartOf's candidate floor — the line is read to its LF once), a unit's 16 in code points,
+  a `#` run no candidate at any length (it was said as a `candidateBytes` drop). None of the five made a bound drop input
+  unsaid. The judge: a value past 15 significant digits compared as its double (`…000000001` vs `…002` at tolerance 0 read
+  `within`); the reading now keeps its printed `text`, judged when both sides have one (R1-MF-5 — the "≤ 15 digits, all the
+  grammar keeps" note was wrong: 15 + 9); exponent-form values (`1.5e-7`, `1e21` — JS prints them so) got judge fixtures
+  (R1-MF-2: a mutant ignoring the exponent survived). `metricsUnmeasured` claimed "no passing run printed it" for a finish
+  reported over MCP, where no run carries a reading — now only when every check's latest run is the CLI's (R1-MF-1). The reader
+  got stdout + stderr joined (a stdout line without its newline glued to stderr's first) — now two texts (R1-MF-6). A unit change
+  read "judged by the earlier finish's terms" and a unit-only warning "got worse past the tolerance" — both say not compared
+  (R1-MF-7). `_Budget: npm test 2m_` (the command in the check's place) was silent — now `no-check` (R1-MF-9). Two more
+  differences the fix found past the 73 lines, aligned on the controller's ruling the same way: a final CR with no LF after
+  it (dev-spec read it into the last token — malformed; now one CR ends the line at the text's end too) and a bare `METRIC`
+  line (dev-guardian counts it toward its 1,000 candidates, dev-spec never did; now a candidate, ignored — a flood of them
+  pushes earlier readings out with `candidates` said, never unsaid). Both harnesses: 0 disagreements.
+  **Review 2 (area MF):** `metricsUnmeasured`'s warning said "no passing run printed a METRIC line of that name" for a name the
+  run printed as a malformed line (`12.5kB`) or past a bound — now "no READABLE METRIC line … the run's note names it", prose
+  only, no stored flag (R2-MF-1). The reader stripped a long candidate line's colours whole before measuring it (a 60 MiB
+  coloured line 1,325 ms against 34 ms plain): now `visibleLine` stops past the bound (R2-MF-5; 25 lines built to cross its
+  chunks, each as dev-guardian 3.17 reads it). The warning and `## Metrics` printed a long reading as its double — they print its
+  `text`, the reference's too, and so does a tick's line (R2-MF-4). dev-guardian's review found the judge read a TOLERANCE of
+  more than 15–17 digits as its double (4 of its 19 pairs disagreed; 9 of 20 here): the tolerance keeps its printed `text` on
+  the reading and in `finished.metrics`, the round-1 mechanism of values (R1-DG-H-7), and the known limit is gone. Fixtures
+  only: the append to a project template — the feature's language, before the track blocks, a section under a synonym or at
+  level 3 found (R2-MF-2) — and a flagged unjudged reading that is no unit change under the general head (R2-MF-3). **The
+  cross-plugin review:** a stream starting with a UTF-8 byte-order mark read nothing (dev-guardian's file decoding drops it) —
+  one leading U+FEFF of each text is dropped now (RX-3; against dev-guardian's string reader, which never sees a BOM, the
+  harnesses' BOM rows now differ — through its readMetricFile, 0 of 7 do); the prose said "its last 64 MiB" of a bound the
+  CLI never reaches (RX-4) and nothing of the two readers' stream order (RX-6). **Review 3 (area MF, prose and fixtures):**
+  RX-4's "never reaches" held for `finish --run` only — one `done --run` reads every `_Verify:_` command's streams together,
+  and two of 40 MiB said `readBytes` (R3-A-1); a BOM at stderr's start is read past here while a `2>&1` capture holds it
+  mid-file (R3-A-2); the CHANGELOG's "compare — and show — as the exact decimals" — the delta and the applied tolerance
+  print as numbers (R3-A-3); two judge rows no reader prints — a current tolerance without its text, a reference without
+  its value text but a long tolerance text — kill the mutants reading `tolExact` off the reference alone or only with both
+  value texts (R3-A-4). **Cross-plugin pass 2:** R3-A-2's sentence named stderr only — with a BOM on both streams and stderr
+  printed first, a `2>&1` capture holds stdout's mid-file: verification.md and this note say "the stream printed second"
+  (RX2-4, prose).
+  **Review 1 (W):** "below the gate" also leaves out a finding the report lists in `blocking_findings` (R1-PZ-4: dev-spec
+  reads the command's first `--fail-on`, dev-guardian its last — `--fail-on high --fail-on medium` named a medium as the
+  blocker AND as "They do not block"; a subtraction, the rule checked before a key is built); `kinds` and a head naming only
+  those checks (R1-PZ-5: 3.8–3.16 has no suppressions check — stored, since the top 3 may hide a kind), mcpRun's full-report
+  clause; an unknown-severity fixture at `--fail-on info` (R1-PZ-6); `cleanLine` drops the bidi controls and zero-width format
+  characters (a U+202E reordered the warning and the blocker), tested before its replace — a second global replace on each
+  fact of a 120k-finding report cost W a quarter more. **Review 2 (W):** `cleanLine` keeps ZWNJ / ZWJ (R2-PZ-3: dropped, the
+  blocker and W printed Persian / Indic / emoji names that name no file, and a name folded into its ZWNJ-less twin in the
+  own-file match); the command's LAST `--fail-on` is read, as dev-guardian reads it (pre-existing: `--fail-on low --fail-on
+  high` said "at or above low" and the medium weakened test the gate let pass was in neither W nor the blocker — R1-PZ-4's
+  fixture moved to a shell-quoted last value, which dev-guardian unquotes and dev-spec does not read, so the blocking
+  exclusion stays the net); the record comment names `kinds` and that exclusion (R2-PZ-5). From the cross-plugin review: W
+  never fires over MCP — both diff passes need `--diff-base`, which the launcher adds only from `DEV_SPEC_DIFF_BASE`, which
+  only `finish --run` sets — so mcpRun (EN / PT / ES), verification.md and the CHANGELOG say so and review 1's "a full
+  report names them" is gone (RX-1: the reviewer's mcp-finish.js — the hint's own command over MCP, 0 findings; the same
+  branch through `finish --run`, 5); a `guardian-suppressions: ` coverage note keeps the suppressions check in the head
+  (RX-7); a reported suppression has no reason or names no rule, so W's closing says to give it one, and the diff-base line
+  says suppressions are read too (RX-9). **Review 3 (W):** that line said "checked for weakened tests and added
+  suppressions" for every dev-guardian version — 3.8–3.16 run no suppressions check — so it is one text true for each, no
+  version branch: "checked for weakened tests (and, with dev-guardian 3.17+, added suppressions)" (R3-B-1: the reviewer's
+  g1.js with 3.16.1, 3.8.0 and 3.17.0); a fixture with a `guardian-suppressions: ` note beside suppression-only findings —
+  the head names the suppressions check only (R3-B-5, killing the mutant that let the note add the test-integrity check).
+  Review 3's last `--fail-on` read the command's first segment only (`;` / `&&` / `||` / `|` / a line break), so a later
+  `echo --fail-on low` is not dev-guardian's. **Cross-plugin pass 2 (W):** that first segment made a prefixed check
+  (`cd . && <check> --fail-on medium`, Windows' `chcp 65001 >NUL && …`) read high where 1.40 read medium — the FIRST segment
+  that carries a `--fail-on` decides now, its last flag (RX2-1: a text property, never a name list; 8 mutants killed — the
+  first segment only, no break, no split, the first flag, the default, `&&` or the line break dropped from the cut, a bare
+  `--fail-on` word choosing the segment; the residual `echo --fail-on low && <check>` reads low, as in 1.40). W's closing
+  said "give it a reason or name its rule", and verification.md / the CHANGELOG "no reason or naming no rule — only such a
+  one is reported": in 3.17 a whole-file directive with no reason is reported even naming its rules
+  (`/* eslint-disable no-console */`, `#![allow(dead_code)]`) — "give it a reason" alone, and the rule as 3.17's Upgrading
+  section states it (RX2-2). fixHint offered only an inline suppression for a blocking test-integrity finding, which reads
+  none — it says restore the test or the user decides, an approved pruning blocking at `--fail-on medium` by design (RX2-3,
+  pre-existing).
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
@@ -1267,3 +1589,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 (review 8, ds-maint finding 4)** — the hook's pre-filter was a renamed copy of `observedNorm` / `observedBodies`
   (`norm` / `bodies` / `RE_ENV`) that the 8-line duplication guard couldn't see and a source comparison kept in step: both now read
   mcp/lib/probe.js's one copy.
+- **1.41.0** (the gardening round) — the hook passes the payload's `duration_ms` on as `ms`; a project check's run is timed in timings.jsonl
+  (the friction budget), the observed line unchanged (09-evidence-friction pins its keys). Only runs the matcher reads as the
+  check alone are timed: of this repository's 2,139 foreground check runs in its own transcripts 93 % were piped — the hook
+  mostly times the fast check run on its own; the suite's numbers come from `finish --run` / `done --run`.

@@ -14,7 +14,9 @@ is in History at the end.
   leaves the project; `init` never writes through a link. Files are read BOM-stripped, LF; a whitespace-only one is ignored.
 - **Who uses them:** `createFeature` (so `spec_import` too), `applyTracks`, `initProject`, `scaffoldSteeringFile` — all
   create-only (`writeIfAbsent`), naming the templates used (`templates`). A sized feature's built-in scaffold follows its
-  size; a project template is written as it says.
+  size; a project template is written as it says — one sized exception: an m / l feature's design from a template without
+  Silent Regressions gets the built-in section at the end, before the track blocks (`withTrackBlocks`' `opts.size`, 1.41.0
+  review 1 — quality.md → Spec quality, Silent Regressions).
 - **Variables** (case-insensitive, inner spaces allowed): `{{name}}` `{{slug}}` `{{summary}}` `{{tracks}}` `{{lang}}`
   `{{date}}`; an unknown one stays as is; no summary → the language's generic slot (`[TBD]`, `[a definir]`,
   `[por definir]`), still a placeholder. Steering: name and slug are the project folder's, tracks init's; a spike's
@@ -225,8 +227,9 @@ engine/scan.js — area 13 of the suites.
     `slugify(mdPlainText(title))` cut to `ADR_SLUG_MAX`: a retitle renames the file.
   - **Content:** front matter `status` (accepted, superseded by ADR-NNNN, superseded) and `date` (the log's day),
     English-stable; then only the localized MADR sections the log has text for, linking the feature, the log entry and
-    each `_Affects:_` target (`resolveAffect`). A discovery is no ADR (`excluded`: `discovery`, `duplicate-id`,
-    `unsafe-file` — a linked decisions.md is never read, `readContained`). User text is inert where it sits in our
+    each `_Affects:_` target (`resolveAffect`). A discovery is no ADR, nor (1.41) a lesson or an entry that only closes
+    lessons (`excluded`: `discovery`, `lesson`, `lesson-close`, `duplicate-id`, `unsafe-file` — a linked decisions.md is never
+    read, `readContained`; lifecycle.md → Decisions and spikes). User text is inert where it sits in our
     structure (`adrLabel`, `mdCell`, `adrInert`, `adrBlock`). No run date: a re-run is byte-identical.
   - **Write**, all-or-nothing: the legacy `exports` feature, a linked target or scope (`specsWriteContained`) or an
     unmarked same-named file (`isGeneratedOrAbsent`, `skipped: true`) refuses it all; unchanged text is not rewritten;
@@ -301,6 +304,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.22 review** — the summary goes through `safeSpecText` (requirements.md, classification.md, change.md, bug.md, the
   bug requirements): its `<!--` paired with the scaffold's closing EARS-guidance `-->` and hid every criterion
   (placeholders 30 → 0, trace 5 ACs → 0, EARS 0 criteria).
+- **1.41.0** (review 1, R1-MF-3) — the first sized section a project template gains: an m / l design from a template without
+  Silent Regressions (templates init's own copy among them) gets the built-in one, through the track blocks' append; before,
+  doctor warned `missing` on every such feature while templates check passed (quality.md's History, 1.41.0).
 
 ### Scoped steering
 - **1.13** — scoped steering: Kiro-compatible front matter, fileMatch bodies quoted into the brief, `manual` files listed.

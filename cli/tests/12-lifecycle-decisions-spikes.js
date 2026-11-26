@@ -106,6 +106,31 @@ ok(skPt.code === 0 && /  pergunta: Redis ou Memcached\?\n  timebox: até \d{4}-\
   docPt.code === 1 && /✗ decision — spike\.md → Decisão ainda não está escrita/.test(docPt.out),
   "PT: spike prints pergunta / timebox até; decide writes '# Decisões:' (a spike section as _Affects:_); doctor speaks Portuguese (got " + JSON.stringify([skPt.out, docPt.out.slice(0, 200)]) + ")");
 
+// 1.41 decide --kind lesson --cause <code> [--target <path>] (= spec_decide {kind: "lesson", cause, target}): the ✎ line, then the cause
+// and target markers; --cause without --kind lesson is the engine's lessonOnly refusal (exit 1, nothing written), as over MCP.
+{
+  const pl = path.join(tmp, "c2-lesson");
+  Sc2.initProject(pl, ["core"], "en");
+  Sc2.createFeature(pl, "Billing", ["core"], "", undefined, "en");
+  fs.mkdirSync(path.join(pl, "src", "lib"), { recursive: true });
+  fs.writeFileSync(path.join(pl, "src", "lib", "price.js"), "module.exports = 1;\n");
+  const dec = path.join(pl, ".specs", "billing", "decisions.md");
+  const only = rc2(["decide", "billing", "--title", "x", "--decision", "y", "--cause", "model-error", "--project", pl]);
+  const onlyJ = jsonC2(rc2(["decide", "billing", "--title", "x", "--decision", "y", "--target", "src/lib/price.js", "--json", "--project", pl]).stdout);
+  const mcp = Sc2.decide(pl, "billing", { title: "x", decision: "y", cause: "model-error" });
+  const noFile = !fs.existsSync(dec);
+  const les = rc2(["decide", "billing", "--title", "Float money", "--decision", "Money is integer cents.", "--kind", "lesson", "--cause", "example-copied", "--target", "./src/lib/price.js", "--project", pl]);
+  const noTarget = rc2(["decide", "billing", "--title", "Slow", "--decision", "Run the fast check.", "--kind", "lesson", "--cause", "tool-friction", "--json", "--project", pl]);
+  const D = MSG("en").decisions;
+  all("1.41 decide --kind lesson --cause --target (= spec_decide): the ✎ line then `_Cause: x_ · _Target: y_` (the target as its project path), no target → the cause alone; --cause / --target without --kind lesson → lessonOnly, exit 1, nothing written — the MCP refusal (got " +
+    JSON.stringify([only.out, les.out, noTarget.stdout.slice(0, 160)]) + ")", [
+    () => only.code === 1 && only.out.includes(D.lessonOnly) && mcp.ok === false && mcp.error === D.lessonOnly && onlyJ && onlyJ.error === D.lessonOnly && noFile,
+    () => les.code === 0 && /^✎ D-1 — Float money  \(\.specs\/billing\/decisions\.md\)\n  _Cause: example-copied_ · _Target: src\/lib\/price\.js_\n$/.test(les.out),
+    () => noTarget.code === 0 && jsonC2(noTarget.stdout).kind === "lesson" && jsonC2(noTarget.stdout).cause === "tool-friction" && jsonC2(noTarget.stdout).target === null,
+    () => /\n- _Kind: lesson_\n- _Date: [^_]+_\n- _Cause: example-copied_\n- _Target: src\/lib\/price\.js_\n\n\*\*Lesson:\*\* Money is integer cents\.\n/.test(fs.readFileSync(dec, "utf8")),
+  ]);
+}
+
 // help and the command table document spike and decide.
 const hC2 = rc2(["help"]).out;
 const docC2 = require(path.join(path.dirname(CLI), "commands.js")).helpText();

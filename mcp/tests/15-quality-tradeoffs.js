@@ -147,7 +147,8 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, requi
     const codes = (r) => (r.problems || []).filter((x) => /design/.test(x.file)).map((x) => x.code + ":" + x.severity);
     ok(dmDoc.verdict === "pass" && weigh(dmDoc) === "pass,pass" && chk(dmDoc, "design-tradeoffs").detail === "4 option(s) weighed" && !chk(dmDoc, "changed-since-approval").id &&
       dmCl.nudges === undefined && dmCl.questions.length === 1 &&
-      !codes(tpOk).length && js(codes(tpBad)) === js(["tradeoffs-missing:warn", "risks-missing:warn", "reuse-missing:warn"]) && tpBad.verdict === "warn", // (+ reuse-missing, 1.19 R1)
+      // (+ reuse-missing, 1.19 R1; + silent-missing, 1.41 — never on templates init's own copy, tpOk)
+      !codes(tpOk).length && js(codes(tpBad)) === js(["tradeoffs-missing:warn", "risks-missing:warn", "reuse-missing:warn", "silent-missing:warn"]) && tpBad.verdict === "warn",
       "1.17 A1: examples/demo-project stays doctor PASS (design-tradeoffs 4 options, design-risks pass, design approval fingerprint current), no nudge; templates check warns tradeoffs-missing / risks-missing on a design template without them — not on the built-in one (got " +
       js([dmDoc.verdict, weigh(dmDoc), dmCl.questions, codes(tpOk), codes(tpBad)]) + ")");
 

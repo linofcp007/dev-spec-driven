@@ -395,21 +395,26 @@ const BRIEF_STEERING_BUDGET = 3000; // chars of scoped (fileMatch) steering quot
 // own mode: `always` → listed, `fileMatch` → listed when a pattern matches one of the task's _Implements:_ paths
 // (and its body quoted, front matter stripped, when it holds real content and fits the budget), `manual` (or a
 // fileMatch without a pattern) → listed as available on request. Other files without front matter stay out.
+// A task's _Implements:_ paths as trace_check / coverage read them (backticks and anchors dropped; an absolute path inside the
+// project → its project-relative path, outside → nothing) — what a fileMatch pattern and (1.41) a Reference Examples row match.
+// root: the .specs/ folder.
+function briefTargets(root, implementsList) {
+  const pdir = path.dirname(path.resolve(root));
+  return (implementsList || []).map((r) => {
+    const p = implementsRel(r);
+    if (!path.isAbsolute(p)) return p;
+    const abs = path.resolve(p);
+    return abs !== pdir && isInsideDir(pdir, abs) ? toPosix(path.relative(pdir, abs)) : "";
+  }).filter(Boolean);
+}
 function briefSteering(root, tracks, implementsList) {
   const dir = path.join(root, "steering");
   const defaults = ["constitution.md", "tech.md", "structure.md"]
     .concat(...optionalTracks().filter((t) => tracks.includes(t)).map((t) => trackSteeringFiles(t)));
   const names = safeReaddir(dir).filter((n) => /\.md$/i.test(n)).sort();
   const ordered = defaults.filter((n) => names.includes(n)).concat(names.filter((n) => !defaults.includes(n)));
-  // _Implements:_ paths as trace_check / coverage read them (backticks and anchors dropped; an absolute path inside
-  // the project → its project-relative path, outside → nothing); a folder also matches "dir/**".
-  const pdir = path.dirname(path.resolve(root));
-  const targets = (implementsList || []).map((r) => {
-    const p = implementsRel(r);
-    if (!path.isAbsolute(p)) return p;
-    const abs = path.resolve(p);
-    return abs !== pdir && isInsideDir(pdir, abs) ? toPosix(path.relative(pdir, abs)) : "";
-  }).filter(Boolean);
+  // the task's paths (briefTargets); a folder also matches "dir/**"
+  const targets = briefTargets(root, implementsList);
   const included = [];
   const manual = [];
   let budget = BRIEF_STEERING_BUDGET;
@@ -1021,7 +1026,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // size S has no classification.md (its Phase 0 is the size and the tracks recorded in .state.json: one approval less).
   if (size !== "s") put("classification.md", scaf("classification", () => classificationMd(name, t, writtenSummary, clsR, lng)));
   put("requirements.md", scaf("requirements", () => requirementsMd(name, t, writtenSummary, lng, size), { tracks: t }));
-  put("design.md", scaf("design", () => designMd(name, t, lng, size), { tracks: t }));
+  put("design.md", scaf("design", () => designMd(name, t, lng, size), { tracks: t, size })); // (size: a project template's m / l Silent Regressions)
   if (t.includes("tdd")) {
     // The same rule as spec_add_track: a template test row only for the track criteria requirements.md has — on an
     // EXISTING feature given +tdd with +saas/+ai the requirements predate those tracks, and their rows would cite
@@ -1568,7 +1573,7 @@ function removeTrack(projectDir, name, track) {
 }
 
 module.exports = { linkedSpecsFolder, initProject, scaffoldSteeringFile, RE_CUSTOM_STEERING, PROTO_KEYS, customSteeringError,
-  customSteeringStub, frontMatterScalar, frontMatterValues, steeringFrontMatter, briefSteering, steeringPlaceholders,
+  customSteeringStub, frontMatterScalar, frontMatterValues, steeringFrontMatter, briefSteering, briefTargets, steeringPlaceholders,
   trackDesignBlock, SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, createFeature, pruneBacklog, STEERING_GOVERNED, steeringFingerprints,
   steeringChanges, steeringChangeText, steeringImpact, steeringImpactLines, trackTemplateAcs, scaffoldTestPlan,
   trackTaskBlock, addTrack, removeTrack, IMPORT_TOOLS, STEERING_IMPORT_TOOLS, __link };

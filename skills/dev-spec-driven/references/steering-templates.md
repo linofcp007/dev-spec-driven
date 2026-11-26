@@ -194,6 +194,11 @@ recurring enterprise plan for venues (€49/mo).
 - **Regulatory:** [e.g., EU GDPR, data residency]
 ```
 
+Optional (1.41): **friction budgets** — a `_Budget: <check> <duration>_` line per project check, how long it may take in the dev
+loop (`- _Budget: test 2m_`, `- _Budget: typecheck 30s_`; pick ≥ 2× a quiet run). Report only: `spec_metrics` judges the median
+of its last 5 passing runs, the finish step proposes a `friction-<check>` backlog item — `references/verification.md` → The
+friction budget. Not in the stub (no slot to fill).
+
 ---
 
 ## `structure.md` (core)
@@ -228,6 +233,12 @@ src/
   system) — search there before adding a helper or a component
 - **Promotion:** code moves into `lib/` on its second or third real use, feature-agnostic, with its own tests
 
+## Reference Examples
+| Pattern | Copy | Applies to |
+|---|---|---|
+| A new API route | `src/features/events/api/route.ts` | `src/features/*/api/**` |
+| Money arithmetic (integer cents) | `src/lib/money.ts` | `src/**` |
+
 ## Naming
 - **Files:** kebab-case (`user-settings.tsx`)
 - **Components:** PascalCase export, file in kebab-case
@@ -244,6 +255,19 @@ Body: why, not what. Reference spec and tests.
 - `main` — production; `feature/<feature-name>` per feature, short-lived, squash-merged
 - Reviews required for all merges to main; must check spec compliance and active-track sections
 ```
+
+**Reference Examples** (optional; PT `## Exemplos de Referência` — Padrão · Copiar · Aplica-se a —, ES `## Ejemplos de
+Referencia` — Patrón · Copiar · Se aplica a): the files agents copy the shape of, one per pattern. Only a TABLE is read —
+the Copy column a path, Applies to its globs, at most 30 rows. A task's brief quotes the rows for its `_Implements:_`
+files (an Applies-to glob that matches, or with none the Copy file's own folder — an Applies-to folder needs `/**`:
+`src/api/**`, never `src/api/`); `spec_doctor` warns `reference-examples` when a Copy file is gone. One file per Copy
+cell — two files are two rows: a cell that names two anyway (`a.ts`, `b.ts`) is never judged and the brief quotes it as
+written, and without an Applies-to glob it may match no task. A note after the one path — `path (note)` or
+`path — note` (`` `a.ts` — the error mapping ``, `a.ts (the v2 shape)`) — is no second file, whatever it names: the path
+is judged and the brief quotes the cell as written. A `,` or `;` note (`` `a.ts`, i.e. the handler ``) makes the cell a
+list, which is never judged. A lesson's `example-copied` amendment adds a row here — the good file, never the copied
+one. Why here and not a `fileMatch` steering file: front matter makes a file govern approvals, and an exemplar changes
+with the code; `structure.md` without front matter governs nothing.
 
 ---
 
@@ -273,6 +297,10 @@ Body: why, not what. Reference spec and tests.
 - No implementation code before a failing test that exercises the real path.
 - "Failing for the right reason" = assertion failure / NotImplementedError, NOT import/syntax error.
 - Test commits land before implementation commits (visible in git history).
+
+## Test Value
+- A test earns its place when it guards an AC (its T-ID in the test plan) or a past bug (a bugfix's regression test), and fails when that behaviour breaks.
+- The others — the same path as another test, green when its behaviour breaks — go to the pruning pass (`/spec-review <feature> prune`): removed whole, only with the user's approval, never mid-task, never a criterion's last planned test.
 ```
 
 ---

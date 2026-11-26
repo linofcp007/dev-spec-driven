@@ -107,6 +107,7 @@ const VALUE_FLAG_SPECS = [
   ["flow", { values: "@flow" }], // create --flow design-first · feature flow <name> --flow <flow>
   // spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
   ["question"], ["timebox"], ["title"], ["decision"], ["context"], ["consequences"], ["affects", { repeatable: true }], ["supersedes", { repeatable: true }],
+  ["cause"], ["target"], // decide <f> --kind lesson --cause <code> [--target <path>] (1.41: a review finding's cause)
   ["depends", { repeatable: true }], // append-tasks --depends 3,5 (repeatable)
   ["reason"], ["expires"], // undone --reason · approve --revoke --reason · approve --force --reason --expires · feature unprotect --reason
   ["file", { values: "@file" }], // feature protect|unprotect <name> --file <test file> (= spec_feature {file}) — 1.36
@@ -176,6 +177,16 @@ function runShell(c) {
   const req = (typeof c.flags.shell === "string" && c.flags.shell.trim()) || (c.env.DEV_SPEC_SHELL || "").trim() || "";
   const needsGit = process.platform === "win32" && /^bash(?:\.exe)?$/i.test(req);
   return spec.resolveRunShell(req, { gitExecPath: needsGit ? GIT.gitText(["--exec-path"], { cwd: c.projectDir }) : null });
+}
+
+// 1.41: what a run's METRIC reading says on the human output (done --run's result, a finish --run check's recordedChecks entry) —
+// each reading in its line's form (a tick's readings only: `metrics` is a count on a check's entry), then what the reader could not
+// read (malformed lines, a bound). MT: the metric messages; label: before the warnings ("size: " — a check's name).
+function metricRunLines(r, MT, label) {
+  const out = Array.isArray(r.metrics) ? r.metrics.map((m) => "  METRIC " + spec.metricLineText(m)) : [];
+  if (r.metricsMalformed) out.push("  ⚠ " + label + MT.notRead(r.metricsMalformed, r.metricsLastMalformed, spec.METRIC_GRAMMAR));
+  if (r.metricsDropped) out.push("  ⚠ " + label + MT.dropped(r.metricsDropped.join(", ")));
+  return out;
 }
 
 // Every --check occurrence (the shared parser keeps only the last value) → {name: command} (null-prototype: "__proto__" stays a plain
@@ -789,15 +800,16 @@ const COMMANDS = [
     name: "decide",
     options: TABLE,
     args: ["@feature"],
-    values: { kind: "decision discovery" },
+    values: { kind: "decision discovery lesson", cause: "guidance-missing guidance-wrong example-copied tool-friction model-error" },
     help: `  decide <feature> --title "…" --decision "…"   Append a D-n entry to decisions.md (append-only): [--context "…"]
                                   [--consequences "…"] [--affects US-1.AC-2,T-03,"Data Models"] [--supersedes D-1] [--discovery]
+                                  [--kind lesson --cause <code> [--target <path>]] (a review finding's cause)
                                   — an unknown _Affects:_ reference is refused (exit 1, nothing written)`,
     run(c) {
       // dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03]
       // [--supersedes D-1] [--discovery] — append one entry to decisions.md (= spec_decide; unknown _Affects:_ → exit 1, nothing written).
       const { flags, pos, projectDir, on, out, fail, usage, log } = c;
-      if (!pos[0] || pos.length > 1) usage('dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03] [--supersedes D-1] [--discovery | --kind decision|discovery] (--affects / --supersedes repeatable)');
+      if (!pos[0] || pos.length > 1) usage('dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03] [--supersedes D-1] [--discovery | --kind decision|discovery|lesson] [--cause <code>] [--target <path>] (--affects / --supersedes repeatable)');
       // A repeated --affects / --supersedes adds to the list (every occurrence — the shared parser kept only the last one); --kind
       // decision|discovery is the MCP `kind` (the engine validates it), --discovery its shorthand.
       const r = c.call("decide", { kind: on("discovery") ? "discovery" : flags.kind });
@@ -807,6 +819,7 @@ const COMMANDS = [
         log(D.cliRecorded(r.id, r.title, r.file));
         if (r.affects.length) log("  _Affects: " + r.affects.join(", ") + "_");
         if (r.supersedes.length) log("  _Supersedes: " + r.supersedes.join(", ") + "_");
+        if (r.kind === "lesson") log("  _Cause: " + r.cause + "_" + (r.target ? " · _Target: " + r.target + "_" : "")); // 1.41
       });
     },
   },
@@ -1077,6 +1090,7 @@ const COMMANDS = [
           log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : r.done < r.total ? "" : D.allDone));
           if (r.redRecorded) log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // _Expect: fail_
           if (r.note) log("  ⚠ " + r.note);
+          metricRunLines(r, spec.msg(spec.featureLang(projectDir, r.feature)).metric, "").forEach((l) => log(l)); // 1.41: stored, never judged here
         });
       };
       if (on("run")) {
@@ -1138,7 +1152,8 @@ const COMMANDS = [
             const x = await RUN.runCommand(fc.command, sh, M, c.execOpts());
             if (x.summary) say(x.summary.replace(/^/gm, "  "));
             if (x.cantRun) say("  " + FC.cantRun(fc.command, x.cantRun.why));
-            else spec.observeRun(projectDir, { command: fc.command, exitCode: x.code, event: "cli", at, cwd: projectDir });
+            // (+ its measured time: a project check's run, timed too — 1.41, the friction budget's timings.jsonl, never the observed line)
+            else spec.observeRun(projectDir, { command: fc.command, exitCode: x.code, event: "cli", at, cwd: projectDir, ms: x.ms });
             if (!x.cantRun && x.code !== 0) say("  " + FC.runFailed(fc.command, x.code));
           } else if (fc && !inVerify) say("  " + FC.skipClean(fc.check)); // clean since the last edit: not run again
           runStartedAt = new Date().toISOString(); // the run's `at` is when it STARTED (an edit made meanwhile isn't tested)
@@ -1151,8 +1166,11 @@ const COMMANDS = [
             // the buffer, WSL's launcher) is refused and NOTHING is recorded — it used to be recorded as exit 1 (an _Expect: fail_
             // task was then ticked on a red run that never happened; a passing check recorded as failed).
             if (x.cantRun) return fail({ ok: false, couldNotRun: x.cantRun.code, error: M.runGate.taskRefused(cmd, x.cantRun.why) });
-            // the fast command as this task's _Verify:_: its run is the fast check's too (the log the tick reads)
-            if (isFast(cmd)) spec.observeRun(projectDir, { command: cmd, exitCode: x.code, event: "cli", at: runStartedAt, cwd: projectDir });
+            // the fast command as this task's _Verify:_: its run is the fast check's too (the log the tick reads) — and timed once there
+            // (1.41); any other _Verify:_ command that is a run of a project check is only timed (recordTiming: a timings line, no
+            // observed one — the run is recorded "cli" on the task)
+            if (isFast(cmd)) spec.observeRun(projectDir, { command: cmd, exitCode: x.code, event: "cli", at: runStartedAt, cwd: projectDir, ms: x.ms });
+            else spec.recordTiming(projectDir, { command: cmd, exitCode: x.code, ms: x.ms, by: "cli", at: runStartedAt, cwd: projectDir });
             // A crash is a failed check, but no red test (not failing "for the right reason"): refused, nothing recorded.
             if (x.crashed && b.expect === "fail") return fail({ ok: false, couldNotRun: "signal", error: M.runGate.taskRefused(cmd, M.runGate.why.signal(x.crashed)) });
             const code = x.code;
@@ -1181,8 +1199,10 @@ const COMMANDS = [
             // nothing recorded (couldNotRun "no-tests"; the engine refuses a reported summary that shows it the same way).
             const none = spec.vacuousRun(x.output);
             if (none) return fail({ ok: false, couldNotRun: "no-tests", error: M.runGate.noTests(cmd, none.text) });
-            passed.push({ cmd, output: x.output, summary: x.summary });
-            evidence = { command: cmds.join(" && "), exitCode: 0, summary: RUN.runSummaries(passed), ...git };
+            passed.push({ cmd, output: x.output, summary: x.summary, streams: [x.stdout, x.stderr] });
+            // (output: every passing command's stdout and stderr as TWO texts each, in run order — 1.41, the engine reads their METRIC
+            // lines, a later text's line of a name winning; never joined end to end — 1.41.0 review 1; never stored)
+            evidence = { command: cmds.join(" && "), exitCode: 0, summary: RUN.runSummaries(passed), output: passed.flatMap((p) => p.streams), ...git };
           }
           return tick();
         })();
@@ -1239,10 +1259,14 @@ const COMMANDS = [
         if (!r.readyToFinish) c.exitCode = 1; // scriptable: blockers → non-zero
         const T = c.featureText(r.feature);
         return out(r, (r) => {
+          const MT = spec.msg(spec.featureLang(projectDir, r.feature)).metric;
           if (r.recordedChecks) log(spec.msg(spec.featureLang(projectDir, r.feature)).projectChecks.recorded(r.recordedChecks.length));
+          (r.recordedChecks || []).forEach((rc) => metricRunLines(rc, MT, rc.name + ": ").forEach((l) => log(l))); // 1.41: what a reader bound dropped
           log(r.message);
           r.blockers.forEach((b) => log("  ✗ " + b));
           (r.warnings || []).forEach((w) => log("  ▲ " + w)); // EC/NFR/SC and tests-in-code — never blockers
+          // 1.41: each METRIC reading against the last other finish that recorded it (the merge summary's ## Metrics)
+          if (r.metrics) { log(MT.reportHead); spec.metricItemLines(r.metrics, spec.featureLang(projectDir, r.feature)).forEach((l) => log("  " + l)); }
           log("\n" + r.checks.map((x) => "  [ ] " + x).join("\n"));
           if (r.wrote) log(T.mergeSummaryAt(r.paths.summary));
           if (r.designSystem && r.designSystem.registered.length) log(T.dsRegistered(r.designSystem.registered.join(", "))); // 1.35: its New components
@@ -1251,6 +1275,7 @@ const COMMANDS = [
           if (r.baseline && r.baseline.recorded) {
             const D = spec.msg(spec.featureLang(projectDir, r.feature)).drift;
             log(D.baselineRecorded(r.baseline.files, r.baseline.missing));
+            if (r.baseline.metrics) log("  " + MT.recorded(r.baseline.metrics)); // 1.41: finished.metrics
             const rp = r.baseline.replaced; // a re-finish over a drifted baseline: the drift it accepted
             if (rp) { const list = [...rp.changed, ...rp.missing, ...rp.nowPresent]; log("  " + D.baselineReplaced(list.length, spec.dayOf(rp.at) || "?", list.join(", "))); }
           } else if (r.baseline && r.baseline.error) err("dev-spec: " + r.baseline.error); // a broken .state.json is never rewritten

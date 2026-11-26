@@ -21,7 +21,9 @@ let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, c
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact; // guardian.js — dev-guardian's gate: which check runs it, its run read, its verdict, what is refused / stored, --compact
 let fastCheckCandidates; // scan.js — 1.36: what the root manifests suggest as the fast check (fastCheckOffer)
-function __link(E) { ({ fastCheckCandidates, dayOf, isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
+let recordTiming; // friction.js — 1.41: a measured run of a project check → its timings line (observeRun forwards a run's ms)
+let runMetricsOf, metricResultFields; // metric.js — 1.41: the METRIC lines of a CLI run's output, and what a result says of them
+function __link(E) { ({ recordTiming, runMetricsOf, metricResultFields, fastCheckCandidates, dayOf, isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
@@ -488,6 +490,9 @@ function recordEvidence(prev, ev, at, stamp, verify, root) {
   // so redProof never grandfathers it as a red proof of another command.
   const run = runOf({ ...ev, at, cmdRule: CMD_RULE });
   const rec = { ...run, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
+  // 1.41: the METRIC readings of `done --run`'s passing commands (completeTask's, never a caller's) — on the LATEST run only, never in
+  // its history (20 names × 6 copies a record); a later run without them leaves none.
+  if (Array.isArray(ev.metrics) && ev.metrics.length) rec.metrics = ev.metrics;
   // an _Expect: fail_ task's red run stays its proof (`red`) when a later run passes — its fix made the test green.
   // (verify — the task's _Verify:_ values: the red run of THAT command, never a red run of another one — unless
   // this run is a passing run of the _Verify:_ and the red run on record predates the command rule: redProof's grandfathering).
@@ -1392,28 +1397,34 @@ function observedLogFile(projectDir, slug) {
 }
 // The log's entries, oldest first (malformed lines skipped; at most the newest 4 × OBSERVED_MAX_BYTES read).
 function readObservedLog(file) {
-  let text = "";
+  return readLogTail(file, 4 * OBSERVED_MAX_BYTES).records.filter((e) => typeof e.command === "string" && Number.isInteger(e.exitCode) && typeof e.at === "string");
+}
+// A git-ignored .execution/ JSON-lines log (observed.jsonl, 1.41 friction's timings.jsonl), its newest `max` bytes at most → { records
+// (the lines that parse to an object, oldest first), read (the bytes read) } — no file: none.
+function readLogTail(file, max) {
+  let text = "", read = 0;
   let fd;
   try {
     fd = fs.openSync(file, "r");
     const size = fs.fstatSync(fd).size;
-    const len = Math.min(size, 4 * OBSERVED_MAX_BYTES);
+    const len = Math.min(size, max);
     const buf = Buffer.alloc(len);
-    text = buf.toString("utf8", 0, fs.readSync(fd, buf, 0, len, size - len));
+    read = fs.readSync(fd, buf, 0, len, size - len);
+    text = buf.toString("utf8", 0, read);
     if (len < size) text = text.slice(text.indexOf("\n") + 1); // started mid-line
   } catch {
-    return [];
+    return { records: [], read };
   } finally {
     if (fd !== undefined) try { fs.closeSync(fd); } catch { /* closed */ }
   }
-  const out = [];
+  const records = [];
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let e;
     try { e = JSON.parse(line); } catch { continue; }
-    if (isRecord(e) && typeof e.command === "string" && Number.isInteger(e.exitCode) && typeof e.at === "string") out.push(e);
+    if (isRecord(e)) records.push(e);
   }
-  return out;
+  return { records, read };
 }
 // Did the harness observe this run? → { observed: boolean, at? } — true when the LATEST observed run of the command within
 // OBSERVED_WINDOW_MS exited with this code (a report of exit 0 after an observed exit 1 is not what the harness saw). slug: the
@@ -1584,8 +1595,8 @@ function observedProof(e, expectFail, since, verify, root) {
 // the verdict uses — one of its runnable _Verify:_ commands, or all of them joined in any order; `node --test tests\x.test.js`,
 // `npm test && npm run build`, `CI=1 npm run lint` were logged nowhere: the log took only the _Verify:_ as written or its in-order
 // join), and the project log when it is a run of a project check. Never creates a feature folder (a feature renamed or removed
-// meanwhile stays gone), never throws. run: {command, exitCode, event?, session?, at?, cwd?, roots?} → { recorded: [{feature |
-// null, file}] }
+// meanwhile stays gone), never throws. run: {command, exitCode, event?, session?, at?, cwd?, roots?, tool?, ms?} → { recorded: [{feature |
+// null, file}] } (+ timed: [check names] when run.ms is given — 1.41, recordTiming)
 // A leading `cd <dir> &&` is stripped when <dir> (from run.cwd) is this project or one of run.roots — the hook passes every
 // project the run belongs to (a worktree's and the main one): stripCdPrefix, the same function observedRun applies. The line keeps
 // the command with its whitespace folded (observedKey — backticks kept).
@@ -1622,15 +1633,21 @@ function observeRun(projectDir, run) {
     const file = appendObserved(t.dir, entry);
     if (file) recorded.push({ feature: t.feature, file: toPosix(path.relative(pdir, file)) });
   }
-  return { recorded };
+  // 1.41 the friction budget: a MEASURED run (run.ms — done --run's clock, the hook's duration_ms) of a project check is timed too, in
+  // .specs/.execution/timings.jsonl — never on the observed line (`entry` above is 1.40's, byte for byte): engine/friction.js
+  if (run.ms === undefined) return { recorded };
+  return { recorded, timed: recordTiming(pdir, { ...run, by: run.event === "cli" ? "cli" : "hook" }).timed };
 }
-function appendObserved(exDir, entry) {
+const appendObserved = (exDir, entry) => appendLog(exDir, OBSERVED_LOG, entry, trimObservedLog);
+// ONE appender for the git-ignored .execution/ logs (observed.jsonl; 1.41 friction's timings.jsonl — after an MCP-only user's
+// first `finish --run` it is the FIRST file of .specs/.execution/: the folder must ignore itself before it). → the file, or null.
+function appendLog(exDir, name, entry, trim) {
   try {
     if (!isDirSafe(path.dirname(exDir))) return null; // the feature folder (or .specs/) must exist — never recreated here
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // .execution/ (created through the write gate) ignores itself
-    const file = path.join(exDir, OBSERVED_LOG);
+    const file = path.join(exDir, name);
     specWrite(file, JSON.stringify(entry) + "\n", { append: true }); // never appended through a link
-    trimObservedLog(file);
+    trim(file);
     return file;
   } catch {
     return null;
@@ -1928,8 +1945,11 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
         ranBy === "cli" && it.diffBaseUncommitted === true) : null; // (1.33: finish --run's own word — the base it passed contains HEAD)
     const refused = guardian ? guardianRefusal(guardian, lng) : null;
     if (refused) return { error: P.evidenceItem(i, refused.why), code: refused.code };
+    // 1.41: the METRIC lines of a PASSING run's whole output — `finish --run` only (ranBy "cli": `output`, never stored; MCP can't pass
+    // it — nested keys are validated), never dev-guardian's gate (its output is a scan report)
+    const read = ranBy === "cli" && !guardian && run.exitCode === 0 && (typeof it.output === "string" || Array.isArray(it.output)) ? runMetricsOf(it.output) : null;
     // (a CLI run's `check` is the command it ran — meta.checks when it started; edited meanwhile, the run reads `changed`)
-    runs.push({ name: it.name, check: start ? run.command : byName.get(it.name), run, guardian });
+    runs.push({ name: it.name, check: start ? run.command : byName.get(it.name), run, guardian, read });
   }
   const state = readState(projectDir, slug);
   if (state.invalid) return { error: state.invalid };
@@ -1943,12 +1963,14 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
     const prev = Object.prototype.hasOwnProperty.call(fc, r.name) && isRecord(fc[r.name]) ? fc[r.name] : null;
     const run = runOf({ ...r.run, at, cmdRule: CMD_RULE }); // recorded under the command rule (suiteStatus judges it by it)
     const hist = prev && prev.check === r.check && Array.isArray(prev.history) ? prev.history.filter(isRecord) : [];
-    fc[r.name] = { ...run, check: r.check, ...(code ? { code } : {}), ...(r.guardian ? { guardian: guardianStored(r.guardian) } : {}), history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
+    fc[r.name] = { ...run, check: r.check, ...(code ? { code } : {}), ...(r.guardian ? { guardian: guardianStored(r.guardian) } : {}),
+      ...(r.read && r.read.stored.length ? { metrics: r.read.stored } : {}), history: hist.concat([run]).slice(-EVIDENCE_HISTORY) }; // metrics: the latest run's only
   }
   state.finishChecks = fc;
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
-  // the observed stamp: suiteChecks[].observed · a guardian check's verdict (stable): here and in suiteChecks[].guardian
-  return { recorded: runs.map((r) => Object.assign({ name: r.name, exitCode: r.run.exitCode }, r.guardian ? { guardian: r.guardian.verdict } : {})) };
+  // the observed stamp: suiteChecks[].observed · a guardian check's verdict (stable): here and in suiteChecks[].guardian · 1.41: metrics
+  // (the count read), metricsMalformed / metricsLastMalformed / metricsDropped (what the reader could not read)
+  return { recorded: runs.map((r) => Object.assign({ name: r.name, exitCode: r.run.exitCode }, r.guardian ? { guardian: r.guardian.verdict } : {}, r.read ? metricResultFields(r.read.read, true) : {})) };
 }
 // Each project check's standing (spec_finish's suite-evidence blocker, doctor's warn): pass — its latest run exited 0, for
 // the command meta.checks names now, at or after the feature's last task activity · no-run · failed · changed (meta.checks'
@@ -2238,6 +2260,7 @@ module.exports = { normalizeEvidence, taskStamp, isRecord, evidenceRecords, ownR
   expectFailRefusal, expectFailResult, gitEvidence, OBSERVED_MAX_BYTES, evidenceMode, evidenceRule, evidenceModeInput,
   setEvidenceMode, observedRun, observedAny, observedStamp, stripCdPrefix, runRootStamp, proofIncomplete, runProvesVerify,
   observeRun, observedNorm, observedBodies, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks,
+  appendLog, readLogTail, validCheckName, // 1.41 friction.js: the one appender and tail reader of the .execution/ logs, a check-shaped name
   fastCheckOf, fastCheckInput, fastPlan, setFastCheck, fastCheckStatus, fastCheckOffer, fixerCommand, // 1.36 the fast check (meta.fastCheck)
   suiteStatus, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, parseGitLog, taskCommits,
   unverifiedLabel, specChangedSince, untickedSince, __link };

@@ -27,18 +27,18 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
-  existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, implementsRel, isDirSafe, isInsideDir,
-  isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
+  existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsRel, isDirSafe, isInsideDir,
+  isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
   stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep,
   uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass, uiOff, breakpointWatch, breakpointsReport;
-// (1.39) quality.js's: a deprecated row's replacement as the registry writes it (doctor's ui-deprecated prints the same)
-let dsReplacement;
+// (1.39) quality.js's: a deprecated row's replacement as the registry writes it (doctor's ui-deprecated prints the same) · (1.41) projectPath / onDisk
+let dsReplacement, projectPath, onDisk;
 // (1.38) engine/design-values.js's: a raw value against the scale, a registry token's value against the code's, the units table
 let easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP;
-function __link(E) { ({ dsReplacement, easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP,
+function __link(E) { ({ dsReplacement, projectPath, onDisk, easingOf, easingsOf, fontStackOf, groupKey, judgeRaw, offUnit, timesOf, tokenDrift, tokenScale, twProperty, unitRows, RE_MOTION_PROP,
   activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
-  detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, implementsRel,
-  isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
+  detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsRel,
+  isDirSafe, isInsideDir, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
   stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns,
   fenceStep, uiChecksOf, uiChecksReport, uiFinishChecks, uiFocusPass, uiProjectPass, uiOff, breakpointWatch, breakpointsReport } = E); }
 
@@ -3480,27 +3480,8 @@ function unitsOf(lines, rowOf, room) {
 }
 
 // --- the registry against the code ---------------------------------------------------------------------------------------------
-// A word of a registry row's path cell as a project path — decided on its TEXT before any fs call (the Reuse section's rule: a
-// network path, an absolute path elsewhere or a `..` out of the project names nothing) — or null when it is no path of the
-// project: a package (`@mui/x-data-grid`), `n/a`, a URL, prose. A `:12` / `#L12` anchor is dropped (implementsPath).
-function projectPath(root, word) {
-  const w = implementsPath(word);
-  if (!w || w.startsWith("@") || /^https?:/i.test(w) || /^n\/a$/i.test(w) || !/[/.]/.test(w) || /[<>"|?*]/.test(w) || isNetworkPath(w)) return null;
-  const abs = path.resolve(root, w);
-  return abs !== root && isInsideDir(root, abs) ? toPosix(path.relative(root, abs)) : null;
-}
-// Does the project path name something on disk — reached WITHOUT following a link: a symlink or a junction on the way (it may
-// lead out of the project, or to a share) is where the walk stops, and counts as there.
-function onDisk(root, rel) {
-  let cur = root;
-  for (const seg of rel.split("/")) {
-    cur = path.join(cur, seg);
-    let st;
-    try { st = fs.lstatSync(cur); } catch { return false; }
-    if (st.isSymbolicLink()) return true;
-  }
-  return true;
-}
+// (projectPath — a path cell's word as a project path, decided on its text before any fs call — and onDisk — is it there, never
+// following a link — live in quality.js since 1.41, moved verbatim: a lesson's _Target:_ and a Reference Examples row read them too.)
 // Is a registry row's path gone? Only a cell that NAMES A CODE FILE OF THE PROJECT can be. A reading is such a name when its
 // last segment has a file extension (`src/components/Card` may be Card.tsx or a folder: not judged) that is no document's or
 // image's (a note cites README.md, a screenshot), and its FIRST segment is on disk: `next/link`, `primereact/button`,

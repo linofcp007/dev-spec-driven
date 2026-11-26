@@ -374,7 +374,18 @@ const SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
 // (the class built from character codes: an editor turns the escapes of U+2028 / U+2029 into the characters, which end a regex literal)
 const RE_REPORT_CONTROL = new RegExp("[" + String.fromCharCode(0) + "-" + String.fromCharCode(0x1f) + String.fromCharCode(0x7f) + "-" +
   String.fromCharCode(0x9f) + String.fromCharCode(0x2028, 0x2029) + "]+", "g");
-const cleanLine = (v, max) => oneLine(String(v == null ? "" : v)).replace(RE_REPORT_CONTROL, " ").trim().slice(0, max);
+// … and the bidi controls and the zero-width space dropped (U+200B, U+200E–U+200F, U+202A–U+202E, U+2066–U+2069 — 1.41.0 review 1: a
+// U+202E in a rule or a file reordered the warning's and the blocker's text). ZWNJ / ZWJ (U+200C / U+200D) stay: they spell names — a
+// Persian word, an Indic conjunct, an emoji sequence (review 2: dropped, a printed path named no file and a name folded into its twin).
+// Tested before the replace: most lines hold none, and a second global replace on every one of a 120k-finding report's facts cost W a
+// quarter more.
+const REPORT_FORMAT_SRC = "[" + String.fromCharCode(0x200b) + String.fromCharCode(0x200e) + "-" + String.fromCharCode(0x200f) + String.fromCharCode(0x202a) + "-" +
+  String.fromCharCode(0x202e) + String.fromCharCode(0x2066) + "-" + String.fromCharCode(0x2069) + "]";
+const RE_REPORT_FORMAT = new RegExp(REPORT_FORMAT_SRC, "g"), RE_REPORT_FORMAT_ANY = new RegExp(REPORT_FORMAT_SRC);
+const cleanLine = (v, max) => {
+  const s = oneLine(String(v == null ? "" : v)).replace(RE_REPORT_CONTROL, " ");
+  return (RE_REPORT_FORMAT_ANY.test(s) ? s.replace(RE_REPORT_FORMAT, "") : s).trim().slice(0, max);
+};
 const gateShape = (j) => isRecord(j) && (Array.isArray(j.blocking_findings) || Array.isArray(j.new_findings) || Number.isInteger(j.exit_code));
 // From s[i] (a "{"), the index of the "}" that closes it — strings (with their escapes) skipped — or -1. Linear in the span read.
 function balancedEnd(s, i) {
@@ -426,6 +437,51 @@ const RE_LAUNCHER_OVERRIDE = /^dev-guardian launcher: DEV_GUARDIAN_CLI=(.+)$/m;
 const RE_LAUNCHER_DIFF_BASE = /^dev-guardian launcher: --diff-base (\S{1,200}) \(DEV_SPEC_DIFF_BASE\)$/m;
 // the tool dev-guardian 3.8.0 reports a weakened test under (a focused .only, a skip, a deleted test file …) — named as such
 const GUARDIAN_TEST_INTEGRITY = "guardian-test-integrity";
+// 1.41.0 (CRIT_G1 #5): dev-guardian 3.17's pass for an ADDED suppression (a nosemgrep, a # nosec, an eslint-disable …) has a name of
+// its own, so a suppression is never labelled a weakened test. An older dev-guardian runs no such pass: its findings read as before.
+const GUARDIAN_SUPPRESSIONS = "guardian-suppressions";
+// W (1.41.0, CRIT_X D7): the passes whose new findings BELOW the gate finish names in ONE warning → the kind each is labelled as
+// (guardian.finding: "weakened test" · "suppression added" — never one label for both); at most GUARDIAN_INTEGRITY_TOP kept, the rest counted.
+const GUARDIAN_INTEGRITY_KINDS = new Map([[GUARDIAN_TEST_INTEGRITY, "test"], [GUARDIAN_SUPPRESSIONS, "suppression"]]);
+const GUARDIAN_INTEGRITY_TOP = 3;
+// A severity's rank — unknown → -1, under every --fail-on, as dev-guardian's gate reads one (ci/gate.ts: blocking = rank ≥ --fail-on's).
+const severityRank = (s) => (Object.prototype.hasOwnProperty.call(SEVERITY_RANK, s) ? SEVERITY_RANK[s] : -1);
+// A report finding's facts, each one inert line — severity (lower case), rule (rule_id, else title, else tool), file (rel: project-
+// relative, forward slashes), line —: what a blocking finding and a W one share.
+function findingFacts(f, rel) {
+  const file = typeof f.file_path === "string" && f.file_path.trim() ? rel(f.file_path.trim()) || null : null;
+  return { severity: typeof f.severity === "string" ? cleanLine(f.severity.toLowerCase(), 20) || "?" : "?", rule: cleanLine(f.rule_id || f.title || f.tool || "?", 160) || "?",
+    file, line: Number.isSafeInteger(f.line_start) && f.line_start > 0 ? f.line_start : null };
+}
+// W: the report's new findings of GUARDIAN_INTEGRITY_KINDS' passes whose severity is under --fail-on (the gate's own rule: none of them
+// blocks) → { count, top: ≤ GUARDIAN_INTEGRITY_TOP [{severity, rule, file, line, kind}], by severity, then the report's order, kinds: the
+// kinds among ALL of them, GUARDIAN_INTEGRITY_KINDS' order — the warning's head names those checks only } | null.
+// A --compact report lists the blocking findings only: none to read there (newFindings still counts them). blocked(facts): one of the
+// report's blocking_findings (blockedFacts) — never W's (1.41.0 review 1: dev-spec read the command's FIRST --fail-on, dev-guardian its
+// last; both read the last since review 2, but dev-guardian unquotes a shell-quoted one dev-spec does not read). suppressionsNoted: the
+// report's coverage_notes hold a `guardian-suppressions: ` line (the pass left changed files unread — its 500-file bound, an
+// unreadable file): `kinds` keeps the suppressions check, so W's head never reads as if that check had seen the whole change (RX-7).
+function integrityFindings(fresh, failOn, rel, blocked, suppressionsNoted) {
+  if (!fresh) return null;
+  const bar = severityRank(failOn), below = [];
+  for (const f of fresh) {
+    const kind = GUARDIAN_INTEGRITY_KINDS.get(f.tool);
+    if (!kind) continue;
+    const x = findingFacts(f, rel);
+    if (severityRank(x.severity) < bar && !blocked(x)) below.push({ ...x, kind });
+  }
+  if (!below.length) return null;
+  below.sort((a, b) => severityRank(b.severity) - severityRank(a.severity)); // stable: the report's order next
+  return { count: below.length, top: below.slice(0, GUARDIAN_INTEGRITY_TOP),
+    kinds: [...GUARDIAN_INTEGRITY_KINDS.values()].filter((k) => below.some((x) => x.kind === k) || (k === "suppression" && suppressionsNoted)) };
+}
+// The blocking findings' facts → (facts) → is it one of them, by rule + file + line (the rule first: a W finding rarely shares one, and
+// a report of 120k findings built a key for each)
+function blockedFacts(facts) {
+  const key = (x) => x.rule + "\n" + (x.file || "") + "\n" + (x.line || "");
+  const rules = new Set(facts.map((x) => x.rule)), keys = new Set(facts.map(key));
+  return (x) => rules.has(x.rule) && keys.has(key(x));
+}
 // "3.2.0" below "3.2.1"? (x.y.z — a suffix like -beta read as its x.y.z; unreadable → below: dev-spec can't tell, so it says so)
 function versionBelow(v, min) {
   const m = /^v?(\d{1,6})\.(\d{1,6})\.(\d{1,6})/.exec(String(v || "").trim());
@@ -500,7 +556,7 @@ const wholeLine = (v) => {
 };
 // A guardian check's run → its summary (finishChecks[name].guardian, suiteChecks[].guardian): { verdict — stable: pass · blocked ·
 // incomplete · config · not-found (the launcher found no dev-guardian) · no-launcher (.specs/guardian.cjs is missing) · exit (any
-// other code) —, exit, failOn (the command's --fail-on, else high), parsed (the JSON report was read), blocking?, newFindings? (the
+// other code) —, exit, failOn (the command's LAST --fail-on, as dev-guardian reads it, else high), parsed (the JSON report was read), blocking?, newFindings? (the
 // report's new_findings_count — --compact —, else its new_findings), own? (blocking findings in the feature's _Implements:_ files),
 // top? (≤ GUARDIAN_TOP: {severity, rule, file, line, own} — own first, then by severity, then the report's order), gaps? (coverage
 // gaps, ≤ 3, each whole up to GUARDIAN_LINE_MAX), gapDetails? (the gating coverage_gap_details, ≤ 5: {tool, kind, remedy?, changed?
@@ -508,7 +564,10 @@ const wholeLine = (v) => {
 // files not analysed, accepted in .guardian/scan.yml —, parse — files only partly parsed, accepted with --accept-partial-parse —,
 // other — gaps of another shape}: accepted_gap_details per line when present, else the line), acceptedOwn? (those files that are the
 // feature's own _Implements:_ files: {count, files ≤ GUARDIAN_SAID: [{file, kind}]}), notes? (the coverage_notes, each once),
-// staleTimeouts? (unused_timeout_acceptances: {count, files ≤ GUARDIAN_SAID}), message? (config: dev-guardian's own),
+// staleTimeouts? (unused_timeout_acceptances: {count, files ≤ GUARDIAN_SAID}), testIntegrity? (1.41.0 — W: the new findings of
+// dev-guardian's test-integrity and suppression passes below --fail-on that are not among the report's blocking_findings,
+// integrityFindings: {count, top ≤ 3, kinds — the passes among all of them, which W's head names, and the suppressions pass while a
+// `guardian-suppressions: ` coverage note says it left changed files unread — RX-7}), message? (config: dev-guardian's own),
 // baseline? ("absent": every existing finding counted as new), tool? (the report's tool_version), update? (dev-guardian is older
 // than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran),
 // diffBase? (the --diff-base the launcher announced — 1.33), diffBaseUncommitted? (true: that base already contains HEAD, so only
@@ -520,7 +579,14 @@ const wholeLine = (v) => {
 function guardianRecord(projectDir, dir, command, exitCode, report, output, uncommitted) {
   const code = Number.isInteger(exitCode) ? exitCode : parseInt(exitCode, 10);
   const cmd = String(command || "");
-  const fo = /--fail-on[=\s]+(info|low|medium|high|critical)\b/i.exec(cmd);
+  // the LAST --fail-on, as dev-guardian reads it (review 2: the first one made `--fail-on low --fail-on high` say "at or above low") —
+  // of the FIRST segment that carries one, the command cut at `;` / `&&` / `||` / `|` / a line break (review 3: a later
+  // `echo --fail-on low` is not dev-guardian's; RX2-1: nor is a prefix — `cd . && <check> --fail-on medium` read high)
+  let fo = null;
+  for (const seg of cmd.split(/;|&&|\|\||\||\r?\n/)) {
+    for (const m of seg.matchAll(/--fail-on[=\s]+(info|low|medium|high|critical)\b/gi)) fo = m;
+    if (fo) break;
+  }
   const text = String(output || "");
   const j = guardianJson(report);
   const g = { verdict: "exit", exit: Number.isInteger(code) ? code : null, failOn: fo ? fo[1].toLowerCase() : "high", parsed: !!j };
@@ -575,7 +641,8 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output, unco
   const mine = () => {
     if (mineSet) return mineSet;
     const tasksText = dir ? activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "" : "";
-    return (mineSet = new Set(tasksText ? baselineFiles(root, tasksText).files.map(fold) : []));
+    // (each read as rel() reads a report's file — cleanLine: a name holding a zero-width or bidi character still matches, 1.41.0 review 1)
+    return (mineSet = new Set(tasksText ? baselineFiles(root, tasksText).files.map((f) => fold(cleanLine(f, 300))) : []));
   };
   const rel = (f) => { // a report's file, project-relative with forward slashes, one inert line
     let p = f.replace(/\\/g, "/").replace(/^\.\//, "");
@@ -612,16 +679,19 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output, unco
   const stale = Array.isArray(j.unused_timeout_acceptances)
     ? [...new Set(j.unused_timeout_acceptances.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()))] : [];
   if (stale.length) g.staleTimeouts = { count: stale.length, files: stale.slice(0, GUARDIAN_SAID).map((f) => cleanLine(f, 200)) };
+  // W (1.41.0, CRIT_X D7): a weakened test or an added suppression dev-guardian found below the gate — ONE finish warning, never a
+  // blocker (today's "(N new below it)" counted them and said no more)
+  const facts = blocking ? blocking.map((f) => findingFacts(f, rel)) : [];
+  const suppressionsNoted = Array.isArray(j.coverage_notes) && j.coverage_notes.some((x) => typeof x === "string" && x.trim().startsWith(GUARDIAN_SUPPRESSIONS + ": "));
+  const integrity = integrityFindings(fresh, g.failOn, rel, blockedFacts(facts), suppressionsNoted);
+  if (integrity) g.testIntegrity = integrity;
   if (!blocking) return g;
   g.blocking = blocking.length;
-  const rank = (s) => (Object.prototype.hasOwnProperty.call(SEVERITY_RANK, s) ? SEVERITY_RANK[s] : -1);
-  const items = blocking.map((f) => {
-    const file = typeof f.file_path === "string" && f.file_path.trim() ? rel(f.file_path.trim()) || null : null;
-    return { severity: typeof f.severity === "string" ? cleanLine(f.severity.toLowerCase(), 20) || "?" : "?", rule: cleanLine(f.rule_id || f.title || f.tool || "?", 160) || "?",
-      file, line: Number.isSafeInteger(f.line_start) && f.line_start > 0 ? f.line_start : null, own: !!file && mine().has(fold(file)),
-      ...(f.tool === GUARDIAN_TEST_INTEGRITY ? { test: true } : {}) };
+  const items = blocking.map((f, i) => {
+    const x = facts[i];
+    return { ...x, own: !!x.file && mine().has(fold(x.file)), ...(f.tool === GUARDIAN_TEST_INTEGRITY ? { test: true } : {}) };
   });
-  items.sort((a, b) => (b.own ? 1 : 0) - (a.own ? 1 : 0) || rank(b.severity) - rank(a.severity)); // stable: the report's order next
+  items.sort((a, b) => (b.own ? 1 : 0) - (a.own ? 1 : 0) || severityRank(b.severity) - severityRank(a.severity)); // stable: the report's order next
   g.own = items.filter((x) => x.own).length;
   if (items.length) g.top = items.slice(0, GUARDIAN_TOP);
   return g;
@@ -687,7 +757,7 @@ const guardianAt = (f) => (f.file ? f.file + (f.line ? ":" + f.line : "") : "?")
 function guardianLines(g, lng) {
   const G = i18n.msg(lng).guardian;
   const top = Array.isArray(g.top) ? g.top : [];
-  const out = [guardianHead(g, lng), ...top.map((f) => "  " + G.finding(guardianAt(f), f.rule, f.severity, f.own, f.test === true))];
+  const out = [guardianHead(g, lng), ...top.map((f) => "  " + G.finding(guardianAt(f), f.rule, f.severity, f.own, f.test === true ? "test" : ""))];
   if (g.blocking > top.length && top.length) out.push("  " + G.more(g.blocking - top.length));
   const said = (lines, more, label) => {
     const list = Array.isArray(lines) ? lines : [];
@@ -764,7 +834,9 @@ function suiteBlocker(missing, slug, lng) {
 // spec_finish's warnings: a recorded guardian run says dev-guardian should be updated (older than GUARDIAN_MIN_VERSION, no version
 // reported, a package it could not load); a pass left the feature's own files unread (review 12 R1: acceptedOwn — each by name, to
 // review by hand) and files the project accepted (1.30.2: accepted_gaps — review a change to them by hand); .guardian/scan.yml holds
-// accept_timeouts entries no step used (1.30.2: staleTimeouts — whatever the verdict). Warnings, never blockers. → the localized lines
+// accept_timeouts entries no step used (1.30.2: staleTimeouts — whatever the verdict); W (1.41.0): dev-guardian's own passes found a
+// weakened test or an added suppression below the gate (testIntegrity — whatever the verdict, LAST: the finish batch's order is
+// dev-guardian, W, …). Warnings, never blockers. → the localized lines
 function guardianWarnings(items, lng) {
   const G = i18n.msg(lng).guardian;
   const mine = (items || []).filter((i) => isRecord(i.guardian) && isGuardianCheck(i.name, i.command));
@@ -773,8 +845,20 @@ function guardianWarnings(items, lng) {
   const own = acc && acceptedOwnText(acc.guardian, G) ? [G.acceptedOwnWarn(acceptedOwnText(acc.guardian, G), ownCount(acc.guardian))] : [];
   const st = mine.map((i) => i.guardian.staleTimeouts).find((s) => isRecord(s) && countOf(s.count));
   const files = st ? (Array.isArray(st.files) ? st.files.filter((f) => typeof f === "string" && f) : []) : [];
+  const ti = mine.map((i) => i.guardian).find((x) => isRecord(x.testIntegrity) && countOf(x.testIntegrity.count));
   return [...(up ? [G.update(up.guardian.tool || null)] : []), ...own, ...(acc ? [G.acceptedWarn(acceptedText(acc.guardian, G))] : []),
-    ...(st ? [G.staleTimeouts(countOf(st.count), files.join(", ") + (countOf(st.count) > files.length && files.length ? ", " + G.more(countOf(st.count) - files.length) : ""))] : [])];
+    ...(st ? [G.staleTimeouts(countOf(st.count), files.join(", ") + (countOf(st.count) > files.length && files.length ? ", " + G.more(countOf(st.count) - files.length) : ""))] : []),
+    ...(ti ? [integrityWarning(ti, G)] : [])];
+}
+// W's one warning: the count, --fail-on, up to 3 findings, each labelled by its pass (guardian.finding labels `test` / `suppression`
+// only: a kind a hand-edited state garbled gets none), the rest counted. Its head names the one check the findings come from when
+// `kinds` says one (1.41.0 review 1 — a dev-guardian before 3.17 has no suppressions check), else both.
+function integrityWarning(g, G) {
+  const n = countOf(g.testIntegrity.count);
+  const top = (Array.isArray(g.testIntegrity.top) ? g.testIntegrity.top : []).filter(isRecord).slice(0, GUARDIAN_INTEGRITY_TOP);
+  const list = top.map((f) => G.finding(guardianAt(f), f.rule, f.severity, false, f.kind)).join(", ") + (n > top.length && top.length ? ", " + G.more(n - top.length) : "");
+  const kinds = Array.isArray(g.testIntegrity.kinds) ? [...GUARDIAN_INTEGRITY_KINDS.values()].filter((k) => g.testIntegrity.kinds.includes(k)) : [];
+  return G.integrityWarn(n, typeof g.failOn === "string" && g.failOn ? g.failOn : "high", list, kinds.length === 1 ? kinds[0] : null);
 }
 
 // --- the approval guard's dev-guardian rules (guards.js calls them; with a guardian check set — guardianGuardOn) -------------------

@@ -1,9 +1,10 @@
 # Spec quality — steering amendments, cross-feature criteria, glossary, design weighing, reuse, duplicates, the design system
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
-The spec-quality checks, the design's trade-offs / risks / reuse sections and their doctor warnings, the constraint nudge,
-the critical flows, the TDD micro-cycle, the duplicate-code detector, the design-system registry. The rules come first; how
-they came to be — the releases and review findings — is in History at the end.
+The spec-quality checks, the design's trade-offs / risks / reuse / Silent Regressions sections and their doctor warnings, the
+constraint nudge, the critical flows, the TDD micro-cycle, the duplicate-code detector, the design-system registry, the UI
+checks and state matrix, structure.md's Reference Examples. The rules come first; how they came to be — the releases and
+review findings — is in History at the end.
 
 ## Spec quality
 - **Steering amendments** — a requirements / design approval (`STEERING_GOVERNED`) and its history record carry `steering`
@@ -155,6 +156,29 @@ they came to be — the releases and review findings — is in History at the en
 - **The merged section (size S)** — a sized-S design writes ONE `## Decisions, reuse & risks` section. `designWeighChecks`
   reads it (`WEIGH_MERGED_SYN`) for a check whose own section the design lacks, min 0 ("no material risk" answers); the brief's
   Reuse part reads it too. A design with its own section is judged on that section.
+- **Silent Regressions (1.41, sizes m / l)** — what number can get worse while every test stays green: the m / l scaffold (i18n.js
+  LAYOUTS.design, `D.silent` after Risks) writes `## Silent Regressions` with a comment and an EMPTY table (`| Metric | Why it can
+  regress silently | Printed by |`) — NO slot, so a fresh design is never refused on `placeholders` (a slot would refuse every m / l
+  design: more than the owner's warn); the no-size and size-s scaffolds never get it (the no-size sha1 pin holds). Doctor
+  `design-silent-regressions` is DESIGN_WEIGH's 4th entry `[id, SILENT_SYN, 0, "silent", true]` — the last field: run only with
+  `opts.gate` (`designReuseGated`: a plain feature of size m / l; designWeighChecks' other callers — the save check — get the three
+  as before, and the reuse gate's `[2]` is unchanged). States as Risks' (min 0: a row or a line of prose — "None — why" — answers;
+  the empty table reads `empty`); a WARN, never a fail nor a gate; the size-S merged section never answers it (`sized`). Its stamp
+  `silent` (`DESIGN_WEIGH_STAMPS.silent = "1.41"`, approvePhase on every design approval and its record): a design approved before
+  passes with `legacyApproval`. In DESIGN_WEIGH_IDS, so spec_upgrade never counts it toward `attention`. **A project design
+  template** replaces the sized builder whole, so an m / l feature scaffolded from one without the heading (weighSection(…,
+  SILENT_SYN) null — doctor's own `missing` test) gets the built-in section at the end, before the track blocks:
+  templates.js `withTrackBlocks` (design) appends `i18n.designSilent(lang)` (the m / l builder's `D.silent`) when `opts.size` is m
+  / l — the size reaches it only from spec_create's design scaffold (`scaffoldText`'s opts.size); the built-in path never passes
+  it (its m / l design holds the section). Doctor then reads it as the built-in scaffold's (empty until answered). `templates
+  check` warns `silent-missing` on a project design template without the heading — saying the m / l features scaffolded from it
+  get the built-in one at the end — never on the built-in's own copy (`templates init` copies the no-size design, which has
+  none: `sameText`, BOM / CRLF / final blanks aside — its pristine copy checks clean, as in 1.40).
+  `SILENT_SYN`: silent regression(s) / silent metrics / regression metrics / metrics that regress silently, PT regressões
+  silenciosas / regressão silenciosa / métricas de regressão, ES regresiones silenciosas / regresión silenciosa / métricas de
+  regresión, unaccented twins — never "Metrics" alone (+saas Observability's). The rows' METRIC names are what finish's
+  `metricsUnmeasured` reads (tasks-and-evidence.md → Metrics that regress silently); the comment points at a track's budget section
+  (Performance Budget, Token Economics, UI Performance Budget): it holds the targets, this row the check that prints the number.
 - **The TDD micro-cycle** (adapted from obra/superpowers, MIT) is prose only — test-patterns.md "The micro-cycle inside a
   task", spec-implementer (a hard rule), spec-reviewer, /executeTask, AGENTS.md, SKILL.md. It lives INSIDE a task: never a new
   T-ID, never an edit of a planned assertion. Its red flags (green on the first run, written after the code) apply to a NEW
@@ -1345,7 +1369,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   review 1, DEP-2: 1.40.0 took the strip out as dead and that gone source went unlisted — a word cannot name a path with
   a blank).
   `projectPath` decides on the TEXT before any fs call (a network path, `..` out, an absolute path elsewhere, a glob:
-  null); `onDisk` stops at a link. **Every doubt reads as "not judged"** — a wrong "gone" sends a team to fix a registry
+  null); `onDisk` stops at a link (both live in the eager quality.js since 1.41, moved verbatim — a lesson's `_Target:_` and
+  a Reference Examples Copy cell read them too; design-system.js links them back, `pathWords` / `stalePath` stay its own).
+  **Every doubt reads as "not judged"** — a wrong "gone" sends a team to fix a registry
   that is right: a root-level file, a path whose first folder is gone as a whole, `_shared/` (`dsCell` drops the
   underscore), a row naming a gone file AND one that is there ("was src/old/Card.jsx, now src/components/Card.tsx" —
   review 3's "the first word decides" called it stale; so `Gone.tsx — replaced by Card.tsx` is not stale either). The
@@ -2094,6 +2120,57 @@ view needs (the detail points there), tooling-reference.md's id.
   the anchor's id; architecture.md → The build): an English doctor loads no pt.js / es.js (a child-process fixture). The
   state ids order the gaps: the feature language's `uiStateLabels` keys.
 
+## Reference examples (1.41)
+- **The table.** `.specs/steering/structure.md`'s `## Reference Examples` section (`REF_EXAMPLES_SYN`: EN · PT `Exemplos de
+  Referência` · ES `Ejemplos de Referencia`, accents optional), read by `referenceExamples(projectDir)` (quality.js): the
+  section's FIRST table outside comments and fences, its columns by header (`REF_EXAMPLES_COLS` — Pattern / Padrão / Patrón ·
+  Copy / Copiar · Applies to / Aplica-se a / Se aplica a), a role no header names by position (1 · 2 · 3), never a column a
+  header took; a row whose Copy cell is empty, a dash or a `[slot]` skipped; `REF_EXAMPLES_ROWS` (30) table lines read,
+  `truncated` counts the rest; a cell cut at `REF_EXAMPLES_CELL` (200). Prose and bullets are never mined (the exemplars found
+  in the wild — PrefectHQ, mithril, vscode's agentHost — are all prose: a section without a table is `{table: false}`).
+  **Why structure.md and not a fileMatch steering file:** front matter makes a file govern the approvals (each edit flags every
+  approved feature its patterns match); an exemplar changes with the code; structure.md without front matter governs nothing.
+  The steering stub has no such section — the default project has no table (CRIT_X D9): the check and the brief part stay
+  inert until a team writes one.
+- **Gone** (`exemplarGone` — its own predicate, never stalePath's: never one predicate for two rules). A Copy cell is ONE
+  path (`exemplarPath`: backticks stripped, a markdown link unwrapped); it is gone only when `projectPath` reads it as a
+  project path with a file extension (`RE_EXEMPLAR_FILE`), its first segment is on disk and the file is not. Everything else
+  — a folder, a package, an alias, a root-level file, a gone first folder, `file.py::func`, `x.ts#name`, a URL, prose — is
+  not judged; no document rule (a `docs/runbook-template.md` exemplar is a file to copy). One reading per cell. **The form:
+  one file per Copy cell — two files are two rows** (the references say so: steering-templates.md, tooling-reference.md).
+  **A list is a doubt** — the safety net, not the form (`exemplarMany`, 1.41.0 review 1): a cell holding more than one
+  path-like word (a `/`, or a `.` before a letter or digit) — in two code spans, or in two parts split by `,` / `;` / ` and ` /
+  ` e ` / ` y ` (`RE_EXEMPLAR_LIST`) — is never judged gone (read as ONE path, "`a.js`, `b.js`" and "src/ui/, src/ui/Card.tsx"
+  were gone files), and the brief quotes it as written. A net only: no more separators (` or `, ` + `, ` & `, ` / `, PT ` ou `,
+  ES ` o ` still join two files into one gone path — the form answers it, 1.41.0 review 2), and a folder whose name holds a
+  separator ("src/search and replace/x.js") is a doubt too. **A note beside one path is no list** (1.41.0 review 2): a cell
+  whose path reading (`exemplarPath`, what projectPath / implementsPath read) is in the ANNOTATED single-path form — a path, a
+  blank, then `(` / `—` / `–` / `- ` (`RE_IMPL_ANNOTATED`, core.js's own, exported for it — never a copy) — is judged by that
+  path whatever its note holds ("x.ts — validation first, then res.json()", "`x.ts` (see `docs/README.md`)").
+- **Doctor `reference-examples`** (`referenceExamplesCheck`, project-level like `steering`): a warn naming the gone files
+  (the first `REF_GONE_LISTED` 6, `+N more`) and / or the rows past 30; a pass with the row count, or saying a section
+  without a table is not read; no entry without the section or with slot rows only. Never a fail, never an approval check.
+  **Lean = full:** a `last: true` entry under cross-feature-acs' rule — the lean doctor (next_action's, finish's) runs it
+  while every other check passes and skips it once one warns or fails (it only warns: the verdict can't change). spec_upgrade
+  leaves it out of `attention` (`REF_EXAMPLES_CHECK`, beside `UI_STATES_CHECK`): every feature reads the same project table.
+  **Read once per call** (`referenceExamplesRead`): the table and each row's gone file, memoized in the read-cache scope under
+  `REF_EXAMPLES_MEMO` + the project's key (friction's timings memo), held with structure.md's text — a write of it in the call
+  (forgetCached drops the text) reads the table again; each feature's doctor words it in its own language.
+- **The brief's part** (`briefExamples(projectDir, targets)` — targets: `briefTargets`, the paths a fileMatch pattern
+  matches): a row whose Applies-to globs (split on blanks / `,` / `;`, backticks dropped) match a target as `steeringGlobMatch`
+  does (a folder as `dir/`), or — without a glob — whose Copy file sits in a target's folder (a file target's folder, a
+  folder target itself, case-folded where the file system folds case); an Applies-to FOLDER matches nothing without `/**`
+  (the references say so — no folder rule of its own); a gone file is named (`gone`), never quoted; a list cell, and an
+  annotated one (1.41.0 review 3: read as its path, the brief wrapped "`x.ts` (note)" in a span of its own — a stray backtick
+  — and nested the spans of "Svc (`a.ts`, `b.ts`)"), is quoted as written (`asWritten`: the renderer prints it without a
+  code span of its own around it; the gone check still reads the annotated cell's path) — and with no glob its Copy
+  folder is read off the cell as ONE path, so it may match no task (1.41.0 review 2: said, no matching of its own); at most
+  `REF_BRIEF_ROWS` (6) rows within `REF_BRIEF_CHARS` (1,200), `omitted` counts the rest; rows but none for the task → the
+  count line. `null` without a real row.
+- **Cost:** a count (15-quality-reference-examples.js, `fsCalls`): 30 rows of a 4-segment gone path → exactly 2 lstats per
+  row under `src/` (the first-segment read, then the walk to the first missing segment); a lean doctor that already warns
+  reads none; spec_upgrade over 6 features lstats exactly what it does over 2 (the memo — 714 against 238 before it).
+
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
 
@@ -2188,6 +2265,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   upload", "at 10:00" read "00"), and a noun-like action alone ("2 panels handle the click" — the bare "click"). Now `parts` and
   `UNITS` after a quantity, no digit after `\d[.,:]`, bare actions only in unambiguous verb forms, request nouns plural; the
   phrase-first form and ES cajeros added. The timing guard is relative: `max(250 ms, 4 ×` a same-size plan of words`)`.
+- **1.41.0** — Silent Regressions (S2 as CRIT_S2 cut it): an m / l design names the numbers a check prints as METRIC lines, or
+  "None — why". The designer's scaffold had a slotted example row: CRIT_S2 #7 — a slot is a `placeholders` refusal of every fresh
+  m / l design, more than the owner's warn — so the table is empty and an unanswered section reads `empty`. The templates-check
+  warning trade-offs and risks have is restored (`silent-missing`), skipping the built-in's own copy: the no-size design `templates
+  init` writes has no such section, and a pristine copy checked clean in 1.40. Review 1 (R1-MF-3): that exemption left every m / l
+  feature scaffolded from the pristine copy without the section — doctor warned `missing` on each while templates check passed.
+  1.40 had no sized-section mechanism for a project template (it replaces the sized builder whole), so the smallest append rides
+  the track blocks' (`withTrackBlocks`, `opts.size` from spec_create only); the exemption stays, `silent-missing`'s text now says
+  what the scaffold does.
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the
@@ -3991,3 +4077,29 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   15-quality-ui-states.js now pass 64, and the BS-5 fixture asserts the clause in PT and ES too). One 1.38 range for the old
   header cost, 2.1–2.8× (the CHANGELOG, the current rule above, the test's comment); re-measured with the fix (h1.js, the
   H1 shape, medians of 5, three runs): 1.38 2.59–2.75×, the fix 0.26–0.28×.
+
+### Reference examples
+- **1.41.0** — the `## Reference Examples` table of structure.md, its reader, doctor `reference-examples` and the brief's part
+  (ITEM_S1 / CRIT_S1 of the gardening round). CRIT_S1's cuts kept: only `projectPath` + `onDisk` moved out of the lazy
+  design-system.js, verbatim (a lazy entry would load the tier in every doctor and brief — 25 ms Windows / 50 ms Linux);
+  `pathWords` / `stalePath` / `DS_PATH_WORDS` untouched, no `words` knob, no check-vs-stalePath ratio guard (it measured
+  the parse only — 1.3 on Linux) but an exact lstat count; a gone predicate of its own (ONE path per cell, no RE_DOC_EXT);
+  lean = full (the design's full-doctor-only `applies: !c.lean` would have made next_action say pass where spec_doctor
+  warns). Not built: the steering stub's section and slot row (CRIT_X D9: the default project has no table). Review 1: a Copy
+  cell listing two files was read as ONE gone path — a false warn, and the brief named a garbled path gone (R1-L-2: a list is
+  a doubt, quoted as written; path-like words, not file names only — a folder-and-file list was the same false warn);
+  spec_upgrade lstat'ed every Copy path's folders once per feature (R1-L-3: 30 rows, 40 features — 131 → 7,291 lstats, +46 %;
+  memoized per call); an Applies-to folder without `/**` matches nothing (R1-L-5: said in the references, no new matching);
+  a fixture for the brief's case fold (M22). Review 2: the list test read an annotated cell's NOTE too — a gone file beside
+  "e.g. `toCents()`", "res.json()", "(see ADR-3, v2.1)" or a second code span became a doubt: doctor passed and the brief
+  quoted it to copy (R2-L-1, made by review 1's list rule: the annotated single-path form is no list — RE_IMPL_ANNOTATED
+  reused on the cell's exemplarPath reading; 14 annotated shapes warn again as before the list rule, the list fixtures
+  unchanged); ` or ` / ` + ` / ` & ` / ` / ` / ` ou ` / ` o ` joining two files, and a list cell with no Applies-to glob
+  matching no task (R2-L-2 / R2-L-3: prose — one file per Copy cell, two files are two rows; no new separator, the doubt
+  documented as the safety net). Review 3: R2-L-1 made an annotated cell one path, and the brief then quoted its path reading
+  in a span of its own — "`` `src/x.js` (… setup)` ``" a stray backtick, "`` `Service (`a.js`, `b.js`)` ``" nested spans
+  (R3-B-2): such a cell is quoted as written (`asWritten`), judged by its path as before (the reviewer's q3.js / q2b.js: every
+  doctor status the same on 9a16f5b6). The references name the annotated forms — `path (note)` / `path — note` — and say a
+  `,` / `;` note makes the cell a list (R3-B-3, prose). Left: a `,` note with no path-like word ("`x.ts`, the handler") is
+  neither a list nor annotated — never judged (no extension at its end), but the brief still wraps its path reading (a stray
+  backtick), as on 9a16f5b6; a rule for it would be one more predicate.

@@ -497,3 +497,37 @@ this loop instead:
 
 This preserves the test suite as a specification. A suite that's been quietly edited to pass
 is worse than no suite at all — it lies.
+
+---
+
+## Test value and pruning
+
+**The rule.** A test earns its place when it guards an AC — its T-ID in the test plan — or a past bug (a bugfix's
+regression test), and fails when that behaviour breaks. The testing-standards template carries it (`## Test Value`) for
+**new projects only**: an existing project that adds it to `.specs/steering/testing-standards.md` gets
+`steering-changed-since-approval` on every +tdd feature whose requirements or design that file governed — a re-review and a
+re-approval each —, so add it between features, or leave the file as it is.
+
+**The others go to the pruning pass** (`/spec-review <feature> prune` — the protocol: `subagent-execution.md` → The pruning
+pass), never mid-task: a test that looks worthless during a task is a concern in your report ("When a test is wrong"), never
+a deletion. The pass proposes, the user approves each pruning, and nothing is removed before that. Its criteria:
+
+| Criterion | What it means | Where it comes from |
+|---|---|---|
+| `same-path` | another test covers the same AC through the same path | the reviewer's proposal, confirmed by probes: every break that reddens this test reddens the kept one |
+| `no-kill` | it stays green when the behaviour it names breaks | the reviewer's proposal, confirmed by a probe |
+
+A test of an AC a shipped feature retired (the matrix's `supersededBy` without `supersedePending`) is never pruned: it fails
+once the superseding feature ships, so the pass names it and tells the user it needs a `/spec-change` on its own feature. A
+`no-kill` test that is its AC's only test is **strengthened** ("When a test is wrong"), never removed. Without a shell (an MCP
+client that runs no command) no probe runs, so the pass proposes no pruning.
+
+**Never pruned:** a criterion's last planned test — every AC, EC, NFR or SC the test covers keeps another test-plan entry,
+or the test stays (trace asks every AC for one, the test-plan approval refuses a plan without it) · a bugfix's regression
+test while the code it guards lives · an eval or load row (outside code — the eval regression set grows, never shrinks) · a
+critical flow's twice / two-at-once / another-user rows (Critical flows, above) · a test with no T-ID, such as a helper test
+the micro-cycle wrote (the pass reads T-IDs: counted, never judged).
+
+**Remove a test whole.** A pruned test is deleted — its case, or its file when nothing in it is kept —, never left as an
+empty body, a skipped case or a constant assertion (`expect(true).toBe(true)`): a hollow test still reads as coverage and
+guards nothing.

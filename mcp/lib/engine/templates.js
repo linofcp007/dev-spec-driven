@@ -17,7 +17,7 @@ let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValid
   isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock, packCorpusSets, packOf,
   packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText, langOption, PROTO_KEYS,
   RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY, RE_TODO_SENTINEL, RE_WIN_RESERVED,
-  readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN, ROOT_CAUSE_SYN, slugify,
+  readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN, SILENT_SYN, ROOT_CAUSE_SYN, slugify,
   specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription, taskMarkerValues,
   tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel, trackMarker,
   trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection, writeIfAbsent;
@@ -29,7 +29,7 @@ function __link(E) { ({ taskBlocks, headingEntries, today, acDuplicates, artifac
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
   langOption, PROTO_KEYS, RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY,
   RE_TODO_SENTINEL, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN,
-  ROOT_CAUSE_SYN, slugify, specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription,
+  SILENT_SYN, ROOT_CAUSE_SYN, slugify, specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription,
   taskMarkerValues, tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel,
   trackMarker, trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection,
   writeIfAbsent } = E); }
@@ -262,12 +262,14 @@ function beforeFirstTaskSection(text, section, orNull) {
 // opts: only — the tracks to add blocks for (a built-in scaffold: its track packs; the i18n builders wrote the rest);
 // planText: () => the feature's test-plan.md (a track pack's tasks make its planned tests green); vars: { name, slug } for a pack
 // fragment's {{name}} / {{slug}}. A track pack's criteria go right after the US-1 criteria (insertPackRequirements) and its
-// checklist items at the end of checklist.md.
+// checklist items at the end of checklist.md. size (a project template's design only — spec_create): an m / l feature's design
+// without a Silent Regressions heading gets the built-in's section, before the track blocks (1.41.0 review 1).
 function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
   const want = (tr) => tracks.includes(tr) && (!opts.only || opts.only.includes(tr));
   const vars = opts.vars;
   let out = text;
   if (key === "design") {
+    if ((opts.size === "m" || opts.size === "l") && weighSection(out, SILENT_SYN) == null) out = out.trimEnd() + "\n\n" + i18n.designSilent(lang) + "\n";
     for (const tr of ["tdd", ...markerTracks()]) {
       if (!want(tr)) continue;
       const present = tr === "tdd" ? RE_TESTABILITY.test(stripHtmlComments(out)) : headingHasMarker(out, trackMarker(tr));
@@ -322,8 +324,9 @@ function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
   return out.endsWith("\n") ? out : out + "\n";
 }
 // The scaffold of one artifact → { text, template } — the project's template (variables substituted; opts.tracks: the track
-// blocks it lacks) when there is one (template = its .specs/templates/… path), else builtIn() (template null) + the blocks of the
-// active track packs — the built-in builders only know the built-in tracks.
+// blocks it lacks; opts.size: a sized feature's — its design's Silent Regressions at m / l) when there is one (template = its
+// .specs/templates/… path), else builtIn() (template null) + the blocks of the active track packs — the built-in builders only
+// know the built-in tracks (and write a sized design's sections themselves).
 function scaffoldText(projectDir, key, lang, vars, builtIn, opts = {}) {
   const o = templateOverride(projectDir, key, lang);
   const packVars = { name: vars && vars.name != null ? String(vars.name) : undefined, slug: vars && vars.slug != null ? String(vars.slug) : undefined };
@@ -335,7 +338,7 @@ function scaffoldText(projectDir, key, lang, vars, builtIn, opts = {}) {
     return { text: withTrackBlocks(key, text, tracks, lang, opts.reqText, { only: packs, planText: opts.planText, vars: packVars }), template: null };
   }
   let text = renderTemplate(o.text, templateVars(vars, lang));
-  if (opts.tracks) text = withTrackBlocks(key, text, normalizeTracks(opts.tracks), lang, opts.reqText, { planText: opts.planText, vars: packVars });
+  if (opts.tracks) text = withTrackBlocks(key, text, normalizeTracks(opts.tracks), lang, opts.reqText, { planText: opts.planText, vars: packVars, size: opts.size });
   return { text: text.endsWith("\n") ? text : text + "\n", template: o.rel };
 }
 // A steering stub: the project's template for that file when there is one, else the built-in (or custom) stub.
@@ -518,6 +521,8 @@ function initTemplates(projectDir, key, lang, lng) {
   return { ok: true, action: "init", dir: tdir, lang: lng, created, kept };
 }
 
+// two template texts the same but for a BOM, line endings and the blank lines at the end (an editor's re-save of a copy)
+const sameText = (a, b) => a != null && b != null && [a, b].map((t) => { const x = String(t).replace(/\r\n/g, "\n").replace(/\s+$/, ""); return x.charCodeAt(0) === 0xfeff ? x.slice(1) : x; }).reduce((x, y) => x === y);
 // The checks of one template text (raw: with its variables; the checks read it rendered with sample values).
 function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
   const P = i18n.msg(lng).templates.problems;
@@ -544,6 +549,11 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
     if (weighSection(rendered, RISKS_SYN) == null) add("warn", "risks-missing", P["risks-missing"]);
     // no Reuse & Integration heading — doctor would warn (design-reuse) on every feature scaffolded from it.
     if (weighSection(rendered, REUSE_SYN) == null) add("warn", "reuse-missing", P["reuse-missing"]);
+    // 1.41: no Silent Regressions heading — a size m / l feature scaffolded from it gets the built-in's section at the end
+    // (withTrackBlocks — 1.41.0 review 1), so doctor warns design-silent-regressions only until it is answered; the template's own
+    // place for it is the team's to choose. Never on the built-in's own copy (templates init — the no-size design, which has no such
+    // section: it checks clean).
+    if (weighSection(rendered, SILENT_SYN) == null && !sameText(raw, builtInTemplate(k, fileLang || lng))) add("warn", "silent-missing", P["silent-missing"]);
     for (const tr of markerTracks()) { // + the track packs
       const marker = trackMarker(tr);
       if (!headingHasMarker(raw, marker)) continue; // no heading of the track: the engine appends its whole block

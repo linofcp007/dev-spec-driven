@@ -17,10 +17,14 @@ first; how they came to be — the releases and review findings — is in Histor
   current; `counts.supersedePending`); a retired AC names only its shipped declarers. A shipped feature counts only the
   declarations of its requirements snapshot approved at or before its latest ship (`shippedSupersedeKeys()`; no snapshot → all);
   one archived without shipping declares nothing and its ACs are not current. `supersededByIndex()` (`.live`, `.liveBy`) and
-  `catalogData()` (`supLiveBy`) share the rule.
+  `catalogData()` (`supLiveBy`) share the rule. Trace reads none of it: a retired AC needs a planned test like any other
+  (markdown-and-trace.md → What trace_check counts, History 1.41.0).
 - **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished` `{at, files: {rel: sha1|null}}`
   over its `_Implements:_` files (folders expanded, inside the project). `fileHash()` reads `FILE_HASH_CHUNK` (1 MiB) pieces
   (`readSync`), CRLF-normalized across pieces — never a whole-file read; mcp/tests/12-lifecycle.js pins its digests.
+  1.41: + `metrics` [{check, name, value, unit?, better?, tolerance?}] — the METRIC readings of the project checks' passing runs
+  (none: no key); the next feature's finish compares each (check, name) with the latest OTHER folder's record by `finished.at`,
+  archived folders included (tasks-and-evidence.md → Metrics that regress silently). A re-finish replaces the record whole.
 - **`spec_drift`** hashes only those files. Open tasks → `reopened`; changed since its finish (`staleFinish()`) → `stale` (CLI
   exit 1; the catalog says `complete`), yet still hashed: a drifted file gives verdict `drift` — a stale baseline never hides a
   change. An unreadable state is `error`. SessionStart: one line per drifted ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
@@ -115,7 +119,7 @@ first; how they came to be — the releases and review findings — is in Histor
 
 ## Decisions and spikes
 - **`decisions.md`** (committed; `.execution/` is scratch): a localized header, then entries `## D-<n> — <title>` with the
-  markers `_Kind: decision | discovery_`, `_Date:_` and the optional `_Affects:_` / `_Supersedes: D-m_`, then **Context** /
+  markers `_Kind: decision | discovery | lesson_` (a lesson: below), `_Date:_` and the optional `_Affects:_` / `_Supersedes: D-m_`, then **Context** /
   **Decision** (or **Discovery**) / **Consequences** (localized; any EN/PT/ES label read). IDs and markers are English-stable,
   read only between the heading and the first label; HTML comments and fenced code never hold an entry.
 - **`spec_decide`** appends under the feature lock after the highest D-n, the existing bytes untouched (BOM, CRLF kept); title ≤
@@ -132,6 +136,43 @@ first; how they came to be — the releases and review findings — is in Histor
 - **Readers:** the brief (bounded), finish's merge summary, spec_export and the catalog, trace_check (`phantomAffects`, warnings),
   doctor (`decision-affects`; `decision-affects-approved` for a decision recorded AFTER the approval it names), the ADR export
   (`exportAdr`: ADR number = D-number, so the log never renumbers — templates-imports-exports.md → Exports and planning).
+- **The lesson kind (1.41)** — why a confirmed review finding happened, as the agent that wrote the code gave it (the loop:
+  references/subagent-execution.md → 7b). `spec_decide {kind: "lesson", cause, target?}` (CLI `decide <f> --kind lesson --cause
+  <code> [--target <path>]`): `cause` one of `LESSON_CAUSES` (`guidance-missing` · `guidance-wrong` · `example-copied` ·
+  `tool-friction` · `model-error` — a string in the schema, the refusal lists them: `causeRequired`, `badCause`); `cause` /
+  `target` on another kind → `lessonOnly`; `target` decided on its TEXT (`lessonTarget`: backticks dropped, a control character
+  or a line terminator — U+2028 / U+2029 too, `RE_LINE_TERMINATOR`: the marker reader ends the line there — none, then
+  quality.js `projectPath` — `badTarget`) and, for `guidance-wrong` / `example-copied` (`LESSON_TARGET_THERE`: the
+  wrong line, the copied file exist by definition), `onDisk` (`targetGone`) — stored as its project path, a root-level name with
+  no `/` and no `.` in its `./` form (`lessonTargetForm`: `./Makefile` — the result's `target` is what the file holds, and
+  every reader shows it so: finish's `lessons`, the brief, the merge summary, the retro, `repeated`). The entry: markers
+  Kind · Date · `_Cause:_` · `_Target:_` · Affects · Supersedes, the paragraph labelled **Lesson** / **Lição** / **Lección**
+  (`labels.lesson`). The reader takes `_Cause:_` / `_Target:_` (`RE_LESSON_MARKER_HEAD`) and the label (`RE_LESSON_LABEL`)
+  ONLY inside an entry whose `_Kind: lesson_` came first — a decision's `**Lesson:**` paragraph or `_Cause:_` line stays its
+  text, as 1.40 read it; `safeSpecText(s, lesson)` escapes them only in a lesson's own text. A later entry's `_Supersedes:_`
+  CLOSES a lesson. **Who reads it:** `lessonView` (finish's `lessons` {open, closed, unread} + ONE warning — the last, never a
+  blocker, ending with the closing call that runs: `spec_decide {name, title, decision, supersedes}` with placeholders and the
+  `decide … --supersedes` CLI line), `briefLessons` (the brief's Lessons part: open ones, newest first, `BRIEF_LESSONS_MAX` 5 within
+  `BRIEF_LESSONS_CHARS` 1,200), `lessonCounts` / `projectLessons` (spec_metrics — below), the retro (one amendments line each).
+  **Who leaves it out:** briefDecisions (never quoted twice), `decision-affects-approved` (a lesson changes nothing the spec
+  says), the ADR export (`excluded` reason `lesson`) and the catalog (`catalogDecisions`' `count` is the items it lists — every
+  entry before 1.41) — and both leave out a decision whose `_Supersedes:_` are
+  all lessons (`lessonCloses`: the finish batch's closing entry, reason `lesson-close`); one superseding a lesson AND a
+  decision is a decision. The merge summary keeps every entry (a lesson's cause → target in its meta, a closed one struck
+  through). A hand-written cause outside the codes is `unread`: listed, never counted under a cause.
+- **spec_metrics' lessons (1.41).** A feature's `lessons` {total, open, byCause (`LESSON_CAUSES` order, read causes only),
+  unread} only when it has one. The project's comes from the metrics blocks' ONE walk (`lessonsBlock` → `projectLessons`; finish.js
+  `metricsBlocks` → metric.js `walkFeatureStates` — tasks-and-evidence.md → spec_metrics' ONE walk) over every folder,
+  ACTIVE and ARCHIVED (`featureDirs`; at most `LESSON_FEATURES_MAX` 1,000 read, `truncated` the rest): + `unread` [{feature, id,
+  archived?}] and `repeated` [{cause, target, features, lessons}] — one (cause, target) in two features or more, the target
+  as its project path (`./x` = `x`, the group showing a root-level name in its `./` form; a bare word a hand edit wrote —
+  `none`, `Makefile` — is no path: a doubt, never grouped; case-folded where the file system folds case) and only OUTSIDE
+  `.specs/` (tested folded too: a steering file is every rule's home — "money → tech.md" and "logging → tech.md" are two
+  lessons); no target never repeats. A folder the walk reads keeps its `view`: the walk runs BEFORE the features' own
+  metrics and `viewOf(dir)` hands an active folder's to
+  that feature's (`featureMetrics(…, lv)`), one read of each decisions.md — a COUNT (12-lifecycle-lessons: lessons in an active
+  and an archived feature make exactly the fs calls of a twin without them, each decisions.md read once, cached or not).
+  **No state key:** the entry is the record (why: conventions.md → History, Merging the spec state, 1.41.0).
 - **Spike kind** (`kind: "spike"`, `question`, `timebox` `YYYY-MM-DD` | `3d`): spike.md (Question · Timebox · Options considered ·
   Evidence · Decision + `_Outcome: go | no-go | pivot_` · Follow-up; `SPIKE_SYN`; `_Outcome:_` also reads PT/ES and yes/no) +
   investigation tasks; core-only, no gates (`gateWalk`, `pendingGateList`, `chainArtifacts` empty; approve takes only the
@@ -242,6 +283,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   next_action's `drift` step (`next.drifted`) and the upgrade audit's drift line (`upgrade.item.drift`) now name
   `/spec-review <f> converge`, which reads the code AC by AC from the drifted files (from google/elephant-goldfish-model's
   semantic drift report).
+- **1.41.0** — `finished.metrics`: the drift baseline also carries the finish's METRIC readings, the reference of the next feature's
+  comparison. No project baseline file nor roadmap key (every finish would write one: parallel branches conflict where the merge
+  driver isn't installed) — the reference is "the latest other finish", read across the folders. "A retired AC
+  (`supersededByIndex().live`) needs no planned test" in trace: built in review 1, reverted in review 2 (an AC id is keyed by
+  folder + id, so a namesake feature or a reused id was accepted silently); the retired-AC pruning was cut to the backlog
+  (markdown-and-trace.md → History → Readers, 1.41.0).
 
 ### A feature's own git branch
 - **1.25** — `create --branch` / `spec_create {branch}`: the record, the name rules, the engine reading the repository as files,
@@ -274,6 +321,24 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   again; add_track's sections landed inside an open fence, read "missing", and a re-add wrote them twice. `appendSpecText()`
   became the one append of every spec writer.
 - **1.25** — the ADR export (`spec_export {format: "adr"}`).
+- **1.41.0** — the lesson kind (ITEM_S1 / CRIT_S1 of the gardening round), a third kind in the committed log rather than a
+  state key or a project `lessons.md` (every branch would append to it: every merge would conflict). CRIT_S1's must-fixes
+  built: a lesson-closing decision is no ADR / catalog row (its probe: a "Lessons of billing" ADR, status accepted, on every
+  feature with lessons); briefDecisions skips lessons (one lesson citing the task's T-ID was quoted in both parts, charged to
+  both budgets); the label and the markers read only inside a lesson entry (a `**Lesson:**` line in an existing entry would
+  have re-segmented it — its Decision and Consequences shifted, its ADR rewritten); `repeated` only outside `.specs/`. Cut:
+  `repeated` in finish, with the design's last-closed and since fields (cross-feature data is project metrics'), a cause enum in the schema (+156
+  tools/list characters against the round's 235 reserve — the string form, +64), the `causes` display names (the codes print as
+  codes), the header's extra sentence. **1.40 garbles a lesson:** it reads `_Kind: lesson_` as a decision, its
+  `_Cause:_` / `_Target:_` lines become the Decision text (body fallback) and the `**Lesson:**` paragraph joins Context — an
+  older engine exports it as an ADR (the CHANGELOG says so). Review 1: `repeated` never grouped a root-level extensionless file
+  (`./Makefile` was stored `Makefile`, which projectPath refuses — R1-L-1: the WRITER keeps the `./` form; a reader guessing
+  `./` before a bare word grouped a hand-written `_Target: none_` too, so none guesses) and counted `.SPECS/` where case folds
+  (R1-L-7); a U+2028 target was written and read back as none (R1-L-6); the finish warning's closing call lacked the title
+  and decision spec_decide requires, and had no CLI line (R1-L-9); fixtures for the mutants 1.41.0 left alive (M18 one
+  feature, M13 the overflowing brief budget, M6 the key's fold, M7 / M26 the backticks — R1-L-4). Review 2: two assertions for
+  the fix's own survivors (R2-L-4 — N2, the `./` form on a `/` alone: `package.json` was written `./package.json`; N4, the
+  targetGone refusal naming the bare `Makefile`).
 
 ### Forecasts and cross-feature overlap
 - **1.14** — sizes, tick times, velocity, ETAs and the cross-feature overlaps. Tasks ticked before 1.14 have no tick time (the

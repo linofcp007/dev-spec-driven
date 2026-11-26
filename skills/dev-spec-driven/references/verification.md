@@ -311,6 +311,38 @@ edit**, so a type error is fixed the moment it appears, not at the `_Verify:_` o
   cap only the first files and the task's own are dated (`partial: true`); test files a task names only by T-ID are outside
   the planned files; after merging a parallel wave the merged files are new — run the fast check once before the ticks.
 
+### The friction budget (`_Budget:` lines in tech.md, report only — 1.41)
+
+How long the project checks take in the dev loop: a slow suite slows every agent's loop. Report only — nothing is refused,
+blocked or warned per feature, at any size.
+
+- **The budget:** a line of `.specs/steering/tech.md` naming a project check and a duration — `- _Budget: test 2m_` (or
+  `*Budget: …*`, any case; the check may be in backticks; text after the closing `_` is a comment: `_Budget: build 90s_ — on a
+  laptop`). Units `ms`, `s`, `m` / `min`, `h`; 1 ms – 24 h; at most 20 markers in the first 256 KB are read. One per check (a
+  second is reported, the first counts); a name that is no check (a command in its place too: `_Budget: npm test 2m_`), an
+  unreadable duration and a duplicate are reported in
+  `spec_metrics`' `friction.invalid`; anything else (`_Budget: $500/month_`, a bold `**Budget:**`) is no budget. Fenced code
+  and HTML comments are skipped.
+- **What is measured:** each run of a check as ONE command — `done --run` / `finish --run` (spawn → the command's exit, never a
+  background process's hold on the output) and, in Claude Code, the observe hook (the tool's own `duration_ms`). A piped,
+  chained or backgrounded run is no run of the check and is not timed — run the check on its own. The lines go to the
+  git-ignored `.specs/.execution/timings.jsonl` (this machine's; past 64 KB each check keeps its newest 10 passing runs); a
+  line counts while the check's command is still the one it ran.
+- **The verdict:** the MEDIAN of the check's last 5 passing measured runs, 3 needed — one slow run never judges. `spec_metrics`
+  (the project view; `dev-spec metrics`) → `friction {checks: [{check, budgetMs, runs, medianMs, minMs, maxMs, status}],
+  invalid}`, status (stable) `over` · `within` (a median at the budget is within) · `few-runs` · `no-runs` · `unbudgeted`.
+- **At the finish step:** while a check is `over`, `spec_next_action`'s `finish` step ends with a hint and returns `friction
+  {over: [{check, medianMs, budgetMs, runs}]}` — propose a platform item to the user (`dev-spec backlog add "friction-<check>"
+  "…"`), never a fix inside the feature; or the user raises or removes that budget. The hint stops once the backlog holds
+  `friction-<check>` or a feature (active or archived) has that name.
+- **Pick a budget ≥ 2× a quiet run:** two suites at once or a parallel wave slow a check by 30–60 % (+56 % measured on Linux,
+  two at once), and the median then reads that as friction. One median mixes the CLI's shell (cmd.exe, pwsh) with Claude Code's
+  Bash, and each start costs time (PowerShell ~0.35 s): a budget under ~2 s mostly measures shells.
+- **A tech.md with `inclusion: always` front matter governs:** editing a budget there marks every approved feature
+  `steering-changed-since-approval` — keep budgets in a tech.md without that front matter, or re-approve.
+- **Not measured:** runs over the MCP server (it runs nothing) or reported to it; failing runs (a bail-out reads fast); a
+  worktree's own CLI runs (its log stays there); permission prompts and the model's thinking.
+
 ### dev-guardian's gate — the check `guardian`
 
 With the sibling plugin **dev-guardian** (3.2.1 or later) installed, `spec_init {guardian: true}` (CLI `dev-spec init
@@ -348,7 +380,7 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   refused (`report-mismatch`), and so is any run of a `.specs/guardian.cjs` that is not the launcher dev-spec-driven writes
   (`launcher-changed` — `init --guardian` writes it again; `finish --run` replaces an earlier version's itself).
 - **A blocking finding is fixed**, then the check runs again. To accept ONE reviewed finding the user suppresses it inline
-  with a reason (`nosemgrep: <rule> -- <reason>`, `# nosec`) — never `baseline update`, which accepts every current
+  with a reason (`nosemgrep: <rule> -- <reason>`, `# nosec <id>  # <reason>`) — never `baseline update`, which accepts every current
   finding, the feature's own included (it belongs on the base commit, and it is the user's decision). An incomplete scan
   stays a failed check until its gaps are fixed — the blocker names how, by kind: install a missing scanner
   (dev-guardian's `/guardian-init`), commit a lockfile, a Semgrep per-file timeout → a larger `semgrep.timeout`, or the file
@@ -358,10 +390,79 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   Never force the finish, nor remove the check, without the user — with the approval guard on, removing the check, an
   agent's write of `.specs/guardian.cjs` or `.guardian/baseline.json`, an agent-run `baseline update` and a gate run under a
   `DEV_GUARDIAN_CLI` / `CLAUDE_CONFIG_DIR` of its own are guard-downs.
+- **A test pruning the user approved** (`/spec-review <feature> prune` — `subagent-execution.md` → The pruning pass) removes
+  tests, and dev-guardian's test-integrity check reports each removal (`test-file-deleted`, `test-assertions-removed` —
+  medium). Below the default `--fail-on high` they never block — the warning below names them. At a non-default
+  `--fail-on medium` an approved pruning blocks like any medium finding: dev-guardian reads no dev-spec approval (dev-spec's
+  record is the user's accept at guard level tests, `feature protect <feature> <file> --accept --reason "pruned: …"`, else
+  the feature's test-plan re-approval) and has no accept of its own for such a finding, so the finish stays blocked until
+  the user decides — never forced.
+- **Its own checks' findings below the gate** (1.41) — the new findings that do not block from dev-guardian's
+  test-integrity check (`guardian-test-integrity`, 3.8+: a skip, a deleted test file, fewer assertions) and its suppressions
+  check (`guardian-suppressions`, 3.17+: an added `nosemgrep`, Bandit `nosec`, `eslint-disable` … with no reason that
+  names no rule, or a whole-file one with no reason even when it names its rules; one with a reason is only counted) —
+  are ONE finish warning, never a blocker: each labelled by its check (weakened test · suppression added), the first 3 by
+  severity, the rest counted. The user decides each: a pruning they approved stays; a suppression they intended gets a
+  reason; otherwise fix it and run the check again. Both checks read the change since the feature's base, which only
+  `finish <feature> --run` hands the launcher: a run of the check's command reported over MCP (`spec_finish {evidence}`)
+  has no base, so it names none. A `--compact` report lists the blocking findings only, so none is named there; a
+  dev-guardian before 3.17 has no suppressions check — its test findings only.
 - **Duplication budget:** when `.guardian/budgets.yml` sets `quality.duplication_pct`, `dev-spec dupes` (no feature) /
   `spec_scan {duplicates: true}` shows the project's duplicated share beside it (`budget`), and finish's duplicate warning
   says when the project is over it. dev-spec counts windows of code lines, dev-guardian measures with jscpd — close, not
   identical.
+
+### Metrics that regress silently
+
+Some numbers get worse while every test stays green: a bundle's size, a p95, queries per request, tokens per call, a
+build's time. A project check prints each as a METRIC line — the form dev-guardian's `metrics` command reads too:
+
+    METRIC <name>=<number>[ <unit>][ better=lower|higher][ tolerance=<n>[%]][ <key>=<value>...]
+
+- **The line.** `METRIC` starts the line, after blanks or one `# ` (node's TAP reporter); the name is ASCII (letters, digits,
+  `_ . -`, up to 64); the number is a plain decimal (`142.3`, `1.5e3` — never `1,5`); the unit one token of up to 16
+  characters; unknown `key=value` words are ignored; the last line of a name wins. A line that starts `METRIC <name>=` and
+  breaks the form is said as not read; a table header (`METRIC | BEFORE`) is no attempt. Colours are removed first, and a
+  byte-order mark at a stream's start.
+- **Only the CLI reads them:** `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read each passing
+  command's whole output, stdout and stderr apart (at most 1,000 candidate lines of 512 bytes from the end, 20 names — a
+  line past a bound is said). The reader's own bound is an output's last 64 MiB: `finish --run` reads each check alone,
+  under the CLI's 64 MB cap (a run whose output passes it records nothing — `output-too-large`, above), so it never
+  reaches that bound; several `_Verify:_` commands of one `done --run` are read together and can reach it, and then
+  `metricsDropped` says `readBytes`. The tick prints and stores them; it never judges. An MCP report carries none.
+- **One stream per name.** dev-spec reads stdout, then stderr, as two texts: a name printed on both reads stderr's line.
+  dev-guardian's `metrics` reads one file — a CI job that captures `2>&1` reads it in print order, the last printed
+  winning. Print each name on ONE stream and both read the same value. A byte-order mark at the start of the stream
+  printed second is read past by dev-spec, while a `2>&1` capture holds it mid-file, and dev-guardian reads nothing there.
+- **finish compares.** Each `(check, name)` a project check's passing run printed is set against the LATEST other
+  feature's finish that recorded it (`finished.at`, archived features included; never the feature's own). Judged only
+  when that earlier line states BOTH `better=` and `tolerance=` — no defaults: otherwise the result shows the delta,
+  `unjudged`. Its terms decide; a new line may only tighten (the smaller tolerance applies). A flipped or dropped
+  `better=`, a raised or dropped tolerance or a changed unit is said as `loosened` (a new unit is not compared). `n%` is n
+  percent of the earlier value; the boundary counts as within; values and tolerances compare as the exact decimals the lines
+  printed (120 → 122.4 at 2 % is within), and the warning and `## Metrics` show them as printed (the delta and the applied
+  tolerance as numbers). Verdicts: `new` · `within` ·
+  `improved` · `regressed` · `unjudged`.
+- **The warning, never a blocker.** A reading worse past the tolerance, or a loosened line, is ONE finish warning and the
+  merge summary's `## Metrics`; a ready written finish records the readings (`finished.metrics`) for the next feature.
+  The number holds every change merged since that finish — another branch's, a dependency bump made outside a feature —,
+  not only this feature's: tell the user before the merge. Never loosen, flip or drop a METRIC line to pass.
+- **A tolerance is the measured spread.** Run the check a few times on quiet code and state at least the spread you saw
+  (`tolerance=3%` for a timing that wanders 2 %). A count (`tests.count`) can say `tolerance=0`. Timings from another
+  machine are noise; `kB` and `KB` are different units.
+- **Limits.** A test whose output prints a METRIC fixture line is read as a metric (print the real ones from a script); a
+  runner that captures stdout hides the line (`pytest -s`); cmd.exe turns `µ` into an unreadable name (ASCII names).
+- **The design names them.** A size m / l design gets a `## Silent Regressions` section (from a project design template
+  without one: the built-in section, at the end): one row per number, its METRIC name
+  in a code span in the first cell and the check that prints it — or `None — <why>`. Doctor warns
+  `design-silent-regressions` while it is missing or blank (never a refusal; a design approved before 1.41 is not asked); a
+  track's budget section (Performance Budget, Token Economics, UI Performance Budget) holds the targets, this row the check
+  that prints the number. finish warns when no passing check printed a readable METRIC line of a name a row declares (a
+  malformed line, or one past a reader bound, is not read — the run's note names it) — once `finish --run` ran every check
+  (a run reported over MCP carries no reading, so it says nothing). Sizes s, xs and none get nothing new unless a check
+  prints a METRIC line with stated terms.
+- **The trend:** `dev-spec metrics` (spec_metrics, the project) lists each `(check, name)` across the finishes — a 1.9 %
+  step at each finish never warns, but the series shows it.
 
 ## Protected tests (`meta.guard: "tests"`, 1.36)
 

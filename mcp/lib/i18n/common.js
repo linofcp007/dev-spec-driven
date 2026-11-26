@@ -195,6 +195,19 @@ function stopLineClaim(words, tested, work) {
 // The one source of the rows and of quality's uiStateLabels / uiStateHead / uiStateView / uiStateA11y.
 const uiStateTable = (s) => [`| ${s.head} | ${s.view} | ${s.a11y} |`, "|---|---|---|", ...Object.values(s.labels).map((l) => `| ${l} | | |`)].join("\n");
 
+// 1.41 a measured duration (ms) as the friction budget's messages print it — SI symbols and a dot decimal, the same in every language
+// (as fmtHours): 850 ms · 4.2 s · 48 s · 3 min 10 s · 1 h 5 min. Not a number → "—".
+function fmtMs(ms) {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "—";
+  if (ms < 999.5) return Math.round(ms) + " ms";
+  if (ms < 9950) return Math.round(ms / 100) / 10 + " s";
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return sec + " s";
+  if (sec < 3600) return Math.floor(sec / 60) + " min" + (sec % 60 ? " " + (sec % 60) + " s" : "");
+  const min = Math.round(sec / 60);
+  return Math.floor(min / 60) + " h" + (min % 60 ? " " + (min % 60) + " min" : "");
+}
+
 module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, signalTracks, templateTests, greenLine, templateTestRows,
   cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli, FEATURE_SIZES, SIZE_CORE_ACS, coreTemplateAcs, CORE_SUPERSEDED_BY, coreSuperseded, stopLineClaim,
-  uiStateTable };
+  uiStateTable, fmtMs };

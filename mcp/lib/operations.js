@@ -349,9 +349,10 @@ const OPERATIONS = [
       consequences: { mcp: "consequences", cli: "--consequences" }, affects: { mcp: "affects", cli: "--affects", type: "list" },
       supersedes: { mcp: "supersedes", cli: "--supersedes", type: "list" },
       kind: { mcp: "kind", cli: ["--discovery", "--kind"], parsed: true }, // --discovery: kind discovery
+      cause: { mcp: "cause", cli: "--cause" }, target: { mcp: "target", cli: "--target" }, // 1.41: a lesson's (kind lesson)
     },
     call: (S, dir, o) => S.decide(dir, o.name, { title: o.title, decision: o.decision, context: o.context, consequences: o.consequences,
-      affects: o.affects, supersedes: o.supersedes, kind: o.kind }),
+      affects: o.affects, supersedes: o.supersedes, kind: o.kind, cause: o.cause, target: o.target }),
   },
   {
     // the Stop hook's decision — for MCP-only clients, and the CLI's (the message: --message, the words or stdin)

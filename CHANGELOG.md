@@ -3,6 +3,188 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.41.0] — 2026-11-26
+
+The gardening round — tending what agents write code in: the guidance they read (each confirmed review finding's cause
+recorded as a lesson and folded back into the steering once, at the finish; Reference Examples to copy), the stakes with a
+number (METRIC lines a project check prints, compared at every finish; a time budget for the checks themselves) and early
+weeding (the tests that no longer earn their place, dev-guardian's own findings below its gate). Nothing 1.40.0 passed is
+refused and nothing new blocks (at dev-guardian's default `--fail-on high`) — every new signal is a warning or a report,
+and a feature where nothing happened (no lesson, no METRIC line, no budget, no table) sees nothing new; at size m / l the
+design gains one section and one doctor warn. Released with dev-guardian 3.17.0, which reads the same METRIC line and
+gives suppressions a check of their own (with an older dev-guardian the finish warning below names test-integrity
+findings only). No new tool, command, hook or dependency; the MCP tool list +64 characters (44,765 of 45,000), SKILL.md
++93 bytes (15,260 of 15,360).
+
+### Added
+- **Lessons — why a confirmed review finding happened.** `spec_decide {kind: "lesson", cause, target}` (CLI
+  `dev-spec decide <feature> --kind lesson --cause <code> [--target <path>]`) records it in `decisions.md`: one of five
+  causes — `guidance-missing` · `guidance-wrong` · `example-copied` · `tool-friction` · `model-error` — and the file a fix
+  changes (a project path; it must exist for `guidance-wrong` / `example-copied`). In subagent execution a fix round asks the
+  implementer each finding's cause (its fix report's `### Causes`, never a guess); the controller checks the three a file
+  can show before recording one, and a rule the user states at a checkpoint goes straight to steering, no lesson. Every
+  later brief of the feature quotes its open lessons (at most 5, 1,200 characters); `spec_finish` lists them (`lessons`
+  {open, closed, unread}) in ONE warning, the last, never a blocker, ending with the closing call (`spec_decide` and its
+  `decide … --supersedes` CLI line, the title and decision as placeholders); `spec_metrics` counts them by cause, per
+  feature and for the project over active AND archived features, with `repeated` — one cause and file in two features or
+  more (a file outside `.specs/`); a retro's amendments start from them. `/spec-review feedback` records the cause of each
+  confirmed fix too. A lesson, and the decision that only closes lessons, is neither an ADR nor a catalog row.
+- **The finish batch — ONE question.** `/spec-finish` asks one question for every warning that needs the user, in this
+  order: dev-guardian's, test integrity's, the metrics', the lessons'. Per lesson its amendment, grouped by target — a
+  steering line (`constitution.md`, `tech.md` / `structure.md`, a track's file, `ui.md`'s Taste), a Reference Examples row
+  naming the good file, a backlog item (`friction-<check>` for a check, else `platform-<topic>`), or, for a target in the
+  feature's own folder, a spec change; per metric or finding what the user fixes or accepts. The answers are applied with
+  each file edited once, one decision superseding the lessons closes them, and finish runs again. A guidance line ends
+  with `<!-- lesson <feature> D-n, <date> -->` (+ ` · dev-guardian: <rule_id>` for a dev-guardian finding) and is not
+  proposed when `AGENTS.md`, `CLAUDE.md` or a steering file already holds that key — dev-guardian 3.17's
+  `/guardian-improve` writes the same key.
+- **Reference Examples.** An optional `## Reference Examples` table in `.specs/steering/structure.md` — Pattern · Copy ·
+  Applies to (PT `Exemplos de Referência`, ES `Ejemplos de Referencia`): the files agents copy the shape of. A task's brief
+  quotes the rows for its files (an Applies-to glob that matches — a folder needs `/**` —, or the Copy file's own folder;
+  at most 6, 1,200 characters; a gone file named, never quoted; one file per Copy cell — two files are two rows: a cell
+  naming several paths anyway is quoted as written, never judged; a note after the one path — `path (note)` or
+  `path — note` — is no second file, whatever it names: the path is judged, the cell quoted as written; a `,` or `;`
+  note makes the cell a list, which is never judged); doctor's project-level `reference-examples` warns when a Copy file
+  is gone or rows past the first 30 are not read — never a fail, never an approval check, never an upgrade to-do. The
+  steering stub has no such section: a project without the table sees nothing.
+- **METRIC lines — numbers that get worse while the tests stay green.** A project check prints
+  `METRIC <name>=<number>[ <unit>][ better=lower|higher][ tolerance=<n>[%]]` (`metric-lines/1`, the line dev-guardian
+  3.17's `metrics` command reads too); `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read it
+  from a passing run's whole output, stdout and stderr apart, a byte-order mark at a stream's start dropped (1,000
+  candidate lines from the end, 20 names — a line past a bound is said; `finish --run` reads each check alone, under the
+  CLI's 64 MB cap, so it never reaches the reader's 64 MiB bound; several `_Verify:_` commands of one `done --run` are
+  read together and can reach it, and then `metricsDropped` says `readBytes`). Print a name on one stream: dev-guardian
+  reads a `2>&1` capture in print order, dev-spec stderr after stdout. The tick prints and stores the readings, never
+  judges. `spec_finish` compares each (check, name) with the latest OTHER feature's finish that
+  recorded it, archived ones included: `metrics`, each with its verdict (`new` · `within` · `improved` · `regressed` ·
+  `unjudged`) and `loosened` for a flipped or dropped `better=`, a raised or dropped tolerance or a changed unit (never
+  compared) — ONE warning for a reading worse past its stated tolerance or a loosened line, worded as what it is (the
+  number holds every change merged since, not only this feature's), never a blocker; `## Metrics` in the merge summary; a
+  ready written finish records the readings (`finished.metrics`) for the next one. No defaults: a reading is judged only
+  when the earlier line states both `better=` and `tolerance=`; the current line may only tighten them; values and
+  tolerances compare as the exact decimals printed and show as printed (120 → 122.4 at 2 % is `within`); the delta and
+  the applied tolerance print as numbers. `spec_metrics` (the project) lists each reading across the finishes
+  (`measured`, the last 10). An MCP report carries none — the CLI reads the whole output.
+- **Silent Regressions (size m / l).** The m / l design gets `## Silent Regressions` — one row per number (its METRIC name
+  in a code span, the check that prints it) or "None — why". Doctor warns `design-silent-regressions` until it is
+  answered — never a refusal, and a design approved before 1.41 is not asked; finish warns when no passing check printed a
+  readable METRIC line of a name a row declares (a malformed line or one past a reader bound is not read; `metricsUnmeasured`,
+  once `finish --run` ran every check); a project design template without the heading gives an m / l feature the built-in
+  section at the end, and `templates check` warns `silent-missing` on it.
+  Sizes s, xs and none get nothing new.
+- **The friction budget (report only).** `_Budget: <check> <duration>_` lines in `.specs/steering/tech.md` (`ms` · `s` ·
+  `m` / `min` · `h`; 1 ms – 24 h). `done --run` / `finish --run` (from the spawn to the command's exit) and Claude Code's
+  observe hook (the tool's `duration_ms`) time each run of a check made as ONE command into the git-ignored
+  `.specs/.execution/timings.jsonl` (this machine's; past 64 KB each check keeps its newest 10 passing runs).
+  `spec_metrics` (the project) → `friction`: the median of a check's last 5 passing runs (3 needed) against its budget —
+  `over` · `within` · `few-runs` · `no-runs` · `unbudgeted`, unreadable lines in `invalid` (a command in the check's
+  place too). While a check is over, `spec_next_action`'s finish step ends with the platform item to propose
+  (`dev-spec backlog add "friction-<check>" …`), until the backlog or a feature has that name. Never a gate, a refusal or
+  a doctor entry; pick a budget ≥ 2× a quiet run.
+- **The Test Value rule and an optional pruning pass (+tdd).** The testing-standards template of NEW +tdd projects (EN /
+  PT / ES) says a test earns its place when it guards an AC or a past bug and fails when that behaviour breaks (adding it
+  to an existing `testing-standards.md` re-reviews every +tdd feature it governed — add it between features);
+  test-patterns.md holds the criteria (`same-path`, `no-kill`), the never-pruned list (a criterion's last planned test
+  first) and "remove a test whole". `/spec-review <feature> prune`: the map from `trace_check {matrix, code}` (which
+  criteria each test covers; a test of an AC a shipped feature retired is never pruned — it needs a `/spec-change` on its
+  feature), the reviewer's prune mode (`same-path` / `no-kill` candidates, then prune · keep · strengthen; a prune names
+  what still guards each criterion), probes only on a tracked, clean file restored from a hash-checked copy, each test of a
+  pair run alone, no probe — and so no pruning — without a shell; each pruning approved by the user, recorded through
+  spec_impact's `retire` and, at guard level tests, `feature protect --accept --reason "pruned: …"` (without guard tests
+  the test-plan re-approval is the record dev-guardian's finding is answered with), then the re-approvals (unforced: every
+  criterion keeps a planned test). No new tool argument.
+- **dev-guardian's own findings below the gate.** finish names the new findings that do not block from dev-guardian's
+  test-integrity check (`guardian-test-integrity`: a skip, a deleted test file, fewer assertions) and, with dev-guardian
+  3.17, its suppressions check (`guardian-suppressions`: an added `nosemgrep`, `nosec`, `eslint-disable` … with no reason
+  that names no rule, or a whole-file one with no reason even when it names its rules; one with a reason is only counted)
+  in ONE warning, never a blocker — each labelled by its check (weakened
+  test · suppression added), the first 3 by severity, the rest counted, the head naming only the checks they come from (and
+  the suppressions check while a `guardian-suppressions: ` note says it left changed files unread); a finding the report
+  lists as blocking is never one — and stores them as `finishChecks.guardian.testIntegrity` {count, top, kinds}; 1.40 only
+  counted them in "(N new below it)". Both checks read the change since the feature's base, which only `finish --run` hands
+  the launcher: a run reported over MCP names none (the MCP run hint says so), nor does a `--compact` report. The
+  verdict's line says "the change since <base> checked for weakened tests (and, with dev-guardian 3.17+, added
+  suppressions)" — one text, true for every version.
+
+### Changed
+- **finish's warnings:** the new ones come in the batch's order — dev-guardian's findings below the gate the last of
+  dev-guardian's warnings, then the METRIC warnings, …, the lessons' the very last; every warning 1.40 gave keeps its place.
+- `spec_decide`'s `kind` takes `lesson`, with `cause` and `target` (a `cause` / `target` on another kind is refused,
+  nothing written); `decisions.md` entries of `_Kind: lesson_` carry `_Cause:_` / `_Target:_` and a **Lesson** / **Lição**
+  / **Lección** paragraph, read only inside a lesson (a decision's own `**Lesson:**` paragraph reads as in 1.40).
+- The catalog's decisions `count` is the items it lists, its decisions and discoveries (1.40: every entry).
+- `dev-spec metrics` with no active feature still prints the project's lessons, friction and measured readings.
+- The reviewers: spec-reviewer has a prune mode; a suppression the diff adds with no reason is a question, Important when it
+  hides a security scanner (`nosemgrep`, Bandit's `nosec`, `gitleaks:allow`); a diff that loosens a METRIC line is
+  Important. spec-implementer never loosens, flips, re-units or drops a METRIC line to pass.
+- At a non-default `--fail-on medium` an approved test pruning blocks like any medium finding (dev-guardian reads no
+  dev-spec approval; at the default `high` it never blocks).
+- The references: verification.md (The friction budget, Metrics that regress silently, dev-guardian's findings below the
+  gate, a pruning under dev-guardian's gate), subagent-execution.md (§7b Lessons, The pruning pass), test-patterns.md (Test
+  value and pruning), steering-templates.md (friction budgets, Reference Examples), phase-guide.md (Silent Regressions),
+  tooling-reference.md; `/spec-report metrics` names the lessons, the friction and the measured readings; the READMEs'
+  `spec_decide` row and `/spec-review` modes.
+
+### Fixed
+- **The `# nosec` examples name the rule and the reason** — `# nosec <id>  # <reason>` (finish's hint EN / PT / ES,
+  AGENTS.md, verification.md): the bare `# nosec` they showed silences every Bandit rule on its line.
+- dev-guardian's report text (a finding's rule and file, in the blocker, the merge summary and the warnings) drops the bidi
+  controls and the zero-width space (U+200B, U+200E–U+200F, U+202A–U+202E, U+2066–U+2069): a U+202E reordered the line.
+  ZWNJ and ZWJ stay — they spell names (Persian, Indic, an emoji sequence). The feature's own files are compared the same
+  way, so such a file is still `[this feature]`.
+- The gate's `--fail-on` is the LAST one of the first part of the command that has one, as dev-guardian reads it (the
+  command cut at `;` / `&&` / `|` / a line break: `cd . && <check> --fail-on medium` reads medium, a later `echo --fail-on
+  low` is not read; a quoted one is not read, as in 1.40): 1.40 read the first, so `--fail-on low --fail-on high` said "no
+  new finding at or above low".
+- finish's hint for a blocked gate says a weakened or deleted test (dev-guardian's test-integrity check) takes no inline
+  suppression: restore the test, or the user decides — at `--fail-on medium` an approved pruning blocks by design. It
+  offered only the inline suppression.
+
+### Compatibility
+- **1.40 garbles a lesson:** an older engine reads `_Kind: lesson_` as a decision, its `_Cause:_` / `_Target:_` lines as
+  the Decision text and the `**Lesson:**` paragraph as Context, and exports it — and the decision that closes it — as an
+  ADR and a catalog row, closed or not. Update every machine that exports ADRs or the catalog before recording lessons.
+- **A 1.40 tick or finish has no metrics:** its runs carry no readings and its finish no `finished.metrics`, so the first
+  finish after the project adopts METRIC lines compares nothing (`new`). Git's merge driver of either version keeps the
+  later run or finish whole — its readings, or none when that record came from 1.40; it needs no update.
+- **Nothing migrates:** no `spec_upgrade` migration; a design approved before 1.41 is not asked for Silent Regressions; an
+  existing `testing-standards.md` is left as it is; `timings.jsonl` is git-ignored, each machine's own.
+- **dev-guardian:** the suppressions label needs dev-guardian 3.17.0; an older one (3.8+) gives its test-integrity findings
+  only, labelled as weakened tests, and nothing else changes.
+
+Designed for this round and cut, each by what it would have cost: a default tolerance (an absent one read as 0 warned on
+46 % of unchanged benchmark pairs), METRIC readings over MCP (a summary is the reporter's text; the CLI reads the whole
+output), a judgment at the tick (a walk of every feature per tick), the friction budget as a doctor entry or a size rule
+(it would warn every feature at every size) and a per-run time in `.state.json` (a per-machine number churning a committed
+file), an engine pruning pass with `_Pruned:_` markers (the matrix already holds the candidates; a prune task naming the
+deleted file failed trace on 43 % of real test files), a `retired-ac` pruning criterion (pruning a retired AC's last test
+needs a gate that honours the user's reasoned approval; the trace rule tried for it took a namesake's or a reused AC ID as
+retired), a cause enum in the tool schema (+156 characters of the round's 235), and a slot in the Silent Regressions
+scaffold (a placeholder would refuse every fresh m / l design).
+
+**Cost.** A run without a METRIC line costs the reader one `lastIndexOf`; 64 MiB of output with one line reads in ~1× a
+bare `lastIndexOf` of it (a split would be 6–9×), and a long coloured line is cleaned only as far as its 512-byte bound.
+finish without a reading opens no other feature; with readings it opens each other feature's state once. `spec_metrics`
+reads each feature's state and `decisions.md` once — the lessons ride the metrics' one walk. The findings below
+dev-guardian's gate make no file-system call; `reference-examples` `lstat`s each Copy path's folders once per engine call
+(spec_upgrade over 6 features as over 2), never lists one (the lean doctor skips it once another check warns); the timings
+log is read once per engine call (at most 4 × 64 KB).
+
+### Tests
+- `node mcp/test.js` 3156 assertions (was 3014), `node cli/test-cli.js` 719 (was 707). New files by area: 09
+  `09-evidence-friction.js` / `09-evidence-metrics.js` and their CLI twins `09-evidence-run-friction.js` /
+  `09-evidence-run-metrics.js` (real children through `done --run` / `finish --run`), 12 `12-lifecycle-lessons.js`, 15
+  `15-quality-reference-examples.js`; W in each suite's `09-evidence-guardian.js`. The METRIC contract is one fixture,
+  `mcp/tests/fixtures/metric-lines.v1.json` (36 lines, 5 whole outputs, 21 judge cases — the reader passes all 62), byte
+  for byte dev-guardian 3.17.0's, both suites pinning the same sha256. The new cost checks count where the property is a
+  count — spec_metrics' one walk (each feature's state and `decisions.md` opened once; a twin without lessons makes the
+  same calls), finish's lookup (one more open per other feature, none without a reading), the friction verdict's bytes
+  read, W's none —, and time only the METRIC reader's CPU walk, as a ratio against a bare `lastIndexOf`. Each mutation
+  list was written before its fixtures: the pruning pass and W 64 of 64, the friction budget 103 of 103, METRIC lines 115
+  of 116 (the one left a cost guard, timed with and without it: 16.6 against 39.3 ms on 4 MiB), the lessons and Reference
+  Examples 75 of 76 (one equivalent guard deleted), the merge's 6 of 6 (a second lessons walk, the temporary one back, the
+  read not handed on, the warning order swapped three ways).
+
 ## [1.40.0] — 2026-11-23
 
 The +ui track's fourth round over the code — every item 1.39 cut or left was designed again on fresh measurements, and the

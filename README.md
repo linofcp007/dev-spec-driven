@@ -169,7 +169,7 @@ are yours to type, so their descriptions stay out of its context. As a plugin th
 | | `/spec-change [impact \| decide \| track ±x]` | After an approval: what an edit touches, a decision-log entry, a track on or off |
 | execute | `/executeTask [--subagents] \| commit` | The next task (or task N) with evidence; `commit` drafts a commit citing the spec |
 | | `/eval [run \| baseline \| migrate]` | (+ai) The local eval harness with your own API key; a model migration gated on it |
-| review | `/spec-review [branch \| converge \| simplify \| feedback \| prompt]` | Review against the spec — the branch, a converge or simplification pass, review comments, a prompt change |
+| review | `/spec-review [branch \| converge \| simplify \| prune \| feedback \| prompt]` | Review against the spec — the branch, a converge, simplification or pruning pass, review comments, a prompt change |
 | close | `/spec-finish` | Verify it is really done, draft the merge summary, then merge locally or keep the branch |
 | | `/feature [archive \| restore \| rename \| remove \| flow]` | A feature's lifecycle; `flow design-first` for work that starts from an architecture |
 | adopt | `/spec-adopt [scan \| reverse \| coverage \| import]` | An existing codebase: inventory it, reverse-engineer specs, measure coverage, import Kiro / spec-kit / OpenSpec / plans / BMAD |
@@ -207,7 +207,7 @@ calls the same engine:
 | `spec_impact` | What an edit after an approval touches (ACs, sections, tests, tasks); `reopen` unticks the affected done tasks (never a removed criterion's: `retire` lists those) |
 | `spec_add_track` | Turn a track on for an existing feature (additive) — `remove: true` turns one off, files kept |
 | `spec_feature` | Archive · restore · rename · remove a feature (remove needs `confirm: true`), or set its `flow` |
-| `spec_decide` | Append a decision or a discovery (`D-n`) to `decisions.md`, with what it affects (checked) |
+| `spec_decide` | Append a decision, a discovery or a lesson (`D-n` — why a confirmed review finding happened: its cause, the file to fix) to `decisions.md`, with what it affects (checked) |
 | `ears_validate` | Lint EARS criteria — SHALL / DEVE / DEBE, stable IDs, vague words, placeholders (EN / PT / ES) |
 | `trace_check` | Every AC covered by a task (and a test on +tdd), phantom refs; `code` finds T-IDs in test files, `matrix` the traceability matrix |
 | `spec_doctor` | One health check → "ready to advance?" (EARS, placeholders, trace, sections, evidence, gates, steering) |
@@ -324,7 +324,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (32 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine: 30 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
+│   ├── lib/engine/                   ← the engine: 32 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← localized content (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)

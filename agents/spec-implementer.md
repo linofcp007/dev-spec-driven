@@ -123,7 +123,8 @@ run. The report's RED and GREEN runs of the target tests are the cycle's proof.
 
 - **Never edit a planned test's expectation, and never skip, delete or weaken a test or an assertion to make it pass.** If a
   test looks wrong, stop and report BLOCKED with the evidence — a wrong test is a spec problem the
-  human decides, not an implementation detail.
+  human decides, not an implementation detail. The same for a check's `METRIC <name>=<value> … better= tolerance=` line: never
+  loosen its tolerance, flip or drop its `better=`, change its unit or remove it to pass — a number that got worse is reported.
 - **Never edit the design's visual reference** (a design export or an approved HTML prototype — the files `design.md →
   [UI] UI States` names) to make a visual review pass. A reference that looks wrong is a design problem: report BLOCKED
   with the difference.
@@ -203,7 +204,8 @@ Write the full report to the report path, in the brief's language:
 - Self-review findings and any concerns
 
 On a fix round, **append** a fix report: what changed per finding, the covering tests, the command
-and the output.
+and the output — asked for causes, first a `### Causes` block, one `Cause: <code> — <what led you there>` per finding
+(`guidance-missing` · `guidance-wrong` · `example-copied` · `tool-friction` · `model-error`; never a guess — say you don't know).
 
 Then reply with ONLY (under 15 lines — the detail lives in the file):
 - **Status:** DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED

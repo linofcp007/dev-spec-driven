@@ -35,7 +35,8 @@ how they came to be — the releases and review findings — is in History at th
 - **English-STABLE tokens** — matched literally, never translated: AC / SC / test IDs (`US-1.AC-1`, `SC-001`, `T-01`, `EC-1`,
   `NFR-1`), `D-n`, the markers `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]`/`[DIST]`/`[API]`/`[UI]`/`[OBS]`/`[DATA]`/`[PORT]` (case-sensitive)
   and a pack's own, `[US1]`/`[US2]`/`[shared]`/`[P]`, `> **TODO**`, `[NEEDS CLARIFICATION]`, every `_Marker:_`
-  (`_Requirements:_` … `_Supersedes:_`, the decision log's `_Kind:_` / `_Date:_` / `_Affects:_`, `_Outcome:_` with `go` /
+  (`_Requirements:_` … `_Supersedes:_`, the decision log's `_Kind:_` / `_Date:_` / `_Affects:_` and — 1.41, a lesson's — `_Cause:_`
+  / `_Target:_` with the five cause codes `guidance-missing` … `model-error`, `_Outcome:_` with `go` /
   `no-go` / `pivot`), `**Checkpoint:**`, the Kind values `example` / `property`, the steering front matter
   (`inclusion: always|fileMatch|manual`, `fileMatchPattern`), `{{name}}`…`{{date}}`, every stable code (check ids, `step`,
   reasons, statuses), the ` ```mermaid ` / ` ```typescript ` fences and the eval harness's `## System` / `## User Template`.
@@ -46,7 +47,9 @@ how they came to be — the releases and review findings — is in History at th
   spike.md's headings, the Kind column header, the converge heading (`Phase: Convergence` / `Fase: Convergência` /
   `Fase: Convergencia`), and since 1.35 the design-system registry's first header cell (Component / Componente(s), Token(s) —
   `RE_DS_COMPONENT_HEAD`, `RE_DS_TOKEN_HEAD`) and a usage row's kind word (Reuse / Reutilizar, Extend / Estender / Extender, New / Novo / Nuevo —
-  `RE_DS_KINDS`). **A new or renamed translated heading needs its synonym**, or doctor reports the section missing.
+  `RE_DS_KINDS`), since 1.41 a lesson's label (**Lesson** / **Lição** / **Lección** — `RE_LESSON_LABEL`, read only inside a
+  lesson entry) and structure.md's `## Reference Examples` / `Exemplos de Referência` / `Ejemplos de Referencia` with its
+  column headers (`REF_EXAMPLES_SYN`, `REF_EXAMPLES_COLS`). **A new or renamed translated heading needs its synonym**, or doctor reports the section missing.
 - **Terminology** mirrors `ROADMAP_I18N`: PT keeps the "Feature / Tasks / Tracks" anglicisms, ES translates them (Función /
   Tareas). Eval sample JSON is data, as-is; its prose is localized.
 - **The README, one file per language.** `README.md` (the reference), `README.pt.md` (European, no Brazilianisms) and
@@ -119,6 +122,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.37.0 review 1** — the paste-blocked rule's pt-BR read "gestores de senhas"; software that manages is a "gerenciador" in
   Brazil. `gestor` / `gestores` → gerenciador(es) in `PTBR_WORDS` (a word rule, not that string's override): the pt strings
   say "gestor" of software only — a person in charge is "o responsável". The lint's `EU_ONLY` holds `gestor(es)`.
+- **1.41.0** — the lesson kind's label read in three spellings each (Lição / Licao, Lección / Leccion — accents optional, as
+  `DECISION_LABELS`) and only inside a lesson entry: in a decision a `**Lição:**` paragraph stays its text. Its `_Cause:_` codes are
+  never translated (no `causes` display names — the codes print as codes in every language). Review 1 (R1-L-8): the brief's
+  "não os repitas" / "nunca os copies, e diz no teu relatório" kept their European second person in pt-BR — `repitas` / `copies`
+  joined `PTBR_YOU_SUBJ`, and "e diz no teu relatório" is an override (the imperative chain only follows an imperative, never a
+  negated subjunctive). The finish warning's closing call keeps its placeholders inside the `{…}` snippet (held whole in stage 0):
+  their PT words are ones pt-BR shares (alvo, motivo — never ficheiro).
 
 ### Localization gotchas
 - **1.19** — the eval run showed agents relaying `dev-spec done <f> <n> --run` to users who had no `dev-spec` on PATH (only

@@ -451,6 +451,143 @@ exports.run = async ({
   ok(steersToPr.length === 0 && readmePt.length > 1000 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
     "no command/skill/agent text steers toward PRs or CI; README.pt.md is read as PT, README.es.md as ES (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
 
+  // 1.41.0 (CRIT_G1 #6): a `# nosec` example a user or an agent copies names the rule and gives its reason — `# nosec <id>  # <reason>`,
+  // the form Bandit takes silently (a bare `# nosec` silences every Bandit rule on the line, and dev-guardian 3.17 reports it as a
+  // blanket suppression). A property over every surface that teaches one — the prose files above, the i18n sources (every language),
+  // the CLI and the hooks —, never a list of the places that held one. A directive NAMED without its `#` (`nosec`, a reviewer's
+  // list of scanner directives) is no example. The guard's own reader is checked on both sides.
+  {
+    const RE_BARE_NOSEC = /#[ \t]*nosec\b(?![ \t]+(?:<id>|[A-Z]{1,2}\d{2,4})(?:,[ \t]*(?:<id>|[A-Z]{1,2}\d{2,4}))*[ \t]+#[ \t]*\S)/gi;
+    const nosecFiles = proseFiles.concat(["mcp/lib/i18n", "cli", "hooks"].flatMap((d) => walkFiles(path.join(root, d)).filter((p) => /\.(?:js|cjs|mjs|md)$/.test(p))));
+    const bareAt = nosecFiles.flatMap((p) => (fs.readFileSync(p, "utf8").match(RE_BARE_NOSEC) || []).length ? [path.relative(root, p)] : []);
+    const flags = (s) => (s.match(RE_BARE_NOSEC) || []).length > 0;
+    all("1.41.0 (CRIT_G1 #6): every `# nosec` example names the rule and its reason (`# nosec <id>  # <reason>`) — the prose, the i18n sources of every language, the CLI, the hooks; the reader flags a bare one and passes the named forms (got " + JSON.stringify(bareAt) + ")", {
+      none: bareAt.length === 0 && nosecFiles.length > 100,
+      reader: ["(nosemgrep: <rule> -- <reason>, # nosec)", "`# nosec`", "x = 1  #nosec", "# nosec B602", "# NOSEC <id>"].every(flags) &&
+        !["# nosec <id>  # <reason>", "# nosec <id>  # <motivo>", "# nosec B602, B607  # reviewed: constant command", "`nosec`, `gitleaks:allow`"].some(flags),
+      taught: ["en", "pt", "es", "pt-BR"].every((l) => /# nosec <id> {2}# </.test(S.msg(l).guardian.fixHint("x"))),
+    });
+  }
+
+  // 1.41.0 chain P — the gardening round's prose: the reviewer's suppression line (CRIT_X D8.9).
+  {
+    const rd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n").replace(/\s+/g, " ");
+    const rev = rd("agents", "spec-reviewer.md");
+    all("1.41.0 (CRIT_X D8.9): spec-reviewer — a suppression the diff adds with no reason is a question, Important when it hides a security scanner (nosemgrep, Bandit's nosec, gitleaks:allow); a reasoned one stays Silenced on purpose", {
+      reviewer: /\*\*Silenced on purpose\*\* — a rule the code switches off with its reason beside it[^.]*\. A suppression the diff adds with no reason is a question \(⚠️ — what does it silence, and why\?\), and \*\*Important\*\* when it hides a security scanner \(`nosemgrep`, Bandit's `nosec`, `gitleaks:allow`\): no scan sees that line again\./.test(rev),
+    });
+
+    // CRIT_S4 (KEEP, #6): the Test Value rule — the testing-standards template of a NEW +tdd project (EN / PT / ES, pt-BR derived),
+    // the reference's template, test-patterns.md (the rule, new projects only and why, the criteria, the never-pruned list, remove a
+    // test whole). A 1.40 stub verbatim (the template without the section) still reads as a template.
+    const stub = (l) => {
+      const p = path.join(tmp, "p141-tv-" + l);
+      S.initProject(p, ["tdd"], l);
+      return fs.readFileSync(path.join(p, ".specs", "steering", "testing-standards.md"), "utf8");
+    };
+    const tv = { en: stub("en"), pt: stub("pt"), es: stub("es"), "pt-BR": stub("pt-BR") };
+    const old = path.join(tmp, "p141-tv-old");
+    S.initProject(old, ["tdd"], "en");
+    fs.writeFileSync(path.join(old, ".specs", "steering", "testing-standards.md"), tv.en.slice(0, tv.en.indexOf("\n## Test Value")) + "\n");
+    S.createFeature(old, "Cart", ["tdd"]);
+    const oldSteering = (S.specDoctor(old, "cart").checks || []).find((c) => c.id === "steering") || {};
+    const tp = rd("skills", "dev-spec-driven", "references", "test-patterns.md"), stt = rd("skills", "dev-spec-driven", "references", "steering-templates.md");
+    // (1.41.0 review 2, the user's ruling on R2-PZ-1: `retired-ac` cut — the pass keeps same-path / no-kill, never removes a
+    // criterion's last planned test, and names a retired AC's test as one needing a /spec-change on its feature)
+    all("1.41.0 (CRIT_S4 #6): the Test Value rule — a new +tdd project's testing-standards.md (EN / PT / ES / pt-BR), the reference's template, test-patterns.md (new projects only — adopting it re-reviews every approved +tdd feature —, the two criteria, the never-pruned list with a criterion's last planned test first, a retired AC's test never pruned, a test removed whole); the 1.40 stub verbatim still a template (got " +
+      JSON.stringify({ tails: Object.fromEntries(Object.entries(tv).map(([l, t]) => [l, t.slice(t.lastIndexOf("\n## "))])), oldSteering }) + ")", {
+      en: /\n## Test Value\n- A test earns its place when it guards an AC \(its T-ID in the test plan\) or a past bug \(a bugfix's regression test\), and fails when that behaviour breaks\.\n- The others — the same path as another test, green when its behaviour breaks — go to the pruning pass \(\/spec-review <feature> prune\): removed whole, only with the user's approval, never mid-task, never a criterion's last planned test\.\n$/.test(tv.en),
+      pt: /\n## Valor dos Testes\n- Um teste merece o seu lugar quando guarda um AC \(o seu T-ID no plano de testes\) ou um bug passado[^\n]*\n- Os outros — o mesmo caminho de outro teste, [^\n]*\(\/spec-review <feature> prune\): removidos por inteiro, só com a aprovação do utilizador, nunca durante uma tarefa, nunca o último teste planeado de um critério\.\n$/.test(tv.pt) &&
+        /só com a aprovação do usuário, nunca durante uma tarefa, nunca o último teste planejado de um critério\.\n$/.test(tv["pt-BR"]),
+      es: /\n## Valor de las Pruebas\n- Una prueba se gana su lugar cuando protege un AC \(su T-ID en el plan de pruebas\)[^\n]*\n- Las demás — la misma ruta que otra prueba, [^\n]*\(\/spec-review <feature> prune\): se eliminan enteras, solo con la aprobación del usuario, nunca a mitad de una tarea, nunca la última prueba planificada de un criterio\.\n$/.test(tv.es),
+      noRetired: Object.values(tv).every((t) => !/retired|retirados/.test(t.slice(t.lastIndexOf("\n## ")))),
+      oldStub: oldSteering.status === "warn" && /testing-standards\.md \(4\)/.test(oldSteering.detail || ""),
+      reference: /## Test Value - A test earns its place when it guards an AC \(its T-ID in the test plan\)[^#]*- The others — the same path as another test, green when its behaviour breaks — go to the pruning pass \(`\/spec-review <feature> prune`\): removed whole, only with the user's approval, never mid-task, never a criterion's last planned test\./.test(stt),
+      rule: /\*\*The rule\.\*\* A test earns its place when it guards an AC — its T-ID in the test plan — or a past bug \(a bugfix's regression test\), and fails when that behaviour breaks\./.test(tp),
+      newOnly: /for \*\*new projects only\*\*: an existing project that adds it to `\.specs\/steering\/testing-standards\.md` gets `steering-changed-since-approval` on every \+tdd feature whose requirements or design that file governed — a re-review and a re-approval each —/.test(tp),
+      criteria: !/retired-ac/.test(tp) && /\| Criterion \| What it means \| Where it comes from \| \|---\|---\|---\| \| `same-path` \|/.test(tp) &&
+        /\| `same-path` \|[^|]*\| the reviewer's proposal, confirmed by probes: every break that reddens this test reddens the kept one \|/.test(tp) && /\| `no-kill` \| it stays green when the behaviour it names breaks \|/.test(tp),
+      retired: /A test of an AC a shipped feature retired \(the matrix's `supersededBy` without `supersedePending`\) is never pruned: it fails once the superseding feature ships, so the pass names it and tells the user it needs a `\/spec-change` on its own feature\./.test(tp) &&
+        !/\*\*retrace\*\*/.test(tp) && /is \*\*strengthened\*\* \("When a test is wrong"\), never removed/.test(tp),
+      noShell: /Without a shell \(an MCP client that runs no command\) no probe runs, so the pass proposes no pruning\./.test(tp),
+      never: /\*\*Never pruned:\*\* a criterion's last planned test — every AC, EC, NFR or SC the test covers keeps another test-plan entry, or the test stays \(trace asks every AC for one, the test-plan approval refuses a plan without it\) · a bugfix's regression test while the code it guards lives · an eval or load row \(outside code — the eval regression set grows, never shrinks\) · a critical flow's twice \/ two-at-once \/ another-user rows/.test(tp),
+      whole: /\*\*Remove a test whole\.\*\* A pruned test is deleted — its case, or its file when nothing in it is kept —, never left as an empty body, a skipped case or a constant assertion/.test(tp),
+      notMidTask: /never mid-task: a test that looks worthless during a task is a concern in your report \("When a test is wrong"\), never a deletion/.test(tp),
+    });
+
+    // CRIT_S4 (PROSE, must-fixes 1–5 and 7; CRIT_X D5): the optional /spec-review <f> prune pass — the command's mode, the protocol
+    // (subagent-execution.md → The pruning pass), the reviewer's prune mode, SKILL.md's pointer, verification.md's --fail-on medium note.
+    const cmdRaw = fs.readFileSync(path.join(root, "commands", "spec-review.md"), "utf8");
+    const cmd = rd("commands", "spec-review.md"), sub = rd("skills", "dev-spec-driven", "references", "subagent-execution.md");
+    const ver = rd("skills", "dev-spec-driven", "references", "verification.md"), skill = rd("skills", "dev-spec-driven", "SKILL.md");
+    const log = rd("CHANGELOG.md").slice(0, rd("CHANGELOG.md").indexOf("## [1.40.0]")); // the 1.41.0 entry
+    const desc = (/^description: (.*)$/m.exec(fs.readFileSync(path.join(root, "agents", "spec-reviewer.md"), "utf8")) || [])[1] || "";
+    all("1.41.0 (CRIT_S4 #1–5, #7; CRIT_X D5): the /spec-review prune pass, prose — the map from trace_check {matrix, code}, probes only on a tracked clean file with a hash-checked copy-restore and each test alone, never `git diff --quiet` alone, no shell no probe, the batch (rows, retire, _Implements:_, removed whole, the accept), the churn; the reviewer's prune mode; SKILL.md; --fail-on medium blocks like any medium; review 1 (R1-PZ-3): .execution/ made with its .gitignore; review 2 (the user's ruling on R2-PZ-1): `retired-ac` cut — never a criterion's last planned test, a retired AC's test named for a /spec-change, never pruned; the verdict names each criterion's guard; the re-approvals complete unforced", {
+      hint: /^argument-hint: "\[feature\] \[branch \| converge \| simplify \[--subagents\] \| prune \| feedback <comments> \| prompt\]"$/m.test(cmdRaw),
+      command: /\*\*prune\*\* — optional, a \+tdd feature with every task done \(or a finished one, which then reopens\)/.test(cmd) && !/retired-ac|retrace/.test(cmd) &&
+        /The map: `trace_check \{name, matrix: true, code: true\}` \(each row's `tests\[\]\.files`\) — never a criterion's last planned test \(an AC, EC, NFR or SC left with none\) nor an eval \/ load row; a test of an AC a shipped feature retired \(`supersededBy` without `supersedePending`\) is never pruned: it fails once the superseding feature ships, so name it — it needs a `\/spec-change` on its own feature\./.test(cmd) &&
+        /its `same-path` \/ `no-kill` candidates with their probe requests, then prune \(what still guards each criterion the test covers\) · keep · strengthen per candidate/.test(cmd) &&
+        /\(test-plan, then tests, then tasks — each unforced: every criterion keeps a planned test; on a finished feature execution and a new finish too\)/.test(cmd) &&
+        /a tracked, clean file only, restored from a hash-checked copy, each test of a pair run alone; no shell, no probe, so no pruning/.test(cmd) &&
+        // (review 2, RX-2 ruled: the accept at guard level tests only — on a guard-off project it would start a protected-tests
+        // list with later warnings of its own; there the test-plan re-approval answers dev-guardian's finding)
+        /at guard level tests each changed protected test accepted \(`feature protect <feature> <file> --accept --reason "pruned: …"` — the record dev-guardian's test-integrity finding is answered with; without guard tests that record is the test-plan re-approval\), then the re-approvals\./.test(cmd),
+      section: /## The pruning pass \(optional, before finishing\)/.test(sub) && /It never runs mid-task: an implementer who thinks a test worthless reports it as a concern\./.test(sub),
+      map: !/retired-ac|retrace/.test(sub) &&
+        /1\. \*\*Baseline and the map\.\*\* The project checks \(or the full suite\) green on HEAD first\. Then `trace_check \{name, matrix: true, code: true\}`: each row's `tests` \(their T-IDs, `tests\[\]\.files`\) say which criteria every test covers\. Never a candidate: a criterion's last planned test \(a T-ID that is some AC, EC, NFR or SC row's only test entry — the test-plan approval refuses an AC with none\), nor a test of an `outsideCode` row \(eval, load\)\. A test of an AC a shipped feature retired \(a non-empty `supersededBy`, no `supersedePending`\) is never pruned: it fails once the superseding feature ships, so name it to the user — it needs a `\/spec-change` on its own feature\./.test(sub) &&
+        /It proposes the `same-path` \/ `no-kill` candidates with the probes each needs and, once you hand it their results, gives each candidate one verdict — prune \(naming what still guards EACH criterion the test covers\) · keep · strengthen/.test(sub),
+      tracked: /only on a file git tracks with no change of its own: `git ls-files --error-unmatch -- <file>` exits 0 and `git status --porcelain -- <file>` prints nothing\. Never `git diff --quiet` alone — an untracked file passes it, and `git checkout --` cannot restore it\./.test(sub),
+      // (R1-PZ-3: a finished feature's .execution/ went at Closing — the pass makes it again, ignoring itself)
+      gitignore: /\(under `\.specs\/<feature>\/\.execution\/` — no `\.execution\/` yet, as on a finished feature, whose Closing deleted it\? Create it with a `\.gitignore` holding `\*`\)/.test(sub) &&
+        /`\.specs\/<feature>\/\.execution\/prune-report\.md` \(git-ignored: a report, never evidence — no probe ran and no `\.execution\/` yet\? Create it with a `\.gitignore` holding `\*` first\)/.test(sub),
+      restore: /Copy the file's bytes aside \(under `\.specs\/<feature>\/\.execution\/`[^)]*\) and record its `git hash-object`; make the break; run \*\*each test of the pair alone, by name\*\*[^;]*; restore from the copy, then check that `git hash-object` gives the recorded hash and `git status --porcelain -- <file>` is empty again — a mismatch stops the pass\./.test(sub),
+      noShell: /\*\*No shell\*\* \(an MCP client that runs no command\): no probe, so the pass proposes no pruning\./.test(sub),
+      batch: /\*\*The user approves each pruning — never you\.\*\*/.test(sub) && /`spec_impact \{name, phase: "test-plan"\}` — its `retire` names the tasks whose `_Makes green:_` still cite a removed T-ID/.test(sub) &&
+        /a pruning that deletes a whole file also drops that file from every done task's `_Implements:_` \(left there, trace's missing-file gap fails doctor and blocks the finish\)/.test(sub) &&
+        /remove each test \*\*whole\*\* — its case, or the file —, never an empty body, a skip or a constant assertion/.test(sub),
+      record: /At guard level tests \(`meta\.guard: "tests"`\) the record of each protected file the pruning changed or deleted is the user's accept: `feature protect <feature> <file> --accept --reason "pruned: <criterion> — <what still guards it>"` \(a guard-down, asked with the file and the reason; the merge summary prints it\) — dev-guardian's test-integrity finding is answered with it\. Without guard tests the removed row in the approval history is the record \(no accept: it would start a protected-tests list of its own\): when dev-guardian asks why the test went, answer with that feature's test-plan re-approval\./.test(sub) &&
+        /recorded through spec_impact's `retire` and, at guard level tests, `feature protect --accept --reason "pruned: …"` \(without guard tests the test-plan re-approval is the record dev-guardian's finding is answered with\), then the re-approvals/.test(log) &&
+        !/recorded through spec_impact's `retire` and `feature protect --accept/.test(log),
+      churn: /re-approve `test-plan`, then `tests` \(every remaining planned T-ID still in code\), then `tasks`; on a finished feature also `execution` and a new `\/spec-finish` — `spec_drift` names the gone file until then, and each re-approval counts as rework in `spec_metrics`\. Each completes unforced: every criterion keeps a planned test \(step 1\), so trace finds no new gap\. So batch per feature/.test(sub),
+      failOnMedium: /At a non-default `--fail-on medium` an approved pruning blocks like any medium finding: dev-guardian reads no dev-spec approval/.test(ver) &&
+        /at `--fail-on medium` an approved pruning blocks like any medium finding/.test(sub),
+      reviewer: /- \*\*Prune mode\*\* — the candidate tests of a pruning pass/.test(rev) && /## Prune mode The question is "does each candidate test still earn its place\?"/.test(rev) && !/retired-ac|retrace/.test(rev) &&
+        /Inputs: the feature folder, the `trace_check \{matrix: true, code: true\}` result, the references folder path; on a second dispatch, the probe results\. Output: the `same-path` \/ `no-kill` candidates and the probes you ask for, then one verdict per candidate/.test(rev) &&
+        ["\\*\\*prune\\*\\* — name what still guards EACH criterion it covers, an AC or an EC / NFR / SC \\(the kept test's T-ID and file\\) — a criterion left with no other planned test is no prune;",
+          "\\*\\*keep\\*\\* — why it earns its place", "\\*\\*strengthen\\*\\* — its AC's only test"].every((s) => new RegExp(s).test(rev)) &&
+        /Never propose a test of the never-pruned list \(a criterion's last planned test, a bugfix's regression test while its code lives, an eval or load row, a critical flow's repetition or other-user rows\)/.test(rev) &&
+        /A test of an AC a shipped feature retired \(the matrix's `supersededBy` without `supersedePending`\) is never pruned: it fails once the superseding feature ships — name it, it needs a `\/spec-change` on its own feature\./.test(rev) &&
+        /`\*\*Pruning:\*\* N prune · M keep · J strengthen`/.test(rev) &&
+        /the controller runs every probe \(you never edit a file to make one\)/.test(rev) && /a pruned test is removed whole\./.test(rev),
+      description: /, a simplification or pruning pass — /.test(desc) && desc.length <= 250,
+      skill: /\(also the final review, converge, the simplification pass, the pruning pass\)\./.test(skill),
+      // the mode lists: the three READMEs' command row, tooling-reference's, a workflows row of its own
+      lists: [["README.md", /`\/spec-review \[branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt\]` \| Review against the spec — the branch, a converge, simplification or pruning pass,/],
+        ["README.pt.md", /`\/spec-review \[branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt\]` \| Revisão face à spec — o branch, uma passagem de convergência, de simplificação ou de poda,/],
+        ["README.es.md", /`\/spec-review \[branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt\]` \| Revisión frente a la spec — la rama, una pasada de convergencia, de simplificación o de poda,/]]
+        .every(([f, re]) => re.test(fs.readFileSync(path.join(root, f), "utf8"))) &&
+        /\| `\/spec-review branch \\\| converge \\\| simplify \\\| prune \\\| feedback \\\| prompt` \|[^\n]*· `prune`: optional — the tests that no longer earn their place \(probed same-path \/ no-kill pairs, never a criterion's last planned test\)/.test(rd("skills", "dev-spec-driven", "references", "tooling-reference.md")) &&
+        /\| `\/spec-review prune` \| Optional, a \+tdd feature with every task done[^|]*— a same-path \/ no-kill pair the reviewer proposes and you probe[^|]*, never a criterion's last planned test; a test of an AC a shipped feature retired is never pruned \(it needs a `\/spec-change` on its feature\)\.[^|]*approved again, unforced \(every criterion keeps a planned test\)\. \| `references\/subagent-execution\.md` \|/.test(rd("skills", "dev-spec-driven", "references", "workflows.md")),
+      changelog: /test-patterns\.md holds the criteria \(`same-path`, `no-kill`\), the never-pruned list \(a criterion's last planned test first\)/.test(log) && !/`retired-ac`, `same-path`/.test(log) &&
+        /then the re-approvals \(unforced: every criterion keeps a planned test\)\. No new tool argument\./.test(log) && !/An AC a shipped feature retired needs no planned test/.test(log) &&
+        !/trace_check reads the other features' `_Supersedes:_` only when an AC has no test entry/.test(log),
+    });
+    // W (CRIT_X D7): verification.md says what finish shows of dev-guardian's own checks below the gate
+    all("1.41.0 W (CRIT_X D7): verification.md — dev-guardian's test-integrity and suppressions checks below the gate are ONE finish warning, never a blocker, labelled per check; --compact names none; before 3.17 tests only; the pruning bullet points at it; review 2 (RX-1, RX-9): only finish --run hands the base the two checks read — a run reported over MCP names none —, only a suppression with no reason is reported, the action is to give it one; RX2-2: dev-guardian 3.17's rule — no reason and naming no rule, or a whole-file one with no reason even naming its rules; one with a reason only counted —, never \"or name its rule\"; the CHANGELOG's W bullet says the same", {
+      w: /\*\*Its own checks' findings below the gate\*\* \(1\.41\) — the new findings that do not block from dev-guardian's test-integrity check \(`guardian-test-integrity`, 3\.8\+: a skip, a deleted test file, fewer assertions\) and its suppressions check \(`guardian-suppressions`, 3\.17\+:[^)]*\) — are ONE finish warning, never a blocker: each labelled by its check \(weakened test · suppression added\), the first 3 by severity, the rest counted\./.test(ver),
+      limits: /A `--compact` report lists the blocking findings only, so none is named there; a dev-guardian before 3\.17 has no suppressions check — its test findings only\./.test(ver),
+      pointer: /Below the default `--fail-on high` they never block — the warning below names them\./.test(ver) && /they never block \(`finish <feature> --run` names them in one warning\)/.test(sub),
+      onlyRun: /Both checks read the change since the feature's base, which only `finish <feature> --run` hands the launcher: a run of the check's command reported over MCP \(`spec_finish \{evidence\}`\) has no base, so it names none\./.test(ver) &&
+        /Both checks read the change since the feature's base, which only `finish --run` hands the launcher: a run reported over MCP names none \(the MCP run hint says so\), nor does a `--compact` report\./.test(log) &&
+        !/a full report, without --compact, names the findings below the gate/.test(ver + log),
+      reasonless: /`eslint-disable` … with no reason that names no rule, or a whole-file one with no reason even when it names its rules; one with a reason is only counted\) — are ONE finish warning/.test(ver) &&
+        /The user decides each: a pruning they approved stays; a suppression they intended gets a reason; otherwise fix it and run the check again\./.test(ver) &&
+        /`eslint-disable` … with no reason that names no rule, or a whole-file one with no reason even when it names its rules; one with a reason is only counted\) in ONE warning/.test(log) &&
+        !/a suppression with its reason\)|or naming no rule|or names its rule/.test(ver + log),
+      noteKeepsHead: /and the suppressions check while a `guardian-suppressions: ` note says it left changed files unread/.test(log),
+    });
+  }
+
   // 1.14 full review (D) — docs and prose.
   {
     const dRead = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
@@ -804,7 +941,7 @@ exports.run = async ({
     // 1.36.0 review 4 (D4-1): the merge summary written before an accept (or a lift) still names the test as changed and shows no
     // accept — /spec-finish step 1 says to run it again after one, as do the accept's note (EN / PT / ES) and verification.md
     const d41 = [
-      ["spec-finish step 1: run it again after the accept", finishCmd, /After the accept \(or a lift\), run step 1 again \(`spec_finish \{name, write: true\}`\): the merge summary then lists the accept and no longer names the test as changed — the one written before it still does\. 2\. \*\*Verify fresh/],
+      ["spec-finish step 1: run it again after a protected test's accept", finishCmd, /After a protected test's accept \(or a lift\), run step 1 again \(`spec_finish \{name, write: true\}`\): the merge summary then lists the accept and no longer names the test as changed — the one written before it still does\. 2\. \*\*Verify fresh/],
       ["verification.md: the accept bullet", ref("verification.md"), /the merge summary of every written finish of that work cycle shows it — after the accept \(or a lift\), finish again with write \(`dev-spec finish <feature> --write`\): the summary written before it still names the test as changed\./],
       ["the accept's note (en)", S.msg("en").protectedTests.accepted("t.test.js", "alpha"), /Finish it again \([\s\S]*?finish alpha --write\): the merge summary then lists the accept and no longer names the test as changed\.$/],
       ["the accept's note (pt)", S.msg("pt").protectedTests.accepted("t.test.js", "alpha"), /Volta a fechá-la \([\s\S]*?finish alpha --write\): o resumo do merge passa a listar a aceitação e deixa de nomear o teste como alterado\.$/],
@@ -2104,6 +2241,66 @@ exports.run = async ({
         GA.includes("- **1.40.0** — the `uiStates` stamp cut a third time") && !libSources().some((f) => /\buiStates\b/.test(fs.readFileSync(f, "utf8")))],
     ];
     for (const [label, check] of rows) all("1.40.0 Z docs — " + label, { holds: check });
+  }
+
+  // 1.41 the METRIC line (engine/metric.js): ONE owner of its form — METRIC_GRAMMAR, the contract fixture's grammar.line — quoted whole by
+  // references/verification.md (its indented line), the agents' rule against loosening a line to pass, /spec-finish's decision.
+  {
+    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const rd = (...p) => fs.readFileSync(path.join(__dirname, "..", ...p), "utf8").replace(/\r\n/g, "\n");
+    const VER = rd("skills", "dev-spec-driven", "references", "verification.md");
+    const sec = (VER.split("### Metrics that regress silently\n")[1] || "").split("\n## ")[0];
+    const quoted = sec.split("\n").filter((l) => /^ {4}METRIC /.test(l)).map((l) => l.trim());
+    all("1.41 the METRIC line's form is ONE text: verification.md's Metrics that regress silently quotes METRIC_GRAMMAR (the fixture's line) whole, once; spec-implementer never loosens, flips or drops a line to pass, spec-reviewer calls that Important, /spec-finish has the user decide on the warning (got " + JSON.stringify(quoted) + ")", {
+      grammar: quoted.length === 1 && quoted[0] === E.METRIC_GRAMMAR,
+      implementer: /never\s+loosen its tolerance, flip or drop its `better=`, change its unit or remove it to pass/.test(rd("agents", "spec-implementer.md")),
+      reviewer: /A diff that raises or drops a METRIC line's `tolerance=`, flips or drops its `better=`, changes its unit or\s+removes the line[^\n]*\n?[^\n]*\*\*Important\*\*/.test(rd("agents", "spec-reviewer.md")),
+      finish: /METRIC reading worse past its stated tolerance, or a loosened METRIC line: tell the user/.test(rd("commands", "spec-finish.md").replace(/\n\s+/g, " ")),
+    });
+    // 1.41.0 review 2 (R2-MF-1, R2-MF-7): metricsUnmeasured claims no READABLE line (a malformed one or one past a bound is not read),
+    // only once finish --run ran every check — verification.md and tooling-reference.md alike; the readings' `text` in both tools' shapes
+    const TOOL = rd("skills", "dev-spec-driven", "references", "tooling-reference.md");
+    const doubt = "a malformed line, or one past a reader bound, is not read — the run's note names it";
+    all("1.41.0 review 2 R2-MF-1 / R2-MF-7 docs: verification.md and tooling-reference.md say finish's unmeasured claim is about a READABLE METRIC line, and when it is made; spec_complete_task's and spec_finish's `metrics` carry `text`", {
+      verification: sec.replace(/\n\s*/g, " ").includes("finish warns when no passing check printed a readable METRIC line of a name a row declares (" + doubt + ") — once `finish --run` ran every check"),
+      tooling: TOOL.includes("`metricsUnmeasured` — the design's Silent Regressions names no passing run printed as a readable METRIC line (" + doubt + "), said only once every check's latest run is `finish --run`'s"),
+      text: TOOL.includes("`metrics` [{name, value, text, unit, better, tolerance {amount, percent, text}}") && TOOL.includes("`metrics` [{check, name, value, text, unit, better, tolerance,") &&
+        TOOL.includes("reference: {feature, at, value, text, unit, better, tolerance}"),
+    });
+    // 1.41.0 RX-4 / RX-6 (the cross-plugin review): the reader's 64 MiB bound is its own — the CLI records nothing past 64 MB of
+    // output —, and a name printed on both streams reads stderr's here, print order in dev-guardian's `2>&1` file: one stream per name
+    const flat = sec.replace(/\n\s*/g, " ");
+    all("1.41.0 RX-4 / RX-6 docs: verification.md keeps the reader's 64 MiB bound apart from what the CLI runs, and gives the one-stream rule for a name both plugins read", {
+      // (review 3, R3-A-1: done --run reads its several _Verify:_ commands together — those can reach the bound)
+      bound: flat.includes("The reader's own bound is an output's last 64 MiB: `finish --run` reads each check alone, under the CLI's 64 MB cap (a run whose output passes it records nothing — `output-too-large`, above), so it never reaches that bound; several `_Verify:_` commands of one `done --run` are read together and can reach it, and then `metricsDropped` says `readBytes`.") &&
+        !flat.includes("(its last 64 MiB") && !flat.includes("is past what the CLI runs"),
+      streams: flat.includes("**One stream per name.** dev-spec reads stdout, then stderr, as two texts: a name printed on both reads stderr's line. dev-guardian's `metrics` reads one file — a CI job that captures `2>&1` reads it in print order, the last printed winning. Print each name on ONE stream"),
+    });
+    // 1.41.0 review 3 (prose): R3-A-1 the bound in the CHANGELOG and tasks-and-evidence.md too; R3-A-2 a BOM at stderr's start, read past
+    // here, sits mid-file in a `2>&1` capture; R3-A-3 values and tolerances show as printed, the delta and the applied tolerance as
+    // numbers; R3-B-1 the W bullet's diff-base line; R3-B-4 a quoted --fail-on is not read; R3-B-6 the prune row's accept at guard level tests
+    const LOG = rd("CHANGELOG.md").replace(/\s+/g, " "), TE = rd("docs", "maintainers", "tasks-and-evidence.md").replace(/\s+/g, " ");
+    const TOOLF = TOOL.replace(/\s+/g, " ");
+    all("1.41.0 review 3 docs (R3-A-1/2/3, R3-B-1/4/6): the reader's bound reachable only by several _Verify:_ commands of one done --run; stderr's BOM; values shown as printed, the delta and the applied tolerance as numbers; a quoted --fail-on not read; the diff-base line quoted as printed; the prune row's accept at guard level tests", {
+      boundLog: LOG.includes("`finish --run` reads each check alone, under the CLI's 64 MB cap, so it never reaches the reader's 64 MiB bound; several `_Verify:_` commands of one `done --run` are read together and can reach it, and then `metricsDropped` says `readBytes`") &&
+        !LOG.includes("the reader's own 64 MiB bound is past what the CLI runs"),
+      boundNotes: TE.includes("`finish --run` reads each check alone, so it never reaches the bound; several `_Verify:_` commands of one `done --run` are read together and can — `metricsDropped` says `readBytes`") &&
+        !TE.includes("from the CLI the bound is never reached"),
+      // (RX2-4) the stream printed second, not stderr: with a BOM on both and stderr first, a `2>&1` capture holds stdout's mid-file
+      bom: flat.includes("Print each name on ONE stream and both read the same value. A byte-order mark at the start of the stream printed second is read past by dev-spec, while a `2>&1` capture holds it mid-file, and dev-guardian reads nothing there.") &&
+        !flat.includes("at the start of stderr") && TE.includes("RX-3 — the stream printed second's too, which a `2>&1` capture holds mid-file") && !TE.includes("RX-3 — stderr's too"),
+      shown: LOG.includes("values and tolerances compare as the exact decimals printed and show as printed (120 → 122.4 at 2 % is `within`); the delta and the applied tolerance print as numbers.") &&
+        !LOG.includes("compare — and show — as the exact decimals") && flat.includes("the warning and `## Metrics` show them as printed (the delta and the applied tolerance as numbers)"),
+      // (RX2-1) the first segment that carries a --fail-on, its last flag: a `cd . &&` prefix is read past
+      failOn: LOG.includes("The gate's `--fail-on` is the LAST one of the first part of the command that has one, as dev-guardian reads it (the command cut at `;` / `&&` / `|` / a line break: `cd . && <check> --fail-on medium` reads medium, a later `echo --fail-on low` is not read; a quoted one is not read, as in 1.40): 1.40 read the first") &&
+        !LOG.includes("an unquoted flag of the check's own command") && TE.includes("of the FIRST segment that carries one, the command cut at `;` / `&&` / `||` / `|` / a line break"),
+      // (RX2-3) the blocked gate's hint names the real choices for a weakened or deleted test
+      fixHintLog: LOG.includes("finish's hint for a blocked gate says a weakened or deleted test (dev-guardian's test-integrity check) takes no inline suppression: restore the test, or the user decides — at `--fail-on medium` an approved pruning blocks by design."),
+      // (R3-B-1) the W bullet quotes the diff-base line as the engine prints it
+      diffBase: LOG.includes("The verdict's line says \"" + require(path.join(__dirname, "lib", "i18n.js")).msg("en").guardian.diffBase("<base>").replace(/^ · /, "") + "\" — one text, true for every version."),
+      prune: TOOLF.includes("each removal the user's, recorded through spec_impact's `retire` and, at guard level tests, the protected-test accept · `feedback`") &&
+        TE.includes("the record spec_impact's `retire` and, at guard level tests, the protected-test accept"),
+    });
   }
 
   // Release hygiene: the three version fields agree.

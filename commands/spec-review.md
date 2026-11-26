@@ -1,11 +1,12 @@
 ---
 description: Review a feature — its branch against the spec, a converge or simplification pass, review feedback, a prompt change.
 disable-model-invocation: true
-argument-hint: "[feature] [branch | converge | simplify [--subagents] | feedback <comments> | prompt]"
+argument-hint: "[feature] [branch | converge | simplify [--subagents] | prune | feedback <comments> | prompt]"
 ---
 
 Use the **dev-spec-driven** skill, review loops. Args: $ARGUMENTS (default mode: `branch`). The protocols:
-`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` (converge, verify, the simplification pass).
+`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` (converge, verify, the simplification and
+pruning passes).
 
 **Duplicates first** (branch · converge · simplify): `spec_scan {duplicates: true, name}` — its `existing` runs go to the
 reviewer as candidate findings, its `within` runs to the simplifier; each is verified like any finding (a repeat the spec
@@ -59,12 +60,29 @@ task's `_Verify:_` (`node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature>
 each under its `meta.checks` name (`… finish <feature> --run`) — never add checks just to record a run.
 Never "behaviour unchanged" without the runs.
 
+**prune** — optional, a +tdd feature with every task done (or a finished one, which then reopens): the tests that no longer
+earn their place (`test-patterns.md` → Test value and pruning), removed only on the user's word. The map:
+`trace_check {name, matrix: true, code: true}` (each row's `tests[].files`) — never a criterion's last planned test (an AC,
+EC, NFR or SC left with none) nor an eval / load row; a test of an AC a shipped feature retired (`supersededBy` without
+`supersedePending`) is never pruned: it fails once the superseding feature ships, so name it — it needs a `/spec-change` on
+its own feature. Then a prune-mode `dev-spec-driven:spec-reviewer` (inline without a subagent tool): its `same-path` /
+`no-kill` candidates with their probe requests, then prune (what still guards each criterion the test covers) · keep ·
+strengthen per candidate. You run the probes — a tracked, clean file only, restored from a hash-checked copy, each test of
+a pair run alone; no shell, no probe, so no pruning (`subagent-execution.md` → The pruning pass). The report:
+`.specs/<feature>/.execution/prune-report.md`. Say the churn first (test-plan, then tests, then tasks — each unforced: every
+criterion keeps a planned test; on a finished feature execution and a new finish too) and batch the feature's prunings. On the user's yes: the rows out of `test-plan.md`, `spec_impact {name, phase: "test-plan"}`'s
+`retire` applied, a deleted file out of every done task's `_Implements:_`, each test removed whole, at guard level tests each
+changed protected test accepted (`feature protect <feature> <file> --accept --reason "pruned: …"` — the record
+dev-guardian's test-integrity finding is answered with; without guard tests that record is the test-plan re-approval),
+then the re-approvals.
+
 **feedback `<comments>`** — read them all, verify each against the code and the spec
 (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/review-feedback.md`): an AC violation → fix it, cite the AC ·
 a spec change → take it to its phase · out of scope / YAGNI → push back citing the spec · quality → fix with a test · a
 nit → if cheap · a rule for every later task → fix it here, then propose it as a steering amendment, written on the
-user's OK · unclear → ask. One at a time, the covering tests after each, fresh evidence (`spec_complete_task`).
-Reply with the change or the evidence, never performative agreement.
+user's OK · unclear → ask. One at a time, the covering tests after each, fresh evidence (`spec_complete_task`). Each
+confirmed fix gets its cause as a lesson (`spec_decide {kind: "lesson", cause, target}`, never a guess — the finish
+batch amends the guidance once). Reply with the change or the evidence, never performative agreement.
 
 **prompt** (+ai) — a prompt change lands only with its eval delta (golden's median better or held against the
 baseline's spread, adversarial held, regression intact), its cost delta and a bumped `prompts/vN.md`; without eval

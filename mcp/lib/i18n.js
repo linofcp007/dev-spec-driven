@@ -32,7 +32,7 @@
  */
 
 const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli, FEATURE_SIZES,
-  TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, greenLine, signalTracks, templateTestRows, coreSuperseded } = require("./i18n/common.js");
+  TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, greenLine, signalTracks, templateTestRows, coreSuperseded, fmtMs } = require("./i18n/common.js");
 // The pt-BR derivation (i18n/pt-br.js) loads on its first use — a table's "pt-BR" entry, toPtBr, derivePtBr: a process
 // that never meets pt-BR (most hooks) doesn't load it.
 let PTBR = null;
@@ -151,6 +151,24 @@ function renderBrief(d, lang) {
     // R review 4: a folder read up to its cap (`truncated`) makes the count a lower bound — "at least N more", or "possibly more"
     if (r.files.length && (r.more || r.truncated)) push(t.reuseFilesMore(r.more, !!r.truncated));
   }
+  // 1.41: structure.md's Reference Examples rows for this task's files (a gone file named, never quoted), or that none is for them
+  // (1.41.0 review 1: a cell naming several files — asWritten — is quoted as the table wrote it, its own code spans kept; review 3:
+  // an annotated one, "`a.js` (note)", too)
+  if (d.examples) {
+    const x = d.examples;
+    if (x.quoted.length || x.gone.length) {
+      push("", t.examples, t.examplesRule(x.file), ...x.quoted.map((r) => `- **${r.pattern || "—"}** — ` + (r.asWritten ? r.copy : "`" + r.copy + "`") + (r.appliesTo ? ` (${r.appliesTo})` : "")));
+      if (x.gone.length) push(t.examplesGone(x.gone.map((p) => "`" + p + "`").join(", ")));
+      if (x.omitted) push(t.examplesOmitted(x.omitted, x.file));
+    } else push("", t.examples, t.examplesNoMatch(x.total, x.file));
+  }
+  // 1.41: the feature's open lessons (decisions.md) — confirmed findings of earlier tasks and why they happened, newest first (bounded)
+  if ((d.lessons || []).length) {
+    const D = MSG[normalizeLang(lang)].decisions;
+    push("", D.briefLessonsHeading, D.briefLessonsIntro);
+    d.lessons.forEach((x) => push(`- **${x.id}** — ${x.title}` + (x.cause ? ` _(${x.cause}${x.target ? " → " + x.target : ""})_` : "") + (x.text ? ": " + x.text : "")));
+    if ((d.lessonsOmitted || []).length) push(D.briefOmitted(d.lessonsOmitted.join(", ")));
+  }
   // 1.35: a task that builds a view — the design-system registry's entry for each component the design names ([UI] Design
   // System Usage: its kind, path, variants, notes and the row's reason), the names the registry doesn't list, where the tokens live
   if (d.designSystem) {
@@ -256,8 +274,12 @@ function renderRetro(T, P, m, fmt) {
   if (m.reopenedTasks) sig.push(T.sigReopened(m.reopenedTasks));
   if (m.evidence && m.evidence.runs && m.evidence.passRate < 100) sig.push(T.sigPass(m.evidence.passRate));
   if (m.openClarifications) sig.push(T.sigClar(m.openClarifications));
+  if (m.lessons) sig.push(T.sigLessons(m.lessons.total, m.lessons.open)); // 1.41
+  // 1.41: the amendments section starts from the feature's lessons (fmt.lessons — a lessonView with their rules), in D-n order
+  const lessons = fmt.lessons ? fmt.lessons.open.concat(fmt.lessons.closed).sort((a, b) => parseInt(a.id.slice(2), 10) - parseInt(b.id.slice(2), 10)) : [];
   return [T.title(m.feature), "", T.intro(fmt.today), "", T.metrics, "", T.header, "|---|---|", ...rows.map(([k, v]) => `| ${k} | ${v} |`), "",
-    T.well, "", "- ", "", T.hurt, "", ...(sig.length ? [T.signals(sig.join("; "))] : []), "- ", "", T.amend, "", T.amendNote, "- ", "",
+    T.well, "", "- ", "", T.hurt, "", ...(sig.length ? [T.signals(sig.join("; "))] : []), "- ", "", T.amend, "", T.amendNote,
+    ...(lessons.length ? lessons.map(T.lessonLine) : ["- "]), "",
     T.followUps, "", T.followUpsNote, "- ", ""].join("\n");
 }
 
@@ -315,7 +337,8 @@ const LAYOUTS = {
   // design.md: the core sections, then the active tracks' (trackDesignBlock, +tdd first), then the footer. No size: the 1.20
   // design. A SIZED feature (s | m | l; xs is a change, no design): Error Handling points at the IF…THEN criteria (never
   // asked twice), Complexity Tracking has no example row (the placeholder gate refused it), and a core section a track's own
-  // sections supersede is left out (CORE_SUPERSEDED_BY). M / L: Reuse & Integration with one example row. S: the three weigh
+  // sections supersede is left out (CORE_SUPERSEDED_BY). M / L: Reuse & Integration with one example row, and (1.41) Silent
+  // Regressions after Risks — a comment and an empty table, no slot (doctor's design-silent-regressions warns until answered). S: the three weigh
   // sections merged into ONE "Decisions, reuse & risks" (designWeighChecks reads it), no Data Models / API Contracts / Security
   // Considerations / Testing Strategy / Risks. The track blocks are the full ones — the engine keeps a size's tiers and drops the
   // sections another active track covers (engine/scaffold.js).
@@ -336,10 +359,13 @@ const LAYOUTS = {
     }
     if (keep("errorHandling")) secs.push(D.errorHandlingSized);
     if (!s && keep("testingStrategy")) secs.push(D.testing);
-    if (!s) secs.push(D.risks);
+    if (!s) secs.push(D.risks, D.silent); // 1.41: M / L — Silent Regressions, no slot (a doctor warn until answered)
     secs.push(D.constitution, D.complexity);
     return secs.join("\n\n") + "\n" + extra + "\n" + D.footerSized(a.label, a.size) + "\n";
   },
+  // The m / l design's Silent Regressions section alone (1.41.0 review 1): what an m / l feature scaffolded from a project design
+  // template without one gets at the end (engine/templates.js withTrackBlocks — the way a track's block is added).
+  designSilent(T) { return T.design.silent; },
 
   // tasks.md, organized by user story: a track block's lead part first (+port's baseline — 1.36), Setup, Foundational, US-1 (its core
   // task and a parallel one), the active tracks' task blocks (trackTasks, numbered on), US-2, Polish. Size S: the lead part, one core
@@ -538,6 +564,7 @@ module.exports = {
   DEV_SPEC_SCRIPT, // this clone's cli/dev-spec.js (forward slashes)
   cliPrefix, // (script?) → `node "<script>"`, quoted to paste into bash and PowerShell
   portableCli, // text for a committed file: the runnable line → `dev-spec`
+  fmtMs, // 1.41 a measured duration (ms) → "850 ms" · "4.2 s" · "3 min 10 s" — the friction budget's messages (i18n/common.js)
   onLocaleLoad, // (fn) fn("i18n/<file>.js") after each language file loads on demand — the engine's corpus check
   toPtBr: (text, masks) => ptbr().toPtBr(text, masks), // (text, masks?) European → Brazilian Portuguese (the pt-BR derivation)
   derivePtBr: (value, raw) => ptbr().derivePtBr(value, raw || null, null, value), // a pt table (roadmap-md.js's roadmap chrome) → its pt-BR twin
@@ -546,6 +573,7 @@ module.exports = {
   requirements: (a, lang) => L(lang).requirements(a),
   trackDesignBlock: (track, lang) => L(lang).trackDesignBlock(track),
   design: (a, lang) => L(lang).design(a),
+  designSilent: (lang) => L(lang).designSilent(), // 1.41.0 review 1: the m / l design's Silent Regressions section alone
   tasks: (a, lang) => L(lang).tasks(a),
   testPlan: (name, lang, tracks, acs, size) => L(lang).testPlan(name, tracks, acs, size), // tracks: which template ACs get a planned test; acs: the real AC IDs instead (one generic row each); size: S plans its two core criteria
   templateAcIds: (tracks, size) => Object.keys(templateTests(tracks, size)), // the template AC IDs a test plan scaffolded for these tracks (and size) covers

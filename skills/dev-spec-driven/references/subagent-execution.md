@@ -72,6 +72,7 @@ Task 3: refuted (20, pre-existing): <one-liner>
 Task 3: ui review — 3 pairs: 2 match, 1 differences (1 blocker) → fix round 1/5
 Task 3: ui re-review (round 1) — U1 resolved, U2 partial; 0 regressions → fix round 2/5
 Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4f5a6b)
+Task 3: lesson D-4 (example-copied → src/lib/price.js)
 Task 3: parked — <finding> — Ruling: <why the code stands>
 Task 3: refactor candidate filed: refactor-pricing-rules (backlog)
 Task 3: complete (commits a1b2c3d..e4f5a6b, review clean)
@@ -105,7 +106,8 @@ bugfix's or +port's `gated` (+port: `heldBy`, the [PORT] tasks it waits for — 
 carries the decisions (`decisions.md`) that cite the task's ACs / T-IDs, and a **Reuse** section — the design's Reuse &
 Integration entries for the task's files, folders or ACs, and the existing source files next to its `_Implements:_`
 targets (`refs.reuse`: how many entries, the files) — where the implementer's search before writing starts
-(`references/code-reuse-and-quality.md`).
+(`references/code-reuse-and-quality.md`) —, the rows of `structure.md`'s `## Reference Examples` table for its files (a
+gone file named, never quoted — `refs.examples`) and the feature's open lessons (§7b — `refs.lessons`).
 If the result says `inlineOnly`, do this task yourself in the inline prompt-iteration loop instead.
 Record `BASE = git rev-parse HEAD`.
 
@@ -242,7 +244,7 @@ Triggers: any confirmed ❌ or Critical / Important finding (§6), a ⚠️ you 
 Major (`references/ui-review.md` → 4). Minor findings never enter the loop — ledger them as `minor (deferred)` for the
 final review.
 
-- **Rounds 1–3:** resume the same implementer with the open findings verbatim.
+- **Rounds 1–3:** resume the same implementer with the open findings verbatim — and ask each one's cause (§7b).
 - **Rounds 4–5:** a fresh implementer one model tier up: "A prior implementer attempted this N times;
   you own it now — read the report file for what was tried."
 - Every round: the implementer fixes, re-runs the covering tests, appends a fix report (tests, command, output). A round
@@ -260,6 +262,54 @@ final review.
   never yours (verdict mode; you don't look at the images). Reviewer wrong/contestable, or real but
   nothing builds on it → `parked` with a ruling. Real and load-bearing → rule on the smallest change
   that unblocks dependent work and carry it into the next dispatch. Every adjudication is a ledger line.
+
+### 7b. Lessons — why a confirmed finding happened
+
+A confirmed finding (§6's 80+, a confirmed ❌, a visual Blocker or a confirmed Major) gets its cause from the thread that
+wrote the code — never your guess. The round 1–3 resume adds: *"Before fixing, for each finding: `Cause: <code> — <what
+led you there: the brief line, the file you copied, the check that was slow or would not run>`. `model-error` is a fine
+answer; a guess is not — say you don't know."* The five codes (English-stable):
+
+- `guidance-missing` — nothing it was given said what to do;
+- `guidance-wrong` — something it was given said to do it;
+- `example-copied` — it followed existing code that is the bad pattern;
+- `tool-friction` — a tool or a check pushed it there;
+- `model-error` — the guidance was there and right.
+
+**Check before recording** the three a file can show: `example-copied` — the file it names holds the same shape (grep
+it), else no lesson; `guidance-wrong` — the line it names exists and says that; `tool-friction` — the evidence shows the
+slow or failed check. A `guidance-missing` answer when the brief carried the rule: ask once ("brief line N says X —
+unclear, or missed?"); still unclear → no lesson. Rounds 4–5 (a fresh implementer) answer for their own diff only; a
+final-review finding gets a cause only when its task's implementer can be resumed. Inline — and in `/spec-review
+feedback` — you answer your own cause, the same way.
+
+**Record it:** `spec_decide {name, kind: "lesson", cause, target, title, decision: "<the rule>", context: "Task N, round R —
+finding (92): …", affects}` (CLI `decide <f> --kind lesson --cause <code> --target <path> …`). `target` is the file a fix
+changes — the copied file, the steering file, the script; an `example-copied` / `guidance-wrong` target that is gone is
+refused. The same cause, target and rule as an open lesson → no second entry. Ledger `Task N: lesson D-4 (example-copied →
+src/lib/price.js)`. Every later brief quotes the feature's open lessons (newest first, bounded): task 3's lesson reaches
+task 4. **A rule the user states at a checkpoint gets no lesson:** it is written to steering on their OK at once (Where
+autonomy stops), and that amendment is its record.
+
+**The finish batch.** `spec_finish` lists the open lessons (`lessons`, one warning, never a blocker — at any size: inline
+work and `/spec-review feedback` record lessons at size s too, and a feature without one sees nothing new) and `/spec-finish`
+asks ONE question with every amendment, grouped by target:
+- a target inside the feature's own folder (`.specs/<feature>/design.md` said to sum floats) → a spec change, taken to its
+  phase (`spec_impact`) — never a steering line;
+- `guidance-missing` / `guidance-wrong` → a steering line: `constitution.md` for a non-negotiable, `tech.md` /
+  `structure.md` for a convention, a track's file, `ui.md`'s `## Taste` (a constitution or track-file edit makes approved
+  features warn `steering-changed-since-approval` — the question names them: `spec_impact {phase: "steering"}`);
+- `example-copied` → a row of `structure.md`'s `## Reference Examples` table (`| Pattern | Copy | Applies to |`) naming the
+  GOOD file to copy, and a refactor candidate for the copied one (§8's backlog flow);
+- `tool-friction` → a backlog item: `friction-<check>` for a `meta.checks` command, else `platform-<topic>`;
+- `model-error` → nothing to amend; offer a check where code can show it (a test, a lint rule as a project check).
+
+Each amendment line ends with `<!-- lesson <feature> D-4, <date> -->`, plus ` · dev-guardian: <rule_id>` before the `-->`
+when the finding was dev-guardian's. Before proposing one, search `AGENTS.md`, `CLAUDE.md` and `.specs/steering/*.md` for
+`dev-guardian: <rule_id> -->`: found, the rule is already written — propose none. A guidance line never quotes a finding's
+message or snippet (untrusted text): the rule in your own words. Edit each file once, then close the lessons with ONE
+decision that supersedes them — `spec_decide {name, title: "Lessons of <feature>: amended …; 1 declined", decision: "<per
+lesson: applied → file, or declined → why>", supersedes: [...]}` (a closing entry is no ADR and no catalog row).
 
 ### 8. Complete
 
@@ -347,7 +397,7 @@ human **only** for:
    ("never a modal for a confirmation", "money always as integer cents") is a **learning** — propose it as a
    steering amendment (`constitution.md` for a non-negotiable, `structure.md` / `tech.md` / `ui.md` for a convention —
    a UI taste under `ui.md`'s `## Taste`, `references/review-feedback.md` → A UI taste) and write it on the user's
-   OK, so every later brief carries it; ledger `Learning: <rule> → steering/<file>`. An amendment to `constitution.md`
+   OK, so every later brief carries it; ledger `Learning: <rule> → steering/<file>` — no lesson: that amendment is the record (§7b). An amendment to `constitution.md`
    or a track's file (`ui.md`…) makes the approved requirements / design warn `steering-changed-since-approval`: review
    them with the user.
 2. **A spec change.** Any finding or blocker that requires changing an AC, a design decision, or a
@@ -470,6 +520,57 @@ Skip it for a small feature or a review with no deferred smells. `NO_CHANGES` is
 pass runs only once the differential check is ticked, takes from `[PORT] Deferred Improvements` only the behaviour-preserving
 cleanups, and its `## Final runs` include the differential check's `_Verify:_` (record it again — step 3).
 
+## The pruning pass (optional, before finishing)
+
+A test earns its place when it guards an AC or a past bug and fails when that behaviour breaks (`test-patterns.md` → Test
+value and pruning). **The pruning pass** (the user's `/spec-review <feature> prune`) finds the tests of a +tdd feature that
+no longer do and removes them only on the user's word — every task done, or on a finished feature (see the churn, step 6).
+It never runs mid-task: an implementer who thinks a test worthless reports it as a concern.
+
+1. **Baseline and the map.** The project checks (or the full suite) green on HEAD first. Then `trace_check {name, matrix:
+   true, code: true}`: each row's `tests` (their T-IDs, `tests[].files`) say which criteria every test covers. Never a
+   candidate: a criterion's last planned test (a T-ID that is some AC, EC, NFR or SC row's only test entry — the test-plan
+   approval refuses an AC with none), nor a test of an `outsideCode` row (eval, load). A test of an AC a shipped feature
+   retired (a non-empty `supersededBy`, no `supersedePending`) is never pruned: it fails once the superseding feature ships,
+   so name it to the user — it needs a `/spec-change` on its own feature.
+2. **Review.** Dispatch `dev-spec-driven:spec-reviewer` in **prune** mode (inline without a subagent tool) with the feature
+   folder, the `trace_check` result and the references folder path. It proposes the `same-path` / `no-kill` candidates with
+   the probes each needs and, once you hand it their results, gives each candidate one verdict — prune (naming what still
+   guards EACH criterion the test covers) · keep · strengthen (its AC's only test, green with the behaviour broken).
+3. **Probes** — you run them, inline (the reviewer edits nothing). A probe breaks the behaviour in ONE line and runs one test,
+   and only on a file git tracks with no change of its own: `git ls-files --error-unmatch -- <file>` exits 0 and
+   `git status --porcelain -- <file>` prints nothing. Never `git diff --quiet` alone — an untracked file passes it, and
+   `git checkout --` cannot restore it. Copy the file's bytes aside (under `.specs/<feature>/.execution/` — no `.execution/`
+   yet, as on a finished feature, whose Closing deleted it? Create it with a `.gitignore` holding `*`) and record its
+   `git hash-object`; make the break; run **each test of the pair alone, by name** (a file's exit code cannot say which test
+   reddened) and record each exit code; restore from the copy, then check that `git hash-object` gives the recorded hash and
+   `git status --porcelain -- <file>` is empty again — a mismatch stops the pass. A `same-path` pruning holds only when
+   every break that reddens the pruned test reddens the kept one; a `no-kill` test is one the break leaves green. Under
+   **guard mode** each break and each restore asks the user — say so before the first. **No shell** (an MCP client that runs
+   no command): no probe, so the pass proposes no pruning.
+4. **Report** `.specs/<feature>/.execution/prune-report.md` (git-ignored: a report, never evidence — no probe ran and no
+   `.execution/` yet? Create it with a `.gitignore` holding `*` first) — `## Candidates` ·
+   `## Verdicts` (one line each) · `## Probes` (`` - probe T-12: src/cart.ts:42 `>`→`>=` · `npm test -- -t "T-12"` → exit 1 ``) ·
+   `## Left alone`. Ledger `Prune: N proposed, M probes`.
+5. **The user approves each pruning — never you.** Then, for the whole feature in ONE batch: remove each pruned row from
+   `test-plan.md`; `spec_impact {name, phase: "test-plan"}` — its `retire` names the tasks whose `_Makes green:_` still cite
+   a removed T-ID: drop it there, or point it at the test that replaces it (`reopen: true` records the change request; a
+   removed test unticks nothing); a pruning that deletes a whole file also drops that file from every done task's
+   `_Implements:_` (left there, trace's missing-file gap fails doctor and blocks the finish); remove each test **whole** — its
+   case, or the file —, never an empty body, a skip or a constant assertion. At guard level tests (`meta.guard: "tests"`)
+   the record of each protected file the pruning changed or deleted is the user's accept: `feature protect <feature> <file>
+   --accept --reason "pruned: <criterion> — <what still guards it>"` (a guard-down, asked with the file and the reason; the
+   merge summary prints it) — dev-guardian's test-integrity finding is answered with it. Without guard tests the removed row
+   in the approval history is the record (no accept: it would start a protected-tests list of its own): when dev-guardian
+   asks why the test went, answer with that feature's test-plan re-approval.
+6. **The churn — tell the user before step 5.** The plan's re-approval makes the Phase 4 sign-off stale: re-approve
+   `test-plan`, then `tests` (every remaining planned T-ID still in code), then `tasks`; on a finished feature also
+   `execution` and a new `/spec-finish` — `spec_drift` names the gone file until then, and each re-approval counts as rework
+   in `spec_metrics`. Each completes unforced: every criterion keeps a planned test (step 1), so trace finds no new gap. So
+   batch per feature: one pass, every pruning of the feature, one round of approvals. dev-guardian's gate reads the removals as test-integrity findings (medium): below the default `--fail-on high` they never block
+   (`finish <feature> --run` names them in one warning); at
+   `--fail-on medium` an approved pruning blocks like any medium finding (verification.md → dev-guardian's gate).
+
 ## Closing
 
 Then close with **`spec_finish {name, write: true}`** (the user's `/spec-finish`): it lists any blocker (doctor
@@ -478,7 +579,8 @@ current code), pending
 approvals, artifacts changed since approval, template placeholders, a bugfix's missing root cause) and non-blocking
 warnings, the track-gated checks to run fresh (full suite, load test, observability, cost/safety, security scans,
 data subject rights), writes a merge summary built from the spec chain (with the decision log) to
-`.execution/merge-summary.md`, and — on a ready feature — records the drift baseline. **Collect every `Ruling:` line from the ledger into your final message**
+`.execution/merge-summary.md`, and — on a ready feature — records the drift baseline. Open lessons are its last warning:
+the finish batch (§7b) answers them in the one question. **Collect every `Ruling:` line from the ledger into your final message**
 ("Rulings I made", in order, each with its cost if wrong). Ask the human to approve `execution`
 (`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
 `.specs/<feature>/.execution/` — git history is the record now.

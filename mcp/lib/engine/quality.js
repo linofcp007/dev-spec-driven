@@ -21,10 +21,12 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsPath, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
   closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf,
   naAnswer, uiStateNames; // markdown.js — 1.38 doctor's ui-states (an n/a cell; the state labels of every language, from the corpus)
+let stripEnd, steeringGlobMatch; // core.js — 1.41 the Reference Examples table (a header cell's colon; an Applies-to glob)
+let RE_IMPL_ANNOTATED; // core.js — 1.41.0 review 2: a Copy cell in implementsPath's annotated single-path form is no list
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -34,9 +36,10 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
-  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
+  FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsPath, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
-  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf, naAnswer, uiStateNames } = E); }
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf, naAnswer, uiStateNames, stripEnd, steeringGlobMatch,
+  RE_IMPL_ANNOTATED } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -772,17 +775,26 @@ const REUSE_SYN = ["reuse", "code reuse", "reuse of existing code", "reused comp
   "reutilización", "reutilizacion", "aprovechamiento", "servicios existentes", "puntos de integración",
   "puntos de integracion", "integración con lo existente", "integracion con lo existente", "integración con el código existente",
   "integracion con el codigo existente", "integración con el sistema existente", "integracion con el sistema existente"];
-// [id, synonyms, the fewest entries that count as weighed, the approval stamp the check needs]: a decision needs at least two
-// options; one honest line about the risks (a table row, a bullet, or "no material risk, because X") is enough, and so is one
-// about reuse ("Greenfield: nothing to reuse yet"). The stamp: a design approval made before a check existed never has it,
-// and is never flagged by that check — `weigh` (trade-offs, risks), `reuse`. A 1.17 / 1.18 approval (weigh
-// without reuse) is still held to the trade-offs and risks, never to the reuse section.
-const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2, "weigh"], ["design-risks", RISKS_SYN, 0, "weigh"], ["design-reuse", REUSE_SYN, 0, "reuse"]];
+// 1.41: what number can get worse while every test stays green (a bundle's size, a p95, queries per request, tokens per call) — a
+// size m / l design's `## Silent Regressions` section: a row per METRIC line a project check prints (engine/metric.js — spec_finish
+// compares it with the last finish that recorded it), or "None — why". Its own heading: never "Metrics" alone (+saas Observability's).
+const SILENT_SYN = ["silent regressions", "silent regression", "silent metrics", "regression metrics", "metrics that regress silently",
+  "regressões silenciosas", "regressoes silenciosas", "regressão silenciosa", "regressao silenciosa", "métricas de regressão", "metricas de regressao",
+  "regresiones silenciosas", "regresión silenciosa", "regresion silenciosa", "métricas de regresión", "metricas de regresion"];
+// [id, synonyms, the fewest entries that count as weighed, the approval stamp the check needs, m / l only]: a decision needs at
+// least two options; one honest line about the risks (a table row, a bullet, or "no material risk, because X") is enough, and so is
+// one about reuse ("Greenfield: nothing to reuse yet") and one about silent regressions ("None — the feature changes no measured
+// path"). The stamp: a design approval made before a check existed never has it, and is never flagged by that check — `weigh`
+// (trade-offs, risks), `reuse`, `silent`. A 1.17 / 1.18 approval (weigh without reuse) is still held to the trade-offs and risks,
+// never to the reuse section. design-silent-regressions (1.41) runs only for a design whose size gates (opts.gate — m / l): a warn,
+// never a refusal, never an upgrade to-do (DESIGN_WEIGH_IDS).
+const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2, "weigh"], ["design-risks", RISKS_SYN, 0, "weigh"], ["design-reuse", REUSE_SYN, 0, "reuse"],
+  ["design-silent-regressions", SILENT_SYN, 0, "silent", true]];
 const DESIGN_WEIGH_IDS = new Set(DESIGN_WEIGH.map(([id]) => id));
 // The release each stamp arrived with (the "approved before X" note) — approvePhase stamps every key here on a design approval.
 // `reuseGate` (1.28): the Reuse & Integration section is an APPROVAL check of a size m / l design (designReuseGated) — doctor fails
 // it there, the design gate refuses it; a design approved before (no stamp) keeps the warning, never failed retroactively.
-const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19", reuseGate: "1.28" };
+const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19", reuseGate: "1.28", silent: "1.41" };
 // Is the Reuse & Integration section a gate for this feature? A plain feature of size m / l (the full chain) — never a bugfix, a
 // spike, a change, an unsized feature or size s / xs (a warning there, as before).
 const designReuseGated = (kind, size) => (kind || "feature") === "feature" && (size === "m" || size === "l");
@@ -895,8 +907,8 @@ function designWeighChecks(design, lang, opts = {}) {
   const W = i18n.msg(lang).designWeigh;
   const approval = isRecord(opts.approval) ? opts.approval : null;
   const merged = weighSection(design || "", WEIGH_MERGED_SYN) != null;
-  return DESIGN_WEIGH.map(([id, syn, min, stamp]) => {
-    const own = !merged || weighSection(design || "", syn) != null;
+  return DESIGN_WEIGH.filter((w) => !w[4] || opts.gate).map(([id, syn, min, stamp, sized]) => {
+    const own = !merged || sized || weighSection(design || "", syn) != null; // (the size-S merged section never answers an m / l question)
     let st = own ? designWeighState(design, syn, min) : designWeighState(design, WEIGH_MERGED_SYN, 0);
     if (id === "design-reuse" && (st.status === "missing" || st.status === "empty")) {
       const fb = designReuseFallback(opts.integrationPlan);
@@ -2300,6 +2312,188 @@ function briefDesignSystem(root, design) {
 }
 
 // ---------------------------------------------------------------------------
+// A project path and whether it is there (1.41: moved verbatim from design-system.js, which links them back — the registry's
+// stalePath reads them, and so do a lesson's _Target:_ and a Reference Examples row's Copy cell, eager readers)
+// ---------------------------------------------------------------------------
+// A word of a registry row's path cell as a project path — decided on its TEXT before any fs call (the Reuse section's rule: a
+// network path, an absolute path elsewhere or a `..` out of the project names nothing) — or null when it is no path of the
+// project: a package (`@mui/x-data-grid`), `n/a`, a URL, prose. A `:12` / `#L12` anchor is dropped (implementsPath).
+function projectPath(root, word) {
+  const w = implementsPath(word);
+  if (!w || w.startsWith("@") || /^https?:/i.test(w) || /^n\/a$/i.test(w) || !/[/.]/.test(w) || /[<>"|?*]/.test(w) || isNetworkPath(w)) return null;
+  const abs = path.resolve(root, w);
+  return abs !== root && isInsideDir(root, abs) ? toPosix(path.relative(root, abs)) : null;
+}
+// Does the project path name something on disk — reached WITHOUT following a link: a symlink or a junction on the way (it may
+// lead out of the project, or to a share) is where the walk stops, and counts as there.
+function onDisk(root, rel) {
+  let cur = root;
+  for (const seg of rel.split("/")) {
+    cur = path.join(cur, seg);
+    let st;
+    try { st = fs.lstatSync(cur); } catch { return false; }
+    if (st.isSymbolicLink()) return true;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// (1.41) Reference examples — .specs/steering/structure.md's `## Reference Examples` table: Pattern · Copy · Applies to
+// ---------------------------------------------------------------------------
+// The files a team points its agents to ("copy the shape of this file for that pattern"), read as a TABLE only — prose and bullets
+// are never mined (a section without a table is said as not read). The section's first table (outside comments and fences): the
+// Copy column by its header, else the 2nd; Applies to by its header, else the 3rd; Pattern by its header, else the 1st (a column a
+// header already took is never taken again). A row whose Copy cell is empty, a dash or a template slot is skipped; at most
+// REF_EXAMPLES_ROWS rows read (`truncated` counts the rest), each cell cut at REF_EXAMPLES_CELL characters. Why a table in
+// structure.md and not a fileMatch steering file: a front-mattered steering file governs the approvals (each edit flags every
+// approved feature its patterns match), and exemplars change with the code; structure.md without front matter governs nothing.
+// Readers: the brief's Reference examples part (the rows for the task's files) and doctor's `reference-examples` (the gone files).
+const REF_EXAMPLES_SYN = ["reference examples", "exemplos de referência", "exemplos de referencia", "ejemplos de referencia"];
+const REF_EXAMPLES_COLS = { pattern: ["pattern", "padrão", "padrao", "patrón", "patron"], copy: ["copy", "copiar", "copia"],
+  appliesTo: ["applies to", "aplica-se a", "aplica se a", "se aplica a", "aplica a"] };
+const REF_EXAMPLES_ROWS = 30;
+const REF_EXAMPLES_CELL = 200;
+const REF_EXAMPLES_CHECK = "reference-examples";
+const REF_BRIEF_ROWS = 6; // rows a brief quotes…
+const REF_BRIEF_CHARS = 1200; // …and their characters
+const REF_GONE_LISTED = 6; // gone files doctor names (+ how many more)
+// A code file's name: a file extension on its last segment (`src/routes` may be a folder: never judged). No document rule here —
+// a `docs/runbook-template.md` exemplar is a file to copy too (the registry's stalePath has its own: never one predicate for two rules).
+const RE_EXEMPLAR_FILE = /\.[A-Za-z][A-Za-z0-9]{0,9}$/;
+const RE_TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+const refCellKey = (c) => stripEnd(c.replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase(), unitIn(":"));
+// The structure.md table → { file, table: false } (a section without a table) | { file, table: true, rows: [{pattern, copy, appliesTo}],
+// total, truncated } | null (no structure.md, no such section).
+function referenceExamples(projectDir) {
+  const file = path.join(specsRoot(projectDir), "steering", "structure.md");
+  const text = readIfExists(file);
+  if (text == null) return null;
+  const body = extractSection(steeringFrontMatter(text).body, REF_EXAMPLES_SYN);
+  if (body == null) return null;
+  const rel = toPosix(path.relative(path.resolve(projectDir), file));
+  const lines = stripFencedCode(stripHtmlComments(body)).split(/\r?\n/);
+  const at = lines.findIndex((l, i) => /^\s*\|/.test(l) && i + 1 < lines.length && RE_TABLE_RULE.test(lines[i + 1]));
+  if (at < 0) return { file: rel, table: false };
+  const head = tableCells(lines[at]).map(refCellKey);
+  const col = {};
+  for (const k of Object.keys(REF_EXAMPLES_COLS)) { const i = head.findIndex((h) => REF_EXAMPLES_COLS[k].includes(h)); if (i >= 0) col[k] = i; }
+  const taken = () => new Set(Object.values(col));
+  [["pattern", 0], ["copy", 1], ["appliesTo", 2]].forEach(([k, d]) => {
+    if (col[k] != null) return;
+    const t = taken();
+    col[k] = !t.has(d) ? d : [0, 1, 2, 3, 4, 5].find((i) => !t.has(i));
+  });
+  const rows = [];
+  let read = 0, truncated = 0;
+  for (let i = at + 2; i < lines.length && /^\s*\|/.test(lines[i]); i++) {
+    if (read >= REF_EXAMPLES_ROWS) { truncated++; continue; }
+    read++;
+    const cells = tableCells(lines[i]);
+    const cell = (k) => String(cells[col[k]] || "").trim().slice(0, REF_EXAMPLES_CELL);
+    const copy = cell("copy");
+    if (!copy || /^[-—–]$/.test(copy) || /^\[[^\]]*\]$/.test(copy)) continue; // empty, a dash, a slot
+    rows.push({ pattern: cell("pattern"), copy, appliesTo: cell("appliesTo") });
+  }
+  return { file: rel, table: true, rows, total: rows.length, truncated };
+}
+// A Copy cell as ONE path: its backticks stripped, a markdown link unwrapped.
+function exemplarPath(cell) {
+  const t = stripEnds(String(cell || "").trim(), unitIn("`")).trim();
+  const link = /^\[[^\]]*\]\(\s*([^)\s]+)\s*\)$/.exec(t);
+  return link ? stripEnds(link[1], unitIn("`<>")) : t;
+}
+// (1.41.0 review 1) A Copy cell naming MORE than one path — a second code span holding one, or `,` / `;` / and (PT e, ES y) between
+// two of them: "`a.js`, `b.js`", "a.js and b.js", "src/ui/, src/ui/Card.tsx" — is a DOUBT: which one the row means is not read, so it
+// is never judged gone and the brief quotes the cell as written. A note beside ONE path ("x.ts (see README.md)", "x.ts (the old one,
+// with its verify)") is no list. Path-like: a word holding a `/`, or a `.` before a letter or digit (`a.js`, `src/ui`, also `e.g` —
+// a doubt is only never judged). (1.41.0 review 2) A cell whose path reading (exemplarPath — what projectPath / implementsPath read)
+// is in the ANNOTATED single-path form — a path, a blank, then `(`, `—`, `–` or `- ` (RE_IMPL_ANNOTATED, the form implementsPath
+// reads as ONE path) — is no list, whatever its note holds: the list test read the note too, and a gone file beside "res.json(),
+// then …" or "(see `docs/README.md`)" became a doubt the brief quoted. The rule is one file per Copy cell — two files are two rows;
+// this doubt is only the safety net for a cell that lists them anyway.
+const RE_EXEMPLAR_LIST = /[,;]|\s(?:and|e|y)\s/i;
+const pathLike = (text) => text.split(/\s+/).some((w) => /\/|\.[\p{L}\p{N}]/u.test(w));
+function exemplarMany(cell) {
+  const s = String(cell || "");
+  if (RE_IMPL_ANNOTATED.test(exemplarPath(s))) return false;
+  if ((s.match(/`[^`]*`/g) || []).filter(pathLike).length > 1) return true;
+  return s.replace(/`/g, " ").split(RE_EXEMPLAR_LIST).filter(pathLike).length > 1;
+}
+// Is a Copy cell a file that is gone? Only when it is a project path (projectPath — its text decides first) naming a file (an
+// extension), its first segment is on disk and the file is not. Anything else — a folder, a package, a root-level file, a gone first
+// folder, `file.py::func`, `x.ts#name`, a URL, prose, a cell naming several files (exemplarMany) — is not judged: one reading per
+// cell. → the gone file's project path | null
+function exemplarGone(root, cell) {
+  if (exemplarMany(cell)) return null;
+  const rel = projectPath(root, exemplarPath(cell));
+  return rel != null && RE_EXEMPLAR_FILE.test(rel) && onDisk(root, rel.split("/")[0]) && !onDisk(root, rel) ? rel : null;
+}
+// The rows a task's brief quotes (targets: its _Implements:_ paths, briefTargets): a row whose Applies-to globs match one (a glob
+// as a fileMatch pattern matches — steeringGlobMatch, a folder as "dir/"), or — without a glob — whose Copy file sits in a target's
+// folder. A gone file is named, never quoted; a cell naming several files (exemplarMany) is quoted as written (`asWritten`), never
+// judged; at most REF_BRIEF_ROWS rows within REF_BRIEF_CHARS (`omitted` counts the rest). (1.41.0 review 3) A cell in the annotated
+// single-path form (RE_IMPL_ANNOTATED on its exemplarPath reading) is quoted as written too — as its path reading the brief wrapped
+// "`a.js` (note)" in a span of its own (a stray backtick) and nested the spans of "Svc (`a.js`, `b.js`)"; judged by its path still.
+// → { file, quoted: [{pattern, copy (its path — the cell itself when asWritten), appliesTo, asWritten?}], gone: [path], omitted, total }
+// | null (no row in the table).
+function briefExamples(projectDir, targets) {
+  const ref = referenceExamples(projectDir);
+  if (!ref || !ref.total) return null;
+  const root = path.resolve(projectDir);
+  const fold = (s) => (FOLD_CASE ? s.toLowerCase() : s);
+  const tdirs = targets.map((t) => { const x = t.replace(/\/+$/, ""); return fold(RE_EXEMPLAR_FILE.test(x) ? path.posix.dirname(x) : x); });
+  const globsOf = (cell) => cell.split(/[\s,;]+/).map((g) => stripEnds(g, unitIn("`"))).filter((g) => g && !/^(?:[-—–]|n\/a)$/i.test(g));
+  const matches = (r) => {
+    const globs = globsOf(r.appliesTo);
+    if (globs.length) return targets.some((t) => globs.some((g) => steeringGlobMatch(g, t) || steeringGlobMatch(g, t + "/")));
+    const rel = projectPath(root, exemplarPath(r.copy));
+    return rel != null && tdirs.includes(fold(path.posix.dirname(rel)));
+  };
+  const quoted = [], gone = [];
+  let omitted = 0, budget = REF_BRIEF_CHARS;
+  for (const r of ref.rows.filter(matches)) {
+    const asWritten = exemplarMany(r.copy) || RE_IMPL_ANNOTATED.test(exemplarPath(r.copy));
+    const copy = asWritten ? r.copy : exemplarPath(r.copy);
+    const lost = exemplarGone(root, r.copy);
+    if (lost) { gone.push(lost); continue; }
+    const cost = r.pattern.length + copy.length + r.appliesTo.length;
+    if (quoted.length >= REF_BRIEF_ROWS || cost > budget) { omitted++; continue; }
+    budget -= cost;
+    quoted.push(Object.assign({ pattern: r.pattern, copy, appliesTo: r.appliesTo }, asWritten ? { asWritten: true } : {}));
+  }
+  return { file: ref.file, quoted, gone, omitted, total: ref.total };
+}
+// doctor's `reference-examples` (project-level, like steering): warn — the rows whose Copy file is gone (exemplarGone; the first
+// REF_GONE_LISTED named), the rows past REF_EXAMPLES_ROWS not read; pass — every row read is there, or the section holds no table
+// (said: it is not read). No section, or a table without a real row: no entry.
+// (1.41.0 review 1) Its reading — the table and each row's gone file — is made ONCE per project per engine call: spec_upgrade runs
+// the full doctor per feature, and each feature lstat'ed every Copy path's folders again. Memoized in the read-cache scope under a
+// key of its own (friction's timings memo), held with structure.md's text — a write of it in the call (forgetCached drops that
+// text) reads the table again; each feature's doctor still words it in its own language.
+const REF_EXAMPLES_MEMO = "\u0000refexamples:";
+function referenceExamplesRead(projectDir) {
+  const k = CTX.READ_CACHE ? REF_EXAMPLES_MEMO + readCacheKey(projectDir) : null;
+  const text = k !== null ? readIfExists(path.join(specsRoot(projectDir), "steering", "structure.md")) : null;
+  const m = k !== null ? CTX.READ_CACHE.get(k) : undefined;
+  if (m && m.text === text) return m.read;
+  const ref = referenceExamples(projectDir);
+  const root = path.resolve(projectDir);
+  const read = { ref, gone: ref && ref.table ? ref.rows.map((r) => exemplarGone(root, r.copy)).filter(Boolean) : [] };
+  if (k !== null) CTX.READ_CACHE.set(k, { text, read });
+  return read;
+}
+function referenceExamplesCheck(projectDir, lang) {
+  const { ref, gone } = referenceExamplesRead(projectDir);
+  if (!ref) return null;
+  const Q = i18n.msg(lang).quality;
+  if (!ref.table) return { status: "pass", detail: Q.refExamplesUnread(ref.file) };
+  if (!ref.total && !ref.truncated) return null;
+  const issues = [gone.length ? Q.refExamplesGone(gone.slice(0, REF_GONE_LISTED).map((p) => "`" + p + "`").join(", "), Math.max(0, gone.length - REF_GONE_LISTED), ref.file) : null,
+    ref.truncated ? Q.refExamplesTruncated(ref.truncated, REF_EXAMPLES_ROWS, ref.file) : null].filter(Boolean);
+  return issues.length ? { status: "warn", detail: issues.join("; ") } : { status: "pass", detail: Q.refExamplesOk(ref.total, ref.file) };
+}
+
+// ---------------------------------------------------------------------------
 // Clarify — surface ambiguities/gaps in requirements before designing
 // ---------------------------------------------------------------------------
 
@@ -3160,8 +3354,8 @@ function clarifyChange(projectDir, f, c) {
 }
 
 module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
-  TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
+  TRADEOFFS_SYN, RISKS_SYN, SILENT_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
   designSystemDeprecatedCheck, dsReplacement, dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, jsonPlain,
-  UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, __link };
+  UI_STATES_CHECK, uiStateMatrix, uiStatesCheck, projectPath, onDisk, REF_EXAMPLES_CHECK, referenceExamples, briefExamples, referenceExamplesCheck, __link };

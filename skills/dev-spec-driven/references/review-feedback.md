@@ -24,6 +24,12 @@ Adapted from the `receiving-code-review` skill of [obra/superpowers](https://git
 | **Project rule** | It holds for every later task, not just this diff ("money always as integer cents", "no modal for a confirmation") | Fix this diff, then propose the rule as a steering amendment (`constitution.md` for a non-negotiable, `structure.md` / `tech.md` / `ui.md` for a convention — a UI taste in `ui.md`'s `## Taste`, below); on the user's OK every later brief carries it. |
 | **Unclear** | You can't restate it | Ask. Never guess. |
 
+   **Why it happened.** A comment you confirm and fix (an AC violation, Quality, a Project rule) gets its cause — yours to
+   give, you wrote the code: `guidance-missing` · `guidance-wrong` · `example-copied` · `tool-friction` · `model-error`,
+   never a guess. Record it as a lesson, `spec_decide {name, kind: "lesson", cause, target, …}` — what to check first and
+   how the finish batch amends the guidance once: `references/subagent-execution.md` → 7b. A Project rule the user states
+   is written on their OK at once, as above: it needs no lesson.
+
 5. **Implement** one item at a time, in order: blocking (breaks things, security) → simple fixes →
    complex fixes. Run the covering tests after each; re-run the task's `_Verify:_` and record the new
    evidence (`spec_complete_task` back-fills it).

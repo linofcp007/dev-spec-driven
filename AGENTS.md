@@ -90,7 +90,7 @@ fill the scaffold, `dev-spec doctor`, present it, and record the user's yes. Pha
    - **Before you claim it:** run `dev-spec stop-check --message "<what you are about to say>"` — exit 1 means ticked tasks still lack passing evidence: record the run or say plainly what is not verified.
    - **Review findings are claims:** before fixing a finding of this plugin's reviewer, check it exists at HEAD, this branch introduced it, nothing in the spec asks for it and no green check answers it (`agents/spec-verifier.md`; only 80+ is worth a fix; an AC with no code is always a gap). A person's review comments go through `skills/dev-spec-driven/references/review-feedback.md`.
    - **Repeated code:** `dev-spec dupes <feature>` lists what the feature's code repeats — elsewhere in the project (`existing`: reuse or extend it) or inside the feature (`within`); candidates to check, never verdicts (finish warns on them).
-   - **Close** with `dev-spec finish`, optionally after a simplification pass (`skills/dev-spec-driven/references/code-reuse-and-quality.md`); subagent execution: `skills/dev-spec-driven/references/subagent-execution.md`.
+   - **Close** with `dev-spec finish`, optionally after a simplification pass (`skills/dev-spec-driven/references/code-reuse-and-quality.md`) or, on +tdd, a pruning pass (the tests that no longer earn their place, each removal the user's); subagent execution and both passes: `skills/dev-spec-driven/references/subagent-execution.md`.
 
 At each phase boundary run `dev-spec doctor <feature>` and advance only on `readyToAdvance`. Record the user's sign-off (their explicit yes for that phase) with `dev-spec approve <feature> <phase>`. Unsure what comes next? `dev-spec next-action <feature>`.
 
@@ -108,7 +108,7 @@ At each phase boundary run `dev-spec doctor <feature>` and advance only on `read
   pending approvals and project checks (`init --check`) without a passing run on the current code (`finish --run`).
   With dev-guardian installed, `init --guardian` (only on the user's request) makes its gate the check `guardian`: a
   blocking finding is fixed or, once the user accepts it, suppressed inline with a reason (`nosemgrep: <rule> -- <reason>`
-  / `# nosec`) or dropped by a baseline rebuilt on the base commit. Never advise `baseline update` with the feature's code
+  / `# nosec <id>  # <reason>`) or dropped by a baseline rebuilt on the base commit. Never advise `baseline update` with the feature's code
   in the tree — it accepts every finding, the feature's own too; that is the user's decision. Never force the finish
   without the user.
   A bugfix's fix can't complete before `bug.md` → Root Cause is written.
@@ -119,7 +119,8 @@ At each phase boundary run `dev-spec doctor <feature>` and advance only on `read
   unticks the affected done tasks and marks their evidence stale — never a removed criterion's tasks: `retire` lists
   them. Re-review, re-approve (`--phase steering` after a steering amendment). Every approval is snapshotted in
   `.specs/<feature>/.history/` — commit it.
-- **Decisions** go to `decisions.md` (`dev-spec decide`), follow-up work through `dev-spec append-tasks`, a replaced
+- **Decisions** go to `decisions.md` (`dev-spec decide`; a confirmed review finding's cause as a lesson, `--kind lesson --cause
+  <code>`, closed at the finish), follow-up work through `dev-spec append-tasks`, a replaced
   criterion declares `_Supersedes: <feature>/US-n.AC-m_`; archive rather than delete. After a plugin update, `dev-spec
   upgrade` audits read-only; `--apply` with the user's OK. Depth: `skills/dev-spec-driven/references/change-management.md`.
 

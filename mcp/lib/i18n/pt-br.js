@@ -71,6 +71,8 @@ const PTBR_OVERRIDES = [
   ["uma ligação (symlink / junction)", "um link (symlink / junction)"],
   // enclisis mid-sentence reads European (the phrase table can't see it: tasks.md is held as a file name first)
   ["uma alteração ao tasks.md revê-se e volta a aprovar-se", "uma alteração no tasks.md é revisada e aprovada de novo"],
+  // 1.41: an imperative chained to a negated subjunctive ("nunca os copies, e diz …") — the chain only follows an imperative
+  ["e diz no teu relatório", "e diga no seu relatório"],
 ];
 
 // 1. The European progressive a + infinitive → the Brazilian gerund. correr = a process running → rodando.
@@ -160,7 +162,7 @@ const PTBR_PHRASES = {
   "repõe a ligação": "restaura o vínculo", "ligação ao harness": "integração com o harness",
   "um pool de ligações": "um pool de conexões",
   // "para lá de" (beyond) is European; Brazil says "além de"
-  "para lá da": "além da", "para lá dela": "além dela", "para lá deles": "além deles",
+  "para lá da": "além da", "para lá dela": "além dela", "para lá deles": "além deles", "para lá de": "além de", "para lá do": "além do",
   // a link is a "link" (a "ligação" is a phone call, "liga-o" reads "call him / turn it on")
   "uma ligação (link simbólico)": "um link simbólico", "apaga só a ligação": "apaga só o link", "remover a ligação": "remover o link",
   "liga-o em": "coloque o link em", "liga-o aqui": "coloque o link aqui",
@@ -208,6 +210,8 @@ const PTBR_YOU_SUBJ = {
   tenhas: "tenha", possas: "possa", queiras: "queira", sejas: "seja", estejas: "esteja", vás: "vá", ignores: "ignore",
   mexas: "mexa", toques: "toque", reescrevas: "reescreva", apresentes: "apresente", declares: "declare", afirmes: "afirme",
   tires: "tire", forces: "force", // "Nunca forces o finish" → "Nunca force o finish"
+  repitas: "repita", copies: "copie", // 1.41: "não os repitas" (the brief's lessons) · "nunca os copies" (its gone examples)
+  afrouxes: "afrouxe", invertas: "inverta", retires: "retire", // the METRIC warning: "nunca afrouxes, invertas nem retires uma linha METRIC"
 };
 const PTBR_POSSESSIVE = { teu: "seu", tua: "sua", teus: "seus", tuas: "suas" };
 
@@ -225,7 +229,7 @@ const PTBR_IMPERATIVES = {
   fecha: "feche", adiciona: "adicione", renumera: "renumere", abre: "abra", define: "defina", copia: "copie", renomeia: "renomeie",
   edita: "edite", move: "mova", pede: "peça", nomeia: "nomeie", avisa: "avise", prolonga: "prolongue", age: "aja",
   considera: "considere", termina: "termine", experimenta: "experimente", refatora: "refatore", mostra: "mostre", melhora: "melhore",
-  otimiza: "otimize", sinaliza: "sinalize", cobre: "cubra", recusa: "recuse", cola: "cole", imprime: "imprima", diz: "diga",
+  otimiza: "otimize", sinaliza: "sinalize", cobre: "cubra", recusa: "recuse", cola: "cole", imprime: "imprima", diz: "diga", propõe: "proponha",
   guarda: "salve", sê: "seja", pára: "pare", inclui: "inclua", exporta: "exporte", importa: "importe", prioriza: "priorize",
   separa: "separe", junta: "junte", mapeia: "mapeie", agrupa: "agrupe", testa: "teste", reproduz: "reproduza", descreve: "descreva",
   anota: "anote", documenta: "documente", reabre: "reabra", desmarca: "desmarque", deixa: "deixe", espera: "espere", chama: "chame",

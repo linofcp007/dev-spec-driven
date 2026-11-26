@@ -28,13 +28,17 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
   // lines of a wording the line reader can't parse, and two unused acceptances) · "acceptedOwn" (the accepted file is the feature's own,
   // src/login.js) · "changed" (review 12 — dev-guardian 3.4.0's final entry for a listed file that changed since: cause
   // accepted_file_changed, its own remedy) · "changedWording" (the same case in a pre-release build: no cause, the wording alone, a gap
-  // line of ~420 characters, the "list it there" remedy).
-  const CHANGED = { tool: "semgrep", kind: "file_timeout", detail: "security_scan_full: semgrep ran with reduced coverage (partial) — not accepted: Timeout on src/huge.js, listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE: …",
+  // line of ~420 characters, the "list it there" remedy) · "integrity" (1.41.0 W — dev-guardian 3.17: a weakened test and an added
+  // suppression below the gate, each of its own pass).
+  const INTEGRITY = [{ fingerprint: "a", tool: "guardian-test-integrity", severity: "medium", category: "quality", title: "a skipped test", rule_id: "test-skipped", file_path: "tests/b.test.js", line_start: 9, fix_available: false },
+    { fingerprint: "b", tool: "guardian-suppressions", severity: "low", category: "quality", title: "an added suppression", rule_id: "scanner-suppression-added", file_path: "src/c.py", line_start: 4, fix_available: false }];
+  const CHANGED ={ tool: "semgrep", kind: "file_timeout", detail: "security_scan_full: semgrep ran with reduced coverage (partial) — not accepted: Timeout on src/huge.js, listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE: …",
     remedy: "The file is listed in .guardian/scan.yml semgrep.accept_timeouts, but it changed since that acceptance was reviewed (…): review the change as if no SAST ran on it, then raise semgrep.timeout … — or, after review, commit .guardian/scan.yml again … to accept the file as it is now.",
     gating: true, cause: "accepted_file_changed" };
   const fake = path.join(tmp, "dg-fake", "dev-guardian.mjs");
   write(tmp, "dg-fake/dev-guardian.mjs", [
     "const CHANGED = " + JSON.stringify(CHANGED) + ";",
+    "const INTEGRITY = " + JSON.stringify(INTEGRITY) + ";",
     "import fs from \"node:fs\";",
     "const code = Number(process.env.FAKE_EXIT || 0);",
     "const steps = (l) => [\"security_scan_full: \" + l, \"map_attack_surface: \" + l];",
@@ -54,7 +58,8 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
     "  acceptedOwn: { coverage: \"partial\", accepted_gaps: steps(\"semgrep timed out on src/login.js — accepted (.guardian/scan.yml semgrep.accept_timeouts)\"),",
     "    accepted_gap_details: [0, 1].map(() => ({ tool: \"semgrep\", kind: \"file_timeout\", file: \"src/login.js\", reason: \"Timeout — accepted by .guardian/scan.yml semgrep.accept_timeouts\" })) },",
     "  changed: { coverage_gaps: [CHANGED.detail], coverage_gap_details: [CHANGED] },",
-    "  changedWording: { coverage_gaps: CHG, coverage_gap_details: CHG.map((l) => det(\"semgrep\", \"file_timeout\", l, TR, true)) } })[process.env.FAKE_V34 || \"\"] || {};",
+    "  changedWording: { coverage_gaps: CHG, coverage_gap_details: CHG.map((l) => det(\"semgrep\", \"file_timeout\", l, TR, true)) },",
+    "  integrity: { tool_version: \"3.17.0\", new_findings: INTEGRITY } })[process.env.FAKE_V34 || \"\"] || {};",
     "if (process.env.FAKE_MARK) fs.writeFileSync(process.env.FAKE_MARK, process.argv.slice(2).join(\" \"));",
     "if (process.env.FAKE_REPORTS) { fs.mkdirSync(\".guardian/reports\", { recursive: true }); fs.writeFileSync(\".guardian/reports/\" + Date.now() + \".json\", \"{}\"); }",
     "const f = (severity, rule, file, line) => ({ fingerprint: \"x\", tool: \"semgrep\", severity, category: \"security\", title: rule, rule_id: rule, file_path: file, line_start: line, fix_available: false });",
@@ -194,6 +199,20 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
       cause: rF.out.includes(G.gap.timeoutChanged("semgrep") + " " + G.gap.remedy("semgrep", CHANGED.remedy) + " " + G.gap.tail) && !rF.out.includes(G.gap.timeout("semgrep")) &&
         rF.out.includes("listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE: …") && !!stF && stF.exitCode === 2 &&
         js(stF.guardian.gapDetails) === js([{ tool: "semgrep", kind: "file_timeout", remedy: CHANGED.remedy, changed: true }]) && !("accepted" in stF.guardian),
+    });
+    // 1.41.0 W (CRIT_X D7): dev-guardian 3.17's test-integrity and suppression findings below the gate through finish --run — ONE ▲
+    // warning (never ✗), each finding labelled by its pass; stored; `finish --json` (the MCP result's shape) carries the same warning
+    const rW = await finishRun(x.p, x.slug, env(0, { FAKE_V34: "integrity" }));
+    const stW = stateOf(x).finishChecks.guardian;
+    const jW = json(cli(x.p, ["finish", x.slug, "--json"]).out);
+    const WARN = G.integrityWarn(2, "high", G.finding("tests/b.test.js:9", "test-skipped", "medium", false, "test") + ", " + G.finding("src/c.py:4", "scanner-suppression-added", "low", false, "suppression"));
+    all("1.41.0 W: finish --run with dev-guardian 3.17's below-gate test-integrity and suppression findings — one ▲ warning, each labelled by its pass, never ✗; stored as testIntegrity; finish --json carries the same warning (got " +
+      js([rW.out.split("\n").filter((l) => /dev-guardian|▲|✗ the project check/.test(l)), stW && stW.guardian, jW && jW.warnings]) + ")", {
+      printed: rW.out.includes("  ▲ " + WARN + "\n") && rW.out.split("\n").filter((l) => l.includes("of its test-integrity and suppression checks")).length === 1 && !/✗ the project check 'guardian'/.test(rW.out) &&
+        /tests\/b\.test\.js:9 weakened test: test-skipped \(medium\), src\/c\.py:4 suppression added: scanner-suppression-added \(low\)/.test(WARN),
+      stored: !!stW && stW.exitCode === 0 && js(stW.guardian.testIntegrity) === js({ count: 2, top: [{ severity: "medium", rule: "test-skipped", file: "tests/b.test.js", line: 9, kind: "test" },
+        { severity: "low", rule: "scanner-suppression-added", file: "src/c.py", line: 4, kind: "suppression" }], kinds: ["test", "suppression"] }), // (kinds: review 1, R1-PZ-5)
+      json: !!jW && (jW.warnings || []).filter((w) => w === WARN).length === 1 && !(jW.blockers || []).some((b) => /weakened|suppression/.test(b)),
     });
   }
 

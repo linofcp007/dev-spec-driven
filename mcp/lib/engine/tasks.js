@@ -29,7 +29,9 @@ let dayOf; // core.js — the local calendar date (today / dayOf)
 let fastCheckStatus; // evidence.js — 1.36: the fast check at a code task (next_task, the brief, the tick)
 let guardLevel, protectOnTick, protectedCount, tickRecorded; // guards.js · protect.js — 1.36 guard tests: a tick's record, the brief's line
 let portTask, portSchedule, portHeldNumbers; // port.js — +port's fence (1.36; next_task passes over the tasks it holds — review 1; the batch: review 3)
-function __link(E) { ({ guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, portHeldNumbers, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
+let runMetricsOf, metricResultFields; // metric.js — 1.41: `done --run`'s METRIC lines (stored and reported, never judged at the tick)
+let briefLessons, briefExamples, briefTargets; // decisions.js · quality.js · scaffold.js — 1.41 the brief's Lessons and Reference examples parts
+function __link(E) { ({ runMetricsOf, metricResultFields, briefLessons, briefExamples, briefTargets, guardLevel, protectOnTick, protectedCount, tickRecorded, fastCheckStatus, portTask, portSchedule, portHeldNumbers, dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -647,6 +649,11 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   // (its window ends at the previous tick: lastTickAt is stamped below). A tick with a run carries it on that run (`fast`: metrics).
   const fast = !alreadyDone && !failed ? fastCheckStatus(projectDir, f.dir, task, state) : null;
   if (fast && ev && ev.exitCode != null) ev.fast = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean };
+  // 1.41: `done --run` (ranBy "cli") hands the WHOLE output of its passing commands (`evidence.output` — normalizeEvidence never takes
+  // it, MCP can't pass it): their METRIC lines go on the run (`ev.metrics`, the latest run only) and into the result. Report-only:
+  // the tick never compares them — only spec_finish does.
+  const metricRead = cli && ev && ev.exitCode === 0 && !failed && isObj(evidence) && (typeof evidence.output === "string" || Array.isArray(evidence.output)) ? runMetricsOf(evidence.output) : null;
+  if (metricRead && metricRead.stored.length) ev.metrics = metricRead.stored;
   if (ev) { // every run is recorded — a failure too (never ticked), so a later note can't paper over it
     state.evidence = state.evidence || {};
     // Only THIS task's record is extended; another task's record under the same number is kept aside.
@@ -766,6 +773,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.fastCheck = { check: fast.check, status: fast.status, runs: fast.runs, clean: fast.clean, ...(fast.partial ? { partial: true } : {}) };
     if (["stale", "failed", "missing"].includes(fast.status)) res.note = [res.note, i18n.msg(lng).fastCheck.tickNote(n, fast.check, fast.command, fast.status, !!fast.pwsh)].filter(Boolean).join(" ");
   }
+  // 1.41 (stable): metrics [{name, value, unit, better, tolerance}] · metricsMalformed / metricsLastMalformed · metricsDropped
+  if (metricRead) Object.assign(res, metricResultFields(metricRead.read, false));
   return withObserved(res); // the observed stamp on every result
 }
 
@@ -1314,7 +1323,9 @@ const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emi
 // bold-italic: `***Verify: x***` opens at its third `*` (exactly two before it — `**Verify:**` stays a bold label, no
 // marker); a closer may be followed by `*` (`**_Verify: x_**`), quotes (`("_Verify: x_")`, “…”, ‘…’, «…»), a dash (`_Verify: x_—`)
 // — CommonMark's right-flanking rule (a closer followed by punctuation); and a run of `*` closes at its first star.
-const RE_TASK_MARKER_OPEN = new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*|(?<=(?:^|[^*\\p{L}\\p{N}_])\\*\\*)\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
+// (the opener for a list of labels: the task markers', or — 1.41 — another reader's own label, labelMarkerSpans)
+const markerOpenRe = (labels) => new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*|(?<=(?:^|[^*\\p{L}\\p{N}_])\\*\\*)\\*)(" + labels.join("|") + "):[ \\t]*", "giu");
+const RE_TASK_MARKER_OPEN = markerOpenRe(TASK_MARKER_LABELS);
 const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]", "*", '"', "'", "—", "–", "”", "’", "»"]);
 // → [{ key (the label, lower-case), value (untrimmed), start, end }], in line order.
 // A closer followed directly by whitespace / the end ("plain") wins over one followed by closing punctuation, when one exists
@@ -1339,7 +1350,11 @@ function taskMarkerSpans(line) {
   }
   return hit;
 }
-function scanMarkerSpans(s) {
+// 1.41 the same reader for a marker of ANOTHER label — steering/tech.md's `_Budget: <check> <duration>_` lines (engine/friction.js):
+// one closer grammar, never a second copy (the task markers' labels never read it, nor it theirs). Not memoized (a few lines, read
+// once per call). label: a plain word (a regex-safe constant).
+const labelMarkerSpans = (line, label) => scanMarkerSpans(String(line == null ? "" : line), markerOpenRe([label]));
+function scanMarkerSpans(s, open = RE_TASK_MARKER_OPEN) {
   const out = [];
   // The characters inside inline code spans (a backtick run closed by a run of the same length — backtickRuns, linear).
   let inCode = null;
@@ -1354,7 +1369,7 @@ function scanMarkerSpans(s) {
       k = e;
     }
   }
-  const re = new RegExp(RE_TASK_MARKER_OPEN.source, RE_TASK_MARKER_OPEN.flags); // its own lastIndex
+  const re = new RegExp(open.source, open.flags); // its own lastIndex
   const opens = [];
   let m;
   while ((m = re.exec(s)) !== null) if (!inCode || !inCode[m.index]) opens.push({ index: m.index, len: m[0].length, key: m[1] });
@@ -1726,6 +1741,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const testRows = testIds.filter((id) => tests.has(id)).map((id) => tests.get(id));
   const unresolved = { acs: acIds.filter((id) => !acs.has(id)), tests: testIds.filter((id) => !tests.has(id)) };
   const dec = briefDecisions(dir, acIds, testIds, blockText); // decisions.md entries citing the task's IDs (bounded)
+  const les = briefLessons(dir); // 1.41: the feature's OPEN lessons, newest first (bounded) — never in the Decisions part too
   // the glossary entries the task's text and its criteria use (a term or an avoided word; bounded)
   const gloss = briefGlossary(root, [blockText, ...acceptanceCriteria.map((a) => a.text)].join("\n"));
 
@@ -1767,6 +1783,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // … and the design section it quotes leaves "Design context" only when the Reuse section quotes ALL of it (R review 2 —
   // reuseQuotedSection): every other section, whatever its heading, keeps the 1.18 selection below.
   const reuseSection = reuseQuotedSection(sections, designText, reuse);
+  // 1.41: structure.md's Reference Examples rows for the task's files (the paths a fileMatch pattern matches — briefTargets), bounded;
+  // null without a row in the table
+  const examples = briefExamples(projectDir, briefTargets(root, mk.implements));
   // 1.35: a task that builds what the user sees (uiTask — the visual review's rule) reads the design-system registry
   // (.specs/steering/design-system.md): the entry of each component the design's [UI] Design System Usage names, bounded. null
   // without a registry.
@@ -1849,6 +1868,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     metrics: mk["emits metrics"],
     implements: mk.implements,
     reuse: reuseShown ? reuse : null,
+    examples,
+    lessons: les.items,
+    lessonsOmitted: les.omitted,
     designSystem: ds,
     unresolved,
     design: { path: rel(path.join(dir, "design.md")), toc: sections.map((s) => s.title), included, omitted },
@@ -1930,6 +1952,10 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (gloss.items.length) res.glossary = gloss.items.map((g) => ({ term: g.term, definition: g.definition, avoid: g.avoid })); // 1.16 Q3
   if (gloss.omitted.length) res.glossaryOmitted = gloss.omitted;
   if (reuseShown) res.reuse = reuse; // {state, total, entries, omitted, files, more}
+  // 1.41: {file, quoted: [{pattern, copy, appliesTo}], gone: [path], omitted, total} — structure.md's Reference Examples rows for its files
+  if (examples) res.examples = examples;
+  // 1.41: {quoted: [{id, title, cause, target, text}], omitted: [D-n]} — the feature's open lessons the brief quotes
+  if (les.items.length || les.omitted.length) res.lessons = { quoted: les.items, omitted: les.omitted };
   // 1.35: {file, components: [{kind, name, path}], unknown, tokens} — the registry entries the brief quotes (identifiers only);
   // 1.39: units {rows: [{props, units}], more} — the units table's rows it quotes, only when the registry holds one
   if (ds) {
@@ -1949,10 +1975,13 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // the nearby files (identifiers) and how many design entries the brief quotes — never the entries' text
     if (res.reuse) res.refs.reuse = { entries: res.reuse.entries.length, files: res.reuse.files };
     if (res.designSystem) res.refs.designSystem = res.designSystem.components.map((c) => c.name); // the names only
+    // 1.41: how many example rows the brief quotes, the gone files it names (paths), how many rows the table holds · the lessons' IDs
+    if (res.examples) res.refs.examples = { quoted: res.examples.quoted.length, gone: res.examples.gone, total: res.examples.total };
+    if (res.lessons) res.refs.lessons = { quoted: res.lessons.quoted.map((x) => x.id), omitted: res.lessons.omitted };
     // KEPT (identifiers the controller and done --run act on): verify, expect, projectChecks, dependsOn, gated / gateError /
     // heldBy, preflight, uiReview, fastCheck (1.36), protectedTests (1.36), portRole / differential (1.36) — only the quoted spec
     // text below goes.
-    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse", "designSystem"]) delete res[k];
+    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse", "designSystem", "examples", "lessons"]) delete res[k];
   }
   return res;
 }
@@ -2297,7 +2326,7 @@ module.exports = { parseTasks, taskDescription, nextTask, taskDependsSpec, taskS
   taskDepsBlockedNote, taskDepsWaitList, taskDepsCheck, tasksRewrite, checkboxBytes, completeTask, reasonInput, taskLine,
   dropTrailingCr, RE_CHECKPOINT, scanTaskLines, indentOf, hasOutsideCode, backtickRuns, nextTaskNumber, taskPeerStamps,
   taskBlocks, unreadTaskLines, unreadTasksDetail, resolveTask, blockPosition, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
-  changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, taskMarkerSpans, taskMarkerValues, withoutTaskMarkers,
+  changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, taskMarkerSpans, labelMarkerSpans, taskMarkerValues, withoutTaskMarkers,
   taskMarkers, malformedMarkers, suspiciousVerify, RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections,
   taskBrief, RE_THEMATIC_BREAK, appendTasks,
   readyTasks, // 1.36 guard tests (protect.js): the tasks that can start now — their exact _Implements:_ files unlock a protected test

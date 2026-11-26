@@ -425,6 +425,15 @@ Cada critério SE…ENTÃO em requirements.md já nomeia uma falha e a sua recup
 | Risco | Probabilidade | Impacto | Mitigação | Responsável |
 |---|---|---|---|---|
 | [o que pode falhar] | [baixa / média / alta] | [baixo / médio / alto] | [como o evitamos ou detetamos] | [quem o acompanha] |`,
+    silent: `## Regressões Silenciosas
+<!-- Que número pode piorar com todos os testes a passar — o tamanho do bundle, a latência p95, as consultas por pedido, os
+     tokens por chamada, a memória, o tempo de build? Uma linha por número: o nome com que um check do projeto o imprime (uma
+     linha METRIC <name>=<value> <unit> better=lower|higher tolerance=<n>%) — o finish compara-o com o último finish que o
+     registou e avisa para lá da tolerância declarada. A secção de orçamento de uma track (Orçamento de Desempenho, Economia de
+     Tokens, Orçamento de Desempenho da Interface) fixa os alvos: uma linha aqui nomeia o check que imprime o número.
+     "Nenhuma — <porquê>" é uma resposta; em branco não. -->
+| Métrica | Porque pode regredir em silêncio | Impressa por |
+|---|---|---|`,
     constitution: `## Verificação da Constituição
 Verifica este design contra cada princípio em \`steering/constitution.md\`. GATE: tem de passar antes
 da implementação; volta a verificar após qualquer alteração de design.
@@ -931,7 +940,7 @@ const steering = {
     "structure.md":
       "# Estrutura do Projeto\n\n## Layout\n[árvore de diretórios]\n\n## Fronteiras de Módulos\n- O que cada módulo expõe e o que pode importar: [ex.: cada feature expõe um único ponto de entrada; features/* importam lib/*, nunca umas das outras; lib/* não importa nenhuma feature; sem ciclos]\n\n## Código Partilhado\n- Onde ficam os helpers e componentes partilhados: [ex.: src/lib/ para helpers e clientes, src/components/ para a UI] — procurar aí antes de acrescentar um; o código entra lá ao segundo ou terceiro uso real.\n\n## Nomenclatura\n- Ficheiros / componentes / rotas de API / tabelas de BD / métricas: []\n\n## Commits\nConventional commits: `type(scope): description`. Tipos: feat|fix|refactor|test|docs|chore|style|perf\n\n## Branches e Revisões\n- main + feature/<nome>; revisões obrigatórias para merges para main.\n",
     "testing-standards.md":
-      "# Padrões de Teste\n\n## Runner e Ferramentas\n- Unit/Integração: []\n- E2E: []\n- Mocking: []\n\n## Política de Cobertura\n- Alvo por defeito: []\n- Caminhos críticos (auth/faturação/dados): 100% de ramos.\n\n## Disciplina TDD\n- Sem implementação antes de um teste a falhar que exercite o caminho real.\n- 'Falhar pela razão certa' = assertion/NotImplemented, não erro de import/sintaxe.\n",
+      "# Padrões de Teste\n\n## Runner e Ferramentas\n- Unit/Integração: []\n- E2E: []\n- Mocking: []\n\n## Política de Cobertura\n- Alvo por defeito: []\n- Caminhos críticos (auth/faturação/dados): 100% de ramos.\n\n## Disciplina TDD\n- Sem implementação antes de um teste a falhar que exercite o caminho real.\n- 'Falhar pela razão certa' = assertion/NotImplemented, não erro de import/sintaxe.\n\n## Valor dos Testes\n- Um teste merece o seu lugar quando guarda um AC (o seu T-ID no plano de testes) ou um bug passado (o teste de regressão de um bugfix) e falha quando esse comportamento deixa de funcionar.\n- Os outros — o mesmo caminho de outro teste, verde quando o seu comportamento deixa de funcionar — vão para a passagem de poda (/spec-review <feature> prune): removidos por inteiro, só com a aprovação do utilizador, nunca durante uma tarefa, nunca o último teste planeado de um critério.\n",
     "scale.md":
       "# Alvos de Escala\n\n## Alvos de Carga\n| Horizonte | Simultâneos | DAU | MAU | Pico RPS | Dados |\n|---|---|---|---|---|---|\n| Lançamento | | | | | |\n| 6 meses | | | | | |\n| 2 anos | | | | | |\n\n## Alvos de SLA\n| Classe de endpoint | P95 | P99 | Disponibilidade |\n|---|---|---|---|\n| Jornada crítica | | | |\n\n## Jornadas Críticas de Utilizador\n1. []\n\n## Limiares de Escalonamento\n- []\n",
     "observability.md":
@@ -2034,6 +2043,11 @@ const msg = {
       median: "mediana",
       medianLeads: (list) => `  mediana do tempo desde a criação: ${list}`,
       totals: (done, total, pass, runs, changes, reopened) => `  total: tarefas ${done}/${total} · ${runs ? `evidência ${pass} de ${runs} execução(ões) com sucesso` : "nenhuma execução registada"} · pedidos de alteração ${changes} · tarefas reabertas ${reopened}`,
+      // 1.41 as lições (as entradas _Kind: lesson_ do decisions.md) — os códigos da causa ficam em inglês
+      lessonsLine: (total, open, by) => `  lições: ${total} (${open} abertas)${by ? " — " + by : ""}`,
+      lessonsUnread: (list) => `  lições cuja causa não é nenhum dos cinco códigos (uma edição à mão?): ${list}`,
+      lessonsTruncated: (n) => `  lições: ${n} pasta(s) de feature além das primeiras 1000 não lidas`,
+      lessonsRepeated: (cause, target, features, n) => `  repetida: ${cause} → ${target} — ${n} lições em ${features}`,
       retroText: {
         title: (f) => `# Retrospetiva: ${f}`,
         intro: (date) => `> Gerada pelo dev-spec a ${date} a partir de .state.json, .history/ e dos artefactos. Os números são calculados localmente; o resto é contigo. Nada aqui é aplicado automaticamente.`,
@@ -2063,6 +2077,9 @@ const msg = {
         sigReopened: (n) => `${n} tarefa(s) reaberta(s) por pedidos de alteração`,
         sigPass: (rate) => `só ${rate}% das execuções de verificação passaram`,
         sigClar: (n) => `${n} marcador(es) de clarificação ainda por resolver`,
+        sigLessons: (n, open) => `${n} lição(ões) das revisões, ${open} aberta(s)`,
+        // 1.41: uma linha por lição sob o título das alterações — a causa, o target, a regra e o estado
+        lessonLine: (x) => `- ${x.id} (${x.cause || "?"}${x.target ? " → " + x.target : ""}): ${x.text} — ${x.closedBy ? "fechada por " + x.closedBy : "aberta"}`,
         amend: "## Alterações propostas ao steering ou à constituição",
         amendNote: "<!-- Para aprovação humana — nunca aplicadas automaticamente. Indica o ficheiro (.specs/steering/constitution.md, tech.md, …), a alteração exata e o porquê. -->",
         followUps: "## Seguimento",
@@ -2195,6 +2212,39 @@ const msg = {
       metricsTotals: (ticks, ticksClean) => `  verificação rápida: ${ticksClean} de ${ticks} tarefa(s) de código marcada(s) depois de uma execução limpa no código final`,
       doctorInvalid: (name, why) => `meta.fastCheck nomeia '${name}', ${({ missing: "que não é uma verificação do projeto (meta.checks)", guardian: "que corre o gate do dev-guardian (uma análise de minutos)", fixer: "cujo comando reescreve ficheiros (--fix, --write, um comando fmt / format com -w ou sem uma opção de verificação)" })[why]} — não corre nenhuma verificação rápida. Define outra: ${DEV_SPEC} init --fast-check <verificação> (ou off).`,
       offer: (cmd, from, name, existing) => `Uma verificação rápida depois de cada pequena alteração apanha erros de tipos e de lint em segundos: \`${cmd}\` (${from}). Tem de passar no ramo base — passa a ser uma verificação do projeto de que o spec_finish também precisa. Proposta, nunca ativada: ${existing ? `${DEV_SPEC} init --fast-check ${name}` : `${DEV_SPEC} init --check ${name}="${cmd}" --fast-check ${name}`}.`,
+    },
+    friction: {
+      over: (check, median, budget, n) => `▲ ${check} ${median} > ${budget} (${n} execuções)`,
+      within: (check, median, budget, n) => `${check} ${median} ≤ ${budget} (${n} execuções)`,
+      fewRuns: (check, n, need) => `${check}: ${n} execução(ões) medida(s) bem-sucedida(s) — a avaliação precisa de ${need}`,
+      noRuns: (check) => `${check}: ainda sem nenhuma execução medida`,
+      unbudgeted: (check, median, n) => `${check} ${median} (${n} execuções, sem orçamento)`,
+      metrics: (items) => `  fricção (steering/tech.md _Budget:_): ${items}`,
+      invalid: (line, text, why, checks) => `steering/tech.md linha ${line}: ${text} — ${({ "no-check": `não nomeia nenhuma verificação do projeto (meta.checks: ${checks || "nenhuma"})`, duration: "a duração não se consegue ler (p. ex. 90s, 2m, 1500ms; no máximo 24 h)", duplicate: "um segundo orçamento para essa verificação — conta o primeiro" })[why]}`,
+      truncated: "steering/tech.md: só são lidos os primeiros 20 marcadores _Budget:_ (e os primeiros 256 KB)",
+      naItem: (check, median, n, budget) => `${check} (mediana de ${median} nas últimas ${n} execuções bem-sucedidas, orçamento ${budget})`,
+      backlogNote: (median, n, budget) => `mediana de ${median} acima do orçamento de ${budget} (steering/tech.md, últimas ${n} execuções bem-sucedidas)`,
+      naHint: (items, cmds) => `Fricção: ${items} — acima do orçamento (steering/tech.md). Antes de fechar, propõe ao utilizador um item de plataforma — ${cmds} (spec_roadmap_edit {kind: "backlog", action: "add", name, note}) — nunca uma correção dentro desta feature; ou o utilizador sobe ou remove essa linha de orçamento.`,
+    },
+    metric: {
+      verdict: { within: "dentro da tolerância", improved: "melhor para lá da tolerância", regressed: "pior para lá da tolerância" },
+      unjudged: (why) => (why.includes("unit") ? "não comparada — a unidade mudou" : `não avaliada — a linha anterior não declara ${why.map((w) => w + "=").join(" nem ")}`),
+      loosened: (term, was, now) => (term === "unit" ? `mudou a unidade (${was} → ${now}) — não comparada` : `afrouxou ${term}= (${was} → ${now}) — avaliada pelos termos do finish anterior`),
+      line: (name, check, now, ref, feature, day, delta, judged) => `${name} (${check}): ${now} — ${ref} no finish de ${feature} (${day})${delta == null ? "" : " · " + delta} · ${judged}`,
+      lineNew: (name, check, now) => `${name} (${check}): ${now} — primeira medição: o próximo finish compara com ela`,
+      summaryHead: "## Métricas",
+      flagged: (name, check, ref, now, feature, day, delta, applied, verdict) => `${name} (check ${check}): ${ref} → ${now} desde o finish de ${feature} em ${day} (` +
+        [delta, verdict === "unjudged" ? (delta == null ? "não comparada" : "não avaliada") : `${({ within: "dentro da", improved: "melhor do que a", regressed: "para lá da" })[verdict]} tolerância ${applied}`].filter(Boolean).join(", ") + ")",
+      finishWarn: (n, list, more, unitOnly) => (unitOnly
+        ? `${n} leitura(s) METRIC mudaram de unidade desde o último finish que as registou — não comparadas (sem conversão): ${list}${more ? ` — e mais ${more} (as metrics do spec_finish)` : ""}. Diz ao utilizador antes do merge: o próximo finish compara na nova unidade — e nunca mudes a unidade, nem afrouxes, invertas ou retires uma linha METRIC para passar.`
+        : `${n} leitura(s) METRIC pioraram para lá da tolerância que a sua linha declara, ou afrouxaram os seus termos, desde o último finish que as registou: ${list}${more ? ` — e mais ${more} (as metrics do spec_finish)` : ""}. Todas as alterações integradas desde esse finish estão no número, não só as desta feature: diz ao utilizador antes do merge — e nunca afrouxes, invertas nem retires uma linha METRIC para passar.`),
+      unmeasured: (names, slug) => `O design.md de ${slug} indica ${names} em Regressões Silenciosas, mas as execuções bem-sucedidas dos checks do projeto não imprimiram nenhuma linha METRIC legível com esse nome (uma linha malformada, ou uma para lá de um limite do leitor, não é lida — a nota da execução diz qual) — acrescenta a linha ao check que o mede (references/verification.md → Metrics that regress silently), ou corrige a linha da tabela.`,
+      notRead: (n, last, grammar) => `${n} linha(s) METRIC não lida(s) — a forma é ${grammar}${last ? ` (a última: ${last})` : ""}`,
+      dropped: (bounds) => `linhas METRIC para lá de um limite do leitor ficaram por ler (${bounds}): no máximo 20 nomes, 1000 linhas candidatas de no máximo 512 bytes, os últimos 64 MiB da saída — ficam as linhas impressas por último`,
+      reportHead: "Leituras METRIC (cada uma contra o último outro finish que a registou):",
+      recorded: (n) => `${n} leitura(s) METRIC registada(s) com este finish: o finish da próxima feature compara com elas`,
+      measuredHead: "  Leituras METRIC ao longo dos finishes:",
+      measuredLine: (name, check, first, last, n, change) => `${name} (${check}): ${first} → ${last} em ${n} finish(es) (${change})`,
     },
     reviewModels: {
       on: (list, diverse) => `Painel de revisão LIGADO (meta.reviewModels: ${list}${diverse ? " — diverse" : ""}): a revisão do ramo antes do merge, o converge e os críticos do gate da revisão profunda correm também em cada modelo do painel — o painel acrescenta modelos, nunca substitui o da própria revisão (o dos críticos do gate: o modelo da sessão) —; os achados da revisão do ramo e do converge são reunidos e cada um é verificado uma vez, os achados reunidos dos críticos do gate vão para o utilizador (os gates não têm verificador). O revisor de cada tarefa corre num modelo do painel diferente do do implementador, nunca abaixo do nível do sonnet — com diverse e um implementador sonnet, cada revisão de tarefa corre em opus. Cada modelo a mais custa mais um despacho de revisão por cada revisão que cobre. O Claude Code só despacha aliases (opus, sonnet, haiku, fable): aí, outro nome faz a revisão num só modelo.`,
@@ -2534,6 +2584,7 @@ const msg = {
         "tradeoffs-missing": "sem secção Alternativas e Compromissos — o doctor avisa (design-tradeoffs) em todas as features criadas a partir dele.",
         "risks-missing": "sem secção Riscos — o doctor avisa (design-risks) em todas as features criadas a partir dele.",
         "reuse-missing": "sem secção Reutilização e Integração — o doctor avisa (design-reuse) em todas as features criadas a partir dele.",
+        "silent-missing": "sem secção Regressões Silenciosas — uma feature de tamanho m / l criada a partir dele recebe a do built-in no fim (o doctor avisa design-silent-regressions até ser respondida); acrescenta-a onde o template a quer.",
         "no-criteria": "nenhum critério de aceitação (uma linha US-n.AC-m com DEVE) — nada para o EARS, o trace_check ou o plano de testes seguirem.",
         "ac-duplicate": (ids) => `IDs de AC duplicados: ${ids} — o doctor falha em todas as features criadas a partir dele.`,
         "phantom-ac": (ids, file) => `cita IDs de AC que ${file} não define: ${ids} — o trace_check reporta-os como fantasmas.`,
@@ -3014,8 +3065,8 @@ const msg = {
       noBaseline: " — sem baseline: todos os findings que já existem contam como novos",
       override: (p) => ` (dev-guardian do DEV_GUARDIAN_CLI=${p})`,
       // 1.33: a alteração desde a base da feature, lida à procura de testes enfraquecidos (o test-integrity do dev-guardian 3.8.0)
-      diffBase: (ref) => ` · a alteração desde ${ref} verificada à procura de testes enfraquecidos`,
-      diffBaseUncommitted: (ref) => ` · só o trabalho ainda sem commit verificado à procura de testes enfraquecidos (${ref} já contém os commits deste ramo)`,
+      diffBase: (ref) => ` · a alteração desde ${ref} verificada à procura de testes enfraquecidos (e, com o dev-guardian 3.17+, supressões adicionadas)`,
+      diffBaseUncommitted: (ref) => ` · só o trabalho ainda sem commit verificado à procura de testes enfraquecidos e, com o dev-guardian 3.17+, supressões adicionadas (${ref} já contém os commits deste ramo)`,
       accepted: (t, p, o) => [t ? `${t} ficheiro(s) não analisado(s) (aceite(s) no .guardian/scan.yml)` : "", p ? `${p} ficheiro(s) só lido(s) em parte (aceite(s) com --accept-partial-parse)` : "",
         o ? `${o} outra(s) aceitação(ões) (accepted_gaps)` : ""].filter(Boolean).join(" · "),
       acceptedWarn: (what) => `o gate do dev-guardian passou com ${what} — revê à mão uma alteração a esses ficheiros: um finding onde nenhum scanner olhou passa o gate.`,
@@ -3027,10 +3078,11 @@ const msg = {
       staleTimeouts: (n, files) => `${n} ${n === 1 ? "entrada obsoleta" : "entradas obsoletas"} em accept_timeouts no .guardian/scan.yml${files ? " (" + files + ")" : ""} — remove-${n === 1 ? "a" : "as"}, ou um timeout futuro ${n === 1 ? "nesse ficheiro" : "nesses ficheiros"} é aceite sem que ninguém o veja.`,
       update: (v) => `atualiza o dev-guardian (Claude Code: /plugin) — ${v ? "esta execução usou o " + v + ", o gate precisa do 3.2.1 ou posterior" : "esta execução não indicou versão (o 3.3.0 e posteriores indicam); o gate precisa do 3.2.1 ou posterior"}`,
       updateHint: (slug) => `Atualiza o plugin dev-guardian (3.2.1 ou posterior — Claude Code: /plugin) e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run.`,
-      finding: (at, rule, severity, own, test) => `${at} ${test ? "teste enfraquecido: " : ""}${rule} (${severity})` + (own ? " [esta feature]" : ""),
+      finding: (at, rule, severity, own, kind) => `${at} ${kind === "test" ? "teste enfraquecido: " : kind === "suppression" ? "supressão adicionada: " : ""}${rule} (${severity})` + (own ? " [esta feature]" : ""),
+      integrityWarn: (n, failOn, list, only) => `dev-guardian: ${n} finding(s) novo(s) ${only === "test" ? "da sua verificação de integridade dos testes" : only === "suppression" ? "da sua verificação de supressões" : "das suas verificações de integridade dos testes e de supressões"} abaixo de --fail-on ${failOn}${list ? " — " + list : ""}. Não bloqueiam: o utilizador decide cada um — uma remoção de teste que aprovou fica; acrescenta um motivo à supressão que quis; senão, corrige-o e volta a correr a verificação.`,
       blocker: (name, text) => `a verificação do projeto '${name}' falhou — ${text}.`,
       more: (n) => `+${n} mais`,
-      fixHint: (slug) => `Corrige o(s) finding(s) e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run. Para aceitar UM finding revisto, o utilizador suprime-o na própria linha com um motivo (nosemgrep: <regra> -- <motivo>, # nosec) — nunca com \`baseline update\`, que aceita todos os findings atuais, incluindo os desta feature. Nunca forces o finish sem o utilizador.`,
+      fixHint: (slug) => `Corrige o(s) finding(s) e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run. Para aceitar UM finding revisto, o utilizador suprime-o na própria linha com um motivo (nosemgrep: <regra> -- <motivo>, # nosec <id>  # <motivo>) — nunca com \`baseline update\`, que aceita todos os findings atuais, incluindo os desta feature. Um finding de integridade dos testes (um teste enfraquecido ou apagado) não aceita supressão na própria linha: repõe o teste, ou o utilizador decide — com --fail-on medium, uma poda aprovada bloqueia, como previsto. Nunca forces o finish sem o utilizador.`,
       baselineHint: "Sem baseline: o utilizador regista uma no commit de base, antes do código desta feature (num checkout do ramo de base: node .specs/guardian.cjs baseline update --project . aí, e depois commit do .guardian/baseline.json) — registada aqui, aceitaria também os findings desta feature.",
       incompleteHint: "Instala o scanner em falta (o /guardian-init do dev-guardian), ou — sem rede, quando o Semgrep não conseguiu obter as regras — junta --local-only ao comando da verificação; a verificação continua falhada até passar ou o utilizador a mudar.",
       gap: {
@@ -3045,7 +3097,7 @@ const msg = {
         tail: "A verificação continua falhada até passar ou o utilizador a mudar.",
       },
       configHint: (slug) => `Corrige isso e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run.`,
-      mcpRun: (name, cmd, slug) => `A verificação '${name}' corre o scan do dev-guardian (minutos). No Claude Code, corre ${DEV_SPEC} finish ${slug} --run (Bash com timeout 600000, ou em segundo plano): corre a verificação e regista o relatório sozinho. Noutros clientes, corre \`${cmd}\` a partir da raiz do projeto (dev-guardian 3.3+: junta --compact para um relatório curto) e regista a execução com spec_finish {evidence: [{name: "${name}", command, exitCode, summary: as últimas linhas do stderr, report: o JSON do stdout}]} — uma execução que passa precisa do relatório.`,
+      mcpRun: (name, cmd, slug) => `A verificação '${name}' corre o scan do dev-guardian (minutos). No Claude Code, corre ${DEV_SPEC} finish ${slug} --run (Bash com timeout 600000, ou em segundo plano): corre a verificação e regista o relatório sozinho. Noutros clientes, corre \`${cmd}\` a partir da raiz do projeto (dev-guardian 3.3+: junta --compact para um relatório curto) e regista a execução com spec_finish {evidence: [{name: "${name}", command, exitCode, summary: as últimas linhas do stderr, report: o JSON do stdout}]} — uma execução que passa precisa do relatório. O dev-guardian só procura os seus findings abaixo do gate (um teste enfraquecido, uma supressão adicionada) numa execução com a base da feature, que só o ${DEV_SPEC} finish ${slug} --run entrega ao seu launcher: uma execução registada assim não nomeia nenhum.`,
       launcherChanged: `o .specs/guardian.cjs não é o launcher que o dev-spec-driven escreve (editado, substituído ou um link), por isso o gate não o corre — ${DEV_SPEC} init --guardian volta a escrevê-lo (se foi um dev-spec mais recente a escrevê-lo, atualiza o dev-spec em vez disso)`,
       launcherRefreshed: "O .specs/guardian.cjs foi substituído pelo launcher desta versão (era o de uma versão anterior).",
       notRun: (name, why) => `a verificação do projeto '${name}' não foi corrida — ${why}. Nada foi registado.`,
@@ -3263,13 +3315,19 @@ const msg = {
      que a decisão toca; uma decisão posterior que substitua outra diz _Supersedes: D-n_. As descobertas (factos
      aprendidos durante o trabalho) usam o mesmo registo (_Kind: discovery_). -->
 `,
-      labels: { context: "Contexto", decision: "Decisão", discovery: "Descoberta", consequences: "Consequências" },
-      kinds: { decision: "decisão", discovery: "descoberta" },
+      labels: { context: "Contexto", decision: "Decisão", discovery: "Descoberta", lesson: "Lição", consequences: "Consequências" },
+      kinds: { decision: "decisão", discovery: "descoberta", lesson: "lição" },
       titleRequired: "uma decisão precisa de um título (uma linha de texto).",
-      decisionRequired: "uma decisão precisa do seu texto — decision: o que foi decidido (numa descoberta: o que se descobriu).",
+      decisionRequired: "uma decisão precisa do seu texto — decision: o que foi decidido (numa descoberta: o que se descobriu; numa lição: a regra).",
       badText: (field) => `${field} tem de ser texto.`,
       tooLong: (field, max) => `${field} é demasiado longo (no máximo ${max} caracteres).`,
-      badKind: (v) => `kind tem de ser decision ou discovery (recebido: ${v}).`,
+      badKind: (v) => `kind tem de ser decision, discovery ou lesson (recebido: ${v}).`,
+      // 1.41 o tipo lição: porque aconteceu um achado confirmado numa revisão (os códigos da causa ficam em inglês)
+      causeRequired: (list) => `uma lição precisa da sua causa — uma de ${list}, tal como a deu o agente que escreveu o código (nunca um palpite). Nada foi escrito.`,
+      badCause: (v, list) => `causa desconhecida ${v} — a causa de uma lição é uma de ${list}. Nada foi escrito.`,
+      lessonOnly: "cause e target pertencem a uma lição (kind: lesson) — uma decisão ou uma descoberta não tem nenhum dos dois. Nada foi escrito.",
+      badTarget: (v) => `o target ${v} não é um caminho dentro do projeto (um caminho de rede, um caminho absoluto noutro sítio ou uma saída com .. não indicam nenhum; um ficheiro na raiz: ./Makefile). Nada foi escrito.`,
+      targetGone: (rel, cause) => `o target ${rel} não existe — com a causa ${cause}, o target é um ficheiro que existe (a orientação que estava errada, o código que foi copiado). Nada foi escrito.`,
       badAffectsChange: (list) => `referência(s) _Affects:_ desconhecida(s): ${list} — uma alteração refere um AC ID que o seu change.md define, ou um título de secção do change.md (Resumo, Critérios de Aceitação, Abordagem, Tarefas). Nada foi escrito.`,
       badAffects: (list) => `referência(s) _Affects:_ desconhecida(s): ${list} — um AC ID tem de estar definido em requirements.md, um T-ID planeado em test-plan.md, um ID EC/NFR/SC escrito em requirements.md; qualquer outra tem de ser um título de secção do design.md (bug.md / design.md num bugfix, spike.md num spike). Nada foi escrito.`,
       badSupersedes: (list) => `_Supersedes:_ tem de indicar decisões que já estão neste registo (D-n): ${list}. Nada foi escrito.`,
@@ -3278,6 +3336,10 @@ const msg = {
       briefHeading: "## Decisões",
       briefIntro: "Decisões e descobertas (decisions.md) que citam os critérios ou testes desta tarefa — respeita-as:",
       briefOmitted: (list) => `…e ${list} — ver decisions.md.`,
+      briefLessonsHeading: "## Lições das revisões desta feature",
+      briefLessonsIntro: "Achados confirmados de tarefas anteriores e porque aconteceram (decisions.md) — não os repitas:",
+      // spec_finish: as lições abertas — a ÚNICA pergunta do fecho (commands/spec-finish.md), nunca um bloqueio
+      finishOpen: (ids, slug) => `${ids.length} lição(ões) à espera da decisão do utilizador (${ids.join(", ")}): propõe todas as alterações numa ÚNICA pergunta, edita cada ficheiro uma só vez e depois fecha-as com uma decisão que as substitua (spec_decide {name: "${slug}", title: "Lições de ${slug}: alterado …", decision: "<por lição: aplicada → alvo, ou recusada → motivo>", supersedes: [${ids.map((x) => JSON.stringify(x)).join(", ")}]} · ${DEV_SPEC} decide ${slug} --title "Lições de ${slug}: alterado …" --decision "<por lição: aplicada → alvo, ou recusada → motivo>" --supersedes ${ids.join(",")}).`,
       supersedesNote: (list) => `substitui ${list}`,
       prHeading: "## Decisões",
       catalogLine: (n, list) => `Decisões (${n}): ${list}`,
@@ -3553,6 +3615,11 @@ const quality = {
     dsTruncated: (read, total) => `o registo tem ${total} componentes — só os primeiros ${read} são lidos com os detalhes (reduz o número de linhas: só este ficheiro é lido)`,
     dsTable: { components: "| Componente | Caminho | Variantes | Notas |" },
     dsRegistered: (list) => `acrescentado ao registo do design system (.specs/steering/design-system.md): ${list}`,
+    // 1.41 o reference-examples do doctor (a tabela ## Exemplos de Referência do structure.md)
+    refExamplesGone: (list, more, file) => `${file} → Exemplos de Referência indica ficheiros que já não existem: ${list}${more ? ` (+${more})` : ""} — aponta a linha para o ficheiro a copiar agora, ou remove-a (um brief indica-o, nunca o cita)`,
+    refExamplesTruncated: (n, max, file) => `${file} → Exemplos de Referência: ${n} linha(s) além das primeiras ${max} não lidas — mantém a tabela nos padrões que importam`,
+    refExamplesUnread: (file) => `${file} → Exemplos de Referência não tem tabela — não é lida (um brief cita as linhas de uma tabela: Padrão | Copiar | Aplica-se a)`,
+    refExamplesOk: (n, file) => `${file} → Exemplos de Referência: ${n} linha(s), todos os ficheiros existem`,
   };
 
 // every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
@@ -3581,6 +3648,13 @@ const designWeigh = {
       empty: () => "Reutilização e Integração está vazia — indica o que é reutilizado ou estendido, ou numa linha a razão de nada o ser (projeto novo); em branco não",
       few: () => "Reutilização e Integração não indica nada",
       integration: (n) => `coberta pelo integration-plan.md → Pontos de Integração${n ? ` (${n} item(ns))` : ""}`,
+    },
+    "design-silent-regressions": {
+      filled: (n) => (n ? `${n} número(s) indicado(s) que podem piorar com os testes a passar` : "escrita (sem linha — 'Nenhuma — porquê' conta)"),
+      missing: () => "sem secção Regressões Silenciosas — indica que número pode piorar com todos os testes a passar (o tamanho de um bundle, um p95, as consultas por pedido, os tokens por chamada), uma linha por cada linha METRIC que um check do projeto imprime, ou escreve 'Nenhuma — porquê' (a secção de orçamento de uma track fixa os alvos; esta nomeia o check que imprime o número — references/verification.md → Metrics that regress silently)",
+      template: () => "Regressões Silenciosas ainda é o template — indica os números que um check do projeto imprime como linhas METRIC, ou escreve 'Nenhuma — porquê'",
+      empty: () => "Regressões Silenciosas está vazia — uma linha por número que um check do projeto imprime como linha METRIC, ou 'Nenhuma — porquê'; em branco não é resposta",
+      few: () => "Regressões Silenciosas não indica nada",
     },
     legacyApproval: (d, v = "1.17") => `design aprovado antes da ${v} — só é exigido a partir da próxima aprovação (${d})`,
     // 1.28: a Reutilização e Integração de um design de tamanho m / l é uma verificação da aprovação
@@ -3634,6 +3708,12 @@ const brief = {
     reuseOmitted: (n) => `Mais ${n} item(ns) correspondem — lê-os no design.md (Reutilização e Integração).`,
     reuseNoMatch: (n) => `A secção Reutilização e Integração do design lista ${n} item(ns), nenhum com os ficheiros ou os critérios desta tarefa — lê-a antes de criar algo novo.`,
     reuseFiles: "Ficheiros de código existentes ao lado dos desta tarefa — procura aqui primeiro:",
+    // 1.41: as linhas de Exemplos de Referência do structure.md para os ficheiros desta tarefa (limitadas pelo motor; um ficheiro que já não existe é indicado, nunca citado)
+    examples: "## Exemplos de referência",
+    examplesRule: (file) => `Copia a forma destes ficheiros para o mesmo padrão (\`${file}\` → Exemplos de Referência):`,
+    examplesGone: (list) => `Já não existem — nunca os copies, e diz no teu relatório que a linha deles está desatualizada: ${list}`,
+    examplesOmitted: (n, file) => `Mais ${n} linha(s) correspondente(s) — lê-as em \`${file}\`.`,
+    examplesNoMatch: (n, file) => `\`${file}\` → Exemplos de Referência lista ${n} linha(s); nenhuma é para os ficheiros desta tarefa.`,
     reuseFilesMore: (n, atLeast) => (!atLeast ? `…e mais ${n} na(s) mesma(s) pasta(s).`
       : n ? `…e pelo menos mais ${n} na(s) mesma(s) pasta(s) — uma pasta grande: só as primeiras entradas foram lidas.`
         : "…e possivelmente mais na(s) mesma(s) pasta(s) — uma pasta grande: só as primeiras entradas foram lidas."),
