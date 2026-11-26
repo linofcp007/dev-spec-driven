@@ -259,11 +259,14 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   in-process tests (`onLevel`: the worker tells the main thread the strictest level and the project's language before it loads the
   engine). No answer by the deadline (why `timeout`, its own sentence), a worker error or out-of-memory, an exit without an answer, a
   worker that could not start (why `error`): ask, in the project's language once the worker named it. The margin, measured on
-  Windows 11 (the hook as a process, a project at deny, 25 runs): idle — a normal approve 294 ms (p50) / 402 ms (max), the answer
+  Windows 11 (the hook as a process, a project at deny, 20–25 runs): idle — a normal approve 294 ms (p50) / 402 ms (max), the answer
   past the deadline (a busy worker: the reason's i18n load, the write, the exit) 91 / 131 ms, the spawn to the process's start 35 / 47
-  ms; with four test suites running — 772 / 1,443 ms, 178 / 517 ms, 78 / 192 ms. So a legitimate decision stays ≥ 4× under the
-  deadline and hooks.json's 10 s leaves 4 s for ≤ 0.7 s measured past it; the timeout stays 10 s. The worker costs a candidate
-  ~15 ms (spin-up and its own module loads); a call that can't be an approval pays only requiring `worker_threads` (~1.5 ms).
+  ms; with four test suites running (both suites of two checkouts, `--jobs 6` each) — 1,253 / 2,324 ms, 339 / 1,116 ms, 127 / 642
+  ms. So a legitimate decision stays ≥ 2.5× under the deadline and hooks.json's 10 s leaves 4 s for ≤ 1.8 s measured past it; the
+  timeout stays 10 s. Idle, interleaved against the parent (25 runs each), the worker costs a candidate nothing measurable (an
+  approve 173 vs 177 ms: the main thread no longer loads the engine); a call that can't be an approval pays only requiring
+  `worker_threads` (~1.5 ms); a Write whose path passes the text pre-check but is no guarded file (a `~1` short name in it) now
+  starts a worker to read its real path: +18 ms.
   `DEV_SPEC_TEST_APPROVAL_DEADLINE_MS` LOWERS the deadline (tests: the hermetic chains keep `DEV_SPEC_TEST_*`; a higher or malformed
   value is the default). Not covered: a worker inside one native call that never returns (a read of a FIFO, a dead network share) —
   Node joins its workers at exit, so the process ends only when that call does (Claude Code's own timeout then applies); the

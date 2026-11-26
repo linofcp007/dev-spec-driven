@@ -585,7 +585,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const brief = Object.fromEntries(Object.entries(R).map(([k, v]) => [k, v.d + " " + v.ms + " ms, " + v.workers + " worker(s)"]));
     all("1.41.1 fix round 1 (Q4): the approval hook answers by its deadline (" + D + " ms of hooks.json's " + T + ") — a worker only past the pre-check, ask on a late, failed, " +
       "out-of-memory, exited or absent worker, the deadline never raised by the test variable, a stdin past MAX_INPUT read as a partial payload (got " + js(brief) + ")", {
-      "the margin: hooks.json's timeout − the deadline ≥ 3 s (measured past the deadline under 4 suites: ≤ 0.7 s with the process's start)": () => D < T && T - D >= 3000,
+      "the margin: hooks.json's timeout − the deadline ≥ 3 s (measured past the deadline under 4 suites: ≤ 1.8 s with the process's start)": () => D < T && T - D >= 3000,
       "a normal approve at deny: deny, through one worker": () => R.approve.d === "deny" && R.approve.workers === 1,
       "…that worker runs under the hook's heap limits (WORKER_LIMITS)": () => { const l = JSON.parse(fs.readFileSync(LIMITS, "utf8")); return ["maxOldGenerationSizeMb", "maxYoungGenerationSizeMb", "stackSizeMb"].every((k) => l[k] === AH.WORKER_LIMITS[k]); },
       "the deadline's and the failure's sentences, as their locale tables write them (en, pt)": () => R.late.reason.includes(ACT.en.timeout(1)) && R.slowEngine.reason.includes(ACT.pt.timeout(3)) &&
