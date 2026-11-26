@@ -481,17 +481,20 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   // Every dependency named here must be an existing feature (reserved names like `steering` included): an
   // unknown name used to be stored and then read as a dependency that could never be met.
   const unknownNames = [];
+  let linkedDep = null; // (1.41.1) a dependency a linked folder holds is feature-linked, as every reader answers it — never "unknown"
   const resolveDeps = (list) => {
     const out = [];
     for (const d of names(list)) {
       const r = existingFeature(projectDir, d);
-      if (!r.ok) unknownNames.push(d);
+      if (r.linked) linkedDep = linkedDep || r;
+      else if (!r.ok) unknownNames.push(d);
       else if (!out.includes(r.slug)) out.push(r.slug);
     }
     return out;
   };
   const replaced = dependsOn === undefined || dependsOn === null ? null : resolveDeps(dependsOn);
   const added = resolveDeps(edits.add);
+  if (linkedDep) return { ok: false, linked: true, code: linkedDep.code, path: linkedDep.path, error: linkedDep.error };
   if (unknownNames.length) return { ok: false, error: D.unknown(unknownNames.join(", ")) };
   // order: a SAFE integer, as spec_roadmap_edit {kind: "depend"}'s schema ({type: "integer"} — no bound) — the CLI passes the raw word, and
   // `--order 99999999999999999999` matched the digits and was stored as 1e20. Refused with the MCP

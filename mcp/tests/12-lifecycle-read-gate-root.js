@@ -401,11 +401,12 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     S.createFeature(p, { name: "plain" });
     if (link(out, path.join(p, ".specs", "lnk"))) {
       const dr = S.drift(p, "lnk"), ms = S.milestone(p, "add", { name: "v1", date: "2027-01-15", features: ["plain", "lnk"] }), bl = S.backlog(p, "add", "lnk", "later");
+      const dp = S.setDependency(p, "plain", ["lnk"]), da = S.setDependency(p, "plain", null, null, { add: ["lnk"] });
       const rm = JSON.parse(fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8"));
       const linked = (r) => r.ok === false && r.linked === true && r.code === "feature-linked" && r.error === S.msg("en").err.featureLinked(".specs/lnk/") && !has(r);
-      all("1.41.1 fix round 1 (B-2, B-3): `drift lnk`, a milestone naming lnk and `backlog add lnk` answer feature-linked for a linked feature folder — never \"not found\" / \"unknown\", nothing planned under its name (got " + js({ dr, ms, bl }) + ")", {
-        drift: () => linked(dr), milestone: () => linked(ms), backlog: () => linked(bl),
-        nothingWritten: () => !js(rm.backlog || []).includes("lnk") && !js(rm.milestones || {}).includes("lnk"),
+      all("1.41.1 fix round 1 (B-2, B-3): `drift lnk`, a milestone naming lnk, `backlog add lnk` and a dependency on lnk (set or added) answer feature-linked for a linked feature folder — never \"not found\" / \"unknown\", nothing planned under its name (got " + js({ dr, ms, bl, dp, da }) + ")", {
+        drift: () => linked(dr), milestone: () => linked(ms), backlog: () => linked(bl), depend: () => linked(dp) && linked(da),
+        nothingWritten: () => !js(rm.backlog || []).includes("lnk") && !js(rm.milestones || {}).includes("lnk") && !js(rm.features || {}).includes("lnk"),
       });
       const msg = (slug) => "**Status:** DONE\nReport: .specs/" + slug + "/.execution/task-1-report.md";
       const sl = S.stopCheck(p, { agent: "dev-spec-driven:spec-implementer", message: msg("lnk") }), sn = S.stopCheck(p, { agent: "dev-spec-driven:spec-implementer", message: msg("nosuch") });
