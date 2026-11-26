@@ -416,27 +416,58 @@ const APPROVAL_PS_SHELLS = new Set(["powershell", "pwsh", "iex", "invoke-express
 const APPROVAL_STDIN_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "wsl", "su"]);
 const approvalShellMode = (prog) => (prog === "cmd" ? "cmd" : APPROVAL_PS_SHELLS.has(prog) ? "ps" : "bash");
 const RE_DEVSPEC_WORD = /(?:^|[\\/])dev-spec(?:\.(?:[cm]?js|cmd|ps1|exe))?$/i;
+// The guard's ONE glob matcher (devSpecGlob, shellSegCould, cliSubcommandGlob): a glob — * ? [set] [!set] [^set], an unclosed `[`
+// itself — → (name) => does it match the WHOLE name?, or null: a set no RegExp reads (a range out of order, `[z-a]`). LINEAR in glob ×
+// name — a dynamic program over (token, position), never a RegExp built from the glob: a `*` per character made a run of `[^/\\]*` /
+// `[\s\S]*` that a name it fails backtracked C(n + k, k) ways (1.41.1: `cli/` + 18 stars + `x approve; node … approve` took the
+// approval hook past its 10 s timeout, and a hook past its timeout lets the call through). Each other character is the one-character
+// RegExp the old builder made of it (`i`: case folded as RegExp folds it), so it matches what it matched. opts: star / any — the
+// one-character RegExp `*` covers and `?` is; wild — characters that are a `*` too (SHELL_VAR, SHELL_ANY); noDot — a name starting
+// with `.` never matches (Bash, dotglob off: the old `(?!\.)`). Stars in a row are one; a token that leaves no position alive ends it.
+const GLOB_LITERALS = new Map(); // a literal character → its one-character RegExp (≤ one per UTF-16 code unit)
+function globMayName(glob, opts) {
+  const one = (src) => new RegExp("^" + src + "$", "i");
+  const toks = []; // null: a star; else the one-character RegExp of a ?, a set or a literal
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*" || (opts.wild && opts.wild.includes(c))) { if (toks[toks.length - 1] !== null) toks.push(null); continue; }
+    const end = c === "[" ? glob.indexOf("]", i + 2) : -1;
+    if (end >= 0) {
+      try { toks.push(one("[" + glob.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&") + "]")); } catch { return null; }
+      i = end;
+    } else if (c === "?") toks.push(opts.any);
+    else {
+      if (!GLOB_LITERALS.has(c)) GLOB_LITERALS.set(c, one(c.replace(/[.+^${}()|[\\]/g, "\\$&"))); // (an unclosed `[`: itself)
+      toks.push(GLOB_LITERALS.get(c));
+    }
+  }
+  return (name) => {
+    const s = String(name), n = s.length;
+    if (opts.noDot && s[0] === ".") return false;
+    let cur = new Uint8Array(n + 1);
+    cur[0] = 1;
+    for (const t of toks) {
+      const nxt = new Uint8Array(n + 1);
+      let live = 0;
+      for (let j = 0; j <= n; j++) {
+        nxt[j] = t === null ? (cur[j] || (j > 0 && nxt[j - 1] && opts.star.test(s[j - 1])) ? 1 : 0) : j > 0 && cur[j - 1] && t.test(s[j - 1]) ? 1 : 0;
+        live |= nxt[j];
+      }
+      if (!live) return false;
+      cur = nxt;
+    }
+    return cur[n] === 1;
+  };
+}
 // a glob that names the CLI's script (`node cli/dev-sp?c.js approve …` — the shell expands it) — its last
 // path segment, read as a glob (* ? [set]), matches one of the script's names. Bounded: a word over 200 characters is no glob here.
 const DEVSPEC_NAMES = ["dev-spec", "dev-spec.js", "dev-spec.cjs", "dev-spec.mjs", "dev-spec.cmd", "dev-spec.ps1", "dev-spec.exe"];
+const DEVSPEC_GLOB = { star: /^[^/\\]$/, any: /^.$/ }; // `*` never crosses a separator; `?` is RegExp's `.`
 function devSpecGlob(word) {
   const w = String(word);
   if (w.length > 200 || !/[*?[]/.test(w)) return false;
-  const base = w.replace(/^.*[\\/]/, "");
-  let re = "";
-  for (let i = 0; i < base.length; i++) {
-    const c = base[i];
-    if (c === "*") re += "[^/\\\\]*";
-    else if (c === "?") re += ".";
-    else if (c === "[") {
-      const end = base.indexOf("]", i + 2);
-      if (end < 0) { re += "\\["; continue; }
-      const set = base.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&");
-      re += "[" + set + "]";
-      i = end;
-    } else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
-  }
-  try { const r = new RegExp("^(?:" + re + ")$", "i"); return DEVSPEC_NAMES.some((n) => r.test(n)); } catch { return false; }
+  const may = globMayName(w.replace(/^.*[\\/]/, ""), DEVSPEC_GLOB);
+  return !!may && DEVSPEC_NAMES.some((n) => may(n));
 }
 const isDevSpecWord = (w) => RE_DEVSPEC_WORD.test(w) || devSpecGlob(w);
 // A word that is only a substitution or a variable ($(which node), `…`, $NODE, ${NODE}, $env:NODE, %NODE%): an unknown launcher.
@@ -1032,30 +1063,18 @@ function braceExpand(s, cap = 32) {
   }
   return [s];
 }
-// One path segment read as a glob → a RegExp (case folded — a superset where the file system keeps case), or null. Bash (dotglob
-// off): a leading * ? [ never matches a dot; PowerShell / cmd.exe wildcards do. SHELL_VAR / SHELL_ANY match anything.
-function shellGlobRe(seg, mode) {
-  let re = "";
-  for (let i = 0; i < seg.length; i++) {
-    const c = seg[i];
-    if (c === "*" || c === SHELL_VAR || c === SHELL_ANY) re += "[\\s\\S]*";
-    else if (c === "?") re += "[\\s\\S]";
-    else if (c === "[") {
-      const end = seg.indexOf("]", i + 2);
-      if (end < 0) { re += "\\["; continue; }
-      re += "[" + seg.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&") + "]";
-      i = end;
-    } else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
-  }
-  const lead = mode === "bash" && /^[*?[]/.test(seg) ? "(?!\\.)" : "";
-  try { return new RegExp("^" + lead + re + "$", "i"); } catch { return null; }
-}
+// One path segment read as a glob → (name) => may it be that name? (case folded — a superset where the file system keeps case), or
+// null (globMayName: linear, never a RegExp built from the glob). Bash (dotglob off): a leading * ? [ never matches a dot; PowerShell /
+// cmd.exe wildcards do. SHELL_VAR / SHELL_ANY match anything.
+const SHELL_GLOB = { star: /^[\s\S]$/, any: /^[\s\S]$/, wild: SHELL_VAR + SHELL_ANY };
+const SHELL_GLOB_BASH_LEAD = { ...SHELL_GLOB, noDot: true };
+const shellGlob = (seg, mode) => globMayName(seg, mode === "bash" && /^[*?[]/.test(seg) ? SHELL_GLOB_BASH_LEAD : SHELL_GLOB);
 // May the segment be `name`? A plain one equals it (case folded); a glob may match it; a variable never stands for .specs (varOk false).
 function shellSegCould(seg, name, mode, varOk) {
   if (!RE_SHELL_WILD.test(seg)) return seg.toLowerCase() === name;
   if (!varOk && seg.includes(SHELL_VAR)) return false;
-  const re = shellGlobRe(seg, mode);
-  return !!re && re.test(name);
+  const may = shellGlob(seg, mode);
+  return !!may && may(name);
 }
 // A path (its variables already put in) → what it may name: { text, wild, specs (the first segment that is or may be .specs, else -1),
 // dir (it is — or may be — .specs itself), guarded (approvalGuardedFile: an exact path — dev-spec's own), guardianFile (dev-guardian's
@@ -2295,8 +2314,8 @@ function cliSubcommandGlob(words, at) {
   if (typeof sub !== "string" || !/[*?[{]/.test(sub)) return false;
   return braceExpand(sub).some((x) => {
     if (!/[*?[]/.test(x)) return CLI_GUARDED_COMMANDS.includes(x.toLowerCase());
-    const re = shellGlobRe(x, "bash");
-    return !re || CLI_GUARDED_COMMANDS.some((c) => re.test(c));
+    const may = shellGlob(x, "bash");
+    return !may || CLI_GUARDED_COMMANDS.some((c) => may(c));
   });
 }
 function approvalUnparsed(command, mode) {
@@ -3106,7 +3125,8 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, AP
   APPROVAL_WRITERS_INPLACE, approvalGuardInput, rawApprovalGuard, approvalGuardLevel, setApprovalGuard, shellCommandWords,
   approvalGuardDecision, STOP_RECENT_HOURS, guardLevel, guardInput, stopCheckEnabled, setStopCheck, stopProse,
   reviewModelsInput, reviewModelsSetting, setReviewModels, // 1.36 the review panel (meta.reviewModels)
-  stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, recordSpecEdit, stopCheck, devSpecGlob,
+  stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, recordSpecEdit, stopCheck, devSpecGlob, shellGlob,
+  globMayName, DEVSPEC_GLOB, // 1.41.1 the guard's one glob matcher (its devSpecGlob reading — tested where no CLI name reaches it)
   guardTargetPath, SESSION_MAX_UP, worktreeProject, sessionProject, sessionPath, readStopReport, approvalEditTargets,
   approvalCommand, // 1.36 guard tests: the lift line a protected test's ask names (protect.js) — the approval guard's own builder
   // the shell's file operations, fed scripts, MCP file tools, the edit guard on the shell

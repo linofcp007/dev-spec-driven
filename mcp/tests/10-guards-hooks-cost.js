@@ -360,4 +360,130 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       fast: () => m.long.ms <= Math.max(5000, 10 * m.short.ms),
     });
   }
+
+  // 1.41.1 (R1) — the guard's globs were RegExps built from the glob (devSpecGlob: a `*` → `[^/\\]*`; shellGlobRe: `[\s\S]*`): a program
+  // word, a path segment or the CLI's subcommand of k stars and a letter, tested against the short fixed names (the CLI's script, the
+  // guarded files, the guarded subcommands), backtracked ~C(n + k, k) ways — 18 stars ran the approval hook past its 10 s timeout, and
+  // the approve after it went through at deny. One linear matcher now (guards.js globMayName). The hook itself, in a CHILD process with
+  // a 12 s timeout (the parent's cost at 40 stars is astronomic: a red run times out, never hangs the suite) — each payload answers as
+  // its one-star twin (deny; an unreadable subcommand: ask) within max(5 s, 10 × the twin's time).
+  {
+    const pj = path.join(tmp, "r1411-glob");
+    S.initProject(pj, ["core"], "en", { approvalGuard: "deny" });
+    const APPROVE = "node cli/dev-spec.js approve feat requirements";
+    const SHAPES = {
+      "program word (devSpecGlob)": [(k) => "cli/" + "*".repeat(k) + "x approve; " + APPROVE, "deny"],
+      "path segment (shellSegCould)": [(k) => "foo .specs/" + "*".repeat(k) + "q; " + APPROVE, "deny"],
+      "CLI subcommand (cliSubcommandGlob)": [(k) => "node cli/dev-spec.js " + "*".repeat(k) + "x feat; A=approve; node cli/dev-spec.js $A feat requirements", "ask"],
+    };
+    const call = (command) => {
+      const t = Date.now();
+      const r = spawnSync(process.execPath, [path.join(HOOKS, "approval-hook.js")], { encoding: "utf8", env: hookEnv({ CLAUDE_PROJECT_DIR: pj }), cwd: pj, timeout: 12000,
+        input: js({ session_id: "s", hook_event_name: "PreToolUse", cwd: pj, tool_name: "Bash", tool_input: { command } }) });
+      let decision;
+      try { decision = JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { decision = r.status === null ? "killed by " + r.signal : "silent"; }
+      return { decision, ms: Date.now() - t };
+    };
+    const within = (x) => x.ms <= Math.max(5000, 10 * x.twin.ms);
+    const got = {}, checks = {};
+    for (const [name, [make, want]] of Object.entries(SHAPES)) {
+      const m = remeasure(() => ({ twin: call(make(1)), ...call(make(40)) }), within);
+      got[name] = { twin: m.twin.decision + " " + m.twin.ms + " ms", stars40: m.decision + " " + m.ms + " ms", tries: m.tries };
+      checks[name + " — the one-star twin: " + want] = m.twin.decision === want;
+      checks[name + " — 40 stars: " + want] = m.decision === want;
+      checks[name + " — 40 stars within max(5 s, 10 × the twin's time)"] = within(m);
+    }
+    all("1.41.1 (R1): the approval hook answers a glob of 40 stars — a program word, a path segment, the CLI's subcommand — at deny as its one-star twin, at once (got " + js(got) + ")", checks);
+  }
+
+  // …and the linear matcher matches what the RegExps matched — the parent's two builders, verbatim, as the oracle (short globs only: it
+  // backtracks): a table of glob × name (case folded as RegExp folds it — the Kelvin sign is no k —, [!set] / [^set], `[!]` any one
+  // character, an unclosed `[` itself, a range out of order null, Bash's leading dot, SHELL_VAR / SHELL_ANY) and 20,000 random globs.
+  {
+    const E = require("./lib/engine/index.js");
+    const SV = "\u0001", SA = "\u0002";
+    const DEVSPEC_NAMES = ["dev-spec", "dev-spec.js", "dev-spec.cjs", "dev-spec.mjs", "dev-spec.cmd", "dev-spec.ps1", "dev-spec.exe"];
+    function oldDevSpecGlob(word) {
+      const w = String(word);
+      if (w.length > 200 || !/[*?[]/.test(w)) return false;
+      const base = w.replace(/^.*[\\/]/, "");
+      let re = "";
+      for (let i = 0; i < base.length; i++) {
+        const c = base[i];
+        if (c === "*") re += "[^/\\\\]*";
+        else if (c === "?") re += ".";
+        else if (c === "[") {
+          const end = base.indexOf("]", i + 2);
+          if (end < 0) { re += "\\["; continue; }
+          const set = base.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&");
+          re += "[" + set + "]";
+          i = end;
+        } else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
+      }
+      try { const r = new RegExp("^(?:" + re + ")$", "i"); return DEVSPEC_NAMES.some((n) => r.test(n)); } catch { return false; }
+    }
+    function oldShellGlobRe(seg, mode) {
+      let re = "";
+      for (let i = 0; i < seg.length; i++) {
+        const c = seg[i];
+        if (c === "*" || c === SV || c === SA) re += "[\\s\\S]*";
+        else if (c === "?") re += "[\\s\\S]";
+        else if (c === "[") {
+          const end = seg.indexOf("]", i + 2);
+          if (end < 0) { re += "\\["; continue; }
+          re += "[" + seg.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&") + "]";
+          i = end;
+        } else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
+      }
+      const lead = mode === "bash" && /^[*?[]/.test(seg) ? "(?!\\.)" : "";
+      try { return new RegExp("^" + lead + re + "$", "i"); } catch { return null; }
+    }
+    const oldShell = (seg, mode, name) => { const re = oldShellGlobRe(seg, mode); return re ? re.test(name) : null; };
+    const newShell = (seg, mode, name) => { const may = E.shellGlob(seg, mode); return may ? may(name) : null; };
+    const DEV_ROWS = [["dev-sp?c.js", true], ["*.md", false], ["dev-spec.js", false], ["cli/dev-spe[c].js", true], ["cli/dev-spe[!c].js", false],
+      ["cli/dev-spe[^x].js", true], ["DEV-SPEC.*", true], ["dev-spec.[jc]s", true], ["dev[-]spec", true], ["dev?spec", true], ["dev-spec[", false],
+      ["dev-spec.[js", false], ["[]]ev-spec", false], ["[!]ev-spec", true], ["[z-a]ev-spec", false], ["*/dev-spec", true], ["cli\\dev-sp*", true],
+      ["dev-spec.*" + "s".repeat(3), false], ["x*", false], ["dev-spec.e[x-z]e", true], ["dev-ſpec*", false], ["dev-spe" + SV + "*", false]];
+    const SHELL_ROWS = [[".s*", "bash", ".specs", true], ["*", "bash", ".specs", false], ["*", "ps", ".specs", true], ["?specs", "bash", ".specs", false],
+      ["?specs", "cmd", ".specs", true], ["[.]specs", "bash", ".specs", false], ["[.]specs", "ps", ".specs", true], [".SPEC[sS]", "bash", ".specs", true],
+      ["road*.json", "bash", "roadmap.json", true], ["road*.jso[!n]", "bash", "roadmap.json", false], ["road*.jso[^x]", "bash", "roadmap.json", true],
+      ["roadmap.jso[", "bash", "roadmap.json", false], ["x[", "ps", "x[", true], ["[z-a]*", "ps", "roadmap.json", null], [SV, "bash", ".specs", true],
+      [SA + ".json", "bash", "observed.jsonl", false], [SA + "l", "bash", "observed.jsonl", true], ["*K", "bash", "add-track", false], ["*K", "bash", "add-track", true],
+      ["[!]x", "ps", "ax", true], ["[]]", "ps", "]", true], ["[a-c]pprove", "bash", "approve", true], ["*e", "bash", "merge-state", true],
+      ["*x", "bash", "merge-state", false], ["a*b*c", "ps", "a/b\\c", true], ["?", "bash", "\n", true], ["*.state.json", "bash", ".state.json", false]];
+    const rows = {};
+    for (const [w, want] of DEV_ROWS) rows["devSpecGlob(" + js(w) + ") " + want] = oldDevSpecGlob(w) === want && E.devSpecGlob(w) === want;
+    for (const [g, mode, name, want] of SHELL_ROWS) rows["shellGlob(" + js(g) + ", " + mode + ")(" + js(name) + ") " + want] = oldShell(g, mode, name) === want && newShell(g, mode, name) === want;
+    // (devSpecGlob's reading where no CLI name reaches it — the names hold no separator and no line terminator: its `*` is the old
+    // `[^/\\]*`, never across / or \, its `?` RegExp's `.`, never a line terminator; the shell's cross both)
+    const dev = (g, name) => E.globMayName(g, E.DEVSPEC_GLOB)(name), sh = (g, name) => newShell(g, "ps", name);
+    Object.assign(rows, { "devSpecGlob's a*c: a/c false": dev("a*c", "a/c") === false, "devSpecGlob's a*c: a\\c false": dev("a*c", "a\\c") === false,
+      "devSpecGlob's a*c: abbc true": dev("a*c", "abbc") === true, "devSpecGlob's a?c: a\\nc false": dev("a?c", "a\nc") === false,
+      "devSpecGlob's a?c: a\\rc false": dev("a?c", "a\rc") === false, "devSpecGlob's a?c: a.c true": dev("a?c", "a.c") === true,
+      "the shell's a*c: a/c true": sh("a*c", "a/c") === true, "the shell's a?c: a\\nc true": sh("a?c", "a\nc") === true });
+    all("1.41.1 (R1): the linear glob matcher answers each row as the parent's RegExp builders do (a row false: the oracle or the matcher disagrees with it)", rows);
+    // (a set no RegExp reads, where each reader takes it — a path segment then may be no guarded name, the CLI's subcommand is
+    // unreadable, a program word is no glob of the CLI's script: the decisions the parent made, never a throw)
+    const decide = (tool, command) => {
+      try { return E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command } }, "deny", { meta: {}, lang: "en" }).decision; } catch (e) { return "threw: " + e.message; }
+    };
+    const INVALID = [["Bash", "cp x .specs/[z-a]*", "allow"], ["PowerShell", "Remove-Item .s[z-a]* -Recurse", "allow"],
+      ["Bash", "node cli/dev-spec.js [z-a]pprove feat requirements", "ask"], ["Bash", "node cli/dev-spe[z-a].js approve feat requirements", "allow"]];
+    const invalidGot = INVALID.map(([tool, command]) => decide(tool, command));
+    all("1.41.1 (R1): a glob holding a range out of order answers as the parent did — a path segment no guarded name, the CLI's subcommand unreadable (ask), no glob of the CLI's script (got " + js(invalidGot) + ")",
+      Object.fromEntries(INVALID.map(([tool, command, want], i) => [tool + " " + command + " → " + want, invalidGot[i] === want])));
+    let seed = 1411;
+    const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+    const ALPHA = ["*", "?", "[", "]", "!", "^", "-", ".", "d", "e", "v", "s", "p", "c", "j", "D", "S", "/", "\\", "a", "z", "x", "\n", SV, SA, "K", "k", "K", "{", "(", "+", "$", "|"];
+    const NAMES = [".specs", "roadmap.json", ".state.json", "observed.jsonl", "guardian.cjs", ".execution", ".guardian", "baseline.json", "approve", "merge-state", "add-track", "", ".", "dev-spec", "k", "\n", "a]b", "["];
+    const diff = { devSpecGlob: [], shellGlob: [] };
+    for (let i = 0; i < 20000; i++) {
+      let g = "";
+      for (let n = rnd(i % 3 ? 8 : 12); n > 0; n--) g += ALPHA[rnd(ALPHA.length)];
+      if (oldDevSpecGlob(g) !== E.devSpecGlob(g)) diff.devSpecGlob.push(g);
+      for (const mode of ["bash", "ps", "cmd"]) for (const name of NAMES) if (oldShell(g, mode, name) !== newShell(g, mode, name)) diff.shellGlob.push([g, mode, name]);
+    }
+    all("1.41.1 (R1): the linear glob matcher answers as the parent's RegExp builders on 20,000 random globs (× 3 modes × " + NAMES.length + " names for the shell's) — got " +
+      js({ devSpecGlob: diff.devSpecGlob.slice(0, 3), shellGlob: diff.shellGlob.slice(0, 3) }), { devSpecGlob: diff.devSpecGlob.length === 0, shellGlob: diff.shellGlob.length === 0 });
+  }
 };
