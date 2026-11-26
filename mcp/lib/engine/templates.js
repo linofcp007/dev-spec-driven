@@ -549,8 +549,10 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
     if (weighSection(rendered, RISKS_SYN) == null) add("warn", "risks-missing", P["risks-missing"]);
     // no Reuse & Integration heading — doctor would warn (design-reuse) on every feature scaffolded from it.
     if (weighSection(rendered, REUSE_SYN) == null) add("warn", "reuse-missing", P["reuse-missing"]);
-    // 1.41: no Silent Regressions heading — doctor warns (design-silent-regressions) on every size m / l feature scaffolded from
-    // it. Never on the built-in's own copy (templates init — the no-size design, which has no such section: it checks clean).
+    // 1.41: no Silent Regressions heading — a size m / l feature scaffolded from it gets the built-in's section at the end
+    // (withTrackBlocks — 1.41.0 review 1), so doctor warns design-silent-regressions only until it is answered; the template's own
+    // place for it is the team's to choose. Never on the built-in's own copy (templates init — the no-size design, which has no such
+    // section: it checks clean).
     if (weighSection(rendered, SILENT_SYN) == null && !sameText(raw, builtInTemplate(k, fileLang || lng))) add("warn", "silent-missing", P["silent-missing"]);
     for (const tr of markerTracks()) { // + the track packs
       const marker = trackMarker(tr);

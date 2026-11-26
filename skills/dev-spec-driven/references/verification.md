@@ -428,8 +428,9 @@ build's time. A project check prints each as a METRIC line — the form dev-guar
   when that earlier line states BOTH `better=` and `tolerance=` — no defaults: otherwise the result shows the delta,
   `unjudged`. Its terms decide; a new line may only tighten (the smaller tolerance applies). A flipped or dropped
   `better=`, a raised or dropped tolerance or a changed unit is said as `loosened` (a new unit is not compared). `n%` is n
-  percent of the earlier value; the boundary counts as within; values compare as the exact decimals the lines printed (120 →
-  122.4 at 2 % is within). Verdicts: `new` · `within` · `improved` · `regressed` · `unjudged`.
+  percent of the earlier value; the boundary counts as within; values and tolerances compare as the exact decimals the lines
+  printed (120 → 122.4 at 2 % is within), and the warning and `## Metrics` show them so. Verdicts: `new` · `within` ·
+  `improved` · `regressed` · `unjudged`.
 - **The warning, never a blocker.** A reading worse past the tolerance, or a loosened line, is ONE finish warning and the
   merge summary's `## Metrics`; a ready written finish records the readings (`finished.metrics`) for the next feature.
   The number holds every change merged since that finish — another branch's, a dependency bump made outside a feature —,

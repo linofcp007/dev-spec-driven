@@ -10,7 +10,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
   const i18n = require(path.join(__dirname, "lib", "i18n.js"));
   const MT = (lng) => i18n.msg(lng || "en").metric;
   const FX = JSON.parse(fs.readFileSync(path.join(__dirname, "tests", "fixtures", "metric-lines.v1.json"), "utf8"));
-  const reading = (r) => ({ value: r.value, unit: r.unit, better: r.better, tolerance: r.tolerance });
+  // the contract's fields (a reading's printed texts — `text`, the tolerance's `text` — are dev-spec's, tested below)
+  const reading = (r) => ({ value: r.value, unit: r.unit, better: r.better, tolerance: r.tolerance && { amount: r.tolerance.amount, percent: r.tolerance.percent } });
   const one = (t) => E.metricLinesOf(t).metrics[0];
   const ESC = String.fromCharCode(27);
 
@@ -168,7 +169,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
   // values of more than 15 significant digits (judged on the printed text) — each verdict, delta and applied as dev-guardian 3.17's judge gives it ---
   {
     const J = (r, c) => { const j = E.judgeMetric(r, c); return { verdict: j.verdict, delta: j.delta, applied: j.applied }; };
-    const noText = (t) => { const r = one(t); return { name: r.name, value: r.value, unit: r.unit, better: r.better, tolerance: r.tolerance }; }; // a reading without its text
+    const noText = (t) => { const r = one(t); return { name: r.name, value: r.value, unit: r.unit, better: r.better, tolerance: r.tolerance && { amount: r.tolerance.amount, percent: r.tolerance.percent } }; }; // a reading without its texts
     const exp = [
       ["METRIC a=0.000001 better=lower tolerance=10%", "METRIC a=1.5e-7 better=lower tolerance=10%", { verdict: "improved", delta: -8.5e-7, applied: 1e-7 }],
       ["METRIC a=1.5e-7 better=lower tolerance=10%", "METRIC a=0.000001 better=lower tolerance=10%", { verdict: "regressed", delta: 8.5e-7, applied: 1.5e-8 }],
@@ -511,7 +512,7 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     const x = (r.metrics || []).find((i) => i.name === "x") || {};
     all("1.41 a hand-edited finished.metrics: an entry the grammar could not have printed is skipped (a bad name, a non-number or non-finite value, no check or one past 40 characters) and a bad term read as absent (a unit with a blank, better=up, a negative tolerance) — the comparison and spec_metrics' series alike (got " +
       js({ items: (r.metrics || []).map((i) => [i.name, i.verdict, i.reference && i.reference.value]), x, measured: (m.measured || []).map((e) => e.check + ":" + e.name) }) + ")", {
-      sanitized: js(x.reference) === js({ feature: a, at: stateOf(p, a).finished.at, value: 7, unit: null, better: null, tolerance: null }) && x.verdict === "unjudged" && js(x.why) === js(["better", "tolerance"]),
+      sanitized: js(x.reference) === js({ feature: a, at: stateOf(p, a).finished.at, value: 7, text: null, unit: null, better: null, tolerance: null }) && x.verdict === "unjudged" && js(x.why) === js(["better", "tolerance"]),
       skipped: ["w", "z", "v", "s"].every((n) => (r.metrics.find((i) => i.name === n) || {}).verdict === "new"),
       series: js((m.measured || []).map((e) => e.check + ":" + e.name)) === js(["size:x"]),
     });
@@ -549,8 +550,8 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     const v = (n) => { const m = ((r && r.metrics) || []).find((i) => i.name === n); return m ? [m.verdict, m.delta] : null; };
     all("1.41.0 review 1 R1-MF-5: a reading keeps the decimal its line printed (`text`) on the run and in finished.metrics; the next finish judges 100000000000000.000000001 → …002 at tolerance 0 regressed (dev-guardian 3.17's verdict); a recorded reading without a text, with one that is not its value's or one outside the grammar is judged on the values (got " +
       js({ rec, run, threw: r && r.threw, d: v("d"), m: v("m"), x: v("x"), y: v("y") }) + ")", {
-      stored: rec === js([{ check: "size", name: "d", value: 100000000000000, text: "100000000000000.000000001", better: "lower", tolerance: { amount: 0, percent: false } }]) &&
-        run === js([{ name: "d", value: 100000000000000, text: "100000000000000.000000001", better: "lower", tolerance: { amount: 0, percent: false } }]),
+      stored: rec === js([{ check: "size", name: "d", value: 100000000000000, text: "100000000000000.000000001", better: "lower", tolerance: { amount: 0, percent: false, text: "0" } }]) &&
+        run === js([{ name: "d", value: 100000000000000, text: "100000000000000.000000001", better: "lower", tolerance: { amount: 0, percent: false, text: "0" } }]),
       exact: js(v("d")) === js(["regressed", 1e-9]),
       bothOnly: js(v("m")) === js(["within", 0]),
       notItsValue: js(v("x")) === js(["within", 0]),
@@ -776,6 +777,173 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
         js(warnOf(mal)) === js([MT().unmeasured("`bundle-size`, `p95_ms`, `first_name`", slug)]),
       pastBound: js(bound.metricsUnmeasured) === js(["bundle-size", "p95_ms", "first_name"]) && js(bound.recordedChecks[0].metricsDropped) === js(["names"]),
       words: Object.entries(doubt).every(([l, re]) => re.test(MT(l).unmeasured("`x`", "f"))),
+    });
+  }
+  {
+    // R2-MF-2: the append to a project template keeps the built-in section's rules — the feature's language (a PT project's template gets
+    // `## Regressões Silenciosas`), before the track blocks (+saas: ahead of the first `[SaaS]` heading), and a section the template
+    // already has under a synonym or at level 3 is found (weighSection), never a second one
+    const silentHeads = (t) => t.split("\n").filter((l) => /^#{2,3} .*(Silent Regressions|Regressões Silenciosas|Regresiones Silenciosas)/i.test(l));
+    const fromTemplate = (label, lang, edit, tracks) => {
+      const q = path.join(tmp, "m41-r2-tpl-" + label);
+      S.initProject(q, ["core"], lang, { checks: CHECKS });
+      S.templates(q, "init", { artifact: "design" });
+      const tf = path.join(q, ".specs", "templates", "design.md");
+      if (edit) fs.writeFileSync(tf, edit(fs.readFileSync(tf, "utf8")));
+      const f = S.createFeature(q, "Tpl " + label, tracks || ["core"], "x", undefined, lang, undefined, { size: "m" });
+      return fs.readFileSync(path.join(f.dir, "design.md"), "utf8");
+    };
+    const pt = fromTemplate("pt", "pt"), saas = fromTemplate("saas", "en", null, ["core", "saas"]);
+    const h3 = fromTemplate("h3", "en", (t) => t.replace("## Risks", "### Silent regressions\nNone — nothing measured.\n\n## Risks"));
+    const ptHead = fromTemplate("pt-head", "en", (t) => t + "\n## Regressões Silenciosas\nNenhuma — nada medido.\n");
+    const at = saas.indexOf("\n## Silent Regressions\n"), firstSaas = saas.indexOf("\n## [SaaS]");
+    all("1.41.0 review 2 R2-MF-2: Silent Regressions appended to a project design template is the feature's language's section, put before the track blocks, and never a second section beside the template's own under another heading or level (got " +
+      js({ pt: silentHeads(pt), saas: [at, firstSaas, silentHeads(saas)], h3: silentHeads(h3), ptHead: silentHeads(ptHead) }) + ")", {
+      lang: js(silentHeads(pt)) === js(["## Regressões Silenciosas"]),
+      beforeTracks: at > 0 && firstSaas > at && js(silentHeads(saas)) === js(["## Silent Regressions"]),
+      h3: js(silentHeads(h3)) === js(["### Silent regressions"]),
+      ptHeading: js(silentHeads(ptHead)) === js(["## Regressões Silenciosas"]),
+    });
+  }
+  {
+    // R2-MF-3: a flagged reading left unjudged with no unit change — the earlier line states no tolerance, the current flips better= — gets
+    // the general head (the unit-only head is for unit changes alone)
+    const p = proj("p4");
+    const a = change(p, "P4 base");
+    finishWith(p, a, { size: "METRIC speed=100 ms better=lower\n" });
+    const day = E.dayOf(stateOf(p, a).finished.at);
+    const r = finishWith(p, change(p, "P4 flip"), { size: "METRIC speed=100 ms better=higher\n" }, { write: false });
+    const m = (r.metrics || [])[0] || {};
+    const item = MT().flagged("speed", "size", "100 ms", "100 ms", a, day, "0", null, "unjudged") + " " + MT().loosened("better", "lower", "higher");
+    const warn = (r.warnings || []).filter((w) => /METRIC/.test(w));
+    ok(m.verdict === "unjudged" && m.loosened === "better" && js(m.why) === js(["tolerance"]) && js(warn) === js([MT().finishWarn(1, item, 0, false)]),
+      "1.41.0 review 2 R2-MF-3: a reading unjudged without a unit change (no tolerance on the earlier line, better= flipped) is flagged under the general head, never the unit-only one (got " + js({ m, warn }) + ")");
+  }
+  {
+    // R2-MF-4: the warning, the merge summary and a tick's line print a reading's printed decimal (`text`, the judge's input) — never its
+    // double; a reading without one (a hand edit, another writer) prints its value
+    const p = proj("printed");
+    const L = "100000000000000.000000001", N = "100000000000000.000000002";
+    const a = change(p, "Printed first");
+    finishWith(p, a, { size: "METRIC d=" + L + " better=lower tolerance=0\nMETRIC e=" + L + " better=lower tolerance=0\n" });
+    const st = stateOf(p, a);
+    for (const e of st.finished.metrics) if (e.name === "e") delete e.text;
+    writeState(p, a, st);
+    const day = E.dayOf(st.finished.at);
+    const b = change(p, "Printed next");
+    later();
+    const r = S.finishFeature(p, b, { evidence: evidenceOf({ size: "METRIC d=" + N + " better=lower tolerance=0\nMETRIC e=" + N + " better=lower tolerance=0\n" }), ranBy: "cli", includeBody: true });
+    const body = r.mergeSummary || "";
+    const iM = body.indexOf("## Metrics"), lines = body.slice(iM, body.indexOf("\n## ", iM + 1)).trim().split("\n");
+    const warn = (r.warnings || []).filter((w) => /METRIC/.test(w));
+    const tick = E.metricLineText(one("METRIC d=" + L + " better=lower tolerance=0"));
+    all("1.41.0 review 2 R2-MF-4: a reading's printed decimal is what the warning, the merge summary's ## Metrics and the tick's line show — the reference's too; a recorded reading without its text shows its value (got " +
+      js({ warn, lines, tick, items: (r.metrics || []).map((m) => [m.text, m.reference && m.reference.text]) }) + ")", {
+      warning: js(warn) === js([MT().finishWarn(1, MT().flagged("d", "size", L, N, a, day, "+1e-9", "0", "regressed"), 0, false)]),
+      summary: js(lines) === js(["## Metrics", "- " + MT().line("d", "size", N, L, a, day, "+1e-9", MT().verdict.regressed + " (0)"),
+        "- " + MT().line("e", "size", N, "100000000000000", a, day, "0", MT().verdict.within + " (0)")]),
+      tick: tick === "d=" + L + " better=lower tolerance=0",
+      items: js((r.metrics || []).map((m) => [m.text, m.reference && m.reference.text])) === js([[N, L], [N, null]]),
+    });
+  }
+  {
+    // R2-MF-5: the candidate line is cleaned only as far as its bound needs — the head to the keyword's end whole, then chunks until it
+    // holds more than 512 units AND a character past the keyword — each verdict as dev-guardian 3.17's metricLine.ts gives it (the
+    // review's differential harness, 25 lines built to cross the chunks: 0 disagreements)
+    const C0 = ESC + "[0m";
+    const sum = (t) => { const r = E.metricLinesOf(t); return { metrics: r.metrics.map((m) => [m.name, m.value, m.unit, m.better]), malformed: r.malformed, dropped: r.dropped }; };
+    const none = { metrics: [], malformed: 0, dropped: [] }, over = { metrics: [], malformed: 0, dropped: ["candidateBytes"] };
+    const a1 = { metrics: [["a", 1, null, null]], malformed: 0, dropped: [] };
+    // (each line is longer than one chunk — a shorter one is cleaned whole, as R1-MF-4's rows read it)
+    const rows = [
+      [" ".repeat(600) + "METRIC" + C0 + "x=1" + C0.repeat(1100) + "\n", none], [" ".repeat(600) + "METRIC" + C0 + " a=1" + C0.repeat(1100) + "\n", over],
+      [" ".repeat(507) + "METRIC" + C0.repeat(1100) + " a=1\n", over], [" ".repeat(507) + "METRIC" + C0.repeat(1100) + "x=1\n", none],
+      ["METRIC a=1 " + C0.repeat(2000) + "\n", a1], ["METRIC a=1 ms" + C0.repeat(5000) + " better=lower\n", { metrics: [["a", 1, "ms", "lower"]], malformed: 0, dropped: [] }],
+      ["METRIC a=1 " + ESC + "[" + "1;".repeat(3000) + "m\n", a1], ["METRIC a=1 " + ESC + "[" + "1".repeat(5000) + "\n", over],
+      ["METRIC a=1 " + ESC + "x" + "y".repeat(5000) + C0 + "\n", over], ["METRIC a=1 " + (C0 + "x").repeat(1000) + "\n", over],
+      ["METRIC a=1 k=" + "x".repeat(498) + C0.repeat(1500) + "\n", a1], ["METRIC a=1 k=" + "x".repeat(499) + C0.repeat(1500) + "x\n", over],
+      ["METRIC a=1 k=" + "x".repeat(200) + C0.repeat(1100) + "x".repeat(299) + "\n", a1], ["METRIC a=1 k=" + "x".repeat(200) + C0.repeat(1100) + "x".repeat(300) + "\n", over],
+      [C0.repeat(3000) + "METRIC a=1\n", a1], ["METRIC" + C0.repeat(3000) + " a=1\n", a1], ["METRIC" + C0.repeat(3000) + "x a=1\n", none],
+      ["METRIC a=1" + C0.repeat(1100) + "\r\n", a1], ["METRIC a=1" + C0.repeat(1100) + "\r", a1],
+      ["METRIC a=1 " + C0.repeat(1200) + "METRIC b=2\n", { metrics: [["a", 1, "METRIC", null]], malformed: 0, dropped: [] }],
+      ["METRIC a=1 k=" + "é".repeat(200) + C0.repeat(1200) + "é".repeat(49) + "\n", a1], ["METRIC a=1 k=" + "é".repeat(200) + C0.repeat(1200) + "é".repeat(50) + "\n", over],
+      ["METRIC a=1 " + "\u{1F600}".repeat(8) + C0.repeat(1100) + "\n", { metrics: [["a", 1, "\u{1F600}".repeat(8), null]], malformed: 0, dropped: [] }],
+      ["METRIC a=1 " + (ESC + "[2~").repeat(1100) + "\n", over],
+      [("METRIC a=1 " + (C0 + "y").repeat(12000) + "\n").repeat(5) + "METRIC z=2\n", { metrics: [["z", 2, null, null]], malformed: 0, dropped: ["candidateBytes"] }],
+    ];
+    const got = rows.map(([t]) => sum(t));
+    const bad = rows.map(([, want], i) => (js(got[i]) === js(want) ? null : i + " → " + js(got[i]))).filter(Boolean);
+    ok(!bad.length, "1.41.0 review 2 R2-MF-5 parity with dev-guardian 3.17 metricLine.ts: a candidate line cleaned chunk by chunk reads as one stripped whole — a sequence never split, a long parameter run read alone, a character past the keyword always read, the 512 bytes after CSI removal (bad: " + js(bad) + ")");
+    // the cost, on equal work: the same 60 MiB line coloured (every 5th character visible) and plain — both scan for the keyword and the
+    // line's end and clean one chunk; stripped whole first, the coloured one cost ~39× (1,325 against 34 ms)
+    const MB = 1024 * 1024;
+    const coloured = "METRIC a=1 " + (C0 + "x").repeat(12 * MB) + "\n", plain = "METRIC a=1 " + "x".repeat(60 * MB) + "\n";
+    coloured.lastIndexOf("zzzz"); plain.lastIndexOf("zzzz"); // flat strings: neither side pays a rope's copy
+    const t = (s) => { const t0 = process.hrtime.bigint(); const r = E.metricLinesOf(s); return { ms: Number(process.hrtime.bigint() - t0) / 1e6, d: r.dropped }; };
+    t(coloured); t(plain); // warmed
+    const m = remeasure(() => { const c = t(coloured), u = t(plain); return { c: c.ms, u: u.ms, ratio: c.ms / Math.max(u.ms, 0.5), same: js(c.d) === js(["candidateBytes"]) && js(u.d) === js(c.d) }; }, (x) => x.ratio <= 3, 3);
+    all("1.41.0 review 2 R2-MF-5: a 60 MiB coloured candidate line costs ≤ 3× the same line plain — the bound counted while the colours are removed, the cleaning stopped past it (stripped whole: ~39×; measured " +
+      m.ratio.toFixed(2) + "×, " + m.c.toFixed(1) + " / " + m.u.toFixed(1) + " ms)", { ratio: m.ratio <= 3, verdict: m.same });
+  }
+  {
+    // R1-DG-H-7 (dev-guardian's review 1, ruled for fix round 2): a tolerance keeps its printed decimal (`tolerance.text`) as a value does
+    // (R1-MF-5) — the judge applies and compares the tolerances on their texts when every tolerance the two lines state carries one, else
+    // on the numbers. Each row is what dev-guardian 3.17's judge.ts gives the same pair (the differential harness: 0 of 20 disagree).
+    const J = (r, c) => { const j = E.judgeMetric(one(r), one(c)); return { verdict: j.verdict, why: j.why, loosened: j.loosened, delta: j.delta, applied: j.applied }; };
+    const W = (verdict, loosened, delta, applied, why) => ({ verdict, why: why || null, loosened, delta, applied });
+    const rows = [
+      ["METRIC a=1 better=lower tolerance=100000000.000000001", "METRIC a=100000001.000000001 better=lower", W("within", "tolerance", 100000000, 100000000)],
+      ["METRIC a=1 better=lower tolerance=999999999.999999999", "METRIC a=1 better=lower tolerance=1000000000", W("within", "tolerance", 0, 1000000000)],
+      ["METRIC a=0 better=lower tolerance=1000000000", "METRIC a=1000000000 better=lower tolerance=999999999.999999999", W("regressed", null, 1000000000, 1000000000)],
+      ["METRIC a=0 better=lower tolerance=100000000.000000002", "METRIC a=100000000.000000002 better=lower tolerance=100000000.000000001", W("regressed", null, 100000000, 100000000)],
+      ["METRIC a=0 better=lower tolerance=100000000.000000001", "METRIC a=0 better=lower tolerance=100000000.000000002", W("within", "tolerance", 0, 100000000)],
+      ["METRIC a=0 better=higher tolerance=999999999999999.999999999", "METRIC a=0 better=higher tolerance=1e15", W("within", "tolerance", 0, 1000000000000000)],
+      ["METRIC a=0 better=lower tolerance=1e15", "METRIC a=-999999999999999.999999999 better=lower tolerance=999999999999999.999999999", W("within", null, -1000000000000000, 1000000000000000)],
+      ["METRIC a=1 better=lower tolerance=100000000000000.000000001%", "METRIC a=100000000000100.000000001e-2 better=lower", W("within", "tolerance", 1000000000000, 1000000000000)],
+      ["METRIC a=1 better=lower tolerance=100000000000000.000000001%", "METRIC a=100000000000100.000000002e-2 better=lower tolerance=100000000000000.000000001%", W("regressed", null, 1000000000000, 1000000000000)],
+      ["METRIC a=1 better=lower tolerance=100000000000000.000000002%", "METRIC a=1 better=lower tolerance=100000000000000.000000001%", W("within", null, 0, 1000000000000)],
+      ["METRIC a=1 better=lower tolerance=999999999999999.999999999e-9", "METRIC a=1 better=lower tolerance=1e6", W("within", "tolerance", 0, 1000000)],
+      ["METRIC a=5 better=lower tolerance=123456789012345.123456789e-3", "METRIC a=123456789017345.123456789e-3 better=lower", W("within", "tolerance", 123456789012.34512, 123456789012.34512)],
+      ["METRIC a=0 better=lower tolerance=100000000000000.000000001", "METRIC a=100000000000000.000000001 better=lower tolerance=100000000000000.000000001", W("within", null, 100000000000000, 100000000000000)],
+      ["METRIC a=100 better=lower tolerance=2%", "METRIC a=102 better=lower tolerance=2%", W("within", null, 2, 2)],
+      ["METRIC a=1 better=lower tolerance=0.000000001", "METRIC a=1.000000001 better=lower tolerance=1e-9", W("within", null, 1e-9, 1e-9)],
+      ["METRIC a=1 better=lower tolerance=123456789012345.123456789", "METRIC a=1 better=lower tolerance=123456789012345.123456789", W("within", null, 0, 123456789012345.12)],
+      ["METRIC a=1 better=lower", "METRIC a=2 better=lower tolerance=100000000.000000001", W("unjudged", null, 1, null, ["tolerance"])],
+      ["METRIC a=1 tolerance=100000000.000000001", "METRIC a=100000001.000000002 better=lower", W("unjudged", "tolerance", 100000000, null, ["better"])],
+      ["METRIC a=1 kB better=lower tolerance=100000000.000000001", "METRIC a=1 MB better=lower tolerance=100000000.000000002", W("unjudged", "unit", null, null, ["unit"])],
+      ["METRIC a=1 better=lower tolerance=100000000.000000001", "METRIC a=1 better=higher tolerance=100000000.000000002", W("within", "better", 0, 100000000)],
+    ];
+    const bad = rows.map(([r, c, want], i) => (js(J(r, c)) === js(want) ? null : i + " → " + js(J(r, c)))).filter(Boolean);
+    ok(!bad.length && js(one("METRIC a=1 tolerance=2.50%").tolerance) === js({ amount: 2.5, percent: true, text: "2.50" }),
+      "1.41.0 review 1 R1-DG-H-7 parity with dev-guardian 3.17 judge.ts: a tolerance of more than 15 significant digits is applied and compared on the decimal its line printed (`tolerance.text`) — the delta at a long tolerance within, a raise past a double's digits loosened, a long current tolerance tightening (bad: " + js(bad) + ")");
+    // the stored path: finished.metrics keeps the tolerance's text and the next finish judges on it; a recorded tolerance without one, with
+    // one that is not its amount's or one outside the grammar is read back on its number — and then both tolerances are judged on numbers
+    const safe = (fn) => { try { return fn(); } catch (e) { return { threw: e.message }; } };
+    const p = proj("tolerance-texts");
+    const a = change(p, "Tolerance first");
+    finishWith(p, a, { size: "METRIC a=1 better=lower tolerance=100000000.000000001\nMETRIC b=1 better=lower tolerance=999999999.999999999\n" +
+      "METRIC m=1 better=lower tolerance=100000000.000000001\nMETRIC x=1 better=lower tolerance=2\nMETRIC y=1 better=lower tolerance=16\n" });
+    const st = stateOf(p, a);
+    const rec = js(st.finished.metrics.filter((e) => e.name === "a").map((e) => e.tolerance));
+    for (const e of st.finished.metrics) {
+      if (e.name === "m") delete e.tolerance.text; // recorded without its text: its number, 100000000
+      if (e.name === "x") e.tolerance.text = "999"; // not the amount's decimal
+      if (e.name === "y") e.tolerance.text = "0x10"; // Number() reads it as 16, the grammar never prints it
+    }
+    writeState(p, a, st);
+    const day = E.dayOf(st.finished.at);
+    const r = safe(() => finishWith(p, change(p, "Tolerance next"), { size: "METRIC a=100000001.000000001 better=lower\nMETRIC b=1 better=lower tolerance=1000000000\n" +
+      "METRIC m=1 better=lower tolerance=100000000.000000001\nMETRIC x=501 better=lower\nMETRIC y=20 better=lower\n" }, { write: false }));
+    const v = (n) => { const it = ((r && r.metrics) || []).find((i) => i.name === n); return it ? [it.verdict, it.loosened] : null; };
+    const warn = ((r && r.warnings) || []).filter((w) => /METRIC/.test(w))[0] || "";
+    all("1.41.0 review 1 R1-DG-H-7: finished.metrics keeps a tolerance's printed text and the next finish judges on it (a delta at the long tolerance within, a raise past a double's digits loosened, printed as written); a recorded tolerance without its text, with one not its amount's or outside the grammar is judged on the numbers (got " +
+      js({ rec, threw: r && r.threw, a: v("a"), b: v("b"), m: v("m"), x: v("x"), y: v("y") }) + ")", {
+      stored: rec === js([{ amount: 100000000, percent: false, text: "100000000.000000001" }]),
+      exact: js(v("a")) === js(["within", "tolerance"]) && js(v("b")) === js(["within", "tolerance"]),
+      printed: warn.includes(MT().flagged("b", "size", "1", "1", a, day, "0", "1000000000", "within") + " " + MT().loosened("tolerance", "999999999.999999999", "1000000000")),
+      numbersOnly: js(v("m")) === js(["within", null]),
+      notItsAmount: js(v("x")) === js(["regressed", "tolerance"]),
+      grammar: js(v("y")) === js(["regressed", "tolerance"]),
     });
   }
 };
