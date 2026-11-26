@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
+exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
   const { OPERATIONS } = require("./lib/operations.js");
@@ -478,5 +478,137 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     let r;
     try { r = E.withReadCache(read); } finally { fs.realpathSync.native = rp; }
     eq(r, [true, false, false, true, 0, true, true], "1.41.1 fix round 1 (B-4: B20): a folder below .specs/ whose realpath throws reads as absent — every primitive, fail closed");
+  }
+  // ---------------------------------------------------------------------------------------------------------------------------
+  // fix round 2 — the save hook's project, the NTFS stream spelling, a FIFO, BMAD's folders, the write gate on the root, a base that
+  // holds no path
+  // ---------------------------------------------------------------------------------------------------------------------------
+  // R2-R-2: the save hook's project is the gates' own root — an edit through `.specs/f/.history/.specs -> <another project's .specs>`
+  // reaches the engine as THIS project's: nothing of the other project traced into the context, its .state.json and stamp untouched
+  {
+    const p = project("hooknested"), op = project("hooknested-other");
+    S.createFeature(p, { name: "f" });
+    S.createFeature(op, { name: "x" });
+    fs.writeFileSync(path.join(op, ".specs", "x", "requirements.md"), "# Feature: x\n\n## User Stories\n\n### US-1: OUTSIDE-STORY (P1)\nAs a user I want OUTSIDE-WANT so that OUTSIDE-SO.\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN OUTSIDE-AC THE SYSTEM SHALL OUTSIDE-SHALL\n");
+    fs.writeFileSync(path.join(op, ".specs", "x", "tasks.md"), "# Tasks\n\n- [ ] 1. a task for US-1.AC-9\n  - _Requirements: US-1.AC-9_\n");
+    if (link(path.join(op, ".specs"), path.join(p, ".specs", "f", ".history", ".specs"))) {
+      const st0 = fs.readFileSync(path.join(op, ".specs", "x", ".state.json"), "utf8");
+      // with the session's project exported, and without (no anchor: the path's own outermost .specs is the project)
+      const bare = { ...process.env };
+      delete bare.CLAUDE_PROJECT_DIR; delete bare.SPEC_PROJECT_DIR;
+      const outs = [{ ...process.env, CLAUDE_PROJECT_DIR: p }, bare].flatMap((env) => ["tasks.md", "requirements.md"].map((file) => hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), {
+        input: js({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: path.join(p, ".specs", "f", ".history", ".specs", "x", file) }, cwd: p }),
+        cwd: p, env }).stdout));
+      all("1.41.1 fix round 2 (R2-R-2): the save hook's project is the gates' own root (the session's project recorded) — an edit through a link NAMED .specs below .specs/ traces / lints nothing of the project behind it, stamps neither its .state.json nor its roadmap (got " + js(outs) + ")", {
+        noLeak: () => outs.every((o) => !/OUTSIDE|US-1\.AC-9|US-1\.AC-1/.test(o)),
+        stateUntouched: () => fs.readFileSync(path.join(op, ".specs", "x", ".state.json"), "utf8") === st0,
+        noStamp: () => !fs.existsSync(path.join(op, ".specs", ".execution", "roadmap-stale")),
+      });
+    } else ok(true, "1.41.1 fix round 2 (R2-R-2): links not creatable here — skipped");
+    // … and a project below a folder NAMED .specs is the session's project, recorded: its own save is linted as ever (the outermost
+    // .specs of the bare path would make the outer folder the project — no dev-spec project, a silent hook)
+    const b1 = path.join(tmp, "rgr-hookb1", ".specs", "app");
+    fs.mkdirSync(b1, { recursive: true });
+    S.initProject(b1, ["core"], "en");
+    const fb = S.createFeature(b1, { name: "feat" });
+    fs.writeFileSync(path.join(fb.dir, "requirements.md"), REQ);
+    const lint = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: js({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: path.join(fb.dir, "requirements.md") }, cwd: b1 }),
+      cwd: b1, env: { ...process.env, CLAUDE_PROJECT_DIR: b1 } }).stdout;
+    ok(/EARS/.test(lint), "1.41.1 fix round 2 (R2-R-2): the save hook on a project below a folder named .specs (CLAUDE_PROJECT_DIR) lints its saved requirements.md — the session's project is the base (got " + js(lint.slice(0, 160)) + ")");
+  }
+  // R2-R-3 (win32): an NTFS stream spelling of .specs (`.specs::$INDEX_ALLOCATION`, `.specs:$I30:$INDEX_ALLOCATION`) or of a part below
+  // it reads as absent — the gate blocks it, and trace / coverage answer the same whether a link's outside target exists or not
+  if (WIN) {
+    const run = (exists) => {
+      const p = project("stream-" + (exists ? "e" : "m")), out = path.join(tmp, "rgr-stream-out-" + (exists ? "e" : "m"));
+      fs.mkdirSync(out, { recursive: true });
+      if (exists) { put(path.join(out, "secret.js"), "x\n"); put(path.join(out, "secret.md"), "# OUTSIDE-STREAM\n"); }
+      const f = S.createFeature(p, { name: "feat" });
+      if (!link(out, path.join(f.dir, "lnk"))) return null;
+      const forms = [".specs::$INDEX_ALLOCATION", ".specs:$I30:$INDEX_ALLOCATION"].map((s) => path.join(p, s, "feat", "lnk", "secret.md"))
+        .concat([path.join(p, ".specs", "feat::$INDEX_ALLOCATION", "requirements.md"), path.join(p, ".specs", "feat", "requirements.md::$DATA")]);
+      const gate = E.withReadCache(() => { E.specsRoot(p); return forms.map((x) => [E.specsReadBlocked(x), E.readIfExists(x), E.existsRaw(x)]); });
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), TASKS.replace("  - _Verify", "  - _Implements: .specs::$INDEX_ALLOCATION/feat/lnk/secret.js_\n  - _Verify"));
+      const norm = (r) => js(r).split(js(p).slice(1, -1)).join("<P>").split(p).join("<P>").replace(/"(at|generatedAt|date)":"[^"]*"/g, "");
+      return { gate, trace: norm(S.traceCheck(p, "feat").missingImplFiles), cov: norm(S.coverage(p)) };
+    };
+    const e = run(true), m = run(false);
+    if (e && m) all("1.41.1 fix round 2 (R2-R-3): on win32 an NTFS stream spelling — of .specs (::$INDEX_ALLOCATION, :$I30:$INDEX_ALLOCATION) or of a part below it — reads as absent (blocked, nothing read), and trace / coverage of a `_Implements:_` so spelled answer the same whether the outside file exists or not (got " + js({ e: e.gate, trace: [e.trace, m.trace] }) + ")", {
+      blocked: () => e.gate.every((g) => js(g) === js([true, null, false])), oracle: () => e.trace === m.trace && e.cov === m.cov,
+    });
+    else ok(true, "1.41.1 fix round 2 (R2-R-3): links not creatable here — skipped");
+  } else ok(true, "1.41.1 fix round 2 (R2-R-3): NTFS stream syntax is a win32 spelling — a ':' is an ordinary name character here");
+  // the hook review's FIFO: a part below .specs/ that is neither a file nor a folder (a FIFO, a socket, a device) reads as absent — the
+  // gate's own lstat, no open (a FIFO's open waits for a writer: the call never returned). A real FIFO where the platform makes one
+  // (mkfifo), and the same lstat answer stubbed everywhere
+  {
+    const p = project("fifo"), f = S.createFeature(p, { name: "feat" });
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), TASKS);
+    const tasks = path.join(f.dir, "tasks.md"), key = fold(path.resolve(tasks));
+    const ls = fs.lstatSync;
+    const fifoStats = { isSymbolicLink: () => false, isDirectory: () => false, isFile: () => false, isFIFO: () => true };
+    fs.lstatSync = function (q) { return typeof q === "string" && fold(path.resolve(q)) === key ? fifoStats : ls.apply(this, arguments); };
+    let r;
+    try { r = E.withReadCache(() => [E.readIfExists(tasks), E.existsRaw(tasks), E.specsReadBlocked(tasks), E.readFileHead(tasks, 100)]); } finally { fs.lstatSync = ls; }
+    eq(r, [null, false, true, null], "1.41.1 fix round 2 (hook review): a part below .specs/ whose lstat is neither a file, a folder nor a link (a FIFO, a socket, a device) reads as absent — never opened");
+    if (!WIN) {
+      const fifo = path.join(f.dir, "decisions.md");
+      fs.rmSync(fifo, { force: true });
+      const mk = require("child_process").spawnSync("mkfifo", [fifo], { encoding: "utf8" });
+      if (mk.status === 0) {
+        const t0 = Date.now();
+        const got = E.withReadCache(() => [E.readIfExists(fifo), E.existsRaw(fifo)]);
+        const st = S.statusFeature(p, "feat");
+        ok(js(got) === js([null, false]) && st.ok === true && Date.now() - t0 < 10000, "1.41.1 fix round 2 (hook review): a real FIFO named decisions.md below .specs/ reads as absent — read and status return at once, nothing opened (got " + js([got, st.ok, Date.now() - t0]) + ")");
+      } else ok(true, "1.41.1 fix round 2 (FIFO): mkfifo not available here — skipped");
+    } else ok(true, "1.41.1 fix round 2 (FIFO): Windows makes no FIFO in a folder (its pipes live in \\\\.\\pipe\\) — the stubbed lstat above holds the rule");
+  }
+  // R2-R-4: BMAD's folders by real path — with docs/ a junction out of the project, the warnings are the same whatever the outside
+  // folder holds (a stories/ folder, a prd/ folder, nothing) or whether it exists at all
+  {
+    const runs = {};
+    for (const kind of ["stories", "prd", "empty", "dangling"]) {
+      const ip = path.join(tmp, "rgr-bmad-" + kind), io = path.join(tmp, "rgr-bmad-" + kind + "-out");
+      if (kind === "stories") put(path.join(io, "stories", "1.1.md"), "# Story 1.1: OUTSIDE-STORY\n");
+      if (kind === "prd") put(path.join(io, "prd", "index.md"), "# OUTSIDE-PRD\n");
+      if (kind === "empty") fs.mkdirSync(io, { recursive: true });
+      fs.mkdirSync(path.join(ip, ".specs"), { recursive: true });
+      fs.writeFileSync(path.join(ip, ".specs", "roadmap.json"), js({ meta: { lang: "en" }, features: {} }));
+      put(path.join(ip, "bm", "epics.md"), "# Epics\n\n## Epic 1: T\n\n### Story 1.1: Do\n\nAs a user I want x so that y.\n\n**Acceptance Criteria:**\n1. WHEN x THEN the system SHALL y\n");
+      if (!link(io, path.join(ip, "bm", "docs"))) { runs[kind] = null; continue; }
+      const r = S.importSpec(ip, "bmad", "bm", { dryRun: true });
+      runs[kind] = js([r.ok, r.warnings]).split(js(ip).slice(1, -1)).join("<P>");
+    }
+    const vals = Object.values(runs);
+    if (vals.every(Boolean)) ok(vals.every((v) => v === vals[0]) && !/OUTSIDE|bm.docs./.test(vals[0]), "1.41.1 fix round 2 (R2-R-4): BMAD's folders are decided by real path — with docs/ a junction out of the project the warnings are the same whether the outside folder holds stories/, prd/, nothing, or is not there (got " + js(runs) + ")");
+    else ok(true, "1.41.1 fix round 2 (R2-R-4): links not creatable here — skipped");
+  }
+  // R2-R-6: the WRITE gate moves with the root (ONE predicate) — in a scope with the project recorded, a write through a link NAMED
+  // .specs below .specs/ (the nearest-name root would have exempted it) or through a `.SPECS` spelling is refused, nothing lands behind
+  {
+    const p = project("wroot"), out = path.join(tmp, "rgr-wroot-out");
+    fs.mkdirSync(out, { recursive: true });
+    const f = S.createFeature(p, { name: "f" });
+    if (link(out, path.join(f.dir, ".history", ".specs")) && link(out, path.join(p, ".specs", "lnk"))) {
+      const tryWrite = (file) => E.withReadCache(() => { E.specsRoot(p); try { E.writeFileAtomic(file, "# x\n"); return "written"; } catch (e) { return e.code || e.message; } });
+      const tryDir = (dir) => E.withReadCache(() => { E.specsRoot(p); try { E.ensureDir(dir); return "made"; } catch (e) { return e.code || e.message; } });
+      const w = [tryWrite(path.join(f.dir, ".history", ".specs", "planted.md")), tryDir(path.join(f.dir, ".history", ".specs", "planted-dir"))]
+        .concat(FOLD ? [tryWrite(path.join(p, ".SPECS", "lnk", "planted2.md"))] : []);
+      all("1.41.1 fix round 2 (R2-R-6): the write gate stands on the same root — a write and a folder made through a link NAMED .specs below .specs/, and (case-folding volumes) through `.SPECS/lnk/`, are refused (ESPECSLINK), nothing lands behind the link (got " + js(w) + ")", {
+        refused: () => w.every((x) => x === "ESPECSLINK"), nothingOut: () => fs.readdirSync(out).length === 0,
+      });
+    } else ok(true, "1.41.1 fix round 2 (R2-R-6): links not creatable here — skipped");
+    // a recorded project that does NOT hold the path (another checkout's report, a worktree's .specs/) is no base: the outermost .specs
+    // of the path stands, a link below it is refused
+    const longBase = path.join(tmp, "rgr-r22", "a-project-folder-whose-name-runs-past-the-other-checkouts-specs");
+    fs.mkdirSync(longBase, { recursive: true });
+    const other = path.join(tmp, "rgr-r22", "o");
+    fs.mkdirSync(path.join(other, ".specs"), { recursive: true });
+    put(path.join(tmp, "rgr-r22-out", "x.md"), "# OUTSIDE-R22\n");
+    if (link(path.join(tmp, "rgr-r22-out"), path.join(other, ".specs", "lnk"))) {
+      const t = path.join(other, ".specs", "lnk", "x.md");
+      const r = E.withReadCache(() => { E.specsRoot(longBase); return [E.specsReadBlocked(t), E.readIfExists(t)]; });
+      eq(r, [true, null], "1.41.1 fix round 2 (R2-R-6): a recorded project that holds no part of the path is no base — another checkout's .specs/<linked>/x read in a scope that recorded only the session's project is blocked");
+    }
   }
 };

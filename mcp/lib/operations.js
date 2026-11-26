@@ -208,7 +208,9 @@ const OPERATIONS = [
     // the CLI's path (a subfolder) is reported in the PROJECT's language — the scanned folder holds no .specs/
     id: "scan", tool: "spec_scan", mode: { key: "coverage", values: [false], fallback: false }, cli: ["scan"], engine: "scanCodebase",
     args: { cap: { mcp: "cap", cli: "--cap", type: "int" }, path: { pos: 0, parsed: true } },
-    call: (S, dir, o) => S.scanCodebase(o.path != null ? o.path : dir, { cap: o.cap, lang: S.projectLang(dir) }),
+    // ONE scope that names the project (1.41.1 fix round 2): the read gate stands on ITS .specs/ (scanCodebase takes a folder, maybe a
+    // subfolder — never the project), so a project below a folder named .specs scans its linked packages as ever
+    call: (S, dir, o) => S.withReadCache(() => { S.specsRoot(dir); return S.scanCodebase(o.path != null ? o.path : dir, { cap: o.cap, lang: S.projectLang(dir) }); }),
   },
   {
     id: "coverage", tool: "spec_scan", mode: { key: "coverage", values: [true] }, legacy: ["spec_coverage"], cli: ["coverage"], engine: "coverage",

@@ -208,8 +208,11 @@ function listDir(dir, withTypes) {
 }
 // Active feature folders (listFeatures' addressability rule; _archive, dot folders and steering/ are not features),
 // sorted — with the slug a specs:// URI uses (the folder name, lower-cased for a case-only variant).
+// isFeatureFolder in ONE scope that names the project (1.41.1 fix round 2): its reserved-name test (a legacy <name>/.state.json) reads
+// through the read gate, which stands on THIS project's .specs/ — a project below a folder named .specs, its .specs/ a junction
+const isFeatureIn = (name, root) => spec.withReadCache(() => { spec.specsRoot(path.dirname(root)); return spec.isFeatureFolder(name, root); });
 function featureFolders(root) {
-  return listDir(root, true).filter((d) => d.isDirectory() && spec.isFeatureFolder(d.name, root))
+  return listDir(root, true).filter((d) => d.isDirectory() && isFeatureIn(d.name, root))
     .map((d) => ({ folder: d.name, slug: spec.slugify(d.name) })).sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
 }
 function steeringFiles(root, inSpecs) {
@@ -330,7 +333,7 @@ function readResource(projectDir, uri) {
       if (!r.ok) return invalid(r.error);
       const f = spec.existingFeature(pdir, p.feature); // not there (an archived one says so) → not found
       if (!f.ok) return missing(f.error);
-      if (!spec.isFeatureFolder(path.basename(f.dir), root)) return missing();
+      if (!isFeatureIn(path.basename(f.dir), root)) return missing();
       return file(path.join(f.dir, p.artifact));
     }
     default:

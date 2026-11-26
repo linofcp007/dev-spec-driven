@@ -51,15 +51,14 @@ const emit = (eventName, text) => (text ? { hookSpecificOutput: { hookEventName:
 // feature folder with its .state.json / classification.md), required lazily: an edit outside .specs/ loads nothing.
 const isDevSpecProject = (pdir) => probe().isDevSpecProject(pdir);
 
+// The saved file's project: the one the read / write gates stand on (spec.gateRootOf — their own rule, 1.41.1 fix round 2): the
+// OUTERMOST .specs below the session's project folder (CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR, recorded in this hook's scope), else the
+// outermost in the path — never the nearest folder named .specs (a committed `.specs/<f>/.history/.specs -> <another project's .specs>`
+// made the link the project: its feature traced into the context, its .state.json stamped). Called inside decide's scope.
 function findProjectDir(filePath) {
-  // Walk up from the file until we find the parent of a `.specs` directory.
-  let dir = path.dirname(filePath);
-  for (let i = 0; i < 12 && dir; i++) {
-    if (path.basename(dir) === ".specs") return path.dirname(dir);
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
+  for (const v of [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]) if (typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim())) spec.specsRoot(v.trim());
+  const root = spec.gateRootOf(filePath);
+  if (root) return path.dirname(root);
   return process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || process.cwd();
 }
 

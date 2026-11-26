@@ -803,7 +803,10 @@ const GATE_CODES = { link: "ESPECSLINK", notFolder: "ESPECSKIND", notFile: "ESPE
 // no .specs folder. A deeper part named .specs is then an ordinary part (lstat'ed: a link there is refused).
 const SPECS_NAME = ".specs";
 const RE_SHORT_ALIAS = /~\d/;
-const isSpecsName = (s) => (FOLD_CASE ? s.toLowerCase() : s) === SPECS_NAME;
+// (fix round 2) on win32 a segment's NAME is the part before its first ':' — NTFS stream syntax (`.specs::$INDEX_ALLOCATION` opens the
+// .specs folder; no file name holds a ':'), so that spelling is the project's .specs/ too — and reads below it as absent (specsReadGate)
+const streamName = (s) => (WIN_FS ? s.split(":")[0] : s);
+const isSpecsName = (s) => (FOLD_CASE ? streamName(s).toLowerCase() : streamName(s)) === SPECS_NAME;
 function gateRootOf(p) {
   const abs = path.resolve(String(p));
   const shortAlias = WIN_FS && RE_SHORT_ALIAS.test(abs);
@@ -947,13 +950,17 @@ function seedParts(d, entries) {
 function specsReadGate(p) {
   const abs = path.resolve(String(p));
   const root = gateRootOf(abs); // the PROJECT's .specs/ (a text test first: a project's code never pays a disk call here)
-  if (!root || root.length >= abs.length) return null; // .specs itself (it may be a link) is never gated
+  if (!root) return null;
+  // (fix round 2) win32: a ':' from .specs on is NTFS stream syntax (no file name holds one) — `.specs::$INDEX_ALLOCATION\…`, `x.md:s`
+  if (WIN_FS && abs.slice(path.dirname(root).length).includes(":")) return { blocked: true, at: abs };
+  if (root.length >= abs.length) return null; // .specs itself (it may be a link) is never gated
   const segs = abs.slice(root.length).split(path.sep).filter(Boolean); // (root is abs's own prefix, whatever its case)
   let cur = root, folder = root, kind = "none";
   for (let i = 0; i < segs.length; i++) {
     cur = path.join(cur, segs[i]);
     kind = partKind(cur);
-    if (kind === "link" || kind === "error") return { blocked: true, at: cur };
+    // (fix round 2) "other" — a FIFO, a socket, a device — reads as absent too: opening a FIFO waits for a writer (the call never returns)
+    if (kind === "link" || kind === "error" || kind === "other") return { blocked: true, at: cur };
     if (kind === "none") break;
     if (kind === "dir") { folder = cur; continue; }
     if (i < segs.length - 1) kind = "none"; // a file on the way: nothing below it
@@ -1423,4 +1430,4 @@ module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensu
   readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, readFileHeads, decodeText, existsCached,
   existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
   FOLD_CASE, toPosix, isInsideDir, writeInsideProject, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO,
-  specsReadBlocked, readBytes, specsStat, entryAt, projectFileReal, realRootOf, seedParts, __link };
+  specsReadBlocked, readBytes, specsStat, entryAt, projectFileReal, realRootOf, seedParts, gateRootOf, __link };

@@ -687,8 +687,9 @@ function approvalMeta(pdir) {
   let text;
   const file = path.join(spec.specsRoot(pdir), "roadmap.json");
   // (1.41.1) a roadmap.json behind a link is read by no one (the read gate): its meta is unknown — every change that could weaken counts,
-  // as the approval hook reads a linked one (and the engine's level: gone → ask)
-  if (spec.specsReadBlocked(file)) return undefined;
+  // as the approval hook reads a linked one (and the engine's level: gone → ask). ONE scope that names the project (fix round 2): the
+  // gate stands on pdir's .specs/ (a project below a folder named .specs, its .specs/ a junction: no link on the way)
+  if (spec.withReadCache(() => { spec.specsRoot(pdir); return spec.specsReadBlocked(file); })) return undefined;
   try { text = spec.decodeText(fs.readFileSync(file)); } catch (e) { return e && e.code === "ENOENT" ? {} : undefined; }
   try {
     const j = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
