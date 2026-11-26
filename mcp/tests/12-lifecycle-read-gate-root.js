@@ -343,8 +343,12 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
       if (!link(io, path.join(ip, "specs", "001-x", "contracts")) || !link(io, path.join(ip, "openspec", "changes", "add-x", "specs")) || !link(io, path.join(ip, ".fluidplan", "p1"))) return null;
       fileLink(path.join(io, "x.md"), path.join(ip, "specs", "001-x", "research.md"));
       const norm = (r) => js(r).split(ip).join("<P>").split(js(ip).slice(1, -1)).join("<P>");
-      return [norm(S.importSpec(ip, "spec-kit", "specs/001-x", { dryRun: true }).warnings), norm(S.importSpec(ip, "openspec", "openspec/changes/add-x", { dryRun: true }).warnings),
-        norm(S.importSpec(ip, "fluidplan", "docs/PLAN.md", { dryRun: true }).warnings)];
+      const runs = [S.importSpec(ip, "spec-kit", "specs/001-x", { dryRun: true }), S.importSpec(ip, "openspec", "openspec/changes/add-x", { dryRun: true }),
+        S.importSpec(ip, "fluidplan", "docs/PLAN.md", { dryRun: true })];
+      // every "points outside the project" warning names an ENTRY of the project (never a file that isn't there: DECISIONS.md, plan.json)
+      const named = runs.flatMap((r) => (r.warnings || []).map((w) => /^(.+) points outside the project — skipped$/.exec(w)).filter(Boolean).map((x) => x[1]));
+      const ghosts = named.filter((n) => { try { fs.lstatSync(path.join(ip, n)); return false; } catch { return true; } });
+      return runs.map((r) => norm(r.warnings)).concat([ghosts]);
     };
     const e = run(true), m = run(false);
     // B15: contracts/ linking into the project's own hidden folder — inside the project, hidden by its real path
@@ -357,6 +361,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     const W = S.msg("en").importSpec;
     if (e && m && hid) all("1.41.1 fix round 1 (A-6, B15): spec-kit's and OpenSpec's warnings are the same whether a linked folder's outside target exists or not (decided on the entry by real path, before existence); a contracts/ linking into the project's own hidden folder is named once, its entries never (got " + js({ e, m, hid: hid.warnings }) + ")", {
       noOracle: () => e[0] === m[0] && e[1] === m[1] && e[2] === m[2] && /\.fluidplan\/p1 /.test(e[2]) && !/p1\/plan\.json/.test(e[2]),
+      entriesOnly: () => !e[3].length && !m[3].length,
       hidden: () => hid.ok === true && hid.warnings.filter((w) => w === W.wUnreadable("specs/001-x/contracts")).length === 1 && !/secret-name-one/.test(js(hid)),
     });
     else ok(true, "1.41.1 fix round 1 (A-6): links not creatable here — skipped");
