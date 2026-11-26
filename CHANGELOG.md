@@ -49,22 +49,26 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
 - **METRIC lines — numbers that get worse while the tests stay green.** A project check prints
   `METRIC <name>=<number>[ <unit>][ better=lower|higher][ tolerance=<n>[%]]` (`metric-lines/1`, the line dev-guardian
   3.17's `metrics` command reads too); `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read it
-  from a passing run's whole output, stdout and stderr apart (its last 64 MiB, 1,000 candidate lines from the end, 20
-  names — a line past a bound is said). The tick prints and stores
-  the readings, never judges. `spec_finish` compares each (check, name) with the latest OTHER feature's finish that
+  from a passing run's whole output, stdout and stderr apart, a byte-order mark at a stream's start dropped (1,000
+  candidate lines from the end, 20 names — a line past a bound is said; the reader's own 64 MiB bound is past what the CLI
+  runs: a run printing more records nothing). Print a name on one stream: dev-guardian reads a `2>&1` capture in print
+  order, dev-spec stderr after stdout. The tick prints and stores the readings, never judges. `spec_finish` compares each
+  (check, name) with the latest OTHER feature's finish that
   recorded it, archived ones included: `metrics`, each with its verdict (`new` · `within` · `improved` · `regressed` ·
   `unjudged`) and `loosened` for a flipped or dropped `better=`, a raised or dropped tolerance or a changed unit (never
   compared) — ONE warning for a reading worse past its stated tolerance or a loosened line, worded as what it is (the
   number holds every change merged since, not only this feature's), never a blocker; `## Metrics` in the merge summary; a
   ready written finish records the readings (`finished.metrics`) for the next one. No defaults: a reading is judged only
-  when the earlier line states both `better=` and `tolerance=`; the current line may only tighten them; values compare as
-  the exact decimals printed (120 → 122.4 at 2 % is `within`). `spec_metrics` (the project) lists each reading across the
-  finishes (`measured`, the last 10). An MCP report carries none — the CLI reads the whole output.
+  when the earlier line states both `better=` and `tolerance=`; the current line may only tighten them; values and
+  tolerances compare — and show — as the exact decimals printed (120 → 122.4 at 2 % is `within`). `spec_metrics` (the
+  project) lists each reading across the finishes (`measured`, the last 10). An MCP report carries none — the CLI reads the
+  whole output.
 - **Silent Regressions (size m / l).** The m / l design gets `## Silent Regressions` — one row per number (its METRIC name
   in a code span, the check that prints it) or "None — why". Doctor warns `design-silent-regressions` until it is
-  answered — never a refusal, and a design approved before 1.41 is not asked; finish warns when a name a row declares was
-  printed by no passing check (`metricsUnmeasured`, once `finish --run` ran every check); a project design template without
-  the heading gives an m / l feature the built-in section at the end, and `templates check` warns `silent-missing` on it.
+  answered — never a refusal, and a design approved before 1.41 is not asked; finish warns when no passing check printed a
+  readable METRIC line of a name a row declares (a malformed line or one past a reader bound is not read; `metricsUnmeasured`,
+  once `finish --run` ran every check); a project design template without the heading gives an m / l feature the built-in
+  section at the end, and `templates check` warns `silent-missing` on it.
   Sizes s, xs and none get nothing new.
 - **The friction budget (report only).** `_Budget: <check> <duration>_` lines in `.specs/steering/tech.md` (`ms` · `s` ·
   `m` / `min` · `h`; 1 ms – 24 h). `done --run` / `finish --run` (from the spawn to the command's exit) and Claude Code's
@@ -144,8 +148,9 @@ deleted file failed trace on 43 % of real test files), a cause enum in the tool 
 235), and a slot in the Silent Regressions scaffold (a placeholder would refuse every fresh m / l design).
 
 **Cost.** A run without a METRIC line costs the reader one `lastIndexOf`; 64 MiB of output with one line reads in ~1× a
-bare `lastIndexOf` of it (a split would be 6–9×). finish without a reading opens no other feature; with readings it opens
-each other feature's state once. `spec_metrics` reads each feature's state and `decisions.md` once — the lessons ride the
+bare `lastIndexOf` of it (a split would be 6–9×), and a long coloured line is cleaned only as far as its 512-byte bound.
+finish without a reading opens no other feature; with readings it opens each other feature's state once. `spec_metrics` reads
+each feature's state and `decisions.md` once — the lessons ride the
 metrics' one walk. trace_check reads the other features' `_Supersedes:_` only when an AC has no test entry (the index the
 matrix reads), so a trace with none reads no other feature. The findings below dev-guardian's gate make no file-system
 call; `reference-examples` `lstat`s each Copy path's folders once per engine call (spec_upgrade over 6 features as over

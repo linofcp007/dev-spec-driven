@@ -560,13 +560,23 @@ Engine: the `B5` block of `engine/evidence.js`.
   the last one kept for the note, control characters folded), anything else ignored and uncounted; tokens split on runs of
   blanks; the unit only right after the number, ≤ 16 CODE POINTS (`unitFits`, the reader and readingOf alike; its length
   guard a cost guard — no array for a long unit) (a bare word elsewhere, a known key twice, a negative tolerance:
-  malformed); unknown keys ignored; names in a Map (`__proto__` is a name). Each reading carries `text`, its number as
-  printed (the judge's input). **The walk** — from the END with `lastIndexOf`, never a split: `lineStartOf()` scans back
-  over blanks, `#` and CSI sequences only (any final byte: a superset of RE_CSI's — a pre-filter; an earlier `METRIC` stops
+  malformed); unknown keys ignored; names in a Map (`__proto__` is a name); ONE leading U+FEFF of each text dropped (a stream
+  starting with a UTF-8 byte-order mark, as dev-guardian 3.17's file decoding drops it — a second one or one mid-text stays;
+  built with 0xfeff, never a literal; RX-3). Each reading carries `text`, its number as
+  printed, and its tolerance its own `text` (the judge's inputs; what the warning, `## Metrics` and a tick's line show).
+  **The walk** — from the END with `lastIndexOf`, never a split: `lineStartOf()` scans back over blanks, `#` and CSI sequences
+  only (any final byte: a superset of RE_CSI's — a pre-filter; an earlier `METRIC` stops
   it at its `C`, so two scans never cross and the whole walk is linear), with no candidate floor; the line is then read to
   its LF ONCE (only a line's first keyword can follow nothing but blanks, `#` and CSI), its CSI removed, and RE_CANDIDATE
-  decides — a `#` run of any length is no candidate. **The bounds, one set (`METRIC_BOUNDS` = the fixture's):** the last
-  `readBytes` CHARACTERS of the output (run.js caps bytes; a character is ≥ 1 byte) — `readBytes` said when a METRIC lies
+  decides — a `#` run of any length is no candidate. The removal stops once the bound is passed (`visibleLine`, 1.41.0 review 2: a
+  long coloured line was stripped whole first): a line of ≤ 4,096 units is cleaned whole; a longer one its head to the keyword's
+  end whole (no sequence crosses it), then 4,096-unit chunks — each cut before its last ESC, a chunk starting with its only ESC
+  reading that sequence alone (`RE_CSI_AT`, sticky) — until the text holds more than 512 units AND a character past the keyword:
+  over the bound, and RE_CANDIDATE reads the same characters as on the whole line. **The bounds, one set (`METRIC_BOUNDS` =
+  the fixture's):** the last `readBytes` CHARACTERS of the output (run.js caps bytes; a character is ≥ 1 byte — and since 1.23
+  run.js refuses a run past MAX_OUTPUT, 64 MiB of both streams: from the CLI the bound is never reached, it guards a facade
+  caller; RX-4) — `readBytes`
+  said when a METRIC lies
   before them, or when the bound cuts the blanks / `#` in front of one (`lineStartOf` → -3: maybe a candidate; mid-line
   text before it is none) —, a candidate (a line passing RE_CANDIDATE, an attempt or not) of ≤ 512 UTF-8 bytes AFTER CSI
   removal (a colour never pushes a line over) — a longer one is a drop (`candidateBytes`), never malformed —,
@@ -574,7 +584,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   loop's final iteration. `dropped` lists the bounds in the fixture's order. Cost (09-evidence-metrics, ratios — no count exists for a
   CPU walk; both sides warmed): hostile lines UNDER the cap (no line of them a candidate) 64 → 256 KiB ≤ 6× (linear 4×, ~4.6×
   measured; quadratic would be 16×), and 64 MiB of output lines (2.2 M) with one METRIC line ≤ 3× a bare `lastIndexOf` of the same
-  text, flattened first — the first scan of a concatenation pays for its copy — (~1×; a split is 6–9×).
+  text, flattened first — the first scan of a concatenation pays for its copy — (~1×; a split is 6–9×); a 60 MiB coloured
+  candidate line ≤ 3× the same line plain (equal work: the keyword's scan, the line end's, one chunk; stripped whole it was ~39×).
 - **The judge, `judgeMetric(reference, current)`** → the fixture's `{verdict, why, loosened, delta, applied}`: the REFERENCE's terms;
   judged only when it states `better=` AND `tolerance=` (else `unjudged`, `why` its missing terms, with the delta); a changed unit
   `unjudged` + `loosened: "unit"`, no delta; `loosened` is ONE term (unit, then better, then tolerance — a flipped / dropped direction,
@@ -582,17 +593,22 @@ Engine: the `B5` block of `engine/evidence.js`.
   amount); `n%` of |reference|; symmetric (`improved` / `regressed` only past `applied`, the boundary within). Exact decimals
   (`decimalOf`, a BigInt at one scale): the two readings' printed `text`s when BOTH carry one — the grammar prints up to 24
   significant digits (15 + 9), a double keeps 15–17 — else the two values' shortest round-trip texts (a reading without a text: a
-  hand edit, another writer); a tolerance is read from its amount's shortest text; `delta` / `applied` read back with Number().
+  hand edit, another writer); the tolerances likewise (R1-DG-H-7): their printed `text`s when EVERY tolerance the two lines state
+  carries one (a line stating none needs none — the reference's long tolerance against a current without one is exact), else
+  both on their amounts' shortest texts; `delta` / `applied` read back with Number().
 - **Who reads, who stores.** Only the CLI: `done --run` hands `evidence.output` (every passing command's stdout and stderr,
   TWO texts each, in run order — never joined end to end, so a stdout line without its newline is read; a later text's line
-  of a name wins: a name on both streams reads stderr's) and `finish --run` each non-guardian check's `output` (`[stdout,
+  of a name wins: a name on both streams reads stderr's — dev-guardian's `metrics` reads ONE file, a CI job's `2>&1` capture in
+  print order, so the two agree on a name printed on one stream only: verification.md → One stream per name, RX-6) and
+  `finish --run` each non-guardian check's `output` (`[stdout,
   stderr]`; `ranBy: "cli"`; never stored; normalizeEvidence never takes it, MCP can't pass it — `output` is no schema key,
   nested keys are refused). Only a PASSING run is read (a failed command, a non-zero check, `_Expect: fail_`'s red run:
   none); dev-guardian's gate never (`isGuardianCheck` — its output is a scan report). The readings (`runMetricsOf` →
-  `storedReading`: an ARRAY `[{name, value, text, unit?, better?, tolerance?}]`, null terms left out; readingOf keeps a
-  text read back only when it is the grammar's number AND Number() of it is
-  the stored value) go on the LATEST run only — `recordEvidence` / `recordFinishChecks` put them on the record after `runOf`
-  built it, so the history never carries them (20 names × 6 copies) and a later run without them leaves none. Results:
+  `storedReading`: an ARRAY `[{name, value, text, unit?, better?, tolerance? {amount, percent, text?}}]`, null terms left out;
+  readingOf keeps a text read back only when it is the grammar's number AND Number() of it is the stored value — a tolerance's
+  only when it is the grammar's unsigned number AND Number() of it is the amount) go on the LATEST run only —
+  `recordEvidence` / `recordFinishChecks` put them on the record after `runOf` built it, so the history never carries them (20
+  names × 6 copies) and a later run without them leaves none. Results:
   spec_complete_task `metrics` (the reader's shape, nulls kept), `metricsMalformed` / `metricsLastMalformed`, `metricsDropped` —
   report-only: the tick never compares (no walk); `recordedChecks[]` the same with `metrics` a count. The CLI prints a tick's
   readings as `METRIC <line>` and, per check, what it could not read (`metricRunLines`).
@@ -601,20 +617,23 @@ Engine: the `B5` block of `engine/evidence.js`.
   latest OTHER folder's `finished.metrics` holding it — by `finished.at` (a re-finish moves it; never `firstAt`), active and archived
   (`walkFeatureStates`, the feature's own folder skipped: its re-read compares the same). No reading: no walk (the COUNT —
   09-evidence-metrics: each other folder's `.state.json` opened exactly once more than without readings, the own folder's the same,
-  the execution gate's none). Out: `metrics` [{check, name, value, unit, better, tolerance, verdict, why, loosened, delta, applied,
-  reference: {feature, at, value, unit, better, tolerance} | null}] (stable codes), ONE warning (`metric.finishWarn`: the regressed
-  and the loosened readings, ≤ 5 named + the rest counted, worded without blaming the feature — the number holds every change merged
+  the execution gate's none). Out: `metrics` [{check, name, value, text, unit, better, tolerance, verdict, why, loosened, delta,
+  applied, reference: {feature, at, value, text, unit, better, tolerance} | null}] (stable codes; each number shown as its `text`
+  when it has one — `shown()` —, a reading without one as its value), ONE warning (`metric.finishWarn`: the regressed and the
+  loosened readings, ≤ 5 named + the rest counted, worded without blaming the feature — the number holds every change merged
   since; its 4th argument `unitOnly` — every one it names only changed its unit — gives its own head: not compared, never "got worse
   past the tolerance"; a unit's `loosened` form says "not compared", never "judged by"), never a blocker; the merge summary's
   `## Metrics` right after the project checks; `metricsUnmeasured` + its warning — the
   code spans of the FIRST cell of the design's Silent Regressions data rows (`designMetricNames`; never a comment, prose or another
-  cell) no passing check printed, only once every check passes AND every check's latest run is stamped `observed: "cli"`
-  (finish --run): a check reported over MCP carries no reading, so its names are a doubt — no claim (1.41.0 review 1). A ready
+  cell) no passing check printed as a READABLE line, only once every check passes AND every check's latest run is stamped
+  `observed: "cli"` (finish --run): a check reported over MCP carries no reading, so its names are a doubt — no claim (1.41.0
+  review 1); a name printed as a malformed line or one past a bound is no reading either, so the warning claims no READABLE line
+  and points at the run's note (1.41.0 review 2 — no stored flag: a later spec_finish without a run says the same). A ready
   WRITTEN finish records them: `recordFinishBaseline(…, metrics)` → `finished.metrics` [{check, name, value, text, unit?, better?,
   tolerance?}] (none: no key), `baseline.metrics` its count.
 - **Known limits** (verification.md says them): the baseline is the tree's — parallel branches, a commit outside a feature, another
   machine's timings all land in the next feature's comparison; a test printing a METRIC fixture line is read; a runner capturing
-  stdout hides it; `kB` ≠ `KB`; a tolerance of more than 15 significant digits compares as its double (values: their printed text).
+  stdout hides it; `kB` ≠ `KB`.
 - **spec_metrics' ONE walk** (finish.js `metricsBlocks` → metric.js `walkFeatureStates`): every folder (featureDirs: active, then
   archived), its state read ONCE (stateFromFile; the read cache serves featureMetrics' and the velocity's reads of the same files —
   the COUNT: each `.state.json` opened once per call), handed to each block `{ key, visit(fd, state), result() → value | null }`; a
@@ -1315,6 +1334,20 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   it (dev-spec read it into the last token — malformed; now one CR ends the line at the text's end too) and a bare `METRIC`
   line (dev-guardian counts it toward its 1,000 candidates, dev-spec never did; now a candidate, ignored — a flood of them
   pushes earlier readings out with `candidates` said, never unsaid). Both harnesses: 0 disagreements.
+  **Review 2 (area MF):** `metricsUnmeasured`'s warning said "no passing run printed a METRIC line of that name" for a name the
+  run printed as a malformed line (`12.5kB`) or past a bound — now "no READABLE METRIC line … the run's note names it", prose
+  only, no stored flag (R2-MF-1). The reader stripped a long candidate line's colours whole before measuring it (a 60 MiB
+  coloured line 1,325 ms against 34 ms plain): now `visibleLine` stops past the bound (R2-MF-5; 25 lines built to cross its
+  chunks, each as dev-guardian 3.17 reads it). The warning and `## Metrics` printed a long reading as its double — they print its
+  `text`, the reference's too, and so does a tick's line (R2-MF-4). dev-guardian's review found the judge read a TOLERANCE of
+  more than 15–17 digits as its double (4 of its 19 pairs disagreed; 9 of 20 here): the tolerance keeps its printed `text` on
+  the reading and in `finished.metrics`, the round-1 mechanism of values (R1-DG-H-7), and the known limit is gone. Fixtures
+  only: the append to a project template — the feature's language, before the track blocks, a section under a synonym or at
+  level 3 found (R2-MF-2) — and a flagged unjudged reading that is no unit change under the general head (R2-MF-3). **The
+  cross-plugin review:** a stream starting with a UTF-8 byte-order mark read nothing (dev-guardian's file decoding drops it) —
+  one leading U+FEFF of each text is dropped now (RX-3; against dev-guardian's string reader, which never sees a BOM, the
+  harnesses' BOM rows now differ — through its readMetricFile, 0 of 7 do); the prose said "its last 64 MiB" of a bound the
+  CLI never reaches (RX-4) and nothing of the two readers' stream order (RX-6).
   **Review 1 (W):** "below the gate" also leaves out a finding the report lists in `blocking_findings` (R1-PZ-4: dev-spec
   reads the command's first `--fail-on`, dev-guardian its last — `--fail-on high --fail-on medium` named a medium as the
   blocker AND as "They do not block"; a subtraction, the rule checked before a key is built); `kinds` and a head naming only

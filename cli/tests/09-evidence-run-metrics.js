@@ -45,8 +45,8 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
     JSON.stringify({ tick: tick.out.slice(0, 400), tickJ: tickJ && tickJ.metrics, rec: st.evidence["1"].metrics, note: note && note.metrics, rec2: st.evidence["2"], many: many.out.slice(-300) }) + ")", {
     human: tick.code === 0 && tick.out.includes("  METRIC first_only=1\n") && tick.out.includes("  METRIC queries_per_request=6 better=lower tolerance=0\n") && tick.out.includes("  METRIC heap_mb=48.25 MB\n"),
     json: !!tickJ && JSON.stringify(tickJ.metrics) === JSON.stringify([{ name: "first_only", value: 1, text: "1", unit: null, better: null, tolerance: null },
-      { name: "queries_per_request", value: 6, text: "6", unit: null, better: "lower", tolerance: { amount: 0, percent: false } }, { name: "heap_mb", value: 48.25, text: "48.25", unit: "MB", better: null, tolerance: null }]),
-    stored: JSON.stringify(st.evidence["1"].metrics) === JSON.stringify([{ name: "first_only", value: 1, text: "1" }, { name: "queries_per_request", value: 6, text: "6", better: "lower", tolerance: { amount: 0, percent: false } },
+      { name: "queries_per_request", value: 6, text: "6", unit: null, better: "lower", tolerance: { amount: 0, percent: false, text: "0" } }, { name: "heap_mb", value: 48.25, text: "48.25", unit: "MB", better: null, tolerance: null }]),
+    stored: JSON.stringify(st.evidence["1"].metrics) === JSON.stringify([{ name: "first_only", value: 1, text: "1" }, { name: "queries_per_request", value: 6, text: "6", better: "lower", tolerance: { amount: 0, percent: false, text: "0" } },
       { name: "heap_mb", value: 48.25, text: "48.25", unit: "MB" }]) && st.evidence["1"].history.every((h) => h.metrics === undefined),
     manual: !!note && note.ok && note.metrics === undefined && st.evidence["2"].metrics === undefined,
     bound: many.code === 0 && many.out.includes("  ⚠ " + MT.dropped("names") + "\n") && st.evidence["3"].metrics.length === 20,
@@ -66,7 +66,7 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
   const day = S.dayOf(fin1 && fin1.at);
   all("1.41 finish --run reads each project check's whole output — a size script's line before 50 noise lines, node --test's TAP '# METRIC' of a nested subtest — says the malformed line per check, records the readings on a ready written finish; the next feature's finish compares each (check, name): the size that grew past its tolerance is ONE ▲ warning (exit 0: ready), the report's METRIC lines and --json's metrics (got " +
     JSON.stringify({ f1: f1.out.slice(0, 900), fin1: fin1 && fin1.metrics, f2: f2.out.slice(0, 1200), f2j: f2j && [f2j.readyToFinish, f2j.metrics, f2j.recordedChecks] }) + ")", {
-    readFirst: f1.code === 0 && JSON.stringify(fin1.metrics) === JSON.stringify([{ check: "size", name: "bundle-size", value: 120, text: "120", unit: "kB", better: "lower", tolerance: { amount: 2, percent: true } },
+    readFirst: f1.code === 0 && JSON.stringify(fin1.metrics) === JSON.stringify([{ check: "size", name: "bundle-size", value: 120, text: "120", unit: "kB", better: "lower", tolerance: { amount: 2, percent: true, text: "2" } },
       { check: "tap", name: "parse.ms", value: 3, text: "3", unit: "ms" }]),
     malformed: f1.out.includes("  ⚠ size: " + MT.notRead(1, "METRIC broken=1,5", S.METRIC_GRAMMAR) + "\n"),
     recorded: f1.out.includes("  " + MT.recorded(2)),
@@ -105,6 +105,47 @@ exports.run = async ({ all, spawnIn, spawnAsync, tmp, require, __dirname }) => {
       JSON.stringify({ done: done && [done.metrics, done.metricsMalformed], fin: fin && fin.recordedChecks, fc: fc && fc.streams && fc.streams.metrics }) + ")", {
       done: !!done && done.ok && names(done.metrics) === "both=2 err_only=3 out_only=4" && done.metricsMalformed === undefined,
       finish: !!fin && JSON.stringify(fin.recordedChecks) === JSON.stringify([{ name: "streams", exitCode: 0, metrics: 3 }]) && names(fc.streams.metrics) === "both=2 err_only=3 out_only=4",
+    });
+  }
+
+  // 1.41.0 review 2 R2-MF-1: a Silent Regressions name the check printed as a MALFORMED line (`12.5kB`) — finish --run says the line was
+  // not read, then the unmeasured warning names that doubt (no READABLE line, the run's note), never "printed no METRIC line"
+  {
+    const q = path.join(tmp, "metric-unread");
+    S.initProject(q, ["core"], "en", { checks: { size: "node size.js" } });
+    w(q, "size.js", "console.log(\"METRIC bundle-size=12.5kB better=lower tolerance=2%\");\n");
+    const c = S.createFeature(q, "Unread", undefined, "x", undefined, "en", "change");
+    fs.writeFileSync(path.join(c.dir, "change.md"), "# Change: Unread\n\n## Summary\nThe change.\n\n## Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer.\n\n## Approach\nOne string.\n\n## Tasks\n- [ ] 1. [US1] Do it\n" +
+      "  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"0\"_\n");
+    fs.writeFileSync(path.join(c.dir, "design.md"), "# Design\n\n## Silent Regressions\n| Metric | Why | Printed by |\n|---|---|---|\n| `bundle-size` | grows | size |\n");
+    S.approvePhase(q, c.slug, null, "t", { through: "tasks" });
+    S.completeTask(q, c.slug, 1, { command: "node -e \"0\"", exitCode: 0, summary: "ok" });
+    const f = await run(q, ["finish", c.slug, "--run"]);
+    const note = "  ⚠ size: " + MT.notRead(1, "METRIC bundle-size=12.5kB better=lower tolerance=2%", S.METRIC_GRAMMAR) + "\n";
+    const warn = "▲ " + MT.unmeasured("`bundle-size`", c.slug);
+    all("1.41.0 review 2 R2-MF-1: finish --run over a check that printed its Silent Regressions name as a malformed line says the line was not read, then warns of no READABLE METRIC line of that name — the run's note names it (got " + JSON.stringify(f.out.slice(0, 1400)) + ")", {
+      note: f.code === 0 && f.out.includes(note),
+      warning: f.out.includes(warn) && f.out.indexOf(note) < f.out.indexOf(warn),
+      words: /printed no readable METRIC line of that name \(a malformed line, or one past a reader bound, is not read — the run's note names it\)/.test(warn),
+    });
+  }
+
+  // 1.41.0 RX-3: a command whose stdout and stderr each start with a UTF-8 byte-order mark (EF BB BF) — done --run reads the first
+  // METRIC line of both (one leading BOM of each stream dropped, as dev-guardian's file decoding drops it)
+  {
+    const q = path.join(tmp, "metric-bom");
+    S.initProject(q, ["core"], "en", {});
+    w(q, "scripts/bom.js", "const BOM = Buffer.from([0xef, 0xbb, 0xbf]);\nprocess.stdout.write(Buffer.concat([BOM, Buffer.from(\"METRIC out_bom=1\\n\")]));\n" +
+      "process.stderr.write(Buffer.concat([BOM, Buffer.from(\"METRIC err_bom=2\\n\")]));\n");
+    const c = S.createFeature(q, "Bom", undefined, "x", undefined, "en", "change");
+    fs.writeFileSync(path.join(c.dir, "change.md"), "# Change: Bom\n\n## Summary\nThe change.\n\n## Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer.\n\n## Approach\nOne string.\n\n## Tasks\n- [ ] 1. [US1] Measure it\n" +
+      "  - _Requirements: US-1.AC-1_\n  - _Verify: node scripts/bom.js_\n");
+    S.approvePhase(q, c.slug, null, "t", { through: "tasks" });
+    const done = json((await run(q, ["done", c.slug, "1", "--run", "--json"])).stdout);
+    all("1.41.0 RX-3: done --run over a command whose stdout and stderr each start with a UTF-8 byte-order mark reads both streams' first METRIC line (got " + JSON.stringify(done && [done.ok, done.metrics]) + ")", {
+      read: !!done && done.ok && (done.metrics || []).map((m) => m.name + "=" + m.value).sort().join(" ") === "err_bom=2 out_bom=1",
     });
   }
 };
