@@ -299,7 +299,7 @@ nothing.
 
 ## Test Value
 - A test earns its place when it guards an AC (its T-ID in the test plan) or a past bug (a bugfix's regression test), and fails when that behaviour breaks.
-- The others — every AC it covers retired, the same path as another test, green when its behaviour breaks — go to the pruning pass (`/spec-review <feature> prune`): removed whole, only with the user's approval, never mid-task.
+- The others — the same path as another test, green when its behaviour breaks — go to the pruning pass (`/spec-review <feature> prune`): removed whole, only with the user's approval, never mid-task, never a criterion's last planned test.
 ```
 
 ---

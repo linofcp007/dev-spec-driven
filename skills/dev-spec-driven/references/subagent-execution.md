@@ -527,16 +527,16 @@ value and pruning). **The pruning pass** (the user's `/spec-review <feature> pru
 no longer do and removes them only on the user's word — every task done, or on a finished feature (see the churn, step 6).
 It never runs mid-task: an implementer who thinks a test worthless reports it as a concern.
 
-1. **Baseline and candidates.** The project checks (or the full suite) green on HEAD first. Then `trace_check {name,
-   matrix: true, code: true}`: a T-ID is a `retired-ac` candidate only when EVERY requirement row it covers is retired — a
-   non-empty `supersededBy` and no `supersedePending` (its declarer shipped) — and at least one of them is an AC; its files
-   are the row's `tests[].files`. A T-ID that covers an EC / NFR / SC row is never `retired-ac` (no `_Supersedes:_` retires
-   one: pruning the test would leave it unguarded), nor is a test of an `outsideCode` row (eval, load).
+1. **Baseline and the map.** The project checks (or the full suite) green on HEAD first. Then `trace_check {name, matrix:
+   true, code: true}`: each row's `tests` (their T-IDs, `tests[].files`) say which criteria every test covers. Never a
+   candidate: a criterion's last planned test (a T-ID that is some AC, EC, NFR or SC row's only test entry — the test-plan
+   approval refuses an AC with none), nor a test of an `outsideCode` row (eval, load). A test of an AC a shipped feature
+   retired (a non-empty `supersededBy`, no `supersedePending`) is never pruned: it fails once the superseding feature ships,
+   so name it to the user — it needs a `/spec-change` on its own feature.
 2. **Review.** Dispatch `dev-spec-driven:spec-reviewer` in **prune** mode (inline without a subagent tool) with the feature
-   folder, the `trace_check` result, the candidates and the references folder path. It gives each candidate one verdict —
-   prune (naming what still guards EACH criterion the test covers) · keep · retrace (the test now guards the superseding
-   feature's AC: its row belongs in that plan) · strengthen (its AC's only test, green with the behaviour broken) — and
-   asks for probes of the `same-path` / `no-kill` pairs it proposes.
+   folder, the `trace_check` result and the references folder path. It proposes the `same-path` / `no-kill` candidates with
+   the probes each needs and, once you hand it their results, gives each candidate one verdict — prune (naming what still
+   guards EACH criterion the test covers) · keep · strengthen (its AC's only test, green with the behaviour broken).
 3. **Probes** — you run them, inline (the reviewer edits nothing). A probe breaks the behaviour in ONE line and runs one test,
    and only on a file git tracks with no change of its own: `git ls-files --error-unmatch -- <file>` exits 0 and
    `git status --porcelain -- <file>` prints nothing. Never `git diff --quiet` alone — an untracked file passes it, and
@@ -547,7 +547,7 @@ It never runs mid-task: an implementer who thinks a test worthless reports it as
    `git status --porcelain -- <file>` is empty again — a mismatch stops the pass. A `same-path` pruning holds only when
    every break that reddens the pruned test reddens the kept one; a `no-kill` test is one the break leaves green. Under
    **guard mode** each break and each restore asks the user — say so before the first. **No shell** (an MCP client that runs
-   no command): no probe, so no `same-path` / `no-kill` pruning is proposed — `retired-ac` only.
+   no command): no probe, so the pass proposes no pruning.
 4. **Report** `.specs/<feature>/.execution/prune-report.md` (git-ignored: a report, never evidence — no probe ran and no
    `.execution/` yet? Create it with a `.gitignore` holding `*` first) — `## Candidates` ·
    `## Verdicts` (one line each) · `## Probes` (`` - probe T-12: src/cart.ts:42 `>`→`>=` · `npm test -- -t "T-12"` → exit 1 ``) ·
@@ -560,14 +560,15 @@ It never runs mid-task: an implementer who thinks a test worthless reports it as
    case, or the file —, never an empty body, a skip or a constant assertion. At guard level tests (`meta.guard: "tests"`)
    the record of each protected file the pruning changed or deleted is the user's accept: `feature protect <feature> <file>
    --accept --reason "pruned: <criterion> — <what still guards it>"` (a guard-down, asked with the file and the reason; the
-   merge summary prints it). Without guard tests the removed row in the approval history is the record.
+   merge summary prints it) — dev-guardian's test-integrity finding is answered with it. Without guard tests the removed row
+   in the approval history is the record (no accept: it would start a protected-tests list of its own): when dev-guardian
+   asks why the test went, answer with that feature's test-plan re-approval.
 6. **The churn — tell the user before step 5.** The plan's re-approval makes the Phase 4 sign-off stale: re-approve
    `test-plan`, then `tests` (every remaining planned T-ID still in code), then `tasks`; on a finished feature also
    `execution` and a new `/spec-finish` — `spec_drift` names the gone file until then, and each re-approval counts as rework
-   in `spec_metrics`. Each completes unforced: an AC a SHIPPED feature retired needs no planned test (trace leaves it out of
-   `uncoveredByTests`; one only a draft plans to supersede still needs one). So batch per feature: one pass, every
-   pruning of the feature, one round of approvals. dev-guardian's gate reads the removals as test-integrity findings (medium): below the default `--fail-on high` they never block
-   (`/spec-finish` names them in one warning); at
+   in `spec_metrics`. Each completes unforced: every criterion keeps a planned test (step 1), so trace finds no new gap. So
+   batch per feature: one pass, every pruning of the feature, one round of approvals. dev-guardian's gate reads the removals as test-integrity findings (medium): below the default `--fail-on high` they never block
+   (`finish <feature> --run` names them in one warning); at
    `--fail-on medium` an approved pruning blocks like any medium finding (verification.md → dev-guardian's gate).
 
 ## Closing
