@@ -148,8 +148,9 @@ review findings — is in History at the end.
   planned-not-in-code, legacy approvals missing a role, `outside-code-artifacts`, a file-date-only change, an expired
   waiver; 1.41: dev-guardian's own findings below the gate — W, one line, the last of dev-guardian's warnings
   (tasks-and-evidence.md → Project checks, dev-guardian's gate) —, then a regressed or loosened METRIC reading and the
-  Silent Regressions names no passing check printed (tasks-and-evidence.md → Metrics that regress silently), and the open
-  lessons — ONE warning, always the LAST, the field `lessons` only when the feature has one (lifecycle.md → Decisions and
+  Silent Regressions names no passing check printed as a readable line (tasks-and-evidence.md → Metrics that regress
+  silently), and the open lessons — ONE warning, always the LAST, the field `lessons` only when the feature has one
+  (lifecycle.md → Decisions and
   spikes). The finish batch of commands/spec-finish.md asks ONE question for the warnings that need the user, in that order —
   dev-guardian, test integrity, metrics, lessons —, then runs finish again; 12-lifecycle-lessons holds the engine's order
   and the prose's to each other). spec_metrics' `finished` = the earlier of the first execution approval and `state.finished.at`.
