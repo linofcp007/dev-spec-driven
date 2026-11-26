@@ -2243,6 +2243,13 @@ exports.run = async ({
       text: TOOL.includes("`metrics` [{name, value, text, unit, better, tolerance {amount, percent, text}}") && TOOL.includes("`metrics` [{check, name, value, text, unit, better, tolerance,") &&
         TOOL.includes("reference: {feature, at, value, text, unit, better, tolerance}"),
     });
+    // 1.41.0 RX-4 / RX-6 (the cross-plugin review): the reader's 64 MiB bound is its own — the CLI records nothing past 64 MB of
+    // output —, and a name printed on both streams reads stderr's here, print order in dev-guardian's `2>&1` file: one stream per name
+    const flat = sec.replace(/\n\s*/g, " ");
+    all("1.41.0 RX-4 / RX-6 docs: verification.md keeps the reader's 64 MiB bound apart from what the CLI runs, and gives the one-stream rule for a name both plugins read", {
+      bound: flat.includes("the reader's own bound, an output's last 64 MiB, is past what the CLI runs: a run whose output passes 64 MB records nothing") && !flat.includes("(its last 64 MiB"),
+      streams: flat.includes("**One stream per name.** dev-spec reads stdout, then stderr, as two texts: a name printed on both reads stderr's line. dev-guardian's `metrics` reads one file — a CI job that captures `2>&1` reads it in print order, the last printed winning. Print each name on ONE stream"),
+    });
   }
 
   // Release hygiene: the three version fields agree.

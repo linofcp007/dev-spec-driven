@@ -418,11 +418,16 @@ build's time. A project check prints each as a METRIC line — the form dev-guar
 - **The line.** `METRIC` starts the line, after blanks or one `# ` (node's TAP reporter); the name is ASCII (letters, digits,
   `_ . -`, up to 64); the number is a plain decimal (`142.3`, `1.5e3` — never `1,5`); the unit one token of up to 16
   characters; unknown `key=value` words are ignored; the last line of a name wins. A line that starts `METRIC <name>=` and
-  breaks the form is said as not read; a table header (`METRIC | BEFORE`) is no attempt. Colours are removed first.
+  breaks the form is said as not read; a table header (`METRIC | BEFORE`) is no attempt. Colours are removed first, and a
+  byte-order mark at a stream's start.
 - **Only the CLI reads them:** `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read each passing
-  command's whole output, stdout and stderr apart — a name printed on both reads stderr's — (its last 64 MiB, at most 1,000
-  candidate lines of 512 bytes from the end, 20 names — a line past a bound is said). The tick prints and stores them; it
-  never judges. An MCP report carries none.
+  command's whole output, stdout and stderr apart (at most 1,000 candidate lines of 512 bytes from the end, 20 names — a
+  line past a bound is said; the reader's own bound, an output's last 64 MiB, is past what the CLI runs: a run whose
+  output passes 64 MB records nothing — `output-too-large`, above). The tick prints and stores them; it never judges. An
+  MCP report carries none.
+- **One stream per name.** dev-spec reads stdout, then stderr, as two texts: a name printed on both reads stderr's line.
+  dev-guardian's `metrics` reads one file — a CI job that captures `2>&1` reads it in print order, the last printed
+  winning. Print each name on ONE stream and both read the same value.
 - **finish compares.** Each `(check, name)` a project check's passing run printed is set against the LATEST other
   feature's finish that recorded it (`finished.at`, archived features included; never the feature's own). Judged only
   when that earlier line states BOTH `better=` and `tolerance=` — no defaults: otherwise the result shows the delta,

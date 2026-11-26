@@ -48,9 +48,11 @@ findings only). No new tool, command, hook or dependency; the MCP tool list +64 
 - **METRIC lines — numbers that get worse while the tests stay green.** A project check prints
   `METRIC <name>=<number>[ <unit>][ better=lower|higher][ tolerance=<n>[%]]` (`metric-lines/1`, the line dev-guardian
   3.17's `metrics` command reads too); `dev-spec done <feature> <n> --run` and `dev-spec finish <feature> --run` read it
-  from a passing run's whole output, stdout and stderr apart (its last 64 MiB, 1,000 candidate lines from the end, 20
-  names — a line past a bound is said). The tick prints and stores
-  the readings, never judges. `spec_finish` compares each (check, name) with the latest OTHER feature's finish that
+  from a passing run's whole output, stdout and stderr apart, a byte-order mark at a stream's start dropped (1,000
+  candidate lines from the end, 20 names — a line past a bound is said; the reader's own 64 MiB bound is past what the CLI
+  runs: a run printing more records nothing). Print a name on one stream: dev-guardian reads a `2>&1` capture in print
+  order, dev-spec stderr after stdout. The tick prints and stores the readings, never judges. `spec_finish` compares each
+  (check, name) with the latest OTHER feature's finish that
   recorded it, archived ones included: `metrics`, each with its verdict (`new` · `within` · `improved` · `regressed` ·
   `unjudged`) and `loosened` for a flipped or dropped `better=`, a raised or dropped tolerance or a changed unit (never
   compared) — ONE warning for a reading worse past its stated tolerance or a loosened line, worded as what it is (the

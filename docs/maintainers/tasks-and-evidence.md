@@ -560,7 +560,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   the last one kept for the note, control characters folded), anything else ignored and uncounted; tokens split on runs of
   blanks; the unit only right after the number, ≤ 16 CODE POINTS (`unitFits`, the reader and readingOf alike; its length
   guard a cost guard — no array for a long unit) (a bare word elsewhere, a known key twice, a negative tolerance:
-  malformed); unknown keys ignored; names in a Map (`__proto__` is a name). Each reading carries `text`, its number as
+  malformed); unknown keys ignored; names in a Map (`__proto__` is a name); ONE leading U+FEFF of each text dropped (a stream
+  starting with a UTF-8 byte-order mark, as dev-guardian 3.17's file decoding drops it — a second one or one mid-text stays;
+  built with 0xfeff, never a literal; RX-3). Each reading carries `text`, its number as
   printed, and its tolerance its own `text` (the judge's inputs; what the warning, `## Metrics` and a tick's line show).
   **The walk** — from the END with `lastIndexOf`, never a split: `lineStartOf()` scans back over blanks, `#` and CSI sequences
   only (any final byte: a superset of RE_CSI's — a pre-filter; an earlier `METRIC` stops
@@ -571,7 +573,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   end whole (no sequence crosses it), then 4,096-unit chunks — each cut before its last ESC, a chunk starting with its only ESC
   reading that sequence alone (`RE_CSI_AT`, sticky) — until the text holds more than 512 units AND a character past the keyword:
   over the bound, and RE_CANDIDATE reads the same characters as on the whole line. **The bounds, one set (`METRIC_BOUNDS` =
-  the fixture's):** the last `readBytes` CHARACTERS of the output (run.js caps bytes; a character is ≥ 1 byte) — `readBytes`
+  the fixture's):** the last `readBytes` CHARACTERS of the output (run.js caps bytes; a character is ≥ 1 byte — and since 1.23
+  run.js refuses a run past MAX_OUTPUT, 64 MiB of both streams: from the CLI the bound is never reached, it guards a facade
+  caller; RX-4) — `readBytes`
   said when a METRIC lies
   before them, or when the bound cuts the blanks / `#` in front of one (`lineStartOf` → -3: maybe a candidate; mid-line
   text before it is none) —, a candidate (a line passing RE_CANDIDATE, an attempt or not) of ≤ 512 UTF-8 bytes AFTER CSI
@@ -594,7 +598,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   both on their amounts' shortest texts; `delta` / `applied` read back with Number().
 - **Who reads, who stores.** Only the CLI: `done --run` hands `evidence.output` (every passing command's stdout and stderr,
   TWO texts each, in run order — never joined end to end, so a stdout line without its newline is read; a later text's line
-  of a name wins: a name on both streams reads stderr's) and `finish --run` each non-guardian check's `output` (`[stdout,
+  of a name wins: a name on both streams reads stderr's — dev-guardian's `metrics` reads ONE file, a CI job's `2>&1` capture in
+  print order, so the two agree on a name printed on one stream only: verification.md → One stream per name, RX-6) and
+  `finish --run` each non-guardian check's `output` (`[stdout,
   stderr]`; `ranBy: "cli"`; never stored; normalizeEvidence never takes it, MCP can't pass it — `output` is no schema key,
   nested keys are refused). Only a PASSING run is read (a failed command, a non-zero check, `_Expect: fail_`'s red run:
   none); dev-guardian's gate never (`isGuardianCheck` — its output is a scan report). The readings (`runMetricsOf` →
@@ -1337,7 +1343,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   more than 15–17 digits as its double (4 of its 19 pairs disagreed; 9 of 20 here): the tolerance keeps its printed `text` on
   the reading and in `finished.metrics`, the round-1 mechanism of values (R1-DG-H-7), and the known limit is gone. Fixtures
   only: the append to a project template — the feature's language, before the track blocks, a section under a synonym or at
-  level 3 found (R2-MF-2) — and a flagged unjudged reading that is no unit change under the general head (R2-MF-3).
+  level 3 found (R2-MF-2) — and a flagged unjudged reading that is no unit change under the general head (R2-MF-3). **The
+  cross-plugin review:** a stream starting with a UTF-8 byte-order mark read nothing (dev-guardian's file decoding drops it) —
+  one leading U+FEFF of each text is dropped now (RX-3; against dev-guardian's string reader, which never sees a BOM, the
+  harnesses' BOM rows now differ — through its readMetricFile, 0 of 7 do); the prose said "its last 64 MiB" of a bound the
+  CLI never reaches (RX-4) and nothing of the two readers' stream order (RX-6).
   **Review 1 (W):** "below the gate" also leaves out a finding the report lists in `blocking_findings` (R1-PZ-4: dev-spec
   reads the command's first `--fail-on`, dev-guardian its last — `--fail-on high --fail-on medium` named a medium as the
   blocker AND as "They do not block"; a subtraction, the rule checked before a key is built); `kinds` and a head naming only
