@@ -185,6 +185,17 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
       const b = E.withReadCache(() => { E.specsRoot(inner); E.specsRoot(p); return [E.specsReadBlocked(t), E.readIfExists(t)]; });
       eq([a, b], [[true, null], [true, null]], "1.41.1 fix round 1: two projects recorded in one scope, one reached through a link below the other's .specs/ — the outermost project's .specs/ is the root, the link on the way refused (either order)");
     } else ok(true, "1.41.1 fix round 1 (two bases): links not creatable here — skipped");
+    // … and only in ONE scope: a later call on a project that lives inside the first one's .specs/ folder stands on its own .specs/ —
+    // the first call's project is gone with its scope (a long-lived MCP server serves both)
+    const y = path.join(p, ".specs", "nested-app");
+    fs.mkdirSync(y, { recursive: true });
+    S.initProject(y, ["core"], "en");
+    put(path.join(y, "src", "real", "a.js"), "y\n");
+    if (link(path.join(y, "src", "real"), path.join(y, "src", "alias"))) {
+      S.statusFeature(p, "anything"); // a call on the outer project (its scope records it)
+      const r = E.withReadCache(() => { E.specsRoot(y); return E.readIfExists(path.join(y, "src", "alias", "a.js")); });
+      ok(r === "y\n", "1.41.1 fix round 1: the projects a call records live as long as its scope — a later call on a project inside the first one's .specs/ folder reads its own code through an in-project junction as ever (got " + js(r) + ")");
+    }
   }
 
   // a monorepo: each project stands on its own .specs/ (the outer call reaching an inner project's spec, the inner call, the code between)
@@ -267,7 +278,8 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     };
     const P3 = [2, 3, 4].map(mk);
     const OPS = { drift: [(q) => S.drift(q), 1, 0], statusLine: [(q) => S.statusLine(q, {}), 2, 0], doctor: [(q) => S.specDoctor(q, "f1"), 4, 0],
-      trace: [(q) => S.traceCheck(q, "f1", { code: true }), 2, 1], finish: [(q) => S.finishFeature(q, "f1", {}), 2, 1] };
+      trace: [(q) => S.traceCheck(q, "f1", { code: true }), 2, 1], finish: [(q) => S.finishFeature(q, "f1", {}), 2, 1],
+      protect: [(q) => S.manageFeature(q, "protect", "f1", null, {}), 2, 1] }; // the protected-tests walk of every feature's tests/
     const k = (r, x) => r[x] || 0;
     const steps = {}, bad = [];
     for (const [name, [op, ls, rp]] of Object.entries(OPS)) {
@@ -276,7 +288,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
       steps[name] = { lstat: st("lstatSync"), realpath: st("realpathSync.native") };
       if (js(steps[name].lstat) !== js([ls, ls]) || js(steps[name].realpath) !== js([rp, rp])) bad.push(name);
     }
-    ok(!bad.length, "1.41.1 fix round 1 (B-5): the gate's per-feature cost once a listing proved the folder plain (seedParts) — drift 1 lstat / 0 realpath, the status line 2 / 0, doctor 4 / 0, trace {code} and finish 2 / 1 (their tests/ folder), exact steps 2 → 3 → 4 features (got " + js({ bad, steps }) + ")");
+    ok(!bad.length, "1.41.1 fix round 1 (B-5): the gate's per-feature cost once a listing proved the folder plain (seedParts) — drift 1 lstat / 0 realpath, the status line 2 / 0, doctor 4 / 0, trace {code}, finish and the protected-tests walk 2 / 1 (their tests/ folder), exact steps 2 → 3 → 4 features (got " + js({ bad, steps }) + ")");
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------
@@ -325,10 +337,14 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
       put(path.join(ip, "specs", "001-x", "spec.md"), "# Feature Specification: X\n\n## User Scenarios & Testing\n\n### User Story 1 - Do (Priority: P1)\n\nU.\n\n**Acceptance Scenarios**:\n\n1. **Given** a, **When** b, **Then** c\n");
       put(path.join(ip, "specs", "001-x", "plan.md"), "# Plan\n");
       put(path.join(ip, "openspec", "changes", "add-x", "proposal.md"), "# Change: Add x\n\n## Why\nB.\n");
-      if (!link(io, path.join(ip, "specs", "001-x", "contracts")) || !link(io, path.join(ip, "openspec", "changes", "add-x", "specs"))) return null;
+      // fluidplan: the plan folder its header names (.fluidplan/p1/plan.json) is a link — a file read by NAME inside a linked folder
+      if (exists) put(path.join(io, "plan.json"), js({ id: "p1", steps: [] }));
+      put(path.join(ip, "docs", "PLAN.md"), ["# X — execution plan", "", "> Regenerate with `fluidplan export --plan p1`.", "", "## Phase 1 — One", "", "### [ ] 1.1 Do it · D1", "", "- Decision: **D1** Choice", ""].join("\n"));
+      if (!link(io, path.join(ip, "specs", "001-x", "contracts")) || !link(io, path.join(ip, "openspec", "changes", "add-x", "specs")) || !link(io, path.join(ip, ".fluidplan", "p1"))) return null;
       fileLink(path.join(io, "x.md"), path.join(ip, "specs", "001-x", "research.md"));
       const norm = (r) => js(r).split(ip).join("<P>").split(js(ip).slice(1, -1)).join("<P>");
-      return [norm(S.importSpec(ip, "spec-kit", "specs/001-x", { dryRun: true }).warnings), norm(S.importSpec(ip, "openspec", "openspec/changes/add-x", { dryRun: true }).warnings)];
+      return [norm(S.importSpec(ip, "spec-kit", "specs/001-x", { dryRun: true }).warnings), norm(S.importSpec(ip, "openspec", "openspec/changes/add-x", { dryRun: true }).warnings),
+        norm(S.importSpec(ip, "fluidplan", "docs/PLAN.md", { dryRun: true }).warnings)];
     };
     const e = run(true), m = run(false);
     // B15: contracts/ linking into the project's own hidden folder — inside the project, hidden by its real path
@@ -340,7 +356,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     const hid = link(path.join(ip, ".private", "c"), path.join(ip, "specs", "001-x", "contracts")) ? S.importSpec(ip, "spec-kit", "specs/001-x", { dryRun: true }) : null;
     const W = S.msg("en").importSpec;
     if (e && m && hid) all("1.41.1 fix round 1 (A-6, B15): spec-kit's and OpenSpec's warnings are the same whether a linked folder's outside target exists or not (decided on the entry by real path, before existence); a contracts/ linking into the project's own hidden folder is named once, its entries never (got " + js({ e, m, hid: hid.warnings }) + ")", {
-      noOracle: () => e[0] === m[0] && e[1] === m[1],
+      noOracle: () => e[0] === m[0] && e[1] === m[1] && e[2] === m[2] && /\.fluidplan\/p1 /.test(e[2]) && !/p1\/plan\.json/.test(e[2]),
       hidden: () => hid.ok === true && hid.warnings.filter((w) => w === W.wUnreadable("specs/001-x/contracts")).length === 1 && !/secret-name-one/.test(js(hid)),
     });
     else ok(true, "1.41.1 fix round 1 (A-6): links not creatable here — skipped");

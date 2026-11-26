@@ -28,6 +28,11 @@ exports.run = ({ ok, run, runIn, tmp }) => {
     !!links && links.status === "warn" && links.detail.includes(".specs/lnk") && !/OUTSIDE-/.test(dr.out),
     "1.41.1 read gate (CLI): `status` / `next` of a linked feature folder exit 1 with feature-linked (its --json the MCP result, code feature-linked) and nothing behind the link; `doctor --json` names it in specs-links (got " +
     JSON.stringify([st.code, st.out.slice(0, 120), parsed && parsed.code, nx.code, links]) + ")");
+  // fix round 1 (the inventory outside mcp/lib): `ears <file>` naming a file behind a link below .specs/ lints nothing — no such file
+  const ea = runIn(["ears", ".specs/lnk/requirements.md", "--project", p]);
+  const eaPlain = runIn(["ears", ".specs/plain/requirements.md", "--project", p]);
+  ok(ea.code === 1 && !/OUTSIDE-/.test(ea.out) && ea.out.includes(MSG("en").cliOutput.earsNoFile(path.join(p, ".specs", "lnk", "requirements.md"))) && !/no such file|not found/i.test(eaPlain.out),
+    "1.41.1 fix round 1 (CLI): `ears .specs/lnk/requirements.md` — a file behind a link below .specs/ — is no file (earsNoFile, exit 1, nothing behind the link linted); a plain feature's file is linted as ever (got " + JSON.stringify([ea.code, ea.out.slice(0, 160), eaPlain.code]) + ")");
 
   // fix round 1 (A-7): the engine-free readers keep the engine's reading — a linked _archive/ completes no archived name (restore <Tab>),
   // a linked roadmap.json picks no language (its target's meta.lang); the plain twins as ever
