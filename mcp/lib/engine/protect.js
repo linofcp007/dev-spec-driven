@@ -34,11 +34,11 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked, fileHash,
   FOLD_CASE, globMatcher, guardLevel, implementsRel, insideDirAlias, isCodeFile, isImplementsGlob, isObj, isTestFile, projectLang,
-  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic, projectFileReal, realRootOf;
+  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic, projectFileReal, realRootOf, isDirSafe;
 let portHeldNumbers, detectTracks, specsRoot, evidenceRule; // port.js · tracks.js · core.js · evidence.js — a task +port's fence holds
 function __link(E) { ({ approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked,
   fileHash, FOLD_CASE, globMatcher, guardLevel, implementsRel, insideDirAlias, isCodeFile, isImplementsGlob, isObj, isTestFile, projectLang,
-  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic, projectFileReal, realRootOf,
+  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic, projectFileReal, realRootOf, isDirSafe,
   portHeldNumbers, detectTracks, specsRoot, evidenceRule } = E); }
 
 const PROTECT_MAX_FILES = 2000; // test files a snapshot records, at most (past them: `truncated` — doctor warns)
@@ -91,7 +91,7 @@ function protectWalk(projectDir, first) {
   const feats = featureDirs(projectDir).filter((f) => !f.archived);
   for (const f of feats.filter((x) => x.slug === first).concat(feats.filter((x) => x.slug !== first))) {
     const tdir = path.join(f.dir, "tests");
-    try { if (!fs.lstatSync(tdir).isDirectory()) continue; } catch { continue; } // a linked tests/ is never followed
+    if (!isDirSafe(tdir)) continue; // a linked tests/ is never followed (the read gate's lstat, memoized — 1.41.1)
     const pre = path.relative(root, tdir).split(path.sep).join("/") + "/";
     const tw = walkProject(tdir, PROTECT_MAX_FILES - n, (rel, full) => { if (isTest(pre + rel)) { files[pre + rel] = hash16(full); n++; } }, { counts: (rel) => isTest(pre + rel) });
     truncated = truncated || tw.truncated;

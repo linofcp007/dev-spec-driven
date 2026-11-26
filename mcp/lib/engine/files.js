@@ -920,6 +920,28 @@ function realDirOf(p) {
   if (k !== null) CTX.READ_CACHE.set(k, v);
   return v;
 }
+// What a listing of .specs/ (or of a folder below it the gate let through) already proved is not asked of the disk again (1.41.1, fix
+// round 1 — a project-wide drift paid an lstat and a realpath per feature folder its own listing had just named): a Dirent that
+// says "directory" or "file" names an entry that is NO reparse point (Windows types every reparse point — a link, a junction, a mount
+// point, an OneDrive placeholder — as a link; POSIX: d_type, or Node's own lstat for DT_UNKNOWN), so its lstat says the same, and a
+// plain folder's real path is its listed folder's real path + its name. A Dirent "link" seeds nothing (a placeholder is a link to a
+// Dirent, not to lstat: lstat decides it), and a seed never replaces what lstat already answered.
+function seedParts(d, entries) {
+  if (!CTX.READ_CACHE || !entries || !entries.length) return;
+  const abs = path.resolve(String(d));
+  const root = gateRootOf(abs); // the listed folder is the project's .specs/ or below it (its children are gated), else nothing to seed
+  if (!root) return;
+  const real = abs === root ? realSpecsRoot(root) : CTX.READ_CACHE.get(REALDIR_KEY + readCacheKey(abs)); // the gate's own answer
+  for (const e of entries) {
+    const kind = e.isDirectory() ? "dir" : e.isFile() ? "file" : null;
+    if (!kind) continue;
+    const child = path.join(abs, e.name);
+    const pk = PART_KEY + readCacheKey(child);
+    if (!CTX.READ_CACHE.has(pk)) CTX.READ_CACHE.set(pk, kind);
+    const rk = REALDIR_KEY + readCacheKey(child);
+    if (kind === "dir" && real && !CTX.READ_CACHE.has(rk)) CTX.READ_CACHE.set(rk, path.join(real, e.name));
+  }
+}
 // → null (not below a .specs/, or .specs itself) | { blocked: true, at } (the part that refuses it) | { blocked: false, kind } (the
 // target's own lstat kind — "none" when it, or a part above it, is not there).
 function specsReadGate(p) {
@@ -1247,7 +1269,7 @@ function readDirDisk(d) {
   } catch {
     entries = null;
   }
-  if (k !== null) CTX.READ_CACHE.set(k, entries);
+  if (k !== null) { CTX.READ_CACHE.set(k, entries); seedParts(d, entries); }
   return entries;
 }
 // `file` is about to be written (or created, with its folders): its text, the "exists" answers and listings of it and of
@@ -1297,7 +1319,9 @@ function invalidateReadCache() {
 function safeReaddir(p) {
   let names;
   try {
-    names = gateNothing(specsReadGate(p)) ? [] : fs.readdirSync(p); // the read gate: a linked folder below .specs/ lists nothing
+    // the read gate: a linked folder below .specs/ lists nothing; a listing's plain entries seed its memo (seedParts)
+    if (gateNothing(specsReadGate(p))) names = [];
+    else { const ents = fs.readdirSync(p, { withFileTypes: true }); seedParts(p, ents); names = ents.map((e) => e.name); }
   } catch {
     names = [];
   }
@@ -1399,4 +1423,4 @@ module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensu
   readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, readFileHeads, decodeText, existsCached,
   existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
   FOLD_CASE, toPosix, isInsideDir, writeInsideProject, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO,
-  specsReadBlocked, readBytes, specsStat, entryAt, projectFileReal, realRootOf, __link };
+  specsReadBlocked, readBytes, specsStat, entryAt, projectFileReal, realRootOf, seedParts, __link };

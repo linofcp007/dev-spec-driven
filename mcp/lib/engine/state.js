@@ -16,11 +16,11 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let catalogData, compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures, maybeRefreshCatalog, own,
   positionPhase, readIfExists, readJson, removeSpecFile, renderRoadmapHtml, renderRoadmapMd, roadmapData, roadmapExtras, safeReaddir,
-  shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent, specsReadBlocked, existsRaw, specsStat, readDirCached;
+  shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent, specsReadBlocked, existsRaw, specsStat, readDirCached, seedParts;
 function __link(E) { ({ catalogData, compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures,
   maybeRefreshCatalog, own, positionPhase, readIfExists, readJson, removeSpecFile, renderRoadmapHtml, renderRoadmapMd, roadmapData,
   roadmapExtras, safeReaddir, shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent, specsReadBlocked, existsRaw, specsStat,
-  readDirCached } = E); }
+  readDirCached, seedParts } = E); }
 
 // Language resolution. The project's language is the single source of truth, persisted in
 // .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
@@ -827,6 +827,7 @@ function featureDirs(projectDir) {
   const dirsIn = (base, entries) => (entries || []).filter((d) => d.isDirectory() && isFeatureFolder(d.name, base)).map((d) => d.name).sort();
   let top = null;
   try { top = fs.readdirSync(root, { withFileTypes: true }); } catch { /* no .specs/ */ }
+  seedParts(root, top); // what the listing proved, the read gate doesn't ask again (each feature folder's lstat and real path)
   const archRoot = path.join(root, "_archive");
   return dirsIn(root, top).map((n) => ({ slug: n, dir: path.join(root, n), archived: false }))
     .concat(dirsIn(archRoot, readDirCached(archRoot)).map((n) => ({ slug: n, dir: path.join(archRoot, n), archived: true })));

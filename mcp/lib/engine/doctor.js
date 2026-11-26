@@ -51,8 +51,8 @@ let PROBE_IO; // files.js — the engine's view of the disk for the project prob
 let frictionHint; // friction.js — 1.41 the friction budget: next_action's finish-step hint (a platform item for a check over its budget)
 let existsRaw, entryAt, specsStat; // files.js — the read gate (1.41.1)
 let projectFileReal; // files.js — R3 (1.41.1): a project file by its real path
-let readDirCached, specsReadBlocked; // files.js — the read gate (1.41.1): specs-links
-function __link(E) { ({ readDirCached, specsReadBlocked, projectFileReal, existsRaw, entryAt, specsStat, frictionHint, referenceExamplesCheck, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
+let readDirCached, specsReadBlocked, seedParts; // files.js — the read gate (1.41.1): specs-links, the listing's seed
+function __link(E) { ({ readDirCached, specsReadBlocked, seedParts, projectFileReal, existsRaw, entryAt, specsStat, frictionHint, referenceExamplesCheck, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designReuseGated, designWeighChecks, detectPhase,
@@ -210,7 +210,9 @@ function seedProjectLang(projectDir, lang) {
 function listFeatures(projectDir) {
   const root = specsRoot(projectDir);
   if (!fs.existsSync(root)) return { specsDir: root, exists: false, features: [] };
-  const dirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
+  const top = fs.readdirSync(root, { withFileTypes: true });
+  seedParts(root, top); // what the listing proved, the read gate doesn't ask again (each feature folder's lstat and real path)
+  const dirs = top.filter((d) => d.isDirectory());
   const entries = dirs.filter((d) => isFeatureFolder(d.name, root));
   // Visible, non-addressable folders are named (so a hand-made "My Feature/" can be renamed), never listed.
   const ignored = dirs.filter((d) => !isFeatureFolder(d.name, root) && !/^[._]/.test(d.name) && !reservedSlug(d.name, root)).map((d) => d.name);

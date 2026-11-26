@@ -24,8 +24,8 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir, approvedContentSame, wsText, headingEntries;
 let readDirCached; // files.js — the read gate's listing (1.41.1)
-let existsRaw, projectFileReal, realRootOf; // files.js — the read gate (1.41.1)
-function __link(E) { ({ existsRaw, projectFileReal, realRootOf, readDirCached, acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
+let existsRaw, projectFileReal, realRootOf, isDirSafe; // files.js — the read gate (1.41.1)
+function __link(E) { ({ existsRaw, projectFileReal, realRootOf, isDirSafe, readDirCached, acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
   codeBlockLines, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, FOLD_CASE,
   gitEvidence, globFiles, GUARD_CODE_EXT, historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord,
@@ -1004,7 +1004,7 @@ function scanTestCode(projectDir) {
   for (const d of specFeatureDirs(projectDir)) {
     if (left <= 0) break;
     const tdir = path.join(d, "tests");
-    try { if (!fs.lstatSync(tdir).isDirectory()) continue; } catch { continue; } // a symlinked tests/ is never followed
+    if (!isDirSafe(tdir)) continue; // a linked tests/ is never followed (the read gate's lstat, memoized — 1.41.1)
     const tPre = toPosix(path.relative(root, tdir));
     const w = walkProject(tdir, left, (rel, full) => onFile(tPre + "/" + rel, full));
     left -= w.total;
