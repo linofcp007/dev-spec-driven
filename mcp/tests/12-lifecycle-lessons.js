@@ -425,6 +425,24 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, fsCalls, cliIn, requir
     });
   }
 
+  // --- 1.41.0 review 2 (R2-L-4, the round-1 survivors N2 / N4): only a root-level name with no `/` and no `.` takes the `./` form — a
+  // dotted one (`package.json`, written bare or as `./package.json`) is stored and shown bare; the targetGone refusal of a root-level
+  // name names it in its `./` form (`./Makefile`, the form the user typed and the writer would have stored), never the bare word
+  {
+    const p = demo("target-form-r2");
+    fs.writeFileSync(path.join(p, "package.json"), "{}\n");
+    const bare = lesson(p, "api-keys", { title: "package.json copied", target: "package.json" });
+    const dotted = lesson(p, "api-keys", { title: "package.json copied again", target: "./package.json" });
+    const gone = lesson(p, "api-keys", { title: "Makefile copied", target: "./Makefile" }); // example-copied: its target must be there
+    const text = rd(p, ".specs", "api-keys", "decisions.md");
+    all("1.41.0 review 2: a dotted root-level target (`package.json`, `./package.json`) is written bare; a gone `./Makefile` is refused naming `./Makefile` (got " +
+      js([bare.target, dotted.target, gone.error]) + ")", {
+      bare: bare.ok === true && bare.target === "package.json" && dotted.ok === true && dotted.target === "package.json" &&
+        text.includes("\n- _Target: package.json_\n") && !text.includes("./package.json"),
+      gone: gone.ok === false && gone.error === D().targetGone("./Makefile", "example-copied") && !text.includes("Makefile"),
+    });
+  }
+
   // --- 1.41.0 review 1 (M13): a brief's lesson budget that overflows skips a longer lesson for an older one that fits ------------------
   {
     const p = demo("brief-overflow");
