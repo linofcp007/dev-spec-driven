@@ -1224,6 +1224,7 @@ const msg = {
     doctor: {
       steeringMissing: (list) => `falta: ${list}`,
       steeringOk: "steering esencial presente (incl. constitución)",
+      specsLinks: (list, more) => `enlaces en .specs/ a través de los cuales dev-spec nunca lee ni escribe — se leen como ausentes: ${list}${more ? ` y ${more} más` : ""}. Sustituye cada uno por una carpeta o un fichero normal (copia allí su contenido).`,
       requirementsMissing: "falta requirements.md",
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] sin resolver — resuelve antes del diseño`,
       clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] sin resolver en change.md — resuelve antes de aprobar el plan`,

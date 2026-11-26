@@ -51,7 +51,8 @@ let PROBE_IO; // files.js — the engine's view of the disk for the project prob
 let frictionHint; // friction.js — 1.41 the friction budget: next_action's finish-step hint (a platform item for a check over its budget)
 let existsRaw, entryAt, specsStat; // files.js — the read gate (1.41.1)
 let projectFileReal; // files.js — R3 (1.41.1): a project file by its real path
-function __link(E) { ({ projectFileReal, existsRaw, entryAt, specsStat, frictionHint, referenceExamplesCheck, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
+let readDirCached, specsReadBlocked; // files.js — the read gate (1.41.1): specs-links
+function __link(E) { ({ readDirCached, specsReadBlocked, projectFileReal, existsRaw, entryAt, specsStat, frictionHint, referenceExamplesCheck, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designReuseGated, designWeighChecks, detectPhase,
@@ -905,6 +906,27 @@ const quoted = (list) => list.map((v) => "«" + v + "»").join(", ");
 const CORE_STEERING = ["constitution.md", "product.md", "tech.md", "structure.md"];
 
 const protectOpen = (c) => !!c.approvals.tasks && c.blocks.some((b) => !b.done); // protected-tests: approved, open tasks
+// specs-links (1.41.1): the entries below .specs/ the read gate reads as absent — .specs/'s own children, steering/'s and _archive/'s,
+// and the feature folder's (`dir`, SPECS_LINKS_DEPTH levels) — each a `.specs/…` path, sorted, at most SPECS_LINKS_MAX. A listing's
+// link entry is confirmed by the gate's lstat (a cloud-file placeholder lists as one on Windows), a folder by the gate (its real
+// path); a regular file can't redirect. Listings through readDirCached: the ones doctor reads anyway.
+const SPECS_LINKS_SHOWN = 8, SPECS_LINKS_MAX = 200, SPECS_LINKS_DEPTH = 3;
+function specsLinks(root, dir) {
+  const out = new Set();
+  const scan = (d, depth) => {
+    for (const e of readDirCached(d) || []) {
+      if (out.size >= SPECS_LINKS_MAX) return;
+      if (!e.isSymbolicLink() && !e.isDirectory()) continue;
+      const p = path.join(d, e.name);
+      if (specsReadBlocked(p)) out.add(".specs/" + toPosix(path.relative(root, p)));
+      else if (depth > 0 && e.isDirectory()) scan(p, depth - 1);
+    }
+  };
+  scan(root, 0);
+  for (const sub of ["steering", "_archive"]) if (!specsReadBlocked(path.join(root, sub))) scan(path.join(root, sub), 0);
+  if (dir && !specsReadBlocked(dir)) scan(dir, SPECS_LINKS_DEPTH);
+  return [...out].sort();
+}
 
 // DOCTOR_CHECKS — every check spec_doctor runs and every check a phase's approval runs, ONE entry each, in the doctor's order:
 //   id         its stable id (an entry emitting several lists them in `emits`; `family` matches a family — a track pack's
@@ -946,6 +968,12 @@ const DOCTOR_CHECKS = [
     const issues = [missing.length ? c.m.steeringMissing(missing.join(", ")) : null,
       stub.length ? c.fm.scopedSteering.placeholders(stub.map((s) => s.file + (s.placeholders ? ` (${s.placeholders})` : "")).join(", ")) : null].filter(Boolean);
     return { status: issues.length ? "warn" : "pass", detail: issues.join("; ") || c.m.steeringOk };
+  } },
+  // 1.41.1 the read gate: each link below .specs/ the reads treat as ABSENT — a linked steering/ or feature folder, a file link in this
+  // feature's folder, in steering/ or at .specs/'s root — named (never what it points at), so nothing a user relied on goes silent. A warn.
+  { id: "specs-links", run: (c) => {
+    const links = specsLinks(c.root, c.dir);
+    return links.length ? { status: "warn", detail: c.m.specsLinks(links.slice(0, SPECS_LINKS_SHOWN).join(", "), Math.max(0, links.length - SPECS_LINKS_SHOWN)) } : null;
   } },
   // 1.41: structure.md's ## Reference Examples table (the brief quotes its rows for a task's files) — a warn for a Copy file that is
   // gone or rows past the read; a pass that says a section without a table is not read; nothing without the section. Project-level,

@@ -1243,6 +1243,8 @@ const msg = {
     doctor: {
       steeringMissing: (list) => `missing: ${list}`,
       steeringOk: "core steering present (incl. constitution)",
+      // 1.41.1 the read gate: the links below .specs/ the reads treat as absent (named — never what they point at)
+      specsLinks: (list, more) => `links below .specs/ dev-spec never reads or writes through — they read as absent: ${list}${more ? ` and ${more} more` : ""}. Replace each with a plain folder or file (copy its content in).`,
       requirementsMissing: "requirements.md missing",
       clarificationsOpen: (n) => `${n} unresolved [NEEDS CLARIFICATION] — resolve before design`,
       clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change
