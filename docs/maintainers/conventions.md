@@ -97,6 +97,10 @@ History at the end.
   by `specs-links` —, a project that sits below a folder named `.specs` (`~/.specs/work/app`) gates its own `.specs/` only (its code
   is never gated: a text test first, no disk call for a path with no `.specs` segment below the project), and each project of a
   monorepo stands on its own `.specs/`. Not `isDevSpecProject`: a `.specs/` the rule doesn't call dev-spec's would be ungated.
+  Several projects recorded in one scope: the OUTERMOST holding the path (a project reached through a link below another's `.specs/`
+  never resets the gate); the bases live and die with the scope. **Known limit:** an engine call outside any scope (a test calling
+  `engine/index.js` directly) records no project — the outermost `.specs` in the path stands, so a project below a folder named
+  `.specs` has its code gated there; every surface's call goes through the facade's scope.
 - **What a listing proved is not asked again (`seedParts`, fix round 1):** every listing of `.specs/` or of a folder below it the gate
   let through (`readDirDisk`, `safeReaddir`, `featureDirs`, `listFeatures`) seeds the memo with its plain entries — a Dirent that says
   "directory" / "file" is no reparse point at all (Windows types every reparse point as a link; POSIX: d_type, Node's own lstat for
