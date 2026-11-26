@@ -850,8 +850,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   past the timeout (pre-existing). **S1-F3:** `A=$A$A` doubled a tracked value, read again by every path after it — 321 characters, 22 s
   (pre-existing). **S1-F4:** a 33 K-literal segment threw in the parent's RegExp (ask at deny), now deny. Fixed by reading the glob
   in one pass without a RegExp (the code units it takes, the validity by hand, a `]` looked for once), tokens and RegExps made only
-  where a name reaches them, each segment read once per path (`shellSegReader`), and tracking's growth bounded (`shellGrow`:
-  too-long); the sweep replaced `/[^\\/]*$/` (Rename-Item of a 64 K name: 12.5 s) and `/[\\/]+$/` (a 64 K slash run copied into
+  where a name reaches them, each segment read once per path (`shellSegReader`), and tracking's growth bounded (one count against
+  the read limit: too-long — review 2 split it into `shellBuilt` / `shellWork`); the sweep replaced `/[^\\/]*$/` (Rename-Item of a 64 K name: 12.5 s) and `/[\\/]+$/` (a 64 K slash run copied into
   .specs/: 8 s), and bounded a long cd folder put before every path (54 K: 14 s). And the net the review proposed (its Q4): **the
   deadline** (Human approval guard → The deadline), the decision in a worker, ask past it.
 - **1.41.1 review 2** — **R2H-F1 (HIGH, older):** a FIFO named roadmap.json under a folder a command `cd`s into kept the worker in
