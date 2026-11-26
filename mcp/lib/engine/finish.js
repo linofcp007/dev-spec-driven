@@ -1772,6 +1772,10 @@ function drift(projectDir, name, opts = {}) {
   if (named) {
     const f = resolveFeature(projectDir, name);
     if (!f.ok) return { ok: false, error: f.error, code: f.code };
+    // (1.41.1) a name that reaches a linked folder is feature-linked, as every reader answers it — never "not found" (locateFeatures
+    // reads through the gate: the link is no folder there)
+    const x = existingFeature(projectDir, name);
+    if (x.linked) return { ok: false, linked: true, code: x.code, path: x.path, error: x.error };
     sources = locateFeatures(projectDir, name);
     if (!sources.length) return { ok: false, code: "feature-not-found", error: errs(projectDir).notFound(f.slug, f.root) };
   } else sources = featureDirs(projectDir);

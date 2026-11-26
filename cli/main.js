@@ -46,7 +46,10 @@ const I18N = () => {
 function lightProjectLang(flag, env) {
   let lang;
   try {
-    const j = PROBE().readJsonFile(path.join(COMPLETION.resolveProject(flag, env), ".specs", "roadmap.json"));
+    const file = path.join(COMPLETION.resolveProject(flag, env), ".specs", "roadmap.json");
+    // (1.41.1) a linked roadmap.json is none, as the engine reads it (the read gate): its target's meta.lang never picks the language
+    if (require("fs").lstatSync(file).isSymbolicLink()) throw new Error("linked");
+    const j = PROBE().readJsonFile(file);
     const meta = j && typeof j === "object" && !Array.isArray(j) && j.meta && typeof j.meta === "object" && !Array.isArray(j.meta) ? j.meta : {};
     lang = meta.lang;
   } catch { lang = undefined; }

@@ -3302,7 +3302,7 @@ const msg = {
       finishWarn: (slug, list, more) => `Pruebas protegidas de ${slug} cambiadas sin motivo registrado (ninguna tarea las volvió a registrar, ningún levantamiento las cubre): ${list}${more ? ` y ${more} más` : ""} — comprueba que cada cambio es intencionado (una prueba cambiada para pasar es una prueba debilitada); si lo es, acéptalo: ${DEV_SPEC} feature protect ${slug} <fichero> --accept --reason "…".`,
       changed: (file) => `${file} (cambiada)`,
       deleted: (file) => `${file} (borrada)`,
-      ignored: (slug, list, more) => `Pruebas protegidas de ${slug}: ${list}${more ? ` y ${more} más` : ""} — están en .state.json, pero no son ficheros de este proyecto por su ruta real (fuera de él, o tras un enlace): nunca se calculan ni se cuentan; elimina esas entradas a mano.`,
+      ignored: (slug, list, more) => `Pruebas protegidas de ${slug}: ${list}${more ? ` y ${more} más` : ""} — están en .state.json, pero no son ficheros de este proyecto por su ruta real (fuera de él, o tras un enlace): nunca se calcula su hash ni se cuentan; elimina esas entradas a mano.`,
       summaryHead: "## Pruebas protegidas",
       summaryLine: (n, k) => `${n} fichero(s) de prueba protegido(s); ${k} cambiado(s) sin motivo registrado.`,
       summaryLift: (file, by, reason) => `- protección levantada: ${file} — por ${by}: "${reason}"`,

@@ -21,9 +21,15 @@ History at the end.
 - **Never through a link:** `linkedSpecsFolder()` (scaffold.js) refuses to scaffold through a linked `.specs/steering/` or
   `.specs/<feature>/` (`linked: true`, nothing written), and nothing is READ through one (The read gate, below). A name that
   reaches a linked feature folder is `feature-linked` (`existingFeature`: `{ok: false, linked: true, code, path, error}` —
-  `err.featureLinked`) for every reader, never "not found"; the six folder-level operations — `featureLocked`, archive, rename,
-  remove (+ its preview and `removeLinkedFeatureLocked`), restore's `archivedFeature` — accept `f.linked` and go on to the write
-  gate's refusal at the lock / the link's removal, as since 1.24 (12-lifecycle-write-gate.js G1, unchanged). Nothing else may.
+  `err.featureLinked`) for every reader, never "not found" — `drift {name}`, a milestone's feature list and a dependency
+  (`depend`) included; `backlog add` of the name is refused with it (a linked folder holds the name, but "already has a spec"
+  would name a spec dev-spec can't read).
+  Eight sites accept `f.linked` and go on to the write gate's refusal at the lock / the link's removal, as since 1.24
+  (12-lifecycle-write-gate.js G1, unchanged): `featureLocked` (files.js), archive, rename, remove, its preview,
+  `removeLinkedFeatureLocked`, restore's `archivedFeature` (finish.js) and protect / unprotect (`protectTests`, protect.js: its lock
+  refuses). Nothing else accepts one (every other `f.linked` test refuses with it). Restore of a name that is NOT archived while `_archive/` itself is a link answers that refusal (`linked: true`, `.specs/_archive/`)
+  rather than the parent's "Nothing is archived as …": behind the link dev-spec can't see what is archived, and the link is why
+  no restore can work — the more informative answer, kept on purpose (1.41.1 fix round 1).
 - **`spec_feature remove` needs `confirm: true`** (CLI `--yes`); without it the result (`needsConfirm`) previews what would go
   (`removePreview()`, `lstat`: a link is never followed). Prefer archive. A feature folder that is itself a link is removed as
   the link alone (`removeLinkEntry`), under the roadmap lock only — a feature lock would be created THROUGH it.
@@ -61,7 +67,8 @@ History at the end.
   `writeIfAbsent`, `ensureDir`, `specWrite` (the append: O_APPEND | O_CREAT | O_NOFOLLOW where available) — and on
   `withLockFile`'s lock path before the lock exists. **No other mcp/lib or mcp/evals/ source writes with a raw fs call**
   (mcp/tests/16-conventions.js; files.js alone may); the eval harness writes through `spec.writeSpecFile`.
-- **It refuses** (`specsWriteBlock`: lstat of each part below the nearest `.specs` — `specsRootOf` — plus one realpath) **a link
+- **It refuses** (`specsWriteBlock`: lstat of each part below the project's `.specs` — `gateRootOf`, the read gate's root: The read
+  gate, below — plus one realpath) **a link
   on the way** — a folder between .specs/ and the target, or the target, that is a symlink / junction or resolves outside the
   real .specs/ — and **the wrong kind** (a file where a folder is needed, or the reverse). .specs/ itself may be a link; only
   what lies below it is checked. A part gone between lstat and realpath (a lock just released) is judged by its folder
@@ -76,17 +83,40 @@ History at the end.
 
 ### The read gate — nothing READ through a link below .specs/ (1.41.1)
 - **The write gate's predicate, read the other way** (`specsReadGate(p)`, engine/files.js, beside `specsWriteBlock`; both share
-  `realInsideSpecs`): below the nearest `.specs` (`specsRootOf` — never `.specs` itself, which may be a link), a part between it and
+  `realInsideSpecs`): below the project's `.specs` (`gateRootOf` — never `.specs` itself, which may be a link), a part between it and
   the target that is a symlink / junction (lstat), that lstat can't read (EACCES…), or a FOLDER whose real path is not strictly inside
   the real `.specs/` (a mount point) makes the target read as ABSENT. Memoized in the call's read-cache scope (`\0part:` — one lstat per
   distinct part — and `\0realdir:` — one realpath per distinct folder; a regular file can't redirect, its folder's real path is
-  checked); `forgetCached` drops both for a written path and its folders. lstat, never a Dirent's type (Windows lists a cloud-file
-  placeholder as a link).
+  checked); `forgetCached` drops both for a written path and its folders. lstat decides a link, never a Dirent's "link" (Windows lists a
+  cloud-file placeholder as one).
+- **Which `.specs/` (`gateRootOf`, fix round 1 — ONE root for both gates):** the PROJECT's, never the nearest folder merely NAMED
+  `.specs`. `specsRoot(projectDir)` records the call's project folder in the scope (`CTX.GATE_BASES`); the root is the outermost
+  segment named `.specs` strictly below the outermost recorded project folder holding the path (none recorded: the outermost in the
+  path), its name compared by `withinRoot`'s case rule (folded on win32 / darwin; a Windows 8.3 alias counts only when its real path
+  is that `.specs`'s). So a link NAMED `.specs` deeper down (`.specs/f/.history/.specs -> ~`) is an ordinary part — refused, and named
+  by `specs-links` —, a project that sits below a folder named `.specs` (`~/.specs/work/app`) gates its own `.specs/` only (its code
+  is never gated: a text test first, no disk call for a path with no `.specs` segment below the project), and each project of a
+  monorepo stands on its own `.specs/`. Not `isDevSpecProject`: a `.specs/` the rule doesn't call dev-spec's would be ungated.
+  Several projects recorded in one scope: the OUTERMOST holding the path (a project reached through a link below another's `.specs/`
+  never resets the gate); the bases live and die with the scope. **Known limit:** an engine call outside any scope (a test calling
+  `engine/index.js` directly) records no project — the outermost `.specs` in the path stands, so a project below a folder named
+  `.specs` has its code gated there; every surface's call goes through the facade's scope.
+- **What a listing proved is not asked again (`seedParts`, fix round 1):** every listing of `.specs/` or of a folder below it the gate
+  let through (`readDirDisk`, `safeReaddir`, `featureDirs`, `listFeatures`) seeds the memo with its plain entries — a Dirent that says
+  "directory" / "file" is no reparse point at all (Windows types every reparse point as a link; POSIX: d_type, Node's own lstat for
+  DT_UNKNOWN), so its lstat says the same and a plain folder's real path is its listed folder's + its name; a Dirent "link" seeds
+  nothing (lstat decides it), and a seed never replaces an lstat's answer. A project-wide drift / list / doctor no longer pays an
+  lstat + a realpath per feature folder its own listing had just named (12-lifecycle-read-gate.js "cost (counts)").
 - **Where it holds:** every read primitive asks it first — `readRaw` (`readIfExists`, `readJson`, `readContained`), `existsRaw` (below
   .specs/ answered from the gate's lstat, no existsSync of its own), `readDirCached` / `walkProject`, `safeReaddir`, `isDirSafe`,
   `readFileHead(s)` (the pool gets a path no open accepts), `readBytes` (a tick's bytes), `specsStat` (an mtime / a size); the bounded
   readers outside files.js ask `specsReadBlocked` first (`readLogTail`, `readStopReport`, `fileHash`, the save hook's lint, spec_upgrade's
-  `.gitignore`, the roadmap row signature). A WRITE target's name (rename / archive / restore onto it, a snapshot's number, an import's
+  `.gitignore`, the roadmap row signature); `historyText` takes `.history/<one file name>` only, as text, before its (gated) read.
+  Outside mcp/lib (fix round 1): mcp/server.js's approval meta asks `specsReadBlocked` of roadmap.json (a linked one is unknown —
+  every weakening counts, as the approval hook reads it); `ears <file>` (cli/commands.js) asks it of the file it names (behind a link:
+  no such file); the engine-free CLI readers keep the one project rule with a one-line lstat — the completion's archived names (a
+  linked `_archive/` lists none) and status-line signature (a link signed as itself), cli/main.js's light language (a linked
+  roadmap.json picks none). A WRITE target's name (rename / archive / restore onto it, a snapshot's number, an import's
   folder) is `entryAt` — lstat, a link there is taken. `specsFileContained` / `readContained` ARE the gate's verdict (a regular file or
   absent). The dry-run sink is read first (its records passed the write gate).
 - **Not gated, on purpose:** `.specs` itself; the project rule (`PROBE_IO`, probe.js `isDevSpecProject`) — which folder IS the project is
@@ -95,12 +125,14 @@ History at the end.
   engine runs, and its gated read decides.
 - **Reported, never silent:** a linked feature folder is `feature-linked` (Feature folders, above); doctor `specs-links` (a warn) names
   each link below .specs/ the reads treat as absent — `.specs/`'s, `steering/`'s and `_archive/`'s own entries and the feature folder's
-  (three levels) —, never what it points at; an approval's artifact behind a link is `unreadable: true` (an entry that reads absent).
+  down to four levels below it (`SPECS_LINKS_DEPTH` = 3 recursions) —, never what it points at; an approval's artifact behind a link is
+  `unreadable: true` (an entry that reads absent).
 - **Where absence would relax a decision, it fails closed:** a linked roadmap.json is a GONE one — the approval guard asks
   (`approvalRoadmapGone` → `existsRaw`; the approval hook's `rawLevel` the same by lstat), the stop gate stays on (the Stop hook's
   `gateOff`), guard mode takes the user's default (the guard hook) —; a linked `.state.json` approves nothing, a linked approved artifact
   changed since its approval, a linked report is no report, a linked tasks.md covers nothing (DESIGN table: 12-lifecycle-read-gate.js
-  Addition A).
+  Addition A). A stop-gate report path naming a linked feature folder (`.specs/<linked>/.execution/task-N-report.md`) answers what a
+  name no feature holds answers (`no-task` / `no-report`) — never weaker: any reply may name a feature that doesn't exist.
 - **Checked by a property, not a list:** mcp/tests/12-lifecycle-read-gate.js drives EVERY entry of `OPERATIONS` (and the hooks) on a
   link maze under an fs tracer — no fs call other than lstat / realpath of a link itself lands behind one, no result carries its text; a
   new operation without its arguments fails "not driven".
@@ -406,6 +438,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `readContained`. ONE predicate in the read primitives (the write gate's, memoized) + `feature-linked` in the resolver. A prototype of
   the gate alone (no resolver) broke exactly the six 1.24 linked-folder tests — and read a linked roadmap.json as off for the approval
   guard (meta `{}` while the raw existence check said present): hence the GONE rule on both sides.
+- **1.41.1 fix round 1** — the root was the NEAREST folder named `.specs` (1.24's root rule): a link named `.specs` below the project's
+  `.specs/` reset the gate (spec_impact's snapshot path read through it), a project below a folder named `.specs` had its code gated,
+  and the name test was case-sensitive where `withinRoot` folds. `gateRootOf` stands on the call's project (`GATE_BASES`), for both
+  gates. A project-wide drift paid +2 lstat +1 realpath per feature folder its own listing had named: the listings seed the memo.
 
 ### The dry-run sink
 - **1.25** — the sink (`withDryRun`), for `spec_import {dryRun}`: one switch in the write primitives, made possible by the 1.24

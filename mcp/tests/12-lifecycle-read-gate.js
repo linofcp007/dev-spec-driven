@@ -563,11 +563,14 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
     const l2 = listing(p2), l4 = listing(p4), l3p = listing(mk("n3", 3));
     const src = (p) => fsCalls(path.join(path.resolve(p), "src") + path.sep, () => S.traceCheck(p, "f1", { code: true }));
     const s4 = src(p4);
-    all("1.41.1 read gate cost (counts): a path touched twice in one scope costs one lstat (doctor twice = doctor once, lstat and realpath alike), the list's gate calls grow by one fixed step per feature (2 → 3 → 4 features), and no lstat / realpath is made outside .specs/ by the gate (src/ sees what it read before) (got " +
+    // (fix round 1) the listing of .specs/ seeds its plain entries: a feature folder it named costs no lstat and no realpath of its own
+    // — the list pays for the files it asks about, never a realpath per folder the listing already proved plain
+    const lsOf = (r) => (r.lstatSync || 0), rpOf = (r) => (r["realpathSync.native"] || 0);
+    all("1.41.1 read gate cost (counts): a path touched twice in one scope costs one lstat (doctor twice = doctor once, lstat and realpath alike), the list's lstats grow by one fixed step per feature (2 → 3 → 4 features) and its realpaths not at all (the listing's seed), and no lstat / realpath is made outside .specs/ by the gate (src/ sees what it read before) (got " +
       js({ twice: [twice.lstatSync, twice["realpathSync.native"]], once: [once.lstatSync, once["realpathSync.native"]], l2, l3p, l4, s4 }) + ")", {
       memo: () => twice.lstatSync === once.lstatSync && twice["realpathSync.native"] === once["realpathSync.native"],
-      linear: () => ["lstatSync", "realpathSync.native"].every((k) => (l4[k] || 0) - (l3p[k] || 0) === (l3p[k] || 0) - (l2[k] || 0) && (l4[k] || 0) > (l2[k] || 0)),
-      realpathPerFolder: () => (l4["realpathSync.native"] || 0) <= 4 + 1 + 1, // the 4 feature folders, steering/, the root
+      linear: () => lsOf(l4) - lsOf(l3p) === lsOf(l3p) - lsOf(l2) && lsOf(l4) > lsOf(l2),
+      seededFolders: () => rpOf(l4) === rpOf(l2) && rpOf(l4) <= 2,
       noneInSrc: () => !s4.lstatSync && !s4["realpathSync.native"],
     });
   }

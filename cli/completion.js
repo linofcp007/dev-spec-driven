@@ -92,7 +92,7 @@ function specsSignature(projectDir) {
       if (++n > STATUS_CACHE_ENTRIES || depth > 16) return false;
       const p = path.join(dir, e.name), r = rel + "/" + e.name;
       let st = null;
-      try { st = fs.statSync(p); } catch { st = null; }
+      try { st = fs.lstatSync(p); } catch { st = null; } // (1.41.1) its own: a link is signed as the link, never stat'ed through
       h.update(r + "\0" + (st ? [st.size, st.mtimeMs, st.ctimeMs, e.isDirectory() ? "d" : e.isSymbolicLink() ? "l" : "f"].join(":") : "?") + "\n");
       if (e.isDirectory() && !walk(p, r, depth + 1)) return false;
     }
@@ -183,7 +183,8 @@ function featureFolders(base) {
   return ents.filter((d) => d.isDirectory() && isFeatureFolder(d.name, base)).map((d) => d.name).sort();
 }
 const featureNames = (projectDir) => featureFolders(path.join(projectDir, ".specs"));
-const archivedNames = (projectDir) => featureFolders(path.join(projectDir, ".specs", "_archive"));
+// (1.41.1) a linked _archive/ lists nothing — the engine reads it as absent (the read gate) and refuses every name behind it
+const archivedNames = (projectDir) => { const a = path.join(projectDir, ".specs", "_archive"); try { if (fs.lstatSync(a).isSymbolicLink()) return []; } catch { return []; } return featureFolders(a); };
 
 // `dev-spec __complete <what> [--project <dir>]` → the names on stdout, one per line. Never an error, never a refusal: a Tab
 // gets names or nothing (an unknown <what>, a project without .specs/, anything unreadable).

@@ -1559,6 +1559,7 @@ function milestone(projectDir, action, opts = {}) {
     const unknown = [];
     for (const x of asked) {
       const f = existingFeature(projectDir, x);
+      if (f.linked) return { ok: false, linked: true, code: f.code, path: f.path, error: f.error }; // (1.41.1) said, never "unknown"
       if (!f.ok) unknown.push(x);
       else if (!features.includes(f.slug)) features.push(f.slug);
     }
