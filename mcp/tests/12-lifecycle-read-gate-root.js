@@ -162,7 +162,29 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
         const r = E.withReadCache(() => { E.specsRoot(p); return [E.specsReadBlocked(t), E.readIfExists(t)]; });
         eq(r, [true, null], "1.41.1 fix round 1 (A-2): the 8.3 alias of .specs (" + short + ") is the root by its REAL path — `" + short + "/lnk/tasks.md` is blocked");
       } else ok(true, "1.41.1 fix round 1 (A-2): no 8.3 alias of .specs here — skipped");
+      // … and only then: a code folder whose NAME looks like an alias (LIB~1) is no root — a junction in it reads as ever
+      if (WIN) {
+        put(path.join(p, "src", "LIB~1", "real", "x.js"), "x\n");
+        if (link(path.join(p, "src", "LIB~1", "real"), path.join(p, "src", "LIB~1", "alias"))) {
+          const c = path.join(p, "src", "LIB~1", "alias", "x.js");
+          const r = E.withReadCache(() => { E.specsRoot(p); return [E.specsReadBlocked(c), E.readIfExists(c)]; });
+          eq(r, [false, "x\n"], "1.41.1 fix round 1 (A-2): a code folder named like an 8.3 alias (src/LIB~1) is no root — its real path is no .specs/: a junction in it reads as ever");
+        }
+      }
     } else ok(true, "1.41.1 fix round 1 (A-2): links not creatable here — skipped");
+  }
+
+  // two projects recorded in one scope, the second reached THROUGH a link below the first's .specs/: the OUTERMOST project stands — the
+  // link on the way is refused whatever the order the call named them in
+  {
+    const p = project("bases"), out = path.join(tmp, "rgr-bases-out");
+    put(path.join(out, "proj", ".specs", "x.md"), "# OUTSIDE-BASES\n");
+    if (link(out, path.join(p, ".specs", "lnk"))) {
+      const inner = path.join(p, ".specs", "lnk", "proj"), t = path.join(inner, ".specs", "x.md");
+      const a = E.withReadCache(() => { E.specsRoot(p); E.specsRoot(inner); return [E.specsReadBlocked(t), E.readIfExists(t)]; });
+      const b = E.withReadCache(() => { E.specsRoot(inner); E.specsRoot(p); return [E.specsReadBlocked(t), E.readIfExists(t)]; });
+      eq([a, b], [[true, null], [true, null]], "1.41.1 fix round 1: two projects recorded in one scope, one reached through a link below the other's .specs/ — the outermost project's .specs/ is the root, the link on the way refused (either order)");
+    } else ok(true, "1.41.1 fix round 1 (two bases): links not creatable here — skipped");
   }
 
   // a monorepo: each project stands on its own .specs/ (the outer call reaching an inner project's spec, the inner call, the code between)
@@ -228,20 +250,29 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
         file: () => listed[5] === false && listed[6] === true, lstatWins: () => js(kept) === js([null, null, false]),
       });
     } else ok(true, "1.41.1 fix round 1 (seedParts): links not creatable here — skipped");
-    // the counts: a project-wide drift (the SessionStart check) pays one lstat per feature (its .state.json) and no realpath per feature
+    // the counts (the 1.40 method: exact per-feature steps, 2 → 3 → 4 features): what each feature folder costs the gate once its listing
+    // proved it plain — a project-wide drift (the SessionStart check) one lstat (its .state.json) and no realpath; the status line two
+    // lstats; doctor four; trace {code} and finish two lstats and ONE realpath (the feature's tests/ folder, asked by lstat — no listing
+    // names it). ed680c92 paid drift 2 + 1, status line 3 + 1, doctor 5 + 1, trace / finish 7 + 5.
     const mk = (n) => {
-      const q = path.join(tmp, "rgr-drift-" + n);
+      const q = path.join(tmp, "rgr-steps-" + n);
       fs.mkdirSync(q, { recursive: true });
-      S.initProject(q, ["core"], "en");
-      for (let i = 1; i <= n; i++) S.createFeature(q, { name: "f" + i });
+      S.initProject(q, ["tdd"], "en");
+      for (let i = 1; i <= n; i++) S.createFeature(q, { name: "f" + i, tracks: ["tdd"] });
       return q;
     };
-    const d = [2, 3, 4].map((n) => { const q = mk(n); return fsCalls(path.join(q, ".specs") + path.sep, () => S.drift(q)); });
+    const P3 = [2, 3, 4].map(mk);
+    const OPS = { drift: [(q) => S.drift(q), 1, 0], statusLine: [(q) => S.statusLine(q, {}), 2, 0], doctor: [(q) => S.specDoctor(q, "f1"), 4, 0],
+      trace: [(q) => S.traceCheck(q, "f1", { code: true }), 2, 1], finish: [(q) => S.finishFeature(q, "f1", {}), 2, 1] };
     const k = (r, x) => r[x] || 0;
-    all("1.41.1 fix round 1 (B-5): a project-wide drift's gate calls grow by ONE lstat per feature (its .state.json — the listing proved the folder) and no realpath at all: 2 → 3 → 4 features (got " + js(d) + ")", {
-      lstat: () => k(d[1], "lstatSync") - k(d[0], "lstatSync") === 1 && k(d[2], "lstatSync") - k(d[1], "lstatSync") === 1,
-      realpath: () => !k(d[0], "realpathSync.native") && !k(d[2], "realpathSync.native"),
-    });
+    const steps = {}, bad = [];
+    for (const [name, [op, ls, rp]] of Object.entries(OPS)) {
+      const c = P3.map((q) => fsCalls(path.join(q, ".specs") + path.sep, () => op(q)));
+      const st = (x) => [k(c[1], x) - k(c[0], x), k(c[2], x) - k(c[1], x)];
+      steps[name] = { lstat: st("lstatSync"), realpath: st("realpathSync.native") };
+      if (js(steps[name].lstat) !== js([ls, ls]) || js(steps[name].realpath) !== js([rp, rp])) bad.push(name);
+    }
+    ok(!bad.length, "1.41.1 fix round 1 (B-5): the gate's per-feature cost once a listing proved the folder plain (seedParts) — drift 1 lstat / 0 realpath, the status line 2 / 0, doctor 4 / 0, trace {code} and finish 2 / 1 (their tests/ folder), exact steps 2 → 3 → 4 features (got " + js({ bad, steps }) + ")");
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------

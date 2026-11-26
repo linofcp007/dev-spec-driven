@@ -56,4 +56,12 @@ exports.run = ({ ok, run, runIn, tmp }) => {
     (!fileLinked || (oLk === oEn && oPt !== oEn)),
     "1.41.1 fix round 1 (A-7, CLI): restore's completion lists no archived name behind a linked _archive/ (the engine reads it as absent), a plain _archive/'s as ever; a linked roadmap.json gives the engine-free CLI no language — an argument error is in English, its plain PT twin's in Portuguese (got " +
     JSON.stringify({ linked: COMPLETION.archivedNames(arch), plain: COMPLETION.archivedNames(archPlain), fileLinked, oEn: oEn.slice(0, 80), oPt: oPt.slice(0, 80), oLk: oLk.slice(0, 80) }) + ")");
+  // … and the status line's cache signature of .specs/ signs a link as the link (lstat): what its target holds never keys the cache
+  if (fileLinked) {
+    const target = path.join(lkOut, "roadmap.json");
+    const s1 = COMPLETION.specsSignature(lk);
+    fs.writeFileSync(target, fs.readFileSync(target, "utf8") + "\n\n\n"); // the target grows
+    const s2 = COMPLETION.specsSignature(lk);
+    ok(typeof s1 === "string" && s1 === s2, "1.41.1 fix round 1 (A-7, CLI): the status line's .specs/ signature stats a link as itself — a change of what a linked roadmap.json points at never changes it (got " + JSON.stringify([s1, s2]) + ")");
+  }
 };
