@@ -31,8 +31,9 @@ review findings — is in History at the end.
   `- **Term** — definition. _Avoid: a, b_` (`_Avoid:_` English-stable). `glossaryEntries()` reads ≤ 300 (`truncated`: doctor
   warns, clarify says so). `glossaryHits()` masks the terms before searching the avoided words ("End user" never reads as
   "user"), skips code, comments and `_Marker:_` tags, reads `_client_` emphasis but not snake_case, and never reads TEMPLATE
-  text: `glossUserParts()` drops each line matching a line of a built-in, project or pack template (`glossBuiltinLines()`,
-  `glossProjectLines()`), a top-level `[…]` / `{{…}}` a wildcard (an untouched slot skipped, a filled one read).
+  text: `glossUserParts()` drops each line matching a line of a built-in, project or pack template (`glossBuiltinLines()` — the
+  built-in lines from the corpus since 1.42, markdown.js `builtinGlossLines()` —, `glossProjectLines()`), a top-level `[…]` /
+  `{{…}}` a wildcard (an untouched slot skipped, a filled one read).
   `briefGlossary()`: ≤ 8 entries / 1500 characters. Clarify asks one question per avoided word (≤ 10); doctor `glossary`
   warns with the count.
 - **Messages:** `i18n.msg(l).quality` (QUALITY_MSG). Phases (`DOCTOR_CHECKS`' `phase`): glossary 1, cross-feature-acs 1,

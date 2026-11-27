@@ -20,11 +20,12 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile, replaceHtmlCommentSpans,
   savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
-  templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
+  templateOverride, trackLabel, trackMarker, unitIn,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsPath, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
   closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf,
   naAnswer, uiStateNames; // markdown.js — 1.38 doctor's ui-states (an n/a cell; the state labels of every language, from the corpus)
+let builtinGlossLines, glossVisibleLines; // markdown.js — 1.42 the glossary check's template lines (the corpus), the one visible-lines rule
 let stripEnd, steeringGlobMatch; // core.js — 1.41 the Reference Examples table (a header cell's colon; an Applies-to glob)
 let RE_IMPL_ANNOTATED; // core.js — 1.41.0 review 2: a Copy cell in implementsPath's annotated single-path form is no list
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
@@ -35,11 +36,11 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   RE_SUCCESS_CRITERIA, RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile,
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
-  templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
+  templateFileList, templateOverride, trackLabel, trackMarker, unitIn,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsPath, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
-  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf, naAnswer, uiStateNames, stripEnd, steeringGlobMatch,
-  RE_IMPL_ANNOTATED } = E); }
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf, naAnswer, uiStateNames, builtinGlossLines, glossVisibleLines,
+  stripEnd, steeringGlobMatch, RE_IMPL_ANNOTATED } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -545,7 +546,7 @@ const wordListRe = (words, capture) => new RegExp(RE_WORD_BEFORE + (capture ? "(
 // its wildcards is the user's (a slot filled in, "[Title]" → "Client uploads a file"). A template heading also matches
 // without its parenthetical ("## User Stories"). Lookup: exact keys in a Set; wildcard patterns by their first / last 8
 // literal characters (a pattern with fewer than 4 literal characters hides nothing and is dropped); the match is linear.
-const GLOSS_TEMPLATE_LINES = new Map(); // lang → { exact, head, tail, loose } — built-in, process-wide
+const GLOSS_TEMPLATE_LINES = new Map(); // lang → { lines (the ones it was built from), set: { exact, head, tail, loose } } — built-in, process-wide
 const glossLineKey = (s) => String(s).replace(/\s+/g, " ").trim().toLowerCase().replace(/\p{N}+(?:[.,]\p{N}+)*/gu, "#");
 // A key → { segs: its literal segments around the wildcards (one segment = no wildcard), slots: each wildcard's own template
 // text (an untouched slot is no user text) }, or null (unbalanced brackets: exact only).
@@ -568,8 +569,8 @@ function glossPatternSegs(key) {
   segs.push(cur);
   return { segs, slots };
 }
-// The visible lines of a template text (comments and fenced code are never a feature's visible text either).
-const glossVisibleLines = (text) => scanTaskLines(String(text || "")).filter((l) => !l.code).map((l) => l.vis);
+// A template text's visible lines (or the lines themselves) as patterns — markdown.js glossVisibleLines: ONE visible-lines rule for
+// the built-in corpus and the project's own templates.
 function glossAddLines(set, text) {
   for (const vis of Array.isArray(text) ? text : glossVisibleLines(text)) {
     const key = glossLineKey(vis);
@@ -593,37 +594,18 @@ function glossAddLines(set, text) {
   }
 }
 const glossNewSet = () => ({ exact: new Set(), head: new Map(), tail: new Map(), loose: [], seen: new Set() });
+// The built-in template lines of a language as patterns: the visible lines of every text a requirements.md / design.md is scaffolded
+// from — markdown.js builtinGlossLines: the trusted corpus's (1.42 perf-8), else rendered — keyed here. Kept per language while
+// those lines are the ones it was built from (a corpus dropped mid-process — localeLoaded — hands out new ones: built again).
 function glossBuiltinLines(lang) {
   const l = normalizeLang(lang);
-  if (GLOSS_TEMPLATE_LINES.has(l)) return GLOSS_TEMPLATE_LINES.get(l);
-  const set = glossNewSet();
   const base = i18n.baseLang(l);
-  // The texts a requirements.md / design.md is scaffolded from: every track combination (templateCorpus' set), the track
-  // blocks spec_add_track appends, the bugfix's requirements and bug report.
-  const texts = [];
-  const put = (fn) => { try { const t = fn(); if (typeof t === "string") texts.push(t); } catch { /* a builder's trouble never breaks the check */ } };
-  const combos = [[], ...OPTIONAL_TRACKS.map((t) => [t]), ...OPTIONAL_TRACKS.flatMap((t, i) => OPTIONAL_TRACKS.slice(i + 1).map((u) => [t, u])), OPTIONAL_TRACKS].map((x) => ["core", ...x]);
-  for (const tracks of combos) {
-    const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "" };
-    put(() => i18n.requirements(a, base));
-    put(() => i18n.design(a, base));
-  }
-  for (const tr of VALID_TRACKS) put(() => i18n.trackDesignBlock(tr, base));
-  // the sized scaffolds' own lines (S's one story, the merged weigh section, the Error Handling pointer) and a change
-  for (const size of ["s", "m"]) {
-    for (const tracks of [["core"], VALID_TRACKS]) {
-      const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "", size };
-      put(() => i18n.requirements(a, base));
-      put(() => i18n.design(a, base));
-    }
-  }
-  put(() => i18n.change({ name: "x", summary: "" }, base));
-  put(() => i18n.bugRequirements({ name: "x" }, base));
-  put(() => i18n.bugReport({ name: "x" }, base));
-  const lines = new Set();
-  for (const t of new Set(texts)) for (const v of glossVisibleLines(t)) lines.add(v);
-  glossAddLines(set, l === base ? [...lines] : [...lines].map((x) => i18n.toPtBr(x))); // pt-BR: the pt lines, each once
-  GLOSS_TEMPLATE_LINES.set(l, set);
+  const lines = builtinGlossLines(base);
+  const kept = GLOSS_TEMPLATE_LINES.get(l);
+  if (kept && kept.lines === lines) return kept.set;
+  const set = glossNewSet();
+  glossAddLines(set, l === base ? lines : lines.map((x) => i18n.toPtBr(x))); // pt-BR: the pt lines, each once
+  GLOSS_TEMPLATE_LINES.set(l, { lines, set });
   return set;
 }
 // The project's own: its templates (.specs/templates/) and its track packs' requirements / design blocks (this call's).
@@ -3353,7 +3335,7 @@ function clarifyChange(projectDir, f, c) {
   return clarifyResult(projectDir, f, tracks, fm, add, questions, []);
 }
 
-module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
+module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, glossBuiltinLines, briefGlossary,
   TRADEOFFS_SYN, RISKS_SYN, SILENT_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,

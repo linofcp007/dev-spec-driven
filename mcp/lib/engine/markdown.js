@@ -19,13 +19,13 @@ const { MARKER_TRACKS } = require("./tracks.js"); // load time
 let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, existingFeature, extractAcIds,
   featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isBacktickUnit, isPackMarkerBracket,
   locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists, renderTrackTaskHeadings,
-  replaceCodeSpans, stripEnds, stripSupersedes, TASK_HEADINGS, taskDescription, taskMarkerSpans, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf,
-  VALID_TRACKS, wildcardMatch;
+  replaceCodeSpans, scanTaskLines, stripEnds, stripSupersedes, TASK_HEADINGS, taskDescription, taskMarkerSpans, trackLabel, trackMarker, TRACK_OVERLAPS,
+  useTemplateScopeOf, VALID_TRACKS, wildcardMatch;
 function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, existingFeature,
   extractAcIds, featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isBacktickUnit,
   isPackMarkerBracket, locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists,
-  renderTrackTaskHeadings, replaceCodeSpans, stripEnds, stripSupersedes, TASK_HEADINGS, taskDescription, taskMarkerSpans, trackLabel, trackMarker, TRACK_OVERLAPS,
-  useTemplateScopeOf, VALID_TRACKS, wildcardMatch } = E); }
+  renderTrackTaskHeadings, replaceCodeSpans, scanTaskLines, stripEnds, stripSupersedes, TASK_HEADINGS, taskDescription, taskMarkerSpans, trackLabel, trackMarker,
+  TRACK_OVERLAPS, useTemplateScopeOf, VALID_TRACKS, wildcardMatch } = E); }
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
 // that never closes is text). A comment spanning lines takes its line breaks with it, as the old regex did.
@@ -1078,6 +1078,54 @@ function renderTemplateSetsBr(base) {
   return { brackets, code };
 }
 
+// The glossary check's built-in template lines (quality.js glossBuiltinLines keys them: a fresh scaffold is the tool's words, not
+// the user's). ONE visible-lines rule for them and the project's own templates (quality.js glossAddLines): comments and fenced
+// code are never a feature's visible text either.
+const glossVisibleLines = (text) => scanTaskLines(String(text || "")).filter((l) => !l.code).map((l) => l.vis);
+// The visible lines of every built-in text a requirements.md / design.md is scaffolded from, in one base language, in RENDER order
+// (the first of two equal patterns wins downstream — never sorted): every track combination (templateCorpus' set), the track
+// design blocks spec_add_track appends, the sized scaffolds' own lines (S's one story, the merged weigh section, the Error Handling
+// pointer) and a change, the bugfix's requirements and bug report. Under BUILTIN_CORPUS_BUILD like the other renders: a
+// process-wide list, never shaped by the current call's track packs. (1.42 perf-8: in the corpus — rendering them cost 90–100 ms a
+// language in each fresh process that reached the glossary check or a critical flow.)
+function renderGlossLines(base) {
+  const texts = [];
+  const put = (fn) => { try { const t = fn(); if (typeof t === "string") texts.push(t); } catch { /* a builder's trouble never breaks the check */ } };
+  CTX.BUILTIN_CORPUS_BUILD++;
+  try {
+    const combos = [[], ...OPTIONAL_TRACKS.map((t) => [t]), ...OPTIONAL_TRACKS.flatMap((t, i) => OPTIONAL_TRACKS.slice(i + 1).map((u) => [t, u])), OPTIONAL_TRACKS].map((x) => ["core", ...x]);
+    for (const tracks of combos) {
+      const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "" };
+      put(() => i18n.requirements(a, base));
+      put(() => i18n.design(a, base));
+    }
+    for (const tr of VALID_TRACKS) put(() => i18n.trackDesignBlock(tr, base));
+    for (const size of ["s", "m"]) {
+      for (const tracks of [["core"], VALID_TRACKS]) {
+        const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "", size };
+        put(() => i18n.requirements(a, base));
+        put(() => i18n.design(a, base));
+      }
+    }
+    put(() => i18n.change({ name: "x", summary: "" }, base));
+    put(() => i18n.bugRequirements({ name: "x" }, base));
+    put(() => i18n.bugReport({ name: "x" }, base));
+    const lines = new Set();
+    for (const t of new Set(texts)) for (const v of glossVisibleLines(t)) lines.add(v);
+    return [...lines];
+  } finally { CTX.BUILTIN_CORPUS_BUILD--; }
+}
+// …from the trusted corpus (glossLines), else rendered — process-wide per base language (localeLoaded drops them). Raw lines only:
+// pt-BR derives its own from pt's (toPtBr) where it is used, and the keying and patterns stay in quality.js.
+const GLOSS_LINES = new Map();
+function builtinGlossLines(base) {
+  if (GLOSS_LINES.has(base)) return GLOSS_LINES.get(base);
+  const c = builtinCorpus();
+  const lines = c ? c.glossLines[base] : renderGlossLines(base);
+  GLOSS_LINES.set(base, lines);
+  return lines;
+}
+
 // ---------------------------------------------------------------------------
 // The pre-generated built-in corpus
 // ---------------------------------------------------------------------------
@@ -1144,7 +1192,9 @@ function renderCorpusData() {
     steeringStubs: renderSteeringStubs(), diagrams: renderTemplateDiagrams(), sectionLines: renderSectionLines("base"),
     sectionLinesBr: renderSectionLines("pt-BR"), bugSlots: renderBugSlots(), templateReqs: renderTemplateReqs(), uiStateNames: renderUiStateNames(),
     // the stop gate's lists of every language (guards.js stopPatterns — builtinStopGate): the Stop hook then loads one language
-    stopGate: i18n.stopGateLists() };
+    stopGate: i18n.stopGateLists(),
+    // the glossary check's template lines per base language, in render order (builtinGlossLines — 1.42 perf-8)
+    glossLines: Object.fromEntries(i18n.BASE_LANGS.map((l) => [l, renderGlossLines(l)])) };
 }
 // The corpus's task headings, steering stubs, requirement templates: { key: [string…] } — strings only, own keys.
 const taskHeadingsShape = (h) => !!h && typeof h === "object" && !Array.isArray(h) &&
@@ -1166,7 +1216,9 @@ function builtinCorpus() {
     // file rewritten before or while it was hashed is never trusted. No version: a `version` key an older build wrote is
     // ignored — the hash alone decides, and an older corpus of the same sources is the same corpus.
     if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
-      taskHeadingsShape(data.taskHeadings) && taskHeadingsShape(data.steeringStubs) && taskHeadingsShape(data.templateReqs) && stopGateShape(data.stopGate) && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
+      taskHeadingsShape(data.taskHeadings) && taskHeadingsShape(data.steeringStubs) && taskHeadingsShape(data.templateReqs) && stopGateShape(data.stopGate) &&
+      taskHeadingsShape(data.glossLines) && i18n.BASE_LANGS.every((l) => Array.isArray(data.glossLines[l])) &&
+      (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
       BUILTIN_CORPUS = data;
       BUILTIN_CORPUS_FROM = b ? "bundle" : "file";
     }
@@ -1195,6 +1247,7 @@ function localeLoaded(rel) {
   TEMPLATE_SETS = TEMPLATE_SETS_BR = TEMPLATE_TASKS = BUG_STEPS = null;
   STEERING_STUBS = TEMPLATE_DIAGRAMS = SECTION_TEMPLATE_LINES = SECTION_TEMPLATE_LINES_BR = BUG_SLOTS = TEMPLATE_REQS = null; // 1.24 r6 I-I2
   UI_STATE_NAMES = null; // 1.38
+  GLOSS_LINES.clear(); // 1.42 perf-8
   TASK_HEADINGS.clear(); // tracks.js's per-track sets, read from it
 }
 if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
@@ -1562,4 +1615,4 @@ module.exports = { stripHtmlComments, inertOutsideCode, commentLines,stripFenced
   isTemplatePlaceholder, placeholderReport, bracketPlaceholders, artifactState, headingsOnly, artifactReport,
   featurePlaceholders, placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, bugTemplateSlots,
   renderBugSlots, renderSectionLines, renderTemplateDiagrams, templateDiagramSet, renderSteeringStubs, isSteeringStub,
-  renderTemplateReqs, builtinTemplateReqs, naAnswer, renderUiStateNames, uiStateNames, __link };
+  renderTemplateReqs, builtinTemplateReqs, naAnswer, renderUiStateNames, uiStateNames, glossVisibleLines, renderGlossLines, builtinGlossLines, __link };
