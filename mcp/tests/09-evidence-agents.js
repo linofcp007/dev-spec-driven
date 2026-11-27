@@ -63,6 +63,21 @@ exports.run = async ({ all, eq, rpc, payload, skip, S, tmp, root, __dirname }) =
   { // the plugin's agents: AGENT_ROLES is the set of agents/*.md stems (a new agent, or one renamed, without its role fails here)
     const stems = fs.readdirSync(path.join(root, "agents")).filter((n) => n.endsWith(".md")).map((n) => n.slice(0, -3)).sort();
     eq(E.AGENT_ROLES.slice().sort(), stems, "1.42 (S9): AGENT_ROLES — the roles agents.jsonl takes — are exactly the plugin's agents (agents/*.md stems)");
+    // (S9-c) the recorder's hooks.json entry — SubagentStop, the observe hook, SECOND after the stop gate's (10-guards.js reads [0] as
+    // the gate's) — matches exactly those agents, plugin-scoped or copied: its alternation IS the stems, and no other name gets through
+    const subs = JSON.parse(fs.readFileSync(path.join(root, "hooks", "hooks.json"), "utf8")).hooks.SubagentStop || [];
+    const at = subs.findIndex((e) => e.hooks.some((h) => (h.args || []).some((a) => /\/hooks\/observe-hook\.js$/.test(a))));
+    const matcher = at >= 0 ? subs[at].matcher : "";
+    const alt = (/^\^\(dev-spec-driven:\)\?spec-\(([\w|-]+)\)\$$/.exec(matcher) || [])[1];
+    const re = new RegExp(matcher || "^$");
+    const others = ["spec-writer", "dev-spec-driven:spec-writer", "spec-critic-x", "xspec-critic", "general-purpose", "Explore", "dev-spec-driven:spec-", "other:spec-reviewer"];
+    all("1.42 (S9-c): hooks.json's SubagentStop recorder (the observe hook, the second entry) matches exactly the plugin's agents — its alternation is the agents/*.md stems (= AGENT_ROLES), each plugin-scoped or copied, and no other name (got " +
+      js({ at, matcher, others: others.filter((n) => re.test(n)) }) + ")", {
+      "the second entry": () => at === 1,
+      "its alternation: the stems": () => !!alt && js(alt.split("|").map((x) => "spec-" + x).sort()) === js(stems) && js(stems) === js(E.AGENT_ROLES.slice().sort()),
+      "each agent, plugin-scoped or copied": () => stems.every((s) => re.test(s) && re.test("dev-spec-driven:" + s)),
+      "no other name": () => others.every((n) => !re.test(n)),
+    });
   }
 
   { // agentCosts: one record per id — the LATER one in the log wins (a dispatch the stop gate sent back finishes again, its transcript a

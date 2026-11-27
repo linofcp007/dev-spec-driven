@@ -106,6 +106,11 @@ Phase 6, opt-in.
   `pre-existing (deferred)`, an `unconfirmed (NN)` the final review let ship, a `parked (real)`) is filed as ONE
   `residue-<feature>` backlog entry and committed before `git switch` (Closing); a defect confirmed again at another place is
   asked for as a class in the task's `_Implements:_` files (§7). The `review-seat` evals measure both seats (testing.md).
+- **Each agent prompt has a byte cap (1.42 S14)** — an agents/*.md is paid on every dispatch of its agent. mcp/tests/17-docs.js
+  `AGENT_CAPS` holds one cap per file and fails when an agents/*.md has none (a new agent), a cap names a file that is gone, or
+  a file is past its cap — its bytes as shipped (LF), never characters (an em dash costs three). The caps: reviewer 27,800 ·
+  implementer 18,700 · critic 16,900 · simplifier 8,300 (ceil(bytes × 1.02 / 100) × 100 on the integrated 1.42 branch) · UI
+  reviewer 7,000 · verifier 4,000 (their older pins, kept). Past one: trim, or raise it in one line with the reason in the commit.
 - **`reviewPanel` (1.36)** — `roadmap.json → meta.reviewModels`, opt-in: 2–3 model names checked by SHAPE, never a list of
   known names (`RE_MODEL_NAME`: up to 128 characters — a Bedrock profile ARN —, a leading letter or digit, an optional `[1m]`
   suffix; `REVIEW_RESERVED` inherit / default / diverse / off / none; duplicates case-insensitive, stored as given), the word
@@ -140,10 +145,15 @@ Phase 6, opt-in.
   rolls them up per role (+ `truncated`: the dispatches read only in part — their counts a lower bound, said on the CLI line;
   `models`). **No time and no feature:** a transcript's first-to-last span is wait time for a resumed agent (9.5 % of 2,194
   real dev-spec transcripts span over an hour), and a dispatch prompt names its feature by a name, never an anchor the engine
-  records (7.4 % name two or more). The recorder is Claude Code's: the observe hook's SubagentStop (its reader and its
-  hooks.json entry — 1.42 S9-c, wired on the integrated branch after B142-13's regular-file reads) reads the agent's OWN
-  transcript (`agent_transcript_path`, never the parent session's) in the hook — never the engine, which reads nothing outside
-  the project — and hands over the counts; an MCP-only host records nothing.
+  records (7.4 % name two or more). The recorder is Claude Code's: the observe hook's SubagentStop (1.42 S9-c — hooks.json's
+  second SubagentStop entry, async; claude-code-integration.md → Hooks and commands) reads the agent's OWN transcript
+  (`agent_transcript_path`, never the parent session's) in the hook — never the engine, which reads nothing outside the
+  project — and hands over the counts; an MCP-only host records nothing. **What the reader counts** (hooks/observe-hook.js
+  `agentRunOf`, a regular file only, ≤ 32 MB): the assistant lines alone — turns the distinct message ids (one line per content
+  block, each repeating its message's usage), tokens per id the per-field MAX of its lines (a streamed `output_tokens` grows
+  line by line: never the first line nor a sum) summed over the ids, tool calls per LINE, the last model; a line Claude Code
+  wrote itself (`isApiErrorMessage` — an API error, model `<synthetic>`, zero usage) is no turn and never the model. The id is
+  the transcript's file name without `.jsonl`; a transcript with no assistant turn records nothing.
 
 ## Evidence
 
@@ -1222,7 +1232,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   repeats within one message id GROW (`output_tokens`, 226 files) — per field the max per id, never the first line nor a sum
   (2.0–2.2× the deduped); a tool_use per LINE (one content block a line); the largest transcript 26.8 MB (the hook's 32 MB
   bound). S9-b / S9-d built the engine part (recordAgentRun, agentCosts, the metrics lines); S9-c (the hook's reader and its
-  SubagentStop entry, second in the list after the stop gate's) waits for B142-13's regular-file reads in the same file.
+  SubagentStop entry, second in the list after the stop gate's) waited for B142-13's regular-file reads in the same file.
+- **1.42 —** S9-c (the subagent cost's recorder), built on the integrated branch after B142-13: the observe hook's SubagentStop
+  branch and reader, hooks.json's async entry (claude-code-integration.md → History). Its own count-only probe (4,440 local
+  dev-spec agent transcripts, 8,676 subagent ones) confirmed every assistant line carries a message id and all four usage fields
+  (safe integers), the largest transcript 26.8 MB (none past 32 MB, p99 6.9 MB), and found the one shape the critic's corpus
+  didn't name: Claude Code's own API-error line (`<synthetic>`, `isApiErrorMessage`, zero usage — every one so marked), last in 12
+  dev-spec transcripts — counted, it would have added a turn and handed the engine a model it leaves out, so the reader skips it.
 - **1.42 —** UX-10 (DS-TASKS): the brief listed a fresh init's constitution / tech / structure stubs under "Read before coding",
   their `[e.g., …]` rules read as binding. A file that is a built-in stub verbatim or headings only is listed apart and flagged
   `template: true` in `steering.included` (the row kept: nothing absent). Doctor's "a placeholder left" was rejected as the
@@ -1247,7 +1263,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   findings and the re-review's out-of-scope lines (they stay deferred minors: the label is the namesake the rename removes);
   the dev-guardian review-seat pair (no dev-guardian prose changed; its deterministic half needed another chain's rule);
   SK-P2's within-feature engine check (0 pairs in 2,614 real comparisons) and SK-P3's stub rewrite (the stub's whole-file
-  hash is the brief's "still a template" test). The agent-prompt byte ratchet (S14) waits for the integrated branch.
+  hash is the brief's "still a template" test). The agent-prompt byte ratchet (S14) waited for the integrated branch (below).
+- **1.42 —** S14 (a byte ratchet per agent prompt): only SKILL.md, the verifier (≤ 4,000) and the UI reviewer (≤ 7,000) had a
+  byte cap, while this round alone added 614 B to the reviewer — a prompt paid on every task, re-review, final and simplify
+  dispatch. A cap per agents/*.md (`AGENT_CAPS`), set on the integrated branch after every chain's agent edits at
+  ceil(bytes × 1.02 / 100) × 100: reviewer 27,211 → 27,800, implementer 18,303 → 18,700, critic 16,543 → 16,900, simplifier
+  8,118 → 8,300; the verifier's and the UI reviewer's pins kept (the formula would have raised both). A test row only — no
+  eval weighs a prompt's size against its review quality, so the 2 % is the agreed slack, not a target. Cut: moving converge
+  and prune into an agent of their own (a 7th agent changes the pinned agent count, AGENTS.md, `rules agents` and the plugin
+  listing — a new mechanism for a LOW).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

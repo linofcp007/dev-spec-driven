@@ -109,6 +109,18 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "^(dev-spec-driven:)?spec-(critic|implementer|reviewer|simplifier|ui-reviewer|verifier)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js"],
+            "async": true,
+            "timeout": 10
+          }
+        ]
       }
     ]
   }

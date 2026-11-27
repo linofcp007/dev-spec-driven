@@ -85,23 +85,25 @@ exports.run = async ({ ok, skip, all, remeasure, fsCalls, S, tmp, hookIn, __dirn
     // 1.26: one README per language, the requirement in its Requirements section (the quick start's first line until then)
     const quick = ["README.md", "README.pt.md", "README.es.md"].map((f) => fs.readFileSync(path.join(root, f), "utf8").replace(/\r\n/g, "\n"))
       .map((t) => { const m = t.match(/\n## (?:Requirements|Requisitos)\n/); return m ? t.slice(m.index, m.index + 400) : ""; });
-    ok(entries.length >= 9 && !bad.length && spawned.every((r) => r.status === 0 && r.stdout === "") && req(install.slice(0, 600)) && quick.every(req),
+    ok(entries.length >= 10 && !bad.length && spawned.every((r) => r.status === 0 && r.stdout === "") && req(install.slice(0, 600)) && quick.every(req),
       "1.25.1 (r7 finding 2): every hooks.json entry is exec form — command 'node', args [${CLAUDE_PLUGIN_ROOT}/hooks/<script>] (an existing script), timeout 10 — and runs as Claude Code spawns it (no shell); INSTALL.md and the Requirements of README.md / .pt.md / .es.md require Claude Code 2.1.139+ (got " +
       js({ n: entries.length, bad, spawned: spawned.map((r) => r.status + ":" + r.stdout.slice(0, 30)), quick: quick.map(req) }) + ")");
   }
 
   // Finding 3 — the observe hook prints nothing and decides nothing, yet ran synchronously after every Bash / PowerShell call: both of
   // its entries (PostToolUse, PostToolUseFailure — the docs exclude no event from `async`) run in the background now. Every other hook
-  // answers something (a decision, context) and stays synchronous.
+  // answers something (a decision, context) and stays synchronous. 1.42 (S9-c): its third entry, SubagentStop for the plugin's six
+  // agents (the plugin agents' cost — counts only), is async too.
   {
     const cfg = JSON.parse(fs.readFileSync(path.join(HOOKS, "hooks.json"), "utf8")).hooks;
     const all = Object.entries(cfg).flatMap(([ev, list]) => list.flatMap((e) => e.hooks.map((h) => ({ ev, matcher: e.matcher, script: path.basename((h.args || [""])[0]), async: h.async }))));
     const obs = all.filter((x) => x.script === "observe-hook.js");
     const asyncOthers = all.filter((x) => x.script !== "observe-hook.js" && x.async !== undefined);
     const src = fs.readFileSync(path.join(HOOKS, "observe-hook.js"), "utf8");
-    ok(js(obs.map((x) => x.ev + "/" + x.matcher + "/" + x.async)) === js(["PostToolUse/^(Bash|PowerShell)$/true", "PostToolUseFailure/^(Bash|PowerShell)$/true"]) && !asyncOthers.length &&
+    ok(js(obs.map((x) => x.ev + "/" + x.matcher + "/" + x.async)) === js(["PostToolUse/^(Bash|PowerShell)$/true", "PostToolUseFailure/^(Bash|PowerShell)$/true",
+      "SubagentStop/^(dev-spec-driven:)?spec-(critic|implementer|reviewer|simplifier|ui-reviewer|verifier)$/true"]) && !asyncOthers.length &&
       !/process\.stdout\.write/.test(src),
-      "1.25.1 (r7 finding 3): both observe-hook entries are async (PostToolUse and PostToolUseFailure, Bash|PowerShell) — it writes nothing to stdout; no other hook is async (got " +
+      "1.25.1 (r7 finding 3): every observe-hook entry is async (PostToolUse and PostToolUseFailure, Bash|PowerShell; 1.42 S9-c: SubagentStop, the plugin's six agents) — it writes nothing to stdout; no other hook is async (got " +
       js({ obs, asyncOthers }) + ")");
   }
 
@@ -1059,6 +1061,44 @@ exports.run = async ({ ok, skip, all, remeasure, fsCalls, S, tmp, hookIn, __dirn
         "observe: a FIFO tasks.md is none — the change.md beside it logs the run, ended": () => ended(R.obs) && js(logged(F.ch)) === js(["node b13-fifo.js"]),
       });
     }
+  }
+
+  // 1.42 S9-c [INT-12] — the observe hook's SubagentStop reader opens an agent transcript only when it is a REGULAR file: the entry is
+  // async, and Claude Code never kills an async hook (its timeout isn't enforced), so a FIFO opened for reading would hold it for the rest
+  // of the session. POSIX only (win32 makes no FIFO): (a) a FIFO at agent_transcript_path — the hook ends well before its timeout, the
+  // engine never loaded, nothing recorded; (b) a swap after the lstat (the lstat says a file, the path is a FIFO) — openRegular's
+  // O_NONBLOCK open and the fd's own fstat read it as none, the reader returns null and the process ends. Each spawn bounded at 9 s.
+  if (process.platform === "win32") skip("1.42 S9-c (POSIX): a FIFO agent transcript is never opened by the observe hook's SubagentStop reader", "win32 makes no FIFO");
+  else {
+    const p = project("s9c-fifo");
+    const fifo = path.join(tmp, "s9c-fifo-agent-f00000000000000001.jsonl");
+    const made = spawnSync("mkfifo", [fifo]).status === 0;
+    const pl = { session_id: "s", hook_event_name: "SubagentStop", cwd: p, stop_hook_active: false, agent_type: "dev-spec-driven:spec-reviewer", agent_transcript_path: fifo, last_assistant_message: "DONE" };
+    const t0 = Date.now();
+    try { fs.unlinkSync(probeOut); } catch { /* none */ }
+    const a = spawnSync(process.execPath, ["-r", probe, path.join(HOOKS, "observe-hook.js")], { input: js(pl), encoding: "utf8", env: hookEnv(), cwd: tmp, timeout: 9000 });
+    const aMs = Date.now() - t0, aEngine = fs.existsSync(probeOut) ? fs.readFileSync(probeOut, "utf8") === "true" : null;
+    const swap = path.join(tmp, "s9c-fifo-swap.js");
+    fs.writeFileSync(swap, [
+      "\"use strict\";",
+      "const fs = require(\"fs\");",
+      "const FIFO = " + js(fifo) + ";",
+      "const real = fs.lstatSync;",
+      "fs.lstatSync = function (q, ...rest) { return q === FIFO ? { isFile: () => true, isDirectory: () => false, isSymbolicLink: () => false } : real.call(this, q, ...rest); };",
+      "const H = require(" + js(path.join(HOOKS, "observe-hook.js")) + ");",
+      "process.stdout.write(JSON.stringify({ run: H.agentRunOf(FIFO) }));",
+      "",
+    ].join("\n"));
+    const t1 = Date.now();
+    const b = spawnSync(process.execPath, [swap], { encoding: "utf8", cwd: tmp, env: hookEnv(), timeout: 9000 });
+    const bMs = Date.now() - t1;
+    const ended = (r, ms) => !r.error && r.status === 0 && ms < 8000;
+    all("1.42 S9-c (POSIX): a FIFO agent transcript is never opened — the observe hook's SubagentStop ends well before its timeout, the engine never loaded, nothing recorded; a FIFO behind an lstat that says a file (a swap) reads as none (openRegular: O_NONBLOCK, the fd's fstat) (got " +
+      js({ made, a: [a.status, a.stdout, aMs, aEngine, a.error && a.error.code], b: [b.status, b.stdout, bMs, b.error && b.error.code] }) + ")", {
+      made: () => made,
+      "(a) ended, silent, the engine never loaded, nothing recorded": () => ended(a, aMs) && a.stdout === "" && aEngine === false && !fs.existsSync(path.join(p, ".specs", ".execution", "agents.jsonl")),
+      "(b) the swap: null, ended": () => ended(b, bMs) && b.stdout === js({ run: null }),
+    });
   }
 
   // 1.42 perf-1 — the guard hook reads each feature's tasks.md / .state.json ONCE per project per event: one read-cache scope per

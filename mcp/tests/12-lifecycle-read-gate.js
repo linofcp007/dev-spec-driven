@@ -255,7 +255,12 @@ exports.run = async ({ ok, skip, all, eq, S, tmp, hookIn, fsCalls, require, __di
       }
       // the hooks' decisions on the maze (the engine-free pre-filters exempted by name: EXEMPT)
       const hook = (file, payload) => traced(P.p, P.out, () => hookIn(path.join(HOOKS, file), { input: js(payload), cwd: P.p, env: { ...process.env, CLAUDE_PROJECT_DIR: P.p } }));
+      // (1.42 S9-c) a plugin agent's transcript, outside the project: the SubagentStop recorder's line must not go through the linked .execution/
+      const agentT = path.join(P.p + "-agents", "agent-d00d00d00d00d0001.jsonl");
+      put(agentT, js({ type: "assistant", message: { id: "msg_01MAZE", model: "claude-opus-4-5", role: "assistant", content: [{ type: "text", text: "DONE" }],
+        usage: { input_tokens: 1, output_tokens: 9, cache_read_input_tokens: 500, cache_creation_input_tokens: 50 } }, uuid: "a-1" }) + "\n");
       const hooks = [
+        hook("observe-hook.js", { hook_event_name: "SubagentStop", agent_type: "dev-spec-driven:spec-reviewer", agent_transcript_path: agentT, stop_hook_active: false, cwd: P.p }),
         hook("spec-hook.js", { hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: path.join(P.b, "requirements.md") }, cwd: P.p }),
         hook("spec-hook.js", { hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: path.join(P.a, "tasks.md") }, cwd: P.p }),
         hook("spec-hook.js", { hook_event_name: "SessionStart", cwd: P.p }),

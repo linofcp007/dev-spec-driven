@@ -12,7 +12,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `_Verify:_`, `git diff` or a test, and the shell tool differs by platform (Windows without Git Bash has only PowerShell). An
   unresolved `tools:` entry is dropped (only an all-unresolved list blocks the launch), so naming both is safe; the names are
   the exact strings of permission rules and hook matchers. spec-critic has no shell (read-only). spec-verifier reports no run,
-  so the SubagentStop matcher leaves it out (`^(dev-spec-driven:)?spec-(implementer|simplifier)$`). Descriptions stay ≤ ~250
+  so the stop gate's SubagentStop matcher leaves it out (`^(dev-spec-driven:)?spec-(implementer|simplifier)$`); the second
+  SubagentStop entry, the observe hook's cost recorder (1.42), takes all six (its alternation is agents/*.md's stems — a property
+  in mcp/tests/09-evidence-agents.js, so a new agent fails there until the matcher names it). Descriptions stay ≤ ~250
   characters — what the agent does and when, never "see the agent body" (the dispatcher sees only the description). The critic
   runs on `model: inherit` (one judgment-heavy dispatch per gate), the agents dispatched in bulk on `sonnet` — but the UI
   reviewer (1.32), which inherits too: a judgment on images, one dispatch per UI task.
@@ -69,6 +71,20 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   nothing (1.41: it passes the payload's `duration_ms` on — a project check's run is timed in `.specs/.execution/timings.jsonl`,
   tasks-and-evidence.md → The friction budget; past the same pre-filter, nothing more is read); **the approval hook** only a
   permission decision, and only with `meta.approvalGuard` on.
+- **The observe hook's SubagentStop entry — the plugin agents' cost (1.42 S9-c).** hooks.json's SECOND SubagentStop entry (the
+  stop gate's stays first: mcp/tests/10-guards.js reads `SubagentStop[0]` as the gate's), matcher
+  `^(dev-spec-driven:)?spec-(critic|implementer|reviewer|simplifier|ui-reviewer|verifier)$`, exec form, `"async": true`. Its
+  branch in `decide` comes before the Bash test: `agent_type` and `agent_transcript_path` non-blank (an older payload records
+  nothing; never `transcript_path` — the PARENT session's, which would credit the whole session to one agent), a dev-spec project
+  (`probe.sessionProjects`, then `spec.sessionProject`: a worktree's copy maps to the checkout; ONE record per dispatch), then the
+  read, then the engine: `spec.recordAgentRun` judges the role and every count (tasks-and-evidence.md → Subagent cost). The reader
+  (`agentRunOf`, exported) stays in the hook — the engine reads nothing outside the project: an lstat, then probe.js
+  `openRegular`; at most `TRANSCRIPT_MAX` (32 MB — the largest of 4,440 local dev-spec agent transcripts is 26.8 MB) in 1 MB
+  chunks split on the newline byte (a line carried whole across a chunk's end), past it `truncated`. The id is the transcript's
+  file name without `.jsonl` — the one id source (the payload's `agent_id` is never read: one dispatch keyed two ways would count
+  twice). No assistant turn read, or a payload past the hook's 4 MB `MAX_INPUT` (a final message that long): nothing recorded. **Async:** as the Bash entries — its timeout isn't enforced and `claude -p` may kill it at teardown, so a headless
+  session's last dispatch can go unrecorded; and because nothing kills it, it never opens a FIFO (the POSIX rows of
+  mcp/tests/10-guards-hooks-cost.js "S9-c").
 - **The claim scan runs on a one-byte text** (mcp/lib/latin1-scan.js, loaded only for a prose past U+00FF; guards.js
   `stopScan`, hook-utils `claimScan`): V8 compiles a regex for one-byte and two-byte subjects apart, and the two-byte code of
   the patterns' `[\p{L}\p{N}_]` boundaries is large. `latin1Text` projects the prose to one Latin-1 character per code point (an
@@ -138,6 +154,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   folder or an lstat that throws is no file, as the engine's read gate reads it, and each hook keeps its own no-file answer (the
   guard: the user's default; the Stop gate: the user's option; the observe hook: no checks, change.md) — a FIFO tasks.md held
   every Bash call's async observe hook in one open for the rest of the session (mcp/tests/10-guards-hooks-cost.js "B142-13").
+  The observe hook's SubagentStop reader opens an agent's transcript (outside the project) by the same rule — an lstat, then
+  `openRegular` —, never a copy of `readRegularJson`'s body (it reads in chunks).
 - **What the hooks and the engine both read — mcp/lib/probe.js, ONE copy** (never a renamed copy in a hook: the 8-line duplication
   guard can't see one — review 8): the approval pre-filter (`approvalPlain`, `approvalMayBe` over `APPROVAL_CANDIDATE_TESTS`,
   `RE_APPROVAL_VERB` — the engine's `approvalCandidate` adds a PowerShell `-EncodedCommand`'s decoded script, the hook passes any
@@ -767,6 +785,16 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   the user's option (equal for a folder); a link / FIFO `.state.json` is no activity and a non-regular tasks.md sends the observe
   hook to change.md — the engine reads all of them absent, so the pre-filters stay supersets. 12-lifecycle-read-gate.js's tracer
   exempts `recentActivity`, `mentioned` and `readTasksText` no more.
+- **1.42 (S9-c)** — the observe hook's SubagentStop entry, the plugin agents' cost recorder (engine/agents.js came first, S9-b).
+  The design read the transcript in the engine; the critic moved it to the hook (the engine never reads a path outside the
+  project) and cut time and feature attribution (tasks-and-evidence.md → History). Built on the integrated branch after B142-13,
+  whose regular-file rule it uses ([INT-8], [INT-12]: an async hook is never killed, so the reader opens no FIFO). One finding of
+  the build's own count-only probe: Claude Code writes an API error it reports as an assistant line of its own (`<synthetic>`,
+  `isApiErrorMessage`, zero usage — 392 of 1,149,180 lines in 8,676 local subagent transcripts, every one so marked, the last line
+  of 12 of 4,440 dev-spec ones), so the reader counts it neither as a turn nor as the model (the engine would have left the model
+  out). Rows: 10-guards-hooks.js (the reader, decide, a linked transcript, the worktree), 10-guards-hooks-cost.js (the async pin,
+  the POSIX FIFO and swap rows), 10-guards-probe.js (the engine-load row), 12-lifecycle-read-gate-scope.js (the scope),
+  12-lifecycle-read-gate.js (the maze's linked `.execution/`), 09-evidence-agents.js (the matcher property).
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.

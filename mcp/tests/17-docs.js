@@ -299,6 +299,20 @@ exports.run = async ({
     Buffer.byteLength(fs.readFileSync(path.join(agentsDir, "spec-verifier.md"), "utf8")) <= 4000 && !/^## Verify mode$/m.test(fs.readFileSync(path.join(agentsDir, "spec-reviewer.md"), "utf8")),
     "6 plugin agents: the critic is read-only (Read, Grep, Glob), the 1.32 UI reviewer reads images only (Read, Glob), the reviewer and the verifier add a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool; every description ≤ 250 characters with no pointer to the body, the reviewer's says 'never edits code' (it has a shell), the verifier ≤ 4 KB and the reviewer has no verify mode left (1.26; got " +
     JSON.stringify(agentFiles.map((a) => a + " " + agentDesc(a).length)) + ")");
+  // 1.42 S14: a byte ratchet per agent prompt — an agents/*.md is paid on EVERY dispatch of its agent, so each file has a cap
+  // and stays within it. A property over agents/*.md, never the six names: a new agent without a cap fails, and so does a cap
+  // left for an agent that is gone. Four caps were measured on the integrated 1.42 branch at ceil(bytes × 1.02 / 100) × 100
+  // (reviewer 27,211 · implementer 18,303 · critic 16,543 · simplifier 8,118 bytes); the verifier's 4,000 (1.26, the row above)
+  // and the UI reviewer's 7,000 (1.32, its visual-review row) are their older pins, kept. Bytes as shipped (the file's size —
+  // LF, .gitattributes), never characters: an em dash costs three. Past a cap: raise it in one line, the reason in the commit.
+  const AGENT_CAPS = { "spec-critic.md": 16900, "spec-implementer.md": 18700, "spec-reviewer.md": 27800, "spec-simplifier.md": 8300,
+    "spec-ui-reviewer.md": 7000, "spec-verifier.md": 4000 };
+  const agentSizes = agentFiles.map((a) => [a, fs.statSync(path.join(agentsDir, a)).size, AGENT_CAPS[a]]);
+  const staleCaps = Object.keys(AGENT_CAPS).filter((a) => !agentFiles.includes(a));
+  all("1.42 S14: every agents/*.md has a byte cap and stays within it (bytes / cap: " +
+    agentSizes.map(([a, b, c]) => a + " " + b + " / " + (c || "none")).join(", ") + ") — past a cap, raise it in one line, the reason in the commit",
+    Object.assign(Object.fromEntries(agentSizes.map(([a, b, c]) => [a + " is " + b + " bytes, cap " + (c || "none"), Number.isInteger(c) && b <= c])),
+      { ["a cap for every agent that exists (stale: " + (staleCaps.join(", ") || "none") + ")"]: agentFiles.length > 0 && !staleCaps.length }));
   // 1.31 (from google/elephant-goldfish-model): the reviewers that judge an artifact or a finding start without CLAUDE.md
   // (`omitClaudeMd: true`, Claude Code 2.1.271+; older versions ignore the key); the ones that write or review code keep
   // the project's instructions. The critic has three modes — gate, a cold read (naive), a task brief's pre-flight (brief).
