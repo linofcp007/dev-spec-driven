@@ -2421,7 +2421,9 @@ exports.run = async ({
         return at.every((i, k) => i > 0 && (k === 0 || at[k - 1] < i)); })() &&
         /One order, `\/spec-finish`'s: the finish, the `execution` sign-off, the residues, the commit, then the merge\./.test(closing),
       finishOrder: (() => { const at = [FIN.indexOf("call `spec_approve {name, phase: \"execution\"}` only on their yes"), FIN.indexOf(" 4. Before either option"), FIN.indexOf("files its residues, once"), FIN.indexOf("then commit with the feature what `git status --porcelain -- .specs` lists"), FIN.indexOf("Offer exactly two options")];
-        return at.every((i, k) => i > 0 && (k === 0 || at[k - 1] < i)); })(),
+        return at.every((i, k) => i > 0 && (k === 0 || at[k - 1] < i)); })() &&
+        // the sign-off asked ONCE in each text (a second call after the options would be a second order)
+        FIN.split("spec_approve").length === 2 && closing.split("approve `execution`").length === 2,
       listed: /your final message lists them after the rulings, with the line that drops the entry \(`dev-spec backlog rm residue-<feature>`\)/.test(closing) &&
         /git history and the backlog are the record now\./.test(closing),
       // R1-PROMPTS-04: the final review and /spec-review branch ledger their own pre-existing and 50–79 lines, so Closing files them;
