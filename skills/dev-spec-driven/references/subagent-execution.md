@@ -240,8 +240,10 @@ plugin: each issue rated by a separate agent, only the confident ones kept.)
   answer you expect.
 - **Then, by its confidence:** **80 or more** → confirmed: it enters the fix loop. **50–79** → unconfirmed: no fix
   round — ledger `unconfirmed (NN)`, show it at the next checkpoint; the final review triages it with the deferred
-  minors. **Under 50** → refuted: ledger `refuted (NN, <why>)` and drop it — unless its `Exists at HEAD` line says yes
-  (a real defect this diff didn't make): ledger `refuted (NN, <why>, real at HEAD)`, a residue, filed at Closing.
+  minors. **Under 50** → refuted: ledger `refuted (NN, <why>)` and drop it — unless it is refuted as pre-existing or not
+  in the diff with its `Exists at HEAD` line yes (a real defect this diff didn't make): ledger
+  `refuted (NN, <why>, real at HEAD)`, a residue, filed at Closing. Any other reason — intended, disproved by a run,
+  silenced on purpose, no rule says so, nitpick — is no residue, whatever its `Exists at HEAD` line says.
 - **An ❌ comes back CONFIRMED or REFUTED, never unconfirmed** (an AC with no code is never pre-existing): its verdict
   decides, not a confidence. A refuted ❌ cites the file:line that satisfies the AC — read that line before you count the
   AC as satisfied; a refutation without one is a confirmed ❌, and a confirmed ❌ enters the fix loop.
@@ -613,11 +615,13 @@ the finish batch (§7b) answers them in the one question. **Collect every `Rulin
 One order, `/spec-finish`'s: the finish, the `execution` sign-off, the residues, the commit, then the merge. Ask the human
 to approve `execution` (`spec_approve`, on their yes) — then, before the merge:
 
-**File the residues before the merge** — once: a `Residues filed:` ledger line means they are filed. The ledger goes with
-`.execution/` and nothing else reads it. A residue is a defect that exists at HEAD and ships: a `pre-existing (deferred)`
-line, a refutation `real at HEAD`, a `parked (real)` one, an `unconfirmed (NN)` finding or a class place outside a task the
-final review let ship — never a `parked (contested)` one or another refutation (no defect: the reviewer was wrong), never a
-`minor (deferred)` one (polish in the feature's own lines: the simplification pass's list). They go in ONE backlog entry for
+**File the residues before the merge** — the residue lines after the ledger's last `Residues filed:` line (the ones above
+it are filed; no such line: every one). The ledger goes with `.execution/` and nothing else reads it. A residue is a defect
+that exists at HEAD and ships: a `pre-existing (deferred)` line, a refutation `real at HEAD` (§6: refuted as pre-existing or
+not in the diff with its `Exists at HEAD` line yes), a `parked (real)` one, an `unconfirmed (NN)` finding or a class place
+outside a task the final review let ship — never a `parked (contested)` one or another refutation (intended, disproved by a
+run, silenced on purpose, no rule says so, nitpick: no defect to file), never a `minor (deferred)` one (polish in the
+feature's own lines: the simplification pass's list). They go in ONE backlog entry for
 the feature, without a question: `spec_roadmap_edit {kind: "backlog", action: "add", name: "residue-<feature>", note:
 "residues: <file:line> — <the defect, in your own words, never the reviewer's text> — <confidence NN | ruling: why it
 shipped | real at HEAD | unverified> — task N · …"}` (CLI `dev-spec backlog add residue-<feature> "residues: …"`); a
@@ -626,10 +630,12 @@ confidence rated a fix round, not the defect). A note holds at most 2,000 charac
 `residue-<feature>-2`, never truncated. Ledger `Residues filed: residue-<feature> (N)`; your final message lists them after
 the rulings, with the line that drops the entry (`dev-spec backlog rm residue-<feature>`).
 
-**Then commit the spec state with the feature** — the finish, the sign-off and the residues all write under `.specs/` (the
-feature's `.state.json`, the roadmap files, a registered design system): commit what `git status --porcelain -- .specs`
-lists until it prints nothing — `git switch <base>` refuses while any of it is modified; a change neither you nor these
-steps made is the user's work: ask before committing it. A git-ignored `.specs/` lists nothing: nothing to commit.
+**Then commit the spec state with the feature** — what the run and the closing wrote under `.specs/`: `git add` the
+feature's folder, `.specs/roadmap.json` and the generated roadmap files the project has (`.specs/ROADMAP.md`,
+`.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the finish registered components,
+and a steering file the run amended —, then commit (a git-ignored `.specs/`: nothing to commit). Git carries any other
+uncommitted change across the switch: it is not lost and not committed (one the switch would overwrite makes it refuse,
+naming the file: ask the user).
 
 Then ask the human to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
 `.specs/<feature>/.execution/` — git history and the backlog are the record now.

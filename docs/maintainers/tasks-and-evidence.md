@@ -106,10 +106,13 @@ Phase 6, opt-in.
   runs the simplifier's, each verified before it costs a fix. **1.42:** the task review too — §4 writes `dupes --json` beside the
   package, the reviewer keeps the runs in the package's files and says "none" only at `counts.existing` 0 with neither
   `truncated` nor `partial`. A residue — a defect that exists at HEAD and ships (a `pre-existing (deferred)`, a refutation
-  the verifier found `real at HEAD`, a `parked (real)`, an `unconfirmed (NN)` or a class place the final review let ship) —
-  is filed once as ONE `residue-<feature>` backlog entry (Closing); the closing order is one in Closing and /spec-finish:
-  finish, the `execution` sign-off, the residues, a commit of what `git status --porcelain -- .specs` lists until it is
-  empty, the merge. A defect confirmed again at another place is asked for as a class in the task's `_Implements:_` files
+  `real at HEAD` — refuted as pre-existing or not in the diff with its `Exists at HEAD` line yes, one predicate on two verifier
+  inputs in §6, Closing and `/spec-review branch` —, a `parked (real)`, an `unconfirmed (NN)` or a class place the final review
+  let ship) — is filed as ONE `residue-<feature>` backlog entry (Closing: the lines after the ledger's last `Residues filed:`
+  line); the closing order is one in Closing and /spec-finish, in the same words: finish, the `execution` sign-off, the
+  residues, a commit of what the run and the closing wrote (`git add` the feature's folder, roadmap.json, the generated roadmap
+  files, the registry / a steering file when written — git carries any other change across the switch), the merge. A defect
+  confirmed again at another place is asked for as a class in the task's `_Implements:_` files
   (§7). The `review-seat` evals measure both seats (testing.md); no regex grader matches its seat's own agent prompt.
 - **Each agent prompt has a byte cap (1.42 S14)** — an agents/*.md is paid on every dispatch of its agent. mcp/tests/17-docs.js
   `AGENT_CAPS` holds one cap per file and fails when an agents/*.md has none (a new agent), a cap names a file that is gone, or
@@ -1271,7 +1274,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   findings and the re-review's out-of-scope lines (they stay deferred minors: the label is the namesake the rename removes);
   the dev-guardian review-seat pair (no dev-guardian prose changed; its deterministic half needed another chain's rule);
   SK-P2's within-feature engine check (0 pairs in 2,614 real comparisons) and SK-P3's stub rewrite (the stub's whole-file
-  hash is the brief's "still a template" test). The agent-prompt byte ratchet (S14) waited for the integrated branch (below).
+  hash is the brief's "still a template" test — that test was UX-10, cut in review 1; the hash still serves doctor's
+  steering-placeholder check and the steering importer, `isSteeringStub`). The agent-prompt byte ratchet (S14) waited for the
+  integrated branch (below).
 - **1.42 —** S14 (a byte ratchet per agent prompt): only SKILL.md, the verifier (≤ 4,000) and the UI reviewer (≤ 7,000) had a
   byte cap, while this round alone added 614 B to the reviewer — a prompt paid on every task, re-review, final and simplify
   dispatch. A cap per agents/*.md (`AGENT_CAPS`), set on the integrated branch after every chain's agent edits at
