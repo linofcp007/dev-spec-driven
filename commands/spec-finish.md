@@ -28,7 +28,8 @@ before it.
    target inside the feature's own folder is a spec change, never a steering line; the approved features a constitution or
    track-file edit flags, named); per platform item its backlog name — `friction-<check>` for an over-budget check or a
    `tool-friction` lesson on a `meta.checks` command, else `platform-<topic>` (the over-budget checks are the ones
-   `spec_next_action`'s finish step names, `friction.over`); per metric or finding what the user fixes or accepts. Apply the answers — each file edited once, the lessons closed by ONE `spec_decide` entry that supersedes
+   `spec_next_action`'s finish step names, `friction.over`); per check a shape still breaks, `check-<topic>`; per metric
+   or finding what the user fixes or accepts. Apply the answers — each file edited once, the lessons closed by ONE `spec_decide` entry that supersedes
    them — then run step 1 again.
    After a protected test's accept (or a lift), run step 1 again (`spec_finish {name, write: true}`): the merge summary then lists the
    accept and no longer names the test as changed — the one written before it still does.
@@ -49,9 +50,15 @@ before it.
    registry, adds the design's New components to `.specs/steering/design-system.md` (`designSystem.registered`): a change to
    commit with the feature. Forced approvals appear under "Waived gates", a feature's protected tests (what changed, the
    lifts, the accepts) under "Protected tests".
-4. Offer exactly two options: **1. merge into the base branch locally** (fast-forward when possible, the summary as the
-   message; a feature on its own branch: `git switch <base>`, then `git merge <name>`) **· 2. keep the branch as it is.**
-   Run only the one the user picks; after a merge, the full suite again. Pushing is a separate step the user approves.
+4. Before either option, a feature run with subagents files its review loop's residues
+   (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` → Closing: the ledger goes with
+   `.execution/`); then commit `.specs/roadmap.json` and `.specs/ROADMAP.md` with the feature — `git switch <base>` refuses
+   while they are modified. Offer exactly two options: **1. merge into the base branch locally** — `git switch <base>`,
+   then `git merge <branch>`: the branch `spec_finish`'s merge line names (`feature/<slug>` by default, `fix/<slug>` for a
+   bugfix); without one, the branch you worked on, if it is not the base. A fast-forward when possible; a merge commit
+   (`--no-ff`, or branches that diverged) takes the merge title and summary as its message **· 2. keep the branch as it
+   is** (the residues stay on it). Run only the one the user picks; after a merge, the full suite again. Pushing is a
+   separate step the user approves.
 5. Once merged, delete `.specs/<feature>/.execution/` (keep `.history/`); offer `/spec-report metrics <feature> --write`
    (a retro), `/spec-report catalog --write` and, for a release, `/spec-report changelog`. A spike finishes once its
    decision is written.

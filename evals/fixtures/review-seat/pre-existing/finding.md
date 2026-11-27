@@ -1,0 +1,1 @@
+Important — src/api.js:17 — `rushFee()` computes a charge in floating-point euros (`Math.ceil(text.length / 100) * 0.15`): a 250-character note is charged 0.44999999999999996 €. Money belongs in integer cents. confidence 85

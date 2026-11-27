@@ -101,7 +101,11 @@ Phase 6, opt-in.
   entry, its readers and finish's warning). The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
-  runs the simplifier's, each verified before it costs a fix.
+  runs the simplifier's, each verified before it costs a fix. **1.42:** the task review too — §4 writes `dupes --json` beside the
+  package, the reviewer keeps the runs in the package's files and says "none" only at `counts.existing` 0. A residue (a
+  `pre-existing (deferred)`, an `unconfirmed (NN)` the final review let ship, a `parked (real)`) is filed as ONE
+  `residue-<feature>` backlog entry and committed before `git switch` (Closing); a defect confirmed again at another place is
+  asked for as a class in the task's `_Implements:_` files (§7). The `review-seat` evals measure both seats (testing.md).
 - **`reviewPanel` (1.36)** — `roadmap.json → meta.reviewModels`, opt-in: 2–3 model names checked by SHAPE, never a list of
   known names (`RE_MODEL_NAME`: up to 128 characters — a Bedrock profile ARN —, a leading letter or digit, an optional `[1m]`
   suffix; `REVIEW_RESERVED` inherit / default / diverse / off / none; duplicates case-insensitive, stored as given), the word
@@ -1224,6 +1228,26 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `template: true` in `steering.included` (the row kept: nothing absent). Doctor's "a placeholder left" was rejected as the
   predicate (a partly filled tech.md would drop out). The constitution stub's text was NOT reworded this round (SK-P3 narrowed to
   spec-critic's row): every project inited since 1.30 holds its current hash, and a new text would have made those binding again.
+- **1.42 (the review loop's prose)** — built, prose only: S1 (the residues filed before the merge — the ledger went with
+  `.execution/` and nothing read it, so parked, unconfirmed and pre-existing findings vanished at the merge); S4(a) (the
+  task review gets the duplicate detector's file; the cap answered by the reviewer's own rule, never a "none" from a top-20);
+  S6 (a class fix, narrowed to ONE trigger and the task's files — ships unmeasured: no eval drives fix rounds); S8 (a check
+  offer, found out by a grep or the check's own run — a too-narrow grep would let a check in that blocks the finish's step 2);
+  the critic's rows (SK-P6 as a property, SK-P3 per principle, S15, SK-P2's "or repeat"); one S3 clause; UX-11's merge
+  branch; UX-13(a). Measured: the `review-seat` evals (testing.md → Plugin evals; their reference run on the 1.41.2 prompts,
+  evals/README.md). Cut: S3's protocol (an end line in two shells, a `Read: N lines` reply, a resume and a §8 clause — Read
+  returns a file whole on this host, a refused one tells the agent to page, and N is gameable by Grep), with its long-package
+  eval case; S4(b) (review_pr per task — a recorded scan per task in dev-guardian's history, unmeasured on Linux, and W covers
+  the feature at finish); S6's NOT ADDRESSED trigger (an incomplete fix, which rounds / tier-up / breaker already answer — one
+  predicate for two rules) and its NEEDS_CONTEXT → converge path (a re-approval mid-story for a rare event); S7(a) (the
+  blind-first reorder: gated on the reference run, where the report's rationale swayed 0 of 3 runs) and S7(b) (no fixed
+  report headings to scope a verifier to); SK-P4 (converge's written rules — paid on every reviewer dispatch for a rarely run
+  mode, and a rule break has no AC to route to); SK-P5 (clarify choices as decisions — the AC is the record, and a reworded
+  AC makes the `affects` phantom); S1's per-topic names (two features' defects merged under one topic), its contested parked
+  findings and the re-review's out-of-scope lines (they stay deferred minors: the label is the namesake the rename removes);
+  the dev-guardian review-seat pair (no dev-guardian prose changed; its deterministic half needed another chain's rule);
+  SK-P2's within-feature engine check (0 pairs in 2,614 real comparisons) and SK-P3's stub rewrite (the stub's whole-file
+  hash is the brief's "still a template" test). The agent-prompt byte ratchet (S14) waits for the integrated branch.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

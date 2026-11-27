@@ -305,7 +305,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   matter has no `disallowed_tools` (CLI 2.1.282: `max_turns`, `timeout_seconds`, `model`, `allowed_tools`,
   `artifact_publish`, `growthbook_overrides`, `append_system_prompt`, `env`) and `allowed_tools` only grants gated tools,
   so `Agent` can't be taken away per case; the triggering cases keep `max_turns: 4` (a "max turns" run error after the
-  Skill fired is harmless — evals/README.md).
+  Skill fired is harmless — evals/README.md). The review-seat cases (1.42, `--tag review-seat`: the task reviewer and the
+  verifier on one seeded task) are checked offline in the same file — shape, the seeded premise on their overlay files, no
+  regex grader matching any of the case's inputs — and ONE of them is built (its package byte for byte §4's commands'
+  output); a reply is graded on `last_message`, never the trace, which carries the seat's own reads of those inputs.
 - **Tests run on Windows AND Linux** (`npm run test:docker`): a `_Verify:_` a test writes must work under cmd.exe AND
   `/bin/sh` — quote it (`node -e "process.exit(0)"`; the bare `node -e process.exit(0)` is a sh syntax error that cmd.exe
   accepts); don't depend on a case-insensitive file system (assert the Linux counterpart where Windows/macOS fold case)
@@ -464,3 +467,11 @@ How the rules above came to be — grep a release here.
   property, never a list of places — every .md / .mdc but CHANGELOG* and every .js; not what .gitignore ignores, hidden folders
   but the rule files `rules` prints (cli/commands.js `RULE_FILES`), examples/, evals/, the suites' own folders, nor a
   maintainer note's History. The file set is itself checked on a planted tree (a gap list in each place, read only where shipped).
+- **1.42 (review seats)** — no plugin eval measured the review loop's two seats, the costliest and most edited prose of
+  Phase 6. Seven `review-seat` cases (five task reviews, two verify passes) share one builder (`review_seat <variant>` in
+  evals/fixtures/lib.sh); the suite builds ONE of them (the 8th slot of the 4-wide build pool, ≈ 0 s) and checks the six others'
+  premises on their overlay files — the design's eight built cases would have cost ≈ +9 s warm / +20–25 s cold per run. A
+  `--keep-temp` probe (one paid run) settled the grading: the seat's reply is the `Agent` call's result and the main session
+  relays it, while the trace also holds the seat's reads of every input, so the graders read `last_message` and a property keeps
+  every regex grader from matching any input. Cut: the dev-guardian pair (no dev-guardian prose changes this round; its
+  deterministic half needed another chain's rule) and the long-package final-review case (with S3's protocol).

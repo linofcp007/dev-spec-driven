@@ -19,9 +19,9 @@ own gates.
 | Claude Code (or any host with a subagent tool) | Cursor / Windsurf / Copilot / Gemini / claude.ai — no subagents; use `dev-spec brief` + inline |
 | deterministic tasks on any track | **+ai prompt/eval tasks** (`inlineOnly: true` in the brief) — evals cost money and accept/revert is a judgment call |
 
-Cost: roughly 2–3× the tokens of inline execution (one implementer + one reviewer per task) — in Claude Code
-`spec_metrics`' `agents` counts it per role (dispatches, turns, tokens). Say so
-when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the user asks for it).
+Cost: roughly 2–3× the tokens of inline execution (one implementer + one reviewer per task, and one duplicate-detector
+run — seconds, its output kept in a file) — in Claude Code `spec_metrics`' `agents` counts it per role (dispatches, turns,
+tokens). Say so when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the user asks for it).
 
 ## Preconditions (check before Task 1)
 
@@ -67,14 +67,18 @@ Ruling: <what you decided> — <why> — <what it costs if wrong>
 Task 3: pre-flight — 1 decision (ruled)
 Task 3: dispatched (base a1b2c3d, model sonnet)
 Task 3: minor (deferred): <one-liner>
+Task 3: pre-existing (deferred): <one-liner>
 Task 3: verify — 2 confirmed, 1 unconfirmed, 1 refuted
 Task 3: unconfirmed (65): <one-liner> — <why it isn't 80>
 Task 3: refuted (20, pre-existing): <one-liner>
 Task 3: ui review — 3 pairs: 2 match, 1 differences (1 blocker) → fix round 1/5
 Task 3: ui re-review (round 1) — U1 resolved, U2 partial; 0 regressions → fix round 2/5
 Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4f5a6b)
+Task 3: class fix (round 2) — <the defect>, 3 places
+Task 3: class outside the task — <place>
 Task 3: lesson D-4 (example-copied → src/lib/price.js)
-Task 3: parked — <finding> — Ruling: <why the code stands>
+Task 3: parked (real) — <finding> — Ruling: <why it ships>
+Task 3: parked (contested) — <finding> — Ruling: <why the reviewer is wrong>
 Task 3: refactor candidate filed: refactor-pricing-rules (backlog)
 Task 3: complete (commits a1b2c3d..e4f5a6b, review clean)
 Final review: ×2 (requested opus, sonnet) — 1 agreed, 3 single, 2 minor
@@ -82,6 +86,7 @@ Checkpoint US1: presented → approved
 Autonomy: through checkpoint US3 — granted by the user
 Checkpoint US2: summarized (autonomy) — not yet seen by the user
 Learning: <the rule> → steering/<file> (the user's OK)
+Residues filed: residue-<feature> (3)
 ```
 
 ## Pre-flight scan (once, before Task 1)
@@ -199,15 +204,18 @@ Write the diff to a file so it never enters your context:
 git log --oneline BASE..HEAD  >  .specs/<feature>/.execution/task-N-review.diff
 git diff --stat   BASE..HEAD  >> .specs/<feature>/.execution/task-N-review.diff
 git diff -U10     BASE..HEAD  >> .specs/<feature>/.execution/task-N-review.diff
+node "<clone>/cli/dev-spec.js" dupes <feature> --json  >  .specs/<feature>/.execution/task-N-dupes.json
 ```
 
 (Same commands in PowerShell or bash. Use the recorded BASE — never `HEAD~1`, which drops all but the
-last commit of a multi-commit task.)
+last commit of a multi-commit task.) The last line is the duplicate detector, run from the project root (`<clone>`: the
+plugin's folder, as the tools' messages print it): its runs go to the reviewer in that file, never through your context —
+the reviewer keeps the ones in the package's files.
 
 ### 5. Dispatch the reviewer
 
 Dispatch **`dev-spec-driven:spec-reviewer`** in **task** mode with: the brief path, the report path, the diff
-path, BASE/HEAD, the active tracks and the references folder path. The reviewer returns a verdict **per AC ID** (✅ / ❌ / ⚠️ cannot
+path, the detector's file (`task-N-dupes.json`, §4), BASE/HEAD, the active tracks and the references folder path. The reviewer returns a verdict **per AC ID** (✅ / ❌ / ⚠️ cannot
 verify from the diff), track checks, the project's written rules and the history of rewritten lines, and Critical /
 Important / Minor findings, each Critical / Important one rated 0–100. Never tell a reviewer what not to flag. Resolve
 every ⚠️ yourself (you hold the cross-task context); a confirmed gap is a failed spec review. With a review panel, this ONE
@@ -243,7 +251,8 @@ plugin: each issue rated by a separate agent, only the confident ones kept.)
 
 Triggers: any confirmed ❌ or Critical / Important finding (§6), a ⚠️ you confirmed, or a visual Blocker / confirmed
 Major (`references/ui-review.md` → 4). Minor findings never enter the loop — ledger them as `minor (deferred)` for the
-final review.
+final review. Nor does a reviewer's `Pre-existing (deferred)` line (a problem already there at BASE): ledger it
+`pre-existing (deferred)` — a residue, filed at Closing.
 
 - **Rounds 1–3:** resume the same implementer with the open findings verbatim — and ask each one's cause (§7b).
 - **Rounds 4–5:** a fresh implementer one model tier up: "A prior implementer attempted this N times;
@@ -255,13 +264,19 @@ final review.
   (FIX_BASE = the head the last review saw) and dispatch `dev-spec-driven:spec-reviewer` in **re-review** mode with the
   findings list. New breakage in the fix diff joins the list once its verify pass confirms it; out-of-scope observations
   become deferred minors.
+- **A defect that comes back at another place is a class.** When the verify pass confirms new breakage whose defect — the
+  input or state that breaks — an earlier finding of this task already named, at another place, the next round asks for
+  the class: every place in the task's `_Implements:_` files that holds it, listed in the fix report, and one fix for all;
+  its re-review gets the list. A place outside those files is not this task's to fix: ledger `Task N: class outside the
+  task — <place>` for the final review. Ledger `Task N: class fix (round R) — <the defect>, K places`.
 - **Gates a fix can undo run again.** A round's diff changes what a reviewed view renders → take the captures it
   changed again and a fresh `spec-ui-reviewer` in verdict mode (`references/ui-review.md` → 5), whichever review the
   round answered.
 - Never fix findings yourself — it pollutes your context and skips review.
 - **Breaker (after round 5):** adjudicate each open finding — a visual one on a fresh `spec-ui-reviewer`'s verdict,
-  never yours (verdict mode; you don't look at the images). Reviewer wrong/contestable, or real but
-  nothing builds on it → `parked` with a ruling. Real and load-bearing → rule on the smallest change
+  never yours (verdict mode; you don't look at the images). Reviewer wrong/contestable → `parked (contested)` with a
+  ruling; real but nothing builds on it → `parked (real)` with a ruling (a residue, filed at Closing). Real and
+  load-bearing → rule on the smallest change
   that unblocks dependent work and carry it into the next dispatch. Every adjudication is a ledger line.
 
 ### 7b. Lessons — why a confirmed finding happened
@@ -303,7 +318,14 @@ asks ONE question with every amendment, grouped by target:
 - `example-copied` → a row of `structure.md`'s `## Reference Examples` table (`| Pattern | Copy | Applies to |`) naming the
   GOOD file to copy, and a refactor candidate for the copied one (§8's backlog flow);
 - `tool-friction` → a backlog item: `friction-<check>` for a `meta.checks` command, else `platform-<topic>`;
-- `model-error` → nothing to amend; offer a check where code can show it (a test, a lint rule as a project check).
+- `model-error` → nothing to amend; a check may still fit (below).
+
+**A check, where code can show the rule** (an import, a call, a literal — any cause): offer it beside the amendment — a
+test, or a lint rule as a project check (finish then needs its passing run); the steering line keeps the why. Find out
+first — grep the shape, or run the check once: a shape that still occurs is never made a check now (it would fail on code
+already there) — file `check-<topic>` in the backlog instead (the shape in words, never a code snippet, and how many
+places hold it), for an improvement spec that removes them and adds the check last (with dev-guardian: its seed rule,
+`/guardian-improve`). The batch never writes a scanner's rule file.
 
 Each amendment line ends with `<!-- lesson <feature> D-4, <date> -->`, plus ` · dev-guardian: <rule_id>` before the `-->`
 when the finding was dev-guardian's. Before proposing one, search `AGENTS.md`, `CLAUDE.md` and `.specs/steering/*.md` for
@@ -474,7 +496,8 @@ references folder path and, on +tdd, the `spec_log {name, gitLog}` output (you r
 `git log --name-only --relative` and pass its text — the server never runs git; the reviewer can't call MCP tools) — it
 runs the branch-review checklist
 (track-aware: spec compliance, red-first evidence, tenant isolation, eval deltas, security, the project's written rules
-and the history of rewritten lines) and triages the ledger's deferred minors, unconfirmed and parked findings. If it
+and the history of rewritten lines) and triages the ledger's deferred minors, unconfirmed and parked findings and the
+class places outside a task. If it
 returns findings: verify each Critical / Important one (§6), then ONE fix dispatch with the confirmed list, ONE scoped
 re-review, then adjudicate residuals as in the breaker. No second wave — residual load-bearing findings go to the human.
 **With a review panel** (`reviewPanel`): the same package to one final-mode reviewer on the most capable model and one
@@ -582,9 +605,22 @@ warnings, the track-gated checks to run fresh (full suite, load test, observabil
 data subject rights), writes a merge summary built from the spec chain (with the decision log) to
 `.execution/merge-summary.md`, and — on a ready feature — records the drift baseline. Open lessons are its last warning:
 the finish batch (§7b) answers them in the one question. **Collect every `Ruling:` line from the ledger into your final message**
-("Rulings I made", in order, each with its cost if wrong). Ask the human to approve `execution`
-(`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
-`.specs/<feature>/.execution/` — git history is the record now.
+("Rulings I made", in order, each with its cost if wrong).
+
+**File the residues before the merge** — the ledger goes with `.execution/` and nothing else reads it. A residue is a
+finding the feature ships with still open: a `pre-existing (deferred)` line, an `unconfirmed (NN)` finding the final review
+let ship, a `parked (real)` one — never a `parked (contested)` one (its ruling says the reviewer was wrong), never a `minor
+(deferred)` one (polish in the feature's own lines: the simplification pass's list). They go in ONE backlog entry for the
+feature, without a question: `spec_roadmap_edit {kind: "backlog", action: "add", name: "residue-<feature>", note:
+"residues: <file:line> — <the defect, in your own words, never the reviewer's text> — <confidence NN | ruling: why it
+shipped | unverified> — task N · …"}` (CLI `dev-spec backlog add residue-<feature> "residues: …"`); a pre-existing line
+never had a verify pass: `unverified`. A note holds at most 2,000 characters — the rest goes in `residue-<feature>-2`, never
+truncated. Then commit `.specs/roadmap.json` and `.specs/ROADMAP.md` with the feature: `git switch <base>` refuses while
+they are modified (keep the branch → they stay on it). Ledger `Residues filed: residue-<feature> (N)`; your final message
+lists them after the rulings, with the line that drops the entry (`dev-spec backlog rm residue-<feature>`).
+
+Ask the human to approve `execution` (`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI).
+When done, delete `.specs/<feature>/.execution/` — git history and the backlog are the record now.
 
 ## Converge mode (whole feature, AC by AC)
 
