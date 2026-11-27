@@ -100,9 +100,10 @@ exports.run = async ({ all, runIn, runAsync, spawnAsync, tmp, require, __dirname
   }
 
   { // 1.42 (S9): the plugin subagents' cost on the CLI — `metrics` (the project) prints the head and one line per role after the friction
-    // line, --json carries `agents` (spec_metrics'); none of it without a record
+    // line, --json carries `agents` (spec_metrics'); none of it without a record (a project with a feature: the per-feature table above it)
     const p = path.join(tmp, "fr-agents");
     SD.initProject(p, ["core"], "en", { checks: { test: PASS } });
+    SD.createFeature(p, { name: "Billing", tracks: ["core"] });
     const tok = { in: 1520, out: 18340, cacheRead: 812400, cacheWrite: 64210 };
     SD.recordAgentRun(p, { agent: "dev-spec-driven:spec-reviewer", id: "agent-c1", model: "claude-opus-4-5", turns: 31, tools: 24, tokens: tok, truncated: false });
     const bare = path.join(tmp, "fr-agents-none");
