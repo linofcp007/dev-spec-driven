@@ -63,8 +63,8 @@ dispatches the seat on the tier the controller uses (Model selection: the review
 | `review-seat-caller-left-en` | `getNote()` throws instead of returning null; `src/notes-report.js`, outside the diff, still tests for null | a changed contract → its call sites | dispatched · `Needs fixes` · a non-✅ line citing `src/notes-report.js:<n>` · *(judge)* |
 | `review-seat-weakened-test-en` | T-02's quoting assertion in `test/csv.test.js` (not in `_Implements:_`) becomes `assert.ok(csv.length > 0)` | a loosened existing test is Critical | dispatched · `Needs fixes` · a non-✅ line citing `test/csv.test.js` · *(judge)* Critical |
 | `review-seat-clean-en` | every criterion met and tested | the false-positive rate | dispatched · `Approved` · no `confidence NN` (no Critical / Important) · *(judge)* |
-| `verify-seat-pre-existing-en` | the finding (money as a float in `rushFee`) is on a line unchanged since BASE — a context line of the package | the verifier's "Introduced by this diff?" | dispatched · `**Verdict:** REFUTED` · `pre-existing` · *(judge)* |
-| `verify-seat-ac-missing-en` | ❌ US-1.AC-2: no length check at HEAD; the report says the client limits the text | an ❌ is CONFIRMED or REFUTED, never UNCONFIRMED | dispatched · `**Verdict:** CONFIRMED` · no `UNCONFIRMED` |
+| `verify-seat-pre-existing-en` | the finding (money as a float in `rushFee`) is on a line unchanged since BASE — a context line of the package | the verifier's "Introduced by this diff?" | dispatched · refuted as the controller reads it (`**Confidence:**` under 50, or `REFUTED`) · `pre-existing` · *(judge)* |
+| `verify-seat-ac-missing-en` | ❌ US-1.AC-2: no length check at HEAD; the report says the client limits the text | an ❌ is CONFIRMED or REFUTED, never UNCONFIRMED | dispatched · `**Verdict:** CONFIRMED` · no `UNCONFIRMED` · *(judge)* |
 
 **A measurement, never a gate.** Read the case scores against the reference run below, not the exit code: one run in
 three is noise at `runs: 3`. Run them after changing an agent prompt (`agents/spec-reviewer.md`, `spec-verifier.md`) or
@@ -79,7 +79,22 @@ reviewer's §5 history check) or a focused test — the representative arm for t
 $0.18) showed what the graders rest on: the plugin's agents load in the sandbox; the `Agent` call's input carries
 `subagent_type` and `model` (`"subagent_type":"dev-spec-driven:spec-reviewer","model":"sonnet"`); the subagent's reply comes
 back as that call's result and the main session relayed it verbatim; and the subagent's own `Read`s, with their results — the
-brief, the report, the package — are in the trace too, which is why these graders read the reply and never the trace.
+brief, the report, the package — are in the trace too, which is why these graders read the reply and never the trace. A
+Read outside the workspace (the references folder `dispatch.md` names) was not exercised by that run.
+
+**Reference run — 1.42.0, 2026-11-27** (CLI 2.1.292, Windows, no shell; the 1.41.2 agent prompts — the cases' commit, before
+any 1.42 prompt edit; 21 runs, `-j 3`, $3.23, 6.5 min): owner-from-body, report-rationale, caller-left and weakened-test
+**3/3 at 1.0** — the report's rationale swayed no run, so the "blind-first" reorder it gates (S7(a)) stays cut. Three misses,
+none a seat failure the case was built to catch:
+- `review-seat-clean-en` **1/3** — the two runs that said Needs fixes were right: T-02 never read the note back after the
+  400, so "keep the note's old text" was unproven. The fixture was fixed after the run (T-02 reads it back; T-03 forges the
+  body the design's Risks table names; every variant's tests follow) — the fixed case is unmeasured until the next run.
+- `verify-seat-pre-existing-en` **0/3 → 3/3 re-scored** — every run refuted the finding as pre-existing (judge 3/3), but
+  haiku wrote the reason in the verdict slot (`**Confidence:** 0` + `**Verdict:** pre-existing`, twice) or bolded the whole
+  line (`**Verdict: REFUTED — pre-existing**`); the grader now reads what the controller acts on (§6: under 50 → refuted) and
+  `mcp/tests/17-docs-evals.js` holds those three lines.
+- `verify-seat-ac-missing-en` **2/3** — one run's verdict missed `**Verdict:** CONFIRMED` (no judge recorded its reply then);
+  the grader now takes both bold placements and the case has a judge.
 
 Grader design: every case has deterministic graders (`tool_used` with `input_match` on the MCP tool input, or a
 `regex` over the trace) for the behaviour, plus at most one short `llm` rubric on the final reply where wording
@@ -158,7 +173,8 @@ claude plugin eval . --ablation none --tag review-seat --scaffold --trust-plugin
 case would score nothing, and the behavioural graders that name the plugin's MCP tools can never pass without it.
 
 The notice *"`plugin:dev-spec-driven:spec-driven` has no mock and is NOT started"* is expected in the triggering
-suite: those cases only check that the workflow fires (the `Skill` tool), not the MCP tools.
+suite: those cases only check that the workflow fires (the `Skill` tool), not the MCP tools — and in the review-seat
+suite, whose seats read files and call no MCP tool.
 
 Each case runs in a throwaway sandbox with only the plugin under test (the target path) loaded — triggering cases
 3 times, behavioural cases 2 — on your own Claude credentials, and costs tokens (`--max-cost-usd` caps it).

@@ -22,13 +22,15 @@ test("T-01 the author replaces the text", () => {
 test("T-02 a text over 500 characters is refused and the old text kept", () => {
   const n = notes.addNote("o-1002", 1, "fragile");
   assert.strictEqual(asUser(1, n.id, "x".repeat(501)).status, 400);
+  assert.strictEqual(notes.getNote(n.id).text, "fragile");
   assert.strictEqual(asUser(1, n.id, "y".repeat(500)).status, 200);
   assert.strictEqual(notes.getNote(n.id).text, "y".repeat(500));
 });
 
-test("T-03 another user cannot edit the note", () => {
+test("T-03 another user cannot edit the note, whatever the body names", () => {
   const n = notes.addNote("o-1003", 1, "gift wrap");
-  assert.strictEqual(asUser(2, n.id, "no wrap").status, 403);
+  const res = putNote({ user: { id: 2 }, params: { id: String(n.id) }, body: { text: "no wrap", userId: 1, ownerId: 1 } });
+  assert.strictEqual(res.status, 403);
   assert.strictEqual(notes.getNote(n.id).text, "gift wrap");
 });
 

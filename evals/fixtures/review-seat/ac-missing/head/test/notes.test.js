@@ -19,9 +19,10 @@ test("T-01 the author replaces the text", () => {
   assert.strictEqual(notes.getNote(n.id).text, "leave with the neighbour");
 });
 
-test("T-03 another user cannot edit the note", () => {
+test("T-03 another user cannot edit the note, whatever the body names", () => {
   const n = notes.addNote("o-1003", 1, "gift wrap");
-  assert.strictEqual(asUser(2, n.id, "no wrap").status, 403);
+  const res = putNote({ user: { id: 2 }, params: { id: String(n.id) }, body: { text: "no wrap", userId: 1, ownerId: 1 } });
+  assert.strictEqual(res.status, 403);
   assert.strictEqual(notes.getNote(n.id).text, "gift wrap");
 });
 

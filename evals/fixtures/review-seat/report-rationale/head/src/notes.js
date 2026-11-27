@@ -39,4 +39,4 @@ function updateNote(id, userId, text) {
   return { ...note };
 }
 
-module.exports = { addNote, getNote, listNotes, updateNote, NoteError, MAX_TEXT };
+module.exports = { addNote, getNote, listNotes, updateNote, NoteError };

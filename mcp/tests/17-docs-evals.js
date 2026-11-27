@@ -217,6 +217,29 @@ exports.run = async ({ ok, all, skip, S, root, tmp, require }) => {
       `1.42 (S2): ${seats.length} review-seat cases — each dispatches its seat (spec-reviewer on ${seatTier["spec-reviewer"]}, spec-verifier on ${seatTier["spec-verifier"]}: the Model selection rows) and relays it, read-only tools, runs 3, a one-line \`review_seat <variant>\` fixture, ONE Agent grader naming a real agent, regex graders on the reply that match none of the case's inputs, its seeded premise on the overlay files; the README lists each, the tag and "a measurement, never a gate"` +
       (seatProblems.length ? " — " + seatProblems.join(" · ") : ""));
 
+    // 1.42 (S2, the reference run — the 1.21 F3 rule: a grader that failed a right answer gets that answer as a fixture): the
+    // verifier on haiku refuted the pre-existing finding 3 times of 3 (its judge PASS 3/3) but never wrote `**Verdict:** REFUTED`
+    // — twice `**Confidence:** 0` with the reason in the verdict slot, once the whole line bold. The refutation grader reads what
+    // the controller acts on (§6: under 50 → refuted, or the verdict word) and matches those three recorded lines, never a
+    // confirmation, an unconfirmed one or the output template; the ❌ case's CONFIRMED grader takes both bold placements, never
+    // the template's `CONFIRMED (80+) | UNCONFIRMED (50–79) | …` line.
+    const seatGrader = (c, g) => { const gfm = front(readEv(c, "graders", g)); try { return new RegExp(yamlQuoted(gfm, "pattern"), (gfm.match(/^flags:\s*(\S+)\s*$/m) || [])[1] || ""); } catch { return null; } };
+    const refutedRe = seatGrader("verify-seat-pre-existing-en", "verdict.md"), confirmedRe = seatGrader("verify-seat-ac-missing-en", "verdict.md");
+    const verifierTemplate = (fs.readFileSync(path.join(root, "agents", "spec-verifier.md"), "utf8").match(/^\*\*Verdict:\*\* CONFIRMED \(80\+\) \|.*$/m) || [""])[0];
+    const refRecorded = [
+      "**Confidence:** 0\n\n**Verdict:** pre-existing — rushFee was not introduced by this diff; the diff shows it unchanged from BASE. This finding concerns code outside the scope of task 1 and not part of the diff's changes. Never a finding.",
+      "**Verdict: REFUTED — pre-existing**",
+      "**Confidence:** 0\n**Verdict:** PRE-EXISTING (not in diff's changed lines)",
+    ];
+    const notRefuted = ["**Confidence:** 85\n**Verdict:** CONFIRMED (80+) — introduced by this diff", "**Confidence:** 60\n**Verdict:** UNCONFIRMED (50–79)", "**Confidence:** 100\n**Verdict:** CONFIRMED", verifierTemplate];
+    all("1.42 (S2, reference run): the verifier's recorded refutations pass the pre-existing case's grader (3 of 3 right replies, none in the template's form) and no confirmation does; the ❌ case's CONFIRMED grader takes both bold placements and never the output template", {
+      template: verifierTemplate.length > 60,
+      recordedRefutations: !!refutedRe && refRecorded.every((r) => refutedRe.test(r)),
+      notARefutation: !!refutedRe && !notRefuted.some((r) => refutedRe.test(r)),
+      confirmedBothForms: !!confirmedRe && ["**Verdict:** CONFIRMED", "**Verdict: CONFIRMED**", "**Verdict:** CONFIRMED — nothing refuses a 501-character text"].every((r) => confirmedRe.test(r)),
+      confirmedNotOthers: !!confirmedRe && !["**Verdict:** UNCONFIRMED (50–79)", "**Verdict:** REFUTED — src/notes.js:40 refuses it", verifierTemplate].some((r) => confirmedRe.test(r)),
+    });
+
     // Build every fixture exactly as `claude plugin eval --scaffold` does (bash, cwd = an empty workspace) and check the
     // premise each case relies on. Needs bash (Git Bash on Windows, like the eval harness); skipped without it.
     const bashBin = (process.platform === "win32"

@@ -11,6 +11,7 @@
 
 ## Tests run
 - `node --test test/notes.test.js` — 4 tests (T-01, T-03, T-04 plus the existing store test).
+- `node --test` — the whole suite, 10 tests, exit 0: everything that was green stays green.
 
 ## Verification evidence
 - `node --test test/notes.test.js` — exit 0

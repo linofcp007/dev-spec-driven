@@ -22,6 +22,7 @@ test("T-01 the author replaces the text", () => {
 test("T-02 a text over 500 characters is refused and the old text kept", () => {
   const n = notes.addNote("o-1002", 1, "fragile");
   assert.strictEqual(asUser(1, n.id, "x".repeat(501)).status, 400);
+  assert.strictEqual(notes.getNote(n.id).text, "fragile");
   assert.strictEqual(asUser(1, n.id, "y".repeat(500)).status, 200);
   assert.strictEqual(notes.getNote(n.id).text, "y".repeat(500));
 });
