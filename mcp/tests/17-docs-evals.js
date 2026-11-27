@@ -167,9 +167,11 @@ exports.run = async ({ ok, all, skip, S, root, tmp, require }) => {
     };
     // The texts a seat's session can be shown: the prompt (its body — the front matter never reaches the agent), the report,
     // the finding, every overlay file and the spec — a grader that matches one would pass on an echo or a relay of an input,
-    // never on the seat's own judgement.
+    // never on the seat's own judgement. And the seat's OWN agent prompt (fix round 1, R1-PROMPTS-06): its output template is
+    // the text a reply most readily echoes (the verifier's `— pre-existing | not in the diff | …` verdict list).
     const promptBody = (c) => readEv(c, "prompt.md").split(/^---\r?$/m).slice(2).join("---");
-    const seatInputs = (c) => { const { variant } = seatOf(c); return [promptBody(c), seatFile(variant, "implementer.md"), seatFile(variant, "finding.md")].filter((t) => t != null)
+    const seatAgentPrompt = (c) => { const { agent } = seatOf(c); const f = agent && path.join(root, "agents", agent + ".md"); return f && fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null; };
+    const seatInputs = (c) => { const { variant } = seatOf(c); return [promptBody(c), seatFile(variant, "implementer.md"), seatFile(variant, "finding.md"), seatAgentPrompt(c)].filter((t) => t != null)
       .concat(walkTexts(path.join(seatRoot, variant, "base")), walkTexts(path.join(seatRoot, variant, "head")), walkTexts(path.join(seatRoot, "base")), walkTexts(path.join(seatRoot, "spec"))); };
     // Its regex graders that pass when the pattern IS found (a `not_contains` grader passes on silence by construction).
     const seatFinders = (c) => fs.readdirSync(path.join(evDir, c, "graders")).filter((g) => g.endsWith(".md")).map((g) => [g, front(readEv(c, "graders", g))])
@@ -214,7 +216,7 @@ exports.run = async ({ ok, all, skip, S, root, tmp, require }) => {
     }
     ok(seats.length >= 7 && seats.length === Object.keys(seatPremise).length && !seatProblems.length && evReadme.includes("| `review-seat` |") &&
       /\bA measurement, never a gate\b/i.test(evReadme.replace(/\s+/g, " ")) && Object.values(seatTier).every((t) => /^(?:haiku|sonnet|opus)$/.test(t)),
-      `1.42 (S2): ${seats.length} review-seat cases — each dispatches its seat (spec-reviewer on ${seatTier["spec-reviewer"]}, spec-verifier on ${seatTier["spec-verifier"]}: the Model selection rows) and relays it, read-only tools, runs 3, a one-line \`review_seat <variant>\` fixture, ONE Agent grader naming a real agent, regex graders on the reply that match none of the case's inputs, its seeded premise on the overlay files; the README lists each, the tag and "a measurement, never a gate"` +
+      `1.42 (S2): ${seats.length} review-seat cases — each dispatches its seat (spec-reviewer on ${seatTier["spec-reviewer"]}, spec-verifier on ${seatTier["spec-verifier"]}: the Model selection rows) and relays it, read-only tools, runs 3, a one-line \`review_seat <variant>\` fixture, ONE Agent grader naming a real agent, regex graders on the reply that match none of the case's inputs nor the seat's own agent prompt, its seeded premise on the overlay files; the README lists each, the tag and "a measurement, never a gate"` +
       (seatProblems.length ? " — " + seatProblems.join(" · ") : ""));
 
     // 1.42 (S2, the reference run — the 1.21 F3 rule: a grader that failed a right answer gets that answer as a fixture): the
@@ -225,6 +227,7 @@ exports.run = async ({ ok, all, skip, S, root, tmp, require }) => {
     // the template's `CONFIRMED (80+) | UNCONFIRMED (50–79) | …` line.
     const seatGrader = (c, g) => { if (!fs.existsSync(path.join(evDir, c, "graders", g))) return null; const gfm = front(readEv(c, "graders", g)); try { return new RegExp(yamlQuoted(gfm, "pattern"), (gfm.match(/^flags:\s*(\S+)\s*$/m) || [])[1] || ""); } catch { return null; } };
     const refutedRe = seatGrader("verify-seat-pre-existing-en", "verdict.md"), confirmedRe = seatGrader("verify-seat-ac-missing-en", "verdict.md");
+    const preExistingRe = seatGrader("verify-seat-pre-existing-en", "pre-existing.md");
     const verifierTemplate = (fs.readFileSync(path.join(root, "agents", "spec-verifier.md"), "utf8").match(/^\*\*Verdict:\*\* CONFIRMED \(80\+\) \|.*$/m) || [""])[0];
     const refRecorded = [
       "**Confidence:** 0\n\n**Verdict:** pre-existing — rushFee was not introduced by this diff; the diff shows it unchanged from BASE. This finding concerns code outside the scope of task 1 and not part of the diff's changes. Never a finding.",
@@ -232,10 +235,14 @@ exports.run = async ({ ok, all, skip, S, root, tmp, require }) => {
       "**Confidence:** 0\n**Verdict:** PRE-EXISTING (not in diff's changed lines)",
     ];
     const notRefuted = ["**Confidence:** 85\n**Verdict:** CONFIRMED (80+) — introduced by this diff", "**Confidence:** 60\n**Verdict:** UNCONFIRMED (50–79)", "**Confidence:** 100\n**Verdict:** CONFIRMED", verifierTemplate];
-    all("1.42 (S2, reference run): the verifier's recorded refutations pass the pre-existing case's grader (3 of 3 right replies, none in the template's form) and no confirmation does; the ❌ case's CONFIRMED grader takes both bold placements and never the output template", {
+    all("1.42 (S2, reference run): the verifier's recorded refutations pass the pre-existing case's graders (3 of 3 right replies, none in the template's form; its pre-existing grader never on the template's verdict list) and no confirmation does; the ❌ case's CONFIRMED grader takes both bold placements and never the output template", {
       template: verifierTemplate.length > 60,
       recordedRefutations: !!refutedRe && refRecorded.every((r) => refutedRe.test(r)),
       notARefutation: !!refutedRe && !notRefuted.some((r) => refutedRe.test(r)),
+      // (fix round 1, R1-PROMPTS-06) the pre-existing grader reads the reason on the verdict or "Introduced by this diff:" line —
+      // the three recorded right replies pass it, a reply that says it on the introduced line too, never the output template
+      preExistingRecorded: !!preExistingRe && refRecorded.concat(["- Introduced by this diff: no — pre-existing, unchanged since BASE\n**Verdict:** REFUTED (under 50)"]).every((r) => preExistingRe.test(r)) &&
+        !preExistingRe.test(verifierTemplate) && !preExistingRe.test("**Verdict:** REFUTED (under 50) — not in the diff"),
       confirmedBothForms: !!confirmedRe && ["**Verdict:** CONFIRMED", "**Verdict: CONFIRMED**", "**Verdict:** CONFIRMED — nothing refuses a 501-character text"].every((r) => confirmedRe.test(r)),
       confirmedNotOthers: !!confirmedRe && !["**Verdict:** UNCONFIRMED (50–79)", "**Verdict:** REFUTED — src/notes.js:40 refuses it", verifierTemplate].some((r) => confirmedRe.test(r)),
     });
