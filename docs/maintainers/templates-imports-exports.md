@@ -126,12 +126,30 @@ is in History at the end.
   FR-n, NFR-n; stories (a story file wins over the PRD's copy) → US-n with their ACs; Tasks and Subtasks → `[USn]` tasks,
   `(AC: 1, 3)` → `_Requirements:_` (an uncited nested unit inherits its parent's); architecture and Dev Notes →
   design.md. One story file imports one story.
-- **`spec-kit`** — scenarios: numbered items, else bullets only under an explicit "Acceptance Scenarios" label.
-  `specKitTaskMarkers()` adds the `_Requirements: US<n>_` and `_Implements:_` sub-lines a task lacks.
-  `specKitDesignDocs()` appends research.md, data-model.md, contracts/ and quickstart.md to plan.md under localized,
-  demoted headings (`importSpec.skDocs`, `demoteMd`); a non-markdown contract is fenced (`SPECKIT_CONTRACT_EXT`); at most
-  `SPECKIT_CONTRACTS_MAX` contracts, two levels deep, the rest named in the "not imported" warning; no plan.md →
-  `wNoPlanDocs`.
+- **`spec-kit`** — scenarios: numbered items, else bullets only under an explicit "Acceptance Scenarios" label. The
+  folder's number is stripped once: `001-` or Spec Kit's `--timestamp` `YYYYMMDD-HHMMSS-`.
+  `specKitTaskMarkers()` adds the `_Requirements:_` and `_Implements:_` sub-lines a task lacks: its `[USn]` tag, then a
+  /converge ref (`convergeRef()`: from the line's end, the token after "per" — `US<n>[/AC<m>]`, `FR-n`, `SC-n` — when the
+  gap type is absent or one of `CONVERGE_COVERS`, an inclusion list: `unrequested` or an unknown type claims nothing).
+  `specKitDesignDocs()` appends research.md, data-model.md and contracts/ to plan.md under localized, demoted headings
+  (`importSpec.skDocs`, `demoteMd`); a non-markdown contract is fenced (`SPECKIT_CONTRACT_EXT`, its fence one longer than
+  its longest backtick run, by a loop); at most `SPECKIT_CONTRACTS_MAX` contracts, two levels deep, the rest — a deeper
+  folder too — named in the "not imported" warning; no plan.md → `wNoPlanDocs`. quickstart.md is the feature's
+  quickstart.md (`model.quickstart`, our title line): trace reads an SC's coverage there — it replaces a project template's
+  quickstart as requirements / design / tasks are replaced (the test plan keeps the team's), and an SC named only there no
+  longer draws doctor's `secondary-trace` warn about design.md. plan.md: `specKitPlanMarkers()` turns a `**Field**:` value
+  that opens with a bare NEEDS CLARIFICATION into `[NEEDS CLARIFICATION: Field]` (the tail kept after it), on a line
+  `codeBlockLines` / `commentLines` call content — a field research.md resolved still reads open (fail closed).
+  **FRs:** `specKitFrCriteria()` — a definition item (`RE_FR_DEF`, the id ending there: FR-1.1 / FR-001a define nothing; the
+  first item per id) that `frCovered()` (the ONE coverage rule: a scenario cites it — `citesFr` — or holds every content
+  word) says no scenario covers becomes an EARS criterion (`earsThen` "en", `(FR-n)` appended) of ONE synthetic story,
+  numbered after the source's, title `importSpec.functional`, reachable by no reference the source wrote (`storyNo` skips it;
+  `refs()` refuses a `US-<its n>.AC-m`); `model.frKeys` → importRun's `frRefs`: a task's `FR-n` resolves to the criteria
+  holding it, for every importer, else `wUnknownRef`. What stays prose gets the parent's `wUncoveredFr` (`uncoveredFrs`
+  over the lines left). `counts.stories` counts the synthetic story. **What the import leaves:** `specKitLeft()` names
+  every entry of the folder but a hidden one, a `SPECKIT_KNOWN` name and the case twin of one whose read / listing reached
+  it (the decision follows the read); the exact-name rule hides a known name of the wrong kind (a FOLDER plan.md, a FILE
+  contracts). The one `wSkipped` writer shows `IMPORT_SKIPPED_SHOWN` names, then `importSpec.more`.
 - **`fluidplan`** — `.fluidplan/<id>/` (plan.json, PLAN.md, DECISIONS.md, also at the `output` / `outputDir` paths —
   `fpConfig`) or PLAN.md inline; the finalized PLAN.md and DECISIONS.md win, plan.json and answers.json fill in or stand
   alone (`fpFromPlanJson`). Pages → stories, acceptance → criteria, files → `_Implements:_` (a delete → "To delete"),
@@ -363,6 +381,23 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   must hold a `.specs/`. Scan: `tests/app.py` was a "python" entrypoint (`entryKind` reaches depth 2); any code file naming
   `@SpringBootApplication` (a JS string, a Python comment) was a "spring boot" one; a package.json with no dependency read
   "node ()".
+- **1.42 — spec-kit, brought to Spec Kit 1.4** (v1.4.5's templates and commands read). The import warned for the FRs no
+  scenario covers (not every FR: one a scenario's words hold was always accepted) and left them prose; `_Requirements: FR-n_`
+  passed refs() unchecked while trace ignored it — SK-03 converts exactly those FRs, decided per definition item (a second
+  reader of the id, as first drafted, garbled `**FR-1.1**:` into a criterion and silenced `FR-001a`: one reader, one rule). A
+  `--timestamp` folder slugged as `101500-photo-albums` (SK-04; a `nameFallback` change would have done nothing: the folder
+  name IS the hint). quickstart.md went into design.md and left the template, so doctor read "SC-001 no test or quickstart
+  step" (SK-05). plan.md's bare NEEDS CLARIFICATION passed the design gate (SK-06). /converge's `per <ref>` tasks had no
+  marker (SK-07, an inclusion list: an exclusion of `unrequested` alone fails open on any type Spec Kit adds). A deep
+  `contracts/v1/schemas/`, `checklists/`, a note were dropped with no warning (SK-01). The `specs/` refusal says what a
+  feature folder is (SK-10). Linear and throw-free: a contract's `t.replace(/\s+$/, "")` (39 s at 200,000 blanks) and its
+  `Math.max(...runs)` (RangeError at 300,000 backtick runs) — CRI-1; the FR line's and the task line's regexes (a blank run
+  meeting a U+2028: ~34 s at 200,000) and the citation pattern built from the id ("Regular expression too large" past ~50,000
+  digits) — CRI-2, each scan checked equal to its regex on every short line. Cut, prose instead: copying `checklists/` into
+  checklist.md (no reader of it), a `spec-kit-memory` steering tool (a per-tool hidden folder in the read gate for one file;
+  the copy path works end to end — brownfield.md), stripping tasks.md's front matter (a fourth front-matter reader for a
+  cosmetic stray heading), the Q→A log as decisions, the bug / assess extensions, a synthetic trade-offs section, test-plan
+  Covers cells from `[USn]`, a shared fence / comment line walker (one user left).
 
 ### Stakeholder export and release notes
 - **1.14** — `spec_export`: one offline HTML / md document (roadmap palette, light / dark + toggle, print rules).

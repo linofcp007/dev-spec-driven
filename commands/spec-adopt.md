@@ -21,6 +21,7 @@ Args: $ARGUMENTS — the brownfield flow: `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec
   spec-kit · openspec · plan · execplan · bmad · fluidplan become a NEW feature (`mapping` old → new IDs, `warnings`);
   kiro-steering · cursor-rules become steering files. `dryRun: true` previews it. A plan outside the project (plan mode's
   `~/.claude/plans`) goes as `text`. Then treat it as a new feature: confirm its tracks, `spec_clarify`, the gates —
-  imported ticks are no evidence.
+  imported ticks are no evidence. Spec Kit: one `specs/<nnn-name>/` folder per import; its filled constitution
+  (`.specify/memory/constitution.md`, never read) is copied by hand over `.specs/steering/constitution.md`.
 
 Respond in the user's language (EN / PT / ES).
