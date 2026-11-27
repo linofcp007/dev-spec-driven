@@ -547,6 +547,20 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       bothLibcs: () => /-alpine\b/.test(images) && /-(?:bookworm|trixie)(?:-slim)?\b/.test(images),
       jobs: () => badJobs.status === 2 && /--jobs needs a whole number >= 1/.test(badJobs.stderr) && /--jobs <n>/.test(help.stdout) && /\.\.\.jobs/.test(src),
     });
+    // 1.42 R10: --alias-tmp, OPT-IN — each suite's TMPDIR behind a symlink made in the container (/tmp/alias-tmp → /tmp/real-tmp: every
+    // test project's path an alias of its real one, as macOS's /var → /private/var), copied or mounted; without the flag the
+    // command is the plain one (the default flips only after a clean run of both suites under it, on the integrated branch)
+    const TD = require(dockerJs);
+    const cmdOf = (args, suite = "mcp") => TD.suiteCommand(suite, TD.parseArgs(args)).join(" ");
+    const plain = cmdOf([]), aliased = cmdOf(["--alias-tmp"]), mounted = cmdOf(["--mounted", "--alias-tmp"]), mountedPlain = cmdOf(["--mounted"]);
+    all("1.42 R10: test-docker's --alias-tmp (opt-in) runs each suite with TMPDIR behind a symlink to the real temp folder — copied or mounted —, --help names it, and without it the container's command is the plain one (got " +
+      JSON.stringify({ plain, aliased, mounted, mountedPlain }) + ")", {
+      help: () => /--alias-tmp/.test(help.stdout),
+      optIn: () => TD.parseArgs([]).aliasTmp === false && !/alias-tmp|TMPDIR/.test(plain) && !/alias-tmp|TMPDIR/.test(mountedPlain) && mountedPlain === "node mcp/test.js",
+      aliased: () => aliased.startsWith("sh -c " + TD.ALIAS_TMP) && aliased.endsWith(plain.replace(/^sh -c /, "")) && /ln -sfn \/tmp\/real-tmp \/tmp\/alias-tmp/.test(aliased) && /export TMPDIR=\/tmp\/alias-tmp && /.test(aliased),
+      mounted: () => mounted === "sh -c " + TD.ALIAS_TMP + "exec node mcp/test.js",
+      jobs: () => cmdOf(["--alias-tmp", "--jobs", "4"], "cli").endsWith("exec node cli/test-cli.js --jobs 4"),
+    });
   }
 
   // 1.17: no regex literal lost its backslashes (a heredoc'd edit once turned /^\s*status\s*:/i into /^s*statuss*:/i in
