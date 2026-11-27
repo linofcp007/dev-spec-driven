@@ -333,15 +333,16 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       "T045 Remove the debug album export per Constitution I (unrequested)", "T046 Remove the extra export per US3/AC1 (unrequested)", "T047 Per US1 rules, add an audit log in src/a.ts",
       "T048 [US3] Rate-limit shares per FR-004 (partial)", "T049 Fix the album link per US-1/AC-1", "T050 Cap uploads per FR-004.", "T051 Split exports per FR-004, FR-001 (missing)",
       "T052 Wire creation per FR-001 (missing)", "T053 Tidy per US1/AC1 (optional)", "T054 Re-check per US1/AC1 (drift)", "T055 Share per US3/AC1 (contradicts)",
-      "T056 Ghost per US4/AC1 (missing)", "T057 Notes per FR-004 (see notes)"];
+      "T056 Ghost per US4/AC1 (missing)", "T057 Notes per FR-004 (see notes)", "T059 Glued per FR-004(missing)"];
     put(path.join(k, "tasks.md"), "# Tasks: Converge\n\n## Phase 5: Convergence\n\n" + lines.map((l) => "- [ ] " + l + "\n").join("") + "- [ ] T058 Own per FR-004 (missing)\n  - _Requirements: US1_\n");
     const r = S.importSpec(p, "spec-kit", "specs/005-converge", {});
     const tasks = r.ok ? rd(r.dir, "tasks.md") : "";
     const req = (n) => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === n) || { lines: [] }).requirements;
-    const got = Array.from({ length: 17 }, (_, i) => req(i + 1));
+    const got = Array.from({ length: 18 }, (_, i) => req(i + 1));
     const W = S.msg("en").importSpec;
-    const want = [["US-4.AC-1"], ["US-1.AC-2"], ["SC-002"], [], [], [], ["US-3.AC-1", "US-4.AC-1"], ["US-1.AC-1"], ["US-4.AC-1"], [], ["FR-001"], [], [], ["US-3.AC-1"], ["US4/AC1"], [], ["US-1.AC-1", "US-1.AC-2"]];
-    all("1.42 SK-07: a /converge task's `per <ref> (<type>)` becomes its _Requirements:_ (after its [USn] tag) for none / missing / partial / contradicts — FR-004 → its FR criterion US-4.AC-1, US1/AC2 and US-1/AC-1 by the parser's keys, US3/AC1 → the story printed 3, SC-002 as written; unrequested / optional / drift / '(see notes)' / two refs / a mid-text 'Per' claim nothing; FR-001 (covered by words, no criterion) and US4/AC1 (the FR story) are reported; a task's own _Requirements:_ kept (got " +
+    const want = [["US-4.AC-1"], ["US-1.AC-2"], ["SC-002"], [], [], [], ["US-3.AC-1", "US-4.AC-1"], ["US-1.AC-1"], ["US-4.AC-1"], [], ["FR-001"], [], [], ["US-3.AC-1"], ["US4/AC1"], [], [],
+      ["US-1.AC-1", "US-1.AC-2"]];
+    all("1.42 SK-07: a /converge task's `per <ref> (<type>)` becomes its _Requirements:_ (after its [USn] tag) for none / missing / partial / contradicts — FR-004 → its FR criterion US-4.AC-1, US1/AC2 and US-1/AC-1 by the parser's keys, US3/AC1 → the story printed 3, SC-002 as written; unrequested / optional / drift / '(see notes)' / a type glued to the ref / two refs / a mid-text 'Per' claim nothing; FR-001 (covered by words, no criterion) and US4/AC1 (the FR story) are reported; a task's own _Requirements:_ kept (got " +
       js(got) + ")", [
       () => r.ok, () => js(got) === js(want), () => r.warnings.includes(W.wUnknownRef(11, "FR-001")), () => r.warnings.includes(W.wUnknownRef(15, "US4/AC1")),
       () => r.mapping["User Story 3"] === "US-3" && r.mapping["Functional Requirements"] === "US-4", () => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === 6)).implements.includes("src/a.ts"),
