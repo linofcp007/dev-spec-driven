@@ -6,7 +6,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 // 1.14 full review (Ga) — evidence, project checks, CLI runs.
-exports.run = async ({ ok, all, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
   const Sga = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const jsonGa = (s) => { try { return JSON.parse(s); } catch { return null; } };
   const rga = (proj, args, env) => { // in-process (1.27), but a --run — it waits for its commands: spawned
@@ -40,7 +40,7 @@ exports.run = async ({ ok, all, spawnIn, spawnAsync, tmp, CLI, require, __dirnam
     ok(fin && fc.unit && fc.unit.exitCode === 0 && /failed: 0/.test(fc.unit.summary || "") && fc.unit.observed === "cli" && fc.lint && fc.lint.exitCode === 4,
       "1.21.1 languages: finish --run --shell pwsh runs each project check under PowerShell 7 and records it — `$failed = 0; … exit $failed` → exit 0, `exit 4` → exit 4 (got " +
       JSON.stringify([fc.unit, fc.lint && fc.lint.exitCode]).slice(0, 400) + ")");
-  } else ok(true, "1.21.1 languages: finish --run --shell pwsh — skipped: pwsh is not installed here");
+  } else skip("1.21.1 languages: finish --run --shell pwsh", "pwsh is not installed here");
 
   // 1.22 review (finding 11) — `done --run` / `finish --run` stamped `at`, the verify stamp and the code stamp AFTER the run: an edit
   // made while a long run went on read as tested. Now they are taken before it runs.

@@ -7,7 +7,7 @@ const { spawnSync } = require("child_process");
 
 // 1.30 (review 8, ds-maint 2): split from 09-evidence-done-run.js by topic — the one file ran 37 `done --run` processes in a row
 // (the CLI suite's critical path, ~55 s).
-exports.run = async ({ ok, run, runIn, tmp, CLI, runAsync }) => {
+exports.run = async ({ ok, skip, run, runIn, tmp, CLI, runAsync }) => {
 // 1.21.1 languages: PowerShell as the run shell — --shell pwsh / powershell and DEV_SPEC_SHELL=pwsh run the _Verify:_ as
 // `<shell> -NoProfile -NonInteractive -Command <cmd>` (the exit code propagates, `$` is PowerShell's); under the default cmd.exe
 // a `pwsh -NoProfile -Command "…; exit $LASTEXITCODE"` _Verify:_ runs (1.21.0 refused it as POSIX syntax) while a single-quoted
@@ -37,7 +37,7 @@ if (hasPwsh) {
     r3.status === 1 && /'Invoke-NoSuchCmdletDsd' is not recognized as a name of a cmdlet/.test(r3.stdout + r3.stderr) && /no red test/.test(r3.stdout + r3.stderr) && !ev["3"] && /- \[ \] 3\./.test(lpRead()),
     "1.21.1 languages: done --run --shell pwsh runs the _Verify:_ under PowerShell 7 — `$n = 0; … exit $n` passes (verified, observed: cli), `exit 3` is recorded as exit 3; with DEV_SPEC_SHELL=pwsh an _Expect: fail_ run of an unknown cmdlet is no red test (nothing recorded) (got " +
     JSON.stringify([r1.out.slice(0, 120), r2.out.slice(0, 120), (r3.stdout + r3.stderr).slice(0, 200)]) + ")");
-} else ok(true, "1.21.1 languages: done --run --shell pwsh — skipped: pwsh is not installed here");
+} else skip("1.21.1 languages: done --run --shell pwsh", "pwsh is not installed here");
 if (process.platform === "win32" && hasPwsh) {
   const r4 = (await runAsync(["done", "pwsh", "4", "--run", "--project", lp]));
   const r5 = (await runAsync(["done", "pwsh", "5", "--run", "--project", lp]));
@@ -47,12 +47,12 @@ if (process.platform === "win32" && hasPwsh) {
     r6.code === 1 && /uses POSIX shell syntax \(single quotes/.test(r6.out) && /--shell pwsh for a PowerShell command/.test(r6.out) && !ev["6"],
     "1.21.1 languages (Windows): under the default cmd.exe, `pwsh -NoProfile -Command \"node … ; exit $LASTEXITCODE\"` runs — exit 0 verifies, exit 5 is recorded as 5 (no cmd.exe hint); `pwsh -c '…'` is refused before anything runs, naming --shell pwsh (got " +
     JSON.stringify([r4.out.slice(0, 160), r5.out.slice(0, 160), r6.out.slice(0, 120)]) + ")");
-} else ok(true, "1.21.1 languages: a pwsh -Command _Verify:_ under cmd.exe — skipped: Windows with pwsh only");
+} else skip("1.21.1 languages: a pwsh -Command _Verify:_ under cmd.exe", "Windows with pwsh only");
 if (hasWinPs) {
   const r7 = (await runAsync(["done", "pwsh", "7", "--run", "--shell", "powershell", "--project", lp]));
   ok(r7.code === 0 && /Task 7 done \(verified\)/.test(r7.out) && lpEv()["7"].exitCode === 0,
     "1.21.1 languages: done --run --shell powershell runs the _Verify:_ under Windows PowerShell 5.1 (PSEdition Desktop → exit 0) (got " + r7.out.slice(0, 160) + ")");
-} else ok(true, "1.21.1 languages: done --run --shell powershell — skipped: Windows PowerShell only");
+} else skip("1.21.1 languages: done --run --shell powershell", "Windows PowerShell only");
 
 // 1.21.1 languages (review) — a POSIX shell (/bin/sh off Windows, --shell bash = Git Bash on it) expands `$LASTEXITCODE` in a
 // double-quoted pwsh script BEFORE pwsh starts: `exit $LASTEXITCODE` became a bare `exit` → 0, a failing check recorded as
@@ -70,7 +70,7 @@ const rpEv = () => { try { return JSON.parse(fs.readFileSync(path.join(rp, ".spe
 const posixArgs = process.platform === "win32" ? ["--shell", "bash"] : [];
 const rq1 = (await runAsync(["done", "posix", "1", "--run", ...posixArgs, "--project", rp]));
 const rqf = (await runAsync(["finish", "posix", "--run", ...posixArgs, "--project", rp]));
-if (/no Git Bash was found/.test(rq1.out)) ok(true, "1.21.1 languages (review): a pwsh script under a POSIX shell — skipped: no Git Bash on this Windows machine");
+if (/no Git Bash was found/.test(rq1.out)) skip("1.21.1 languages (review): a pwsh script under a POSIX shell", "no Git Bash on this Windows machine");
 else {
   const rqState = JSON.parse(fs.readFileSync(path.join(rp, ".specs", "posix", ".state.json"), "utf8"));
   ok(rq1.code === 1 && /hands PowerShell a script holding \$VARIABLES outside single quotes, but a POSIX shell/.test(rq1.out) && /--shell pwsh/.test(rq1.out) && !/^\$ pwsh/m.test(rq1.out) &&
@@ -81,7 +81,7 @@ else {
     const rq2 = (await runAsync(["done", "posix", "2", "--run", ...posixArgs, "--project", rp]));
     ok(rq2.code === 1 && rpEv()["2"] && rpEv()["2"].exitCode === 3,
       "1.21.1 languages (review): the single-quoted `pwsh -NoProfile -Command '…; exit $LASTEXITCODE'` runs under the POSIX shell as written — exit 3 recorded as 3 (got " + JSON.stringify([rq2.out.slice(0, 200), rpEv()["2"]]) + ")");
-  } else ok(true, "1.21.1 languages (review): a single-quoted pwsh script under a POSIX shell — skipped: pwsh is not installed here");
+  } else skip("1.21.1 languages (review): a single-quoted pwsh script under a POSIX shell", "pwsh is not installed here");
 }
 // A Pester 5 run whose Describe-level BeforeAll failed (printed by a stand-in: the suite has no Pester) is no red test; a throw
 // inside It is. Colour codes as pwsh 7 writes them.
@@ -108,7 +108,7 @@ if (hasWinPs) {
   ok(rq5.code === 1 && rq5j && rq5j.couldNotRun === "pwsh" && /PowerShell could not parse/.test(rq5j.error) && /not a valid statement separator/.test(rq5j.error) && !rpEv()["5"],
     "1.21.1 languages (review): done --run --shell powershell on an _Expect: fail_ task whose `a && b` Windows PowerShell 5.1 can't parse is no red test (couldNotRun: pwsh, nothing recorded) (got " +
     JSON.stringify([rq5.code, rq5j && rq5j.couldNotRun, rq5j && (rq5j.error || "").slice(0, 200)]) + ")");
-} else ok(true, "1.21.1 languages (review): a Windows PowerShell 5.1 parse error — skipped: Windows PowerShell only");
+} else skip("1.21.1 languages (review): a Windows PowerShell 5.1 parse error", "Windows PowerShell only");
 
 // 1.21.1 languages (review 2) — a real red Pester run where ANOTHER block's BeforeAll failed (Pester 6's output, printed by a
 // stand-in): the output showed the run, but the summary done --run stores dropped "[-] Greeter.T-01 … 121ms" and kept "[-]

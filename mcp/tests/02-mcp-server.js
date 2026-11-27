@@ -15,7 +15,7 @@ const TOOLS_LIST_CAP = 45000;
 
 exports.handshake = true; // this file counts the handshake's assertions — every other process runs it muted
 exports.run = async ({
-  ok, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename, hookIn,
+  ok, skip, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename, hookIn,
 }) => {
 
   { // --- 1.13 WP3: robustness — MCP argument validation, prototype keys, JSON shapes, depend, evals, pre-commit ---
@@ -356,7 +356,7 @@ exports.run = async ({
 
     // 7. Pre-commit: NUL-separated staged paths (accents/spaces) and named IDs.
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) {
-      console.log("  skip - git not available: pre-commit regression not run");
+      skip("pre-commit regression: NUL-separated staged paths and named IDs", "git not available");
     } else {
       const repo = path.join(tmp, "proj-wp3-git");
       fs.mkdirSync(repo, { recursive: true });
@@ -499,7 +499,7 @@ exports.run = async ({
     ok(lnkPrev.needsConfirm === true && lnkPrev.wouldDelete.files === realFiles && lnkDel.ok === true && !fs.existsSync(lnkF.dir) &&
       fs.readdirSync(lnkOut).length === 30 && fs.existsSync(path.join(w4, ".specs")),
       "remove preview does not follow symlinks/junctions (got " + lnkPrev.wouldDelete.files + " of " + realFiles + "); the delete leaves the link targets alone");
-  } else ok(true, "remove preview vs symlinks: skipped (links not creatable here)");
+  } else skip("remove preview vs symlinks", "links not creatable here");
   // With an unreadable roadmap.json the preview returns the same error the confirmed remove would — it used to
   // list what "would" be deleted and ask for confirm:true, then the confirmed call refused.
   const badRmDir = path.join(w4, "bad-roadmap");

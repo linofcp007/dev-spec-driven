@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
+exports.run = async ({ ok, skip, all, rpc, payload, S, tmp, shipFeature }) => {
 
   { // 1.14 B2.1 — stakeholder export (spec_export): ONE offline, printable document of a feature or of the whole project.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -839,7 +839,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
         /Recusei escrever/.test(i18n.msg("pt").stakeholderExport.exportsLinked("x")) && /Me niego a escribir/.test(i18n.msg("es").stakeholderExport.exportsLinked("x")),
         "1.22 review: spec_export {write} refuses a .specs/exports/ that is a junction / symlink — out of the project or not — in every format (feature and project html / md, csv, jira, linear, gherkin), nothing written through it; MCP the same; a plain folder works again (got " +
         js([rs.map((r) => [r.ok, (r.error || "").slice(0, 40)]), outFiles, inFiles, plain.ok]) + ")");
-    } else ok(true, "1.22 review: links unavailable here — the linked .specs/exports/ checks are skipped");
+    } else skip("1.22 review: the linked .specs/exports/ checks", "links unavailable here");
     // the document itself linked to a file outside (file symlinks need a privilege on Windows: skipped without it)
     const secret = path.join(tmp, "out-122-bashrc");
     fs.writeFileSync(secret, "ORIGINAL");
@@ -850,7 +850,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
       const r = S.exportSpecs(lx, { name: "billing", write: true });
       ok(!r.ok && /Refused to write \.specs\/exports\/billing\.html/.test(r.error) && fs.readFileSync(secret, "utf8") === "ORIGINAL" && fs.lstatSync(path.join(exDir, "billing.html")).isSymbolicLink(),
         "1.22 review: spec_export {write} refuses a document that is a symlink to a file outside .specs/ (the file untouched) (got " + js([r.ok, r.error]) + ")");
-    } else ok(true, "1.22 review: file symlinks unavailable here (Windows without the privilege) — skipped");
+    } else skip("1.22 review", "file symlinks unavailable here (Windows without the privilege)");
   }
 
   // 1.24 r6 G-I10: a shipped CHANGE (kind "change" — size xs, one change.md) was listed under "Added" as if it were a new feature. It
@@ -1070,7 +1070,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
       ok(!lr.ok && /a symbolic link, a junction/.test(lr.error || "") && !lpr.ok && fs.readdirSync(outDir).length === 0 &&
         prev.ok && js(prev.stale) === "[]",
         "1.25 ADR: a linked .specs/exports/adr/ refuses the write (feature and project), nothing written through it; a preview lists nothing stale through it (got " + js([lr.error, lpr.error]) + ")");
-    } else ok(true, "1.25 ADR: links unavailable here — the linked adr/ check is skipped");
+    } else skip("1.25 ADR: the linked adr/ check", "links unavailable here");
   }
 
   // The Tasks table never copies a tasks.md linked outside .specs/; the release notes' one-liners never cut an emoji.

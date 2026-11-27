@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, rpc, payload, S, tmp, list, require, __dirname }) => {
   const i18n = require("./lib/i18n.js");
   const rd = (dir, f) => fs.readFileSync(path.join(dir, f), "utf8");
   const wr = (dir, f, t) => fs.writeFileSync(path.join(dir, f), t);
@@ -440,7 +440,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     ]);
     // the pre-commit validator traces the STAGED change.md (a mirror with .state.json): a staged phantom blocks, never "traceability clean"
     const { spawnSync } = require("child_process");
-    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) console.log("  skip - git not available: 1.21 review C1 pre-commit not run");
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.21 review C1 pre-commit", "git not available");
     else {
       const repo = fresh("c1-git");
       const g = S.createFeature(repo, "Footer", undefined, "x", undefined, "en", "change");

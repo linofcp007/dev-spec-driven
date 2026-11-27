@@ -6,7 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp }) => {
+exports.run = async ({ ok, skip, all, rpc, payload, S, tmp }) => {
   const js = JSON.stringify;
   const SHA = "a".repeat(40), SHA2 = "b".repeat(40);
   const rd = (...a) => fs.readFileSync(path.join(...a), "utf8");
@@ -132,7 +132,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp }) => {
       ok(r.ok && r.branch.recorded === false && r.branch.reason === "no-git" && r.branch.name === "feature/solto" && !r.branch.command &&
         /Não há aqui um repositório git — nenhum branch foi registado/.test(r.note) && !("branch" in state(n, "solto")) && fs.existsSync(path.join(n, ".specs", "solto", "requirements.md")),
         "1.25 create --branch: outside a git repository the feature is created, nothing recorded, no command — the note says it (in the feature's language) (got " + js([r.branch, r.note]) + ")");
-    } else ok(true, "1.25 create --branch: no-git — skipped: tmp sits inside a repository");
+    } else skip("1.25 create --branch: no-git", "tmp sits inside a repository");
   }
 
   // a re-run keeps the branch the feature started on; an existing feature without one gets it; the readers name it

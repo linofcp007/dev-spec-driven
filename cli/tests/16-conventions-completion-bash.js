@@ -7,7 +7,7 @@ const { spawnSync } = require("child_process");
 const { fixture, helpers: { fwd, cleanEnv, probe } } = require("./16-conventions-completion.js");
 
 // 1.30 (review 8, ds-maint 2): 16-conventions-completion.js ran bash and PowerShell too, one process — the CLI suite's critical path (~60 s).
-exports.run = async ({ ok, runIn, tmp, CLI }) => {
+exports.run = async ({ ok, skip, runIn, tmp, CLI }) => {
   const { S, cliFwd, scripts, p, staleCli, withCli } = fixture({ runIn, tmp, CLI }, ["bash"]);
 
   // 1.25 completion: bash (Git Bash on Windows) — the script sourced, COMP_WORDS / COMP_CWORD set, the function called: commands,
@@ -15,7 +15,7 @@ exports.run = async ({ ok, runIn, tmp, CLI }) => {
   // working folder or of --project, `dev-spec` defined as a function that runs this CLI; in a plugin cache, the newest version.
   {
     const bash = probe(process.platform === "win32" ? [process.env.DEV_SPEC_TEST_BASH, "C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Program Files\\Git\\usr\\bin\\bash.exe"] : [process.env.DEV_SPEC_TEST_BASH, "bash"]);
-    if (!bash) ok(true, "1.25 completion: bash at work — skipped (no bash here; set DEV_SPEC_TEST_BASH)");
+    if (!bash) skip("1.25 completion: bash at work", "no bash here; set DEV_SPEC_TEST_BASH");
     else {
       const file = path.join(tmp, "c125-c.bash"), stale = path.join(tmp, "c125-stale.bash");
       fs.writeFileSync(file, scripts.bash.stdout);

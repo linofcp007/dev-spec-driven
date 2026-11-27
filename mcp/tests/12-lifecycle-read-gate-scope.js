@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, hookIn, cliIn, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, S, tmp, hookIn, cliIn, require, __dirname }) => {
   const js = JSON.stringify;
   const { OPERATIONS } = require("./lib/operations.js");
   const R = require("./lib/prompts-resources.js");
@@ -37,7 +37,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, cliIn, require, __dirname }) => 
   const base = path.join(tmp, "rgs");
   const outer = path.join(base, "u", ".specs"); // a folder merely NAMED .specs …
   const P = path.join(outer, "app"), PT = path.join(base, "t", "plain", "app"); // … the project below it, and its twin elsewhere
-  if (!build(P, path.join(base, "u", "store", "specs")) || !build(PT, path.join(base, "t", "store", "specs"))) { ok(true, "1.41.1 read gate scope: links not creatable here — skipped"); return; }
+  if (!build(P, path.join(base, "u", "store", "specs")) || !build(PT, path.join(base, "t", "store", "specs"))) { skip("1.41.1 read gate scope", "links not creatable here"); return; }
 
   // THE detector: a read-gate call (partKind / realDirOf / realSpecsRoot / specsWriteBlock — their lstat / realpath) on a path inside
   // the outer folder but not at or below the project's own .specs/ is a gate standing on the OUTER folder: a read whose scope recorded

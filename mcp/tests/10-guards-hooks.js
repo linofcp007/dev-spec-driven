@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
+exports.run = async ({ ok, skip, all, S, tmp, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the lexer, the candidates) — read through mcp/test.js's require
   const js = JSON.stringify;
   const BS = String.fromCharCode(92);
@@ -177,7 +177,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
   // read the report at the absolute path the reply names when it lies in the project or another checkout of its repository.
   {
     const hasGit = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
-    if (!hasGit) ok(true, "1.23 review 5 (M8): worktree-aware hooks — skipped: no git");
+    if (!hasGit) skip("1.23 review 5 (M8): worktree-aware hooks", "no git");
     else {
       const p = path.join(tmp, "r5-m8-main");
       S.initProject(p, ["core"], "en", { guard: true });

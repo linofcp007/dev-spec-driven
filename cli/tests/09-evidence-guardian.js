@@ -6,7 +6,7 @@ const path = require("path");
 const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
   const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = (v) => JSON.stringify(v);
   const json = (s) => { try { return JSON.parse(s); } catch { return null; } };
@@ -278,7 +278,7 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
       const st3 = stateOf(x).finishChecks.guardian;
       ok(st.exitCode === 0 && /\.guardian\//.test(untracked) && st.dirty === false && st3.dirty === true,
         "1.30 review 8 (C5): dev-guardian's untracked report sets under .guardian/reports/ never make a finish --run dirty — a code edit still does (got " + js([untracked, st.dirty, st3.dirty]) + ")");
-    } else ok(true, "1.30 review 8 (C5): .guardian/reports/ and the dirty flag — skipped (git is not available)");
+    } else skip("1.30 review 8 (C5): .guardian/reports/ and the dirty flag", "git is not available");
   }
 
   // 1.33: finish --run hands the launcher the feature's base in DEV_SPEC_DIFF_BASE — the branch it was created from (create --branch's
@@ -395,7 +395,7 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
         fresh: ends(rFresh.args, "refs/heads/main") && wip(rFresh, freshCheck),
         onDefault: rMain.args === PLAIN && !rMain.out.includes("weakened"),
       });
-    } else ok(true, "1.33 finish --run's diff base — skipped (git is not available)");
+    } else skip("1.33 finish --run's diff base", "git is not available");
   }
 
   // the offer (init, upgrade) and the duplication budget line (dupes) on the CLI

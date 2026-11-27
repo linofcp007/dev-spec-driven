@@ -93,7 +93,11 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   (`DEV_SPEC_TEST_CHAIN_TIMEOUT_S`) is killed with its process tree and fails — the suite never hangs on a stuck child. Each file gets its own `ok`: one it calls after its `run`
   resolved (a forgotten await) is a FAIL, "late assertion from <file>", whenever it fires — the runner lets pending timers
   run (≤ 3 s) before the total, and one fired after it prints the total again; the total is read from stdout alone (a Node
-  warning on stderr after it doesn't void the count). cli/tests/16-conventions-runner.js tests the runner on a fake suite.
+  warning on stderr after it doesn't void the count). **A check that cannot run here (1.42)** — no git, no pwsh / zsh / fish,
+  links not creatable — calls `skip(label, why)`, which every file receives beside `ok` from the runner: neither a pass nor a
+  fail, a `  skip - <label> (<why>)` line, the suite's skips summed in a `# K skipped in F file(s): <file> <n>, …` line before
+  the total (a late one is a late assertion) — never a constant-true `ok()`, which counted as a pass (mcp/tests/16-conventions.js
+  refuses one, and a hand-printed skip line, in every test file, with no allowance). cli/tests/16-conventions-runner.js tests the runner on a fake suite.
   The MCP chains today: `01-core → 17-docs` (17-docs reads
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality-fixtures`
   (re-checks of the behavioural fixtures 17-docs-evals builds under tmp — 1.30: they were 15-quality's, and the two files were the
@@ -295,8 +299,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   accepts); don't depend on a case-insensitive file system (assert the Linux counterpart where Windows/macOS fold case)
   or on the text of a V8 error (Node 18 omits a RegExp's flags in its SyntaxError). A test that RUNS PowerShell (1.21.1 —
   cli/tests/09-evidence-done-run.js: `done --run --shell pwsh`, a `pwsh -Command "…"` `_Verify:_` under cmd.exe, `--shell
-  powershell`) probes the program first (`<shell> -NoProfile -NonInteractive -Command "exit 0"` → 0) and asserts `ok(true,
-  "… skipped: …")` without it — the Docker images have no pwsh, and cmd.exe / Windows PowerShell exist only on Windows. The
+  powershell`) probes the program first (`<shell> -NoProfile -NonInteractive -Command "exit 0"` → 0) and calls `skip("…",
+  "<why>")` without it — the Docker images have no pwsh, and cmd.exe / Windows PowerShell exist only on Windows. The
   POSIX-shell refusal of a double-quoted pwsh script runs everywhere (nothing is run: /bin/sh on Linux, `--shell bash` on
   Windows — skipped without Git Bash), a Pester run is stood in for by a node script printing captured Pester output, and the
   engine-level PowerShell checks (posixShellSyntax, posixPwshScript, resolveRunShell, couldNotRunOutput / pwshParseFailure
@@ -304,7 +308,7 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   The shell completion scripts (1.25, cli/tests/16-conventions-completion.js) run the same way: bash (Git Bash on Windows,
   `DEV_SPEC_TEST_BASH`), Windows PowerShell / pwsh through TabExpansion2, zsh and fish where installed (`DEV_SPEC_TEST_ZSH`,
   `DEV_SPEC_TEST_FISH` — the Docker images have neither: `apk add zsh fish bash` in a `node:24-alpine` container runs them
-  all), each skipped with an `ok(true, "… skipped")` where it isn't.
+  all), each a `skip()` where it isn't.
 - **Eval harness** (`run-evals.js`) resolves the feature with the engine's resolver (accents, legacy slugs,
   `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1). It validates
   EVERY item (`itemProblems()`: object, `id`, `input`, a grader in contains|equals|regex|refuse|judge, a value / a regex
@@ -421,3 +425,9 @@ How the rules above came to be — grep a release here.
   and re-derived by an independent oracle (a second reader of the grammar, BigInt-scaled decimals) before the copy; three
   decimal cases read `regressed` in binary floating point and `within` exactly (120 → 122.4 at 2 %, 0.7 → 0.77 at 0.07,
   0.3 → 0.33 at 10 %).
+- **1.42** — a skip was a constant-true `ok(true, "… skipped")`, counted as a pass: 69 sites in 29 test files (plus the runner
+  test's own git skip), so a Linux container's total held the PowerShell, zsh / fish and Windows-only checks it never ran, and the
+  only skips any summary saw were the two `console.log("  skip - …")` lines test-docker.js counts. The runner owns `skip()` now
+  (scripts/test-runner.js: the optional 5th field of a file's `#file` line, the `# K skipped` line before the unchanged last
+  line), all 72 sites call it, and 16-conventions.js's guard keeps the old idiom out with no allowance — the fake suite's files
+  assert `ok(1, …)`. Each machine's total drops by its own skips.

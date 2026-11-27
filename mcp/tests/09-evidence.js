@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require, handRoadmap }) => {
+exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require, handRoadmap }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -1649,7 +1649,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
       ["cd /x && npm test", ["npm test"], false]].filter(([c, v, want]) => PV(c, v, "/r") !== want).map(([c, v]) => c + " vs " + js(v));
     ok(!w5.length, "1.22 review 3 (5): a substitution ($(…), `…`) is never split or stripped — it matches only the same text; a run's commands after `cd # ` never count; an unknown folder ($HOME) equals only itself; commands run in the folder the run left them in (wrong: " + js(w5) + ")");
     // a git worktree of the SAME repository holding the feature is the run's root; another repository's project with the same feature is not
-    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.22 review 3 (4): worktree root — skipped: no git");
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.22 review 3 (4): worktree root", "no git");
     else {
       const repo = path.join(tmp, "proj-122r3-wt-main"), wt = path.join(tmp, "proj-122r3-wt-task"), other = path.join(tmp, "proj-122r3-wt-other");
       const git = (cwd, ...a) => spawnSync("git", a, { cwd, encoding: "utf8" });

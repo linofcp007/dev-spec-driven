@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, rawOnce, payload, S, root, tmp, SERVER, child, require }) => {
+exports.run = async ({ ok, skip, all, remeasure, rpc, rawOnce, payload, S, root, tmp, SERVER, child, require }) => {
 
   { // 1.14 C4 — /spec-tour + the fixes from the independent review of the first 1.14 packages.
     const c4Root = path.join(tmp, "proj-c4");
@@ -219,7 +219,7 @@ exports.run = async ({ ok, all, remeasure, rpc, rawOnce, payload, S, root, tmp, 
       ok(dz.ok === false && /regular file inside \.specs/.test(dz.error) && fs.readFileSync(outside, "utf8") === "TOP-SECRET-KEY" && fs.lstatSync(path.join(lk.dir, "decisions.md")).isSymbolicLink() &&
         !/TOP-SECRET-KEY/.test(exText), "final review S3: spec_decide refuses a decisions.md symlink (nothing written through it); spec_export never copies a linked artifact's content (got " +
         JSON.stringify([dz.ok, dz.error && dz.error.slice(0, 80), /TOP-SECRET-KEY/.test(exText)]) + ")");
-    } else ok(true, "final review S3: symlinks unavailable here (Windows without the privilege) — skipped");
+    } else skip("final review S3", "symlinks unavailable here (Windows without the privilege)");
     // S4: long _Implements:_ references never stall the overlap check (SessionStart runs it).
     const longSeg = "a".repeat(120);
     mkF("Long globs", "# Tasks\n\n" + Array.from({ length: 150 }, (_, i) => `- [ ] ${i + 1}. [US1] t\n  - _Implements: src/${longSeg}/**/${longSeg}${i}*/x*.js_\n`).join(""));

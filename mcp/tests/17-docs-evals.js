@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, root, tmp, require }) => {
+exports.run = async ({ ok, skip, S, root, tmp, require }) => {
 
   { // Behavioural plugin evals (evals/behavior-*, tag `behavior`): well-formed, cheap, naming only REAL MCP tools, and
     // their scaffold fixtures still build against THIS engine — a refused approval in a fixture or a renamed tool would
@@ -120,7 +120,7 @@ exports.run = async ({ ok, S, root, tmp, require }) => {
     const bashBin = (process.platform === "win32"
       ? [process.env.DEV_SPEC_TEST_BASH, "C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Program Files\\Git\\usr\\bin\\bash.exe"]
       : [process.env.DEV_SPEC_TEST_BASH, "bash"]).filter(Boolean).find((b) => { try { return spawnSync(b, ["--version"], { encoding: "utf8" }).status === 0; } catch { return false; } });
-    if (!bashBin) ok(true, "plugin evals: behavioural fixtures build — skipped (no bash here; set DEV_SPEC_TEST_BASH)");
+    if (!bashBin) skip("plugin evals: behavioural fixtures build", "no bash here; set DEV_SPEC_TEST_BASH");
     else {
       const fxRoot = path.join(tmp, "a3-eval-fixtures");
       const gitHome = path.join(tmp, "a3-eval-home");

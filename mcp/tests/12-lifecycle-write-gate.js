@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, skip, rpc, payload, S, tmp, __dirname, require }) => {
   const js = JSON.stringify;
   const CLI = path.join(__dirname, "..", "cli", "dev-spec.js");
   const fresh = (n, lang) => { const p = path.join(tmp, "proj-r6-" + n); S.initProject(p, ["core"], lang); return p; };
@@ -71,7 +71,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname, require }) => {
         rm.ok === true && rm.link === true && !fs.existsSync(real) && snap(out) === before && !fs.existsSync(path.join(out, ".lock")) && !S.roadmap(p).features.some((f) => f.name === "victim"),
         "1.24 r6 G1: remove of a linked feature folder previews 'only the link' (0 files, link: true) and removes the link alone — the target folder and its files untouched, no lock created through it (got " +
         js([pv.wouldDelete, pv.error && pv.error.slice(0, 60), rm.ok, rm.error]) + ")");
-    } else ok(true, "1.24 r6 G1: links not creatable here — skipped");
+    } else skip("1.24 r6 G1", "links not creatable here");
   }
 
   // 1.24 r6 G1: .specs/_archive/ linked outside the project — archive moved the whole feature there, restore pulled any folder the
@@ -89,7 +89,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname, require }) => {
       ok(a.ok === false && a.linked === true && /\.specs\/_archive\/: that folder is a link/.test(a.error) && fs.existsSync(path.join(p, ".specs", "billing", "requirements.md")) &&
         js(fs.readdirSync(out)) === js(["planted"]) && r.ok === false && r.linked === true && !fs.existsSync(path.join(p, ".specs", "planted")) && !fs.existsSync(path.join(out, "planted", ".lock")),
         "1.24 r6 G1: archive into a linked .specs/_archive/ and restore out of it are refused — nothing moved either way, no lock created in the target (got " + js([a.error, r.error]) + ")");
-    } else ok(true, "1.24 r6 G1 (_archive): links not creatable here — skipped");
+    } else skip("1.24 r6 G1 (_archive)", "links not creatable here");
     // an archived feature folder that is itself a link (.specs/_archive/<slug> -> outside) is never restored into .specs/
     const p2 = fresh("linked-archived-slug");
     const out2 = path.join(tmp, "r6-outside-archived-slug");
@@ -131,7 +131,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname, require }) => {
       const sf = S.finishFeature(p, "probe", { write: true });
       ok(sf.ok === false && /merge-summary\.md: that file is a link/.test(sf.error) && rd(victim) === "#!/bin/sh\necho original\n",
         "1.24 r6 G2: a spike's finish --write refuses a linked merge-summary.md too (got " + js(sf.error) + ")");
-    } else ok(true, "1.24 r6 G2: file symlinks not creatable here — skipped");
+    } else skip("1.24 r6 G2", "file symlinks not creatable here");
     const p2 = fresh("gitignore-link");
     const target = path.join(tmp, "r6-some-config.txt");
     fs.writeFileSync(target, "user setting = 1\n");

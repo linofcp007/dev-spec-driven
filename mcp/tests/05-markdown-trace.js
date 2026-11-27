@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname, hookIn, handRoadmap }) => {
+exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname, hookIn, handRoadmap }) => {
 
   { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
     const call9 = async (args) => payload(await rpc("tools/call", { name: "trace_check", arguments: args }));
@@ -1495,7 +1495,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
       () => !("unidentifiedCriteria" in trG),
     ]);
     // the pre-commit check names them too — never "traceability clean (0 ACs)"
-    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.22 review: pre-commit — skipped: no git");
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.22 review: pre-commit", "no git");
     else {
       const repo = path.join(tmp, "proj-122-bare-git");
       put(repo, ".specs/bare/.state.json", js({ lang: "en", approvals: {} }));

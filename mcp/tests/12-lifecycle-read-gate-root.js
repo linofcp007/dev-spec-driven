@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, eq, S, tmp, fsCalls, hookIn, require, __dirname }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
   const { OPERATIONS } = require("./lib/operations.js");
@@ -73,7 +73,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
         scoped: () => js(scoped) === js([true, null, false, false]), bare: () => bare[0] === true && bare[1] === null,
         impact: () => !has(imp), named: () => !!c && c.detail.includes(".specs/feat/.history/.specs"),
       });
-    } else ok(true, "1.41.1 fix round 1 (A-1): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (A-1)", "links not creatable here");
     // historyText: `.history/<one file name>` as TEXT, before any read — a subfolder, `..`, a padded or absolute name is none
     put(path.join(f.dir, ".history", "sub", "x.md"), "# sub\n");
     put(path.join(f.dir, ".history", "x.md"), "# x\n");
@@ -135,7 +135,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
       }
       one("guardCheck", () => E.withReadCache(() => E.guardCheck(A.p, path.join(A.p, "src", "alias", "a.js"))), () => E.withReadCache(() => E.guardCheck(B.p, path.join(B.p, "src", "alias", "a.js"))));
       ok(driven > 30 && !diffs.length, "1.41.1 fix round 1 (B-1): a project below a folder NAMED .specs (~/.specs/work/app) reads as the same project elsewhere — every read operation of the table and the scope guard (" + driven + "), its results and its fs calls on its code equal, an in-project code junction read as ever: only its own .specs/ is gated (got " + js(diffs.slice(0, 6)) + ")");
-    } else ok(true, "1.41.1 fix round 1 (B-1): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (B-1)", "links not creatable here");
   }
 
   // A-2: the project's .specs/ by another spelling (.SPECS on a case-folding volume; its 8.3 alias on Windows) is the same root — gated
@@ -148,7 +148,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
         const t = path.join(p, ".SPECS", "lnk", "tasks.md");
         const r = E.withReadCache(() => { E.specsRoot(p); return [E.specsReadBlocked(t), E.readIfExists(t), E.existsRaw(t), E.specsReadBlocked(path.join(p, ".Specs", "lnk"))]; });
         eq(r, [true, null, false, true], "1.41.1 fix round 1 (A-2): on a case-folding volume `.SPECS/lnk/tasks.md` IS the project's .specs/lnk/tasks.md — the gate stands on it (blocked, absent), any spelling");
-      } else ok(true, "1.41.1 fix round 1 (A-2): a case-sensitive volume — `.SPECS` is another folder");
+      } else skip("1.41.1 fix round 1 (A-2): a case-folded spelling of .specs", "a case-sensitive volume — `.SPECS` is another folder");
       let short = null;
       if (WIN) {
         try {
@@ -161,7 +161,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
         const t = path.join(p, short, "lnk", "tasks.md");
         const r = E.withReadCache(() => { E.specsRoot(p); return [E.specsReadBlocked(t), E.readIfExists(t)]; });
         eq(r, [true, null], "1.41.1 fix round 1 (A-2): the 8.3 alias of .specs (" + short + ") is the root by its REAL path — `" + short + "/lnk/tasks.md` is blocked");
-      } else ok(true, "1.41.1 fix round 1 (A-2): no 8.3 alias of .specs here — skipped");
+      } else skip("1.41.1 fix round 1 (A-2)", "no 8.3 alias of .specs here");
       // … and only then: a code folder whose NAME looks like an alias (LIB~1) is no root — a junction in it reads as ever
       if (WIN) {
         put(path.join(p, "src", "LIB~1", "real", "x.js"), "x\n");
@@ -171,7 +171,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
           eq(r, [false, "x\n"], "1.41.1 fix round 1 (A-2): a code folder named like an 8.3 alias (src/LIB~1) is no root — its real path is no .specs/: a junction in it reads as ever");
         }
       }
-    } else ok(true, "1.41.1 fix round 1 (A-2): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (A-2)", "links not creatable here");
   }
 
   // two projects recorded in one scope, the second reached THROUGH a link below the first's .specs/: the OUTERMOST project stands — the
@@ -184,7 +184,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
       const a = E.withReadCache(() => { E.specsRoot(p); E.specsRoot(inner); return [E.specsReadBlocked(t), E.readIfExists(t)]; });
       const b = E.withReadCache(() => { E.specsRoot(inner); E.specsRoot(p); return [E.specsReadBlocked(t), E.readIfExists(t)]; });
       eq([a, b], [[true, null], [true, null]], "1.41.1 fix round 1: two projects recorded in one scope, one reached through a link below the other's .specs/ — the outermost project's .specs/ is the root, the link on the way refused (either order)");
-    } else ok(true, "1.41.1 fix round 1 (two bases): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (two bases)", "links not creatable here");
     // … and only in ONE scope: a later call on a project that lives inside the first one's .specs/ folder stands on its own .specs/ —
     // the first call's project is gone with its scope (a long-lived MCP server serves both)
     const y = path.join(p, ".specs", "nested-app");
@@ -215,7 +215,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
         outer: () => js(fromOuter) === js([true, true, "x\n"]), inner: () => js(fromInner) === js([true, "x\n"]),
         codeUngated: () => !calls.lstatSync && !calls["realpathSync.native"], linked: () => st.every((r) => r.ok === false && r.code === "feature-linked"),
       });
-    } else ok(true, "1.41.1 fix round 1 (monorepo): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (monorepo)", "links not creatable here");
   }
 
   // .specs ITSELF a link: still the root (exempt) — and a feature folder that is a link inside it is still refused
@@ -239,7 +239,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
       all("1.41.1 fix round 1: .specs ITSELF a link stays the root — its features read as ever (after listings of it and of a feature folder too: the seed takes the real paths), a feature folder that is a link inside it is still refused (got " + js({ seeded, st: st.map((r) => r.ok + ":" + (r.code || "")) }) + ")", {
         read: () => seeded[0] === TASKS && seeded[2] === "# n\n" && st[0].ok === true, refused: () => seeded[1] === null && st[1].code === "feature-linked" && !has(st[1]),
       });
-    } else ok(true, "1.41.1 fix round 1 (.specs a link): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (.specs a link)", "links not creatable here");
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------
@@ -264,7 +264,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
         link: () => listed[0] === null && listed[1] === false && listed[2] === false, plain: () => listed[3] === TASKS && listed[4] === true,
         file: () => listed[5] === false && listed[6] === true, lstatWins: () => js(kept) === js([null, null, false]),
       });
-    } else ok(true, "1.41.1 fix round 1 (seedParts): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (seedParts)", "links not creatable here");
     // the counts (the 1.40 method: exact per-feature steps, 2 → 3 → 4 features): what each feature folder costs the gate once its listing
     // proved it plain — a project-wide drift (the SessionStart check) one lstat (its .state.json) and no realpath; the status line two
     // lstats; doctor four; trace {code} and finish two lstats and ONE realpath (the feature's tests/ folder, asked by lstat — no listing
@@ -311,7 +311,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
     };
     const e = run(true), m = run(false);
     if (e && m) ok(e[0] === m[0] && e[1] === m[1] && !/ghost/.test(e[0]), "1.41.1 fix round 1 (A-4): coverage (its archived features, a path on disk) and trace's missing _Implements:_ files answer the same whether a link's outside target exists or not — an `_archive/<slug> ->` is no archived feature (got " + js({ e: e.map((x) => x.slice(0, 200)), m: m.map((x) => x.slice(0, 200)) }) + ")");
-    else ok(true, "1.41.1 fix round 1 (A-4): links not creatable here — skipped");
+    else skip("1.41.1 fix round 1 (A-4)", "links not creatable here");
   }
   // A-5: doctor's outside-code-artifacts never stats or reads a plan's file through a project-level link out (projectFileReal)
   {
@@ -323,7 +323,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
       fs.writeFileSync(path.join(f.dir, "tasks.md"), TASKS);
       const t = throughLinks(out, () => S.specDoctor(p, "feat"));
       ok(!t.hits.length && !has(t.v), "1.41.1 fix round 1 (A-5): doctor's outside-code-artifacts resolves a plan's file by its REAL path — `docs/lnk/plan.md` through a link out of the project is never stat'ed nor read (got " + js(t.hits) + ")");
-    } else ok(true, "1.41.1 fix round 1 (A-5): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (A-5)", "links not creatable here");
   }
   // A-6 + B15: the importers' warnings are decided on the ENTRY — a live link out and a dangling one answer alike; a folder linking
   // into the project's own hidden folder is named once, its entries never
@@ -364,7 +364,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
       entriesOnly: () => !e[3].length && !m[3].length,
       hidden: () => hid.ok === true && hid.warnings.filter((w) => w === W.wUnreadable("specs/001-x/contracts")).length === 1 && !/secret-name-one/.test(js(hid)),
     });
-    else ok(true, "1.41.1 fix round 1 (A-6): links not creatable here — skipped");
+    else skip("1.41.1 fix round 1 (A-6)", "links not creatable here");
   }
   // A-3: the MCP server's approval meta reads roadmap.json through the gate — a linked one is unknown (every weakening counts): spec_init
   // repeating what the LINK's target says is asked like a change (the parent read the target: "no change", allowed)
@@ -408,7 +408,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
       all("1.41.1 fix round 1 (A-3): the MCP server's approval meta reads roadmap.json through the read gate — a linked one is unknown, so spec_init repeating its target's evidence / stopCheck is asked (elicitation) and, declined, writes nothing; the target is never read (got " + js({ asked: asked.length, res }) + ")", {
         asked: () => asked.length === 1, declined: () => !!res && res.ok === false && !has(res), targetKept: () => JSON.parse(fs.readFileSync(path.join(out, "roadmap.json"), "utf8")).meta.evidence === "reported",
       });
-    } else ok(true, "1.41.1 fix round 1 (A-3): file symlinks not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (A-3)", "file symlinks not creatable here");
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------
@@ -437,7 +437,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
         simplifier: () => ss.block === false && sm.block === false && ss.why === sm.why && js(ss.claims) === js(sm.claims),
         inert: () => !has([sl, ss]),
       });
-    } else ok(true, "1.41.1 fix round 1 (B-2, B-3): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 1 (B-2, B-3)", "links not creatable here");
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------
@@ -467,8 +467,8 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
       if (fileLink(path.join(out, "ROADMAP.html"), html)) {
         const t = throughLinks(out, () => S.backlog(p, "add", "later-one", "n"));
         ok(t.v.ok === true && !t.hits.length, "1.41.1 fix round 1 (B-4: B9): a linked ROADMAP.html — the roadmap refresh after a mutation (backlog add) never stats, probes or reads it through the link (got " + js({ ok: t.v.ok, hits: t.hits }) + ")");
-      } else ok(true, "1.41.1 fix round 1 (B9): file symlinks not creatable here — skipped");
-    } else ok(true, "1.41.1 fix round 1 (B-4): links not creatable here — skipped");
+      } else skip("1.41.1 fix round 1 (B9)", "file symlinks not creatable here");
+    } else skip("1.41.1 fix round 1 (B-4)", "links not creatable here");
     // B20: a folder below .specs/ whose realpath can't be resolved (it throws) reads as absent — every primitive, nothing thrown
     const g = S.createFeature(p, { name: "stub" });
     const tasks = path.join(g.dir, "tasks.md");
@@ -546,7 +546,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
     if (e && m) all("1.41.1 fix round 2 (R2-R-3): on win32 an NTFS stream spelling — of .specs (::$INDEX_ALLOCATION, :$I30:$INDEX_ALLOCATION) or of a part below it — reads as absent (blocked, nothing read), and trace / coverage of a `_Implements:_` so spelled answer the same whether the outside file exists or not (got " + js({ e: e.gate, trace: [e.trace, m.trace] }) + ")", {
       blocked: () => e.gate.every((g) => js(g) === js([true, null, false])), oracle: () => e.trace === m.trace && e.cov === m.cov,
     });
-    else ok(true, "1.41.1 fix round 2 (R2-R-3): links not creatable here — skipped");
+    else skip("1.41.1 fix round 2 (R2-R-3)", "links not creatable here");
   } else {
     // (fix round 3, R3-R-3) off Windows a ':' is an ordinary name character: a spec file named notes:v2.md below .specs/ reads as present
     const p = project("colon"), f = S.createFeature(p, { name: "feat" });
@@ -577,8 +577,8 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
         const got = E.withReadCache(() => [E.readIfExists(fifo), E.existsRaw(fifo)]);
         const st = S.statusFeature(p, "feat");
         ok(js(got) === js([null, false]) && st.ok === true && Date.now() - t0 < 10000, "1.41.1 fix round 2 (hook review): a real FIFO named decisions.md below .specs/ reads as absent — read and status return at once, nothing opened (got " + js([got, st.ok, Date.now() - t0]) + ")");
-      } else ok(true, "1.41.1 fix round 2 (FIFO): mkfifo not available here — skipped");
-    } else ok(true, "1.41.1 fix round 2 (FIFO): Windows makes no FIFO in a folder (its pipes live in \\\\.\\pipe\\) — the stubbed lstat above holds the rule");
+      } else skip("1.41.1 fix round 2 (FIFO)", "mkfifo not available here");
+    } else skip("1.41.1 fix round 2 (FIFO)", "Windows makes no FIFO in a folder (its pipes live in \\\\.\\pipe\\) — the stubbed lstat above holds the rule");
   }
   // R2-R-4: BMAD's folders by real path — with docs/ a junction out of the project, the warnings are the same whatever the outside
   // folder holds (a stories/ folder, a prd/ folder, nothing) or whether it exists at all
@@ -598,7 +598,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
     }
     const vals = Object.values(runs);
     if (vals.every(Boolean)) ok(vals.every((v) => v === vals[0]) && !/OUTSIDE|bm.docs./.test(vals[0]), "1.41.1 fix round 2 (R2-R-4): BMAD's folders are decided by real path — with docs/ a junction out of the project the warnings are the same whether the outside folder holds stories/, prd/, nothing, or is not there (got " + js(runs) + ")");
-    else ok(true, "1.41.1 fix round 2 (R2-R-4): links not creatable here — skipped");
+    else skip("1.41.1 fix round 2 (R2-R-4)", "links not creatable here");
   }
   // R2-R-6: the WRITE gate moves with the root (ONE predicate) — in a scope with the project recorded, a write through a link NAMED
   // .specs below .specs/ (the nearest-name root would have exempted it) or through a `.SPECS` spelling is refused, nothing lands behind
@@ -614,7 +614,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, hookIn, require, __dirname 
       all("1.41.1 fix round 2 (R2-R-6): the write gate stands on the same root — a write and a folder made through a link NAMED .specs below .specs/, and (case-folding volumes) through `.SPECS/lnk/`, are refused (ESPECSLINK), nothing lands behind the link (got " + js(w) + ")", {
         refused: () => w.every((x) => x === "ESPECSLINK"), nothingOut: () => fs.readdirSync(out).length === 0,
       });
-    } else ok(true, "1.41.1 fix round 2 (R2-R-6): links not creatable here — skipped");
+    } else skip("1.41.1 fix round 2 (R2-R-6)", "links not creatable here");
     // a recorded project that does NOT hold the path (another checkout's report, a worktree's .specs/) is no base: the outermost .specs
     // of the path stands, a link below it is refused
     const longBase = path.join(tmp, "rgr-r22", "a-project-folder-whose-name-runs-past-the-other-checkouts-specs");
