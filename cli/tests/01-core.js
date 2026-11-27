@@ -189,6 +189,11 @@ ok(runIn(["wat"]).code === 1, "unknown command exits non-zero");
   const P = (n) => path.join(tmp, "ux21-" + n);
   fs.mkdirSync(P("none")); // a project folder without .specs/
   const missing = runIn(["list", "--project", P("none")]);
+  // review 1 (R1-SURF-07): a .specs/ with no steering (another command made it) still needs init — the hint keeps it (doctor's own
+  // predicate: a core steering file missing), as `status` does; init then drops it
+  fs.mkdirSync(path.join(P("bare"), ".specs"), { recursive: true });
+  const bareList = runIn(["list", "--project", P("bare")]), bareSt = runIn(["status", "--project", P("bare")]);
+  const bareJson = runIn(["list", "--json", "--project", P("bare")]);
   const fresh = runIn(["init", "--project", P("fresh")]);
   const empty = runIn(["list", "--project", P("fresh")]);
   const bareStatus = runIn(["status", "--project", P("fresh")]);
@@ -205,8 +210,10 @@ ok(runIn(["wat"]).code === 1, "unknown command exits non-zero");
   const ptInit = runIn(["init", "--lang", "pt", "--project", P("pt")]);
   const esList = (runIn(["init", "--lang", "es", "--project", P("es")]), runIn(["list", "--project", P("es")]));
   const note = (l) => S.msg(l).initNote;
-  all("1.42 UX-09 / UX-21: init prints the steering note when it created files and the start hint while no feature is active; list / status print the hint on the same predicate (init first only without .specs/); the order classify → init → create", {
+  all("1.42 UX-09 / UX-21: init prints the steering note when it created files and the start hint while no feature is active; list / status print the hint on the same predicate (init in it while a core steering file is missing — no .specs/, or one with no steering); the order classify → init → create", {
     missing: () => /No features under/.test(missing.out) && hintRe(true).test(missing.out),
+    bareSpecs: () => bareList.code === 0 && hintRe(true).test(bareList.out) && hintRe(true).test(bareSt.out) &&
+      JSON.parse(bareJson.out).steeringMissing.join() === "constitution.md,product.md,tech.md,structure.md",
     freshNote: () => fresh.out.includes("\n  " + note("en") + "\n") && hintRe(false).test(fresh.out) && !hintRe(true).test(fresh.out),
     empty: () => hintRe(false).test(empty.out) && hintRe(false).test(bareStatus.out),
     reinitNoNote: () => !reinit.out.includes(note("en")) && hintRe(false).test(reinit.out),

@@ -235,6 +235,12 @@ function listFeatures(projectDir) {
   });
   const res = { specsDir: root, exists: true, features };
   if (ignored.length) res.ignored = ignored;
+  // 1.42 review 1 (R1-SURF-07): no feature yet and a core steering file missing (the doctor `steering` check's own predicate) —
+  // the start hint's `init` step is still due (a .specs/ another command made holds no steering)
+  if (!features.length) {
+    const missing = CORE_STEERING.filter((f) => !existsRaw(path.join(root, "steering", f)));
+    if (missing.length) res.steeringMissing = missing;
+  }
   return res;
 }
 

@@ -210,7 +210,10 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     lang: lng,
     created,
     skipped,
-    note: i18n.msg(lng).initNote,
+    // the steering note ("the steering files are templates: fill their [placeholders]…") only when this call created steering —
+    // a re-init (/spec-setup guard|checks|roles…) of a project whose steering is filled would read it as "rewrite your rules"
+    // (1.42 review 1, R1-SURF-02); the CLI prints it on the same rule, so MCP and `--json` agree
+    ...(created.length ? { note: i18n.msg(lng).initNote } : {}),
     activeFeatures,
     guard: guardLevel(projectDir), // the CURRENT guard state (true | false | "scope" | "tests"), whether or not this call changed it
     stopCheck: stopCheckEnabled(projectDir), // the CURRENT end-of-turn evidence gate state (on unless meta.stopCheck is false)
