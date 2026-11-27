@@ -287,4 +287,45 @@ exports.run = async ({ ok, all, remeasure, S, tmp, hookIn, __dirname }) => {
       });
     }
   }
+
+  // 1.42 perf-3 — the Stop hook decides FIRST and refreshes the stale ROADMAP.md / SPECS.md only when it lets the turn end: the refresh
+  // (1.2–2 s at 200 features) ran before every answer, so it delayed a block and could push it past the hook's timeout. A turn sent back
+  // keeps the stamp; its next stop (stop_hook_active) refreshes; a gate that throws anywhere — a pre-filter, the engine's project
+  // lookup, stopCheck — answers nothing and still refreshes.
+  {
+    const p = path.join(tmp, "perf3-stop-first");
+    S.initProject(p, ["core"], "en");
+    const f = S.createFeature(p, "Billing", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [ ] 1. [US1] Charge\n  - _Verify: npm test_\n- [ ] 2. [US1] Refund\n  - _Verify: npm test_\n");
+    S.completeTask(p, "billing", 1); // ticked just now, no evidence: a claim is sent back
+    const rm = path.join(p, ".specs", "ROADMAP.md"), stamp = path.join(p, ".specs", ".execution", S.ROADMAP_STALE_FILE || "roadmap-stale");
+    const read = (x) => { try { return fs.readFileSync(x, "utf8"); } catch { return null; } };
+    let more = 2;
+    const save = () => { fs.writeFileSync(path.join(f.dir, "tasks.md"), read(path.join(f.dir, "tasks.md")) + "- [ ] " + (++more) + ". [US1] More\n"); S.markRoadmapStale(p); };
+    const stop = (active) => hookIn(path.join(__dirname, "..", "hooks", "stop-hook.js"), { input: js({ session_id: "s", hook_event_name: "Stop", cwd: p, stop_hook_active: active,
+      last_assistant_message: "All tasks are done and verified." }), env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, encoding: "utf8" });
+    const blockOf = (r) => { try { return JSON.parse(r.stdout).decision === "block"; } catch { return false; } };
+    save();
+    const before = read(rm);
+    const sent = stop(false);
+    const kept = { block: blockOf(sent), stamp: fs.existsSync(stamp), roadmapSame: read(rm) === before };
+    const next = stop(true);
+    const after = { silent: next.stdout === "", stamp: fs.existsSync(stamp), refreshed: read(rm) !== before && read(rm) === S.portableCli(S.renderRoadmapMd(p, "en")) };
+    const throwing = (name) => {
+      save();
+      const orig = S[name];
+      S[name] = () => { throw new Error("perf-3 planted: " + name); };
+      let r;
+      try { r = stop(false); } finally { S[name] = orig; }
+      return { status: r.status, silent: r.stdout === "", stamp: fs.existsSync(stamp) };
+    };
+    const tStop = throwing("stopCheck"), tLookup = throwing("sessionProject");
+    all("1.42 perf-3: the Stop hook decides first — a turn sent back keeps the stamp and ROADMAP.md as they were (the refresh never runs before a block); its next stop (stop_hook_active) is silent and refreshes; a gate that throws (stopCheck, or the project lookup before it) is silent and refreshes (got " +
+      js({ kept, after, tStop, tLookup }) + ")", {
+      "a block keeps the stamp and ROADMAP.md": () => kept.block && kept.stamp && kept.roadmapSame,
+      "the next stop refreshes": () => after.silent && !after.stamp && after.refreshed,
+      "stopCheck throwing: silent, refreshed": () => tStop.status === 0 && tStop.silent && !tStop.stamp,
+      "the project lookup throwing (inside the gate, before stopCheck): silent, refreshed": () => tLookup.status === 0 && tLookup.silent && !tLookup.stamp,
+    });
+  }
 };

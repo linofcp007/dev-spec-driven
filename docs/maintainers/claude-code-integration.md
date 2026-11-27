@@ -60,7 +60,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   session started in a subfolder or a sibling checkout keep their lint and their `lastEditAt` stamp (12-lifecycle-read-gate-root.js);
   a save through a link named `.specs` below `.specs/` is the known limit (conventions.md → The read gate). It never
   refreshes ROADMAP.md / SPECS.md: a save leaves `.specs/.execution/roadmap-stale` (`markRoadmapStale`) for the Stop /
-  SubagentStop hook to refresh at the end of the turn (lifecycle.md → Roadmap files). **SessionStart** fires in every session of
+  SubagentStop hook to refresh at the end of the turn — after its gate, and not on a turn it sends back (1.42: that turn's next
+  stop refreshes; lifecycle.md → Roadmap files). **SessionStart** fires in every session of
   every project (the plugin is user-wide), so `sessionMayBeDevSpec()` runs the raw probe first — a superset of what
   `sessionProject()` can pick; it prints ≤ `SESSION_MAX_FEATURES` = 20 feature lines, then "+N more"
   (mcp/tests/10-guards-hooks-cost.js). **The Stop hook** ends before the engine loads when the closing message holds no claim

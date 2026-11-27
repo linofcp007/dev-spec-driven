@@ -18,8 +18,9 @@
  *     project checks. (Plugin subagents ignore `hooks` in their frontmatter, so the plugin's hooks.json is where this
  *     lives.)
  * The decision is the engine's (spec.stopCheck — `dev-spec stop-check` prints the same one).
- * First, whatever the gate says: ROADMAP.md / SPECS.md left stale by the turn's spec saves (the save hook's stamp)
- * are refreshed, once — the save hook no longer refreshes them on every Write / Edit.
+ * Then, unless the gate sends the turn back: ROADMAP.md / SPECS.md left stale by the turn's spec saves (the save hook's stamp)
+ * are refreshed, once — the save hook no longer refreshes them on every Write / Edit. A turn sent back keeps the stamp (1.42): its
+ * next stop refreshes (it carries stop_hook_active and is never sent back), as do SessionStart, the next mutation and the pre-commit check.
  *
  * It never sends a stop back twice in a row (`stop_hook_active`), is silent (exit 0, no output) when there is nothing to
  * say, when the project has no dev-spec .specs/ or when roadmap.json meta.stopCheck is false (spec_init {stopCheck: false} /
@@ -175,7 +176,10 @@ function lastAssistantText(file) {
   return "";
 }
 
-// The hook's decision on one payload → {decision: "block", reason} or null (silent); a stale ROADMAP.md / SPECS.md refreshed first.
+// The hook's decision on one payload → {decision: "block", reason} or null (silent). The gate decides FIRST; a stale ROADMAP.md /
+// SPECS.md (the save hook's stamp) is refreshed only when the turn ends here — never before an answer that sends it back (1.42 perf-3:
+// the refresh, 1.2–2 s at 200 features, delayed the block and could push it past the hook's timeout). A turn sent back keeps its stamp:
+// its next stop (stop_hook_active — never sent back twice), SessionStart, the next engine mutation or the pre-commit check refreshes it.
 function decide(raw) {
   const payload = payloadOf(raw);
   if (!payload) return null;
@@ -188,7 +192,13 @@ function decide(raw) {
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
   const anchors = probe().sessionAnchors();
   const projects = probe().sessionProjects({ cwd, anchors });
-  refreshStale(projects); // the turn's spec saves → ROADMAP.md / SPECS.md, once
+  let answer = null;
+  try { answer = gate(payload, event, cwd, anchors, projects); } catch { answer = null; } // a gate in trouble never blocks — and still refreshes
+  if (!answer) refreshStale(projects); // the turn's spec saves → ROADMAP.md / SPECS.md, once
+  return answer;
+}
+// The gate itself → the block, or null: everything after the projects are known (the pre-filters, the engine, its decision).
+function gate(payload, event, cwd, anchors, projects) {
   if (payload.stop_hook_active === true) return null; // already sent back once: never twice in a row
   const cands = projects.filter((d) => !gateOff(d));
   if (!cands.length) return null;
