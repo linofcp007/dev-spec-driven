@@ -742,7 +742,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       [R + " › Written rules", revRules, /A fixed bug brought back is\s+\*\*Critical\*\*/],
       [R + " › Simplify mode", revSimp, /no test file, fixture or snapshot in the diff \(any is \*\*Critical\*\*/],
       [SX + " › Verify the findings", subVerify, /\*\*80 or more\*\* → confirmed/], [SX + " › Verify the findings", subVerify, /\*\*50–79\*\* → unconfirmed/],
-      [SX + " › Verify the findings", subVerify, /\*\*Under 50\*\* → refuted/], [SX, sub, /Task 3: refuted \(20, pre-existing\)/],
+      [SX + " › Verify the findings", subVerify, /\*\*Under 50\*\* → refuted/], [SX, sub, /Task 3: refuted \(0, pre-existing, real at HEAD\)/],
       [SX + " › The simplification pass", subSimp, /\*\*reverted\*\*, not repaired/], [SX + " › The simplification pass", subSimp, /dev-spec-driven:spec-simplifier/],
       [SX, sub, /Verify pass \(one finding\) \| cheapest/],
       [PR, prr, /\*\*Verify before you report\.\*\*/], [PR, prr, /"Unconfirmed \(below 80\)"/], [PR, prr, /\*\*History\*\*/], [PR, prr, /\*\*Written rules\*\*/],
