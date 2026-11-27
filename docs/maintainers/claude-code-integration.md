@@ -131,7 +131,12 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   OS temp folder), `claimProse` / `claimScan` / `claimMatch` (the Stop hook's pre-filter) and `parseProjectDir(v, base)` /
   `fileUriToPath` / `unexpandedVar` — ONE reading of an MCP tool's projectDir (`{none}` · `{dir}` · `{code: project-dotdot |
   project-network | project-uri}`), which **mcp/server.js** requires too (`HOOK_UTILS`, its `RE_DOTDOT` included). mcp/tests/
-  10-guards-guard-downs.js and 10-guards-shell-writes.js check they agree with the engine's.
+  10-guards-guard-downs.js and 10-guards-shell-writes.js check they agree with the engine's. **A hook's raw read below `.specs/`
+  opens a REGULAR file only (1.42)** — probe.js `readRegularJson` (roadmap.json in the guard, Stop and observe hooks, each
+  `.state.json` of the Stop pre-filter), observe-hook `readTasksText` (an lstat, then `openRegular`): a link, a FIFO, a device, a
+  folder or an lstat that throws is no file, as the engine's read gate reads it, and each hook keeps its own no-file answer (the
+  guard: the user's default; the Stop gate: the user's option; the observe hook: no checks, change.md) — a FIFO tasks.md held
+  every Bash call's async observe hook in one open for the rest of the session (mcp/tests/10-guards-hooks-cost.js "B142-13").
 - **What the hooks and the engine both read — mcp/lib/probe.js, ONE copy** (never a renamed copy in a hook: the 8-line duplication
   guard can't see one — review 8): the approval pre-filter (`approvalPlain`, `approvalMayBe` over `APPROVAL_CANDIDATE_TESTS`,
   `RE_APPROVAL_VERB` — the engine's `approvalCandidate` adds a PowerShell `-EncodedCommand`'s decoded script, the hook passes any
@@ -738,6 +743,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   No hook, matcher or agent tool list changed: spec-reviewer gained a prune mode (its description +9 characters, 222 of ~250)
   and spec-implementer a fix round's `### Causes` block and the METRIC-line rule — prose (tasks-and-evidence.md → Subagent-driven
   execution).
+- **1.42 (B142-13)** — the hooks' raw readers below `.specs/` took the approval hook's 1.41.1 rule (a regular file only; probe.js
+  `readRegularJson`): a FIFO roadmap.json held the guard and Stop hooks to their timeout, and a FIFO tasks.md left one async observe
+  hook blocked in its open per Bash call (Claude Code never kills an async hook). Where absence relaxes, checked site by site: a
+  folder / FIFO / link roadmap.json in the guard is the user's default (the parent: off, or a hang then a pass), in the Stop gate
+  the user's option (equal for a folder); a link / FIFO `.state.json` is no activity and a non-regular tasks.md sends the observe
+  hook to change.md — the engine reads all of them absent, so the pre-filters stay supersets. 12-lifecycle-read-gate.js's tracer
+  exempts `recentActivity`, `mentioned` and `readTasksText` no more.
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.

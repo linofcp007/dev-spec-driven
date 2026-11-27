@@ -101,21 +101,19 @@ function userGuardDefault() {
 // (spec.guardLevel: isDevSpecDir), so neither a folder without .specs/ nor another tool's .specs/ gets the user's default.
 function devSpecWithoutRoadmap(dir) {
   try {
-    // it exists (readable or not): its meta decides — but a LINK there is none (1.41.1: the engine's read gate never reads through it)
-    if (!fs.lstatSync(path.join(dir, ".specs", "roadmap.json")).isSymbolicLink()) return false;
-  } catch (e) {
-    if (!e || e.code !== "ENOENT") return false;
-  }
+    // a REGULAR file (readable or not): its meta decides — anything else is none, as the engine's read gate reads it (1.41.1: a link;
+    // 1.42: a FIFO, a device, a folder, or an lstat that throws — a FIFO's open waited for a writer past the hook's timeout)
+    if (fs.lstatSync(path.join(dir, ".specs", "roadmap.json")).isFile()) return false;
+  } catch { /* no file: the rule below */ }
   return probe().isDevSpecProject(dir);
 }
 // Guard on? Read raw — the engine (and its i18n tables) is only loaded for a guarded project. No roadmap.json in a dev-spec
-// .specs/ → the user's default (spec.guardLevel's rule); an unreadable or broken one → off. A linked one is no roadmap.json (as the engine
-// reads it): the user's default, its target's meta never read.
+// .specs/ → the user's default (spec.guardLevel's rule); an unreadable or broken one → off. One that is no regular file (a link, a
+// FIFO, a folder) is no roadmap.json, as the engine reads it: the user's default above, never opened (probe.js readRegularJson).
 function guardOn(dir) {
   if (userGuardDefault() && devSpecWithoutRoadmap(dir)) return true;
-  try { if (fs.lstatSync(path.join(dir, ".specs", "roadmap.json")).isSymbolicLink()) return false; } catch { /* absent: below */ }
   try {
-    const j = probe().readJsonFile(path.join(dir, ".specs", "roadmap.json"));
+    const j = probe().readRegularJson(path.join(dir, ".specs", "roadmap.json"));
     if (!j || typeof j !== "object" || Array.isArray(j)) return false;
     const meta = j.meta && typeof j.meta === "object" && !Array.isArray(j.meta) ? j.meta : {};
     return meta.guard === true || meta.guard === "scope" || meta.guard === "tests" || (meta.guard === undefined && userGuardDefault());

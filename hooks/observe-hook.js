@@ -103,7 +103,7 @@ function mentioned(pdir, parts) {
   const root = path.join(pdir, ".specs");
   const has = (text) => { const t = probe().observedNorm(text); return parts.every((x) => t.includes(x)); };
   try {
-    const rm = probe().readJsonFile(path.join(root, "roadmap.json"));
+    const rm = probe().readRegularJson(path.join(root, "roadmap.json")); // no regular file (a link, a FIFO, a folder — 1.42): none
     const checks = rm && rm.meta && typeof rm.meta === "object" ? rm.meta.checks : null;
     if (checks && typeof checks === "object" && Object.values(checks).some((c) => typeof c === "string" && has(c))) return true;
   } catch { /* no or broken roadmap.json: no project checks */ }
@@ -114,9 +114,9 @@ function mentioned(pdir, parts) {
     return false;
   }
   for (const d of dirs) {
-    // tasks.md — or, only when there is none, a change's change.md, which holds its tasks. One open per
+    // tasks.md — or, only when there is none, a change's change.md, which holds its tasks. One lstat and one open per
     // feature (its size read from the open file) — a stat, a read and a change.md probe per feature cost +133 ms a Bash call
-    // at 150 features.
+    // at 150 features; the lstat (1.42: a regular file only) is the one more call.
     const raw = readTasksText(path.join(root, d.name, "tasks.md"));
     const got = raw === null ? readTasksText(path.join(root, d.name, "change.md")) : raw;
     if (typeof got !== "string") continue;
@@ -125,10 +125,17 @@ function mentioned(pdir, parts) {
   }
   return false;
 }
-// A tasks file's text → the text, null when there is no such file, false when it can't be read or passes MAX_TASKS_BYTES.
+// A tasks file's text → the text, null when there is no such file, false when it can't be read or passes MAX_TASKS_BYTES. (1.42
+// B142-13) One that is no REGULAR file — a link, a FIFO, a folder — is none (null: on to change.md, as the engine's change alias
+// reads it), never opened: a FIFO tasks.md kept every Bash call's hook in one open waiting for a writer, and an async hook is never
+// killed. Opened by probe.js openRegular (the fd's own fstat: a swap after the lstat reads as none too).
 function readTasksText(file) {
+  let st;
+  try { st = fs.lstatSync(file); } catch (e) { return e && e.code === "ENOENT" ? null : false; }
+  if (!st.isFile()) return null;
   let fd;
-  try { fd = fs.openSync(file, "r"); } catch (e) { return e && e.code === "ENOENT" ? null : false; }
+  try { fd = probe().openRegular(file); } catch { return false; }
+  if (fd === null) return null;
   try {
     const size = fs.fstatSync(fd).size;
     if (size > MAX_TASKS_BYTES) return false;
