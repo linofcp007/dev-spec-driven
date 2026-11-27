@@ -486,3 +486,13 @@ How the rules above came to be — grep a release here.
   relays it, while the trace also holds the seat's reads of every input, so the graders read `last_message` and a property keeps
   every regex grader from matching any input. Cut: the dev-guardian pair (no dev-guardian prose changes this round; its
   deterministic half needed another chain's rule) and the long-package final-review case (with S3's protocol).
+- **1.42 (fix round 1, tests)** — review 1 of the round. The read-ahead stall row has `took < 15000` back beside the one-slow-take
+  count: each bound holds its own part (the count the stall, `took` the ~396 fallback takes after it — a 50 ms wait before each
+  passed the count alone at 27 s). The skip guard reads any truthy literal first argument: the word `true` alone let `1` and a
+  string through, so the fake suite's files assert `typeof exports === "object"`. The round's own link skips fire on win32 alone
+  (rethrown elsewhere), and 14-templates' file-link part is its own `ok()` beside its `skip()`; the older sites are the known
+  limits above. R10's Step 0: the ten path comparisons the alias leg broke compare real paths, a gone folder by its nearest
+  parent's (the runner's samePath norm alone left a gone alias folder unequal to the physical one, and an 8.3 gone folder against
+  its expanded parent made a startsWith negative vacuous on win32); the launcher row records projectPath with fs.realpathSync —
+  `.native` expands the 8.3 name the launcher's own cwd keeps, which failed this machine's run. The leg stays opt-in until a clean
+  run of both suites under it.
