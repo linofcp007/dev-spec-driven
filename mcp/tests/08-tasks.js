@@ -625,7 +625,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
     const aBrief = S.taskBrief(a.p, a.slug);
     all("feature F3: a tasks.md without any _Depends:_ answers exactly as before — next = the first open task, the same result keys (no skipped / blocked), the [P] batch unchanged, no task-deps check, complete_task / brief / status unchanged; its waves follow tasks.md order (a [P] run together, split on a shared file, the task after the run behind all of it) (got " +
       js([aNext, aWaves.waves]) + ")", [
-      () => Object.keys(aNext).join() === "ok,feature,next,remaining,total,batch", () => aNext.next.number === 2, () => aNext.remaining === 4,
+      () => Object.keys(aNext).join() === "ok,feature,next,remaining,total,batch,planApproved,planNote", // 1.42 (UX-02): + the plan's fields (this plan is not approved) () => aNext.next.number === 2, () => aNext.remaining === 4,
       () => aNext.total === 5, () => aNext.batch.map((b) => b.number).join() === "2,3", () => js(aWaves.waves) === "[[2,3],[4],[5]]",
       () => js(aWaves.cycles) === "[]", () => js(aWaves.blocked) === "[]", () => !aDoc.checks.some((c) => c.id === "task-deps"), () => aDone.ok,
       () => !("waitsOn" in aDone), () => !("blocked" in aDone), () => aDone.next.number === 3, () => aBrief.task.number === 3,

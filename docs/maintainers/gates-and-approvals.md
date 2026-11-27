@@ -575,7 +575,7 @@ here. "r5 review" is 1.23's fifth review.
   "when the user explicitly accepts these failing checks" (en / pt / es; pt-BR derived). Text only: every refusal's `code` /
   `failing` / check lines are unchanged (06-gates-approve-refusals). Cut from the same chain (CRITIQUE-GATES): UX-02 B (a
   template-task refusal — two downstream gates already stop a slot task, and its lowercased input disagreed with the
-  placeholder gate's lookup), UX-02 C (`tickedBefore` — 2 of 2 real stamps were the documented investigation ticks), SK-P1
+  placeholder gate's lookup), UX-02 C (a stamp of the ticks no approval covered — 2 of 2 real stamps were the documented investigation ticks), SK-P1
   (an open-checklist finish warning: 0 yield on 23 real checklists) and SK-P2's engine (0 within-feature pairs on 24 real
   features — spec-critic's "contradict or repeat" instead).
 
