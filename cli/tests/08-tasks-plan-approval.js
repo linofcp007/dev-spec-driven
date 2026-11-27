@@ -16,14 +16,14 @@ exports.run = async ({ all, runIn, spawnIn, runAsync, tmp, require, __dirname })
   const p = path.join(tmp, "plan-greet");
   SD.initProject(p, ["core"], "en");
   const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), text); };
-  put("package.json", js({ name: "greet", private: true, scripts: { test: "node --test test/" } }, null, 2) + "\n");
+  put("package.json", js({ name: "greet", private: true, scripts: { test: "node --test test/greet.test.js" } }, null, 2) + "\n");
   put("src/greet.js", "exports.greet = (name) => (name ? \"Hello, \" + name : \"Hello, stranger\");\n");
   put("test/greet.test.js", "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { greet } = require(\"../src/greet.js\");\n" +
     "test(\"greets by name\", () => assert.strictEqual(greet(\"Ann\"), \"Hello, Ann\"));\ntest(\"greets a stranger\", () => assert.strictEqual(greet(\"\"), \"Hello, stranger\"));\n");
   const f = SD.createFeature(p, "greet-empty-name", ["core"], "greet('') says Hello, stranger", undefined, "en", undefined, { size: "xs" });
   put(".specs/" + f.slug + "/change.md", "# Change: greet-empty-name\n\n## Summary\ngreet('') printed \"Hello, \" — it should greet a stranger.\n\n## Acceptance Criteria (EARS)\n" +
     "1. **US-1.AC-1** — WHEN greet is called with an empty name THE SYSTEM SHALL return \"Hello, stranger\"\n\n## Approach\nOne guard in src/greet.js; nothing else reads the name.\n\n" +
-    "## Tasks\n- [ ] 1. [US1] Return \"Hello, stranger\" for an empty name\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/greet.js_\n  - _Verify: node --test test/_\n");
+    "## Tasks\n- [ ] 1. [US1] Return \"Hello, stranger\" for an empty name\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/greet.js_\n  - _Verify: node --test test/greet.test.js_\n");
   const note = PG.notApproved(f.slug, "change.md");
   const P = ["--project", p];
   const nx = runIn(["next", f.slug, ...P]), nj = runIn(["next", f.slug, "--json", ...P]);
