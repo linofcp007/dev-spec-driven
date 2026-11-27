@@ -19,9 +19,10 @@ Bug: $ARGUMENTS
    the fix.
 4. **STOP for the approvals.** Fill the criterion, the test plan's File column and the tasks' `_Verify:_`, run
    `spec_doctor` and fix what each gate up to tasks refuses (`nextGate` is only the first), then present the reproduction,
-   the root cause with its evidence and the fix you propose — and wait. "Fix it" asks for the outcome; it is not an approval of your root cause: no product
-   code in this turn. On the user's yes, record it with `spec_approve` (requirements, design — it signs off `bug.md` —,
-   test-plan, tasks), or all of them with `spec_approve {through: "tasks"}` once they said so.
+   the root cause with its evidence and the fix you propose — and wait. "Fix it" asks for the outcome; it is not an
+   approval of your root cause: no product code in this turn. On the user's yes, record it with `spec_approve`
+   (requirements, design — it signs off `bug.md` —, test-plan, tasks), or all of them with `spec_approve {through: "tasks"}`
+   once they said so.
 5. **Failing regression test** (T-01, task 1) — the scaffold marks task 1 `_Expect: fail_`: write the test, see it fail
    for the right reason and record the red run — `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> 1 --run`
    (or `spec_complete_task` with the failing run). No shell? Ask the user to run it and paste the output — never apply
