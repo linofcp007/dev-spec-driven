@@ -438,4 +438,125 @@ exports.run = async ({ ok, skip, all, S, tmp, hookIn, __dirname, require }) => {
       "the first note: the root's forced note before the package's": () => !!n5 && typeof n5.systemMessage === "string" && /\bweb\b/.test(n5.systemMessage) && !/\bapp\b/.test(n5.systemMessage) && js(n5) === js(reference(payload(P3, N5))),
     });
   }
+
+  // 1.42 S9-c — the plugin agents' cost, Claude Code's side: on SubagentStop the observe hook reads the finished agent's OWN transcript
+  // (agent_transcript_path — never the parent session's transcript_path; a regular file only; bounded) and hands its COUNTS to
+  // spec.recordAgentRun (.specs/.execution/agents.jsonl). Real-shaped JSONL — the structure of 4,440 local dev-spec agent transcripts,
+  // synthetic text: one line per content block, each repeating its message's usage (output_tokens growing within an id), tool_result
+  // lines between, a line without a timestamp, a fallback model, and an API error Claude Code wrote itself last (<synthetic>,
+  // isApiErrorMessage). (The FIFO rows — POSIX — are in 10-guards-hooks-cost.js; the matcher's property in 09-evidence-agents.js.)
+  {
+    const OH = require("../hooks/observe-hook.js");
+    const tdir = path.join(tmp, "s9c-transcripts");
+    fs.mkdirSync(tdir, { recursive: true });
+    let seq = 0;
+    const stamp = () => "2026-11-20T10:" + String(10 + (seq % 50)).padStart(2, "0") + ":0" + (seq % 10) + ".000Z";
+    const env0 = () => ({ isSidechain: true, agentId: "a91f2c3d4e5b6a7c8", cwd: "/work/app", sessionId: "6f1c2a3b-0d4e-4f5a-9b6c-7d8e9f0a1b2c", version: "2.1.300", gitBranch: "main", userType: "external", entrypoint: "cli" });
+    const user = (content) => js({ parentUuid: seq ? "x-" + seq : null, ...env0(), type: "user", message: { role: "user", content }, uuid: "u-" + ++seq, timestamp: stamp() });
+    const result = (id) => user([{ tool_use_id: id, type: "tool_result", content: "     1\tconst total = 1; // ação concluída ✓ — 価格\n" }]);
+    const asst = (id, block, [i, o, cr, cw], model, extra) => js({ parentUuid: "x-" + seq, ...env0(), message: { model: model || "claude-opus-4-5", id, type: "message", role: "assistant",
+      content: [block], stop_reason: null, stop_sequence: null, usage: { input_tokens: i, cache_creation_input_tokens: cw, cache_read_input_tokens: cr, output_tokens: o, service_tier: "standard" } },
+      requestId: "req_011" + id.slice(-6), type: "assistant", uuid: "a-" + ++seq, timestamp: stamp(), ...(extra || {}) });
+    const call = (name) => ({ type: "tool_use", id: "toolu_01" + String(++seq).padStart(6, "0"), name, input: { file_path: "/work/app/src/total.js" } });
+    const synthetic = () => js({ parentUuid: "x-" + seq, ...env0(), type: "assistant", uuid: "a-" + ++seq, timestamp: stamp(), message: { id: "0b7c2e9a-41d3-4c5e-8f6a-9b0c1d2e3f4a", container: null,
+      model: "<synthetic>", role: "assistant", stop_reason: "stop_sequence", stop_sequence: "", type: "message", usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0, server_tool_use: { web_search_requests: 0 }, service_tier: null }, content: [{ type: "text", text: "API Error: 529 Overloaded" }] }, error: "unknown", isApiErrorMessage: true });
+    const write = (name, lines) => { const f = path.join(tdir, name); fs.writeFileSync(f, lines.length ? lines.join("\n") + "\n" : ""); return f; };
+    const t1Calls = [call("Read"), call("Grep"), call("Read")];
+    const T1 = write("agent-a91f2c3d4e5b6a7c8.jsonl", [
+      user("Review task 3 of the billing feature — the package is .specs/billing/.execution/review-3.md. Ação: ler o diff ✓"),
+      js({ type: "attachment", attachment: { type: "skill_listing", content: "" }, uuid: "t-0", isSidechain: true }), // a line with no timestamp
+      asst("msg_01AAAAAAAAAAAAAAAAAAAAAA", { type: "thinking", thinking: "Reading the diff first.", signature: "c2ln" }, [3, 8, 12000, 4000]),
+      asst("msg_01AAAAAAAAAAAAAAAAAAAAAA", t1Calls[0], [3, 210, 12000, 4000]), // the same message, its output_tokens grown
+      result(t1Calls[0].id),
+      asst("msg_01BBBBBBBBBBBBBBBBBBBBBB", t1Calls[1], [1, 95, 16000, 900]),
+      asst("msg_01BBBBBBBBBBBBBBBBBBBBBB", t1Calls[2], [1, 95, 16000, 900]), // two tool calls in one message: two lines
+      result(t1Calls[1].id), result(t1Calls[2].id),
+      asst("msg_01DDDDDDDDDDDDDDDDDDDDDD", { type: "text", text: "Checking the totals — ação ✓" }, [9, 20, 5000, 100]), // (per field the max: input
+      asst("msg_01DDDDDDDDDDDDDDDDDDDDDD", { type: "text", text: "and the rounding." }, [4, 60, 5000, 100]), //  larger first, output last)
+      asst("msg_01CCCCCCCCCCCCCCCCCCCCCC", { type: "text", text: "**Status:** DONE — no finding. Relatório ✓" }, [2, 400, 17000, 300], "claude-sonnet-4-5"), // a fallback model
+      synthetic(),
+    ]);
+    const WANT1 = { turns: 4, tools: 3, tokens: { in: 15, out: 765, cacheRead: 50000, cacheWrite: 5300 }, model: "claude-sonnet-4-5", truncated: false };
+    const r1 = OH.agentRunOf(T1);
+    const chunks = [1, 2, 7, 64, 4096].map((chunk) => js(OH.agentRunOf(T1, { chunk })));
+    // the bound — a COUNT of bytes: 400 dispatch-shaped messages (~230 KB) read with a 64 KB max
+    const big = write("agent-b00000000000000001.jsonl", Array.from({ length: 400 }, (_, k) => asst("msg_01" + String(k).padStart(22, "E"), call("Read"), [2, 150, 20000 + k, 500])));
+    const bigSize = fs.statSync(big).size;
+    const cut = OH.agentRunOf(big, { max: 64 * 1024 }), whole = OH.agentRunOf(big);
+    all("1.42 S9-c: the SubagentStop reader (observe-hook agentRunOf) counts a transcript's assistant lines — turns the distinct message ids, tokens per id the per-field MAX of its lines (a grown output_tokens, never the first line nor a sum) summed, tool calls per LINE, the last model; an API error Claude Code wrote itself (<synthetic>, isApiErrorMessage) neither a turn nor the model; every chunk size the same (a line carried across a chunk's end); bounded by max — a COUNT of the bytes read, `truncated` past it (got " +
+      js({ r1, chunks: [...new Set(chunks)].length, cut, whole: whole && { ...whole, size: bigSize }, max: OH.TRANSCRIPT_MAX }) + ")", {
+      "the counts": () => !!r1 && js({ turns: r1.turns, tools: r1.tools, tokens: r1.tokens, model: r1.model, truncated: r1.truncated }) === js(WANT1) && r1.read === fs.statSync(T1).size,
+      "every chunk size the same counts": () => chunks.every((c) => c === js(r1)),
+      "past max: the bytes read stop there, truncated, a lower bound": () => !!cut && cut.read <= 64 * 1024 && cut.read > 32 * 1024 && cut.truncated === true && cut.turns > 0 && cut.turns < 400,
+      "within the default bound: the whole file": () => !!whole && whole.read === bigSize && whole.truncated === false && whole.turns === 400 && whole.tools === 400 && bigSize > 128 * 1024,
+      "the default bound: 32 MB (the largest local dev-spec agent transcript: 26.8 MB)": () => OH.TRANSCRIPT_MAX === 32 * 1024 * 1024,
+    });
+
+    // decide: one record per dispatch in the session's project; never the parent's transcript; the id the transcript's name, always
+    const p = path.join(tmp, "s9c-proj");
+    S.initProject(p, ["core"], "en");
+    const PARENT = write("6f1c2a3b-0d4e-4f5a-9b6c-7d8e9f0a1b2c.jsonl", [user("Plan the billing feature"), ...Array.from({ length: 6 }, (_, k) => asst("msg_01" + String(k).padStart(22, "P"), call("Bash"), [5, 300, 40000, 2000]))]);
+    const EMPTY = write("agent-e00000000000000001.jsonl", []);
+    const USERS = write("agent-e00000000000000002.jsonl", [user("Review task 1"), result("toolu_01000001")]);
+    const FOLDER = path.join(tdir, "agent-e00000000000000003.jsonl");
+    fs.mkdirSync(FOLDER, { recursive: true });
+    const logOf = (d) => path.join(d, ".specs", ".execution", "agents.jsonl");
+    const lines = (d) => { try { return fs.readFileSync(logOf(d), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+    const sub = (over, cwd) => { const pl = { session_id: "6f1c2a3b-0d4e-4f5a-9b6c-7d8e9f0a1b2c", transcript_path: PARENT, cwd: cwd || p, permission_mode: "default", hook_event_name: "SubagentStop",
+      stop_hook_active: false, agent_type: "dev-spec-driven:spec-reviewer", agent_transcript_path: T1, last_assistant_message: "**Status:** DONE — no finding.", ...(over || {}) };
+      for (const k of Object.keys(pl)) if (pl[k] === undefined) delete pl[k];
+      return hookOut("observe-hook", pl); };
+    const runs = {
+      own: sub(), withAgentId: sub({ agent_id: "a91f2c3d4e5b6a7c8" }), writer: sub({ agent_type: "spec-writer" }), general: sub({ agent_type: "general-purpose" }),
+      noType: sub({ agent_type: undefined }), parentOnly: sub({ agent_transcript_path: undefined }), blank: sub({ agent_transcript_path: "  " }), empty: sub({ agent_transcript_path: EMPTY }),
+      usersOnly: sub({ agent_transcript_path: USERS }), missing: sub({ agent_transcript_path: path.join(tdir, "agent-e00000000000000009.jsonl") }), folder: sub({ agent_transcript_path: FOLDER }),
+    };
+    const plain = path.join(tmp, "s9c-plain");
+    fs.mkdirSync(plain, { recursive: true });
+    runs.noProject = sub({}, plain);
+    const got = lines(p);
+    const WANT_LINE = { agent: "spec-reviewer", id: "agent-a91f2c3d4e5b6a7c8", model: "claude-sonnet-4-5", turns: 4, tools: 3, tokens: WANT1.tokens, truncated: false };
+    all("1.42 S9-c: on SubagentStop the observe hook records ONE line of the agent's own counts — never from transcript_path (the parent session's, also when it is the only path), the id the transcript's name with or without an agent_id (one dispatch), nothing for another agent, a payload without agent_type, an empty / user-only / missing / folder transcript or a folder with no dev-spec project; silent, exit 0 (got " +
+      js({ got, costs: S.agentCosts(p), out: Object.fromEntries(Object.entries(runs).filter(([, r]) => r.status !== 0 || r.stdout !== "").map(([k, r]) => [k, r.stdout.slice(0, 80)])) }) + ")", {
+      "the agent's own counts, the plugin prefix dropped, the id its transcript's name": () => got.length >= 1 && js(got[0]) === js(WANT_LINE),
+      "with an agent_id: the same id — one dispatch": () => got.length === 2 && js(got[1]) === js(WANT_LINE) && S.agentCosts(p).dispatches === 1,
+      "nothing else recorded (another agent, no agent_type, the parent's path alone, no readable turn, no project)": () => got.length === 2 && !fs.existsSync(path.join(plain, ".specs")),
+      "silent, exit 0, every run": () => Object.values(runs).every((r) => r.status === 0 && r.stdout === ""),
+    });
+    // a transcript path that is a LINK (to a real transcript) is no file (lstat first — openRegular alone would follow it)
+    const LINKED = path.join(tdir, "agent-l00000000000000001.jsonl");
+    let linked = false;
+    try { fs.symlinkSync(T1, LINKED, "file"); linked = fs.lstatSync(LINKED).isSymbolicLink(); } catch { linked = false; }
+    if (!linked) skip("1.42 S9-c: a linked transcript is no file", "file links not creatable here");
+    else {
+      const before = lines(p).length;
+      const r = sub({ agent_transcript_path: LINKED });
+      ok(OH.agentRunOf(LINKED) === null && r.stdout === "" && lines(p).length === before,
+        "1.42 S9-c: a transcript path that is a LINK (to a real transcript) is no regular file — nothing read, nothing recorded (got " + js({ run: OH.agentRunOf(LINKED), n: lines(p).length - before }) + ")");
+    }
+
+    // the project: the session's — a git worktree's copy maps to the main checkout (spec.sessionProject), never the first raw candidate
+    const hasGit = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
+    if (!hasGit) skip("1.42 S9-c: a worktree session records in the main checkout", "no git");
+    else {
+      const m = path.join(tmp, "s9c-main");
+      S.initProject(m, ["core"], "en");
+      const git = (args, cwd) => spawnSync("git", args, { cwd: cwd || m, encoding: "utf8" });
+      git(["init", "-q"]); git(["config", "user.email", "t@example.com"]); git(["config", "user.name", "t"]); git(["config", "core.autocrlf", "false"]);
+      git(["add", "-A"]); git(["commit", "-qm", "init"]);
+      const wt = path.join(m, ".claude", "worktrees", "w1");
+      git(["worktree", "add", "-q", wt, "-b", "w1"]);
+      const made = fs.existsSync(path.join(wt, ".specs", "roadmap.json"));
+      sub({}, wt); // no anchor: the linked worktree → its main checkout
+      hookOut("observe-hook", { session_id: "s", hook_event_name: "SubagentStop", cwd: wt, agent_type: "spec-implementer", agent_transcript_path: big }, { CLAUDE_PROJECT_DIR: m });
+      const inMain = lines(m), inWt = lines(wt);
+      all("1.42 S9-c: a dispatch whose session runs in a git worktree is recorded in the main checkout (where the MCP server records), never in the worktree's copy of .specs/ — with and without CLAUDE_PROJECT_DIR (got " +
+        js({ made, inMain: inMain.map((x) => x.agent + "/" + x.id), inWt: inWt.length }) + ")", {
+        made: () => made,
+        "both in the main checkout": () => js(inMain.map((x) => x.agent + "/" + x.id)) === js(["spec-reviewer/agent-a91f2c3d4e5b6a7c8", "spec-implementer/agent-b00000000000000001"]),
+        "none in the worktree": () => inWt.length === 0,
+      });
+    }
+  }
 };
