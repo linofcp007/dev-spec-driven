@@ -23,8 +23,8 @@ AC IDs, T-IDs, EC / NFR / SC IDs and design sections as design.md spells them (`
 (`unknownAffects`). A fact learnt while working: `kind: "discovery"`. Doctor then warns `decision-affects-approved` →
 `impact`.
 
-**track `+x` | `-x`** — `spec_add_track {name, track}` (tdd · saas · ai · sec · privacy · dist · api · ui · obs · data,
-or a project pack): additive, never overwrites — report the files added, then fill the new design sections, criteria and
+**track `+x` | `-x`** — `spec_add_track {name, track}` (tdd · saas · ai · sec · privacy · dist · api · ui · obs · data ·
+port, or a project pack): additive, never overwrites — report the files added, then fill the new design sections, criteria and
 tasks (the design gate refuses unfilled track sections) and re-approve what changed. `-x` → `remove: true`: the track
 leaves the set and no file is deleted (`core` stays; a bugfix keeps +tdd).
 
