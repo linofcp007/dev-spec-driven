@@ -14,13 +14,13 @@ const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, allTracks, commentLines, earsValidate, enumArg, existsCached, extractAcIds, extractTestIds, headingIndex,
-  isInsideDir, writeInsideProject, isObj, MARKER_TRACKS, normalizeLang, planIdText, langOption, PROTO_KEYS, RE_CUSTOM_STEERING,
+  gateRefusal, isInsideDir, isObj, MARKER_TRACKS, normalizeLang, planIdText, langOption, PROTO_KEYS, RE_CUSTOM_STEERING,
   RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, readJson,
   requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription, templateBracketKeys,
   templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING, trackAcIds, trackMarker,
   trackTaskHeading, VALID_TRACKS, writeIfAbsent, nextTaskNumber;
 function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, enumArg, existsCached, extractAcIds, extractTestIds,
-  headingIndex, isInsideDir, writeInsideProject, isObj, MARKER_TRACKS, normalizeLang, planIdText, langOption, PROTO_KEYS,
+  headingIndex, gateRefusal, isInsideDir, isObj, MARKER_TRACKS, normalizeLang, planIdText, langOption, PROTO_KEYS,
   RE_CUSTOM_STEERING, RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists,
   readJson, requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING,
@@ -949,16 +949,18 @@ function initTrackPack(projectDir, name, lang, lng) {
   const a = { name: n, token, title, lang: lng };
   const files = { "track.json": K.initJson(a), "requirements.md": K.initRequirements(a), "tasks.md": K.initTasks(a), "test-plan.md": K.initTestPlan(a),
     "checklist.md": K.initChecklist(a), "steering.md": K.initSteering(a) };
-  // Writes stay inside the project: a .specs/ or tracks/ folder that is a link to a folder elsewhere is refused (writeInsideProject).
+  // The write gate is the containment (1.42 R4): a tracks/ or pack folder below .specs/ that is a link is refused (gateRefusal: the
+  // gate's localized answer), while .specs/ itself may be a link — its starters land there, like its features.
   const created = [], kept = [];
   for (const [file, text] of Object.entries(files)) {
     const rel = ".specs/" + TRACK_PACKS_DIR + "/" + n + "/" + file;
     const abs = path.join(dir, file);
-    if (!writeInsideProject(projectDir, abs)) return { ok: false, error: K.writeOutside(rel), created, kept };
     try {
       if (writeIfAbsent(abs, text)) created.push(rel);
       else kept.push(rel);
     } catch (e) {
+      const g = gateRefusal(e, lng);
+      if (g) return Object.assign(g, { created, kept });
       return { ok: false, error: K.writeFailed(rel, e.code || e.message), created, kept };
     }
   }

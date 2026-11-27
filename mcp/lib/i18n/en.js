@@ -2731,7 +2731,6 @@ const msg = {
       noSummary: "[TBD]", // {{summary}} of a feature created without one: a generic slot, so the scaffold still reads 'placeholder'
       unknownArtifact: (a, list) => `Unknown template '${a}' — one of: ${list}, or steering/<file>.md.`,
       writeFailed: (rel, why) => `Could not write ${rel} (${why}).`,
-      writeOutside: (rel) => `Refused to write ${rel}: its folder is a link to a place outside the project.`,
       legacyFeature: ".specs/templates/ is the folder of a feature created before project templates existed (it holds a .state.json) — it stays that feature and is never read as templates. Rename it (" + DEV_SPEC + " feature rename templates <new-name>, or spec_feature rename) to use project templates.",
       builtIn: "built-in",
       override: "project",
@@ -2796,7 +2795,6 @@ const msg = {
       unknownPack: (n, list) => `No track or track pack '${n}' — the project's packs: ${list}.`,
       legacyFeature: ".specs/tracks/ is the folder of a feature created before track packs existed (it holds a .state.json) — it stays that feature and is never read as packs. Rename it (" + DEV_SPEC + " feature rename tracks <new-name>, or spec_feature rename) to use track packs.",
       writeFailed: (rel, why) => `Could not write ${rel} (${why}).`,
-      writeOutside: (rel) => `Refused to write ${rel}: its folder is a link to a place outside the project.`,
       builtIn: "built-in",
       sectionCount: (n) => `${n} section(s)`,
       signalCount: (n) => `${n} signal(s)`,
