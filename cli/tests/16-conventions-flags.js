@@ -457,4 +457,26 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
       () => /EARS: 1 criteria/.test(stdinDash.stdout),
     ]);
   }
+
+  { // 1.42 UX-08: a mistyped command gets the closest command name or alias (closestName, the flags' did-you-mean: within
+    // max(1, ⌊length / 3⌋) edits, a transposition costs 1) — named, never run: exit 1, nothing done; --json adds didYouMean.
+    // Commands only: a feature name is never suggested (a sibling like auth-v1 for auth-v3 would act on another feature).
+    const p = path.join(tmp, "ux08");
+    runIn(["init", "--project", p]);
+    const pt = path.join(tmp, "ux08-pt");
+    runIn(["init", "--lang", "pt", "--project", pt]);
+    const human = (w, dir) => runIn([w, "--project", dir || p]);
+    const json = (w) => { const r = spawnIn([w, "--json", "--project", p]); let doc = null; try { doc = JSON.parse(r.stdout); } catch { /* reported */ } return { code: r.status, doc }; };
+    const rows = { nxt: "next", nextaction: "next-action", stauts: "status", nq: "na", frobnicate: null };
+    const got = Object.fromEntries(Object.keys(rows).map((w) => [w, { h: human(w), j: json(w) }]));
+    const ptNxt = human("nxt", pt);
+    all("1.42 UX-08: an unknown command names the closest command or alias (nxt → next, nextaction → next-action, stauts → status, nq → the alias na), none far off (frobnicate); exit 1, nothing run; --json didYouMean; Portuguese in a pt project (got " +
+      JSON.stringify(Object.entries(got).map(([w, r]) => [w, r.h.out.trim().slice(0, 90), r.j.doc && r.j.doc.didYouMean])) + ")", {
+      ...Object.fromEntries(Object.entries(rows).map(([w, near]) => [w, () => got[w].h.code === 1 && got[w].j.code === 1 && got[w].j.doc && got[w].j.doc.code === "unknown-command" &&
+        (near ? got[w].h.out.includes(`unknown command '${w}' — did you mean '${near}'? Run`) && got[w].j.doc.didYouMean === near
+          : got[w].h.out.includes(`unknown command '${w}'. Run`) && !("didYouMean" in got[w].j.doc))])),
+      notRun: () => !/Next →|No features|Feature:/.test(got.nxt.h.out + got.stauts.h.out),
+      pt: () => ptNxt.code === 1 && ptNxt.out.includes("comando desconhecido 'nxt' — será 'next'? Corre"),
+    });
+  }
 };

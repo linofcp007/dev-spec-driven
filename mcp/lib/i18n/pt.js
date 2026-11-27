@@ -1708,7 +1708,7 @@ const msg = {
       dependsOn: (f, deps, order, unknown) => `${f} depende de: ${deps || "(nenhuma)"}` + (order != null ? `  ordem=${order}` : "") + (unknown ? `  ⚠ dependências desconhecidas: ${unknown}` : ""),
       trackNow: (f, tracks) => `'${f}' agora [${tracks}]`,
       usage: (syntax) => `uso: ${syntax}`,
-      unknownCommand: (c) => `comando desconhecido '${c}'. Corre \`${DEV_SPEC} help\`.`,
+      unknownCommand: (c, near) => `comando desconhecido '${c}'${near ? ` — será '${near}'?` : "."} Corre \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `cliente desconhecido '${c}'. Conhecidos: ${known}`,
       noJson: (c) => `--json não está disponível para '${c}': só imprime texto. Corre-o sem --json.`,
       flagNotFor: (flag, c, list) => `${flag} não é uma opção de '${c}'` + (list ? ` (as suas opções: ${list})` : " (não tem nenhuma)") + `. Corre \`${DEV_SPEC} help\`.`,

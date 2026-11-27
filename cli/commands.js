@@ -2424,6 +2424,23 @@ const HELP_FOOT = `  The project: --project <dir> (an existing folder — only i
 function helpText() {
   return HELP_HEAD + "\n\n" + COMMANDS.filter((e) => e.help).map((e) => e.help).join("\n") + "\n\n" + HELP_FOOT;
 }
+// 1.42 UX-07: what a bare `dev-spec` (no command, no flag) prints — the first steps in /spec's order (the start hint's: classify,
+// init, create), every command of the table by name (derived: the table's entries with a help block, in its order, wrapped under
+// 120 columns) and where the whole help is. `help`, `--help` and `-h` print helpText() as ever (a `--help | grep` reads flags).
+// English, as all the help; the table's static name / help only — never `options` (their getter loads the operations table).
+const HELP_FIRST_STEPS = `  First steps: classify "<idea>" → init → create <name> --size xs|s|m|l → next-action <name> (fill, doctor, approve —
+  the user's yes, phase by phase) → done <name> <n> --run → finish <name> --run`;
+function helpOverview() {
+  const lines = [];
+  let line = "  Commands:";
+  for (const n of COMMANDS.filter((e) => e.help).map((e) => e.name)) {
+    if (line.length + 3 + n.length > 118) { lines.push(line); line = "   "; }
+    line += (/:$|^ +$/.test(line) ? " " : " · ") + n;
+  }
+  lines.push(line);
+  return HELP_HEAD + "\n\n" + HELP_FIRST_STEPS + "\n" + lines.join("\n") + "\n\n" +
+    "  dev-spec help — every command, flag and exit code · dev-spec <command> --help (or help <command>) — one command";
+}
 // one command's help: its lines of helpText() (an alias's: its command's) + its options (a value flag shows "…") + the
 // global ones + where the whole help is. No block (help, an unknown word): the whole help. The lines stay the one help text (English,
 // like the rest of it); the frame lines are in the project language.
@@ -2473,5 +2490,5 @@ function completionModel(c) {
 module.exports = {
   COMMANDS, COMMAND_INDEX, commandFor, COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES, HELP_ALIASES, TEXT_ONLY_COMMANDS, GLOBAL_OPTIONS,
   VALUE_FLAG_SPECS, VALUE_FLAGS, REPEATABLE_FLAGS, OPTIONAL_VALUE_FLAGS, BOOL_FLAGS, EVALS_VALUE_FLAGS, EVALS_SWITCHES, TIMEOUT_MAX_S, NEXT_MAX,
-  spec, engineLoaded, CLI_FILE, CLI_PATH, RULE_FILES, mcpConfigBlocks, helpText, helpFor, completionModel, statusLineRender, printVersion,
+  spec, engineLoaded, CLI_FILE, CLI_PATH, RULE_FILES, mcpConfigBlocks, helpText, helpOverview, helpFor, completionModel, statusLineRender, printVersion,
 };

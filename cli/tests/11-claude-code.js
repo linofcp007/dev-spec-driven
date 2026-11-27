@@ -201,7 +201,7 @@ exports.run = ({ ok, skip, all, run, runIn, spawnIn, tmp, CLI, require, __dirnam
     const loaded = (args, input, cwd) => spawnSync(process.execPath, ["-r", pre, CLI, ...args], { encoding: "utf8", input: input || "", cwd: cwd || none, env: envNo });
     const slNone = loaded(["statusline"], js({ cwd: none, workspace: { current_dir: none } }));
     const slProj = loaded(["statusline"], js({ cwd: pr }));
-    const help = loaded(["help"]), dashHelp = loaded(["--help"]);
+    const help = loaded(["help"]), dashHelp = loaded(["--help"]), bareOverview = loaded([]); // 1.42 UX-07: the bare overview loads none either
     const time = (args, input) => { const t0 = process.hrtime.bigint(); spawnSync(process.execPath, args, { input: input || "", cwd: none, env: envNo }); return Number(process.hrtime.bigint() - t0) / 1e6; };
     const med = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
     const measure = () => {
@@ -214,6 +214,7 @@ exports.run = ({ ok, skip, all, run, runIn, spawnIn, tmp, CLI, require, __dirnam
     ok(!disagree.length && slNone.status === 0 && slNone.stdout === "" && /LOADED 0$/.test(slNone.stderr) &&
       slProj.status === 0 && /login/.test(slProj.stdout) && !/LOADED 0$/.test(slProj.stderr) &&
       help.status === 0 && /universal spec-driven CLI/.test(help.stdout) && /LOADED 0$/.test(help.stderr) && /LOADED 0$/.test(dashHelp.stderr) &&
+      bareOverview.status === 0 && /^ {2}Commands: /m.test(bareOverview.stdout) && /LOADED 0$/.test(bareOverview.stderr) &&
       s < v && s <= Math.max(250, 2.5 * n),
       "1.25.1 r7: statusline outside a dev-spec project prints nothing without loading any engine module (statusProbe agrees with statusLineProject on " + layouts.length +
       " layouts), a project still gets its line; the bare help loads none either; statusline (no project) " + Math.round(s) + " ms vs node -e 0 " + Math.round(n) + " ms and `version` (the engine) " + Math.round(v) +

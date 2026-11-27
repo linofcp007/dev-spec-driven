@@ -111,6 +111,39 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, tmp, CLI }) => {
     ]);
   }
 
+  // 1.42 UX-07: a bare `dev-spec` (no command, no flag) prints an overview — the first steps, every command by name, where the whole
+  // help is —, not the 31 KB reference; help / --help / -h print the reference as ever (a `--help | grep <flag>` keeps working).
+  // The command list is DERIVED from the table (a new command is listed with nothing else to touch); its first steps are the start
+  // hint's order (UX-21: classify, init, create).
+  {
+    const CMD = require(path.join(path.dirname(CLI), "commands.js"));
+    const I = require(path.join(path.dirname(CLI), "..", "mcp", "lib", "i18n.js"));
+    const p = path.join(tmp, "ux07");
+    runIn(["init", "--project", p]);
+    const bare = spawnIn([], { cwd: p }), help = runIn(["help"]), dashH = runIn(["--help"]), h = runIn(["-h"]);
+    const lines = bare.stdout.replace(/\r?\n$/, "").split(/\r?\n/);
+    // the Commands: block — "  Commands: a · b" and its indented continuation lines, up to the blank line
+    const at = lines.findIndex((l) => l.startsWith("  Commands: "));
+    const block = [];
+    for (let i = at; at >= 0 && i < lines.length && lines[i].trim(); i++) block.push(lines[i]);
+    const listed = block.join(" ").replace(/^\s*Commands:\s*/, "").split(/\s+·\s+|\s{2,}/).map((s) => s.trim()).filter(Boolean);
+    const table = CMD.COMMANDS.filter((e) => e.help).map((e) => e.name);
+    // the first steps' command words, in order, against the start hint's (with init: no .specs/ yet)
+    const steps = (lines.slice(0, at).join(" ").split("First steps:")[1] || "").split("→").map((s) => s.trim().split(/\s+/)[0]);
+    const hint = I.msg("en").cliOutput.startHint(true).split(I.DEV_SPEC).slice(1).map((s) => s.trim().split(/[\s,]+/)[0]);
+    all("1.42 UX-07: bare `dev-spec` prints the overview — the head, the first steps (the start hint's order, real commands), exactly the table's commands in order, ≤ 120 columns, the pointer to the whole help; help / --help / -h unchanged (got " +
+      JSON.stringify({ lines: lines.length, widest: Math.max(...lines.map((l) => [...l].length)), steps, hint, missing: table.filter((n) => !listed.includes(n)), extra: listed.filter((n) => !table.includes(n)) }) + ")", {
+      code: () => bare.status === 0 && lines[0] === "dev-spec — universal spec-driven CLI (local, zero-dependency)",
+      exactList: () => JSON.stringify(listed) === JSON.stringify(table),
+      narrow: () => lines.length <= 40 && lines.every((l) => [...l].length <= 120),
+      notReference: () => !/^ {2}Flags: --json/m.test(bare.stdout) && bare.stdout.length < 2000,
+      pointer: () => lines[lines.length - 1] === "  dev-spec help — every command, flag and exit code · dev-spec <command> --help (or help <command>) — one command",
+      stepsAreCommands: () => steps.length >= 6 && steps.every((w) => CMD.COMMAND_INDEX.has(w)),
+      hintOrder: () => hint.length === 3 && JSON.stringify(steps.slice(0, 3)) === JSON.stringify(hint),
+      helpUnchanged: () => help.out.replace(/\r?\n$/, "") === CMD.helpText() && dashH.out.replace(/\r?\n$/, "") === CMD.helpText() && h.out.replace(/\r?\n$/, "") === CMD.helpText(),
+    });
+  }
+
   // 1.24 r6 B-I9: an argument `-` reads stdin — from a terminal (a TTY) a one-line hint goes to stderr (type, then Ctrl+D /
   // Ctrl+Z Enter); piped input prints none. (A TTY can't be faked here: the piped side is what this asserts.)
   {

@@ -1781,7 +1781,7 @@ const msg = {
       dependsOn: (f, deps, order, unknown) => `${f} depends on: ${deps || "(none)"}` + (order != null ? `  order=${order}` : "") + (unknown ? `  ⚠ unknown deps: ${unknown}` : ""),
       trackNow: (f, tracks) => `'${f}' now [${tracks}]`,
       usage: (syntax) => `usage: ${syntax}`,
-      unknownCommand: (c) => `unknown command '${c}'. Run \`${DEV_SPEC} help\`.`,
+      unknownCommand: (c, near) => `unknown command '${c}'${near ? ` — did you mean '${near}'?` : "."} Run \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `unknown client '${c}'. Known: ${known}`,
       // --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
       noJson: (c) => `--json is not available for '${c}': it prints text only. Run it without --json.`,

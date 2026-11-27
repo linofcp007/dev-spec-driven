@@ -524,9 +524,15 @@ function dispatch(c) {
     if (cmd !== "version" && cmd !== "completion") checkProject(c);
     checkCommandArgs(c); // the command's own options, at most its own arguments
   }
+  // 1.42 UX-07: `dev-spec` alone (no command, no flag) prints the overview; a help word or flag — help, --help, -h — the whole help
+  if (cmd === undefined && !Object.keys(c.flags).length) return c.log(CMD.helpOverview());
   if (cmd === undefined || cmd === "-h" || cmd === "--help") return c.log(CMD.helpText()); // (`-- --help`: the word itself)
   c.entry = CMD.commandFor(cmd);
-  if (!c.entry) c.die(c.projectText().unknownCommand(cmd), { code: "unknown-command" });
+  if (!c.entry) {
+    // 1.42 UX-08: the closest command name or alias (closestName, as the flags' did-you-mean) — named, never run; `didYouMean` in --json
+    const near = PROBE().closestName(cmd, [...CMD.COMMAND_INDEX.keys()]);
+    c.die(c.projectText().unknownCommand(cmd, near), near ? { code: "unknown-command", didYouMean: near } : { code: "unknown-command" });
+  }
   return c.entry.run(c);
 }
 
