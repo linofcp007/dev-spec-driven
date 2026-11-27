@@ -352,10 +352,9 @@ function specKitDesignDocs(dir, read, rd, W, model, src, got) {
   if (contracts.length) parts.push("## " + D.contracts + "\n\n" + W.skFrom("contracts/") + "\n\n" + contracts.join("\n\n"));
   // quickstart.md is no design: Spec Kit's ("runnable validation scenarios that prove the feature works end-to-end") IS the
   // feature's quickstart.md, the file trace reads an SC's coverage from — importRun writes it there (its title replaced by ours);
-  // one holding only its title leaves the scaffold's
+  // one holding only its title ("") leaves the scaffold's
   const q = rd("quickstart.md");
-  const qs = q == null ? "" : demoteMd(q, 0).trim();
-  if (qs) model.quickstart = qs;
+  model.quickstart = q == null ? null : demoteMd(q, 0).trim();
   if (skipped.length) model.skipped.push(...skipped);
   return parts.length ? parts.join("\n\n") : null;
 }
