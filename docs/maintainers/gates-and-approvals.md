@@ -106,8 +106,11 @@ review findings — is in History at the end.
   missingRoles} is `approvalChecks` of the FIRST pending gate — the approval's own checks, a forecast: the approve call adds
   `phase-order` (an earlier phase changed since its approval, `changedApprovedPhases`, kept apart from `pending`) and the role
   sign-offs. The CLI headline prints it (`cliOutput.doctorNextGate`: checks pass · fails (its ids) · nothing to approve yet), and
-  the texts that send an agent to doctor say to fix what its next gate refuses — none promises an approval on it
-  (mcp/tests/17-docs-shipped-texts.js reads every shipped text). `changedApprovedPhases` stays out of `nextGate`: next_action's
+  every shipped sentence that sends an agent to doctor before an approval or a phase advance says to fix what its next gate
+  refuses — none promises an approval on it (mcp/tests/17-docs-shipped-texts.js reads every shipped .md / .mdc, the rule files
+  of other tools included, by the sentence's shape: "run … doctor … before advancing / an approval", "at each phase boundary",
+  "`spec_doctor` … first", "`spec_doctor`, then the user's approval"; another wording, another language or a .js string is not
+  read). `changedApprovedPhases` stays out of `nextGate`: next_action's
   re-review step and the fast-forward read it, and approvePhase adds `phase-order` itself.
 - **`next_action` — the step order, phase by phase** (doctor shows the same gate as `nextGate`). One ordered registry, as the
   checks are (1.30): `NEXT_STEPS` (engine/doctor.js) — `{id, when(x), run(x)}`, the first whose `when` holds answers, `run`
