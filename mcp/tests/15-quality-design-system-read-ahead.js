@@ -263,16 +263,21 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     // the rest in sequence. It was `took ≥ 1800 && took < 15000`, the whole read's time: worker starts and contention among the five
     // children at once — 9.1 s of 15 in a pre-push run. A pool start of 2 s or more is itself a stall by the product's rule (that
     // take times out, the pool stops: still one slow take); only a start between 1.8 and 2 s beside the planted stall makes two —
-    // on a miss the stall child runs once more ALONE, with spawnSync)
+    // on a miss the stall child runs once more ALONE, with spawnSync. 1.42 fix round 1: two bounds, each holding its own part. The
+    // slow-take count holds the STALL: one wait of AHEAD_STALL_MS, never doubled, never a second one. `took < 15000` (the whole read,
+    // as before R8) holds the FALLBACK after it: ~396 takes through readFileHead in sequence, each far below 1.8 s, which the count
+    // never sees — a 50 ms wait before each (review 1's RA-1) passed the count alone at 27 s. What `took` hides: a fallback slower by
+    // less than ~11 s in all (≈ 28 ms a take beside this machine's 3.4 s read), and load on the first, parallel sample — retried alone)
     let stallFirst = true;
-    const stallOk = (x, y) => x.code === 0 && !x.killed && y != null && y.same && y.made === 8 && y.exited === 8 && Array.isArray(y.slow) && y.slow.length === 1 && y.slow[0] < 2 * STALL_MS;
+    const stallOk = (x, y) => x.code === 0 && !x.killed && y != null && y.same && y.made === 8 && y.exited === 8 && Array.isArray(y.slow) && y.slow.length === 1 && y.slow[0] < 2 * STALL_MS &&
+      y.took < 15000;
     const st = remeasure(() => {
       if (stallFirst) { stallFirst = false; return { x: stall, y: s1 }; }
       const x = runSync([CHILD, ENGINE, "stall", path.join(d, "files")], env("on"));
       return { x, y: said(x) };
     }, (v) => stallOk(v.x, v.y));
     const brief = (x, y) => ({ code: x.code, killed: x.killed, ms: x.ms, said: y, stderr: x.stderr.slice(0, 200) });
-    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (its source throws) is heard — the process lives on and every file comes, in order; a NODE_OPTIONS preload that refuses worker threads reaches none (no worker's error; no stall: 1.35.4 review 2 — within 1.5× + 1 s of the same read with no NODE_OPTIONS, measured next to it, no longer an absolute 1.8 s); 1.42: the stall is ONE slow take, under twice AHEAD_STALL_MS (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(st.x, st.y), base: brief(base, b1), failing: brief(failing, f1), refused: brief(refused, r1), plain: brief(plain, p1), tries: twins.tries, stallTries: st.tries }) + ")", {
+    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (its source throws) is heard — the process lives on and every file comes, in order; a NODE_OPTIONS preload that refuses worker threads reaches none (no worker's error; no stall: 1.35.4 review 2 — within 1.5× + 1 s of the same read with no NODE_OPTIONS, measured next to it, no longer an absolute 1.8 s); 1.42: the stall is ONE slow take, under twice AHEAD_STALL_MS, and the whole read under 15 s — the fallback's takes in sequence (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(st.x, st.y), base: brief(base, b1), failing: brief(failing, f1), refused: brief(refused, r1), plain: brief(plain, p1), tries: twins.tries, stallTries: st.tries }) + ")", {
       failing: () => failing.code === 0 && !failing.killed && f1 != null && f1.same && f1.made === 8 && f1.failed === 1,
       refused: () => refused.code === 0 && !refused.killed && r1 != null && r1.same && r1.made === 8 && r1.failed === 0 && plain.code === 0 && p1 != null && p1.same && p1.made === 8 && r1.took < 1.5 * p1.took + 1000,
       early: () => early.code === 0 && !early.killed && e1.same && e1.made === 8 && e1.exited === 8 && e1.exitMs < 5000,
