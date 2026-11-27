@@ -1091,7 +1091,7 @@ const TASK_BLOCKS_MEMO = new Map();
 const TASK_BLOCKS_MEMO_MAX = 1024;
 const TASK_BLOCKS_MEMO_CHARS = 4 * 1024 * 1024;
 const TASK_BLOCKS_MEMO_STATE = { chars: 0 };
-// An LRU put on a Map whose insertion order is its recency (a hit is deleted and set again by the caller): `key` → `value` set last,
+// An LRU put on a Map whose insertion order is its recency: `key` → `value` set last (a key already there moves to the newest place),
 // then the OLDEST entries evicted until both bounds hold — at most `maxEntries` entries and `maxChars` characters of keys — or the
 // new one is alone (it is never evicted). `state.chars` is the kept keys' total length, exact. → map
 function lruPut(map, key, value, state, { maxEntries, maxChars }) {
