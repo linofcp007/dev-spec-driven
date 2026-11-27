@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   const S16 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const w16 = path.join(tmp, "wp16");
   S16.initProject(w16, ["core"], "en");
@@ -165,4 +165,53 @@ exports.run = ({ ok, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
     !fs.existsSync(path.join(w16, ".specs", "not-a-bug-either")) && !fs.existsSync(path.join(w16, ".specs", "long-cond")),
     "1.21 review A8: on the CLI a bugfix input given to a plain feature is refused naming --root-cause (not the MCP key rootCause) and the runnable bugfix command; a too-long --condition names the flag (got " +
     JSON.stringify([jA8 && jA8.error, longA8.out.slice(0, 160)]) + ")");
+
+  { // 1.42 UX-01: doctor's headline adds the next approval's own checks (nextGate) — readyToAdvance is every check, a later phase's
+    // included: a +sec feature's design sections fail at classification. Never "ready": nextGate is a forecast (the approval also
+    // runs phase-order — case (e) — and the role sign-offs).
+    const head = (out) => out.split(/\r?\n/)[0];
+    const fill = (f) => fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(/\[[^\]\n]*\]/g, "filled"));
+    const u1 = (n) => path.join(tmp, "ux01-" + n);
+    for (const [n, l] of [["a", "en"], ["b", "en"], ["pt", "pt"], ["es", "es"]]) { S16.initProject(u1(n), ["core"], l); S16.createFeature(u1(n), { name: "Pay flow", tracks: ["tdd", "sec"], size: "m" }); }
+    fill(path.join(u1("a"), ".specs", "pay-flow", "classification.md"));
+    const a = runIn(["doctor", "pay-flow", "--project", u1("a")]), aj = JSON.parse(runIn(["doctor", "pay-flow", "--json", "--project", u1("a")]).out);
+    const b = runIn(["doctor", "pay-flow", "--project", u1("b")]);
+    const pt = runIn(["doctor", "pay-flow", "--project", u1("pt")]), es = runIn(["doctor", "pay-flow", "--project", u1("es")]);
+    // (e) the demo, its tasks approval revoked, then an approved criterion edited: nextGate's own checks pass, the approval is
+    // refused (phase-order) — the suffix says what holds, the checks, and nothing more
+    const demo = u1("demo");
+    fs.cpSync(path.join(__dirname, "..", "examples", "demo-project"), demo, { recursive: true });
+    runIn(["approve", "api-keys", "tasks", "--revoke", "--reason", "re-plan", "--project", demo]);
+    const reqF = path.join(demo, ".specs", "api-keys", "requirements.md");
+    fs.writeFileSync(reqF, fs.readFileSync(reqF, "utf8").replace("store only its hash", "store only its salted hash"));
+    const e = runIn(["doctor", "api-keys", "--project", demo]), eAp = runIn(["approve", "api-keys", "tasks", "--project", demo]);
+    // (u) review 1 (R1-SURF-03, SURF-06 M4): the next gate's file is there but can't be read (a folder named requirements.md) —
+    // said as approve says it, never "nothing to approve yet"; nextGate.unreadable in --json; en / pt / es
+    const unread = Object.fromEntries([["en", "en"], ["pt", "pt"], ["es", "es"]].map(([n, l]) => {
+      const p = u1("unread-" + n);
+      S16.initProject(p, ["core"], l);
+      S16.createFeature(p, { name: "Pay flow", tracks: ["core"], size: "s" }); // s: no classification gate before it
+      const rq = path.join(p, ".specs", "pay-flow", "requirements.md");
+      fs.rmSync(rq);
+      fs.mkdirSync(rq);
+      const d = runIn(["doctor", "pay-flow", "--project", p]), dj = runIn(["doctor", "pay-flow", "--json", "--project", p]), ap = runIn(["approve", "pay-flow", "requirements", "--project", p]);
+      let j = {};
+      try { j = JSON.parse(dj.out); } catch { /* reported below */ }
+      return [n, { head: head(d.out), ng: j.nextGate, approve: ap.out.trim() }];
+    }));
+    const UNREAD = { en: "  next gate requirements: its file can't be read — make it a readable file", pt: "  próximo gate requirements: o seu ficheiro não pode ser lido — torna-o um ficheiro legível",
+      es: "  siguiente gate requirements: su fichero no se puede leer — conviértelo en un fichero legible" };
+    all("1.42 review 1 (R1-SURF-03): the next gate's file there but unreadable — the headline says it can't be read (en / pt / es), as approve does; nextGate.unreadable (got " + JSON.stringify(unread) + ")",
+      Object.fromEntries(Object.entries(UNREAD).map(([n, want]) => [n, () => unread[n].head.endsWith(want) && !/nothing to approve yet|ainda nada a aprovar|aún nada que aprobar/.test(unread[n].head) &&
+        !!unread[n].ng && unread[n].ng.phase === "requirements" && unread[n].ng.ready === false && unread[n].ng.unreadable === true && unread[n].ng.failing.length === 0])));
+    all("1.42 UX-01: doctor's CLI headline ends with the next gate's own verdict — checks pass while a later phase's check fails (exit 1, the --json keys unchanged), fails (its own ids only), localized; never 'ready' (got " +
+      JSON.stringify([head(a.out), head(b.out), head(pt.out), head(es.out), head(e.out)]) + ")", {
+      passLater: () => / {2}verdict=FAIL {2}readyToAdvance=false {2}next gate classification: checks pass$/.test(head(a.out)) && a.code === 1 && /✗ sec-sections/.test(a.out),
+      jsonKeys: () => aj.readyToAdvance === false && aj.verdict === "fail" && aj.nextGate.phase === "classification" && aj.nextGate.ready === true,
+      ownIds: () => / {2}next gate classification: fails \(placeholders\)$/.test(head(b.out)) && /✗ sec-sections/.test(b.out),
+      pt: () => / {2}próximo gate classification: falha \(placeholders\)$/.test(head(pt.out)),
+      es: () => / {2}siguiente gate classification: falla \(placeholders\)$/.test(head(es.out)),
+      forecast: () => / {2}next gate tasks: checks pass$/.test(head(e.out)) && !/ready to/i.test(head(e.out)) && eAp.code === 1 && /phase-order/.test(eAp.out),
+    });
+  }
 };

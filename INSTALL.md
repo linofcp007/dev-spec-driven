@@ -106,6 +106,11 @@ then verifies a task only with such a run, or one `dev-spec done --run` made. It
 with that off, an agent appending one line to the log forges a run (`init` and doctor's `observed-unguarded` say so).
 A run Claude Code logged no exit code for (the PowerShell tool alone): record it with `dev-spec done <feature> <n> --run`.
 
+**What the plugin's agents cost (always on, counts only).** The same hook also runs, in the background, when one of the
+plugin's agents (spec-implementer, spec-reviewer, spec-critic…) finishes: it reads that agent's own transcript and appends
+one line of counts — assistant turns, tool calls, tokens, the model — to the git-ignored `.specs/.execution/agents.jsonl`,
+never the transcript's text. `node "$plugin\cli\dev-spec.js" metrics` (`spec_metrics`) adds them up per agent.
+
 **dev-guardian's gate (opt-in).** With the dev-guardian plugin installed, `node "$plugin\cli\dev-spec.js" init --guardian`
 (`spec_init {guardian: true}`; `--guardian off` removes it) adds the project check `guardian`, which `/spec-finish` runs:
 `.specs/guardian.cjs` finds the installed dev-guardian (3.2.1 or later) at each run — the install Claude Code records, or

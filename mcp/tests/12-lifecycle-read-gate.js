@@ -5,7 +5,52 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname }) => {
+// The calls that drive EVERY operation of the table (1.41.1's property, below; 1.42: a shared fixture — the read-gate root file's
+// sweep and 08-tasks-checkbox-case.js's twin drive the same calls, never a copy): each operation with the generic argument pack
+// and the arguments it requires beyond it (OWN: a mode, an action), each feature name for an operation that takes one — a read
+// pass (w false) and a write pass. Parameterized by the project's names: `names` (the features to drive), `other` (a feature a
+// dependency names), `movers` (the names whose write pass moves the folder: archive / rename / restore / remove), `report` (a
+// feature whose task-1 report a stop check names). → passFor(w): [{ op, nm, o }] in the order they run (`feature` last: it moves
+// folders). (Moved out of the property verbatim but for those four names: the same 400 calls over the same 42 operations.)
+exports.operationCalls = (OPERATIONS, { names, other, movers = [], report }) => {
+  const EV = { command: "node -v", exitCode: 0, summary: "ok" };
+  const GENERIC = (w, nm) => ({ name: nm, number: 1, write: w, includeBody: true, includeBrief: true, code: true, matrix: true, batch: true, waves: true,
+    max: 3, evidence: w ? EV : undefined, reason: "r", phase: "requirements", by: "t", force: w, lang: "en", explain: true,
+    text: "WHEN a user saves an item THE SYSTEM SHALL store it", description: "users save items", track: "sec", dependsOn: [other],
+    tasks: [{ text: "More", requirements: ["US-1.AC-1"] }], heading: undefined, gitLog: "", since: "all", apply: w, reopen: w, cap: 100,
+    minLines: 8, tests: true, title: "t", decision: "d", message: "All tasks are done and verified.", agent: "" });
+  // the arguments an operation REQUIRES beyond the generic pack (a mode, an action); every operation must have been driven
+  const OWN = {
+    init: () => [{ tracks: ["tdd"], lang: "en" }], classify: () => [{}], create: (w) => (w ? [{ name: "fresh-one", tracks: ["tdd"] }, {}] : [{}]),
+    steering: () => [{ file: "custom-one.md" }], backlog: () => [{ action: "list" }], milestone: () => [{ action: "list" }],
+    feature: (w, nm) => (w && movers.includes(nm) ? [{ action: "archive" }, { action: "rename", newName: nm + "-two" }, { action: "restore" }, { action: "remove" }, { action: "remove", confirm: true }]
+      : [{ action: "remove" }, { action: "flow", flow: "design-first" }, { action: "protect", file: "tests/ext/a.test.js", accept: true, reason: "r", dryRun: true },
+        { action: "unprotect", file: "tests/ext/a.test.js", reason: "r", dryRun: true }]),
+    import: (w) => [{ tool: "plan", text: "# Plan: OK\n\n## Steps\n1. do `src/a.js`\n", dryRun: !w }],
+    templates: () => [{ action: "list" }], tracks: () => [{ action: "list" }], signals: () => [{ op: "list" }],
+    export: () => [{ format: "md" }, { format: "html" }, { format: "adr" }, { format: "csv" }, { format: "gherkin" }], changelog: () => [{ since: "all" }],
+    "stop-check": () => [{}, { agent: "dev-spec-driven:spec-implementer", message: "**Status:** DONE\nReport: .specs/" + report + "/.execution/task-1-report.md" }],
+    approve: (w) => [{ phase: "requirements" }, ...(w ? [{ through: "tasks", reason: "r" }] : [])],
+  };
+  const order = OPERATIONS.filter((o) => o.id !== "feature").concat(OPERATIONS.filter((o) => o.id === "feature")); // the folder moves last
+  return (w) => {
+    const calls = [];
+    for (const op of order) {
+      const keys = Object.keys(op.args || {});
+      for (const nm of keys.includes("name") ? names : [undefined]) {
+        for (const extra of (OWN[op.id] ? OWN[op.id](w, nm) : [{}])) {
+          const o = {};
+          const g = GENERIC(w, nm);
+          for (const k of keys) if (g[k] !== undefined) o[k] = g[k];
+          calls.push({ op, nm, o: Object.assign(o, extra) });
+        }
+      }
+    }
+    return calls;
+  };
+};
+
+exports.run = async ({ ok, skip, all, eq, S, tmp, hookIn, fsCalls, require, __dirname }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
   const { OPERATIONS } = require("./lib/operations.js");
@@ -97,9 +142,10 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
   // An fs tracer: every fs.*Sync call made by fn whose path lies in the project and whose REAL location (the nearest existing
   // ancestor's real path) is inside `outside` — a read, a stat, a listing, an existence probe or a write through a link. lstat / readlink
   // / unlink of a link itself are judged by its folder; realpath is the gates' own reading (never content). `exempt`: the frames
-  // allowed to (the engine-free 1-bit pre-filters and the project rule — DESIGN §1-E).
+  // allowed to (the engine-free 1-bit pre-filters and the project rule — DESIGN §1-E). (1.42 B142-13: the Stop and observe hooks'
+  // pre-filters — recentActivity, mentioned, readTasksText — open a regular file only now, so they left the list: the tracer holds them.)
   const NOFOLLOW = new Set(["lstatSync", "readlinkSync", "unlinkSync", "lutimesSync", "symlinkSync", "rmSync", "rmdirSync"]);
-  const EXEMPT = /\b(?:isDevSpecProject|recentActivity|mentioned|readTasksText|refreshStale)\b/;
+  const EXEMPT = /\b(?:isDevSpecProject|refreshStale)\b/;
   const traced = (projectDir, outside, fn) => {
     const rp = fs.realpathSync.native;
     const proj = fold(path.resolve(projectDir));
@@ -153,7 +199,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
   };
 
   const M = maze("main");
-  if (!M.folders) ok(true, "1.41.1 read gate: folder links not creatable here — skipped");
+  if (!M.folders) skip("1.41.1 read gate", "folder links not creatable here");
   else {
     const fl = M.links.files; // file symlinks (Windows: admin / Developer Mode — else skipped; Linux: always)
     const before = snap(M.out);
@@ -186,26 +232,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
     // (b) THE property: every operation of the table, driven with each feature name (the plain ones, the linked folder, the planted
     // archive) in a read pass and a write pass, under the tracer — no fs call through a link below .specs/, no OUT text in any result.
     {
-      const NAMES = ["plaina", "plainb", "plainc", "lnk", "planted"];
-      const EV = { command: "node -v", exitCode: 0, summary: "ok" };
-      const GENERIC = (w, nm) => ({ name: nm, number: 1, write: w, includeBody: true, includeBrief: true, code: true, matrix: true, batch: true, waves: true,
-        max: 3, evidence: w ? EV : undefined, reason: "r", phase: "requirements", by: "t", force: w, lang: "en", explain: true,
-        text: "WHEN a user saves an item THE SYSTEM SHALL store it", description: "users save items", track: "sec", dependsOn: ["plainb"],
-        tasks: [{ text: "More", requirements: ["US-1.AC-1"] }], heading: undefined, gitLog: "", since: "all", apply: w, reopen: w, cap: 100,
-        minLines: 8, tests: true, title: "t", decision: "d", message: "All tasks are done and verified.", agent: "" });
-      // the arguments an operation REQUIRES beyond the generic pack (a mode, an action); every operation must have been driven
-      const OWN = {
-        init: () => [{ tracks: ["tdd"], lang: "en" }], classify: () => [{}], create: (w) => (w ? [{ name: "fresh-one", tracks: ["tdd"] }, {}] : [{}]),
-        steering: () => [{ file: "custom-one.md" }], backlog: () => [{ action: "list" }], milestone: () => [{ action: "list" }],
-        feature: (w, nm) => (w && (nm === "lnk" || nm === "planted") ? [{ action: "archive" }, { action: "rename", newName: nm + "-two" }, { action: "restore" }, { action: "remove" }, { action: "remove", confirm: true }]
-          : [{ action: "remove" }, { action: "flow", flow: "design-first" }, { action: "protect", file: "tests/ext/a.test.js", accept: true, reason: "r", dryRun: true },
-            { action: "unprotect", file: "tests/ext/a.test.js", reason: "r", dryRun: true }]),
-        import: (w) => [{ tool: "plan", text: "# Plan: OK\n\n## Steps\n1. do `src/a.js`\n", dryRun: !w }],
-        templates: () => [{ action: "list" }], tracks: () => [{ action: "list" }], signals: () => [{ op: "list" }],
-        export: () => [{ format: "md" }, { format: "html" }, { format: "adr" }, { format: "csv" }, { format: "gherkin" }], changelog: () => [{ since: "all" }],
-        "stop-check": () => [{}, { agent: "dev-spec-driven:spec-implementer", message: "**Status:** DONE\nReport: .specs/plaina/.execution/task-1-report.md" }],
-        approve: (w) => [{ phase: "requirements" }, ...(w ? [{ through: "tasks", reason: "r" }] : [])],
-      };
+      const passFor = exports.operationCalls(OPERATIONS, { names: ["plaina", "plainb", "plainc", "lnk", "planted"], other: "plainb", movers: ["lnk", "planted"], report: "plaina" });
       const P = maze("prop");
       const pc = S.createFeature(P.p, { name: "plainc", tracks: ["tdd"] });
       fs.writeFileSync(path.join(pc.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Do it for US-1.AC-1\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/c.js_\n  - _Verify: node -v_\n");
@@ -217,30 +244,23 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       const beforeP = snap(P.out);
       const driven = new Set();
       const bad = [], leaks = [];
-      const order = OPERATIONS.filter((o) => o.id !== "feature").concat(OPERATIONS.filter((o) => o.id === "feature")); // the folder moves last
       for (const w of [false, true]) {
-        for (const op of order) {
-          const keys = Object.keys(op.args || {});
-          const names = keys.includes("name") ? NAMES : [undefined];
-          for (const nm of names) {
-            for (const extra of (OWN[op.id] ? OWN[op.id](w, nm) : [{}])) {
-              const o = {};
-              const g = GENERIC(w, nm);
-              for (const k of keys) if (g[k] !== undefined) o[k] = g[k];
-              Object.assign(o, extra);
-              let r;
-              const t = traced(P.p, P.out, () => { try { return op.call(S, P.p, o); } catch (e) { return { threw: e.message }; } });
-              r = t.value;
-              driven.add(op.id);
-              for (const b of t.bad) bad.push(op.id + "(" + (nm || "") + (w ? ",w" : "") + "): " + b);
-              if (has(r)) leaks.push(op.id + "(" + (nm || "") + (w ? ",w" : "") + ")");
-            }
-          }
+        for (const { op, nm, o } of passFor(w)) {
+          const t = traced(P.p, P.out, () => { try { return op.call(S, P.p, o); } catch (e) { return { threw: e.message }; } });
+          const r = t.value;
+          driven.add(op.id);
+          for (const b of t.bad) bad.push(op.id + "(" + (nm || "") + (w ? ",w" : "") + "): " + b);
+          if (has(r)) leaks.push(op.id + "(" + (nm || "") + (w ? ",w" : "") + ")");
         }
       }
       // the hooks' decisions on the maze (the engine-free pre-filters exempted by name: EXEMPT)
       const hook = (file, payload) => traced(P.p, P.out, () => hookIn(path.join(HOOKS, file), { input: js(payload), cwd: P.p, env: { ...process.env, CLAUDE_PROJECT_DIR: P.p } }));
+      // (1.42 S9-c) a plugin agent's transcript, outside the project: the SubagentStop recorder's line must not go through the linked .execution/
+      const agentT = path.join(P.p + "-agents", "agent-d00d00d00d00d0001.jsonl");
+      put(agentT, js({ type: "assistant", message: { id: "msg_01MAZE", model: "claude-opus-4-5", role: "assistant", content: [{ type: "text", text: "DONE" }],
+        usage: { input_tokens: 1, output_tokens: 9, cache_read_input_tokens: 500, cache_creation_input_tokens: 50 } }, uuid: "a-1" }) + "\n");
       const hooks = [
+        hook("observe-hook.js", { hook_event_name: "SubagentStop", agent_type: "dev-spec-driven:spec-reviewer", agent_transcript_path: agentT, stop_hook_active: false, cwd: P.p }),
         hook("spec-hook.js", { hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: path.join(P.b, "requirements.md") }, cwd: P.p }),
         hook("spec-hook.js", { hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: path.join(P.a, "tasks.md") }, cwd: P.p }),
         hook("spec-hook.js", { hook_event_name: "SessionStart", cwd: P.p }),
@@ -383,7 +403,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         finish: () => (f7.blockers || []).some((b) => b.includes(typeof F.noTasks === "string" ? F.noTasks : String(F.noTasks).slice(0, 10))),
         scope: () => s8plain.decision === "allow" && s8.decision === "ask",
       });
-    } else ok(true, "1.41.1 Addition A: file symlinks not creatable here — skipped (Linux runs them)");
+    } else skip("1.41.1 Addition A", "file symlinks not creatable here — Linux runs them");
 
     // (d) .specs ITSELF a link (a project keeping its specs elsewhere): read exactly as a plain .specs/ — the gate is BELOW it
     {
@@ -399,7 +419,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         const view = (p) => { const r = [S.statusFeature(p, "login"), S.nextTask(p, "login"), S.traceCheck(p, "login", { code: true }), S.taskBrief(p, "login", 1, {}).task, S.specDoctor(p, "login").checks.map((c) => c.id + c.status)];
           return js(r).split(p).join("<P>").split(fold(p)).join("<P>"); };
         eq(view(lp), view(real), "1.41.1 read gate: a project whose .specs/ IS a link reads every spec as a plain .specs/ does (status, next_task, trace {code} — its own tests/ found through a listing of .specs/ itself —, the brief, doctor) — only what lies BELOW .specs/ is gated");
-      } else ok(true, "1.41.1 read gate (.specs a link): links not creatable here — skipped");
+      } else skip("1.41.1 read gate (.specs a link)", "links not creatable here");
     }
 
     // meta.evidence observed: a feature's observed log behind a link holds no run — the tick is refused as unobserved, and since no log
@@ -437,7 +457,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         let got = [];
         try { const r = E.readFileHeads(files, 100); try { for (let i = 0; i < files.length; i++) got.push(r.next()); } finally { r.stop(); } } finally { if (ahead === undefined) delete process.env.DEV_SPEC_TEST_AHEAD; else process.env.DEV_SPEC_TEST_AHEAD = ahead; }
         ok(got[80] === null && got.filter((x) => x !== null).length === 110 && !has(got), "1.41.1 read gate: the read-ahead pool (workers on, 111 heads) gives null for a file behind a link below .specs/ and every other head as read (got " + js([got[80], got.filter((x) => x !== null).length]) + ")");
-      } else ok(true, "1.41.1 read gate (pool): file symlinks not creatable here — skipped");
+      } else skip("1.41.1 read gate (pool)", "file symlinks not creatable here");
     }
     // a rename onto a name held by a link (a dangling one too): taken — never a move onto it
     {
@@ -447,7 +467,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       if (link(path.join(tmp, "proj-rg-rename-nowhere"), path.join(p, ".specs", "beta"))) {
         const r = S.manageFeature(p, "rename", "alpha", "beta");
         ok(r.ok === false && r.error === S.msg("en").err.alreadyExists("beta") && fs.existsSync(path.join(p, ".specs", "alpha")), "1.41.1: a rename onto a name a dangling link holds is refused as taken (entryAt) — the feature stays (got " + js(r) + ")");
-      } else ok(true, "1.41.1 (rename onto a link): links not creatable here — skipped");
+      } else skip("1.41.1 (rename onto a link)", "links not creatable here");
     }
     // roadmap.json gone, the only feature's .state.json a link: no feature on both sides (the engine's existsRaw, the hook's lstat)
     if (M.links.files) {
@@ -535,7 +555,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         all("1.41.1 read gate: spec_import's dry run beside a linked steering/ previews what the real import writes and reads nothing through the link (got " + js({ bad: t.bad, files }) + ")", {
           ok: () => t.value.ok === true && real.ok === true, parity: () => files.length > 0 && files.every(([, same]) => same), noRead: () => !t.bad.length && !has(t.value),
         });
-      } else ok(true, "1.41.1 read gate (dry run): links not creatable here — skipped");
+      } else skip("1.41.1 read gate (dry run)", "links not creatable here");
     }
   }
 
@@ -650,7 +670,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         openspec: () => runs[1].warnings.includes(W.wUnreadable("openspec/changes/add-x/specs")),
         bmad: () => !runs[2].warnings.some((w) => /bmadsrc.docs./.test(w)),
       });
-    } else ok(true, "1.41.1 R3 (imports): links not creatable here — skipped");
+    } else skip("1.41.1 R3 (imports)", "links not creatable here");
     // trace's feature folders are FOLDERS: a root file (ROADMAP.md, roadmap.json) is never read as one
     const calls = fsCalls(path.join(path.resolve(p), ".specs") + path.sep, () => S.traceCheck(p, "feat", { code: true }));
     const seen = [];

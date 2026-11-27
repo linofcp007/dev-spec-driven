@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, rpc, payload, hookIn, __dirname, require }) => {
+exports.run = async ({ ok, skip, all, S, tmp, rpc, payload, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the lexer) — read through mcp/test.js's require
   let HU; // what the hooks share before the engine loads (hooks/hook-utils.js — no engine)
   try { HU = require("../hooks/hook-utils.js"); } catch { HU = { approvalProjects: () => [], editTargets: () => [], sessionFlagFile: () => path.join(os.tmpdir(), "none") }; }
@@ -483,7 +483,7 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, hookIn, __dirname, require
       () => noop.refreshed === false, () => did.refreshed === true, () => !raw.length,
     ]);
     // the pre-commit check: a stale roadmap is refreshed, and a generated file that was staged is staged again (the commit holds the fresh one)
-    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.24 r6 I-I1 pre-commit: skipped — git not available");
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.24 r6 I-I1 pre-commit", "git not available");
     else {
       const git = (...g) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...g], { cwd: p, encoding: "utf8" });
       git("init", "-q");

@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require, handRoadmap }) => {
+exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require, handRoadmap }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -260,6 +260,31 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
       () => /checks must be an object/.test(bad4.result.content[0].text), () => bad5.ok === false, () => /at most 20 project checks/.test(bad5.error),
       () => fs.readFileSync(rp5, "utf8") === before5, () => JSON.parse(before5).meta.lang !== "pt",
     ]);
+    // 1.42 R1(d): every name of Object.prototype that a check name's shape admits — derived at run time from the engine's
+    // CHECK_NAME_RE (constructor, toString, valueOf, hasOwnProperty… — never a list typed here) — and its upper-cased spelling: each
+    // refused by spec_init {checks} in-process and over MCP, the error naming it, roadmap.json unchanged after each (a check of that
+    // name would be the object's own method once read back)
+    {
+      const evSrc = fs.readFileSync(path.join(__dirname, "lib", "engine", "evidence.js"), "utf8");
+      const shapeSrc = (evSrc.match(/^const CHECK_NAME_RE = \/(.+)\/;$/m) || [])[1];
+      const SHAPE = shapeSrc ? new RegExp(shapeSrc) : null;
+      const protoNames = SHAPE ? Object.getOwnPropertyNames(Object.prototype).filter((k) => SHAPE.test(k)) : [];
+      const names = protoNames.flatMap((k) => [k, k.toUpperCase()]);
+      const stored = fs.readFileSync(rp5, "utf8");
+      const got = [];
+      for (const k of names) {
+        const inProc = S.initProject(d5, ["core"], undefined, { checks: { [k]: "npm test" } });
+        const unchanged1 = fs.readFileSync(rp5, "utf8") === stored;
+        const viaMcp = await b5Call("spec_init", { projectDir: d5, checks: { [k]: "npm test" } });
+        got.push({ k, inProc: inProc.ok === false && String(inProc.error).includes("'" + k + "'"), mcp: !!viaMcp && viaMcp.ok === false && String(viaMcp.error).includes("'" + k + "'"),
+          unchanged: unchanged1 && fs.readFileSync(rp5, "utf8") === stored });
+      }
+      all("1.42 R1(d): spec_init {checks} refuses every Object.prototype name a check name's shape admits — and its upper-cased spelling — in-process and over MCP, naming it, roadmap.json unchanged (got " +
+        JSON.stringify({ protoNames, bad: got.filter((g) => !(g.inProc && g.mcp && g.unchanged)) }) + ")", {
+        derived: () => protoNames.length >= 5 && protoNames.includes("constructor") && protoNames.includes("toString") && names.length === 2 * protoNames.length,
+        refused: () => got.length === names.length && got.every((g) => g.inProc && g.mcp && g.unchanged),
+      });
+    }
     const d6 = b5Dir("badstored");
     S.initProject(d6, ["core"], "en");
     const rp6 = path.join(d6, ".specs", "roadmap.json");
@@ -1649,7 +1674,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
       ["cd /x && npm test", ["npm test"], false]].filter(([c, v, want]) => PV(c, v, "/r") !== want).map(([c, v]) => c + " vs " + js(v));
     ok(!w5.length, "1.22 review 3 (5): a substitution ($(…), `…`) is never split or stripped — it matches only the same text; a run's commands after `cd # ` never count; an unknown folder ($HOME) equals only itself; commands run in the folder the run left them in (wrong: " + js(w5) + ")");
     // a git worktree of the SAME repository holding the feature is the run's root; another repository's project with the same feature is not
-    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.22 review 3 (4): worktree root — skipped: no git");
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.22 review 3 (4): worktree root", "no git");
     else {
       const repo = path.join(tmp, "proj-122r3-wt-main"), wt = path.join(tmp, "proj-122r3-wt-task"), other = path.join(tmp, "proj-122r3-wt-other");
       const git = (cwd, ...a) => spawnSync("git", a, { cwd, encoding: "utf8" });
@@ -1859,13 +1884,14 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
 
   // 1.22 review (13) — the observe hook's pre-filter stat'ed, read and probed change.md in every feature folder on every Bash call
   // (+133 ms at 150 features). It opens tasks.md once and looks at change.md only when there is no tasks.md; what it finds is
-  // unchanged (a change's change.md is still read, an oversized tasks.md still skipped).
+  // unchanged (a change's change.md is still read, an oversized tasks.md still skipped). (1.42 B142-13: counted as the change.md
+  // FILES touched — a stat, an lstat, an open, a read —, since a regular file only is opened: the lstat says there is none first.)
   {
     const js = JSON.stringify;
     const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
     const probe = path.join(tmp, "o122-probe.js"), out = path.join(tmp, "o122-probe.out");
-    fs.writeFileSync(probe, "const fs = require('fs'); let n = 0; for (const k of ['statSync', 'openSync', 'readFileSync', 'existsSync']) { const o = fs[k]; fs[k] = function (p, ...r) { if (typeof p === 'string' && /change\\.md$/.test(p)) n++; return o.call(this, p, ...r); }; }\n" +
-      "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(n)));\n");
+    fs.writeFileSync(probe, "const fs = require('fs'); const seen = new Set(); for (const k of ['statSync', 'lstatSync', 'openSync', 'readFileSync', 'existsSync']) { const o = fs[k]; fs[k] = function (p, ...r) { if (typeof p === 'string' && /change\\.md$/.test(p)) seen.add(p); return o.call(this, p, ...r); }; }\n" +
+      "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(seen.size)));\n");
     const p = path.join(tmp, "o122-prefilter");
     S.initProject(p, ["core"], "en");
     for (let i = 0; i < 5; i++) {

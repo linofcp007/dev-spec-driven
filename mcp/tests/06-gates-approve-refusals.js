@@ -135,4 +135,27 @@ exports.run = async ({ ok, all, S, tmp }) => {
       "1.24 r6 E8: the bugfix design gate refuses a bug.md whose Reproduction is the TODO sentinel again, and one holding its own slots ([correct behavior]); quoted evidence ([object Object]) stays content (got " +
       js([rq.ok, d1.failing, d2.failing, d3.ok, d3.failing]) + ")");
   }
+
+  // 1.42 (UX-04): a refused approval offered force as an equal option ("Fix them, or pass force: true"). It names force only under
+  // the user's explicit consent to these failing checks, and the CLI's doctor line beside /spec-doctor — in every language (pt-BR
+  // derived). A real refusal: an m design whose +sec sections are still the scaffold's.
+  {
+    const CONSENT = { en: /\. force: true \(CLI: --force\) only when the user explicitly accepts these failing checks — /,
+      pt: /\. force: true \(CLI: --force\) só quando o utilizador aceita explicitamente estas verificações a falhar — /,
+      "pt-BR": /\. force: true \(CLI: --force\) só quando o usuário aceita explicitamente estas verificações falhando — /,
+      es: /\. force: true \(CLI: --force\) solo cuando el usuario acepta explícitamente estas verificaciones que fallan — / };
+    const got = {};
+    for (const lang of Object.keys(CONSENT)) {
+      const p = fresh("ux04-" + lang.toLowerCase());
+      const f = S.createFeature(p, "Export " + lang, ["core", "sec"], "Export invoices as CSV", undefined, lang, undefined, { size: "m" });
+      S.approvePhase(p, f.slug, "requirements", "alice", { force: true });
+      const a = S.approvePhase(p, f.slug, "design", "alice");
+      got[lang] = { refused: a.refused === true, failing: a.failing, consent: CONSENT[lang].test(a.error || ""),
+        cli: String(a.error || "").includes("/spec-doctor " + f.slug + " · " + S.DEV_SPEC + " doctor " + f.slug),
+        equalOption: /, or pass force|, ou passa force|, o pasa force/.test(a.error || "") };
+    }
+    all("1.42 UX-04: a refused approval names force only when the user explicitly accepts the failing checks, with the CLI's doctor line — en / pt / pt-BR / es (got " + js(got) + ")",
+      Object.fromEntries(Object.entries(got).flatMap(([l, g]) => [[l + " refused", g.refused && Array.isArray(g.failing) && g.failing.length > 0],
+        [l + " consent clause", g.consent], [l + " CLI doctor line", g.cli], [l + " no equal-option force", !g.equalOption]])));
+  }
 };

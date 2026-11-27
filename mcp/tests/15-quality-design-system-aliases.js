@@ -9,7 +9,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
+exports.run = async ({ all, S, tmp, remeasure, rpc, payload, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const E = require(path.join(__dirname, "lib", "engine", "index.js"));
   const write = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
@@ -46,11 +46,13 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     return o;
   };
   const among = (got, names) => got.filter((n) => names.includes(n));
-  // a timed pair for remeasure(): both scans, the hard one first → [hard ms, soft ms, hard settles Moving, soft settles Moving]
-  const pair = (hard, soft) => () => {
-    const t0 = Date.now(); const h = S.designSystemReport(hard); const t1 = Date.now(); const s = S.designSystemReport(soft);
-    return [t1 - t0, Date.now() - t1, h.missing.some((m) => m.name === "Moving"), s.missing.some((m) => m.name === "Moving")];
-  };
+  // (1.42 perf-13 / B141-08) a scan's alias counts — the report's non-enumerable `aliasStats` (the reader's work past each memo:
+  // `owned` a config's own table built, `tables` a governing folder's, `keys` a folder's keys for a spec) — and whether it settles
+  // Moving. The cost checks below COUNT, no clock: timed, two of the three memos dropped cost nothing measurable at these sizes
+  // (a `tables` or `said` memo off: 670 / 787 ms against 766), so their clocks guarded nothing; the counts are exact on every
+  // platform. What they do not see: CPU work inside keysOf / chain that goes through no counted step (a star scan made
+  // quadratic: 100 stars × 31 asks, negligible today), and the watch's reader (a `_Deprecated:_` row) — no fixture has one.
+  const counted = (p) => { const r = S.designSystemReport(p); return { ...r.aliasStats, moving: r.missing.some((m) => m.name === "Moving") }; };
 
   // --- real-world configs: what each settles, and what it must not -----------------------------------------------------------
   {
@@ -431,8 +433,10 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
 
   // --- what it costs: a config's table is built once a governing folder ---------------------------------------------------------
   {
-    // hard: a tsconfig.json over 31 links with 100 patterns, 1,000 page folders each asking it 31 names (31,000 asks); soft:
-    // the same pages and no config at all (the reader never asked) — the table's memo keeps hard within a bound of soft
+    // a tsconfig.json over 31 links with 100 patterns, 1,000 page folders each asking it 31 names (31,000 asks): ONE governing
+    // folder's table built, ONE config's own `paths` (the 31 it extends write none), 31 lookups (one a distinct spec) — the
+    // memos keep the work at the fixture's own numbers (without the tables' one: 31 tables; without the keys': 31,000 lookups);
+    // the twin with no config at all asks the reader nothing
     const cost = (tag, hostile) => {
       const files = { "package.json": REACT, "src/components/ui/kit.tsx": "export const Moving = motion(Box);\n" };
       if (hostile) {
@@ -445,18 +449,20 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       for (let d = 0; d < 1000; d++) files["src/pages/p" + d + "/page.tsx"] = text;
       return project("cost-" + tag, files);
     };
-    const ms = remeasure(pair(cost("hard", true), cost("soft", false)), (s) => s[0] < 2 * s[1] + 150);
-    all("1.35.4: a governing config's table is built once a folder — 31 links and 100 patterns asked 31,000 times cost within twice the same pages with no config (got " + js(ms) + ")", {
-      bounded: ms[0] < 2 * ms[1] + 150,
-      settled: ms[2] && ms[3],
+    const hard = counted(cost("hard", true)), soft = counted(cost("soft", false));
+    all("1.35.4: a governing config's table is built once a folder — 31 links and 100 patterns asked 31,000 times build one folder's table and one config's own, and look up each of the 31 specs once (1.42: counted, no clock; got " + js({ hard, soft }) + ")", {
+      bounded: hard.tables === 1 && hard.owned === 1 && hard.keys === 31,
+      untouched: soft.tables === 0 && soft.owned === 0 && soft.keys === 0,
+      settled: hard.moving && soft.moving,
     });
   }
 
   // --- what it costs: an import's keys once a governing folder and a spec; a config's table once a file -----------------------
   {
-    // hard: 500 page folders each asking 20 bare specs (`lib<k>`, one segment: no guess beside the key) through a `*` key of
-    // 10 targets of 1,000 characters (within DS_PATH_CHARS); soft: the same pages, targets of one segment — the keys' memo
-    // keeps hard within a bound of soft (each import resolved the ten targets again: 240 KB of them took 500 pages 114 s)
+    // 500 page folders each asking 20 bare specs (`lib<k>`, one segment: no guess beside the key) through a `*` key of
+    // 10 targets of 1,000 characters (within DS_PATH_CHARS) — the keys' memo looks each spec up once: 20 lookups, one table
+    // (each import resolved the ten targets again: 240 KB of them took 500 pages 114 s; without the memo 10,000 lookups — or as
+    // many as the 4 M characters of keys allow, past which the configs tell nothing: the answers change too)
     const long = (tag, segs) => {
       const files = { "package.json": REACT, "src/components/ui/kit.tsx": "export const Moving = motion(Box);\n" };
       files["tsconfig.json"] = { compilerOptions: { paths: { "*": Array.from({ length: 10 }, (_, i) => "./t" + i + "/" + "a/".repeat(segs) + "*") } } };
@@ -464,14 +470,15 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       for (let d = 0; d < 500; d++) files["src/pages/p" + d + "/page.tsx"] = text;
       return project("cost-long-" + tag, files);
     };
-    const lk = remeasure(pair(long("hard", 497), long("soft", 0)), (s) => s[0] < 2 * s[1] + 150);
-    all("1.35.4 review 1: an import's keys are built once a governing folder and a spec — 500 page folders asking 20 bare specs through a `*` key of 10 targets of 1,000 characters cost within twice the same pages with targets of one segment (got " + js(lk) + ")", {
-      bounded: lk[0] < 2 * lk[1] + 150,
-      settled: lk[2] && lk[3],
+    const lk = counted(long("hard", 497));
+    all("1.35.4 review 1: an import's keys are built once a governing folder and a spec — 500 page folders asking 20 bare specs through a `*` key of 10 targets of 1,000 characters look up each spec once, through one table (1.42: counted, no clock; got " + js(lk) + ")", {
+      bounded: lk.keys === 20 && lk.tables === 1 && lk.owned === 1,
+      settled: lk.moving,
     });
-    // hard: 60 folders, each with a tsconfig.json extending the end of one chain of 31 configs that write 2,000 exact keys
-    // each; soft: the same with one key each — a config's table is built once a file (each folder rebuilt the table of every
-    // config of its chain: 68 folders over 31 configs of 12,000 keys took 52 s)
+    // 60 folders, each with a tsconfig.json extending the end of one chain of 31 configs that write 2,000 exact keys each — a
+    // config's table is built once a file: 31 configs' own tables, 60 folders' (one each), 60 lookups (each folder's `lib/x`)
+    // (each folder rebuilt the table of every config of its chain: 68 folders over 31 configs of 12,000 keys took 52 s; without
+    // the memo, 31 × 60 = 1,860)
     const chain = (tag, keys) => {
       const files = { "package.json": REACT, "src/components/ui/kit.tsx": "export const Moving = motion(Box);\n" };
       for (let c = 0; c < 31; c++) {
@@ -485,12 +492,27 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       }
       return project("cost-chain-" + tag, files);
     };
-    // (hard reads 1.2 MB of configs that soft does not, once: a wider bound than the keys' — measured ×1.2 to ×2.7 with the
-    // memo, ×9 to ×27 without it, six runs at once)
-    const ch = remeasure(pair(chain("hard", 2000), chain("soft", 1)), (s) => s[0] < 4 * s[1] + 300);
-    all("1.35.4 review 1: a config's table is built once a file, not once a governing folder — 60 folders extending one chain of 31 configs of 2,000 exact keys each cost within four times the same with one key each (got " + js(ch) + ")", {
-      bounded: ch[0] < 4 * ch[1] + 300,
-      settled: ch[2] && ch[3],
+    const ch = counted(chain("hard", 2000));
+    all("1.35.4 review 1: a config's table is built once a file, not once a governing folder — 60 folders extending one chain of 31 configs of 2,000 exact keys each build each config's own table once and each folder's once (1.42: counted, no clock; got " + js(ch) + ")", {
+      bounded: ch.owned === 31 && ch.tables === 60 && ch.keys === 60,
+      settled: ch.moving,
+    });
+  }
+
+  // --- 1.42: the counts never leave the process: not enumerable — no `aliasStats` in a report's JSON, in MCP's payload, a feature's
+  // report has them too ----------------------------------------------------------------------------------------------------------
+  {
+    const p = project("alias-stats-json", { "package.json": REACT, "tsconfig.json": { compilerOptions: { paths: { "@/*": ["./src/*"] } } },
+      "src/components/ui/kit.tsx": "export const Moving = motion(Box);\n", "src/app/page.tsx": page([[["Moving"], "@/components/ui/kit"]]) });
+    const f = S.createFeature(p, { name: "Stats", tracks: ["ui"], summary: "x" });
+    const r = S.designSystemReport(p), fr = S.designSystemReport(p, { name: f.slug });
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_scan", arguments: { projectDir: p, designSystem: true } }));
+    all("1.42: a design-system report's aliasStats are in-process only — counted on the project's and a feature's report, absent from JSON.stringify and from spec_scan {designSystem}'s payload (got " +
+      js({ stats: r.aliasStats, feature: fr.aliasStats, mcpKeys: viaMcp && Object.keys(viaMcp) }) + ")", {
+      counted: () => r.aliasStats.tables === 1 && r.aliasStats.keys === 1 && r.aliasStats.owned === 1,
+      feature: () => !!fr.aliasStats && typeof fr.aliasStats.keys === "number",
+      notEnumerable: () => !Object.keys(r).includes("aliasStats") && !JSON.stringify(r).includes("aliasStats") && !JSON.stringify(fr).includes("aliasStats"),
+      notOnMcp: () => !!viaMcp && viaMcp.ok === true && !JSON.stringify(viaMcp).includes("aliasStats"),
     });
   }
 };

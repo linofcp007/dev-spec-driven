@@ -9,7 +9,7 @@ const { spawnSync } = require("child_process");
 // Runs after 01-core, in the same process: it reads ctx.vDir — the v1.12 project whose login-loop feature 01-core took to its finish (the prose guard reads its merge summary).
 exports.deps = ["01-core"];
 exports.run = async ({
-  ok, all, S, root, tmp, libSources, maintainerNotes, approveBefore, init, list, require, __dirname, vDir,
+  ok, skip, all, S, root, tmp, libSources, maintainerNotes, approveBefore, init, list, require, __dirname, vDir,
 }) => {
 
   { // --- 1.13 batch 6: the docs' worked examples pass the engine's own gates; no stale test counts ---
@@ -128,9 +128,25 @@ exports.run = async ({
   ok(/real defect[^\n]*\/spec-bugfix/.test(docsSkill) && /Bounded/.test(docsRef("classification-matrix.md")) && /\/spec-bugfix/.test(docsRef("classification-matrix.md")) &&
     /Bounded/.test(docsRef("bugfix.md")) && /\*\*After Phase 0 approval:\*\* `spec_init \{tracks, lang\}` if steering is missing, then\s+`spec_create \{name, tracks, size, lang\}` \*\*once\*\*/.test(docsSkill),
     "mode routing sends a real defect to /spec-bugfix and knows Bounded (SKILL, matrix, bugfix.md); spec_init → spec_create (with the size, 1.24 r6 H2) once, after Phase 0 approval");
-  ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /always scaffolds `quickstart\.md`/.test(docsSkill) && !/^\| Tool \|/m.test(docsSkill) &&
-    (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
-    "SKILL.md claims are honest (constitution check = section presence; quickstart/checklist always scaffolded); the tool table lives in tooling-reference.md");
+  // 1.42 UX-16: quickstart.md and checklist.md come with design.md — a feature of any size —, never with a change (xs), a bugfix
+  // or a spike: SKILL.md said "always". The sentence is held to spec_create's own scaffold.
+  const docsQs = path.join(tmp, "proj-ux16");
+  S.initProject(docsQs, ["core"], "en");
+  const docsQsFiles = (f) => ["design.md", "quickstart.md", "checklist.md"].filter((x) => fs.existsSync(path.join(f.dir, x))).join(",");
+  // (review 1, R1-SURF-08: a bugfix on a marker track gets design.md — its track sections — and neither file: "a feature's")
+  const docsQsGot = [S.createFeature(docsQs, "alpha", ["core"]), S.createFeature(docsQs, { name: "delta", tracks: ["core"], size: "m" }),
+    S.createFeature(docsQs, { name: "beta", tracks: ["core"], size: "xs" }), S.createFeature(docsQs, "gamma", ["core"], undefined, undefined, undefined, "bugfix"),
+    S.createFeature(docsQs, "crash two", ["tdd", "saas"], "the tenant app crashes on save", undefined, "en", "bugfix")].map(docsQsFiles);
+  ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /`spec_create` scaffolds `quickstart\.md` and `checklist\.md` with a feature's `design\.md` \(never a bugfix's\) — fill both\./.test(docsSkill) &&
+    !/always scaffolds `quickstart\.md`/.test(docsSkill) && JSON.stringify(docsQsGot) === JSON.stringify(["design.md,quickstart.md,checklist.md", "design.md,quickstart.md,checklist.md", "", "", "design.md"]) &&
+    !/^\| Tool \|/m.test(docsSkill) && (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
+    "SKILL.md claims are honest (constitution check = section presence; 1.42 UX-16: quickstart / checklist come with design.md — a feature, not a change or a bugfix); the tool table lives in tooling-reference.md (got " + JSON.stringify(docsQsGot) + ")");
+  // 1.42 UX-06: `/spec` with no argument — a returning user who names no feature — routes through spec_status {}: one feature in
+  // flight is resumed, several are listed to choose from, none starts Phase 0 (it routed an existing feature or a new idea only).
+  const docsSpecCmd = docsRead("commands", "spec.md").replace(/\s+/g, " ");
+  ok(/- \*\*No argument\*\* → `spec_status \{\}`: one feature in flight \(not complete\) → resume it as below; several → list them with their phase and progress and ask which; none → ask for the idea \(Phase 0\)\./.test(docsSpecCmd) &&
+    docsSpecCmd.indexOf("**No argument**") < docsSpecCmd.indexOf("**An existing feature**"),
+    "1.42 UX-06: /spec with no argument routes through spec_status {} — one in flight: resume; several: list and ask which; none: Phase 0 — before the existing-feature route");
   // The expected set IS the live tools/list — a hand-kept list went stale (it stopped at 23 tools while the server had 29).
   const docsTools = list.result.tools.map((t) => t.name);
   // 1.26: the README is one file per language — README.md (EN, the reference), README.pt.md (PT-PT), README.es.md (ES) — with
@@ -285,6 +301,20 @@ exports.run = async ({
     Buffer.byteLength(fs.readFileSync(path.join(agentsDir, "spec-verifier.md"), "utf8")) <= 4000 && !/^## Verify mode$/m.test(fs.readFileSync(path.join(agentsDir, "spec-reviewer.md"), "utf8")),
     "6 plugin agents: the critic is read-only (Read, Grep, Glob), the 1.32 UI reviewer reads images only (Read, Glob), the reviewer and the verifier add a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool; every description ≤ 250 characters with no pointer to the body, the reviewer's says 'never edits code' (it has a shell), the verifier ≤ 4 KB and the reviewer has no verify mode left (1.26; got " +
     JSON.stringify(agentFiles.map((a) => a + " " + agentDesc(a).length)) + ")");
+  // 1.42 S14: a byte ratchet per agent prompt — an agents/*.md is paid on EVERY dispatch of its agent, so each file has a cap
+  // and stays within it. A property over agents/*.md, never the six names: a new agent without a cap fails, and so does a cap
+  // left for an agent that is gone. Four caps were measured on the integrated 1.42 branch at ceil(bytes × 1.02 / 100) × 100
+  // (reviewer 27,211 · implementer 18,303 · critic 16,543 · simplifier 8,118 bytes); the verifier's 4,000 (1.26, the row above)
+  // and the UI reviewer's 7,000 (1.32, its visual-review row) are their older pins, kept. Bytes as shipped (the file's size —
+  // LF, .gitattributes), never characters: an em dash costs three. Past a cap: raise it in one line, the reason in the commit.
+  const AGENT_CAPS = { "spec-critic.md": 16900, "spec-implementer.md": 18700, "spec-reviewer.md": 27800, "spec-simplifier.md": 8300,
+    "spec-ui-reviewer.md": 7000, "spec-verifier.md": 4000 };
+  const agentSizes = agentFiles.map((a) => [a, fs.statSync(path.join(agentsDir, a)).size, AGENT_CAPS[a]]);
+  const staleCaps = Object.keys(AGENT_CAPS).filter((a) => !agentFiles.includes(a));
+  all("1.42 S14: every agents/*.md has a byte cap and stays within it (bytes / cap: " +
+    agentSizes.map(([a, b, c]) => a + " " + b + " / " + (c || "none")).join(", ") + ") — past a cap, raise it in one line, the reason in the commit",
+    Object.assign(Object.fromEntries(agentSizes.map(([a, b, c]) => [a + " is " + b + " bytes, cap " + (c || "none"), Number.isInteger(c) && b <= c])),
+      { ["a cap for every agent that exists (stale: " + (staleCaps.join(", ") || "none") + ")"]: agentFiles.length > 0 && !staleCaps.length }));
   // 1.31 (from google/elephant-goldfish-model): the reviewers that judge an artifact or a finding start without CLAUDE.md
   // (`omitClaudeMd: true`, Claude Code 2.1.271+; older versions ignore the key); the ones that write or review code keep
   // the project's instructions. The critic has three modes — gate, a cold read (naive), a task brief's pre-flight (brief).
@@ -334,14 +364,31 @@ exports.run = async ({
       briefInstructions: () => /the root `CLAUDE\.md` and the files it imports \(`@path`\), `\.claude\/CLAUDE\.md` and `CLAUDE\.local\.md` when present, and a `CLAUDE\.md` in the folders of the files the brief names/.test(critic) &&
         !/`AGENTS\.md`/.test(critic),
     });
+    // 1.42 UX-17: each README's requirements line names every agent that starts without CLAUDE.md — the set is read from the
+    // agents' front matter (`omitClaudeMd: true`), never a name list: 1.41's named the critic and the verifier, not the UI reviewer.
+    // A new such agent needs its display name here (and in the three sentences), and one that keeps CLAUDE.md again leaves both.
+    const freshNames = {
+      "spec-critic.md": { en: "the spec critic", pt: "o crítico da spec", es: "el crítico de la spec" },
+      "spec-verifier.md": { en: "the verifier", pt: "o verificador", es: "el verificador" },
+      "spec-ui-reviewer.md": { en: "the UI reviewer", pt: "o revisor de interface", es: "el revisor de interfaz" },
+    };
+    const freshAgents = agentFiles.filter((a) => /^omitClaudeMd: true$/m.test(front(a))).sort();
+    const freshSentence = { en: /2\.1\.271 or later also starts ([^.]*) without your CLAUDE\.md\./, pt: /a 2\.1\.271 ou posterior também arranca ([^.]*) sem o teu CLAUDE\.md\./,
+      es: /la 2\.1\.271 o posterior además arranca ([^.]*) sin tu CLAUDE\.md\./ };
+    const freshGot = docsReadmes.map(([lang, , t]) => [lang, (docsWs(t).match(freshSentence[lang]) || [])[1] || ""]);
+    all("1.42 UX-17: each README's Claude Code line names every omitClaudeMd agent (from agents/*.md's front matter: " + freshAgents.join(", ") + ") and no other (got " + JSON.stringify(freshGot) + ")", {
+      sameSet: JSON.stringify(Object.keys(freshNames).sort()) === JSON.stringify(freshAgents) && freshAgents.length >= 3,
+      named: freshGot.every(([lang, s]) => s && freshAgents.every((a) => s.includes((freshNames[a] || {})[lang] || "\0"))),
+    });
     // 1.32 (from Shopify's Helix): the visual review of a +ui task — an image-only reviewer, INVALID on different states,
     // never "passed" without a reference or a capture; it re-runs after a fix that changes a view; more autonomy only on
     // the user's word; a checkpoint's general feedback becomes a steering amendment; the skeleton first.
     const uiAgent = docsWs(docsRead("agents", "spec-ui-reviewer.md")), uiRef = docsWs(docsRef("ui-review.md"));
     all("1.32: the visual review (agents/spec-ui-reviewer.md, references/ui-review.md) wired into the task loop, /executeTask and SKILL.md; the re-run after a fix, the autonomy grant, learnings → steering, the skeleton first", {
       agent: () => /^model: inherit$/m.test(front("spec-ui-reviewer.md")) && ["never the code, the diff or the conversation", "the pair is **INVALID**",
-        "**Blocker**: a user would notice it and the code can fix it", "its **place**: the region and the element", "### UI review: Match | Differences | Invalid",
-        "Shopify's Helix"].every((s) => uiAgent.includes(s)),
+        "**Blocker**: a user would notice it and the code can fix it", "its **place**: the region and the element", "### UI review: Match | Differences | Invalid"].every((s) => uiAgent.includes(s)) &&
+        // 1.42 (UX-13a): the credit lives in references/ui-review.md alone — the agent's copy, paid per visual review, is gone
+        uiRef.includes("Adapted from the UI review gate of Shopify's Helix (shopify.engineering/helix)") && !uiAgent.includes("Helix"),
       // 1.37: no reference no longer means no review — the floor alone runs (the 1.37 block below); still never "passed"
       neverPassed: () => /\*\*No reference → the floor alone\*\*[^.]*\. It is never "passed"\./.test(uiRef) && /skipped \(no capture tool\)` and say so at the checkpoint\. Never "passed"\./.test(uiRef),
       imagesOnly: () => /Never the code, the diff, the brief or your view of it\./.test(uiRef) && /Don't open the images yourself/.test(uiRef) &&
@@ -386,9 +433,10 @@ exports.run = async ({
     "22 commands: /spec (+ /ds), /spec-bugfix, /clarify, /approve, /spec-doctor, /executeTask (+ /dsx), /spec-status (+ /dss), /roadmap, /spec-review, /spec-finish, /spec-spike, /spec-change, /feature, /spec-report, /spec-adopt, /spec-setup, /eval, /spec-upgrade, /spec-tour (got " + cmdFiles.join(", ") + ")");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
-  // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
+  // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below, and the
+  // review-seat cases (tag `review-seat`, 1.42: a review agent's reply) in 17-docs-evals.js.
   const evalCases = fs.readdirSync(evalRoot, { withFileTypes: true }).filter((e) => e.isDirectory() && !["results", "fixtures"].includes(e.name)).map((e) => e.name);
-  const evalBehavior = (c) => /^\s+- behavior\s*$/m.test(fs.readFileSync(path.join(evalRoot, c, "prompt.md"), "utf8"));
+  const evalBehavior = (c) => /^\s+- (?:behavior|review-seat)\s*$/m.test(fs.readFileSync(path.join(evalRoot, c, "prompt.md"), "utf8"));
   ok(evalCases.length >= 5 && evalCases.every((c) => fs.existsSync(path.join(evalRoot, c, "prompt.md")) && (evalBehavior(c) ||
     fs.readdirSync(path.join(evalRoot, c, "graders")).some((g) => /input_match: '"skill":\\s\*"dev-spec-driven:\[\\w-\]\+"'/.test(fs.readFileSync(path.join(evalRoot, c, "graders", g), "utf8"))))),
     "plugin evals: every case has prompt.md; every triggering case a grader with an intact regex");
@@ -691,6 +739,81 @@ exports.run = async ({
       d8Bug.indexOf("done <feature> 1 --run") < d8Bug.indexOf("done <feature> 2 --run") && !/done <feature> [34]\b/.test(d8Bug) &&
       /no task stands for them/.test(d8Ref) && /\*\*Failing regression test\*\* \(task 1\)/.test(d8Ref) && /\*\*Fix\*\* \(task 2\)/.test(d8Ref),
       "full review D8: /spec-tour sizes the change (step 3) and fills change.md (step 4) before approving it (step 5); /spec-bugfix and references/bugfix.md: task 1 is the red regression test (its red run first), task 2 the fix — no reproduce / root-cause task to tick");
+    // 1.42 (S13): the root-cause phase instruments each boundary, and nothing said to take the instrumentation out. Each instrument
+    // line is tagged DEBUG-<slug>, removed before the fix's run, and the Checkpoint asks for it gone — by `git grep -n`, which EXITS 1
+    // when it finds nothing: the prose says "prints nothing", never "passes" / "succeeds". /spec-bugfix's step 6 says it too. The legacy
+    // four-task sentence (tick 1 and 2 with a note) stays word for word: the plan note's investigation exemption rests on it (UX-02).
+    // Review 1 (R1-TASKS-05): the search is `git grep -n --untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)'` — a plain git grep skipped a
+    // file created while tracing, and `DEBUG-login` matched another bugfix's `DEBUG-login-crash` (`-w` too: a hyphen is a word
+    // boundary); /spec-bugfix's step 3 (the root cause, also the MCP prompt) tells the agent to tag. Mutations: G1 --untracked dropped
+    // · G2 the boundary dropped (or `-w`) · G3 step 3's tag sentence dropped.
+    // Review 2 (R2-TASKS-02): `--untracked` also read the feature's own uncommitted bug.md, whose Root Cause quotes the tagged
+    // output as its evidence — "prints nothing" then asked to delete the approved evidence. A pathspec leaves every `.specs/`
+    // folder out: `':(exclude,glob)**/.specs/**'` (any depth — the ruled `:(top,exclude).specs` is anchored at the git root and
+    // missed a monorepo subproject's app/.specs, run from app/). The documented command is RUN below on both layouts.
+    // Mutations: G4 the pathspec dropped · G5 the top-anchored pathspec · G6 the pathspec dropped from the Checkpoint only.
+    {
+      const s13Ref = dWs(dRef("bugfix.md")), s13Cmd = dWs(dRead("commands", "spec-bugfix.md"));
+      const fixStep = (s13Ref.match(/4\. \*\*Fix\*\* \(task 2\)\.[\s\S]*?(?=\*\*Checkpoint:\*\*)/) || [""])[0], checkpoint = (s13Ref.match(/\*\*Checkpoint:\*\*.*?Close with/) || [""])[0];
+      const step3 = (s13Cmd.match(/3\. \*\*Root cause with evidence\*\*.*?4\. \*\*STOP/) || [""])[0];
+      const step6 = (s13Cmd.match(/6\. \*\*Fix the cause\*\*.*?7\. \*\*Close\*\*/) || [""])[0];
+      const grep = (tag) => "`git grep -n --untracked -E 'DEBUG-<" + tag + ">([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'` prints nothing";
+      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n --untracked` with a tag boundary, every folder named .specs left out by pathspec — a code folder of that name too, said —, prints nothing — never 'passes'); /spec-bugfix steps 3 and 6 say so, step 6's command on one line; the four-task sentence is kept (got " +
+        JSON.stringify([fixStep, checkpoint, step3, step6]) + ")", {
+        "phase 2 tags each instrument line": /instrument each boundary once and run it[^.]*\.[^.]*Tag every instrument line `DEBUG-<slug>`/.test(s13Ref),
+        "phase 4 removes it before task 2's run (G1, G2, G4)": fixStep.includes("Remove the instrumentation before task 2's run: " + grep("slug")),
+        "the Checkpoint asks for it gone (G1, G2, G4, G6)": checkpoint.includes(grep("slug")),
+        "/spec-bugfix step 3 tags (G3)": /tag every instrument line you add `DEBUG-<feature>`/.test(step3),
+        "/spec-bugfix step 6 (G1, G2, G4)": /remove the instrumentation first, every line tagged `DEBUG-<feature>`/.test(step6) && step6.includes(grep("feature")),
+        // review 3 (R3-TASKS-04): the namesake said — the pathspec leaves out a CODE folder named .specs too
+        "bug.md's quoted evidence is said to stay, a code folder named .specs said to be left out": /the pathspec leaves out every folder named `\.specs`, a code folder of that name too — `bug\.md`'s quoted evidence is no instrument line, so it stays/.test(fixStep) &&
+          /and so does every folder named `\.specs`, a code folder of that name too — `bug\.md`'s quoted evidence is no instrument line\)/.test(step6),
+        // review 3 (R3-TASKS-05): /spec-bugfix step 6's command on ONE line of the MCP prompt's markdown — a line-by-line copy that
+        // stopped at `--` ran a complete command, the one without the pathspec
+        "/spec-bugfix step 6's command on one line": dRead("commands", "spec-bugfix.md").split(/\r?\n/).some((l) => l.includes("`git grep -n --untracked -E 'DEBUG-<feature>([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'`")),
+        "never 'passes' / 'succeeds' for the search": ![s13Ref, s13Cmd].some((t) => /git grep -n[^`]*DEBUG-<(?:slug|feature)>[^`]*`? (?:passes|succeeds|returns 0)/.test(t)),
+        "no bare or -w search left": ![s13Ref, s13Cmd].some((t) => /git grep -n (?:-w )?DEBUG-</.test(t)),
+        "the four-task sentence, word for word": s13Ref.includes("(A bugfix scaffolded before this had four tasks — 1 reproduce, 2 root cause, 3 the red test, 4 the fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --evidence \"…\"`, once `bug.md` holds them.)"),
+      });
+      // The Checkpoint's command, RUN as written (its words, the quoted ones unquoted, <slug> → login) from the project root, on a
+      // project at the git root and on a monorepo subproject (app/): bug.md, uncommitted, quotes `DEBUG-login:` (the approved
+      // evidence — never listed), a file made while tracing holds the instrument line (listed), another bugfix's
+      // `DEBUG-login-crash` stays out; with the probe gone it prints nothing and exits 1. Nothing is committed (no hook, no identity).
+      const s13Cmdline = (checkpoint.match(/`(git grep [^`]*)`/) || [])[1] || "";
+      const s13Argv = (s13Cmdline.match(/'[^']*'|\S+/g) || []).map((w) => w.replace(/^'|'$/g, "").replace(/<slug>/g, "login"));
+      if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.42 review 2 (R2-TASKS-02) the documented DEBUG search, run", "git not available");
+      else {
+        // the developer's own git config stays out (review 3, R3-TASKS-03: a global `grep.fullName` or `color.ui = always` changed the
+        // listed names, a global excludes file could hide the probe) — an empty global config, HOME and XDG_CONFIG_HOME in tmp, as
+        // 09-evidence-guardian.js's git rows do
+        const s13Cfg = path.join(tmp, "s13-gitconfig");
+        fs.writeFileSync(s13Cfg, "");
+        const s13Env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: s13Cfg, HOME: tmp, XDG_CONFIG_HOME: tmp, GIT_TERMINAL_PROMPT: "0" };
+        const s13Git = (cwd, ...a) => spawnSync("git", ["-c", "core.autocrlf=false", ...a], { cwd, encoding: "utf8", env: s13Env });
+        const s13Layout = (name, sub) => {
+          const repo = path.join(tmp, "s13-grep-" + name), proj = sub ? path.join(repo, sub) : repo;
+          fs.mkdirSync(path.join(proj, ".specs", "login"), { recursive: true });
+          fs.mkdirSync(path.join(proj, "src"), { recursive: true });
+          s13Git(repo, "init", "-q");
+          fs.writeFileSync(path.join(proj, "crash.js"), "console.log(\"DEBUG-login-crash: trace\");\n");
+          s13Git(repo, "add", "-A");
+          fs.writeFileSync(path.join(proj, ".specs", "login", "bug.md"), "# Bug: login\n\n## Root Cause\nauth.js:1 reads p.length. Evidence: `DEBUG-login: p=undefined at auth.js:1`.\n");
+          fs.writeFileSync(path.join(proj, "src", "probe.js"), "console.log(\"DEBUG-login:\", p);\n");
+          const run = () => { const r = s13Git(proj, ...s13Argv.slice(1)); return [r.status, (r.stdout || "").split(/\r?\n/).filter(Boolean).map((l) => l.replace(/:.*$/, ""))]; };
+          const found = run();
+          fs.unlinkSync(path.join(proj, "src", "probe.js"));
+          return [found, run()];
+        };
+        const s13Plain = s13Layout("plain", ""), s13Mono = s13Layout("mono", "app");
+        const s13Want = JSON.stringify([[0, ["src/probe.js"]], [1, []]]);
+        all("1.42 review 2 (R2-TASKS-02): the Checkpoint's DEBUG search, run as written from the project root, lists the instrument line of a file made while tracing and never the uncommitted bug.md's quoted evidence nor another bugfix's longer tag — at the git root and in a monorepo subproject; once removed it prints nothing (got " +
+          JSON.stringify({ argv: s13Argv, plain: s13Plain, mono: s13Mono }) + ")", {
+          command: s13Argv[0] === "git" && s13Argv[1] === "grep" && s13Argv.includes("--untracked") && s13Argv.indexOf("--") > 1,
+          plain: JSON.stringify(s13Plain) === s13Want,
+          monorepo: JSON.stringify(s13Mono) === s13Want,
+        });
+      }
+    }
     // D9: the implementer and the reviewer get explicit tool lists — no Agent tool (they never dispatch subagents).
     const d9Tools = (x) => ((dRead("agents", x).split(/^---$/m)[1] || "").match(/^tools: (.*)$/m) || [])[1] || "";
     ok(["spec-implementer.md", "spec-reviewer.md", "spec-critic.md"].every((x) => d9Tools(x) && !/\b(?:Agent|Task)\b/.test(d9Tools(x))) &&
@@ -1750,16 +1873,21 @@ exports.run = async ({
       put("src/styles/tokens.css", ":root {\n  --brand: #1e40af;\n}\n");
       put("src/checkout/Pay.tsx", "export function Pay() {\n  return <div className=\"p-[13px] text-[#1d4ed9]\" style={{ color: \"#1d4ed8\" }}><img src=\"a.png\" />Pay</div>;\n}\n");
       put("src/checkout/pay.css", ".pay {\n  font-family: Inter, sans-serif;\n  transition: transform 150ms ease;\n  color: #1d4ed8;\n}\n.all {\n  transition: all 200ms;\n}\n");
+      // (1.42 B141-01: an outline removal a focus style excuses — the inventory's `excused`)
+      put("src/checkout/reset.css", "*:focus {\n  outline: none;\n}\n");
+      put("src/checkout/Ring.tsx", "export const Ring = () => <button className=\"focus-visible:ring-2\">ok</button>;\n");
       const f = S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" });
       fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the checkout\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/checkout/_\n  - _Verify: npm test_\n");
       const pr = S.designSystemReport(p, { uiPass: true }), fr = S.designSystemReport(p, { name: f.slug });
       const keys = new Set(), add = (o) => { for (const k of Object.keys(o || {})) if (k !== "ok") keys.add(k); };
       const first = (list) => (list || [])[0];
       [pr, fr, pr.breakpoints, pr.unitsTable, pr.uiChecks, first(pr.drift), first(Object.values(pr.uiChecks.rules)), first(pr.uiChecks.facts), first(pr.uiChecks.off),
-        first(pr.uiChecks.offIgnored), fr.counts, first(fr.groups), fr.units, first(fr.units && fr.units.findings), fr.uiChecks, first(fr.uiChecks.off)].forEach(add);
+        first(pr.uiChecks.offIgnored), first(Object.values(pr.uiChecks.excused || {})), fr.counts, first(fr.groups), fr.units, first(fr.units && fr.units.findings), fr.uiChecks,
+        first(fr.uiChecks.off)].forEach(add);
       for (const r of fr.raw || []) { add(r); if (r.near) add(r.near); }
       const sane = pr.drift.length === 1 && pr.gone.length === 1 && pr.unitsTable && pr.unitsTable.unread.length === 1 && pr.uiChecks.facts.length === 1
         && pr.uiChecks.off.length === 1 && pr.uiChecks.offIgnored.length === 1 && Object.keys(pr.uiChecks.rules).length >= 1
+        && !!(pr.uiChecks.excused && pr.uiChecks.excused["outline-removed"])
         && ["font", "motion"].every((k) => fr.raw.some((r) => r.kind === k && r.token)) && fr.raw.some((r) => r.near) && fr.groups.length >= 1
         && fr.units && fr.units.findings.length >= 1 && fr.uiChecks.off.length === 1;
       return { keys: [...keys], missed: [...keys].filter((k) => !toolRow.includes("`" + k + "`")), sane };
@@ -2300,6 +2428,201 @@ exports.run = async ({
       diffBase: LOG.includes("The verdict's line says \"" + require(path.join(__dirname, "lib", "i18n.js")).msg("en").guardian.diffBase("<base>").replace(/^ · /, "") + "\" — one text, true for every version."),
       prune: TOOLF.includes("each removal the user's, recorded through spec_impact's `retire` and, at guard level tests, the protected-test accept · `feedback`") &&
         TE.includes("the record spec_impact's `retire` and, at guard level tests, the protected-test accept"),
+    });
+  }
+
+  { // 1.42 (DS-PROMPTS) — the review loop's prose and the agent prompts: each row reads the real files.
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const SUBX = raw("skills", "dev-spec-driven", "references", "subagent-execution.md"), SUB = ws(SUBX);
+    const REV = ws(raw("agents", "spec-reviewer.md")), FIN = ws(raw("commands", "spec-finish.md"));
+    const section = (text, head) => { const i = text.indexOf(head); if (i < 0) return ""; const rest = text.slice(i + head.length); const j = rest.search(/\n#{2,3} /); return head + (j < 0 ? rest : rest.slice(0, j)); };
+    const ledger = (SUBX.match(/Ledger lines \(one per event, appended\):\n\n```\n([\s\S]*?)```/) || [])[1] || "";
+    const closing = ws(section(SUBX, "## Closing")), fix = ws(section(SUBX, "### 7. Fix loop"));
+    const step4 = (FIN.match(/ 4\. (.*?) 5\. /) || [])[1] || "";
+
+    // S1: the review loop's residues — the findings a feature ships with still open — are filed before the merge, since the ledger
+    // goes with .execution/ and nothing else reads it. The set is a PROPERTY (fix round 1, R1-PROMPTS-02/03): a defect that exists
+    // at HEAD and ships — pre-existing (deferred) (the reviewer's Pre-existing label, renamed from "Out of scope (deferred)", which
+    // the re-review keeps for a deferred minor — the namesake), a refutation real at HEAD, parked (real), an unconfirmed (NN)
+    // finding or a class place outside a task the final review let ship; never parked (contested) or another refutation (no
+    // defect), never minor (deferred). Fix round 2 (R2-PROMPTS-01 / -04): "real at HEAD" is ONE predicate on TWO verifier inputs —
+    // its verdict's reason (pre-existing / not in the diff) AND its Exists at HEAD line (yes) — written the same in §6, Closing and
+    // /spec-review branch (an intended, silenced, no-rule or nitpick refutation can say "Exists at HEAD: yes" and is no defect);
+    // every other reason of the verifier's template is named as no residue, so a reason added there must be classed here.
+    // ONE entry per feature (keyed on the slug, an input), split at the 2,000-character note limit; the lines after the ledger's
+    // LAST `Residues filed:` line are the ones filed (R2-PROMPTS-03: a kept branch's later residues). ONE closing order in both
+    // files (R1-PROMPTS-01): finish → the execution sign-off → the residues → the commit → switch + merge. The commit (R2-PROMPTS-02)
+    // adds what the run and the closing wrote — the feature's folder, roadmap.json, the generated roadmap files, the registry / a
+    // steering file / the launcher / .specs/.gitignore when written — in the SAME words in both texts (fix round 1's "until git
+    // status is empty … ask the user" asked on every close: the ticks' tasks.md is listed and no closing step wrote it). Fix round 3
+    // (R3-PROMPTS-01 / -02 / -03): a plain `git commit` commits the whole INDEX, so "git carries any other uncommitted change: not
+    // committed" was false for a change staged before the closing — the texts look at the index first (`git diff --cached
+    // --name-only`: those files go to the user, an input, so nothing is asked when nothing was staged), say that a file the run
+    // wrote is added whole, and that only an unstaged or untracked change is carried across the switch; no sweeping add in either
+    // whole text. No recovery verb that parks or drops a change is named in either whole text (R2-PROMPTS-05), the sign-off asked
+    // in ONE sentence of each, whatever its spelling. UX-11: step 4 names the branch the merge line names, no guess without one.
+    const VERIFIER = raw("agents", "spec-verifier.md");
+    const verdictReasons = ((VERIFIER.match(/REFUTED \(under 50\) — ([^\n]*)/) || [])[1] || "").split(" | ").map((s) => s.trim().replace(/ \(cite\)$/, ""));
+    const REAL = "refuted as pre-existing or not in the diff with its `Exists at HEAD` line yes";
+    const sec6 = ws(section(SUBX, "### 6. Verify the findings")), REVIEW = ws(raw("commands", "spec-review.md"));
+    const otherReasons = verdictReasons.filter((r) => r !== "pre-existing" && r !== "not in the diff");
+    const COMMIT = "what the run and the closing wrote under `.specs/`. Before the `git add`, `git diff --cached --name-only` — a file it lists was staged before the closing and would go into the commit: show those files to the user, who decides (unstage them with `git restore --staged <file>`, or commit them too). Then `git add` the feature's folder, `.specs/roadmap.json` and the generated roadmap files the project has (`.specs/ROADMAP.md`, `.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the finish registered components, a steering file the run amended, `.specs/guardian.cjs` when `finish --run` replaced it and `.specs/.gitignore` when the engine added lines to it —, then commit (a file the run wrote is added whole: an edit of the user's in it goes into the commit too; a path git ignores stays out: `git add` names it and adds the rest; a git-ignored `.specs/` has nothing to commit). An unstaged or untracked change of the user's is not added, and git carries it across the switch (or the switch refuses, naming the file, when the branch changed it: ask the user).";
+    // the exclusion lists (every refutation reason that is NO residue) of §6 and Closing — read by two keys below
+    const excl6 = (sec6.match(/Any other reason — (.*?) — is no residue, whatever its `Exists at HEAD` line says\./) || [, ""])[1];
+    const exclC = (closing.match(/another refutation \((.*?): no defect to file\)/) || [, ""])[1];
+    // R3-PROMPTS-05: a sentence of §6 / Closing that pairs "residue" with a no-residue reason once its exclusion list is taken out
+    // (an intended refutation filed as a residue after all — the rule then contradicts itself)
+    const contrary = (t, excl) => (excl ? t.split(excl).join("") : t).split(/(?<=\.)\s+/).filter((s) => /\bresidues?\b/i.test(s) && otherReasons.some((r) => s.includes(r)));
+    const commitIn = (t, lead) => { const i = t.indexOf(lead); if (i < 0) return ""; const rest = t.slice(i + lead.length), j = rest.indexOf("ask the user)."); return j < 0 ? "" : rest.slice(0, j + "ask the user).".length); };
+    const SIGN = /spec_approve|dev-spec approve|approve `execution`|phase: "execution"|sign(?:s|ed)? off the `execution`/;
+    const signSentences = (t) => t.split(/(?<=\.)\s+/).filter((s) => SIGN.test(s)).length;
+    all("1.42 (S1 + UX-11, fix rounds 1-3): the residues — a defect that exists at HEAD and ships: pre-existing (deferred), a refutation real at HEAD (refuted as pre-existing or not in the diff AND its Exists at HEAD line yes — one predicate in §6, Closing and /spec-review branch), parked (real), an unconfirmed (NN) or a class place outside a task the final review let ship — the ones after the last `Residues filed:` line filed as ONE residue-<feature> backlog entry, the defect in the controller's own words, the note split at 2,000 characters; ONE closing order in Closing and /spec-finish (finish, the execution sign-off asked in one sentence, the residues, then the commit of what the run and the closing wrote, a file staged before it shown to the user — the same words in both, no sweeping add —, then the merge); /spec-finish step 4 merges the branch spec_finish's merge line names", {
+      reviewerLabel: /one "Pre-existing \(deferred\)" line at most/.test(REV) && !/one "Out of scope \(deferred\)" line at most/.test(REV) &&
+        /outside the fix diff → "Out of scope \(deferred\)", one line each — it never reopens the loop/.test(REV),
+      ledgerKinds: ["Task 3: pre-existing (deferred): <one-liner>", "Task 3: parked (real) — ", "Task 3: parked (contested) — ", "Residues filed: residue-<feature> (3)"].every((l) => ledger.includes(l)) &&
+        !/Task 3: parked — /.test(ledger),
+      fixLoopRoutes: /Nor does a reviewer's `Pre-existing \(deferred\)` line \(a problem already there at BASE\): ledger it `pre-existing \(deferred\)` — a residue, filed at Closing\./.test(fix) &&
+        /out-of-scope observations become deferred minors\./.test(fix) && !/out-of-scope observations[^.]*residue/.test(fix),
+      breaker: /Reviewer wrong\/contestable → `parked \(contested\)` with a ruling; real but nothing builds on it → `parked \(real\)` with a ruling \(a residue, filed at Closing\)\./.test(fix),
+      set: closing.includes("A residue is a defect that exists at HEAD and ships: a `pre-existing (deferred)` line, a refutation `real at HEAD` (§6: " + REAL + "), a `parked (real)` one, an `unconfirmed (NN)` finding or a class place outside a task the final review let ship — never a `parked (contested)` one or another refutation (") &&
+        /never a `minor \(deferred\)` one/.test(closing),
+      // R1-PROMPTS-02 + R2-PROMPTS-01: §6 ledgers a refutation as a residue on TWO verifier inputs — its reason and its Exists line
+      refutedRealAtHead: sec6.includes("**Under 50** → refuted: ledger `refuted (NN, <why>)` and drop it — unless it is " + REAL + " (a real defect this diff didn't make): ledger `refuted (NN, <why>, real at HEAD)`, a residue, filed at Closing.") &&
+        !/unless its `Exists at HEAD` line says yes/.test(sec6) &&
+        ledger.includes("Task 3: refuted (0, pre-existing, real at HEAD): <one-liner>") && /- Exists at HEAD: /.test(VERIFIER),
+      // one predicate, the same words, in the three texts that ledger it (R2-PROMPTS-01 / -04: /spec-review branch keyed on two other
+      // lines and labelled the same verified fact `pre-existing (deferred)`, which Closing files as `unverified`)
+      onePredicate: [sec6, closing, REVIEW].every((t) => t.split(REAL).length === 2) &&
+        REVIEW.includes("and each one " + REAL + " (checked yourself: your answers to the first two questions) `Final review: refuted (NN, <why>, real at HEAD): …` — residues `/spec-finish` files (`subagent-execution.md` → Closing; any other refutation is none)") &&
+        !/Final review: pre-existing \(deferred\)/.test(REVIEW) && !/real at HEAD that the branch did not introduce/.test(REVIEW),
+      // its two reasons are the verifier template's own words, and every OTHER reason of the template is named as no residue — in
+      // §6 and in Closing (an intended / silenced / no-rule / nitpick refutation says "Exists at HEAD: yes" and is no defect)
+      reasonsFromTemplate: verdictReasons.length >= 7 && ["pre-existing", "not in the diff"].every((r) => verdictReasons.includes(r)) &&
+        otherReasons.length === verdictReasons.length - 2 &&
+        otherReasons.every((r) => excl6.split(", ").includes(r)) && otherReasons.every((r) => exclC.split(", ").includes(r)),
+      // R3-PROMPTS-05 (mutants R3-m3 / R3-m4): and no contrary rule — neither exclusion list names a residue's own reason, and no
+      // other sentence of §6 or Closing files a no-residue reason as a residue
+      noContraryRule: excl6 !== "" && exclC !== "" && ["pre-existing", "not in the diff"].every((r) => !excl6.includes(r) && !exclC.includes(r)) &&
+        contrary(sec6, excl6).length === 0 && contrary(closing, exclC).length === 0,
+      name: /name: "residue-<feature>"/.test(closing) && /dev-spec backlog add residue-<feature> "residues: …"/.test(closing) && !/residue-<topic>/.test(SUB),
+      ownWords: /<the defect, in your own words, never the reviewer's text>/.test(closing) && /<confidence NN \| ruling: why it shipped \| real at HEAD \| unverified>/.test(closing) &&
+        /a pre-existing line or a class place never had a verify pass: `unverified`; a refutation real at HEAD: `real at HEAD` \(its confidence rated a fix round, not the defect\)/.test(closing),
+      // R1-PROMPTS-10 + R2-PROMPTS-03: the ledger line is the mark (the engine dedupes a backlog note only on its exact text) — the
+      // lines after the LAST one are the ones filed (kept the branch, ran more tasks, closed again: its later residues are new)
+      once: closing.includes("**File the residues before the merge** — the residue lines after the ledger's last `Residues filed:` line (the ones above it are filed; no such line: every one).") &&
+        /files the residues after its last `Residues filed:` line \(/.test(step4) && !/means they are filed|files its residues, once/.test(closing + FIN),
+      split: /A note holds at most 2,000 characters — the rest goes in `residue-<feature>-2`, never truncated\./.test(closing),
+      // R1-PROMPTS-01 / 05 + R2-PROMPTS-02 + R3-PROMPTS-01..03: the commit adds what the run and the closing wrote, after everything
+      // that writes the spec state, in the SAME words in both texts — the index looked at first (a file staged before the closing
+      // goes to the user), a file the run wrote added whole, only an unstaged / untracked change carried across the switch (never
+      // asked on every close); a git-ignored .specs/ has nothing to commit (its add would refuse)
+      commitState: commitIn(closing, "**Then commit the spec state with the feature** — ") === COMMIT &&
+        commitIn(step4, "then commit the spec state with the feature — ") === COMMIT && step4.includes(COMMIT + " Offer exactly two options") &&
+        !/user's work|is the user's, ask|porcelain -- \.specs|until it prints nothing|refuses while any of it/.test(closing + FIN) &&
+        // fix round 2's promise, false for a staged change (R3-PROMPTS-01), gone from both
+        !/any other uncommitted change|not lost and not committed/.test(closing + FIN),
+      // R3-PROMPTS-05 (mutants R3-m1 / R3-m2): no sweeping add in either WHOLE text, with or without `--`, a trailing slash or a glob
+      noSweepingAdd: !/git add (?:-A|--all|-u|\.(?=[\s`])|(?:-- )?\.specs\/?(?=[\s`*]))/.test(SUB + " " + FIN),
+      // R2-PROMPTS-05: no recovery verb that parks or drops a change, in EITHER WHOLE text (the old key read Closing + step 4)
+      noRecoveryVerb: !/\bstash\b|switch -f|--force|add -f|checkout --|reset --hard/.test(closing + FIN),
+      // residues and the commit before the merge, after the sign-off — the same order in both files
+      beforeMerge: (() => { const at = ["Ask the human to approve `execution`", "**File the residues before the merge**", "**Then commit the spec state with the feature**", "Then ask the human to choose: merge locally or keep the branch", "delete `.specs/<feature>/.execution/`"].map((s) => closing.indexOf(s));
+        return at.every((i, k) => i > 0 && (k === 0 || at[k - 1] < i)); })() &&
+        /One order, `\/spec-finish`'s: the finish, the `execution` sign-off, the residues, the commit, then the merge\./.test(closing),
+      finishOrder: (() => { const at = [FIN.indexOf("call `spec_approve {name, phase: \"execution\"}` only on their yes"), FIN.indexOf(" 4. Before either option"), FIN.indexOf("files the residues after its last `Residues filed:` line"), FIN.indexOf("then commit the spec state with the feature — "), FIN.indexOf("Offer exactly two options")];
+        return at.every((i, k) => i > 0 && (k === 0 || at[k - 1] < i)); })() &&
+        // the sign-off asked in ONE sentence of each text, whatever its spelling (R2-PROMPTS-05: a second ask spelled as a call
+        // survived a count of one spelling) — a second call after the options would be a second order
+        signSentences(FIN) === 1 && signSentences(closing) === 1,
+      listed: /your final message lists them after the rulings, with the line that drops the entry \(`dev-spec backlog rm residue-<feature>`\)/.test(closing) &&
+        /git history and the backlog are the record now\./.test(closing),
+      // R1-PROMPTS-04: the final review and /spec-review branch ledger their own pre-existing and 50–79 lines, so Closing files them;
+      // step 4 keys on the ledger (a property), not on how the feature ran
+      finalLedger: /Ledger its own lines as a task's are: a `Pre-existing \(deferred\)` line `Final review: pre-existing \(deferred\): …`, a verified 50–79 one `Final review: unconfirmed \(NN\): …`, a refutation real at HEAD with `real at HEAD` \(§6\) — Closing files them\./.test(ws(section(SUBX, "## Final review"))) &&
+        /ledger each 50–79 one `Final review: unconfirmed \(NN\): …` and each one refuted as/.test(REVIEW),
+      finishStep4: /^Before either option, a feature with a review ledger \(`\.specs\/<feature>\/\.execution\/ledger\.md`\) files the residues after its last `Residues filed:` line \(`\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/dev-spec-driven\/references\/subagent-execution\.md` → Closing/.test(step4) &&
+        !/a feature run with subagents files/.test(FIN),
+      finishBranch: /`git switch <base>`, then `git merge <branch>`: the branch `spec_finish`'s merge line names \(`feature\/<slug>` by default, `fix\/<slug>` for a bugfix\); without one, the branch you worked on, if it is not the base\./.test(step4) &&
+        /A fast-forward when possible; a merge commit \(`--no-ff`, or branches that diverged\) takes the merge title and summary as its message/.test(step4) &&
+        !/git merge <name>/.test(FIN) && !/already on the base/.test(FIN),
+    });
+
+    // S4(a): the duplicate detector before the TASK review. Its JSON goes to a file beside the package (§4's fence — so the
+    // review-seat fixture, tied to the fence's output, follows), never into the controller's context; the REVIEWER keeps the
+    // runs in the package's files (the path's tail: a monorepo's stat paths are the repository's, the detector's the project's).
+    // A capped list is never a "none" (L8, L12): only counts.existing 0 is, and a list shorter than its total is the top DUP_TOP.
+    const sec4 = section(SUBX, "### 4. Review package"), fence4 = (sec4.match(/```\n([\s\S]*?)```/) || [])[1] || "";
+    const DUP_TOP = +((fs.readFileSync(path.join(root, "mcp", "lib", "engine", "dupes.js"), "utf8").match(/^const DUP_TOP = (\d+);/m) || [])[1]);
+    const GUIDE = ws(raw("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md")), EXEC = ws(raw("commands", "executeTask.md"));
+    all("1.42 (S4a): the task review gets the duplicate detector's file — §4 writes it beside the package, never through the controller's context; the reviewer keeps the runs in the package's files (by the path's tail), says none only at counts.existing 0 neither truncated nor partial (fix round 1) and knows a list shorter than its total is the top " + DUP_TOP, {
+      fenceLine: /^node "<clone>\/cli\/dev-spec\.js" dupes <feature> --json {2}> {2}\.specs\/<feature>\/\.execution\/task-N-dupes\.json$/m.test(fence4),
+      notInContext: /The last line is the duplicate detector, run from the project root \(`<clone>`: the plugin's folder, as the tools' messages print it\): its runs go to the reviewer in that file, never through your context — the reviewer keeps the ones in the package's files\./.test(ws(sec4)),
+      dispatch: /in \*\*task\*\* mode with: the brief path, the report path, the diff path, the detector's file \(`task-N-dupes\.json`, §4\), BASE\/HEAD/.test(SUB),
+      cost: /one implementer \+ one reviewer per task, and one duplicate-detector run — seconds, its output kept in a file/.test(SUB),
+      reviewerInput: /\*\*Task mode\*\* — one task's diff\. Inputs: [^\n]*the duplicate detector's file \(`task-N-dupes\.json`\)/.test(REV),
+      reviewerFilter: /Task mode: the detector's file — a run counts when its place is a package `--stat` file \(by the path's tail: repository vs project paths\)/.test(REV),
+      // (fix round 1, R1-PROMPTS-07) a zero the detector's own reading caps made (`truncated`: past DUP_FILE_CAP files; `partial`:
+      // past DUP_TOTAL_BYTES — files never compared) is a capped zero, never a "none"; both keys are the detector's own
+      noneOnlyAtZero: /only `counts\.existing` 0, not `truncated` and with no `partial`, is "none"/.test(REV) &&
+        [/\btruncated: /, /\bpartial: \{/].every((re) => re.test(fs.readFileSync(path.join(root, "mcp", "lib", "engine", "dupes.js"), "utf8"))),
+      capTold: Number.isInteger(DUP_TOP) && REV.includes("a `duplicates` list shorter than `total` is the top " + DUP_TOP + ", which can miss this task's run"),
+      pinsKept: /the duplicate detector's `existing` runs first when the dispatch carries them/.test(REV) && /"Duplicated on purpose" is not/.test(REV),
+      guide: /\(the task review, the final review, `\/spec-review branch` \/ `converge` run it first\)/.test(GUIDE),
+      exec: /`dev-spec-driven:spec-reviewer` \(with the duplicate detector's file — subagent-execution\.md §4;/.test(EXEC),
+    });
+
+    // S6: a defect that comes back at ANOTHER place is fixed as a class. ONE trigger with its own predicate (L7 — not the review
+    // panel's merge rule, which is the same place; not every NOT ADDRESSED, which the rounds / tier-up / breaker already answer);
+    // the scope is the task's _Implements:_ files (a property, L1); a place outside them is ledgered for the final review, never
+    // a NEEDS_CONTEXT / converge task mid-story. Ships unmeasured (no review-seat case drives fix rounds).
+    // S3 (the one clause kept): a package too long for one Read is read in parts to its end, never through the shell.
+    const IMPL = ws(raw("agents", "spec-implementer.md"));
+    const classBullet = (fix.match(/- \*\*A defect that comes back at another place is a class\.\*\*(.*?)- \*\*Gates a fix can undo/) || [])[1] || "";
+    all("1.42 (S6 + S3): a confirmed new breakage with an earlier finding's defect at another place is asked for as a class — every place in the task's _Implements:_ files, one fix, the re-review's ADDRESSED only when none is left; a place outside them ledgered for the final review; the reviewer reads a long package in parts, never through the shell", {
+      trigger: /When the verify pass confirms new breakage whose defect — the input or state that breaks — an earlier finding of this task already named, at another place, the next round asks for the class/.test(classBullet) &&
+        !/NOT ADDRESSED/.test(classBullet) && !/overlapping lines|Merge first/.test(classBullet),
+      scope: /every place in the task's `_Implements:_` files that holds it, listed in the fix report, and one fix for all; its re-review gets the list\./.test(classBullet) && !/MERGE_BASE/.test(classBullet),
+      outside: /A place outside those files is not this task's to fix: ledger `Task N: class outside the task — <place>` for the final review \(one it lets ship is a residue\)\./.test(classBullet) &&
+        !/NEEDS_CONTEXT|converge/.test(classBullet),
+      ledger: ["Task 3: class fix (round 2) — <the defect>, 3 places", "Task 3: class outside the task — <place>"].every((l) => ledger.includes(l)),
+      finalTriage: /triages the ledger's deferred minors, unconfirmed and parked findings and the class places outside a task\./.test(SUB) &&
+        /Triage the ledger's deferred minors, unconfirmed findings, parked findings and class places outside a task:/.test(REV),
+      implementer: /A class fix: first list every `file:line` in your task's `_Implements:_` files that holds the defect, then one fix for all; a place outside them you only name\./.test(IMPL),
+      reviewer: /A class finding is ADDRESSED only when every place listed is fixed and a search of the task's `_Implements:_` files finds no other\./.test(REV),
+      readWhole: /\*\*Read the package once\*\* — one too long for a single Read in parts \(`offset` \/ `limit`\) to its last line, never through the shell \(it cuts long output\)\./.test(REV),
+    });
+
+    // The critic's gate rows (GATES' SK-P2 / SK-P3 / S15 as prose, REVIEW's SK-P6) — one cell each, read from the table row.
+    // SK-P6 is a PROPERTY (would a user or caller notice the swap?), never a track list (L1); its exemptions are what the critic
+    // can check — the feature's own story / summary, the steering (Grep), an approved artifact — never "the user's request" it
+    // never sees (it starts fresh); always Minor (placement). SK-P3 asks per principle; the constitution stub is untouched (its
+    // whole-file hash is doctor's steering-placeholder test and the steering importer's, isSteeringStub — the brief's "still a
+    // template" test was UX-10, cut in review 1). S15 stays within 150 bytes: the critic is paid per pre-flight too.
+    const CRITIC = raw("agents", "spec-critic.md");
+    const cell = (cat) => (CRITIC.match(new RegExp("^\\| \\*\\*" + cat + "\\*\\* \\| (.*) \\|$", "m")) || [])[1] || "";
+    const clarity = cell("Clarity"), consistency = cell("Consistency"), testability = cell("Testability");
+    // (fix round 1, R1-PROMPTS-08) S15 exempts an AC that IS the check's result — the improvement-spec template's "the existing
+    // tests stay green" / "0 findings" ACs, proven by the very check; still within the 150 bytes
+    const s15 = "; a task citing an AC whose only `_Verify:_` is a project check naming no test of it, unless the AC is that check's result — it proves nothing broke";
+    const p6 = (clarity.match(/; an AC naming an internal choice.*$/) || [""])[0];
+    all("1.42 (SK-P6, SK-P3, S15, SK-P2): spec-critic flags an AC naming an internal choice no user or caller would notice swapped — Minor, unless the swap IS the feature, the steering sets it or an approved artifact does, never a bugfix's; asks each constitution principle answered; flags a task proved only by a project check unless the AC is that check's result (≤ 150 B); and ACs that repeat each other (fix round 1: only each other — contradiction still reaches the design, the constitution, Out of Scope)", {
+      p6Property: /^; an AC naming an internal choice no user or caller would notice swapped \(a framework, database, library — not an endpoint path or a schema others read\): Minor, it belongs in the design/.test(p6),
+      p6Exempt: /unless the swap IS the feature \(story or summary\), `\.specs\/steering\/` sets it \(Grep\) or an approved artifact the requirements follow; never a bugfix's criteria\.$/.test(p6),
+      p6NotAList: !/\+api|\+data|\+port|the user's request|Important/.test(p6) && /words the glossary says to avoid \(the doctor's `glossary` check\)/.test(clarity),
+      p3: /each principle of `constitution\.md` answered in the design's Constitution Check \(by number or name, with how the design meets it\) — "all principles respected" with none named is a finding\./.test(consistency),
+      // (fix round 1, R1-PROMPTS-09) "repeat" is within the feature only — an AC restating a constitution principle or one the
+      // design echoes is intended repetition; contradiction still reaches the design, the constitution and Out of Scope
+      p2: /^ACs that repeat each other; ACs that contradict each other, the design, the constitution, or `Out of Scope`/.test(consistency) &&
+        !/repeat each other, the design|contradict or repeat/.test(consistency),
+      s15: testability.endsWith(s15 + ".") && Buffer.byteLength(s15) <= 150 && /^ACs no test could fail; test-plan rows that don't actually exercise the AC they claim to cover/.test(testability),
+    });
+
+    // fix round 1, R1-XPLUG-02 (prose, no new reader): with dev-guardian 3.18 a coverage note can also be findings the gate did
+    // not count as new — verification.md's notes clause names that kind and says what it is, so the merge summary's count is read
+    const VERI = ws(raw("skills", "dev-spec-driven", "references", "verification.md"));
+    all("1.42 fix round 1 (R1-XPLUG-02): verification.md's coverage-notes clause names findings the gate did not count as new — never gating, findings it let through", {
+      notes: VERI.includes("The merge summary also counts dev-guardian's coverage notes (taint timeouts, a baseline entry it could not read, findings the gate did not count as new — never gating, though the last are findings it let through: `finish --run` prints the first notes)."),
     });
   }
 

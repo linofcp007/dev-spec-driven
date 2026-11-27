@@ -20,7 +20,7 @@ sencilla — en inglés, portugués (PT-PT y PT-BR) y español.
 
 - **Claude Code 2.1.139 o posterior** (`claude --version`) — los hooks se ejecutan en exec form (`node` arranca
   directamente, sin shell en cada llamada), que las versiones anteriores no ejecutan; la 2.1.271 o posterior además
-  arranca el crítico de la spec y el verificador sin tu CLAUDE.md. O cualquier cliente MCP: Claude
+  arranca el crítico de la spec, el verificador y el revisor de interfaz sin tu CLAUDE.md. O cualquier cliente MCP: Claude
   Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI, Codex CLI… ([INTEGRATIONS.md](./INTEGRATIONS.md)).
 - **Node.js ≥ 18** en el PATH (`node --version`). Node 18 y 20 ya llegaron al final de su vida útil: se recomienda la 22
   o posterior (las suites pasan en la 18, la 22, la 24 y la 26).
@@ -337,7 +337,7 @@ dev-spec-driven/                      ← raíz del plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 herramientas + prompts + recursos, sin dependencias)
 │   ├── servers.json                  ← registro MCP del plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← la fachada del motor (el único objeto que cargan el servidor, la CLI y los hooks)
-│   ├── lib/engine/                   ← el motor: 32 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
+│   ├── lib/engine/                   ← el motor: 33 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← contenido localizado (en · pt · es) + la derivación pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (uno por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (tu clave de API; --dry-run sin conexión)

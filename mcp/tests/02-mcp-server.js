@@ -15,7 +15,7 @@ const TOOLS_LIST_CAP = 45000;
 
 exports.handshake = true; // this file counts the handshake's assertions — every other process runs it muted
 exports.run = async ({
-  ok, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename, hookIn,
+  ok, all, skip, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename, hookIn,
 }) => {
 
   { // --- 1.13 WP3: robustness — MCP argument validation, prototype keys, JSON shapes, depend, evals, pre-commit ---
@@ -356,7 +356,7 @@ exports.run = async ({
 
     // 7. Pre-commit: NUL-separated staged paths (accents/spaces) and named IDs.
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) {
-      console.log("  skip - git not available: pre-commit regression not run");
+      skip("pre-commit regression: NUL-separated staged paths and named IDs", "git not available");
     } else {
       const repo = path.join(tmp, "proj-wp3-git");
       fs.mkdirSync(repo, { recursive: true });
@@ -499,7 +499,7 @@ exports.run = async ({
     ok(lnkPrev.needsConfirm === true && lnkPrev.wouldDelete.files === realFiles && lnkDel.ok === true && !fs.existsSync(lnkF.dir) &&
       fs.readdirSync(lnkOut).length === 30 && fs.existsSync(path.join(w4, ".specs")),
       "remove preview does not follow symlinks/junctions (got " + lnkPrev.wouldDelete.files + " of " + realFiles + "); the delete leaves the link targets alone");
-  } else ok(true, "remove preview vs symlinks: skipped (links not creatable here)");
+  } else skip("remove preview vs symlinks", "links not creatable here");
   // With an unreadable roadmap.json the preview returns the same error the confirmed remove would — it used to
   // list what "would" be deleted and ask for confirm:true, then the confirmed call refused.
   const badRmDir = path.join(w4, "bad-roadmap");
@@ -1068,7 +1068,11 @@ exports.run = async ({
     await se.req("initialize", { protocolVersion: "2025-06-18", capabilities: { roots: {} } });
     const listEnv = await se.call("spec_list", {});
     await se.stop();
-    const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+    // (by real path — a POSIX server's process.cwd() is the physical one, a path built from os.tmpdir() may be an alias of it:
+    // test-docker's --alias-tmp; a folder not made yet, cwd23/.specs, takes its nearest existing parent's. fs.realpathSync, the JS one —
+    // never .native, which expands an 8.3 name a win32 process.cwd() keeps. 1.42 review 1, R10 Step 0; review 2, R2-TESTS-01)
+    const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync(r); } catch { const d = path.dirname(r); return d === r ? r : path.join(real(d), path.basename(r)); } };
+    const same = (a, b) => real(a).toLowerCase() === real(b).toLowerCase();
     ok(rlA.resources.some((r) => r.uri === "specs://feature/from-roots/requirements.md") && same(listA.specsDir, path.join(rootA, ".specs")) && listA.features.length === 1 &&
       same(explicit.specsDir, path.join(other, ".specs")) && askedOnce === 1 && same(listB.specsDir, path.join(rootB, ".specs")) && askedTwice === 2 &&
       !fs.existsSync(path.join(cwd23, ".specs")) && same(listCwd.specsDir, path.join(cwd23, ".specs")) &&
@@ -1084,7 +1088,10 @@ exports.run = async ({
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const bodyOf = (res) => { try { return JSON.parse(res.result.content[0].text); } catch { return { raw: res }; } };
     const txt = (fn) => { try { return String(fn()); } catch (e) { return "THREW: " + e.message; } }; // a missing text must FAIL, not crash the run
-    const same = (a, b) => typeof a === "string" && path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+    // (by real path, as above: a server's cwd is the physical folder — the JS fs.realpathSync, never .native. 1.42 review 1, R10 Step 0;
+    // review 2, R2-TESTS-01)
+    const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync(r); } catch { const d = path.dirname(r); return d === r ? r : path.join(real(d), path.basename(r)); } };
+    const same = (a, b) => typeof a === "string" && real(a).toLowerCase() === real(b).toLowerCase();
     const fileUri = (p) => {
       const s = path.resolve(p).split(path.sep).join("/");
       return process.platform === "win32" ? "file:///" + encodeURI(s) : "file://" + encodeURI(s);
@@ -1241,6 +1248,19 @@ exports.run = async ({
         js([over.error, atMax.ok, undescribed, pdInit]) + ")");
     }
 
+    { // 1.42 UX-20: spec_next_task's description says how the task is picked — by section in file order, then by number (tasks.js
+      // taskDepGraph, D6), never "in number order": task 3 of the first section comes before tasks 1 and 2 of the second
+      const desc = list.result.tools.find((t) => t.name === "spec_next_task").description;
+      const p = path.join(tmp, "proj-ux20");
+      S.initProject(p, ["core"], "en");
+      const f = S.createFeature(p, "alpha", ["core"]);
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n## Phase 1: Setup\n\n- [ ] 3. Wire the store\n  - _Requirements: US-1.AC-1_\n\n" +
+        "## Phase 2: Core\n\n- [ ] 1. Parse the input\n  - _Requirements: US-1.AC-1_\n- [ ] 2. Print it\n  - _Requirements: US-1.AC-1_\n");
+      const nx = bodyOf(await call("spec_next_task", { name: f.slug, projectDir: p }));
+      ok(/the first open one \(by section, then by number\) whose _Depends:_ tasks are done/.test(desc) && !/in number order/.test(desc) && nx.next && nx.next.number === 3,
+        "1.42 UX-20: spec_next_task's description says 'by section, then by number' — and it is so: the first section's task 3 comes before the second's 1 (got " + js([nx.next && nx.next.number]) + ")");
+    }
+
     { // 1.24 r6 A-I1: a tool's result is compact JSON — the same object without the indentation (~22% of a reply's characters)
       const r = await call("spec_list", { projectDir: path.join(tmp, "proj-r6-a5") });
       const e = await call("spec_doctor", { projectDir: path.join(tmp, "proj-r6-a5") }); // 1.26: spec_status without a name lists
@@ -1367,6 +1387,16 @@ exports.run = async ({
         /writes stay in the project's \.specs\/, reads inside the project/.test(ins) && !/never a hidden folder/.test(ins) &&
         /inside the project \(never a hidden folder or a non-document file; with another projectDir, only a dev-spec project's\)/.test(impDesc),
         "1.25.1 r7: initialize's instructions point at spec_next_action for 'where am I / what now?' and say what is local (writes in .specs/, reads inside the project — spec_import's limits) instead of 'All file ops are local to .specs/' (got " + js(ins.slice(0, 200)) + ")");
+      // 1.42 UX-03: the instructions (a client without the skill reads nothing else) state the approval loop the tools enforce —
+      // per phase the artifact, spec_doctor, and spec_approve only on the user's yes — and name only prompts that exist
+      // (1.41 still named spec-impact, folded into spec-change in 1.26): every name of their "(…)" list is a prompts/list name.
+      const prompts = new Set(((await rpc("prompts/list", {})).result.prompts || []).map((p) => p.name));
+      const named = ((ins.match(/Prompts: one per plugin command \(([^)]*)\)/) || [])[1] || "").split(",").map((s) => s.trim()).filter((s) => s && s !== "…");
+      all("1.42 UX-03: the instructions give the approval loop (fill, spec_doctor, spec_approve on the user's explicit yes for that phase; execution after the tasks approval), point at spec_status {} for the features, and every prompt they name is in prompts/list (got " + js(named) + ")", {
+        loop: /then per phase fill its artifact, spec_doctor, and spec_approve on the user's explicit yes for that phase; after the tasks approval spec_next_task \/ spec_complete_task drive execution/.test(ins),
+        features: /spec_next_action \{name\} \(spec_status \{\} lists the features\)/.test(ins),
+        prompts: named.length >= 3 && named.every((n) => prompts.has(n)),
+      });
     }
   }
 };

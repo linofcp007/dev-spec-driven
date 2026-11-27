@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require, handRoadmap }) => {
+exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, require, handRoadmap }) => {
 
   { // --- 1.13 WP6: brownfield depth (scan routes/tests/entrypoints/env/migrations, coverage by _Implements:_), spec_import, integration-plan ---
     const call6 = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
@@ -228,7 +228,9 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require, handRo
     const sk = safe6(() => S.importSpec(im, "spec-kit", "specs/001-photo-albums", { tracks: "saas" }));
     const skReq = sk.ok ? r6(im, ".specs", "photo-albums", "requirements.md") : "";
     const skTasks = sk.ok ? r6(im, ".specs", "photo-albums", "tasks.md") : "";
-    ok(sk.ok && sk.feature === "photo-albums" && sk.mapping["User Story 1 / Scenario 2"] === "US-1.AC-2" && sk.mapping["User Story 2"] === "US-2" && sk.mapping["SC-001"] === "SC-001" && sk.mapping["FR-002"] === "FR-002" &&
+    ok(sk.ok && sk.feature === "photo-albums" && sk.mapping["User Story 1 / Scenario 2"] === "US-1.AC-2" && sk.mapping["User Story 2"] === "US-2" && sk.mapping["SC-001"] === "SC-001" &&
+      // 1.42 SK-03: FR-002 (no scenario covers it) became US-3.AC-1; FR-001 (covered by US-1.AC-1's words) stays prose
+      sk.mapping["FR-002"] === "US-3.AC-1" && sk.mapping["FR-001"] === "FR-001" && /\n### US-3: Functional Requirements\n\n#### Acceptance Criteria \(EARS\)\n1\. \*\*US-3\.AC-1\*\* — THE SYSTEM SHALL keep photo order \(FR-002\)\n/.test(skReq) &&
       /### US-1 \(P1\): Create albums/.test(skReq) && /1\. \*\*US-1\.AC-1\*\* — WHILE a user with photos, WHEN they create an album named Trip, THE SYSTEM SHALL ensure that the album Trip is listed/.test(skReq) &&
       /2\. \*\*US-1\.AC-2\*\* — WHILE an album, WHEN the user renames it, THE SYSTEM SHALL show the new name/.test(skReq) && /- \*\*FR-001\*\*: System MUST let users create albums/.test(skReq) &&
       /## Success Criteria\n[\s\S]*- \*\*SC-001\*\*: 90%/.test(skReq), "spec_import spec-kit: scenario M of story N → US-N.AC-M as one EARS criterion; FR-/SC- lines kept with their IDs; priority kept");
@@ -236,7 +238,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require, handRo
       /\*\*Checkpoint\*\*: User Story 1 works on its own/.test(skTasks) && sk.mapping["task T010"] === "task 3" && S.parseTasks(skTasks).find((t) => t.number === 3).story === "US1" &&
       S.parseTasks(skTasks).find((t) => t.number === 3).parallel === true, "spec_import spec-kit: T001… → numbered tasks keeping checkbox state, [P]/[USn] tags and checkpoints");
     const skEars = safe6(() => S.earsFeature(im, "photo-albums"));
-    ok(skEars.verdict === "pass" && skEars.summary.criteriaDetected === 3 && sk.label === "core +saas" && /## \[SaaS\] Performance Budget/.test(r6(im, ".specs", "photo-albums", "design.md")) &&
+    ok(skEars.verdict === "pass" && skEars.summary.criteriaDetected === 4 /* 1.42 SK-03: + US-3.AC-1 (FR-002) */ && sk.label === "core +saas" && /## \[SaaS\] Performance Budget/.test(r6(im, ".specs", "photo-albums", "design.md")) &&
       // 1.24 r6 G-I3: research.md is design now (one holding only its title carries nothing) — no "not imported" warning
       /## Constitution Check/.test(r6(im, ".specs", "photo-albums", "design.md")) && !sk.warnings.some((x) => /research\.md/.test(x)),
       "spec_import spec-kit: the imported requirements pass ears_validate; explicit tracks honoured; plan.md becomes design.md (+ the [SaaS] sections); research.md no longer reported as not imported");
@@ -1468,7 +1470,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require, handRo
       const slScan = S.scanCodebase(sl);
       ok(!slScan.stack.some((s) => /node|secret-dep/.test(s)) && !slScan.frameworks.includes("express") && slScan.stack.includes("go") && slScan.frameworks.includes("echo"),
         "1.22 review F9: a root package.json linked to a file outside the project is not read (no node stack, no express); a go.mod linked inside the project is (got " + js([slScan.stack, slScan.frameworks]) + ")");
-    } else ok(true, "1.22 review F9: file symlinks unavailable here (Windows without the privilege) — skipped");
+    } else skip("1.22 review F9", "file symlinks unavailable here (Windows without the privilege)");
 
     // F11. coverage(): a folder reference's files by a binary search of keys sorted once — the same files as the scan of every
     // key, far faster (18,000 keys × 709 references here; two scans of every key per reference were most of a coverage run).

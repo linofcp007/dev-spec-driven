@@ -1005,7 +1005,7 @@ const STOP_ES_I = String.raw`(?:terminé|completé|implementé|verifiqué|acabé
 // init notes / hook output). Functions so callers interpolate freely.
 // ===========================================================================
 const msg = {
-    initNote: "Los stubs son placeholders. La skill los rellena con contenido real (ver references/steering-templates.md).",
+    initNote: "Los ficheros de steering son plantillas: rellena sus [placeholders] con las reglas reales del proyecto (del usuario o del código) — doctor avisa hasta entonces. Cómo: skills/dev-spec-driven/references/steering-templates.md, en la carpeta del plugin.",
     addTrackNote: (tr, slug) => `+${tr} añadido. Rellena las nuevas secciones de diseño y vuelve a ejecutar /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `ya tiene +${tr}`,
     notes: {
@@ -1531,10 +1531,12 @@ const msg = {
       steeringSeeded: (comps, tokens) => `  rellenado a partir del código: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} — falta revisar las filas y añadir las variantes y las notas de cada componente`,
       feature: (slug, label, lang) => `Función '${slug}' [${label}] (${lang})`,
       noFeatures: (dir) => `No hay funciones en ${dir}`,
+      startHint: (init) => `  Para empezar una: ${DEV_SPEC} classify "<idea>", luego ${init ? `${DEV_SPEC} init, luego ` : ""}${DEV_SPEC} create <nombre> --size xs|s|m|l (en Claude Code: /spec <idea>).`,
       listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tareas)`,
       statusHead: (f, tracks, phase) => `Función: ${f}  [${tracks}]  fase: ${phase}`,
       statusTasks: (done, total, next) => `Tareas: ${done}/${total}` + (next ? `  siguiente → ${next}` : ""),
       doctorHead: (f, tracks, verdict, ready) => `Diagnóstico: ${f}  [${tracks}]  veredicto=${verdict}  lista para avanzar: ${ready}`,
+      doctorNextGate: (phase, ready, ids, unreadable) => ready ? `  siguiente gate ${phase}: las verificaciones pasan` : ids ? `  siguiente gate ${phase}: falla (${ids})` : unreadable ? `  siguiente gate ${phase}: su fichero no se puede leer — conviértelo en un fichero legible` : `  siguiente gate ${phase}: aún nada que aprobar`,
       traceHead: (f, verdict, acs, covered) => `Trazabilidad: ${f}  veredicto=${verdict}  ACs=${acs}  cubiertos por tareas=${covered}`,
       earsHead: (n, m, verdict) => `EARS: ${n} criterios, ${m} con verbo modal, veredicto=${verdict}`,
       next: (n, text, left, total) => `Siguiente → #${n} ${text}  (quedan ${left}/${total})`,
@@ -1671,6 +1673,8 @@ const msg = {
       uiProjectHead: (n, files) => `  Comprobaciones de interfaz en los ficheros de vista del proyecto (${n} en ${files === 1 ? "el fichero leído" : `los ${files} leídos`}) — el informe de cada funcionalidad lista las suyas; spec_finish avisa de las de una funcionalidad +ui:`,
       uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} en ${files} ${files === 1 ? "fichero" : "ficheros"}${tag ? " " + tag : ""} — la primera: ${at}`,
       uiProjectNone: (files) => `  Comprobaciones de interfaz: nada en ${files === 1 ? "el fichero de vista" : `los ${files} ficheros de vista`} del proyecto`,
+      // 1.42: las eliminaciones que un estilo de foco leído en otro sitio dispensó (`excused`) — un recuento y un recordatorio, nunca un hallazgo
+      uiProjectExcused: (id, n, files, at) => `  ${id}: ${n} ${n === 1 ? "eliminación dispensada" : "eliminaciones dispensadas"} en ${files} ${files === 1 ? "fichero" : "ficheros"} — un estilo de foco en los ficheros leídos las dispensa todas; comprueba que los elementos que pierden el contorno reciben uno (la primera: ${at})`,
       // (los hechos del proyecto por código — at: el primer lugar, fichero:línea)
       uiFact: {
         "no-reduced-motion": (n, at) => `  ▲ el código declara movimiento — una animación, una transición de transform o un desplazamiento suave (${n} ${n === 1 ? "lugar" : "lugares"}, el primero: ${at}) — y ninguno de los ficheros de vista y scripts del proyecto leídos menciona el movimiento reducido: ofrecer una variante reducida — @media (prefers-reduced-motion: reduce), motion-reduce: / motion-safe: de Tailwind (WCAG 2.3.3, AAA)`,
@@ -1706,7 +1710,7 @@ const msg = {
       dependsOn: (f, deps, order, unknown) => `${f} depende de: ${deps || "(ninguna)"}` + (order != null ? `  orden=${order}` : "") + (unknown ? `  ⚠ dependencias desconocidas: ${unknown}` : ""),
       trackNow: (f, tracks) => `'${f}' ahora [${tracks}]`,
       usage: (syntax) => `uso: ${syntax}`,
-      unknownCommand: (c) => `comando desconocido '${c}'. Ejecuta \`${DEV_SPEC} help\`.`,
+      unknownCommand: (c, near) => `comando desconocido '${c}'${near ? ` — ¿quizás '${near}'?` : "."} Ejecuta \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `cliente desconocido '${c}'. Conocidos: ${known}`,
       noJson: (c) => `--json no está disponible para '${c}': solo imprime texto. Ejecútalo sin --json.`,
       flagNotFor: (flag, c, list) => `${flag} no es una opción de '${c}'` + (list ? ` (sus opciones: ${list})` : " (no tiene ninguna)") + `. Ejecuta \`${DEV_SPEC} help\`.`,
@@ -1763,7 +1767,7 @@ const msg = {
       earsPlaceholder: (list) => `El criterio aún tiene placeholder(s) de la plantilla ${list} — escribe el disparador/comportamiento real.`,
       constitutionUnfilled: "la sección Verificación de la Constitución falta o está sin rellenar",
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
-      approveRefused: (phase, slug, ids, lines) => `No se puede aprobar '${phase}' de '${slug}' — verificaciones que fallan: ${ids}.\n${lines}\nCorrígelas (detalles: /spec-doctor ${slug}), o pasa force: true (CLI: --force) para registrar la aprobación igualmente — queda marcada como forzada.`,
+      approveRefused: (phase, slug, ids, lines) => `No se puede aprobar '${phase}' de '${slug}' — verificaciones que fallan: ${ids}.\n${lines}\nCorrígelas (detalles: /spec-doctor ${slug} · ${DEV_SPEC} doctor ${slug}). force: true (CLI: --force) solo cuando el usuario acepta explícitamente estas verificaciones que fallan — la aprobación queda registrada igualmente, marcada como forzada.`,
       approveNothing: (phase, slug, file) => `Nada que aprobar: '${phase}' no tiene artefacto en '${slug}' (${file} no existe, o su track está desactivado) — ni con force.`,
       approveUnreadable: (phase, slug, file) => `Nada que aprobar: ${file} en '${slug}' no se puede leer (una carpeta con ese nombre, sin permiso u otro programa que lo tiene abierto) — conviértelo en un fichero legible y luego aprueba '${phase}'.`,
       approveForced: (ids) => `Aprobado con force — las verificaciones que fallan quedan registradas con la aprobación: ${ids}.`,
@@ -1794,7 +1798,7 @@ const msg = {
         "test-plan.md": (slug) => `comprueba la cobertura de los ACs con trace_check (${DEV_SPEC} trace ${slug})`,
         "eval-plan.md": (slug) => `define los umbrales y la baseline, luego /spec-doctor ${slug}`,
         "tasks.md": (slug) => `desglosa el diseño en tareas reales (/spec ${slug} tasks), luego trace_check`,
-        "change.md": (slug) => `escribe el resumen, 1–3 criterios EARS, el enfoque y 1–3 tareas, cada una con un comando _Verify:_, y luego aprueba el plan en una sola llamada — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks)`,
+        "change.md": (slug) => `escribe el resumen, 1–3 criterios EARS, el enfoque y 1–3 tareas, cada una con un comando _Verify:_, y luego aprueba el plan en una sola llamada — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks; CLI: ${DEV_SPEC} approve ${slug} --through tasks)`,
         default: (slug) => `/spec-doctor ${slug}`,
       },
       approveClassification: (slug) => `Confirma y aprueba la clasificación — /approve ${slug} classification.`,
@@ -1844,6 +1848,7 @@ const msg = {
       hidden: (p, part) => `'${p}' está en una carpeta oculta o es un fichero oculto (${part}) — spec_import no lee ninguno salvo los de los importadores: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
       notSource: (p) => `'${p}' no es una fuente de spec que spec_import lea — indica un fichero .md / .markdown / .mdc / .txt / .json / .yaml / .yml, o la carpeta de la fuente.`,
       nothing: (tool, p) => `No se encontraron ficheros de spec ${tool} en '${p}'.`,
+      nothingSpecKit: (p) => `No se encontraron ficheros de spec spec-kit en '${p}' — una función de Spec Kit es una carpeta con spec.md o tasks.md (normalmente specs/<nnn-name>/): importa esa carpeta.`,
       exists: (slug) => `La función '${slug}' ya existe — la importación nunca la sobrescribe. Indica otro nombre.`,
       tooLarge: (rel, max) => `${rel} tiene más de ${max} caracteres — demasiado grande para importarlo entero (la parte que pasa del límite, incluidos los pasos de un plan, se perdería). Divídelo o acórtalo y vuelve a importarlo; no se creó nada.`,
       noUsableTitle: (title) => `El título del documento '${title}' no tiene caracteres utilizables (a-z, 0-9) para un nombre de carpeta — indica el nombre de la función (name; CLI: --name "<función>").`,
@@ -1882,10 +1887,12 @@ const msg = {
       wRemoved: (name) => `el requisito REMOVED '${name}' no se importó`,
       wRenamed: (from, to) => `requisito RENAMED '${from}' → '${to}' (importado con el nombre nuevo)`,
       wSkipped: (files) => `no importados (se quedan donde están): ${files}`,
-      skDocs: { research: "Investigación", dataModel: "Modelo de datos", contracts: "Contratos", quickstart: "Inicio rápido" },
+      more: (n) => `+${n} más`,
+      skDocs: { research: "Investigación", dataModel: "Modelo de datos", contracts: "Contratos", open: "Preguntas abiertas de quickstart.md" },
       skFrom: (file) => `> De spec-kit \`${file}\`.`,
-      wNoPlanDocs: (file) => `no hay ${file} en el origen — design.md tiene los documentos de diseño encontrados a su lado (investigación, modelo de datos, contratos, inicio rápido) sin el plan`,
+      wNoPlanDocs: (file) => `no hay ${file} en el origen — design.md tiene los documentos de diseño encontrados a su lado (investigación, modelo de datos, contratos) sin el plan`,
       wUncoveredFr: (list) => `requisitos funcionales que ningún escenario de aceptación cubre — quedaron como texto en "Requisitos Funcionales", así que ninguna tarea ni prueba los traza: ${list}. Convierte cada uno en un criterio EARS con un ID de AC (o cítalo en uno) antes de aprobar los requisitos`,
+      wFrCriteria: (story, list) => `los requisitos funcionales que ningún escenario de aceptación cubre pasaron a ser criterios EARS de la historia ${story} (cada original queda en un comentario) — revisa la redacción de cada uno y dale una tarea: ${list}`,
       wUnreadable: (file) => `${file} apunta fuera del proyecto — omitido`,
       done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → función '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  correspondencia: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
@@ -1972,6 +1979,11 @@ const msg = {
       cliSkipped: (list) => `  en espera: ${list}`,
     },
 
+    planGate: {
+      notApproved: (slug, file) => `El plan (${file}) aún no está aprobado: esta tarea no es para implementar — muestra el plan al usuario y pídele su aprobación (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} indica el paso).`,
+      tickedEarly: (n, slug) => `La tarea ${n} se marcó antes de que el plan estuviera aprobado — muestra el plan al usuario y pídele su aprobación antes de la tarea siguiente (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} indica el paso).`,
+    },
+
     impact: {
       reopenTasks: "reopen se aplica a requirements, design, test-plan y eval-plan — un cambio en tasks.md se revisa y se vuelve a aprobar; no reabre nada.",
       changePhase: (phase, slug) => `'${slug}' es un cambio: sus criterios y sus tareas son un solo fichero, change.md, aprobado como el plan (fase tasks) — no hay fase ${phase}. spec_impact {name: "${slug}"} (fase tasks, la predeterminada) compara ambos: los criterios por ID, las tareas por número.`,
@@ -2052,6 +2064,9 @@ const msg = {
       lessonsUnread: (list) => `  lecciones cuya causa no es ninguno de los cinco códigos (¿una edición a mano?): ${list}`,
       lessonsTruncated: (n) => `  lecciones: ${n} carpeta(s) de funcionalidad más allá de las primeras 1000 sin leer`,
       lessonsRepeated: (cause, target, features, n) => `  repetida: ${cause} → ${target} — ${n} lecciones en ${features}`,
+      // 1.42 el coste de los subagentes del plugin (el `agents` de spec_metrics del proyecto): recuentos de sus transcripciones de Claude Code, nunca un tiempo
+      agentsHead: (n) => `  subagentes (los agentes del plugin, contados a partir de sus transcripciones de Claude Code — sin tiempo): ${n} ${n === 1 ? "ejecución" : "ejecuciones"}`,
+      agentsRole: (role, n, turns, tin, tout, cached, partial) => `    ${role}  ${n} ${n === 1 ? "ejecución" : "ejecuciones"} · ${turns} turnos · tokens de entrada ${tin}, de salida ${tout}, leídos de caché ${cached}${partial ? ` — ${partial} ${partial === 1 ? "leída" : "leídas"} solo en parte: un mínimo` : ""}`,
       retroText: {
         title: (f) => `# Retrospectiva: ${f}`,
         intro: (date) => `> Generada por dev-spec el ${date} a partir de .state.json, .history/ y los artefactos. Los números se calculan localmente; el resto te toca a ti. Nada de esto se aplica automáticamente.`,
@@ -2101,7 +2116,7 @@ const msg = {
         phantomSecondary: "las tareas / el plan de pruebas citan IDs EC/NFR/SC desconocidos (¿erratas?)",
         untracedCriteria: "criterios con verbo modal pero sin ID propio (por línea) — ninguna tarea ni prueba puede trazarlos: numera cada uno US-<historia>.AC-<n>",
         inactiveAcs: "ACs bajo el encabezado de un track desactivado (o de un paquete de track que falta) — no se exigen ni se trazan: vuelve a activar el track, o sácalos de esa sección si son criterios del core",
-        justifiedTestGaps: "ACs que el plan de pruebas solo nombra en una nota (Lagunas / Fuera de Alcance), nunca en una fila de prueba — siguen sin cobertura: añade una fila, o aprueba el plan de pruebas con force para aceptar la laguna",
+        justifiedTestGaps: "ACs que el plan de pruebas solo nombra en una nota (Lagunas / Fuera de Alcance), nunca en una fila de prueba — siguen sin cobertura: añade una fila de prueba para cada uno (para cambiar o retirar el AC: /spec-change)",
         plannedNotInCode: "pruebas planificadas que ningún fichero de prueba nombra (pon el T-ID en el nombre de la prueba)",
         inCodeNotInPlan: "T-IDs en el código de prueba que ningún plan de pruebas incluye",
         unresolvedImplGlobs: "globs de _Implements:_ no resueltos del todo (el recorrido de ficheros se detuvo en su límite antes de una coincidencia — no cuentan como ausentes)",
@@ -2315,7 +2330,7 @@ const msg = {
         "     inclusion: manual    → nunca automáticamente; los briefs lo listan como disponible bajo petición\n" +
         "     Sustituye el patrón de ejemplo y las líneas entre corchetes de abajo. -->\n\n" +
         "## Reglas\n- [Una regla que todo fichero que coincida con el patrón debe seguir.]\n\n## Ejemplos\n- [Un ejemplo breve — o una referencia a un fichero que muestre el patrón.]\n",
-      placeholders: (list) => `aún con placeholders de la plantilla: ${list}`,
+      placeholders: (list) => `aún con placeholders de la plantilla: ${list} — rellénalos con las reglas reales del proyecto (del usuario o del código)`,
       scoped: "Steering con alcance (fileMatch — coincide con los ficheros de esta tarea):",
       manual: "Disponible bajo petición (steering manual):",
     },
@@ -2565,7 +2580,6 @@ const msg = {
       noSummary: "[por definir]",
       unknownArtifact: (a, list) => `Plantilla desconocida '${a}' — una de: ${list}, o steering/<fichero>.md.`,
       writeFailed: (rel, why) => `No se pudo escribir ${rel} (${why}).`,
-      writeOutside: (rel) => `Me niego a escribir ${rel}: su carpeta es un enlace a un lugar fuera del proyecto.`,
       legacyFeature: ".specs/templates/ es la carpeta de una función creada antes de que existieran las plantillas del proyecto (tiene un .state.json) — sigue siendo esa función y nunca se lee como plantillas. Cámbiale el nombre (" + DEV_SPEC + " feature rename templates <nuevo-nombre>, o spec_feature rename) para usar plantillas del proyecto.",
       builtIn: "de serie",
       override: "del proyecto",
@@ -2626,7 +2640,6 @@ const msg = {
       unknownPack: (n, list) => `No hay track ni track pack '${n}' — los packs del proyecto: ${list}.`,
       legacyFeature: ".specs/tracks/ es la carpeta de una función creada antes de que existieran los track packs (tiene un .state.json) — sigue siendo esa función y nunca se lee como packs. Cámbiale el nombre (" + DEV_SPEC + " feature rename tracks <nuevo-nombre>, o spec_feature rename) para usar track packs.",
       writeFailed: (rel, why) => `No se pudo escribir ${rel} (${why}).`,
-      writeOutside: (rel) => `Rechazado escribir ${rel}: su carpeta es un enlace a un lugar fuera del proyecto.`,
       builtIn: "de serie",
       sectionCount: (n) => `${n} sección(es)`,
       signalCount: (n) => `${n} señal(es)`,
@@ -2642,7 +2655,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — un track definido por el proyecto (dev-spec 1.15). Solo datos: nada de esta carpeta se ejecuta.
 // Guía: references/project-tracks.md · valídalo: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = el nombre de esta carpeta: ^[a-z][a-z0-9]{1,19}$, nunca un track de serie (core tdd saas ai sec privacy dist api ui obs data).
+  // = el nombre de esta carpeta: ^[a-z][a-z0-9]{1,19}$, nunca un track de serie (core tdd saas ai sec privacy dist api ui obs data port).
   "name": "${a.name}",
   // El marcador estable (distingue mayúsculas) de sus secciones de diseño, criterios y bloque de tareas: [${a.token}].
   "marker": "${a.token}",

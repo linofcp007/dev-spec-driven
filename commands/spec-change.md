@@ -13,9 +13,9 @@ Detail: `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/change-manageme
 is tasks); `steering` without a name lists every feature an amended steering file governed (read-only). Show the diff
 and `affectedTasks` with their evidence; ask whether the change is intended and which done tasks to redo. Only with the
 user's OK: `reopen: true` — it unticks the affected done tasks and marks their evidence stale, never a removed
-criterion's tasks (`retire` lists them to delete or repoint). Then update what the change reaches, `spec_doctor`, and — on
-the user's yes — re-approve each changed phase with `spec_approve`. Never reopen on your own; never treat a changed
-approved spec as still approved.
+criterion's tasks (`retire` lists them to delete or repoint). Then update what the change reaches, `spec_doctor` (fix
+what its next gate refuses), and — on the user's yes — re-approve each changed phase with `spec_approve`. Never reopen
+on your own; never treat a changed approved spec as still approved.
 
 **decide `<what was decided>`** — `spec_decide {name, title, decision, context?, consequences?, affects?, supersedes?,
 kind?}`: the next `D-n` in `decisions.md`, append-only (to change a decision, record one that supersedes it). `affects`:
@@ -23,8 +23,8 @@ AC IDs, T-IDs, EC / NFR / SC IDs and design sections as design.md spells them (`
 (`unknownAffects`). A fact learnt while working: `kind: "discovery"`. Doctor then warns `decision-affects-approved` →
 `impact`.
 
-**track `+x` | `-x`** — `spec_add_track {name, track}` (tdd · saas · ai · sec · privacy · dist · api · ui · obs · data,
-or a project pack): additive, never overwrites — report the files added, then fill the new design sections, criteria and
+**track `+x` | `-x`** — `spec_add_track {name, track}` (tdd · saas · ai · sec · privacy · dist · api · ui · obs · data ·
+port, or a project pack): additive, never overwrites — report the files added, then fill the new design sections, criteria and
 tasks (the design gate refuses unfilled track sections) and re-approve what changed. `-x` → `remove: true`: the track
 leaves the set and no file is deleted (`core` stays; a bugfix keeps +tdd).
 

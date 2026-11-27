@@ -322,8 +322,11 @@ function wantClause(s, head, opt, closing) {
   return null;
 }
 function newImportModel() {
-  // nameFallback: the name without the title (a file's or a folder's), for a title that slugifies to nothing
-  return { title: null, summary: null, nameHint: null, nameFallback: null, stories: [], extra: [], carried: [], design: null, tasks: null, skipped: [], warnings: [], mapping: {} };
+  // nameFallback: the name without the title (a file's or a folder's), for a title that slugifies to nothing; quickstart: the
+  // feature's quickstart.md body (spec-kit's quickstart.md, its title dropped) | null; scaffoldDesignAppend: text written after the
+  // scaffold's design.md when `design` is null and the scaffold's is kept (spec-kit: its quickstart's open questions) | null
+  return { title: null, summary: null, nameHint: null, nameFallback: null, stories: [], extra: [], carried: [], design: null, tasks: null, quickstart: null,
+    scaffoldDesignAppend: null, skipped: [], warnings: [], mapping: {} };
 }
 // \s*[:.\-–—]?\s*(.*)$ (= \s*(?:[:.\-–—]\s*)?(.*)$) from i → the title | null
 function titleAfterDash(s, i) {

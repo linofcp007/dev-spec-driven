@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, hookIn, cliIn, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, S, tmp, hookIn, cliIn, require, __dirname }) => {
   const js = JSON.stringify;
   const { OPERATIONS } = require("./lib/operations.js");
   const R = require("./lib/prompts-resources.js");
@@ -37,7 +37,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, cliIn, require, __dirname }) => 
   const base = path.join(tmp, "rgs");
   const outer = path.join(base, "u", ".specs"); // a folder merely NAMED .specs …
   const P = path.join(outer, "app"), PT = path.join(base, "t", "plain", "app"); // … the project below it, and its twin elsewhere
-  if (!build(P, path.join(base, "u", "store", "specs")) || !build(PT, path.join(base, "t", "store", "specs"))) { ok(true, "1.41.1 read gate scope: links not creatable here — skipped"); return; }
+  if (!build(P, path.join(base, "u", "store", "specs")) || !build(PT, path.join(base, "t", "store", "specs"))) { skip("1.41.1 read gate scope", "links not creatable here"); return; }
 
   // THE detector: a read-gate call (partKind / realDirOf / realSpecsRoot / specsWriteBlock — their lstat / realpath) on a path inside
   // the outer folder but not at or below the project's own .specs/ is a gate standing on the OUTER folder: a read whose scope recorded
@@ -82,6 +82,10 @@ exports.run = async ({ ok, all, S, tmp, hookIn, cliIn, require, __dirname }) => 
   ].join("\n"));
   const cfg = { outer, own: path.join(P, ".specs"), log };
   const logged = () => { try { return fs.readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+  // (1.42 S9-c) a plugin agent's transcript, as Claude Code keeps it outside the project (one assistant message, real-shaped)
+  const agentT = path.join(base, "agents", "agent-c0ffee00c0ffee001.jsonl");
+  put(agentT, js({ type: "assistant", isSidechain: true, message: { id: "msg_01RGS", model: "claude-opus-4-5", role: "assistant", content: [{ type: "tool_use", id: "toolu_01", name: "Read", input: {} }],
+    usage: { input_tokens: 2, output_tokens: 30, cache_read_input_tokens: 8000, cache_creation_input_tokens: 600 } }, uuid: "a-1", timestamp: "2026-11-20T10:00:00.000Z" }) + "\n");
   fs.writeFileSync(log, "");
   const restore = require(spyFile).install(cfg);
   const driven = new Set();
@@ -144,6 +148,8 @@ exports.run = async ({ ok, all, S, tmp, hookIn, cliIn, require, __dirname }) => 
     hook("spec-hook.js", { hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: path.join(P, ".specs", "alpha", "tasks.md") } });
     hook("spec-hook.js", { hook_event_name: "SessionStart" });
     hook("observe-hook.js", { hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "node -v" }, tool_response: { stdout: "v1", exit_code: 0 } });
+    // (1.42 S9-c) its SubagentStop recorder: a reviewer's transcript (outside every .specs) → one line in THIS project's .execution/
+    hook("observe-hook.js", { hook_event_name: "SubagentStop", agent_type: "dev-spec-driven:spec-reviewer", agent_transcript_path: agentT, stop_hook_active: false, last_assistant_message: "DONE" });
     hook("stop-hook.js", { hook_event_name: "Stop", last_assistant_message: "All tasks are done and verified." });
     hook("guard-hook.js", { hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.join(P, "src", "shared", "a.js") } });
     hook("approval-hook.js", { hook_event_name: "PreToolUse", tool_name: "mcp__plugin_dev-spec-driven_spec-driven__spec_approve", tool_input: { name: "alpha", phase: "requirements" } });
@@ -202,6 +208,14 @@ exports.run = async ({ ok, all, S, tmp, hookIn, cliIn, require, __dirname }) => 
     driven: () => driven.size > 80 && driven.has("server") && driven.has("resources") && driven.has("op:scan") && driven.has("cli:ears") && driven.has("hook:approval-hook.js") &&
       driven.has("hook-process:Bash"),
     serverAsksNothing: () => !asked.length && !!init.result, // the unchanged spec_init: the server's meta read through the gate, no question
+  });
+  // (1.42 S9-c) the SubagentStop recorder wrote where the project is: its .specs/ (the linked store), never the outer folder named .specs
+  const agentLines = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "agents.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+  const own = agentLines(path.join(P, ".specs")), inOuter = agentLines(outer), inStore = agentLines(path.join(base, "u", "store", "specs"));
+  all("1.42 S9-c: the observe hook's SubagentStop records in the session project's own .specs/.execution/ (the linked store), never in the outer folder named .specs (got " +
+    js({ own: own.map((x) => x.agent + "/" + x.id), inOuter: inOuter.length, inStore: inStore.length }) + ")", {
+    "one line, the project's": () => js(own.map((x) => x.agent + "/" + x.id + "/" + x.turns + "/" + x.tools)) === js(["spec-reviewer/agent-c0ffee00c0ffee001/1/1"]) && inStore.length === 1,
+    "none in the outer folder": () => inOuter.length === 0 && !fs.existsSync(path.join(outer, ".execution", "agents.jsonl")),
   });
 
   // the B-1 twin of that layout (its .specs/ a junction too): the four entries' arguments the sweep missed answer as the same project

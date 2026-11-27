@@ -370,7 +370,8 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   "N file(s) not analysed", and finish warns — review a change to those files by hand. The feature's own files among them are
   named ("src/big.js is this feature's and was not analysed (accepted timeout) — review it by hand"): the gate runs without a
   ref, so read the feature's change to that file yourself — no scanner did. The merge summary also counts
-  dev-guardian's coverage notes (taint timeouts, a baseline entry it could not read — never gating). An `accept_timeouts`
+  dev-guardian's coverage notes (taint timeouts, a baseline entry it could not read, findings the gate did not count as new —
+  never gating, though the last are findings it let through: `finish --run` prints the first notes). An `accept_timeouts`
   entry no scan used is a finish warning too: the user removes it, or a future timeout on that file is accepted unseen.
 - **In Claude Code, run the CLI:** `node "<plugin>/cli/dev-spec.js" finish <feature> --run` with the Bash tool's `timeout:
   600000` (or in the background) — it runs the check and records its report itself. **Over another MCP client** run the

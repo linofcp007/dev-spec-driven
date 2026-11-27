@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, fsCalls, require, __dirname }) => {
 
   // --- 1.13 WP11: guard mode (PreToolUse hook), scoped steering (front matter, custom files, brief, doctor), design.md save check ---
   {
@@ -237,6 +237,32 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
       ["en", "pt", "es"].every((l) => qText.includes("> - Rule " + l + ".")) && !/Replace the example pattern|Substitui o padrão|Sustituye el patrón|inclusion: always/.test(qText),
       "brief steering quotes keep a '<!--' inside fenced code or an inline code span (and an unclosed one in backticks); an inline trailing comment and the EN/PT/ES stub guidance comment are removed (got " + qRows.map((s) => s.file + ":" + s.quoted).join(",") + ")");
 
+    // 1.42 review 1 (R1-TASKS-01: UX-10 cut · R1-TASKS-07): every default steering file is "read before coding", a track's built-in
+    // stub too — it holds the team's defaults (security.md's "parameterized queries only", distributed.md's outbox, testing-standards.md's
+    // failing test first), never "nothing binding" — and each file ONCE: +saas and +obs both name observability.md (it was listed twice,
+    // in the brief and in steering.included). Mutations listed before the fixture: D1 the dedupe dropped · D2 a stub moved off the
+    // Read line (UX-10's templates line back) · D3 a template key on an included row.
+    {
+      const READ = require("./lib/i18n.js").brief("en").steeringRead;
+      const p = path.join(tmp, "proj-r1t07-steer");
+      const tracks = ["core", "tdd", "saas", "sec", "dist", "obs"];
+      S.initProject(p, tracks, "en");
+      const f = S.createFeature(p, "Checkout", tracks, "", undefined, "en");
+      const b = S.taskBrief(p, f.slug, 1);
+      const P = (n) => ".specs/steering/" + n;
+      const want = ["constitution.md", "tech.md", "structure.md", "testing-standards.md", "scale.md", "observability.md", "cost.md", "security.md", "distributed.md"];
+      const lines = String(b.brief || "").split("\n");
+      const readLines = lines.filter((l) => l.startsWith(READ));
+      const inc = (b.steering && b.steering.included) || [];
+      all("1.42 review 1 (R1-TASKS-01 / -07): a fresh +tdd +saas +sec +dist +obs feature's brief reads every default steering file before coding, the track stubs included, each once (got " +
+        JSON.stringify([readLines, inc]) + ")", {
+        "one Read line, every default once, in order (D1, D2)": readLines.length === 1 && readLines[0] === READ + " " + want.map((n) => "`" + P(n) + "`").join(", "),
+        "steering.included lists them once (D1)": inc.map((s) => s.file).join() === want.map(P).join(),
+        "every row always, no template key (D3)": inc.length === want.length && inc.every((s) => s.inclusion === "always" && !("template" in s)),
+        "no other line names a steering file (D2)": lines.filter((l) => l.includes(".specs/steering/")).length === 1,
+      });
+    }
+
     // (H4) steering_scaffold custom names: localized stub with front matter; known names keep their templates; rejections.
     const c11 = path.join(tmp, "proj-wp11-custom");
     fs.mkdirSync(c11, { recursive: true }); // a projectDir names an existing folder (1.24 r6 A3 — only spec_init creates one)
@@ -280,12 +306,19 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     S.scaffoldSteeringFile(d11, "api-rules.md");
     fs.unlinkSync(path.join(dSt, "tech.md"));
     const ds3 = docSt(d11, "dash");
-    ok(ds2.status === "pass" && ds2.detail === S.msg("en").doctor.steeringOk && ds3.status === "warn" && ds3.detail === "missing: tech.md; still template placeholders: api-rules.md (2)",
-      "filled steering → pass; a custom stub still holding placeholders (front matter set aside) and a missing core file are both reported");
+    ok(ds2.status === "pass" && ds2.detail === S.msg("en").doctor.steeringOk && ds3.status === "warn" && ds3.detail === "missing: tech.md; still template placeholders: api-rules.md (2) — fill them with the project's real rules (from the user or the code)",
+      "filled steering → pass; a custom stub still holding placeholders (front matter set aside) and a missing core file are both reported (1.42 UX-09: with the remedy — the project's real rules, never invented)");
     const d11pt = path.join(tmp, "proj-wp11-doctor-pt");
     S.initProject(d11pt, ["core"], "pt");
     S.createFeature(d11pt, "Painel", ["core"]);
     ok(/ainda com placeholders do template: .*constitution\.md/.test(docSt(d11pt, "painel").detail), "the doctor steering detail is localized (PT)");
+    // 1.42 UX-09: the remedy in every language — the project's real rules, from the user or the code (an agent never invents them)
+    const d11es = path.join(tmp, "proj-wp11-doctor-es");
+    S.initProject(d11es, ["core"], "es");
+    S.createFeature(d11es, "Panel", ["core"]);
+    const remPt = docSt(d11pt, "painel").detail, remEs = docSt(d11es, "panel").detail;
+    ok(/ — preenche-os com as regras reais do projeto \(do utilizador ou do código\)$/.test(remPt) && / — rellénalos con las reglas reales del proyecto \(del usuario o del código\)$/.test(remEs),
+      "1.42 UX-09: the doctor steering detail names the remedy in PT and ES too — fill them with the project's real rules, from the user or the code (got " + JSON.stringify([remPt.slice(-90), remEs.slice(-90)]) + ")");
 
     // (D4) PostToolUse: saving design.md runs its mandatory checks for the ACTIVE tracks (EN + PT).
     const runPost = (file) => { const r = hookIn(specHookJs, { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: file } }), encoding: "utf8" });

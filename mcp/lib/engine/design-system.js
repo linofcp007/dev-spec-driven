@@ -226,7 +226,6 @@ const DS_EXPORT_NAMES = 500; // components kept of one file (what the registry's
 const DS_EXPORT_LIST_LINES = 200; // lines an `export { … }` list or an `import` clause may go on over
 const DS_DECL_LINES = 60; // lines a declaration's annotation may go on over before its `=`
 const RE_EXPORTS_EXT = /\.(?:tsx|jsx|js|mjs)$/i;
-const RE_COMPONENT_NAME = /^\p{Lu}[\p{L}\p{N}]*$/u;
 const RE_IDENTIFIERS = /[\p{L}_$][\p{L}\p{N}_$]*/gu;
 const RE_DECL_FN = /^(export\s+)?(?:default\s+)?(?:async\s+)?(function|class)\s+([\p{L}_$][\p{L}\p{N}_$]*)/u;
 const RE_DECL_CONST = /^(export\s+)?(?:const|let|var)\s+([\p{L}_$][\p{L}\p{N}_$]*)/u;
@@ -2273,7 +2272,10 @@ function inProject(dir, p) {
   }
   return out.join("/");
 }
-function aliasReader(configs, absRoot, realRoot) {
+// stats (1.42, perf-13 / B141-08): the scan's counts of the reader's work — `owned` a config's own `paths` table built, `tables` a
+// governing folder's table built, `keys` a folder's keys for a spec looked up — each counted where the work is done, past its memo:
+// the alias cost checks assert them (a dropped memo is a count, where their clocks saw two of the three not at all)
+function aliasReader(configs, absRoot, realRoot, stats = { owned: 0, tables: 0, keys: 0 }) {
   const BSL = String.fromCharCode(92);
   const parsed = new Map(), tables = new Map();
   let reads = 0;
@@ -2299,6 +2301,7 @@ function aliasReader(configs, absRoot, realRoot) {
   // anything else) | UNKNOWN (past DS_TS_STARS; a key or a target longer than DS_PATH_CHARS — no file system holds such
   // a path, and each import resolved it again: review 1 of 1.35.4, 240 KB of targets took 500 pages 114 s)
   const tableOf = (obj, from) => {
+    stats.owned++;
     const t = { exact: new Map(), stars: [], from };
     for (const [k, v] of Object.entries(record(obj) ? obj : {})) {
       const all = (Array.isArray(v) ? v : []).filter((x) => typeof x === "string");
@@ -2354,6 +2357,7 @@ function aliasReader(configs, absRoot, realRoot) {
   // the governing config's table { exact, stars, from, base, leaf } | null (none, or one that tells nothing for sure)
   const tableOfLeaf = (leaf) => {
     if (tables.has(leaf)) return tables.get(leaf);
+    stats.tables++;
     const rel = (leaf === "" ? "" : leaf + "/") + configs.get(leaf);
     const r = chain(rel, new Set([rel]), { n: DS_TS_LINKS });
     let t = null;
@@ -2374,6 +2378,7 @@ function aliasReader(configs, absRoot, realRoot) {
     if (leaf === undefined) return [];
     const sk = leaf + "\n" + spec;
     if (!said.has(sk)) {
+      stats.keys++;
       const ks = built > DS_ALIAS_CHARS ? [] : keysOf(leaf, spec, nSegs);
       for (const k of ks) built += k.length;
       said.set(sk, ks);
@@ -2489,8 +2494,8 @@ function exportedPaths(map, sub) {
   for (const t of targetsOf(p.entry)) { const parts = t.split("*"); if (t.length + (parts.length - 1) * (match.length - 1) <= DS_PATH_CHARS) out.push(parts.join(match)); }
   return out;
 }
-function projectPlaces(manifests, roots, configs, absRoot, realRoot) {
-  const aliasKeys = aliasReader(configs, absRoot, realRoot);
+function projectPlaces(manifests, roots, configs, absRoot, realRoot, aliasStats) {
+  const aliasKeys = aliasReader(configs, absRoot, realRoot, aliasStats);
   const found = new Map(), read = new Set(), grouped = new Set(), spent = { own: 0, walk: 0 }, mapAt = new Map();
   let bySegment = null, walked = 0, kept = 0; // (kept: the characters of the manifests whose maps are kept — DS_MAP_CHARS)
   const lastOf = (s) => s.slice(s.lastIndexOf("/") + 1).toLowerCase();
@@ -3156,10 +3161,12 @@ function scanCode(root, withComponents = true, withBreakpoints = false, deprecat
   // dropped when the project calls it as a function or gives it to `useContext`, never rendering it; a CANDIDATE — a name
   // exported that the rules took for none — is one when the project renders it.
   let placed = null;
+  // (1.42: the alias readers' counts, ONE object for the scan — the watch's reader and settle's add to it; in-process only)
+  const aliasStats = { owned: 0, tables: 0, keys: 0 };
   // (1.39, deprecated: the registry, when the project report's registry marks a row `_Deprecated:_` — the watch on settle's
   // read, with places of its own)
-  const watch = withComponents && deprecated && deprecated.deprecated.size ? deprecatedWatch(deprecated, files, results, scripts, projectPlaces(packageFiles, roots, configs, path.resolve(root), realRoot)) : null;
-  const verdict = settle(results, scripts, markups, readPaths, () => placed || (placed = projectPlaces(packageFiles, roots, configs, path.resolve(root), realRoot)), watch);
+  const watch = withComponents && deprecated && deprecated.deprecated.size ? deprecatedWatch(deprecated, files, results, scripts, projectPlaces(packageFiles, roots, configs, path.resolve(root), realRoot, aliasStats)) : null;
+  const verdict = settle(results, scripts, markups, readPaths, () => placed || (placed = projectPlaces(packageFiles, roots, configs, path.resolve(root), realRoot, aliasStats)), watch);
   // (every file's names before any candidate: a barrel's re-export takes no row's path from the file that declares it —
   // review 1 of 1.35.3, `export { default as FiltersToggle } from "./toggle"`)
   const add = (r, name) => { const key = dsKey(name); if (key && !byKey.has(key)) byKey.set(key, { name, key, path: r.path, index: false, route: false }); };
@@ -3280,9 +3287,11 @@ function scanCode(root, withComponents = true, withBreakpoints = false, deprecat
   const packages = packageLibraries(root);
   capped.workspaces = packages.cut;
   capped.manifests = packages.read;
-  return { components, tokens, sources, twins, libraries: packages.libraries, views, scripts, files: walk.files, truncated: walk.truncated, capped, realRoot, multi,
+  const out = { components, tokens, sources, twins, libraries: packages.libraries, views, scripts, files: walk.files, truncated: walk.truncated, capped, realRoot, multi,
     breakpoints: bp ? bp.found : null,
     ...(watch ? { deprecatedUses: watch.report([walk.truncated ? { code: "files", read: walk.files } : null, capped.exports ? { code: "component-files", read: capped.exports } : null]) } : {}) };
+  Object.defineProperty(out, "aliasStats", { value: aliasStats, enumerable: false });
+  return out;
 }
 
 // --- raw values: what a feature's view files hard-code ------------------------------------------------------------------------
@@ -3667,8 +3676,11 @@ function designSystemReport(projectDir, opts = {}) {
   // (a feature's report reads no component's name: neither what files export nor what the others tell; 1.39: the project's
   // report watches the deprecated rows' uses while the registry marks one)
   const scan = scanCode(root, !f, true, reg);
+  // (1.42: the alias readers' counts, as `deprecatedUses.parsed` — in-process only: not enumerable, so MCP, --json and a spread
+  // drop them; 15-quality-design-system-aliases.js counts them, a cost check with no clock)
+  const counted = (r) => Object.defineProperty(r, "aliasStats", { value: scan.aliasStats, enumerable: false });
   // (1.38: the breakpoints — both shapes, the same; here, never in featureReport: finish calls that too)
-  if (f) return Object.assign(featureReport(projectDir, root, f, reg, scan), { breakpoints: breakpointsReport(projectDir, scan.breakpoints) });
+  if (f) return counted(Object.assign(featureReport(projectDir, root, f, reg, scan), { breakpoints: breakpointsReport(projectDir, scan.breakpoints) }));
   const listed = reg ? reg.keys : new Set();
   const building = pendingNew(projectDir);
   const missing = [], pending = [];
@@ -3689,7 +3701,7 @@ function designSystemReport(projectDir, opts = {}) {
   const limits = scanLimits(scan);
   if (reg && reg.total.components > reg.components.length) limits.push({ code: "registry-rows", read: reg.components.length });
   const { drift, gone } = registryValues(root, reg, scan);
-  return { ok: true, registry: registryView(root, reg),
+  return counted({ ok: true, registry: registryView(root, reg),
     found: { components: scan.components.length, tokens: scan.tokens.length, sources: scan.sources, libraries: scan.libraries },
     missing: missing.slice(0, DS_LIST), missingTotal: missing.length, pending: pending.slice(0, DS_LIST), pendingTotal: pending.length,
     stale: stale.slice(0, DS_LIST), staleTotal: stale.length,
@@ -3700,7 +3712,7 @@ function designSystemReport(projectDir, opts = {}) {
     inSync: !!reg && !limits.length && !missing.length && !stale.length && !newTokens.length && !newSources.length && !newLibraries.length,
     ...(opts.uiPass ? { uiChecks: uiProject(scan, reg) } : {}), // (1.38: the operation's opt-in — the engine's default reads no view file)
     scanned: { files: scan.files }, limits, truncated: limits.length > 0,
-    breakpoints: breakpointsReport(projectDir, scan.breakpoints) };
+    breakpoints: breakpointsReport(projectDir, scan.breakpoints) });
 }
 // The feature's part: its usage rows against the registry, the raw values in its view files (its _Implements:_ view / style
 // files, token files and tests aside), its UI checks (the same text read once feeds both — and its token files, read for the

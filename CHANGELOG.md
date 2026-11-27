@@ -3,6 +3,148 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.42.0] — 2026-11-27
+
+The "everything" round, shared with dev-guardian 3.18.0: the 1.41 / 1.42 backlog, what github/spec-kit and other
+spec-driven workflows do better, and a sweep for speed, wording and robustness. A spec-kit import now keeps its functional
+requirements traceable; the task surfaces say when the plan is not approved yet; a feature closes in one order and files
+the open findings it ships with; the hooks stay fast on large projects; and the plugin's agents record what they cost.
+
+### Upgrading from 1.41.x
+- **A spec-kit import's tasks approval can now wait.** The FR-xxx no acceptance scenario covers become the EARS criteria of
+  one more story, "Functional Requirements", and trace stays `gaps-found` until a task cites each of them — the import's
+  own former advice, now checked. A feature imported before 1.42 is unchanged.
+- **Task surfaces carry `planApproved: false` while the tasks approval is missing** (`spec_next_task`, `spec_task_brief`,
+  `spec_status`, with a `planNote`; the CLI prints it on a ⚠ line, `brief` on stderr), and `spec_complete_task` marks a
+  tick made before it (`beforeApproval`). Nothing is refused; an approved plan's results are unchanged; a bugfix's
+  investigation tasks (they write only bug.md) are exempt.
+- **hooks.json has 10 commands:** the observe hook's background SubagentStop entry comes second, after the stop gate's.
+  Restart Claude Code after the update so it loads.
+
+### Added
+- **spec-kit import (Spec Kit 1.4's layout):**
+  - the FRs no scenario covers (neither cites nor holds its words) become one story's EARS criteria, each ending `(FR-n)`
+    (the original kept in a comment), numbered past every story number the source names; a warning lists FR → AC;
+  - a task's `_Requirements: FR-n_` resolves to the criteria that hold that FR; on every importer (Kiro, OpenSpec, BMAD,
+    plan, ExecPlan, fluidplan) an `FR-n` that resolves to no criterion is reported "matches no imported criterion — kept
+    as written" (it passed silently and covered nothing);
+  - Spec Kit's `/converge` tasks (`… per <ref> (missing | partial | contradicts)`) get `_Requirements:_`; `unrequested`
+    and unknown gap types claim nothing;
+  - `quickstart.md` becomes the feature's `quickstart.md` (trace reads SC coverage there), and each open
+    `[NEEDS CLARIFICATION]` in it is one line of design.md ("Open questions in quickstart.md"), so the design approval
+    waits for it — also when plan.md or a design document ends inside an unclosed code block;
+  - a plan.md Technical Context value that opens with a bare `NEEDS CLARIFICATION` becomes
+    `[NEEDS CLARIFICATION: <field>]`, which the design gate counts, unless a letter or a digit follows it (read as prose);
+  - `--timestamp` folders (`YYYYMMDD-HHMMSS-<name>`) name the feature `<name>`; an import pointed at `specs/` itself says
+    to import one feature folder; what a folder holds beyond what the import reads (`checklists/`, notes, deeper
+    contract folders) is named in the "not imported" warning, and every importer's list shows 50 names, then "+N more".
+- **The plugin's agents record what they cost (Claude Code).** When spec-implementer, spec-reviewer, spec-critic,
+  spec-simplifier, spec-ui-reviewer or spec-verifier finishes, a background hook reads that agent's own transcript and
+  appends one line of counts — assistant turns, tool calls, tokens (in, out, cache read, cache write) and the model — to
+  the git-ignored `.specs/.execution/agents.jsonl`; `spec_metrics` (the project) adds them up per agent under `agents`,
+  and `dev-spec metrics` prints them. Never a transcript's text, never the parent session's transcript; a transcript past
+  32 MB is counted up to there and marked partial.
+- **The closing files what ships open.** Subagent execution and `/spec-finish` file the open findings a feature ships with
+  — a problem already there before the task, a finding parked as real, an unconfirmed finding or an out-of-task class the
+  final review let ship — as one `residue-<feature>` backlog entry before the merge, instead of letting them vanish with
+  `.execution/`. A verifier refutation is a residue only when refuted as pre-existing or not in the diff and found at HEAD
+  (`refuted (NN, <why>, real at HEAD)`, the same line in `/spec-review branch`); closing a kept branch again files only
+  the residues recorded after the last filing.
+- `dev-spec` with no command prints a short overview (the first steps, every command, where the whole help is); `help`,
+  `--help` and `-h` still print the full reference. A mistyped command names the closest one
+  (`unknown command 'nxt' — did you mean 'next'?`, `didYouMean` in `--json`); nothing runs.
+- doctor's headline ends with the next approval's own checks — `next gate <phase>: checks pass`, `fails (<ids>)`,
+  `nothing to approve yet`, or that the gate's file cannot be read (`nextGate.unreadable`) — and the skill, the commands,
+  the references and every rule file say to fix what that gate refuses rather than wait on `readyToAdvance` (which also
+  counts later phases' checks); /spec-tour, /spec-bugfix and bugfix.md, which ask for several approvals at once, say to
+  fix what each gate up to tasks refuses.
+- `/spec` with no argument lists the features in flight (or resumes the only one); `list` / `status` on an empty project
+  print the next step (classify → init → create), and keep the `init` step while a core steering file is missing — with no
+  feature yet, `spec_status {}` names them (`steeringMissing`). `spec_init`'s result gains `activeFeatures`, and its
+  steering note comes only when it created steering files.
+- `spec_scan {designSystem: true}` / `dev-spec design-system` count the outline removals a focus style elsewhere excused
+  (`excused`), with one CLI line asking to check those elements — report only, the verdict unchanged.
+- `/spec-bugfix`: instrumentation added while tracing the root cause is tagged `DEBUG-<slug>`, and its removal is checked
+  before the fix's run with `git grep -n --untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'`
+  (new files too; every folder named `.specs` is left out, so bug.md's quoted evidence is no hit, and so is another
+  bugfix's longer tag; also in a monorepo subproject).
+- The task reviewer gets the duplicate detector's output for its task, in a file beside the review package, and never
+  reads a capped result (`truncated` / `partial`) as "no duplicates"; a defect that comes back at another place during a
+  task's fix rounds is fixed as a class across the task's files.
+- `/spec-finish`'s finish batch offers a check (a test, or a lint rule as a project check) where code can show a lesson's
+  rule, and files a `check-<topic>` backlog item when the shape still occurs.
+- The spec critic flags an acceptance criterion that names an internal choice nobody would notice swapped (Minor), asks
+  for each constitution principle in the design's Constitution Check, flags a task whose only proof is a project check
+  (unless the criterion is that check's result), and ACs that repeat each other within the feature.
+
+### Changed
+- **A feature closes in one order:** the finish, the execution sign-off, the review loop's residues, then a commit of what
+  the run and the closing wrote, then the switch and the merge. The commit first lists what is already staged
+  (`git diff --cached --name-only`): a file staged before the closing would go into it, so you decide whether to unstage
+  it (`git restore --staged <file>`) or commit it too. It then adds the feature's folder, `roadmap.json`, the generated
+  roadmap files and, when the run wrote them, the design-system registry, an amended steering file, the
+  `.specs/guardian.cjs` launcher `finish --run` refreshed and the lines the engine added to `.specs/.gitignore` (a path
+  git ignores stays out). A file the run wrote is added whole, so an edit of yours in it is committed with it; an unstaged
+  or untracked change of yours is not added, and git carries it across the switch. `/spec-finish`'s merge step names the
+  branch to merge and no longer contradicts itself about fast-forwards.
+- The task brief lists a steering file once when two active tracks name it (+saas and +obs: observability.md).
+- A bugfix task that names a file it changes (`_Implements:_`) is no investigation task: it gets the plan note before the
+  tasks approval; ticking an investigation task carries the note of the next task it serves.
+- A refused approval offers `force` only when the user explicitly accepts the failing checks, and names the CLI doctor
+  command; trace_check / doctor's `justifiedTestGaps` warning no longer suggests forcing the test-plan approval (a forced
+  approval never cleared the gap) — add a test row, or `/spec-change` the criterion.
+- An xs change's next step gives the CLI line for approving its plan.
+- The MCP server's instructions state the approval loop (fill, spec_doctor, spec_approve on the user's explicit yes) and
+  name only existing prompts; spec_next_task's description says it picks by section, then by number; spec_doctor's
+  describes what the next gate's checks refuse.
+- +port is in every list of the built-in tracks; SKILL.md says quickstart.md and checklist.md come with design.md (not with
+  a change or a bugfix); the READMEs name the UI reviewer among the agents that start without your CLAUDE.md;
+  llms-install.md's rule-file step is no longer optional.
+- A project whose `.specs/` folder is a link (specs kept elsewhere) now uses its `.specs/templates/` overrides and its
+  track packs, and `templates init` / `tracks init` write their starters there (the overrides were silently ignored and
+  both commands refused). A link below `.specs/` is still never read nor written through; the refusal is the write gate's
+  own localized message.
+- The task reviewer reads a long review package in parts to its end, never through the shell; the visual reviewer's prompt
+  is 80 bytes shorter per review.
+
+### Performance
+- The guard hook reads each feature's files once per project for a whole shell command instead of once per file it
+  writes: a multi-file `sed -i` on a large project no longer runs past the hook's timeout (16 files on 200 features:
+  ~7 s → ~0.8 s).
+- The task scanner keeps up to 1,024 tasks.md texts (4 M characters) instead of 32: projects past 32 features no longer
+  re-scan every tasks.md several times per roadmap refresh (40 features: 160 scans → 0 on a warm refresh, a tick 162 → 1).
+- The Stop hook answers before it refreshes a stale ROADMAP.md / SPECS.md, and refreshes only when the turn ends there: a
+  turn sent back is no longer delayed by the refresh (1.2–2 s at 200 features).
+- The status line walks `.specs/` once, not twice, when its cached line is out of date (~50 ms at 40 features, ~200 ms
+  at 200).
+- The glossary check's built-in template lines come from the pre-generated corpus: 90–100 ms less per language in each
+  fresh CLI / MCP process that reaches the glossary check or a critical flow (the corpus file grows ~94 KB).
+
+### Fixed
+- The guard, Stop and observe hooks open a roadmap.json, `.state.json` or tasks.md only when it is a regular file (as the
+  approval hook since 1.41.1): a special file there no longer leaves a hook waiting, and a linked one is no longer read
+  through.
+- A spec-kit import with a very large contract, FR line or task line, or many acceptance scenarios citing one FR, could
+  take tens of seconds or fail with an internal error; it is linear now. So are the protected-tests reader on a
+  `_Verify:_` command with a very long run of punctuation and `templates check` on a template with a very long run of
+  blanks.
+- The task brief quotes a Reference Examples cell such as "`src/x.ts`, the handler" as written (no stray backtick).
+
+### Tests
+- A check that cannot run on a machine (no git, no PowerShell / zsh / fish, links not creatable) is reported as a skip — a
+  `skip - …` line per check and one `# K skipped in F file(s)` line before the total — instead of counting as a pass; each
+  machine's totals drop by its own skips. A source guard keeps constant-true `ok(…)` skips out of both suites.
+- A second contract with dev-guardian, `metric-bytes.v1.json`: the bytes of a run's output and how each plugin reads them
+  (dev-spec-driven reads stdout and stderr apart, each as UTF-8; dev-guardian's `metrics` reads a `2>&1` file), pinned by
+  sha256 in both suites. No reading changed.
+- Every agent prompt has a byte cap (`AGENT_CAPS` in mcp/tests/17-docs.js): the suite fails when one grows past its cap or
+  a new agent has none.
+- Cost checks that timed what is a count now count it; `done --run`'s timing rows are containments. The local pre-push gate
+  can order its run by the pushing checkout's times (`DEV_SPEC_TEST_TIMES_ROOT`). `npm run test:docker` runs the newest
+  default image with the temp folder behind a symlink (`--alias-tmp`: every image); seven `review-seat` plugin eval cases
+  measure the task reviewer and the verifier.
+- `node mcp/test.js` 3339 assertions (was 3225), `node cli/test-cli.js` 737 (was 723).
+
 ## [1.41.2] — 2026-11-27
 
 dev-guardian's scan of the plugin now reads every one of its JavaScript files in full.

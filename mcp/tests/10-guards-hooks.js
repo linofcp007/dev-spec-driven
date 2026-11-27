@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
+exports.run = async ({ ok, skip, all, S, tmp, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the lexer, the candidates) — read through mcp/test.js's require
   const js = JSON.stringify;
   const BS = String.fromCharCode(92);
@@ -177,7 +177,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
   // read the report at the absolute path the reply names when it lies in the project or another checkout of its repository.
   {
     const hasGit = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
-    if (!hasGit) ok(true, "1.23 review 5 (M8): worktree-aware hooks — skipped: no git");
+    if (!hasGit) skip("1.23 review 5 (M8): worktree-aware hooks", "no git");
     else {
       const p = path.join(tmp, "r5-m8-main");
       S.initProject(p, ["core"], "en", { guard: true });
@@ -317,5 +317,255 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
       encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, timeout: 20000 });
     ok(/exported-thing/.test(r.stdout) && !/own-thing/.test(r.stdout) && /own-thing/.test(r2.stdout),
       "1.23 review 5 (M8): SessionStart without a payload cwd lists CLAUDE_PROJECT_DIR's features, never the hook process folder's .specs/ (that one only when nothing is exported) (got " + js([r.stdout.slice(0, 160), r2.stdout.slice(0, 160)]) + ")");
+  }
+
+  // 1.42 perf-1 — the guard hook runs each project's checks in ONE read-cache scope and folds the results target by target. THE
+  // property: on every fixture × level (on / scope / tests) × command, the hook prints exactly what the 1.41.2 loop printed — a
+  // REFERENCE written here from it: target by target, the session's project then the file's own, one guardCheck call each (its own
+  // scope), the strictest wins (deny > a protected test's ask > any ask), the first among equals, the first note. The commands: the
+  // review's legit commands and the monorepo / CI corpus (mcp/tests/guard-commands.js), the controller's package and detector writes
+  // ([INT-3]: allowed at every level), and edits real-shaped for the fixtures — covering, forced, pending, stale, a spike, a test plan,
+  // protected tests with a lift, a folder of code, a glob at level tests, an outside path, README.md, a monorepo whose package is a
+  // project of its own (one that asks, one forced-only).
+  {
+    const CMD = require("./tests/guard-commands.js");
+    const PR = require("./lib/probe.js");
+    const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
+    const HOOK = require(guardJs);
+    const put = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
+    const state = (dir, slug, patch) => { const sp = path.join(dir, ".specs", slug, ".state.json"); const st = JSON.parse(fs.readFileSync(sp, "utf8")); fs.writeFileSync(sp, js({ ...st, ...patch }, null, 2)); };
+    const AT = "2026-01-01T00:00:00Z";
+    const feature = (dir, name, impl, approvals, extra) => {
+      const f = S.createFeature(dir, { name, tracks: ["core"], lang: "en", ...(extra || {}) });
+      put(f.dir, "tasks.md", "# Tasks\n\n" + impl.map((x, i) => "- [ ] " + (i + 1) + ". [US1] Do " + x + "\n  - _Requirements: US-1.AC-1_\n  - _Implements: " + x + "_\n").join(""));
+      if (approvals) state(dir, f.slug, { approvals });
+      return f.slug;
+    };
+    const project = (name, guard) => { const d = path.join(tmp, "proj-perf1-" + name); S.initProject(d, ["core"], "en", { guard }); fs.writeFileSync(path.join(d, ".specs", "ROADMAP.md"), "# Roadmap\n\nHand-written.\n"); return d; };
+    const setLevel = (dir, guard, approvalGuard = "off") => { const f = path.join(dir, ".specs", "roadmap.json"); const rm = JSON.parse(fs.readFileSync(f, "utf8")); rm.meta = { ...(rm.meta || {}), guard, approvalGuard }; fs.writeFileSync(f, js(rm, null, 2)); };
+    // P1: one project with every kind of feature
+    const P1 = project("one", "scope");
+    for (const f of ["src/pay/a.js", "src/pay/b.js", "src/lib/u.js", "src/gen/x.js", "src/other.js", "test/pay.test.js", "test/old.test.js", "test/lifted.test.js", "test/unit/a.test.js", "tmpl.js"]) put(P1, f, "x\n");
+    const co = feature(P1, "Checkout", ["src/pay/a.js", "src/pay/b.js", "src/lib/", "src/gen/*.js", "test/pay.test.js"], { tasks: { at: AT, by: "t" } });
+    state(P1, co, { protectedTests: { at: AT, via: "approval", files: { "test/pay.test.js": "0123456789abcdef", "test/old.test.js": "0123456789abcdef", "test/lifted.test.js": "0123456789abcdef", "test/unit/a.test.js": "0123456789abcdef" },
+      lifts: [{ file: "test/lifted.test.js", at: AT, by: "me", reason: "rewritten on purpose" }] } });
+    feature(P1, "Invoices", ["src/invoices/pdf.js"], { tasks: { at: AT, by: "t", forced: true } });
+    feature(P1, "Draft", ["src/draft/x.js"], null);
+    feature(P1, "Stale", ["src/stale/y.js"], { tasks: { at: AT, by: "t", fingerprint: "0000000000000000" } });
+    feature(P1, "Plan", ["src/plan/z.js"], { "test-plan": { at: AT, by: "t" } });
+    S.createFeature(P1, { name: "Research", kind: "spike", lang: "en" });
+    // P2: a monorepo — the root at the level, packages/app a project of its own (guard on) whose feature waits for its tasks approval
+    const P2 = project("mono", "scope");
+    feature(P2, "Web", ["packages/app/src/t1.js", "src/root.js"], { tasks: { at: AT, by: "t" } });
+    const P2app = path.join(P2, "packages", "app");
+    fs.mkdirSync(P2app, { recursive: true });
+    S.initProject(P2app, ["core"], "en", { guard: "on" });
+    feature(P2app, "App", ["src/t1.js"], null);
+    // P3: the same layout, both projects forced-only (two notes: the first is printed)
+    const P3 = project("mono-forced", "scope");
+    feature(P3, "Web", ["packages/app/src/t1.js", "src/t2.js"], { tasks: { at: AT, by: "t", forced: true } });
+    const P3app = path.join(P3, "packages", "app");
+    fs.mkdirSync(P3app, { recursive: true });
+    S.initProject(P3app, ["core"], "en", { guard: "on" });
+    feature(P3app, "App", ["src/t1.js"], { tasks: { at: AT, by: "t", forced: true } });
+    const W = (dir, rel) => ["Write", null, path.isAbsolute(rel) ? rel : path.join(dir, rel)];
+    const EDITS1 = [["Bash", "sed -i 's/a/b/' src/pay/a.js src/pay/b.js src/lib/u.js src/gen/x.js src/other.js"], ["Bash", "rm -rf src/lib"],
+      ["Bash", "cp tmpl.js src/invoices/pdf.js && cp tmpl.js src/draft/x.js"], ["Bash", "echo x > test/old.test.js"],
+      ["Bash", "sed -i s/x/y/ src/other.js test/old.test.js test/pay.test.js test/lifted.test.js"], ["Bash", "rm -rf tes?/unit"],
+      ["PowerShell", "Set-Content -Path src" + BS + "pay" + BS + "a.js -Value x; Copy-Item tmpl.js src" + BS + "stale" + BS + "y.js"],
+      W(P1, "src/pay/a.js"), W(P1, "src/other.js"), W(P1, "README.md"), W(P1, ".specs/checkout/tasks.md"), W(P1, "test/old.test.js"), W(P1, "test/lifted.test.js"),
+      W(P1, path.join(tmp, "perf1-outside", "x.js"))];
+    const N4 = ["Bash", "sed -i 's/a/b/' packages/app/src/t1.js src/t2.js"], N5 = ["Bash", "sed -i 's/a/b/' packages/app/src/t1.js"];
+    const EDITS2 = [N4, ["Bash", "sed -i s/a/b/ src/root.js packages/app/src/t1.js"], W(P2, "packages/app/src/t1.js")];
+    const EDITS3 = [N5, ["Bash", "sed -i 's/a/b/' src/t2.js packages/app/src/t1.js"]];
+    const payload = (dir, [tool, command, file]) => ({ hook_event_name: "PreToolUse", cwd: dir, tool_name: tool, tool_input: command !== null ? { command } : { file_path: file, content: "x" } });
+    // THE reference: the 1.41.2 loop over single guardCheck calls (each the facade's own read-cache scope)
+    const rank = (r) => (r.decision === "deny" ? 3 : r.decision === "ask" ? (r.why === "protected-test" ? 2 : 1) : 0);
+    const reference = (pl) => {
+      const ti = pl.tool_input, cwd = pl.cwd;
+      const command = pl.tool_name === "Bash" || pl.tool_name === "PowerShell" ? ti.command : null;
+      if (command !== null && !HOOK.mayWrite(command)) return null;
+      const local = (p) => typeof p === "string" && p.trim() && !PR.isNetwork(p);
+      const targets = command === null ? [ti.file_path] : S.shellWriteTargets(command, pl.tool_name === "PowerShell" ? "ps" : "bash");
+      const s0 = S.sessionProject({ cwd, anchors: [] });
+      let best = null, note = null;
+      for (const t of targets) {
+        const abs = local(t) ? S.sessionPath(s0 || { root: cwd }, t, cwd) : null;
+        const own = abs ? S.sessionProject({ cwd: path.dirname(abs), anchors: [] }) : null;
+        const seen = new Set();
+        for (const s of [s0, own]) {
+          if (!s || seen.has(s.project)) continue;
+          seen.add(s.project);
+          const r = S.guardCheck(s.project, S.sessionPath(s, t, cwd), s.project);
+          if (rank(r) > (best ? rank(best) : 0)) best = r;
+          if (r.note && !note) note = r.note;
+        }
+      }
+      if (best) return Object.assign({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: best.decision, permissionDecisionReason: best.reason } }, best.userNote ? { systemMessage: best.userNote } : {});
+      return note ? { systemMessage: note } : null;
+    };
+    const hooked = (pl) => { const r = hookIn(guardJs, { input: js(pl), env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", DEV_SPEC_GUARD_DEFAULT: "" }, encoding: "utf8" }); try { return r.stdout ? JSON.parse(r.stdout) : null; } catch { return { unparsed: r.stdout }; } };
+    const legitMono = Object.values(CMD.legitMonorepo()).map(([tool, command]) => [tool, command]);
+    const RUNS = [[P1, [...CMD.LEGIT_REVIEW, ...CMD.controllerWrites("checkout", 3), ...EDITS1]], [P2, [...legitMono, ...EDITS2]], [P3, EDITS3]];
+    const differ = [], seenAnswers = new Map(), ctrl = [];
+    let compared = 0;
+    // (tests + approvalGuard deny: a protected test is refused — the strictest answer)
+    for (const level of [true, "scope", "tests", "tests+deny"]) {
+      for (const d of [P1, P2, P3]) setLevel(d, level === "tests+deny" ? "tests" : level, level === "tests+deny" ? "deny" : "off");
+      for (const [dir, cmds] of RUNS) {
+        for (const c of cmds) {
+          const pl = payload(dir, c);
+          const got = hooked(pl), want = reference(pl);
+          compared++;
+          const key = got ? (got.hookSpecificOutput ? got.hookSpecificOutput.permissionDecision + (/protected/.test(js(got)) ? "-protected" : "") : "note") : "silent";
+          seenAnswers.set(key, (seenAnswers.get(key) || 0) + 1);
+          if (js(got) !== js(want)) differ.push(String(level) + " " + path.basename(dir) + " " + c[0] + " " + String(c[1] || c[2]).slice(0, 80) + " → " + js(got).slice(0, 160) + " ≠ " + js(want).slice(0, 160));
+          if (CMD.controllerWrites("checkout", 3).some((w) => w[1] === c[1])) ctrl.push(got);
+        }
+      }
+    }
+    // the fold's order and its notes, named: own's ask on t1 before s0's on t2 (both plain asks — the first among equals), the first note
+    setLevel(P2, "scope"); setLevel(P3, "scope");
+    const n4 = hooked(payload(P2, N4)), n5 = hooked(payload(P3, N5));
+    all("1.42 perf-1: the guard hook (one read-cache scope per project, folded target by target) prints exactly what the 1.41.2 loop over single guardCheck calls printed — " +
+      "every fixture × level (on / scope / tests / tests at approvalGuard deny) × command, the legit corpora and the controller's writes allowed (got " + js({ compared, answers: Object.fromEntries(seenAnswers), differ: differ.slice(0, 6), more: Math.max(0, differ.length - 6),
+        n4: n4 && n4.hookSpecificOutput && n4.hookSpecificOutput.permissionDecisionReason.slice(0, 120), n5: n5 && n5.systemMessage && n5.systemMessage.slice(0, 120) }) + ")", {
+      "the same printed object everywhere": () => compared >= 360 && differ.length === 0,
+      "not vacuous: silent, notes, plain asks, protected-test asks and denies all met": () => ["silent", "ask", "note", "ask-protected", "deny-protected"].every((k) => (seenAnswers.get(k) || 0) > 0),
+      "[INT-3] the controller's package and detector writes: allowed at every level": () => ctrl.length === 28 && ctrl.every((x) => x === null),
+      "the fold's order: own's ask on t1 (packages/app awaits its tasks approval) before the root's scope ask on t2": () => !!n4 && n4.hookSpecificOutput.permissionDecision === "ask" && /\bapp\b/.test(n4.hookSpecificOutput.permissionDecisionReason) &&
+        js(n4) === js(reference(payload(P2, N4))),
+      "the first note: the root's forced note before the package's": () => !!n5 && typeof n5.systemMessage === "string" && /\bweb\b/.test(n5.systemMessage) && !/\bapp\b/.test(n5.systemMessage) && js(n5) === js(reference(payload(P3, N5))),
+    });
+  }
+
+  // 1.42 S9-c — the plugin agents' cost, Claude Code's side: on SubagentStop the observe hook reads the finished agent's OWN transcript
+  // (agent_transcript_path — never the parent session's transcript_path; a regular file only; bounded) and hands its COUNTS to
+  // spec.recordAgentRun (.specs/.execution/agents.jsonl). Real-shaped JSONL — the structure of 4,440 local dev-spec agent transcripts,
+  // synthetic text: one line per content block, each repeating its message's usage (output_tokens growing within an id), tool_result
+  // lines between, a line without a timestamp, a fallback model, and an API error Claude Code wrote itself last (<synthetic>,
+  // isApiErrorMessage). (The FIFO rows — POSIX — are in 10-guards-hooks-cost.js; the matcher's property in 09-evidence-agents.js.)
+  {
+    const OH = require("../hooks/observe-hook.js");
+    const tdir = path.join(tmp, "s9c-transcripts");
+    fs.mkdirSync(tdir, { recursive: true });
+    let seq = 0;
+    const stamp = () => "2026-11-20T10:" + String(10 + (seq % 50)).padStart(2, "0") + ":0" + (seq % 10) + ".000Z";
+    const env0 = () => ({ isSidechain: true, agentId: "a91f2c3d4e5b6a7c8", cwd: "/work/app", sessionId: "6f1c2a3b-0d4e-4f5a-9b6c-7d8e9f0a1b2c", version: "2.1.300", gitBranch: "main", userType: "external", entrypoint: "cli" });
+    const user = (content) => js({ parentUuid: seq ? "x-" + seq : null, ...env0(), type: "user", message: { role: "user", content }, uuid: "u-" + ++seq, timestamp: stamp() });
+    const result = (id) => user([{ tool_use_id: id, type: "tool_result", content: "     1\tconst total = 1; // ação concluída ✓ — 価格\n" }]);
+    const asst = (id, block, [i, o, cr, cw], model, extra) => js({ parentUuid: "x-" + seq, ...env0(), message: { model: model || "claude-opus-4-5", id, type: "message", role: "assistant",
+      content: [block], stop_reason: null, stop_sequence: null, usage: { input_tokens: i, cache_creation_input_tokens: cw, cache_read_input_tokens: cr, output_tokens: o, service_tier: "standard" } },
+      requestId: "req_011" + id.slice(-6), type: "assistant", uuid: "a-" + ++seq, timestamp: stamp(), ...(extra || {}) });
+    const call = (name) => ({ type: "tool_use", id: "toolu_01" + String(++seq).padStart(6, "0"), name, input: { file_path: "/work/app/src/total.js" } });
+    const synthetic = () => js({ parentUuid: "x-" + seq, ...env0(), type: "assistant", uuid: "a-" + ++seq, timestamp: stamp(), message: { id: "0b7c2e9a-41d3-4c5e-8f6a-9b0c1d2e3f4a", container: null,
+      model: "<synthetic>", role: "assistant", stop_reason: "stop_sequence", stop_sequence: "", type: "message", usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0, server_tool_use: { web_search_requests: 0 }, service_tier: null }, content: [{ type: "text", text: "API Error: 529 Overloaded" }] }, error: "unknown", isApiErrorMessage: true });
+    const write = (name, lines) => { const f = path.join(tdir, name); fs.writeFileSync(f, lines.length ? lines.join("\n") + "\n" : ""); return f; };
+    const t1Calls = [call("Read"), call("Grep"), call("Read")];
+    const T1 = write("agent-a91f2c3d4e5b6a7c8.jsonl", [
+      user("Review task 3 of the billing feature — the package is .specs/billing/.execution/review-3.md. Ação: ler o diff ✓"),
+      js({ type: "attachment", attachment: { type: "skill_listing", content: "" }, uuid: "t-0", isSidechain: true }), // a line with no timestamp
+      asst("msg_01AAAAAAAAAAAAAAAAAAAAAA", { type: "thinking", thinking: "Reading the diff first.", signature: "c2ln" }, [3, 8, 12000, 4000]),
+      asst("msg_01AAAAAAAAAAAAAAAAAAAAAA", t1Calls[0], [3, 210, 12000, 4000]), // the same message, its output_tokens grown
+      result(t1Calls[0].id),
+      asst("msg_01BBBBBBBBBBBBBBBBBBBBBB", t1Calls[1], [1, 95, 16000, 900]),
+      asst("msg_01BBBBBBBBBBBBBBBBBBBBBB", t1Calls[2], [1, 95, 16000, 900]), // two tool calls in one message: two lines
+      result(t1Calls[1].id), result(t1Calls[2].id),
+      asst("msg_01DDDDDDDDDDDDDDDDDDDDDD", { type: "text", text: "Checking the totals — ação ✓" }, [9, 20, 5000, 100]), // (per field the max: input
+      asst("msg_01DDDDDDDDDDDDDDDDDDDDDD", { type: "text", text: "and the rounding." }, [4, 60, 5000, 100]), //  larger first, output last)
+      asst("msg_01CCCCCCCCCCCCCCCCCCCCCC", { type: "text", text: "**Status:** DONE — no finding. Relatório ✓" }, [2, 400, 17000, 300], "claude-sonnet-4-5"), // a fallback model
+      synthetic(),
+    ]);
+    const WANT1 = { turns: 4, tools: 3, tokens: { in: 15, out: 765, cacheRead: 50000, cacheWrite: 5300 }, model: "claude-sonnet-4-5", truncated: false };
+    const r1 = OH.agentRunOf(T1);
+    const chunks = [1, 2, 7, 64, 4096].map((chunk) => js(OH.agentRunOf(T1, { chunk })));
+    // the bound — a COUNT of bytes: 400 dispatch-shaped messages (~230 KB) read with a 64 KB max
+    const big = write("agent-b00000000000000001.jsonl", Array.from({ length: 400 }, (_, k) => asst("msg_01" + String(k).padStart(22, "E"), call("Read"), [2, 150, 20000 + k, 500])));
+    const bigSize = fs.statSync(big).size;
+    const cut = OH.agentRunOf(big, { max: 64 * 1024 }), whole = OH.agentRunOf(big);
+    // the DEFAULT bound reached (no opts — the hook's own call): three real-shaped lines, then zero bytes up to TRANSCRIPT_MAX + 4096 —
+    // one line with no end past the bound (1.42 fix round 1: only the constant was pinned, never the reader falling back to it)
+    const atMax = write("agent-m00000000000000001.jsonl", Array.from({ length: 3 }, (_, k) => asst("msg_01" + String(k).padStart(22, "M"), call("Read"), [2, 150, 20000 + k, 500])));
+    { const fd = fs.openSync(atMax, "r+"); try { fs.ftruncateSync(fd, OH.TRANSCRIPT_MAX + 4096); } finally { fs.closeSync(fd); } }
+    const capped = OH.agentRunOf(atMax);
+    fs.rmSync(atMax, { force: true });
+    all("1.42 S9-c: the SubagentStop reader (observe-hook agentRunOf) counts a transcript's assistant lines — turns the distinct message ids, tokens per id the per-field MAX of its lines (a grown output_tokens, never the first line nor a sum) summed, tool calls per LINE, the last model; an API error Claude Code wrote itself (<synthetic>, isApiErrorMessage) neither a turn nor the model; every chunk size the same (a line carried across a chunk's end); bounded by max — a COUNT of the bytes read, `truncated` past it — and with no max by TRANSCRIPT_MAX (got " +
+      js({ r1, chunks: [...new Set(chunks)].length, cut, whole: whole && { ...whole, size: bigSize }, capped, max: OH.TRANSCRIPT_MAX }) + ")", {
+      "the counts": () => !!r1 && js({ turns: r1.turns, tools: r1.tools, tokens: r1.tokens, model: r1.model, truncated: r1.truncated }) === js(WANT1) && r1.read === fs.statSync(T1).size,
+      "every chunk size the same counts": () => chunks.every((c) => c === js(r1)),
+      "past max: the bytes read stop there, truncated, a lower bound": () => !!cut && cut.read <= 64 * 1024 && cut.read > 32 * 1024 && cut.truncated === true && cut.turns > 0 && cut.turns < 400,
+      "within the default bound: the whole file": () => !!whole && whole.read === bigSize && whole.truncated === false && whole.turns === 400 && whole.tools === 400 && bigSize > 128 * 1024,
+      "the default bound: 32 MB (the largest local dev-spec agent transcript: 26.8 MB)": () => OH.TRANSCRIPT_MAX === 32 * 1024 * 1024,
+      "no max given: TRANSCRIPT_MAX bytes read (a COUNT), truncated, the lines before it counted": () => !!capped && capped.read === OH.TRANSCRIPT_MAX &&
+        capped.truncated === true && capped.turns === 3 && capped.tools === 3,
+    });
+
+    // decide: one record per dispatch in the session's project; never the parent's transcript; the id the transcript's name, always
+    const p = path.join(tmp, "s9c-proj");
+    S.initProject(p, ["core"], "en");
+    const PARENT = write("6f1c2a3b-0d4e-4f5a-9b6c-7d8e9f0a1b2c.jsonl", [user("Plan the billing feature"), ...Array.from({ length: 6 }, (_, k) => asst("msg_01" + String(k).padStart(22, "P"), call("Bash"), [5, 300, 40000, 2000]))]);
+    const EMPTY = write("agent-e00000000000000001.jsonl", []);
+    const USERS = write("agent-e00000000000000002.jsonl", [user("Review task 1"), result("toolu_01000001")]);
+    const FOLDER = path.join(tdir, "agent-e00000000000000003.jsonl");
+    fs.mkdirSync(FOLDER, { recursive: true });
+    const logOf = (d) => path.join(d, ".specs", ".execution", "agents.jsonl");
+    const lines = (d) => { try { return fs.readFileSync(logOf(d), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
+    const sub = (over, cwd) => { const pl = { session_id: "6f1c2a3b-0d4e-4f5a-9b6c-7d8e9f0a1b2c", transcript_path: PARENT, cwd: cwd || p, permission_mode: "default", hook_event_name: "SubagentStop",
+      stop_hook_active: false, agent_type: "dev-spec-driven:spec-reviewer", agent_transcript_path: T1, last_assistant_message: "**Status:** DONE — no finding.", ...(over || {}) };
+      for (const k of Object.keys(pl)) if (pl[k] === undefined) delete pl[k];
+      return hookOut("observe-hook", pl); };
+    const runs = {
+      own: sub(), withAgentId: sub({ agent_id: "a91f2c3d4e5b6a7c8" }), writer: sub({ agent_type: "spec-writer" }), general: sub({ agent_type: "general-purpose" }),
+      noType: sub({ agent_type: undefined }), parentOnly: sub({ agent_transcript_path: undefined }), blank: sub({ agent_transcript_path: "  " }), empty: sub({ agent_transcript_path: EMPTY }),
+      usersOnly: sub({ agent_transcript_path: USERS }), missing: sub({ agent_transcript_path: path.join(tdir, "agent-e00000000000000009.jsonl") }), folder: sub({ agent_transcript_path: FOLDER }),
+    };
+    const plain = path.join(tmp, "s9c-plain");
+    fs.mkdirSync(plain, { recursive: true });
+    runs.noProject = sub({}, plain);
+    const got = lines(p);
+    const WANT_LINE = { agent: "spec-reviewer", id: "agent-a91f2c3d4e5b6a7c8", model: "claude-sonnet-4-5", turns: 4, tools: 3, tokens: WANT1.tokens, truncated: false };
+    all("1.42 S9-c: on SubagentStop the observe hook records ONE line of the agent's own counts — never from transcript_path (the parent session's, also when it is the only path), the id the transcript's name with or without an agent_id (one dispatch), nothing for another agent, a payload without agent_type, an empty / user-only / missing / folder transcript or a folder with no dev-spec project; silent, exit 0 (got " +
+      js({ got, costs: S.agentCosts(p), out: Object.fromEntries(Object.entries(runs).filter(([, r]) => r.status !== 0 || r.stdout !== "").map(([k, r]) => [k, r.stdout.slice(0, 80)])) }) + ")", {
+      "the agent's own counts, the plugin prefix dropped, the id its transcript's name": () => got.length >= 1 && js(got[0]) === js(WANT_LINE),
+      "with an agent_id: the same id — one dispatch": () => got.length === 2 && js(got[1]) === js(WANT_LINE) && S.agentCosts(p).dispatches === 1,
+      "nothing else recorded (another agent, no agent_type, the parent's path alone, no readable turn, no project)": () => got.length === 2 && !fs.existsSync(path.join(plain, ".specs")),
+      "silent, exit 0, every run": () => Object.values(runs).every((r) => r.status === 0 && r.stdout === ""),
+    });
+    // a transcript path that is a LINK (to a real transcript) is no file (lstat first — openRegular alone would follow it)
+    const LINKED = path.join(tdir, "agent-l00000000000000001.jsonl");
+    let linked = false;
+    // (a skip on win32 alone — a file symlink without Developer Mode; elsewhere a failure is a broken fixture: rethrown, the file FAILS)
+    try { fs.symlinkSync(T1, LINKED, "file"); linked = fs.lstatSync(LINKED).isSymbolicLink(); } catch (e) { if (process.platform !== "win32") throw e; linked = false; }
+    if (!linked) skip("1.42 S9-c: a linked transcript is no file", "file links not creatable here");
+    else {
+      const before = lines(p).length;
+      const r = sub({ agent_transcript_path: LINKED });
+      ok(OH.agentRunOf(LINKED) === null && r.stdout === "" && lines(p).length === before,
+        "1.42 S9-c: a transcript path that is a LINK (to a real transcript) is no regular file — nothing read, nothing recorded (got " + js({ run: OH.agentRunOf(LINKED), n: lines(p).length - before }) + ")");
+    }
+
+    // the project: the session's — a git worktree's copy maps to the main checkout (spec.sessionProject), never the first raw candidate
+    const hasGit = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
+    if (!hasGit) skip("1.42 S9-c: a worktree session records in the main checkout", "no git");
+    else {
+      const m = path.join(tmp, "s9c-main");
+      S.initProject(m, ["core"], "en");
+      const git = (args, cwd) => spawnSync("git", args, { cwd: cwd || m, encoding: "utf8" });
+      git(["init", "-q"]); git(["config", "user.email", "t@example.com"]); git(["config", "user.name", "t"]); git(["config", "core.autocrlf", "false"]);
+      git(["add", "-A"]); git(["commit", "-qm", "init"]);
+      const wt = path.join(m, ".claude", "worktrees", "w1");
+      git(["worktree", "add", "-q", wt, "-b", "w1"]);
+      const made = fs.existsSync(path.join(wt, ".specs", "roadmap.json"));
+      sub({}, wt); // no anchor: the linked worktree → its main checkout
+      hookOut("observe-hook", { session_id: "s", hook_event_name: "SubagentStop", cwd: wt, agent_type: "spec-implementer", agent_transcript_path: big }, { CLAUDE_PROJECT_DIR: m });
+      const inMain = lines(m), inWt = lines(wt);
+      all("1.42 S9-c: a dispatch whose session runs in a git worktree is recorded in the main checkout (where the MCP server records), never in the worktree's copy of .specs/ — with and without CLAUDE_PROJECT_DIR (got " +
+        js({ made, inMain: inMain.map((x) => x.agent + "/" + x.id), inWt: inWt.length }) + ")", {
+        made: () => made,
+        "both in the main checkout": () => js(inMain.map((x) => x.agent + "/" + x.id)) === js(["spec-reviewer/agent-a91f2c3d4e5b6a7c8", "spec-implementer/agent-b00000000000000001"]),
+        "none in the worktree": () => inWt.length === 0,
+      });
+    }
   }
 };

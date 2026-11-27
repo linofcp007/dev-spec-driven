@@ -70,7 +70,15 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
     "state-only": "", "dot-folders": null, "generated-roadmap-md": "", "mono-classified": "packages/app", "mono-other-tool": "",
     "steering-linked": "", "feature-linked": "" };
   const want = (l) => (WANT[l.name] === null ? null : path.join(l.root, ...WANT[l.name].split("/").filter(Boolean)));
+  // (by SPELLING: a surface given one spelling of a folder answers that spelling — one that starts answering another spelling of the
+  // right folder, its real path or an expanded 8.3 name, fails here)
   const same = (a, b) => (a == null || b == null ? a == b : path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()); // eslint-disable-line eqeqeq
+  // The resolver CHILD's values alone by real path: its process.chdir makes S.resolveProjectDir() / C.resolveProject() answer
+  // process.cwd(), the PHYSICAL folder on POSIX, while the probe keeps the spelling it was given — an aliased temp, test-docker's
+  // --alias-tmp. fs.realpathSync, the JS one — never .native, which expands an 8.3 name a win32 process.cwd() keeps. 1.42 review 1, R10
+  // Step 0; review 2, R2-TESTS-01
+  const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync(r); } catch { return r; } };
+  const childSame = (a, b) => (a == null || b == null ? a == b : real(a).toLowerCase() === real(b).toLowerCase()); // eslint-disable-line eqeqeq
 
   // (a) in process — the probe, the engine (isDevSpecDir, statusLineProject, sessionProject, the CLI resolver's walk), the status line's
   // probe and the shell completion's resolver, hook-utils' approval candidates
@@ -107,7 +115,7 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
     const pr = P.nearestProject(subs[i]);
     const r = resolved[i] || [];
     const cd = HU.approvalProjects({ cwd: l.root, command: "cd src && node cli/dev-spec.js status" });
-    return same(r[0], pr || subs[i]) && same(r[1], pr || subs[i]) && (pr === null || cd.some((d) => same(d, pr))) ? null
+    return childSame(r[0], pr || subs[i]) && childSame(r[1], pr || subs[i]) && (pr === null || cd.some((d) => same(d, pr))) ? null
       : l.name + ": engine " + r[0] + " completion " + r[1] + " probe " + pr + " candidates " + js(cd);
   }).filter(Boolean);
   ok(inProcess.length === 0 && resolver.length === 0,
@@ -116,23 +124,28 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
 
   // (b) the hooks, each in its own process, the engine-load as the observable (a preload records whether mcp/lib/spec.js was loaded): a
   // hook loads it exactly when the probe finds a project — SessionStart (its probe), SubagentStop (the stop gate on: no roadmap meta), the
-  // edit guard (DEV_SPEC_GUARD_DEFAULT=on: every dev-spec project is guarded), the observe hook (`npm test` is in work/tasks.md) and the
-  // plan hook. No CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR: the cwd alone decides.
+  // edit guard (DEV_SPEC_GUARD_DEFAULT=on: every dev-spec project is guarded), the observe hook (`npm test` is in work/tasks.md; 1.42
+  // S9-c: its SubagentStop recorder, a reviewer's transcript outside every layout) and the plan hook. No CLAUDE_PROJECT_DIR /
+  // SPEC_PROJECT_DIR: the cwd alone decides. A job's name is its hook's file, `:<event>` after it for a second event of one hook.
   const pre = path.join(base, "preload.js");
   fs.writeFileSync(pre, "process.on('exit', () => { if (process.env.PROBE_OUT) require('fs').writeFileSync(process.env.PROBE_OUT, String(Object.keys(require.cache).some((k) => /[" +
     BS + BS + "/]mcp[" + BS + BS + "/]lib[" + BS + BS + "/]spec" + BS + ".js$/.test(k)))); });\n");
+  const agentT = path.join(base, "agent-a1b2c3d4e5f6a7b80.jsonl");
+  put(agentT, js({ type: "assistant", isSidechain: true, message: { id: "msg_01AAAA", model: "claude-opus-4-5", role: "assistant", content: [{ type: "text", text: "DONE" }],
+    usage: { input_tokens: 3, output_tokens: 40, cache_read_input_tokens: 9000, cache_creation_input_tokens: 700 } }, uuid: "a-1", timestamp: "2026-11-20T10:00:00.000Z" }) + "\n");
   const events = (cwd) => ({
     "spec-hook": { session_id: "s", hook_event_name: "SessionStart", source: "startup", cwd },
     "stop-hook": { session_id: "s", hook_event_name: "SubagentStop", agent_type: "dev-spec-driven:spec-implementer", stop_hook_active: false, cwd, last_assistant_message: "DONE — task 1." },
     "guard-hook": { session_id: "s", hook_event_name: "PreToolUse", tool_name: "Write", cwd, tool_input: { file_path: path.join(cwd, "a.ts"), content: "x" } },
     "observe-hook": { session_id: "s", hook_event_name: "PostToolUse", tool_name: "Bash", cwd, tool_input: { command: "npm test" }, tool_response: { stdout: "ok", exit_code: 0 } },
+    "observe-hook:SubagentStop": { session_id: "s", hook_event_name: "SubagentStop", agent_type: "dev-spec-driven:spec-reviewer", agent_transcript_path: agentT, stop_hook_active: false, cwd, last_assistant_message: "DONE" },
     "plan-hook": { session_id: "s", hook_event_name: "PostToolUse", tool_name: "ExitPlanMode", cwd, tool_input: { plan: "# Plan\n- a" } },
   });
   const env = { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", DEV_SPEC_GUARD_DEFAULT: "on" };
   const jobs = [];
-  L.forEach((l, i) => Object.entries(events(l.cwd)).forEach(([h, payload]) => jobs.push({ l, h, payload, out: path.join(base, "out-" + i + "-" + h) })));
+  L.forEach((l, i) => Object.entries(events(l.cwd)).forEach(([h, payload]) => jobs.push({ l, h, payload, out: path.join(base, "out-" + i + "-" + h.replace(/:/g, "-")) })));
   const runOne = (j) => new Promise((resolve) => {
-    const c = spawn(process.execPath, ["-r", pre, path.join(HOOKS, j.h + ".js")], { cwd: tmp, env: { ...env, PROBE_OUT: j.out }, stdio: ["pipe", "ignore", "ignore"] });
+    const c = spawn(process.execPath, ["-r", pre, path.join(HOOKS, j.h.split(":")[0] + ".js")], { cwd: tmp, env: { ...env, PROBE_OUT: j.out }, stdio: ["pipe", "ignore", "ignore"] });
     const t = setTimeout(() => c.kill(), 30000);
     c.on("error", () => { clearTimeout(t); resolve(); });
     c.on("close", () => { clearTimeout(t); resolve(); });
@@ -144,7 +157,7 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
     return loaded === !!want(j.l) ? null : j.l.name + " / " + j.h + ": engine loaded " + loaded;
   }).filter(Boolean);
   ok(hooks.length === 0,
-    "1.27: SessionStart, the stop gate (SubagentStop), the edit guard, the observe hook and the plan hook take a layout for a dev-spec project exactly when the probe does — " + jobs.length + " runs, the engine loaded only then (got " + js(hooks) + ")");
+    "1.27: SessionStart, the stop gate (SubagentStop), the edit guard, the observe hook (1.42 S9-c: and its SubagentStop recorder) and the plan hook take a layout for a dev-spec project exactly when the probe does — " + jobs.length + " runs, the engine loaded only then (got " + js(hooks) + ")");
 
   // (c) `~` (the status line's --project, the CLI's resolver, a SPEC_PROJECT_DIR from a JSON config): the home folder, alike everywhere — in
   // a child whose home is a temp folder (os.homedir() reads USERPROFILE / HOME)

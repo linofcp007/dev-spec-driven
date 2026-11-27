@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, hookIn }) => {
+exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, list, __dirname, hookIn }) => {
 
   { // 1.14 B1 — project templates (.specs/templates/): scaffolds, variables, track blocks, the placeholder corpus, spec_templates
     const b1Root = path.join(tmp, "b1-templates");
@@ -247,11 +247,115 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, hookIn })
     let linked2 = false;
     try { fs.symlinkSync(outDir, path.join(pj2, ".specs", "templates"), "junction"); linked2 = true; } catch { /* no link support */ }
     const fj2 = S.createFeature(pj2, "Linked", ["core"], "", undefined, "en");
-    const ij2 = linked2 ? S.templates(pj2, "init") : { ok: false, error: "Refused to write" };
+    // (1.42 R4: the write gate's own refusal — linked, the folder's path, its localized sentence — in place of the project-real
+    // compare's "outside the project" sentence; the no-links stub has the same shape)
+    const ij2 = linked2 ? S.templates(pj2, "init") : { ok: false, linked: true, path: ".specs/templates/", error: "Refused to write into .specs/templates/" };
     ok(!/OUTSIDE/.test(rd(fj.dir, "requirements.md")) && (!linked || S.templates(pj, "list", { lang: "pt" }).ignored.includes(".specs/templates/pt")) &&
-      !/OUTSIDE/.test(rd(fj2.dir, "requirements.md")) && !ij2.ok && /^Refused to write \.specs\/templates\/classification\.md/.test(ij2.error) &&
+      !/OUTSIDE/.test(rd(fj2.dir, "requirements.md")) && ij2.ok === false && ij2.linked === true && ij2.path === ".specs/templates/" &&
+      /^Refused to write into \.specs\/templates\/: that folder is a link/.test(ij2.error) &&
       fs.readdirSync(outDir).join() === "requirements.md",
-      "B1: a linked folder under .specs/templates/ — or templates/ itself linked out of the project — is never read, and init writes nothing through it" + (linked && linked2 ? "" : " (links unavailable here)"));
+      "B1: a linked folder under .specs/templates/ — or templates/ itself linked out of the project — is never read, and init writes nothing through it (1.42 R4: refused by the write gate, linked: true)" + (linked && linked2 ? "" : " (links unavailable here)"));
+
+    // 1.42 (R4): templates and starters under the gates' rule. A linked .specs/ — a project keeping its specs elsewhere: both gates
+    // exempt .specs itself (12-lifecycle-read-gate-scope.js builds it as a supported layout) — has its templates/ overrides and its
+    // track packs read and its starters written, like its features; until 1.42 a project-real compare (1.14, before either gate)
+    // dropped every override silently (`source: "built-in"`, not even `ignored`) and refused templates init / tracks init. Below it a
+    // link is still the gates' to refuse: a linked templates/ or tracks/ folder (even one pointing INSIDE the store) reads absent and
+    // init answers the write gate's refusal; a template FILE that is a link to a file inside the store reads absent too (the one shape
+    // where the read gate and a real-path compare against the real .specs/ differ — the listing itself never enters a linked folder).
+    {
+      const js = (v) => JSON.stringify(v);
+      // (links not creatable is a win32 cause alone — a junction, a file symlink without Developer Mode: elsewhere the error is rethrown,
+      // a broken fixture FAILS instead of skipping — 1.42 fix round 1)
+      const link = (target, at, kind) => { try { fs.mkdirSync(path.dirname(at), { recursive: true }); fs.symlinkSync(target, at, kind || "junction"); return true; } catch (e) { if (process.platform !== "win32") throw e; return false; } };
+      const MARK = "# R4-STORE {{name}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [r4 trigger] THE SYSTEM SHALL [r4 behaviour]\n";
+      const storeOf = (p, store) => { // the project's .specs/ moved to a store outside the project folder, linked back in
+        fs.mkdirSync(p, { recursive: true });
+        S.initProject(p, ["core"], "en");
+        fs.cpSync(path.join(p, ".specs"), store, { recursive: true });
+        fs.rmSync(path.join(p, ".specs"), { recursive: true, force: true });
+        return link(store, path.join(p, ".specs"));
+      };
+      const pa = b1("r4-linked"), sa = path.join(b1Root, "r4-stores", "a");
+      const pb = b1("r4-linked-inner"), sb = path.join(b1Root, "r4-stores", "b");
+      if (!storeOf(pa, sa) || !storeOf(pb, sb)) skip("1.42 (R4): a linked .specs/ reads its templates and writes its starters", "links not creatable here");
+      else {
+        // (a) the linked store: its override read, a new feature scaffolded from it, templates init / tracks init write into the store
+        fs.mkdirSync(path.join(sa, "templates"), { recursive: true });
+        fs.writeFileSync(path.join(sa, "templates", "requirements.md"), MARK);
+        const la = S.templates(pa, "list");
+        const reqA = la.templates.find((t) => t.artifact === "requirements") || {};
+        const fa = S.createFeature(pa, "Billing", ["core"], "", undefined, "en");
+        const ia = S.templates(pa, "init", { artifact: "design" });
+        const ta = S.trackPacks(pa, "init", { name: "billing" });
+        const tla = S.trackPacks(pa, "list");
+        // (b) inside a linked store: templates/ and tracks/ themselves junctions to folders INSIDE the store — absent, refused;
+        // a template file that is a link to a file inside the store — absent
+        for (const d of ["tpl-real", "tracks-real"]) fs.mkdirSync(path.join(sb, d), { recursive: true });
+        fs.writeFileSync(path.join(sb, "tpl-real", "requirements.md"), MARK);
+        const innerLinks = link(path.join(sb, "tpl-real"), path.join(sb, "templates")) && link(path.join(sb, "tracks-real"), path.join(sb, "tracks"));
+        const lb = S.templates(pb, "list");
+        const fb = S.createFeature(pb, "Inner", ["core"], "", undefined, "en");
+        const ib = S.templates(pb, "init", { artifact: "design" });
+        const tb = S.trackPacks(pb, "init", { name: "billing" });
+        const pc = b1("r4-linked-file"), sc = path.join(b1Root, "r4-stores", "c");
+        const fileLink = storeOf(pc, sc) && (fs.mkdirSync(path.join(sc, "templates"), { recursive: true }), fs.writeFileSync(path.join(sc, "kept-requirements.md"), MARK), true) &&
+          link(path.join(sc, "kept-requirements.md"), path.join(sc, "templates", "requirements.md"), "file");
+        const lc = fileLink ? S.templates(pc, "list") : null;
+        const fc = fileLink ? S.createFeature(pc, "Filed", ["core"], "", undefined, "en") : null;
+        all("1.42 (R4): a linked .specs/ has its templates/ overrides and track packs read and its starters written, like its features; below it a linked templates/ / tracks/ folder (even pointing inside the store) or a linked template file reads absent, and init answers the write gate's refusal (got " +
+          js({ reqA, fa: fa.templates, ia, ta: { ok: ta.ok, created: ta.created }, lb: (lb.templates || []).find((t) => t.artifact === "requirements"), ib, tb, lc: lc && (lc.templates || []).find((t) => t.artifact === "requirements") }) + ")", {
+          "(a) the store's override is listed and used": () => reqA.source === "override" && reqA.override === ".specs/templates/requirements.md" &&
+            fa.ok && /^# R4-STORE Billing/.test(rd(fa.dir, "requirements.md")) && (fa.templates || {})["requirements.md"] === ".specs/templates/requirements.md",
+          "(a) templates init and tracks init write into the store": () => ia.ok === true && js(ia.created) === js([".specs/templates/design.md"]) && fs.existsSync(path.join(sa, "templates", "design.md")) &&
+            ta.ok === true && ta.created.length === 6 && fs.existsSync(path.join(sa, "tracks", "billing", "track.json")) &&
+            (tla.packs || []).some((x) => x.name === "billing" && x.valid),
+          "(b) a linked templates/ inside the store: never read": () => innerLinks && ((lb.templates || []).find((t) => t.artifact === "requirements") || {}).source === "built-in" &&
+            fb.ok && !/R4-STORE/.test(rd(fb.dir, "requirements.md")),
+          "(b) init through a linked templates/ or tracks/ is the gate's refusal, nothing written": () => ib.ok === false && ib.linked === true && ib.path === ".specs/templates/" &&
+            /^Refused to write into \.specs\/templates\//.test(ib.error) && tb.ok === false && tb.linked === true && tb.path === ".specs/tracks/" &&
+            js(fs.readdirSync(path.join(sb, "tpl-real"))) === js(["requirements.md"]) && fs.readdirSync(path.join(sb, "tracks-real")).length === 0,
+        });
+        // (b) the file link: its own assertion where file links can be made, a skip() where they can't — never a pass for the part
+        // that did not run (1.42 fix round 1: it was a `!fileLink ||` disjunct inside the row above)
+        if (!fileLink) skip("1.42 (R4): a template file linked to a file inside a linked store", "file symlinks not creatable here");
+        else {
+          const reqC = (lc.templates || []).find((t) => t.artifact === "requirements") || {};
+          ok(reqC.source === "built-in" && fc.ok && !/R4-STORE/.test(rd(fc.dir, "requirements.md")),
+            "1.42 (R4): a template file linked to a file inside a linked store reads absent — the built-in requirements.md is listed and scaffolded (got " + js({ reqC, fc: fc.ok }) + ")");
+        }
+      }
+    }
+
+    // 1.42 (INT-D2): check's "the built-in's own copy" test (sameText — silent-missing is never warned on templates init's pristine
+    // design) drops the trailing blanks with trimEnd(): /\s+$/ (the same characters) rescanned a long blank run INSIDE the text from
+    // each of its starts — quadratic (12 s at 100 K blanks on the parent, Windows). The equivalence first: BOM / CRLF / trailing blank
+    // lines are the same text; a leading blank line or an inner edit is not. Then the cost, the 05-markdown-trace L2 pattern: the
+    // same check on a small template, 10 × max(base, 100) + 6 s, under remeasure (linear is milliseconds; the old pattern ~27 s here).
+    {
+      const js = (v) => JSON.stringify(v);
+      const silent = (p) => (S.templates(p, "check").problems || []).filter((x) => x.code === "silent-missing").length;
+      const pq = b1("same-text");
+      S.initProject(pq, ["core"], "en");
+      S.templates(pq, "init", { artifact: "design" });
+      const tf = path.join(pq, ".specs", "templates", "design.md");
+      const copy = fs.readFileSync(tf, "utf8");
+      const as = (text) => { fs.writeFileSync(tf, text); return silent(pq); };
+      const eq = { pristine: as(copy), resaved: as(String.fromCharCode(0xfeff) + copy.replace(/\n/g, "\r\n") + "\r\n\r\n  \t\r\n"), leading: as("\n" + copy),
+        inner: as(copy.replace("\n", "   \n")) };
+      ok(js(eq) === js({ pristine: 0, resaved: 0, leading: 1, inner: 1 }),
+        "1.42: templates check calls the built-in design's copy re-saved with a BOM, CRLF and trailing blank lines the built-in's own (no silent-missing); a leading blank line or an inner edit makes it the team's (got " + js(eq) + ")");
+      const N = 150000;
+      const tpl = (body) => "# Design — {{name}}\n\n## Overview\n" + body + "\n\n## Constitution Check\n- [ ] [principle] — complies\n";
+      const mkT = (n, body) => { const p = b1(n); S.initProject(p, ["core"], "en"); tw(p, "design.md", tpl(body)); return p; };
+      const small = mkT("same-text-small", "a b\nx"), big = mkT("same-text-big", " ".repeat(N) + "x");
+      const timed = (p) => { const t0 = Date.now(); const n = silent(p); return { ms: Date.now() - t0, n }; };
+      timed(small);
+      const lin = remeasure(() => { const base = timed(small), b = timed(big); return { base, big: b, bound: 10 * Math.max(base.ms, 100) + 6000 }; },
+        (x) => x.big.ms < x.bound);
+      ok(lin.base.n === 1 && lin.big.n === 1 && lin.big.ms < lin.bound,
+        "1.42: templates check of a design template with a " + N + "-blank run inside (no Silent Regressions: the built-in copy test runs) stays linear — within 10 × max(base, 100) + 6000 ms of a small one (got " + js(lin) + ")");
+    }
     const resv = S.createFeature(pe, "templates", ["core"], "", undefined, "en");
     tw(pe, ".gitkeep", "");
     ok(!resv.ok && /reserved/.test(resv.error) && !S.listFeatures(pe).features.some((x) => x.name === "templates") && !(S.listFeatures(pe).ignored || []).includes("templates") &&

@@ -6,6 +6,8 @@ argument-hint: "[feature | idea] [requirements|design|test-plan|eval-plan|tests|
 Use the **dev-spec-driven** skill. Request: $ARGUMENTS
 
 **Route the request.**
+- **No argument** → `spec_status {}`: one feature in flight (not complete) → resume it as below; several → list them
+  with their phase and progress and ask which; none → ask for the idea (Phase 0).
 - **An existing feature** (`.specs/<feature>/`) → `spec_next_action {name}`: report its tracks, phase, doctor verdict and
   `changedSinceApproval`, then do the ONE step it names — never skip a step to reach a later one. With a phase named,
   do that phase once the phases before it are approved.
@@ -20,7 +22,7 @@ Use the **dev-spec-driven** skill. Request: $ARGUMENTS
   or `change.md` (xs). A spec or plan from Kiro, spec-kit, OpenSpec, plan mode or BMAD: `spec_import` instead of
   re-typing it.
 
-**The phases** (each one: fill the artifact, `spec_doctor`, then the user's approval):
+**The phases** (each one: fill the artifact, `spec_doctor` — fix what its next gate refuses —, then the user's approval):
 - **requirements** — EARS criteria with stable IDs (`US-1.AC-1`, `EC-1`, `NFR-1`, `SC-001`), every placeholder
   replaced; `ears_validate`, then `spec_clarify` for the gaps.
 - **design** — the active tracks' sections, Alternatives & Trade-offs, Risks, Reuse & Integration, the Constitution Check.

@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, remeasure, S, tmp, libSources, require, __dirname }) => {
+exports.run = async ({ ok, skip, remeasure, S, tmp, libSources, require, __dirname }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
   const tmpsIn = (d) => fs.readdirSync(d).filter((x) => /\.tmp$/i.test(x));
@@ -86,7 +86,7 @@ exports.run = async ({ ok, remeasure, S, tmp, libSources, require, __dirname }) 
       fs.chmodSync(ro, 0o644);
       ok(r.code && r.renames === 1 && fs.readFileSync(ro, "utf8") === "KEEP\n" && r.took < 1000 && js(tmpsIn(dir)) === "[]",
         "1.25.1 review 7: a read-only target is refused at once — one rename attempt, no retry (no ~1.6 s of retries) — its content kept, no temp file left (got " + js([r.code, r.renames, r.took, r.tries, tmpsIn(dir)]) + ")");
-    } else ok(true, "1.25.1 review 7: read-only target — skipped (Windows only: a POSIX rename replaces a read-only file in a writable folder)");
+    } else skip("1.25.1 review 7: read-only target", "Windows only: a POSIX rename replaces a read-only file in a writable folder");
   }
 
   // Finding 10 — every calendar date was the UTC one (toISOString().slice(0, 10) in eleven places; todayIso, day): written between

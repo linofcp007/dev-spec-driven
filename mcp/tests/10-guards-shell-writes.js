@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
+exports.run = async ({ ok, skip, all, S, tmp, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the reader) — read through mcp/test.js's require
   const HU = require("../hooks/hook-utils.js");
   const js = JSON.stringify;
@@ -99,22 +99,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
       ["PowerShell", "Remove-Item * -Recurse -Force"], ["PowerShell", "ri -r .specs" + BS + "roadmap.*"], ["PowerShell", "Expand-Archive b.zip -DestinationPath .specs -Force"]];
     const asks = [["Bash", "somebin .specs/roadmap.json"], ["Bash", "npx prettier --write .specs/roadmap.json"], ["PowerShell", "New-Object IO.StreamWriter('.specs/roadmap.json')"],
       ["PowerShell", "[IO.File]::Frobnicate('.specs/roadmap.json')"]];
-    const fp = [["Bash", "cat .specs/roadmap.json"], ["Bash", "grep -rn approve .specs/"], ["Bash", "git add .specs && git commit -m \"approve tasks of login-flow\""],
-      ["Bash", "git diff .specs/roadmap.json"], ["Bash", "git log -p .specs/roadmap.json"], ["Bash", "node cli/dev-spec.js status login-flow"], ["Bash", "node cli/dev-spec.js done login-flow 3 --run"],
-      ["Bash", "node cli/dev-spec.js approve --help"], ["Bash", "node cli/dev-spec.js init --approval-guard deny"], ["Bash", "node cli/dev-spec.js init --guard scope"],
-      ["Bash", "node cli/dev-spec.js init --check test=\"npm test\""], ["Bash", "node cli/dev-spec.js init --evidence observed"], ["Bash", "node cli/dev-spec.js feature archive login-flow"],
-      ["Bash", "node cli/dev-spec.js merge-state --check"], ["Bash", "cp .specs/roadmap.json /tmp/backup.json"], ["Bash", "rm -rf .specs/login-flow/.execution"],
-      ["Bash", "npm test 2>&1 | tee .specs/login-flow/.execution/task-3-report.md"], ["Bash", "echo \"remove the old approve button\" > notes.txt"], ["Bash", "ls .specs/*/tasks.md"],
-      ["Bash", "sed -n 1,40p .specs/login-flow/tasks.md"], ["Bash", "sed -i 's/- " + BS + "[ " + BS + "] 3/- [x] 3/' .specs/login-flow/tasks.md"], ["Bash", "jq . .specs/roadmap.json"],
-      ["Bash", "node -e \"console.log(require('./.specs/roadmap.json').meta)\""], ["Bash", "python -m json.tool .specs/roadmap.json"],
-      ["PowerShell", "Get-Content .specs" + BS + "roadmap.json | ConvertFrom-Json"], ["PowerShell", "Select-String -Path .specs" + BS + "*" + BS + "tasks.md -Pattern approve"],
-      ["PowerShell", "Copy-Item .specs" + BS + "roadmap.json $env:TEMP" + BS + "r.json"], ["Bash", "git checkout main"], ["Bash", "git stash"], ["Bash", "npm run lint -- --fix src/"],
-      ["Bash", "rg -n \"dev-spec approve\" docs/"], ["Bash", "find .specs -name '*.md' -newer .specs/roadmap.json"], ["Bash", "wc -l .specs/*/tasks.md && echo approve"],
-      // and more ordinary work on and beside .specs/
-      ["Bash", "jq . < .specs/roadmap.json"], ["Bash", "cp notes.md .specs/alpha/"], ["Bash", "rm -f *.log && node cli/dev-spec.js status"], ["Bash", "cp -r .specs /tmp/specs-backup"],
-      ["Bash", "tar -czf /tmp/specs.tgz .specs"], ["Bash", "zip -r /tmp/specs.zip .specs"], ["Bash", "rm .specs/.roadmap.lock"], ["Bash", "rm .specs/alpha/notes.md"],
-      ["Bash", "find .specs -name '*.md' | xargs grep -l approve"], ["Bash", "for f in .specs/*/tasks.md; do wc -l $f; done"], ["Bash", "[[ -f .specs/roadmap.json ]] && echo yes"],
-      ["PowerShell", "[IO.File]::ReadAllText('.specs/roadmap.json')"], ["PowerShell", "Get-ChildItem .specs | Format-Table"], ["Bash", "git stash push -m wip -- src/"]];
+    const fp = require("./tests/guard-commands.js").LEGIT_REVIEW; // the review's 33 legitimate commands, and more ordinary work
     const wrong = must.filter(([t, c]) => dec(t, c).decision !== "deny").map(([t, c]) => "deny? " + t + " " + c + " " + js(kinds(dec(t, c))))
       .concat(asks.filter(([t, c]) => dec(t, c).decision !== "ask" || !kinds(dec(t, c)).includes("unreadable/specs-arg")).map(([t, c]) => "ask? " + c))
       .concat(fp.filter(([t, c]) => dec(t, c).decision !== "allow").map(([t, c]) => "allow? " + c + " " + js(kinds(dec(t, c)))));
@@ -441,7 +426,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
     fs.writeFileSync(path.join(r, "src", "Main.java"), "class Main {}");
     let shortNames = false;
     try { shortNames = WIN && /[\\/]\.specs$/.test(fs.realpathSync.native(path.join(r, "SPECS~2"))) && /spe cs$/.test(fs.realpathSync.native(path.join(r, "SPECS~1"))); } catch { shortNames = false; }
-    if (!shortNames) ok(true, "1.30.1: the file system's own 8.3 names — skipped: " + (WIN ? "this volume makes no 8.3 names" : "not win32"));
+    if (!shortNames) skip("1.30.1: the file system's own 8.3 names", WIN ? "this volume makes no 8.3 names" : "not win32");
     else {
       const rd = (command) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, cwd: r }, "deny", { meta: {}, lang: "en" }).decision;
       const gh = (tool, ti) => decisionOf(hookOut(path.join(HOOKS, "guard-hook.js"), pre(r, tool, ti), { CLAUDE_PROJECT_DIR: r }));

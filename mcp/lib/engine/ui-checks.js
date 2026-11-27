@@ -916,7 +916,8 @@ function uiChecksReport(files, projectFocus, cap, offs) {
 // for an off fact too: its `off` count is the fact as it would have been said.)
 // → { feed(rel, lines, over, text) (lines: viewLines of the file's text as read; over: the file is longer than that read),
 //     wouldSay(cut, truncated), mention(text),
-//     done(cut, truncated, scripts) → { read, total, silenced, byRule, rules: { id: {level, files, file, line?} }, off?, offIgnored?,
+//     done(cut, truncated, scripts) → { read, total, silenced, byRule, rules: { id: {level, files, file, line?} },
+//     excused? ({ "outline-removed": {count, files, file, line?} } — 1.42: the removals a focus style read excused), off?, offIgnored?,
 //     facts, limits } } — scripts: the search's { read, bound (null | files | chars: the bound that ended it), count (the scripts
 //     read only in part), file (the first of those by path) }, null when none ran; its limit `motion-scripts` {read, bound?,
 //     count?, file?} beside the fact (or its off count) when a bound ended it or a script was read only in part
@@ -963,10 +964,12 @@ function uiProjectPass(bounds, offs) {
       cutAt(cuts["tag-length"], r.cut.tags, rel);
     },
     done(cut, truncated, scripts) {
-      // (the excuse — any focus style read; a cut pass with none judges no removal)
+      // (the excuse — any focus style read; a cut pass with none judges no removal. 1.42 B141-01: the removals a focus style
+      // excused are kept as `excused` — the deleted rule entry as it was, its counts the rule's own: an off rule, an inline
+      // silence and a finding past a file's cap follow the rule's semantics —, never in total / byRule / rules)
       const removal = rules.get("outline-removed");
-      let unjudged = null;
-      if (removal && (focus || cut)) { rules.delete("outline-removed"); if (!focus) unjudged = removal; }
+      let unjudged = null, excused = null;
+      if (removal && (focus || cut)) { rules.delete("outline-removed"); if (focus) excused = removal; else unjudged = removal; }
       const byRule = {}, out = {};
       let total = 0;
       for (const id of Object.keys(UI_RULES)) {
@@ -985,7 +988,9 @@ function uiProjectPass(bounds, offs) {
       }
       if (said && off.has("no-reduced-motion")) count1(hidden, "no-reduced-motion", motion.count);
       const facts = said && !off.has("no-reduced-motion") ? [{ code: "no-reduced-motion", count: motion.count, file: motion.file, line: motion.line }] : [];
-      return Object.assign({ read, total, silenced, byRule, rules: out }, offKeys(offs, hidden, () => true), { facts, limits });
+      return Object.assign({ read, total, silenced, byRule, rules: out },
+        excused ? { excused: { "outline-removed": Object.assign({ count: excused.count, files: excused.files, file: excused.file }, excused.line != null ? { line: excused.line } : {}) } } : {},
+        offKeys(offs, hidden, () => true), { facts, limits });
     },
   };
 }

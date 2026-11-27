@@ -174,8 +174,13 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
     const otherCli = install(ih, "mk", "3.3.0");
     install(ih, "mk", "9.9.9"); // in the cache, not listed: an orphan
     const entry = (cli, version, extra) => ({ scope: "user", installPath: path.dirname(path.dirname(cli)), version, ...(extra || {}) });
+    // (the project spelled as Claude Code records it — its own process.cwd(), the launcher's too: the PHYSICAL path on POSIX, the
+    // spelling it was given on win32. fs.realpathSync gives that on both — never .native, which expands an 8.3 name the cwd keeps.
+    // The engine is asked with that spelling: findDevGuardian compares spellings, so another spelling of this folder — a symlinked
+    // temp, macOS /var, an 8.3 name — reads as another project's: a known limit, claude-code-integration.md. 1.42 review 1, T-R10-3)
+    const pr = fs.realpathSync(p);
     write(ih, "plugins/installed_plugins.json", js({ version: 2, plugins: { "dev-guardian@mk": [entry(userCli, "3.2.1"),
-      entry(projCli, "3.1.5", { scope: "project", projectPath: p }), entry(otherCli, "3.3.0", { scope: "project", projectPath: path.join(tmp, "another") })] } }));
+      entry(projCli, "3.1.5", { scope: "project", projectPath: pr }), entry(otherCli, "3.3.0", { scope: "project", projectPath: path.join(tmp, "another") })] } }));
     const ip = launch(p, ["scan"], { CLAUDE_CONFIG_DIR: ih, DEV_GUARDIAN_CLI: null });
     const q = path.join(tmp, "g-launch-q");
     S.initProject(q, [], "en", { guardian: true });
@@ -185,7 +190,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, fsCalls, require, 
     write(nh, "plugins/installed_plugins.json", js({ version: 2, plugins: { "other@mk": [{ scope: "user", installPath: "/x", version: "1.0.0" }] } }));
     const nn = launch(p, ["scan"], { CLAUDE_CONFIG_DIR: nh, DEV_GUARDIAN_CLI: null });
     all("1.30 review 8: the launcher (and the offer) prefer installed_plugins.json — this project's install over the user's, another project's never, a cache folder it doesn't list never; it lists no dev-guardian → not found (got " + js([ip, iq, nn]) + ")", {
-      projectScoped: ip.code === 0 && !!ip.out && fold(ip.out.argv1) === fold(projCli) && fold(E.guardianCli({ CLAUDE_CONFIG_DIR: ih }, p)) === fold(projCli),
+      projectScoped: ip.code === 0 && !!ip.out && fold(ip.out.argv1) === fold(projCli) && fold(E.guardianCli({ CLAUDE_CONFIG_DIR: ih }, pr)) === fold(projCli),
       userScoped: iq.code === 0 && !!iq.out && fold(iq.out.argv1) === fold(userCli),
       notListed: nn.code === 3 && /^dev-guardian not found: no dev-guardian in .*installed_plugins\.json/.test(nn.stderr) && E.guardianCli({ CLAUDE_CONFIG_DIR: nh }, p) === null,
     });

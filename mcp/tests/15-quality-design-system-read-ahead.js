@@ -205,6 +205,9 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     fs.mkdirSync(path.join(d, "files"), { recursive: true });
     for (let i = 0; i < 400; i++) fs.writeFileSync(path.join(d, "files", "f" + String(i).padStart(3, "0") + ".txt"), "file " + i + "\n" + "y".repeat(i % 300));
     const CHILD = path.join(d, "child.js");
+    // (1.42 R8: files.js's AHEAD_STALL_MS — a take that waits it out stops the pool — and the child's "slow take", 0.9 of it)
+    const STALL_MS = 2000, SLOW_TAKE_MS = 0.9 * STALL_MS;
+    const stallPinned = /\bAHEAD_STALL_MS = 2000\b/.test(fs.readFileSync(path.join(__dirname, "lib", "engine", "files.js"), "utf8"));
     fs.writeFileSync(CHILD, L([
       "\"use strict\";",
       "const fs = require(\"fs\"), path = require(\"path\"), wt = require(\"worker_threads\");",
@@ -221,13 +224,14 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       "const files = fs.readdirSync(dir).sort().map((n) => path.join(dir, n));",
       "const ref = files.map((f) => E.readFileHead(f, 64));",
       "const take = scenario === \"stall\" || scenario === \"failing\" || scenario === \"refused\" ? files.length : 40;",
-      "const t0 = Date.now(), h = E.readFileHeads(files, 64), got = [];",
-      "for (let i = 0; i < take; i++) got.push(h.next());",
+      "const t0 = Date.now(), h = E.readFileHeads(files, 64), got = [], slow = [];",
+      // (1.42 R8: each take timed — `slow`, the ones of 0.9 × AHEAD_STALL_MS or more: a stall is a COUNT of them)
+      "for (let i = 0; i < take; i++) { const n0 = Date.now(); got.push(h.next()); const dt = Date.now() - n0; if (dt >= " + SLOW_TAKE_MS + ") slow.push(dt); }",
       "const took = Date.now() - t0;",
       "if (scenario !== \"abandon\") h.stop();",
       "const same = got.every((t, i) => t === ref[i]) && got.length === take;",
       "const t1 = Date.now();",
-      "const say = () => process.stdout.write(JSON.stringify({ scenario, made: made.length, exited: made.filter((m) => m.exited).length, failed: made.filter((m) => m.failed).length, same, took, exitMs: Date.now() - t1 }) + \"\\n\");",
+      "const say = () => process.stdout.write(JSON.stringify({ scenario, made: made.length, exited: made.filter((m) => m.exited).length, failed: made.filter((m) => m.failed).length, same, took, slow, exitMs: Date.now() - t1 }) + \"\\n\");",
       // (abandon: says at once, and nothing of its own holds the process — the workers it left must not either)
       "const tick = () => { if (scenario === \"abandon\" || made.every((m) => m.exited) || Date.now() - t1 > 5000) return say(); setTimeout(tick, 10); };",
       "tick();",
@@ -255,15 +259,32 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       return { refused, plain, r1: said(refused), p1: said(plain) };
     }, (x) => x.r1 != null && x.p1 != null && x.r1.took < 1.5 * x.p1.took + 1000);
     const { refused, plain, r1, p1 } = twins;
+    // (1.42 R8: the stall COUNTED — exactly one take waited 0.9 × AHEAD_STALL_MS or more, and less than twice it: one stall, then
+    // the rest in sequence. It was `took ≥ 1800 && took < 15000`, the whole read's time: worker starts and contention among the five
+    // children at once — 9.1 s of 15 in a pre-push run. A pool start of 2 s or more is itself a stall by the product's rule (that
+    // take times out, the pool stops: still one slow take); only a start between 1.8 and 2 s beside the planted stall makes two —
+    // on a miss the stall child runs once more ALONE, with spawnSync. 1.42 fix round 1: two bounds, each holding its own part. The
+    // slow-take count holds the STALL: one wait of AHEAD_STALL_MS, never doubled, never a second one. `took < 15000` (the whole read,
+    // as before R8) holds the FALLBACK after it: ~396 takes through readFileHead in sequence, each far below 1.8 s, which the count
+    // never sees — a 50 ms wait before each (review 1's RA-1) passed the count alone at 27 s. What `took` hides: a fallback slower by
+    // less than ~11 s in all (≈ 28 ms a take beside this machine's 3.4 s read), and load on the first, parallel sample — retried alone)
+    let stallFirst = true;
+    const stallOk = (x, y) => x.code === 0 && !x.killed && y != null && y.same && y.made === 8 && y.exited === 8 && Array.isArray(y.slow) && y.slow.length === 1 && y.slow[0] < 2 * STALL_MS &&
+      y.took < 15000;
+    const st = remeasure(() => {
+      if (stallFirst) { stallFirst = false; return { x: stall, y: s1 }; }
+      const x = runSync([CHILD, ENGINE, "stall", path.join(d, "files")], env("on"));
+      return { x, y: said(x) };
+    }, (v) => stallOk(v.x, v.y));
     const brief = (x, y) => ({ code: x.code, killed: x.killed, ms: x.ms, said: y, stderr: x.stderr.slice(0, 200) });
-    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (its source throws) is heard — the process lives on and every file comes, in order; a NODE_OPTIONS preload that refuses worker threads reaches none (no worker's error; no stall: 1.35.4 review 2 — within 1.5× + 1 s of the same read with no NODE_OPTIONS, measured next to it, no longer an absolute 1.8 s) (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(stall, s1), base: brief(base, b1), failing: brief(failing, f1), refused: brief(refused, r1), plain: brief(plain, p1), tries: twins.tries }) + ")", {
+    all("1.35.4: a caller that takes 40 of 400 files and stops leaves no worker alive (all 8 exit) and its process exits by itself; one that never calls stop() cannot hold its process either (the workers are unref'd); a worker that gives nothing for AHEAD_STALL_MS — 2 s — leaves the rest to readFileHead: every file's text, in order, after about 2 s; a worker that FAILS on its own (its source throws) is heard — the process lives on and every file comes, in order; a NODE_OPTIONS preload that refuses worker threads reaches none (no worker's error; no stall: 1.35.4 review 2 — within 1.5× + 1 s of the same read with no NODE_OPTIONS, measured next to it, no longer an absolute 1.8 s); 1.42: the stall is ONE slow take, under twice AHEAD_STALL_MS, and the whole read under 15 s — the fallback's takes in sequence (got " + js({ early: brief(early, e1), abandon: brief(abandon, a1), stall: brief(st.x, st.y), base: brief(base, b1), failing: brief(failing, f1), refused: brief(refused, r1), plain: brief(plain, p1), tries: twins.tries, stallTries: st.tries }) + ")", {
       failing: () => failing.code === 0 && !failing.killed && f1 != null && f1.same && f1.made === 8 && f1.failed === 1,
       refused: () => refused.code === 0 && !refused.killed && r1 != null && r1.same && r1.made === 8 && r1.failed === 0 && plain.code === 0 && p1 != null && p1.same && p1.made === 8 && r1.took < 1.5 * p1.took + 1000,
       early: () => early.code === 0 && !early.killed && e1.same && e1.made === 8 && e1.exited === 8 && e1.exitMs < 5000,
       base: () => base.code === 0 && b1.same && b1.made === 0,
       abandon: () => abandon.code === 0 && !abandon.killed && a1.same && a1.made === 8 && abandon.ms < 3 * base.ms + 5000,
-      stall: () => stall.code === 0 && !stall.killed && s1.same && s1.made === 8 && s1.took >= 1800 && s1.took < 15000 && s1.exited === 8,
-      quiet: () => [early, abandon, stall, base, plain].every((x) => x.stderr === ""),
+      stall: () => stallPinned && stallOk(st.x, st.y),
+      quiet: () => [early, abandon, st.x, base, plain].every((x) => x.stderr === ""),
     });
   }
 
@@ -383,7 +404,9 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
   // --- the cost: reading ahead never costs much more than reading in sequence ----------------------------------------------------------
   {
     // (the soft side reads in sequence — no pool; the hard side's every file is handed over by a worker: a wait gone slow — a
-    // lost notify, a stall — is seconds over 400 files)
+    // lost notify, a stall — is seconds over 400 files. What the +600 ms hides (1.42, B141-13): a uniform hand-over slowdown of up
+    // to ~600 ms over the 400 files, and the pool's own start — 650–1,330 ms with two containers at once; a count of the slow takes
+    // would false-fail on that start and kill nothing more — a lost notify is a 2 s wait, AHEAD_STALL_MS)
     const list = fileSet("cost", 400, [(i) => Buffer.from("cost " + i + "\n" + "w".repeat(i % 200))]);
     const r = caught(() => remeasure(() => { const a = readAll(list, 64, "off"); const b = readAll(list, 64, "on", { tick: 0 }); return [b.ms, a.ms, b.made.length, firstDiff(b.out, a.out)]; }, (s) => s[0] < 1.5 * s[1] + 600));
     const s = r.v || [];

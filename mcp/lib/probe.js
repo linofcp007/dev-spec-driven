@@ -40,6 +40,7 @@
  *                                    readings of a path (1.30.1): an 8.3 alias of a guarded name, Win32's trailing dots and spaces, the
  *                                    real path of the deepest existing folder (files.js realPathLoose IS this one)
  *   utf16OrUtf8 · textOf · jsonOf · readText · readJsonFile · isUtf16   a file as the engine reads it (files.js decodeText)
+ *   openRegular · readRegularText · readRegularJson   a regular file only (1.41.1, 1.42): never a link, a FIFO, a device, a folder
  *   the guards' shared readings (one copy for the hooks, before the engine loads, and the engine):
  *     trimSlashEnd · approvalPlain · approvalMayBe (APPROVAL_CANDIDATE_TESTS) · RE_APPROVAL_VERB   the approval guard's pre-filter
  *     guardedFileOf · specsParentOf    the files the approval guard stands on, by path; the project a .specs/ path belongs to
@@ -296,6 +297,16 @@ function readRegularText(file) {
   const fd = openRegular(file);
   if (fd === null) return null;
   try { return textOf(fs.readFileSync(fd)); } finally { try { fs.closeSync(fd); } catch { /* closed */ } }
+}
+// (1.42 B142-13) The hooks' raw JSON read: opened only when its lstat says a REGULAR file (head()'s rule, the approval hook's 1.41.1 one),
+// then judged by the fd's own fstat (readRegularText: a swap after the lstat shows there) → the parsed value, or undefined — no such
+// file, a link, a FIFO, a device, a folder, or an lstat that throws. Throws when the JSON doesn't parse, or the open fails. Each hook
+// keeps its own "no file" answer (the guard: the user's default; the Stop gate: the user's option; the observe hook: no checks). A FIFO
+// roadmap.json kept a hook in one open waiting for a writer — the observe hook is async, so Claude Code never killed it.
+function readRegularJson(file) {
+  try { if (!fs.lstatSync(file).isFile()) return undefined; } catch { return undefined; }
+  const text = readRegularText(file);
+  return text === null ? undefined : JSON.parse(text);
 }
 
 // ---- the rule ---------------------------------------------------------------------------------------------------------------
@@ -620,7 +631,7 @@ function closestName(word, candidates, limit) {
 
 module.exports = {
   SESSION_MAX_UP, PROJECT_MAX_UP, RE_AUTOGEN, RE_UNEXPANDED_VAR, unexpandedVar, usable, RE_HOME_PREFIX, expandHome, isNetwork,
-  fsTargetPath, editTargets, utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16, openRegular, readRegularText,
+  fsTargetPath, editTargets, utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16, openRegular, readRegularText, readRegularJson,
   SHORT_NAME_LONGS, shortNameOf, mayShortName, shortNamesRead, shortDirAt, winPathTrim, realPrefix, realPathLoose, longPath,
   isDevSpecProject, nearestDevSpec, nearestSpecs, nearestProject, resolveProjectDir, sessionAnchors, sessionProjects,
   trimSlashEnd, approvalPlain, approvalMayBe, APPROVAL_CANDIDATE_TESTS, RE_APPROVAL_VERB, dotGlob, guardedFileOf, specsParentOf,

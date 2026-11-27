@@ -21,6 +21,37 @@ Phase 6, opt-in.
   characters, the rest named — `lessons` {quoted, omitted}; `decisions` never quotes a lesson: lifecycle.md → Decisions and
   spikes). `write: true` keeps `refs.examples` {quoted, gone, total} and `refs.lessons` {quoted, omitted} only.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
+- **The brief's steering.** "Read before coding" (`brief.steeringRead`) lists every `always` file `briefSteering()` includes —
+  the default ones (constitution / tech / structure and each active track's `trackSteeringFiles`) ONCE each (+saas and +obs both
+  name observability.md; 1.42 review 1) — a built-in stub verbatim too: a track's stub holds the team's defaults (security.md's
+  "parameterized queries only", distributed.md's outbox), so the brief never calls one "nothing binding" (UX-10, cut: History).
+- **The plan's approval at the task surfaces (1.42, UX-02).** `spec_next_task`, `spec_task_brief` and `spec_status {name}`
+  (`tasks.…`) carry `planApproved: false` while the plan is not approved — `planApproved()` (tasks.js) reads phase `tasks` (a
+  change's change.md) by TRUTHINESS, the pending-gates rule (`pendingGateList`; `approvalsInForce` strips only `tests`), so
+  next_task and next_action never disagree on whether the plan is pending (the harness's `planGateMismatches` checks it on every fixture of
+  08-tasks-plan-approval, 06-gates and 07-approvals); a spike has no plan gate; a role sign-off still waiting writes no
+  `approvals.tasks`. When a task is SERVED (next's task, the briefed open task, status's next) the result gains `planNote`
+  (`planGate.notApproved` — "this task is not to be implemented: show the plan to the user and ask for its approval") — its own
+  key, never `note` (the evidence channel, pinned `undefined` on ticks by older tests); `spec_complete_task` that TICKS a task
+  gains `beforeApproval: true` and `planNote` (`planGate.tickedEarly`) — never on an `alreadyDone` re-check or a failed run.
+  Never a refusal (a tick records what happened). **The exemption:** a bugfix's investigation task (`bugInvestigationTask()` —
+  kind bugfix, its prose names `bug.md`, and it carries no `_Implements:_`, `_Makes green:_` or `_Verify:_`: it runs nothing and
+  writes only bug.md, which the requirements / design approvals sign off) carries no `planNote` (`beforeApproval` stays a fact) —
+  the four-task scaffold of ≤ 1.23.0 ticks 1 and 2 before the tasks approval by design (references/bugfix.md says so; it is kept
+  word for word). A task naming a file it changes is a code task, never exempt (review 1: a model-written "apply the fix
+  described in bug.md"). A marker still holding its scaffold slot (`[…]`) counts as none — known limit: the short-form red test
+  edited to cite bug.md before its slots are filled reads as an investigation task. Ticking one serves its `next`: the tick's
+  `planNote` is the one `spec_next_task` gives that task (`planGateFields` — none when it is an investigation task too;
+  review 1: #2's tick served the red test #3 with no note, the CLI `done` no ⚠ line). Its own
+  predicate: never `rootCauseTaskIndex`, `isBugStep` (the CURRENT short-form steps — its task 1 would lose the note) nor
+  `LEGACY_BUG_STEPS` (a name list); it only READS the block (features with identical tasks.md may share one scan's blocks —
+  DS-PERF's memo). The brief's markdown is unchanged (the controller decides the dispatch, not the subagent); the CLI prints
+  the note on a "  ⚠ " line (`next`, `status <f>`, `done`), `brief` on stderr (stdout stays the brief). An approved plan's results
+  are the parent's, byte for byte (the keys absent, not `true`). Known limit: an approved plan EDITED since its approval reads
+  approved, as pendingGateList reads it (next_action asks for the re-review). No new read: `planGateFields()` takes no path — it
+  builds the fields from the state the call already holds, the plan's file from that state's kind (a change's change.md; review
+  1: it called `tasksFileName(dir)`, a re-read of .state.json the primed scope hid) — 08-tasks-plan-approval counts its fs calls
+  (any path) in a fresh read scope, and pins the equal fs calls of approved / unapproved twins.
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`, 6,000 characters since 1.38: a view task keeps +ui's filled state
   matrix — `[UI] UI States`, ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views — beside the other `[UI]` sections, all five up to 2 views;
   the brief ~≤ 10 KB) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
@@ -72,7 +103,24 @@ Phase 6, opt-in.
   entry, its readers and finish's warning). The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
-  runs the simplifier's, each verified before it costs a fix.
+  runs the simplifier's, each verified before it costs a fix. **1.42:** the task review too — §4 writes `dupes --json` beside the
+  package, the reviewer keeps the runs in the package's files and says "none" only at `counts.existing` 0 with neither
+  `truncated` nor `partial`. A residue — a defect that exists at HEAD and ships (a `pre-existing (deferred)`, a refutation
+  `real at HEAD` — refuted as pre-existing or not in the diff with its `Exists at HEAD` line yes, one predicate on two verifier
+  inputs in §6, Closing and `/spec-review branch` —, a `parked (real)`, an `unconfirmed (NN)` or a class place the final review
+  let ship) — is filed as ONE `residue-<feature>` backlog entry (Closing: the lines after the ledger's last `Residues filed:`
+  line); the closing order is one in Closing and /spec-finish, in the same words: finish, the `execution` sign-off, the
+  residues, a commit of what the run and the closing wrote (first `git diff --cached --name-only`: a file staged before the
+  closing goes to the user; then `git add` the feature's folder, roadmap.json, the generated roadmap files, the registry / a
+  steering file / `.specs/guardian.cjs` / `.specs/.gitignore` when written — a file the run wrote is added whole; git carries
+  an unstaged or untracked change across the switch), the merge. A defect
+  confirmed again at another place is asked for as a class in the task's `_Implements:_` files
+  (§7). The `review-seat` evals measure both seats (testing.md); no regex grader matches its seat's own agent prompt.
+- **Each agent prompt has a byte cap (1.42 S14)** — an agents/*.md is paid on every dispatch of its agent. mcp/tests/17-docs.js
+  `AGENT_CAPS` holds one cap per file and fails when an agents/*.md has none (a new agent), a cap names a file that is gone, or
+  a file is past its cap — its bytes as shipped (LF), never characters (an em dash costs three). The caps: reviewer 27,800 ·
+  implementer 18,700 · critic 16,900 · simplifier 8,300 (ceil(bytes × 1.02 / 100) × 100 on the integrated 1.42 branch) · UI
+  reviewer 7,000 · verifier 4,000 (their older pins, kept). Past one: trim, or raise it in one line with the reason in the commit.
 - **`reviewPanel` (1.36)** — `roadmap.json → meta.reviewModels`, opt-in: 2–3 model names checked by SHAPE, never a list of
   known names (`RE_MODEL_NAME`: up to 128 characters — a Bedrock profile ARN —, a leading letter or digit, an optional `[1m]`
   suffix; `REVIEW_RESERVED` inherit / default / diverse / off / none; duplicates case-insensitive, stored as given), the word
@@ -94,6 +142,28 @@ Phase 6, opt-in.
   writes no ledger line: after one, run the review again — and the branch review reads `merge-base..HEAD`: the feature's
   work committed first), `references/critic-review.md` §1 / §3 (the gate critics: the size table's on the session's model plus one per other panel model; their merged findings go
   to the user — gates have no verifier). mcp/tests/17-docs.js pins each file's wording of these rules.
+- **Subagent cost (1.42 S9, report only — never a gate, a warning, a doctor entry or a blocker)** — engine/agents.js: what the
+  plugin's own agents (`AGENT_ROLES` = agents/*.md, a property test) cost, per role: dispatches, assistant turns, tool calls and
+  tokens (in, out, cache read, cache write). The log is `.specs/.execution/agents.jsonl` (git-ignored, beside timings.jsonl),
+  one line of COUNTS per finished dispatch — {agent, id, model?, turns, tools, tokens, truncated} — written by `recordAgentRun`
+  through evidence.js's appender (the write gate) and shape-checked on write AND read (an agent among the six, a
+  `dev-spec-driven:` prefix dropped — a copied agent of the same name is the same role, as the stop gate reads it —, an id
+  `^[\w-]{1,64}$`, counts safe integers ≥ 0, `truncated` a boolean — else the run is refused; a model kept only when it is a
+  model id, else left out with the run kept: Claude Code's own `<synthetic>` is the LAST model of 62 of 3,000 real subagent
+  transcripts); past 256 KB the newest well-shaped lines, up to half. `agentCosts` (spec_metrics' project `agents`, beside `friction`; never a feature's) keeps
+  ONE record per id, the LATER in the log (a dispatch the stop gate sent back finishes again, its transcript a superset), and
+  rolls them up per role (+ `truncated`: the dispatches read only in part — their counts a lower bound, said on the CLI line;
+  `models`). **No time and no feature:** a transcript's first-to-last span is wait time for a resumed agent (9.5 % of 2,194
+  real dev-spec transcripts span over an hour), and a dispatch prompt names its feature by a name, never an anchor the engine
+  records (7.4 % name two or more). The recorder is Claude Code's: the observe hook's SubagentStop (1.42 S9-c — hooks.json's
+  second SubagentStop entry, async; claude-code-integration.md → Hooks and commands) reads the agent's OWN transcript
+  (`agent_transcript_path`, never the parent session's) in the hook — never the engine, which reads nothing outside the
+  project — and hands over the counts; an MCP-only host records nothing. **What the reader counts** (hooks/observe-hook.js
+  `agentRunOf`, a regular file only, ≤ 32 MB): the assistant lines alone — turns the distinct message ids (one line per content
+  block, each repeating its message's usage), tokens per id the per-field MAX of its lines (a streamed `output_tokens` grows
+  line by line: never the first line nor a sum) summed over the ids, tool calls per LINE, the last model; a line Claude Code
+  wrote itself (`isApiErrorMessage` — an API error, model `<synthetic>`, zero usage) is no turn and never the model. The id is
+  the transcript's file name without `.jsonl`; a transcript with no assistant turn records nothing.
 
 ## Evidence
 
@@ -601,6 +671,11 @@ Engine: the `B5` block of `engine/evidence.js`.
   measured; quadratic would be 16×), and 64 MiB of output lines (2.2 M) with one METRIC line ≤ 3× a bare `lastIndexOf` of the same
   text, flattened first — the first scan of a concatenation pays for its copy — (~1×; a split is 6–9×); a 60 MiB coloured
   candidate line ≤ 3× the same line plain (equal work: the keyword's scan, the line end's, one chunk; stripped whole it was ~39×).
+- **The bytes are a second contract, `metric-bytes/1` (1.42).** mcp/tests/fixtures/metric-bytes.v1.json, byte-identical in dev-guardian,
+  pinned in 09-evidence-runs: a run's stdout and stderr bytes and two readings — `stream` (each stream decoded as UTF-8, read apart:
+  this plugin) and `file` (dev-guardian's `metrics` over a `2>&1` capture) —, `differs` exactly when the two differ (key order counts).
+  The stream mode is tested in 09-evidence-metrics (the reader) and cli 09-evidence-run-module (the capture's strings). A change that
+  alters a case is metric-bytes/2, landed in both before either tags. A sample, not a proof: a change that alters no case passes.
 - **The judge, `judgeMetric(reference, current)`** → the fixture's `{verdict, why, loosened, delta, applied}`: the REFERENCE's terms;
   judged only when it states `better=` AND `tolerance=` (else `unjudged`, `why` its missing terms, with the delta); a changed unit
   `unjudged` + `loosened: "unit"`, no delta; `loosened` is ONE term (unit, then better, then tolerance — a flipped / dropped direction,
@@ -709,6 +784,15 @@ Engine: the `B5` block of `engine/evidence.js`.
   `<!--` may span lines) and fenced code never hold tasks; `<!--` / `-->` inside code spans don't count. `parseTasks()` is its
   line-only projection (public through `spec_status`), so status / next / complete / brief / finish never disagree. Tasks are
   story-organized (P1 first) with `[P]` parallel markers + `**Checkpoint:**` lines; doctor checks the design's `Constitution Check`.
+- **The scan is memoized by text** (`TASK_BLOCKS_MEMO`, 1.42): an LRU of `TASK_BLOCKS_MEMO_MAX` = 1,024 texts AND
+  `TASK_BLOCKS_MEMO_CHARS` = 4 M characters of them (`lruPut`: the oldest out first, a hit moved to the newest place, the newest
+  always kept — one text over 4 M is then alone), so a refresh past 32 features no longer re-scans each text 4× (40 features: 160
+  scans → 40 cold, 0 warm; a tick 162 → 1). A pure function of the text: nothing goes stale. Callers get copies; features whose
+  tasks.md are byte-identical share ONE scan (`taskPeerStamps` returns one Set for both), so a reader annotates its copies, never
+  the scan's blocks (mcp/tests/08-tasks-memo.js holds a bugfix and a plain feature with the same text). What the bounds hide: past
+  ~4 M characters held (~400 features of 10 KB; half that when a track-filtered text doubles the keys) or 1,024 texts, a
+  project-wide call scans the oldest again; a long-lived process (the MCP server) keeps ≤ ~26 MB for it (the keys 4–8 MB, one- or
+  two-byte, + ~17.5 MB of blocks — measured at 1,024 × 4 KB). `taskBlocks.scans` counts the misses (in-process, never in a result).
 - **A task line** is `[-*+] [ ] N. text`; the tasks fingerprint's tick normalization (`uncheckTasks`, state.js) takes the same
   bullets, and a fingerprint made on `- [x]` alone still matches. Task numbers are numeric (`01.` is task 1); `resolveTask()` picks
   the first OPEN task of a duplicated number (doctor warns `duplicate-tasks`).
@@ -819,7 +903,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   claude-code-integration.md → Which project a hook reads). Silent with nothing to say, no project, the gate off (`meta.stopCheck`
   exactly `false`; unset → the user's `DEV_SPEC_STOP_CHECK`; `init --stop-check on|off`), or — Stop only — no `.state.json` string
   parsing as a date in the window: a raw superset of `stopActivity()` before the engine loads (≤ `STOP_PRE_MAX_FEATURES` = 500
-  folders, ≤ 1 MB a file; its `STOP_RECENT_HOURS` is checked against the engine's). CLI: `dev-spec stop-check [--message
+  folders, ≤ 1 MB a file; its `STOP_RECENT_HOURS` is checked against the engine's; 1.42: a regular file only — a linked, FIFO or
+  folder `.state.json` is skipped unopened, and a roadmap.json that is no regular file is the user's option, as the engine's read
+  gate reads both). CLI: `dev-spec stop-check [--message
   "<text>"|-] [--agent <type>]` (exit 1 = would block).
 - **The claim pre-filter (Stop only).** `hooks/stop-claims.generated.json` — COMMITTED, from `npm run build` (guards.js
   `stopClaimFilter()`): the claim patterns (`stopClaimSources()`), `STOP_WORD`, stopProse's regexes (`RE_STOP_FENCE` /
@@ -996,7 +1082,9 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   - *The pre-filter* (before the engine loads): `observedNorm` / `observedBodies` — ONE copy, mcp/lib/probe.js's, which the engine's
     observeRun reads too (mcp/tests/09-evidence.js checks neither file keeps its own) — the command's bodies, normalized as the matcher
     reads them, must each appear in a tasks.md read the same way (≤ 2 MB;
-    dot / `_` folders skipped; UTF-16 decoded; change.md only without tasks.md; one open per folder) or a meta.checks command — a
+    dot / `_` folders skipped; UTF-16 decoded; change.md only without tasks.md; one lstat and one open per folder; 1.42: a regular
+    file only — a linked, FIFO or folder tasks.md is none, so change.md is read, as the engine's change alias reads it, and a
+    roadmap.json that is no regular file holds no checks) or a meta.checks command — a
     SUPERSET of the matcher (mcp/tests/09-evidence-matcher.js). A WHOLE bracketed `_Verify:_` value (`RE_VERIFY_PLACEHOLDER`, the
     scaffold's) is taken out first, as the engine never runs one (tasks.js `scanTaskMarkers`: `^\[.*\]$`). observeRun repeats the
     test before parsing. No cached `_Verify:_` index (a stale one would silently drop observations). It prints nothing, reads stdin
@@ -1147,6 +1235,99 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   gate that honours the user's forced, reasoned test-plan approval for the named ACs —, a criterion's last planned test
   joined the never-pruned list (any AC, EC, NFR or SC — the re-approvals then complete unforced), and a retired AC's test is
   named to the user as one needing a `/spec-change` on its feature, never pruned.
+- **1.42 —** S9 (the subagent cost): subagent-execution.md said "roughly 2–3× the tokens" with nothing that measured it.
+  Designed as an engine-side transcript reader with time and a feature per dispatch; the critic measured 2,194 real dev-spec
+  transcripts and cut both (a span is wait time for one dispatch in ten; 7.4 % of prompts name two features — a scope by a
+  name) and moved the read to the hook (the engine never reads a path outside the project). Also from that corpus: usage
+  repeats within one message id GROW (`output_tokens`, 226 files) — per field the max per id, never the first line nor a sum
+  (2.0–2.2× the deduped); a tool_use per LINE (one content block a line); the largest transcript 26.8 MB (the hook's 32 MB
+  bound). S9-b / S9-d built the engine part (recordAgentRun, agentCosts, the metrics lines); S9-c (the hook's reader and its
+  SubagentStop entry, second in the list after the stop gate's) waited for B142-13's regular-file reads in the same file.
+- **1.42 —** S9-c (the subagent cost's recorder), built on the integrated branch after B142-13: the observe hook's SubagentStop
+  branch and reader, hooks.json's async entry (claude-code-integration.md → History). Its own count-only probe (4,440 local
+  dev-spec agent transcripts, 8,676 subagent ones) confirmed every assistant line carries a message id and all four usage fields
+  (safe integers), the largest transcript 26.8 MB (none past 32 MB, p99 6.9 MB), and found the one shape the critic's corpus
+  didn't name: Claude Code's own API-error line (`<synthetic>`, `isApiErrorMessage`, zero usage — every one so marked), last in 12
+  dev-spec transcripts — counted, it would have added a turn and handed the engine a model it leaves out, so the reader skips it.
+- **1.42 —** UX-10 (DS-TASKS), built then CUT in review 1 (R1-TASKS-01, HIGH): the brief listed a file that was a built-in stub
+  verbatim or headings only apart — "Still templates — nothing binding yet" — instead of under "Read before coding". Its premise,
+  "a verbatim stub holds no project rule", was checked against the three core stubs only: the TRACK stubs hold concrete rules
+  (security.md: parameterized queries only; privacy.md: no personal data in logs; distributed.md: idempotent
+  consumers, the outbox; testing-standards.md: a failing test first; ui.md: WCAG 2.2 AA), the brief calls its lists binding, and
+  doctor reads the observability.md / cost.md stubs as `filled` — so a +sec implementer was told its secure-coding rules did not
+  apply, and one changed letter made the file binding again. Back to the parent's line (every file read before coding); the
+  review's older finding R1-TASKS-07 kept as one dedupe (observability.md, named by +saas and +obs, was listed twice).
+- **1.42 (the review loop's prose)** — built, prose only: S1 (the residues filed before the merge — the ledger went with
+  `.execution/` and nothing read it, so parked, unconfirmed and pre-existing findings vanished at the merge); S4(a) (the
+  task review gets the duplicate detector's file; the cap answered by the reviewer's own rule, never a "none" from a top-20);
+  S6 (a class fix, narrowed to ONE trigger and the task's files — ships unmeasured: no eval drives fix rounds); S8 (a check
+  offer, found out by a grep or the check's own run — a too-narrow grep would let a check in that blocks the finish's step 2);
+  the critic's rows (SK-P6 as a property, SK-P3 per principle, S15, SK-P2's "or repeat"); one S3 clause; UX-11's merge
+  branch; UX-13(a). Measured: the `review-seat` evals (testing.md → Plugin evals; their reference run on the 1.41.2 prompts,
+  evals/README.md). Cut: S3's protocol (an end line in two shells, a `Read: N lines` reply, a resume and a §8 clause — Read
+  returns a file whole on this host, a refused one tells the agent to page, and N is gameable by Grep), with its long-package
+  eval case; S4(b) (review_pr per task — a recorded scan per task in dev-guardian's history, unmeasured on Linux, and W covers
+  the feature at finish); S6's NOT ADDRESSED trigger (an incomplete fix, which rounds / tier-up / breaker already answer — one
+  predicate for two rules) and its NEEDS_CONTEXT → converge path (a re-approval mid-story for a rare event); S7(a) (the
+  blind-first reorder: gated on the reference run, where the report's rationale swayed 0 of 3 runs) and S7(b) (no fixed
+  report headings to scope a verifier to); SK-P4 (converge's written rules — paid on every reviewer dispatch for a rarely run
+  mode, and a rule break has no AC to route to); SK-P5 (clarify choices as decisions — the AC is the record, and a reworded
+  AC makes the `affects` phantom); S1's per-topic names (two features' defects merged under one topic), its contested parked
+  findings and the re-review's out-of-scope lines (they stay deferred minors: the label is the namesake the rename removes);
+  the dev-guardian review-seat pair (no dev-guardian prose changed; its deterministic half needed another chain's rule);
+  SK-P2's within-feature engine check (0 pairs in 2,614 real comparisons) and SK-P3's stub rewrite (the stub's whole-file
+  hash is the brief's "still a template" test — that test was UX-10, cut in review 1; the hash still serves doctor's
+  steering-placeholder check and the steering importer, `isSteeringStub`). The agent-prompt byte ratchet (S14) waited for the
+  integrated branch (below).
+- **1.42 —** S14 (a byte ratchet per agent prompt): only SKILL.md, the verifier (≤ 4,000) and the UI reviewer (≤ 7,000) had a
+  byte cap, while this round alone added 614 B to the reviewer — a prompt paid on every task, re-review, final and simplify
+  dispatch. A cap per agents/*.md (`AGENT_CAPS`), set on the integrated branch after every chain's agent edits at
+  ceil(bytes × 1.02 / 100) × 100: reviewer 27,211 → 27,800, implementer 18,303 → 18,700, critic 16,543 → 16,900, simplifier
+  8,118 → 8,300; the verifier's and the UI reviewer's pins kept (the formula would have raised both). A test row only — no
+  eval weighs a prompt's size against its review quality, so the 2 % is the agreed slack, not a target. Cut: moving converge
+  and prune into an agent of their own (a 7th agent changes the pinned agent count, AGENTS.md, `rules agents` and the plugin
+  listing — a new mechanism for a LOW).
+- **1.42 fix round 1 (FX-PROMPTS)** — the two closing texts gave opposite orders (Closing: residues, commit, then the
+  sign-off; /spec-finish: the sign-off, then residues and commit), and both committed two named files, while the sign-off and
+  finish's drift baseline rewrite the feature's `.state.json` and the roadmap files after any earlier commit — `git switch`
+  refused, and git's own message offers to park the change. ONE order now, with the commit as a property of the tree (what
+  `git status --porcelain -- .specs` lists, until empty; a git-ignored `.specs/` lists nothing), and no recovery verb named.
+  The residue set is a property too (a defect that exists at HEAD and ships): a verifier refutation real at HEAD (its own
+  `Exists at HEAD` line) had been dropped while the reviewer's unverified label for the same fact was filed; a class place the
+  final review lets ship, and the final review's and `/spec-review branch`'s own pre-existing / 50–79 lines, join it; filed
+  once (the engine dedupes a backlog note only on its exact text). Prose rows: a capped zero (`truncated` / `partial`) is no
+  "none"; S15 exempts an AC that IS the check's result; SK-P2's "repeat" is within the feature; the review seats' no-echo
+  property reads each seat's own agent prompt (the pre-existing grader matched the verifier's verdict list).
+- **1.42 fix round 2 (FX2-PROSE)** — review 2 of fix round 1's prose. (1) The residue keyed on ONE verifier line, "its
+  `Exists at HEAD` line says yes" — but four of the template's seven refutation reasons (intended, silenced on purpose, no rule
+  says so, nitpick) can say yes there and are no defect, so the backlog would have recorded intended behaviour and accepted
+  suppressions as defects; `/spec-review branch` keyed the same fact on two other lines and labelled it `pre-existing
+  (deferred)`, which Closing files as `unverified`. Now ONE predicate on two inputs — refuted as pre-existing or not in the
+  diff (the verdict's reason) with its `Exists at HEAD` line yes — in the same words in §6, Closing and `/spec-review branch`,
+  one ledger form `refuted (NN, <why>, real at HEAD)`; every other reason of the verifier's template is named as no residue
+  (17-docs reads the reasons from agents/spec-verifier.md, so a new reason must be classed). (2) The commit "until `git status
+  --porcelain -- .specs` is empty", with "a change neither you nor these steps made is the user's: ask", asked on every close:
+  the ticks (`tasks.md`) and the run's backlog entries are listed and no closing step wrote them, and a declined change left
+  no way out. It is `git add` of what the run and the closing wrote now — the feature's folder, roadmap.json, the generated
+  roadmap files the project has, the registry / a steering file when written —, in the same words in both texts; a path git
+  ignores stays out (`git add` names it, exits 1 and adds the rest — said, so no agent forces it in); git carries any other
+  change across the switch (a switch that would overwrite one refuses, naming the file: ask). (3) "A `Residues
+  filed:` line means they are filed" lost the residues of a kept branch closed again: the lines after the LAST one are filed.
+  (4) Two keys read less than they claimed: the recovery-verb check now reads both whole texts, the sign-off is counted per
+  sentence over every spelling. Also: the stale "still a template" rationale above (UX-10 was cut; the stub hash serves doctor
+  and the steering importer).
+- **1.42 fix round 3 (FX3-DSD)** — review 3 of that commit (the closing commit's third MEDIUM in a row: back to an explicit
+  user action). "Git carries any other uncommitted change across the switch: it is not lost and not committed" was false for
+  a STAGED change — a plain `git commit` commits the whole index, so a change the user staged (or an implementer commit a hook
+  refused left staged) went into the spec-state commit and, with the merge, to the base. Taken out: before the `git add`, both
+  texts run `git diff --cached --name-only` — a file it lists was staged before the closing: the user decides (unstage it with
+  `git restore --staged <file>`, or commit it too). Keyed on an input (the index), so nothing is asked when nothing was staged,
+  never on every close; only an unstaged or untracked change is said to be carried. A file the run wrote is added whole — a
+  user's edit in it goes into the commit too, said (the accept, not a new check). The list gains the engine's two writes
+  under `.specs/` the run makes: `.specs/guardian.cjs` when `finish --run` replaced an earlier version's launcher
+  (`launcherRefreshed`; verification.md says it is committed) and `.specs/.gitignore` when `ensureLockIgnore` added lines.
+  The 17-docs keys read more: no sweeping add (`git add .specs`, `-- .specs/`, `-A`, `.`) in either whole text, and no
+  contrary residue rule (a no-residue reason filed as one, or a residue's own reason in an exclusion list).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
@@ -1416,6 +1597,20 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   section states it (RX2-2). fixHint offered only an inline suppression for a blocking test-integrity finding, which reads
   none — it says restore the test or the user decides, an approved pruning blocking at `--fail-on medium` by design (RX2-3,
   pre-existing).
+- **1.42 —** (the tests chain, with dev-guardian 3.18's DG-17) **`metric-bytes.v1.json`**: the METRIC line's BYTES became a second
+  contract, 11 cases (5 agree, 6 differ — by class: a byte-order mark mid-file, UTF-16 by its mark, UTF-16 guessed with no mark or in
+  a tail window, a NUL head, print order), each with the readings both readers give it at 1.41.2 / 3.17. No reader changed:
+  B142-03's rules were CUT — (1) a U+FEFF after a line break read as nothing changes metric-lines/1's line-start grammar in both
+  readers (it would flip two agreeing rows: metric-lines/2 for a LOW); (2) UTF-16 by its mark alone narrows dev-guardian (a
+  BOM-less `cmd /u` capture, a tail window past 64 MiB and the NUL head stop reading) and, here, would put files.js's decoder on
+  `run.js`'s capture, which every reader of a run's output uses (a UTF-16 "tests 0" pass refused, a CR-only progress output split
+  into lines). The research's synthetic NUL-head row is kept beside its real-shaped correction (UTF-16 `wsl.exe`-like text, then a
+  UTF-8 line — the stream reads it, the file does not). Its pin and shape here have no committed negative controls (equivalent
+  mutants while v1 is pinned by its sha: run once, offline) and no threshold of dev-guardian's guess; `differs` compares the
+  readings key order included, as dev-guardian's pin does. **Tests:** done --run's two timing rows in
+  cli/tests/09-evidence-run-friction.js are containments on ONE clock (perf-14): the pre-run's `ms` within the in-process call that
+  holds it, and the pre-run's and the _Verify:_'s together within it — they compared two runs' own durations (`ms < 7500`, the
+  _Verify:_ under the pre-run) and failed the pre-push's parallel run; run.js and commands.js unchanged.
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
@@ -1459,6 +1654,30 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 review 8** — the `_Implements:_` slot: the model-facing prose never required the marker, so a filled xs change.md
   finished "ready" with "0 implementing file(s)" and `dupes` had "nothing to compare". The templates carry the slot, the readers
   drop it as a placeholder, the gate refuses it left in (mcp/tests/08-tasks.js).
+- **1.42 (perf-2, DS-PERF)** — the task-blocks memo held 32 texts: one refresh asks for a feature's tasks.md about four times, so
+  past 32 features every read missed (40 features: 160 scans a refresh, warm or cold; next_action 81; a tick 162). Now 1,024 texts
+  and 4 M characters (`lruPut`). The design's "a key over the bound is not inserted" was dropped in critique: a tasks.md over 4 M
+  characters would re-scan once per caller where 32 kept it; the newest is kept instead. Tested as properties (a warm refresh 0, a
+  tick 1, SessionStart ≤ one a feature), never "exactly 40".
+- **1.42 —** UX-02 A (DS-TASKS, HIGH): next_task, the brief, status and complete_task read no approval — an agent was served,
+  and ticked, the scaffold's template tasks before any plan existed. They now SAY it (planApproved / planNote / beforeApproval,
+  never a refusal: a tick records what happened). The critic's narrowings, each a finding against the first design: the bugfix
+  investigation exemption (dev-guardian's 73 real features held 4 ticks before a tasks approval, all the legacy investigation
+  steps references/bugfix.md tells the agent to tick); `planNote` its own key, never appended to `note` (six `note === undefined`
+  pins on unapproved ticks); a note only where a task is served or ticked (an imported all-done feature has none to name); the
+  pending-gates truthiness, not `isRecord` (one rule, one predicate); no "invalid state reads not approved" (stateFromFile keeps
+  a valid approval beside a malformed key). Cut: B (a template-task refusal — two downstream gates already stop a slot task) and
+  C (a stamp of the ticks no approval covered — its 2 real hits were the documented investigation ticks); gates-and-approvals.md → History →
+  Gates, 1.42. The CLI's exact `next` pins of 08-tasks-deps gained the plan line (still exact); 08-tasks.js's key pin lists the
+  two fields.
+- **1.42 review 1 (R1-TASKS-02 / -03 / -04, R1-MERGE-2)** — the investigation exemption read neither `_Implements:_` nor the
+  tick's `next`: a model-written "apply the fix described in bug.md" naming `src/auth.js` was served with no note, and ticking
+  the legacy task 2 served the red test #3 with none (the CLI `done` printed no ⚠ line where references/bugfix.md says STOP). The
+  exemption now needs no `_Implements:_` too (a task naming a file it changes is a code task; a slot still counts as none — the
+  limit pinned), and an investigation tick's planNote is the one next_task gives its `next` (planGateFields, the same predicate).
+  Two of the predicate's conditions had no fixture (the X1 / X2 mutants survived): a real `_Verify:_` and a `_Makes green:_` rows.
+  planGateFields' "reads nothing" was false — `tasksFileName(dir)` re-read .state.json, hidden by the primed scope its pin ran
+  in: it takes no path now (the plan file from the state's kind) and the pin counts every fs call in a fresh scope.
 
 ### End-of-turn evidence gate and scope guard
 - **1.14** — the end-of-turn gate (`stopCheck`, the Stop / SubagentStop hook, `dev-spec stop-check`) and the scope guard's `"scope"`
@@ -1499,6 +1718,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   stopClaims ~110 ms slower and the pre-filter ~30 ms; claim patterns, triggers and admissions are built on first use (a message
   runs ~18 of ~47). Every hook's pre-check became mcp/lib/probe.js (`sessionProjects` / `sessionAnchors`, the one rule
   `isDevSpecProject`).
+- **1.42 (B142-13, DS-PERF)** — the Stop hook's raw reads open a regular file only (probe.js `readRegularJson`): a FIFO roadmap.json
+  or `.state.json` held the hook to its timeout, a LINKED `.state.json` was followed (the engine then loaded only to read it as
+  absent). gateOff's no-file answer stays the user's option; the pre-filter stays a superset (the engine's read gate reads all three
+  absent).
 
 ### Protected tests
 - **1.36** — tests the implementer cannot alter: a fourth guard level, `tests` (engine/protect.js). Cut from the design before
@@ -1566,6 +1789,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.38.0** (chain P) — `isTestFile` gained Cypress's `*.cy.<script>`, `__mocks__/` and `__fixtures__/` (markdown-and-trace.md →
   Test code and file reads): at level tests a manual mock or a fixture module is now a protected test — snapshotted at the
   tasks approval, its edits asked about, finish's check — as a test file under `tests/` always was.
+- **1.42 (B142-12, DS-PERF)** — the tick record's `_Verify:_` reader (protect.js `verifyTestPaths`) took a word's quotes and
+  brackets off with `^["'`(]+|["'`;,)]+$`, quadratic on a long comma run (40 K commas then a letter: 1.6 s a word); two loops
+  (`trimWord`: the tail run, then the lead run of the rest) take the same characters — the exhaustive table over every word of up
+  to 6 of `"'`(;,)ab` and real commands (10-guards-protected-tests.js), the cost as a same-length yardstick ≤ 20× (the parent's
+  ~4,000×).
 
 ### Harness-observed evidence
 - **1.14 F1** — the observe hook, the `observed` stamp, `meta.evidence` and reason `unobserved`. Its feature review: **R1** — an
@@ -1602,3 +1830,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (the friction budget), the observed line unchanged (09-evidence-friction pins its keys). Only runs the matcher reads as the
   check alone are timed: of this repository's 2,139 foreground check runs in its own transcripts 93 % were piped — the hook
   mostly times the fast check run on its own; the suite's numbers come from `finish --run` / `done --run`.
+- **1.42 (B142-13, DS-PERF)** — the pre-filter opens a regular file only: a FIFO tasks.md (or roadmap.json) left one hook process
+  blocked in its open per Bash call for the rest of the session (an async hook is never killed), a linked one was read through.
+  A tasks.md that is no regular file is none — change.md is read, as the engine's change alias reads it (returning "unreadable"
+  there would have skipped the change); one lstat more per folder.

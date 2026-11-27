@@ -86,7 +86,7 @@ exports.fixture = ({ runIn, tmp, CLI }, shells) => {
 };
 exports.helpers = { fwd, cleanEnv, probe };
 
-exports.run = async ({ ok, all, remeasure, run, runIn, tmp, CLI }) => {
+exports.run = async ({ ok, skip, all, remeasure, run, runIn, tmp, CLI }) => {
   const { ROOT, S, cliFwd, gen, scripts, p } = exports.fixture({ runIn, tmp, CLI }, SHELLS);
   const C = require(path.join(ROOT, "cli", "completion.js"));
   // The CLI's tables (1.27): its command table, cli/commands.js, and what it derives (COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES…).
@@ -255,7 +255,7 @@ exports.run = async ({ ok, all, remeasure, run, runIn, tmp, CLI }) => {
     const fBal = fOpen === fEnd && /^complete -c dev-spec -f -a '\(__dev_spec_complete\)'$/m.test(f) && /^function __dev_spec_complete$/m.test(f);
     ok(zBal && fBal, "1.25 completion: the zsh script is balanced (case/esac, braces) and calls compdef _dev_spec dev-spec; the fish script closes every block (" + fOpen + " / " + fEnd + ") and registers complete -c dev-spec");
     const zsh = probe([process.env.DEV_SPEC_TEST_ZSH, "zsh"]);
-    if (!zsh) ok(true, "1.25 completion: zsh at work — skipped (no zsh here; set DEV_SPEC_TEST_ZSH)");
+    if (!zsh) skip("1.25 completion: zsh at work", "no zsh here; set DEV_SPEC_TEST_ZSH");
     else {
       const file = path.join(tmp, "c125-c.zsh"), drive = path.join(tmp, "c125-drive.zsh");
       fs.writeFileSync(file, z);
@@ -274,7 +274,7 @@ exports.run = async ({ ok, all, remeasure, run, runIn, tmp, CLI }) => {
         "1.25 completion: zsh — feature names, --lang= values (the prefix set aside), archived names, a track list's last item, directories for scan (got " + JSON.stringify([got.slice(0, 5), r.stderr.slice(0, 300)]) + ")");
     }
     const fish = probe([process.env.DEV_SPEC_TEST_FISH, "fish"]);
-    if (!fish) ok(true, "1.25 completion: fish at work — skipped (no fish here; set DEV_SPEC_TEST_FISH)");
+    if (!fish) skip("1.25 completion: fish at work", "no fish here; set DEV_SPEC_TEST_FISH");
     else {
       const file = path.join(tmp, "c125-c.fish"), drive = path.join(tmp, "c125-drive.fish");
       fs.writeFileSync(file, f);

@@ -343,8 +343,8 @@ below) and ledgers it; the implementer never does the refactor in the task.
 
 The reviewer compares new code with the **codebase**, not only with the rest of the diff:
 
-0. **Start from the detector's `existing` runs** when the dispatch carries them (the final review, `/spec-review
-   branch` / `converge` run it first): each is a candidate — confirm it is a copy this branch added, not one the spec
+0. **Start from the detector's `existing` runs** when the dispatch carries them (the task review, the final review,
+   `/spec-review branch` / `converge` run it first): each is a candidate — confirm it is a copy this branch added, not one the spec
    asks for or the report lists under "Duplicated on purpose"; a confirmed one goes through the verifier like any finding.
 1. **List what the diff adds** — every new exported function, class, component, module, client or config key.
 2. **Search for an existing equivalent of each** (the same searches as above, by concept and synonym), and read the

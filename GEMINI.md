@@ -16,7 +16,8 @@ Follow the spec-driven workflow in `AGENTS.md` (repo root). In short:
   commands as MCP prompts).
 - Artifacts live under `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable. Every task carries
   `_Requirements:_` and `_Verify: <command>_`, and `_Implements: <path>_` when it writes code (the files it creates or changes).
-  Mandatory +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data/+port design sections must be filled. Run `dev-spec doctor <feature>` before advancing.
+  Mandatory +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data/+port design sections must be filled. Run `dev-spec doctor <feature>` before advancing;
+  fix what its next gate refuses (a later phase's fail waits).
 - Approvals are the user's: run `dev-spec approve <feature> <phase>` only after their explicit yes for that phase — it
   refuses while the phase's checks fail; `--force` only when the user explicitly accepts the failing checks (it stays
   flagged).

@@ -41,9 +41,9 @@ reason}`.
 `spec_task_brief {write: true}` → on `preflight: true` its pre-flight (`dev-spec-driven:spec-critic`, `Mode: brief`; the
 decisions it finds settled before the dispatch) → `dev-spec-driven:spec-implementer` → on `uiReview: true` the visual
 review (`dev-spec-driven:spec-ui-reviewer`; its Blockers, and the Majors a fresh reviewer confirms, are fixed first) →
-`dev-spec-driven:spec-reviewer` (each Critical / Important finding and each ❌ checked first by one
-`dev-spec-driven:spec-verifier` per finding — 80 or more opens a fix round; a new unit that is a
-duplicate in the existing codebase is Important) → `spec_complete_task` after a clean review. Stop at every
+`dev-spec-driven:spec-reviewer` (with the duplicate detector's file — subagent-execution.md §4; each Critical / Important
+finding and each ❌ checked first by one `dev-spec-driven:spec-verifier` per finding — 80 or more opens a fix round; a new
+unit that is a duplicate in the existing codebase is Important) → `spec_complete_task` after a clean review. Stop at every
 `**Checkpoint:**` (past it only on the user's word); `inlineOnly` tasks run inline; `spec_next_task {waves: true}`
 plans parallel waves. The final review starts from `spec_scan {duplicates: true, name}`: its `existing` runs are the
 reviewer's candidate findings, verified like any other — and, on a +ui feature of a project with a design-system registry,

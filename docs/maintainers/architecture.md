@@ -49,6 +49,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   metric.js                    the METRIC line (1.41): its reader and judge, finish's comparison, spec_metrics' one walk + `measured`
   guardian.js                  dev-guardian's gate (the check `guardian`): the launcher, the CLI lookup, the verdict, its guard rules
   friction.js                  the friction budget (1.41): tech.md's _Budget:_ lines, timings.jsonl, spec_metrics' friction, the hint
+  agents.js                    the plugin subagents' cost (1.42): agents.jsonl (counts per dispatch), spec_metrics' project `agents`
   trace.js                     criterion blocks, the EARS linter, trace_check, the traceability matrix
   gates.js                     the gate walk, pending gates, flows, detectPhase; spec_approve; .history/, spec_impact
   doctor.js                    the check registry (DOCTOR_CHECKS, GATES, approvalChecks), spec_doctor, next_action, status,
@@ -96,11 +97,13 @@ hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|Notebook
                                (approval tools, shells, Write / Edit / NotebookEdit, other MCP servers' file tools) ·
                                PostToolUse → spec-hook.js (Write|Edit) + observe-hook.js (Bash|PowerShell, async) + plan-hook.js
                                (ExitPlanMode) · PostToolUseFailure → observe-hook.js · SessionStart → spec-hook.js · Stop +
-                               SubagentStop (^(dev-spec-driven:)?spec-(implementer|simplifier)$) → stop-hook.js
+                               SubagentStop (^(dev-spec-driven:)?spec-(implementer|simplifier)$) → stop-hook.js, then
+                               (the six plugin agents, async) → observe-hook.js
 hooks/*-hook.js                guard (opt-in guard mode) · approval (opt-in human approval guard) · observe (logs _Verify:_ /
-                               check runs, prints nothing) · spec (save checks + SessionStart lines) · stop (stale roadmap
-                               refresh, then the evidence gate) · plan (the plan-mode bridge) — each exports its decide(raw,
-                               opts), run as a process only as the main module (the tests call it in-process: hookIn)
+                               check runs and a plugin agent's counts, prints nothing) · spec (save checks + SessionStart
+                               lines) · stop (stale roadmap refresh, then the evidence gate) · plan (the plan-mode bridge) —
+                               each exports its decide(raw, opts), run as a process only as the main module (the tests call it
+                               in-process: hookIn)
 hooks/hook-utils.js            what the hooks share before the engine loads (the runner — runHook / finish —, probe.js
                                re-exported on first use, the claim pre-filter…)
 hooks/precommit-check.js       optional git pre-commit validator (a stale ROADMAP.* / SPECS.md refreshed and re-staged)
@@ -168,7 +171,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 27 modules loaded with the engine (+ dupes.js, design-values.js,
+  costs ~0.65 ms before any compile (the open is the expensive part): 28 modules loaded with the engine (+ dupes.js, design-values.js,
   design-system.js, ui-checks.js, breakpoints.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
   the module of the concept; a new file must earn its load cost. The facade's first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
@@ -200,7 +203,11 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   quality.js `builtinTemplateAcs` reads live; `stopGate` — `builtinStopGate()`, the stop gate's lists of every language,
   `i18n.stopGateLists()`, which guards.js `stopPatterns` reads; `uiStateNames` — `uiStateNames()`, 1.38: +ui's state labels
   and the state matrix's a11y header cell of every language, `<id>\t<label>` lines, the header's id `a11y` — the one list read
-  whole, by doctor's ui-states). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
+  whole, by doctor's ui-states; `glossLines` — `builtinGlossLines()`, 1.42 perf-8: per base language, the visible lines of every
+  built-in requirements / design / change / bugfix text in RENDER order (`renderGlossLines()` — never sorted: the first of two equal
+  patterns wins), which quality.js `glossBuiltinLines` keys — pt-BR through `toPtBr` where it is used; rendered, they cost 90–100 ms
+  a language in each fresh process that reached the glossary check or a critical flow; +~94 KB of the file, 171,822 → 265,485
+  bytes, ~+0.15 ms of `JSON.parse` warm). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
   an engine set built from EVERY language's texts belongs here — a process loads only the languages it speaks
   (mcp/tests/16-conventions-build.js "I-I2" asserts an English doctor / next_action / done / finish / catalog / stop gate loads no pt.js,
   es.js or pt-br.js). A new builder or artifact goes into `templateCorpus()`, then rebuild. The per-project part (the
@@ -319,6 +326,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   observed.jsonl's, generalized) and tasks.js's marker span reader under its own label (`labelMarkerSpans`). No module for the
   lessons (decisions.js) or Reference Examples (quality.js): `projectPath` and `onDisk` moved verbatim from the lazy
   design-system.js into the eager quality.js, which both read (quality.md → History, Reference examples).
+- **1.42 —** S9: one eager module, 28 with the engine (README's trees: 33). **engine/agents.js**, the plugin subagents' cost
+  (tasks-and-evidence.md → Subagent-driven execution): after friction.js — the observe hook's SubagentStop records through it
+  (its `recordAgentRun`; the transcript itself is read in the hook, never by the engine: a path outside the project) and
+  spec_metrics reads it (`agentCosts`, `agentLines`, linked by finish.js). It reuses evidence.js's one appender and tail reader,
+  as friction.js does; a module of its own rather than ~120 more lines in friction.js, whose rule (a check's measured time
+  against a budget) it does not share.
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):
@@ -377,6 +390,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30.1** — the stop gate's lists (`stopGate`) joined the corpus: built from every language's table, they loaded pt.js, es.js
   and pt-br.js into every English Stop hook. Measured (median of 21 interleaved fresh processes, Windows 11, Node 26): the Stop
   hook on a claim 204.6 → 188.7 ms; the corpus grew from ~129 KB to ~152 KB.
+- **1.42 (perf-8, DS-PERF)** — `glossLines` joined the corpus: the glossary check's built-in template lines rendered ~146 texts a
+  language in each fresh process (636 builder calls for the four languages; −90–100 ms a language — measured by the critic in
+  fresh processes; pt-BR keeps its ~88 ms of `toPtBr`). No hook reaches it: the one-shot CLI doctor / next / finish / clarify /
+  approve and an MCP server's first such call. Its visible-lines rule moved with it (`glossVisibleLines`, ONE copy in markdown.js,
+  quality.js's project templates read through it); quality.js keeps the keying and rebuilds a language's patterns when the corpus
+  is dropped mid-process (it keys them on the lines array it got).
 - **1.38.0** — `uiStateNames` joined the corpus (CRIT_4 must-fix 6): doctor's ui-states recognises a state-matrix row by a
   label of ANY language, and rendered, those labels loaded pt.js, es.js and pt-br.js into every English doctor of a +ui
   feature. The first list read whole rather than asked `.has()` (`<id>\t<label>` lines); `CORPUS_KEYS` holds it, so a corpus

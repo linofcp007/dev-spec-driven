@@ -164,7 +164,9 @@ function main2list(c) {
   const r = c.call("list");
   const T = c.projectText();
   c.out(r, (r) => {
-    if (!r.exists || !r.features.length) return c.log(T.noFeatures(r.specsDir));
+    // 1.42 UX-21: no active feature (init's activeFeatures, the same folders) → the next step; init in it while a core steering file
+    // is missing — no .specs/, or one another command made (review 1, R1-SURF-07: the engine's steeringMissing, doctor's predicate)
+    if (!r.exists || !r.features.length) { c.log(T.noFeatures(r.specsDir)); return c.log(T.startHint(!r.exists || !!r.steeringMissing)); }
     r.features.forEach((f) => c.log(T.listLine(f.name, f.tracks, T.phase(f.phase), f.tasksDone, f.tasks)));
   });
 }
@@ -432,12 +434,13 @@ function statusLineRender(c) {
         // folder and it is fresh (review 8: the engine loaded after every message) — cli/completion.js statusCacheRead; else the
         // engine renders, kept with the .specs/ signature taken before it read and the outside paths it reports (1.30.1)
         const key = { cands: cands.map((x) => (typeof x === "string" ? path.resolve(c.cwd, x) : null)), columns: columns || null };
-        const cached = COMPLETION.statusCacheRead(key, Date.now(), near);
-        if (cached) r = cached;
+        const look = COMPLETION.statusCacheLookup(key, Date.now(), near);
+        if (look.r) r = look.r;
         else {
           const pdir = spec.statusLineProject(cands);
           if (pdir) {
-            const sig = COMPLETION.specsSignature(pdir);
+            // the signature the lookup just took, when it was this project's (1.42 perf-5: one walk of .specs/ per miss, not two)
+            const sig = look.signed && path.resolve(look.project) === path.resolve(pdir) ? look.sig : COMPLETION.specsSignature(pdir);
             const reads = [], started = Date.now();
             r = spec.statusLine(pdir, { columns, reads });
             COMPLETION.statusCacheWrite(key, pdir, sig, r, { started, near, reads, mapped: path.resolve(pdir) !== path.resolve(near) });
@@ -657,6 +660,7 @@ const COMMANDS = [
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         log(c.cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || c.cliText(r.lang).nothingNew, r.skipped.join(", ")));
+        if (r.note) log("  " + r.note); // 1.42 UX-09: the new steering files are templates — fill them (how: the note; the engine's rule: only when it created some)
         if (r.guardNote) log("  " + r.guardNote);
         if (r.stopCheckNote) log("  " + r.stopCheckNote);
         if (r.evidenceNote) log("  " + r.evidenceNote); // 1.14 F1
@@ -670,6 +674,7 @@ const COMMANDS = [
         if (r.fastCheckNote) log("  " + r.fastCheckNote); // 1.36: --fast-check set it / off, or its check was removed
         if (r.fastCheckOffer) log("  " + r.fastCheckOffer.note); // 1.36: none set, the root manifests suggest one — offered, never set
         if (r.reviewModelsNote) log("  " + r.reviewModelsNote); // 1.36: --review-models set it, or the stored value is ignored
+        if (r.activeFeatures === 0) log(c.cliText(r.lang).startHint(false)); // 1.42 UX-09: no active feature — as `list` says
       });
     },
   },
@@ -843,6 +848,7 @@ const COMMANDS = [
       return out(r, (r) => {
         log(T.statusHead(r.feature, r.tracks, T.phase(r.phase)));
         log(T.statusTasks(r.tasks.done, r.tasks.total, r.tasks.next ? "#" + r.tasks.next.number + " " + r.tasks.next.text : null));
+        if (r.tasks.planNote) log("  ⚠ " + r.tasks.planNote); // 1.42 (UX-02): a next task while the plan is not approved
         // ✓ only when FILLED (the doctor's rule): ◐ present but still a TODO/empty, ✗ missing — in the feature language.
         const fm = spec.msg(spec.featureLang(projectDir, r.feature));
         if (r.branch) log(fm.branch.statusLine(r.branch.name, r.branch.base, r.branch.commit ? r.branch.commit.slice(0, 7) : null, r.branch.current)); // 1.25
@@ -872,7 +878,10 @@ const COMMANDS = [
       if (r.verdict === "fail") c.exitCode = 1; // scriptable: blocking checks → non-zero
       const T = c.featureText(r.feature);
       return out(r, (r) => {
-        log(T.doctorHead(r.feature, r.tracks, T.word(r.verdict).toUpperCase(), T.bool(r.readyToAdvance)));
+        // 1.42 UX-01: + the next approval's own checks (nextGate) — readyToAdvance is every check, a later phase's included
+        const ng = r.nextGate;
+        log(T.doctorHead(r.feature, r.tracks, T.word(r.verdict).toUpperCase(), T.bool(r.readyToAdvance)) +
+          (ng ? T.doctorNextGate(ng.phase, ng.ready, (ng.failing || []).map((x) => x.id).join(", "), ng.unreadable) : ""));
         r.checks.forEach((x) => log("  " + (x.status === "pass" ? "✓" : x.status === "warn" ? "▲" : "✗") + " " + x.id + (x.detail ? " — " + x.detail : "")));
       });
     },
@@ -987,6 +996,7 @@ const COMMANDS = [
       return out(r, (r) => {
         // No task can start while some are open (a cycle, a _Depends:_ naming no task): say so — never "all done".
         log(r.next ? T.next(r.next.number, r.next.text, r.remaining, r.total) : r.remaining ? r.note : T.allDone);
+        if (r.planNote) log("  ⚠ " + r.planNote); // 1.42 (UX-02): the plan is not approved yet — the task served is not to be implemented
         if (r.next && r.skipped && r.skipped.length) log(D.cliSkipped(waits(r.skipped)));
         if (r.batch && r.batch.length > 1) log(T.batch(r.batch.map((b) => "#" + b.number + " [" + b.implements.join(", ") + "]").join("  ")));
         if (r.waves) {
@@ -1046,6 +1056,8 @@ const COMMANDS = [
           log(T.ledgerAt(r.paths.ledger));
         }
         if (r.unresolved.acs.length || r.unresolved.tests.length) err(T.unresolved([...r.unresolved.acs, ...r.unresolved.tests].join(", ")));
+        // 1.42 (UX-02): the plan is not approved yet — on stderr, like the unresolved references: stdout stays the brief
+        if (r.planNote) err("⚠ " + r.planNote);
       });
     },
   },
@@ -1092,6 +1104,7 @@ const COMMANDS = [
           log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : r.done < r.total ? "" : D.allDone));
           if (r.redRecorded) log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // _Expect: fail_
           if (r.note) log("  ⚠ " + r.note);
+          if (r.planNote) log("  ⚠ " + r.planNote); // 1.42 (UX-02): ticked before the plan's approval (a bugfix's investigation tick: the next task's note) — its own line, never the note's
           metricRunLines(r, spec.msg(spec.featureLang(projectDir, r.feature)).metric, "").forEach((l) => log(l)); // 1.41: stored, never judged here
         });
       };
@@ -2043,6 +2056,8 @@ const COMMANDS = [
               Object.entries(u.rules).forEach(([id, x]) => log(T.uiProjectRule(id, u.byRule[id], x.files, x.line ? x.file + ":" + x.line : x.file, x.level === "report" ? T.uiReportTag : "")));
             // (never "nothing" beside the removals a cut pass left unjudged: its limit line names them)
             } else if (u.read && !u.limits.some((l) => l.code === "ui-files" && l.count)) log(T.uiProjectNone(u.read));
+            // 1.42: the removals a focus style excused — counted, with or without a finding above (a nudge, never a finding)
+            for (const [id, x] of Object.entries(u.excused || {})) log(T.uiProjectExcused(id, x.count, x.files, x.line ? x.file + ":" + x.line : x.file));
             if (u.silenced) log(T.uiSilenced(u.silenced));
             offLines(u);
             u.facts.forEach((x) => log(T.uiFact[x.code](x.count, x.file + ":" + x.line)));
@@ -2418,6 +2433,23 @@ const HELP_FOOT = `  The project: --project <dir> (an existing folder — only i
 function helpText() {
   return HELP_HEAD + "\n\n" + COMMANDS.filter((e) => e.help).map((e) => e.help).join("\n") + "\n\n" + HELP_FOOT;
 }
+// 1.42 UX-07: what a bare `dev-spec` (no command, no flag) prints — the first steps in /spec's order (the start hint's: classify,
+// init, create), every command of the table by name (derived: the table's entries with a help block, in its order, wrapped under
+// 120 columns) and where the whole help is. `help`, `--help` and `-h` print helpText() as ever (a `--help | grep` reads flags).
+// English, as all the help; the table's static name / help only — never `options` (their getter loads the operations table).
+const HELP_FIRST_STEPS = `  First steps: classify "<idea>" → init → create <name> --size xs|s|m|l → next-action <name> (fill, doctor, approve —
+  the user's yes, phase by phase) → done <name> <n> --run → finish <name> --run`;
+function helpOverview() {
+  const lines = [];
+  let line = "  Commands:";
+  for (const n of COMMANDS.filter((e) => e.help).map((e) => e.name)) {
+    if (line.length + 3 + n.length > 118) { lines.push(line); line = "   "; }
+    line += (/:$|^ +$/.test(line) ? " " : " · ") + n;
+  }
+  lines.push(line);
+  return HELP_HEAD + "\n\n" + HELP_FIRST_STEPS + "\n" + lines.join("\n") + "\n\n" +
+    "  dev-spec help — every command, flag and exit code · dev-spec <command> --help (or help <command>) — one command";
+}
 // one command's help: its lines of helpText() (an alias's: its command's) + its options (a value flag shows "…") + the
 // global ones + where the whole help is. No block (help, an unknown word): the whole help. The lines stay the one help text (English,
 // like the rest of it); the frame lines are in the project language.
@@ -2467,5 +2499,5 @@ function completionModel(c) {
 module.exports = {
   COMMANDS, COMMAND_INDEX, commandFor, COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES, HELP_ALIASES, TEXT_ONLY_COMMANDS, GLOBAL_OPTIONS,
   VALUE_FLAG_SPECS, VALUE_FLAGS, REPEATABLE_FLAGS, OPTIONAL_VALUE_FLAGS, BOOL_FLAGS, EVALS_VALUE_FLAGS, EVALS_SWITCHES, TIMEOUT_MAX_S, NEXT_MAX,
-  spec, engineLoaded, CLI_FILE, CLI_PATH, RULE_FILES, mcpConfigBlocks, helpText, helpFor, completionModel, statusLineRender, printVersion,
+  spec, engineLoaded, CLI_FILE, CLI_PATH, RULE_FILES, mcpConfigBlocks, helpText, helpOverview, helpFor, completionModel, statusLineRender, printVersion,
 };

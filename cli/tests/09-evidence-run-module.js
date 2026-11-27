@@ -140,4 +140,22 @@ exports.run = async ({ ok, all, eq, tmp, __dirname }) => {
       empty: empty.ok === false && /no project checks/i.test(empty.error), missing: missing.ok === false,
     });
   }
+
+  // 1.42: metric-bytes.v1.json's STREAM mode, the capture's half — a child writes each case's bytes on its two streams (fs.writeSync:
+  // no encoding of its own), and execCommand — the capture done --run and finish --run read — hands back each stream decoded as UTF-8:
+  // the very STRINGS the reader is given (mcp/tests/09-evidence-metrics.js holds the reader's half: two rules, two checks). A capture
+  // that decoded a byte-order mark, latin1, or dropped NULs or a leading mark would change a string. The children run one after
+  // another (a burst of node starts lands on the suite's ratio guards); the order the bytes are written in is no part of it.
+  {
+    const BF = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "mcp", "tests", "fixtures", "metric-bytes.v1.json"), "utf8"));
+    const bytes = script("bytes.cjs", "const fs = require('fs');\nconst [o, e] = process.argv.slice(2);\nif (o !== '-') fs.writeSync(1, Buffer.from(o, 'hex'));\nif (e !== '-') fs.writeSync(2, Buffer.from(e, 'hex'));\n");
+    const utf8 = (h) => Buffer.from(h, "hex").toString("utf8");
+    const bad = [];
+    for (const c of BF.cases) {
+      const r = await RUN.execCommand(bytes + " " + (c.stdout || "-") + " " + (c.stderr || "-"), sh, { cwd: dir });
+      if (!(r.status === 0 && r.stdout === utf8(c.stdout) && r.stderr === utf8(c.stderr))) bad.push(c.id + " → " + JSON.stringify([r.status, r.stdout.length, r.stderr.length, r.error && r.error.message]));
+    }
+    ok(BF.cases.length >= 10 && !bad.length,
+      "1.42: metric-bytes.v1.json, the stream mode's capture — each case's bytes through execCommand come back as the two streams decoded as UTF-8, string for string (bad: " + JSON.stringify(bad) + ")");
+  }
 };

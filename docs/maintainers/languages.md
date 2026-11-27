@@ -75,9 +75,12 @@ how they came to be — the releases and review findings — is in History at th
   `reasoning`, doctor details, add_track's `added`, the ROADMAP Phase column (`phaseNames`; the JSON `phase` stays English), CLI,
   hook and pre-commit output go through `i18n.msg(lang)`. Callers branch on stable fields — EARS `code` / `severity`,
   `unverifiedReason`, check `id`, next_action `step` — never on a `msg`.
-- **The one exception: the CLI's help text** (`helpText()` / `helpFor()`, from each command entry's `help`) is English in every
-  language, like the names and flags it lists; only `help <command>`'s frame lines (`cliOutput.cmdHelp`) are localized. Never
-  document the help as localized.
+- **The one exception: the CLI's help text** (`helpText()` / `helpFor()`, from each command entry's `help`, and the bare
+  `dev-spec`'s `helpOverview()`) is English in every language, like the names and flags it lists; only `help <command>`'s frame
+  lines (`cliOutput.cmdHelp`) are localized. Never document the help as localized. The start hint the overview's first steps
+  follow (`cliOutput.startHint`, printed by `list` / `status` / `init` on a project with no active feature — its `init` step while
+  a core steering file is missing: no .specs/, or `spec_status {}`'s `steeringMissing`) is a message: localized, its CLI lines
+  `${DEV_SPEC}`. spec_init's `note` (`initNote`) comes only with a call that created steering (the engine's rule; the CLI prints it).
 - **Runnable CLI lines.** A plugin install puts no `dev-spec` on PATH, so a message that tells someone to RUN the CLI writes
   `${DEV_SPEC} <command> …` — `DEV_SPEC` (`i18n/common.js`) = `node "<clone>/cli/dev-spec.js"`, quoted by `cliQuote()` for bash
   AND PowerShell (`approvalCommand()` shares `cliPrefix()`); pt-BR's stage 0 protects it whole. The bare name stays where it
@@ -140,3 +143,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   skipped, is called with several argument shapes.
 - **1.24 review 6** — doctor's `constitution-check` moved to `CONSTITUTION_SYN` through `sectionFilled`, the approval gate's
   reader.
+- **1.42 (UX-07, UX-09)** — the bare `dev-spec` overview joined the English help; spec_init's note stopped saying "the skill
+  fills them" (an MCP client has no skill) and points at the steering how-to by its place in the plugin's folder — a relative
+  path, never a machine path: pt-BR's stage 0 protects `DEV_SPEC` whole, not another absolute path (a folder named with a word
+  the rules map). The track-pack starter comment (committed into a project, so a bare `dev-spec`) lists `port` too.
+- **1.42 review 1 (R1-SURF-02, R1-SURF-07)** — spec_init returned its steering note on EVERY call while the CLI printed it only
+  when files were created: /spec-setup's re-inits (guard, checks, roles…) told an MCP agent that a filled constitution was a
+  template to fill "from the user or the code". The engine now returns it only when it created steering (MCP and `--json`
+  agree; 01-core rows on both suites). The start hint dropped `init` once a .specs/ existed, keyed on a name for the property:
+  a .specs/ another command made holds no steering, and doctor then warned `steering — missing` — `spec_status {}` with no
+  feature now names the missing core files (`steeringMissing`, doctor's own predicate) and the hint keeps `init` for it.

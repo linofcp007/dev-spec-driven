@@ -65,14 +65,16 @@ fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --e
    Write the steps in `bug.md → Reproduction` — the requirements approval checks it.
 2. **Root cause** (`bug.md → Root Cause`). Trace the bad value backwards to where it originates. In a multi-component
    path (API → service → DB, build → package → deploy), instrument each boundary once and run it, so the
-   evidence shows WHERE it breaks before you theorise WHY. Compare with a working example of the same
-   pattern in the codebase and list every difference. Form ONE hypothesis ("X is the cause because Y"),
+   evidence shows WHERE it breaks before you theorise WHY. Tag every instrument line `DEBUG-<slug>` (`<slug>` is
+   the bugfix's folder name — in its log text or a comment beside it), so its removal is one search. Compare with
+   a working example of the same pattern in the codebase and list every difference. Form ONE hypothesis ("X is the cause because Y"),
    test it with the smallest possible change, and keep the evidence. Fill `bug.md → Root Cause` — the design
    approval is refused until it is.
 
    **→ Gate: STOP here.** Fill the criterion (`US-1.AC-1`: the real condition and the correct behaviour), the test
-   plan's File column and the tasks' `_Verify:_` commands, run `spec_doctor`, and present the reproduction, the root
-   cause and its evidence for the approvals (requirements, design = `bug.md`, test-plan, tasks). Wait for the yes.
+   plan's File column and the tasks' `_Verify:_` commands, run `spec_doctor` (fix what each gate up to tasks refuses —
+   `nextGate` is only the first), and present the reproduction, the root cause and its evidence for the approvals
+   (requirements, design = `bug.md`, test-plan, tasks). Wait for the yes.
 3. **Failing regression test** (task 1). Write `T-01` so it reproduces the bug and watch it fail *for the
    right reason* (the wrong behaviour, not a typo or a missing import). The scaffold marks task 1 **`_Expect: fail_`**
    with a `_Verify: [command that runs T-01]_` slot — fill in the real command (and add guard test `T-02`):
@@ -84,11 +86,17 @@ fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --e
    — don't write the fix on a red you haven't seen, and don't send a subagent (or a tool search) to find a shell:
    stop and ask.
 4. **Fix** (task 2). One change that removes the root cause — not a bundle of "while I'm here"
-   improvements. Run `T-01`, `T-02` and the full suite (`_Verify:_` records the evidence). Consider
-   defence in depth: should the invalid value also be rejected at the boundary where it entered?
+   improvements. Remove the instrumentation before task 2's run: `git grep -n --untracked -E
+   'DEBUG-<slug>([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'` prints nothing (`--untracked`: a file you created
+   while tracing is searched too; the boundary keeps a longer slug's tags, `DEBUG-<slug>-…` — another bugfix's —, out; the
+   pathspec leaves out every folder named `.specs`, a code folder of that name too — `bug.md`'s quoted evidence is no
+   instrument line, so it stays; it finds only the tagged lines — an untagged one stays, so tag every one). Run `T-01`,
+   `T-02` and the full suite (`_Verify:_` records the evidence). Consider defence in depth: should the invalid value also
+   be rejected at the boundary where it entered?
 
-**Checkpoint:** the reproduction steps no longer reproduce the bug and the full suite is green. Close
-with `/spec-finish` — the merge summary carries the root cause and the fix from `bug.md`.
+**Checkpoint:** the reproduction steps no longer reproduce the bug, the full suite is green and that `git grep -n
+--untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'` prints nothing. Close with
+`/spec-finish` — the merge summary carries the root cause and the fix from `bug.md`.
 
 `T-02` guards behaviour that already works, so it passes before the fix too: it sits in no task's `_Makes green:_`
 (only `T-01` does, on task 2 — the fix), so doctor's `red-green` check asks no red run for it. Never make a guard test fail

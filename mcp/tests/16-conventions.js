@@ -547,6 +547,41 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       bothLibcs: () => /-alpine\b/.test(images) && /-(?:bookworm|trixie)(?:-slim)?\b/.test(images),
       jobs: () => badJobs.status === 2 && /--jobs needs a whole number >= 1/.test(badJobs.stderr) && /--jobs <n>/.test(help.stdout) && /\.\.\.jobs/.test(src),
     });
+    // 1.42 R10: --alias-tmp — each suite's TMPDIR behind a symlink made in the container (/tmp/alias-tmp → /tmp/real-tmp: every
+    // test project's path an alias of its real one, as macOS's /var → /private/var), copied or mounted. suiteCommand builds the
+    // command from the options it is handed: the flag (parseArgs' aliasTmp) turns the leg on for every image, and parseArgs alone
+    // leaves it off — which image a run of the DEFAULT images aliases (the newest) is rowsPlan's, the row after this one.
+    const TD = require(dockerJs);
+    const cmdOf = (args, suite = "mcp") => TD.suiteCommand(suite, TD.parseArgs(args)).join(" ");
+    const plain = cmdOf([]), aliased = cmdOf(["--alias-tmp"]), mounted = cmdOf(["--mounted", "--alias-tmp"]), mountedPlain = cmdOf(["--mounted"]);
+    all("1.42 R10: test-docker's --alias-tmp runs each suite with TMPDIR behind a symlink to the real temp folder — copied or mounted —, --help names it; parseArgs alone leaves it off and suiteCommand then builds the plain command (default: the newest image only — rowsPlan's) (got " +
+      JSON.stringify({ plain, aliased, mounted, mountedPlain }) + ")", {
+      help: () => /--alias-tmp/.test(help.stdout),
+      flagOff: () => TD.parseArgs([]).aliasTmp === false && !/alias-tmp|TMPDIR/.test(plain) && !/alias-tmp|TMPDIR/.test(mountedPlain) && mountedPlain === "node mcp/test.js",
+      aliased: () => aliased.startsWith("sh -c " + TD.ALIAS_TMP) && aliased.endsWith(plain.replace(/^sh -c /, "")) && /ln -sfn \/tmp\/real-tmp \/tmp\/alias-tmp/.test(aliased) && /export TMPDIR=\/tmp\/alias-tmp && /.test(aliased),
+      mounted: () => mounted === "sh -c " + TD.ALIAS_TMP + "exec node mcp/test.js",
+      jobs: () => cmdOf(["--alias-tmp", "--jobs", "4"], "cli").endsWith("exec node cli/test-cli.js --jobs 4"),
+    });
+    // 1.42 (after review 1): the leg's first run on the integrated branch (node:22-bookworm-slim) came back clean, so a run of the
+    // DEFAULT images runs the newest of them under it; every other default image, and any --image list, stays plain unless
+    // --alias-tmp is given. rowsPlan is what main() runs — each image's alias choice and each suite's container command, built in that
+    // one place (review 2, R2-TESTS-03: a main() that built the command from the run's options undid the choice and no row saw it).
+    const newest = TD.DEFAULT_IMAGES[TD.DEFAULT_IMAGES.length - 1];
+    const js = JSON.stringify;
+    const planOf = (args) => TD.rowsPlan(TD.parseArgs(args));
+    const aliasedCmd = (c) => c.args.join(" ").startsWith("sh -c " + TD.ALIAS_TMP);
+    const dflt = planOf([]), listed = planOf(["--image", newest]), forced = planOf(["--alias-tmp"]), oneSuite = planOf(["--suite", "cli"]);
+    all("1.42: rowsPlan (what main() runs) runs the newest default image (" + newest + ") with the alias temp, both suites' commands too, and the others without; an --image list is plain; --alias-tmp turns it on for every image; main() builds no command of its own (got " +
+      JSON.stringify(dflt.map((r) => [r.image, r.alias, r.commands.map((c) => c.suite + ":" + aliasedCmd(c))])) + ")", {
+      images: () => js(dflt.map((r) => r.image)) === js(TD.DEFAULT_IMAGES) && dflt.every((r) => js(r.commands.map((c) => c.suite)) === js(["mcp", "cli"])),
+      newestOn: () => dflt[dflt.length - 1].alias === true && dflt[dflt.length - 1].commands.every(aliasedCmd) && TD.aliasFor(newest, TD.parseArgs([])) === true,
+      othersOff: () => dflt.slice(0, -1).every((r) => r.alias === false && !r.commands.some(aliasedCmd)),
+      listedOff: () => listed.length === 1 && listed[0].alias === false && !listed[0].commands.some(aliasedCmd),
+      forcedAll: () => forced.length === TD.DEFAULT_IMAGES.length && forced.every((r) => r.alias === true && r.commands.every(aliasedCmd)),
+      suiteKept: () => oneSuite[oneSuite.length - 1].commands.length === 1 && oneSuite[oneSuite.length - 1].commands[0].args.join(" ").endsWith("exec node cli/test-cli.js") && aliasedCmd(oneSuite[oneSuite.length - 1].commands[0]),
+      // the definition and rowsPlan's call — main() runs the plan's commands, never one it builds itself
+      planOnly: () => (src.match(/\bsuiteCommand\(/g) || []).length === 2 && /\bof rowsPlan\(o\)/.test(src),
+    });
   }
 
   // 1.17: no regex literal lost its backslashes (a heredoc'd edit once turned /^\s*status\s*:/i into /^s*statuss*:/i in
@@ -1377,7 +1412,12 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     const env0 = { ...process.env };
     delete env0.SPEC_PROJECT_DIR;
     delete env0.CLAUDE_PROJECT_DIR;
-    const same = (a, b) => (process.platform === "win32" ? String(a).toLowerCase() === String(b).toLowerCase() : a === b);
+    // (by real path: a child's resolveProjectDir() answers its process.cwd(), the PHYSICAL folder on POSIX — an aliased temp, test-docker's
+    // --alias-tmp —, while a SPEC_PROJECT_DIR keeps the spelling given; every compared folder exists. fs.realpathSync, the JS one — never
+    // .native, which expands an 8.3 name a win32 process.cwd() keeps: a child that starts answering another spelling of the right folder
+    // fails here. 1.42 review 1, R10 Step 0; review 2, R2-TESTS-01)
+    const real = (p) => { try { return fs.realpathSync(String(p)); } catch { return String(p); } };
+    const same = (a, b) => (process.platform === "win32" ? real(a).toLowerCase() === real(b).toLowerCase() : real(a) === real(b));
     const resolved = (cwd, env) => spawnSync(process.execPath, ["-e", "process.stdout.write(require(process.argv[1]).resolveProjectDir())", path.join(__dirname, "lib", "spec.js")],
       { cwd, env: { ...env0, ...(env || {}) }, encoding: "utf8" }).stdout;
     // (an empty .specs/ made by hand counts in the working folder itself — init fills it — never as an ancestor's project)
@@ -1441,5 +1481,69 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       /spec\.writeSpecFile\(baselineFile/.test(harness),
       "1.24 r6 G-I2: no mcp/lib source but engine/files.js writes with a raw fs call (writeFileSync / appendFileSync / renameSync / mkdirSync …) — every write goes through the gate (writeFileAtomic, writeIfAbsent, ensureDir, specWrite each call specsWriteGate; withLockFile checks the lock's path); 1.25.1 r7: the eval harness's sources too — its baseline.json goes through spec.writeSpecFile, which refuses a linked evals/ folder" +
       (linkedEv ? "" : " (no junction here: that part skipped)") + " (got " + JSON.stringify({ hits, gated, okWrite, refusedWrite }) + ")");
+  }
+
+  // 1.42 (R7): a check that cannot run here (no git, no pwsh, links not creatable) calls the runner's skip(label, why) — never an
+  // ok() whose first argument is a truthy LITERAL (`true`, a number but 0, a non-empty string, [] / {}, a falsy one negated — fix
+  // round 1: the guard read the word `true` alone, and a 1 or a string got through), which counted as a pass: a Linux container's total held the PowerShell
+  // and Windows-only checks it never ran (80 lines did, until 1.42) — nor prints a skip line of its own (a string that starts with two
+  // spaces and "skip - "): test-docker.js counted those, the runner's summary did not. Every .js file of mcp/tests/ and cli/tests/
+  // (the harnesses too), as one text — an ok( spread over lines, one after `} else` —, and NO allowance: the fake suite's files
+  // (cli/tests/16-conventions-runner.js, template literals it writes to disk) assert a non-literal truth. A FALSY literal is a fail,
+  // never a pass — the harnesses' failure report, ok(false, label), stays; a truthy EXPRESSION (`ok(a === a, …)`) is not read.
+  {
+    const OK_LITERAL = /\bok\(\s*((?:!\s*)*)(true|false|null|undefined|NaN|Infinity|\d[\w.]*|\.\d\w*|"[^"\n]*"|'[^'\n]*'|`[^`$]*`|\[\s*\]|\{\s*\})\s*,/g;
+    const truthy = (bangs, lit) => {
+      const v = /^(?:false|null|undefined|NaN)$/.test(lit) ? false : /^["'`]/.test(lit) ? lit.length > 2
+        : /^[\d.]/.test(lit) ? Number(lit.replace(/_/g, "").replace(/n$/i, "")) !== 0 : true;
+      return (bangs.replace(/\s/g, "").length % 2 === 0) === v;
+    };
+    const SKIP_LINE = /["'`] {2}skip - /g;
+    const hitsIn = (text) => [...[...text.matchAll(OK_LITERAL)].filter((m) => truthy(m[1], m[2])), ...text.matchAll(SKIP_LINE)]
+      .map((m) => text.slice(0, m.index).split("\n").length);
+    // (built: this file's own text must hold none of the truthy shapes)
+    const T = "tr" + "ue", N = String(1), Q = "\"", SQ = "'", BT = "`", LB = "[", P = " ".repeat(2) + "skip - ";
+    const planted = [`ok(${T}, "x");`, `  } else ok(${T}, "y");`, `ok( ${T} ,"z")`, `ok(\n    ${T},\n    "w")`, `ok(${N}, "c")`, `ok(${N}.5, "d")`, `ok(${Q}skipped${Q}, "s")`,
+      `ok(${SQ}x${SQ}, "q")`, `ok(${BT}x${BT}, "t")`, `ok(!${0}, "n")`, `ok(! !${N}, "m")`, `ok(${LB}], "a")`, `console.log("${P}by hand");`, "process.stdout.write(`" + P + "x`)"];
+    const clean = [`ok(${T}ish, "a")`, `ok(isTrue, "b")`, `ok(${N} === n, "c")`, `ok(${Q}a${Q} === s, "d")`, `ok(typeof exports === "object", "h")`, `ok(false, label)`, `ok(0, "z")`,
+      `ok(!${N}, "f")`, `ok(!!0, "g")`, `ok(${Q}${Q}, "e")`, `skip("d", "why d")`, `// a ${P.trim()} line`, `notok(${T}, "e")`];
+    const dirs = [path.join(__dirname, "tests"), path.join(root, "cli", "tests")];
+    const scanned = dirs.flatMap((d) => fs.readdirSync(d).filter((n) => n.endsWith(".js")).map((n) => path.join(d, n)))
+      .map((f) => ({ f, hits: hitsIn(fs.readFileSync(f, "utf8")) }));
+    const found = scanned.flatMap(({ f, hits }) => hits.map((n) => path.relative(root, f).split(path.sep).join("/") + ":" + n));
+    all("1.42 (R7): no test file asserts an ok() whose first argument is a truthy literal (true, 1, a string…) for a check it skips, nor prints a skip line of its own — a skip is the runner's skip(label, why), counted apart from the passes; no allowance (got " +
+      JSON.stringify({ files: scanned.length, found: found.slice(0, 20), more: Math.max(0, found.length - 20) }) + ")", {
+      "the planted shapes are found (true, a number, a string of each quote, a negated falsy one, [], spaces inside the call, one after } else, one over lines, a hand-printed skip line)": () => planted.every((t) => hitsIn(t).length === 1),
+      "a falsy literal (the harnesses' failure report), an expression, a non-literal truth, skip() and a name merely ending in ok are not": () => clean.every((t) => hitsIn(t).length === 0),
+      "both suites' folders are read, the fake suite's file (once an allowance) too": () => dirs.every((d) => scanned.some((s) => path.dirname(s.f) === d)) &&
+        scanned.length >= 150 && scanned.some((s) => path.basename(s.f) === "16-conventions-runner.js"),
+      "no truthy-literal ok() and no hand-printed skip line in the suites": () => found.length === 0,
+    });
+  }
+
+  // 1.42 (R13): the engine's readJson answers a file that doesn't parse with the stable CODE "invalid-json" — its English sentence
+  // was never shown (every reader truth-tests `error`; the two that say it localize errorRel / errorDetail through err.invalidJson).
+  {
+    const E = require("./lib/engine/index.js");
+    const pj = path.join(tmp, "proj-r13-invalid-json");
+    S.initProject(pj, ["core"], "pt");
+    S.createFeature(pj, "Billing", ["core"]);
+    const rmFile = path.join(pj, ".specs", "roadmap.json"), stFile = path.join(pj, ".specs", "billing", ".state.json");
+    const rmText = "{ \"features\": ", stText = "{ \"approvals\": [ }";
+    const why = (t) => { try { JSON.parse(t); return null; } catch (e) { return e.message; } };
+    fs.writeFileSync(stFile, stText);
+    const said = S.readState(pj, "billing").invalid; // the project's language (pt) while roadmap.json still parses
+    fs.writeFileSync(rmFile, rmText);
+    const rm = E.readJson(rmFile), st = E.readJson(stFile), none = E.readJson(path.join(pj, ".specs", "nothing.json"));
+    all("1.42 (R13): readJson of a file that doesn't parse → { exists: true, data: null, error: \"invalid-json\", errorRel, errorDetail } (got " +
+      JSON.stringify({ rm, st, none, said }) + ")", {
+      "roadmap.json: the code, its relative name and the parser's own detail": () => rm.exists === true && rm.data === null && rm.error === "invalid-json" &&
+        rm.errorRel === ".specs/roadmap.json" && rm.errorDetail === why(rmText),
+      "a feature's .state.json: the same code": () => st.exists === true && st.data === null && st.error === "invalid-json" &&
+        st.errorRel === "billing/.state.json" && st.errorDetail === why(stText),
+      "an absent file: no error": () => none.exists === false && none.error === null,
+      "the caller still says it, localized (pt), with the name and the detail": () => typeof said === "string" &&
+        said.startsWith("billing/.state.json não é JSON válido (" + why(stText) + ")"),
+    });
   }
 };

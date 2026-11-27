@@ -52,7 +52,8 @@ let frictionHint; // friction.js — 1.41 the friction budget: next_action's fin
 let existsRaw, entryAt, specsStat; // files.js — the read gate (1.41.1)
 let projectFileReal; // files.js — R3 (1.41.1): a project file by its real path
 let readDirCached, specsReadBlocked, seedParts; // files.js — the read gate (1.41.1): specs-links, the listing's seed
-function __link(E) { ({ readDirCached, specsReadBlocked, seedParts, projectFileReal, existsRaw, entryAt, specsStat, frictionHint, referenceExamplesCheck, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
+let planGateFields; // tasks.js — 1.42 (UX-02): spec_status's tasks.planApproved / planNote, next_task's own fields
+function __link(E) { ({ planGateFields, readDirCached, specsReadBlocked, seedParts, projectFileReal, existsRaw, entryAt, specsStat, frictionHint, referenceExamplesCheck, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designReuseGated, designWeighChecks, detectPhase,
@@ -234,6 +235,12 @@ function listFeatures(projectDir) {
   });
   const res = { specsDir: root, exists: true, features };
   if (ignored.length) res.ignored = ignored;
+  // 1.42 review 1 (R1-SURF-07): no feature yet and a core steering file missing (the doctor `steering` check's own predicate) —
+  // the start hint's `init` step is still due (a .specs/ another command made holds no steering)
+  if (!features.length) {
+    const missing = CORE_STEERING.filter((f) => !existsRaw(path.join(root, "steering", f)));
+    if (missing.length) res.steeringMissing = missing;
+  }
   return res;
 }
 
@@ -293,6 +300,9 @@ function statusFeature(projectDir, name) {
   const st = readState(projectDir, slug);
   const kind = st.kind || "feature";
   const branch = branchView(projectDir, st); // the feature's own git branch (create --branch) — and where HEAD is now
+  // 1.42 (UX-02): the plan not approved yet — tasks.planApproved: false, and tasks.planNote while a task is next (never a bugfix's
+  // investigation task); nothing on an approved plan (the tasks object as before)
+  const planGate = planGateFields(st, next, slug, featureLang(projectDir, slug));
   return {
     ok: true,
     feature: slug,
@@ -302,7 +312,7 @@ function statusFeature(projectDir, name) {
     tracks: trackLabel(tracks),
     phase: detectPhase(dir, tracks),
     artifacts,
-    tasks: { total: tasks.length, done, next: next ? { number: next.number, text: next.text } : null, list },
+    tasks: { total: tasks.length, done, next: next ? { number: next.number, text: next.text } : null, list, ...planGate },
     scaleSections,
     aiSections,
     secSections: trackView("sec"),
@@ -846,7 +856,9 @@ function approvalGatesView(c) {
   let next = null;
   if (pending.length) {
     const g = approvalChecks(c.projectDir, c.slug, c.dir, pending[0], c.tracks, c.kind, c.lang);
-    next = { phase: pending[0], ready: g.artifact && !g.checks.length, failing: g.checks };
+    // unreadable (stable): its file is there but can't be read — a folder of that name, no permission, a lock (approve says so);
+    // never "nothing to approve yet" (1.42 review 1, R1-SURF-03)
+    next = { phase: pending[0], ready: g.artifact && !g.checks.length, failing: g.checks, ...(g.unreadable ? { unreadable: true } : {}) };
     if (rv.pending[pending[0]]) next.missingRoles = rv.pending[pending[0]].missing;
     if (rv.pending[pending[0]] && rv.pending[pending[0]].signoffsComplete) next.signoffsComplete = true; // re-sign to complete
   }

@@ -27,8 +27,8 @@ by `check` and ignored. `dev-spec tracks init a11y` scaffolds all of it, comment
 
 | Key | Rule |
 |---|---|
-| `name` | The folder name: `^[a-z][a-z0-9]{1,19}$`. Never a built-in track (core tdd saas ai sec privacy dist api ui obs data), a word people type for one (`security`, `gdpr`, `test`…), one of `none all any track tracks pack packs list init check`, a Windows device name or an `Object.prototype` key. |
-| `marker` | `^[A-Z][A-Z0-9]{1,11}$` (`"A11Y"` or `"[A11Y]"`). The stable, **case-sensitive** token of the pack's headings — `[A11Y]`. Never a built-in marker (SaaS / AI / SEC / PRIVACY / DIST / API / UI / OBS / DATA), a story / parallel tag (`US1`, `P1`, `SHARED`), a generic slot (`TODO`, `TBD`, `FIXME`…) or an ID prefix (`AC1`, `T2`…); unique across packs — two packs with one marker: the first by name keeps it, the other is refused. |
+| `name` | The folder name: `^[a-z][a-z0-9]{1,19}$`. Never a built-in track (core tdd saas ai sec privacy dist api ui obs data port), a word people type for one (`security`, `gdpr`, `test`…), one of `none all any track tracks pack packs list init check`, a Windows device name or an `Object.prototype` key. |
+| `marker` | `^[A-Z][A-Z0-9]{1,11}$` (`"A11Y"` or `"[A11Y]"`). The stable, **case-sensitive** token of the pack's headings — `[A11Y]`. Never a built-in marker (SaaS / AI / SEC / PRIVACY / DIST / API / UI / OBS / DATA / PORT), a story / parallel tag (`US1`, `P1`, `SHARED`), a generic slot (`TODO`, `TBD`, `FIXME`…) or an ID prefix (`AC1`, `T2`…); unique across packs — two packs with one marker: the first by name keeps it, the other is refused. |
 | `title` | `{ "en": "…", "pt"?: "…", "es"?: "…", "pt-BR"?: "…" }` (a plain string = its English). 2–80 characters, one line, no `[ ] < >` or backtick. Shown in the headings. |
 | `description` | Optional, one line, ≤ 300 characters (listed by `list`). |
 | `signals` | Optional `{ "strong"?: [...], "weak"?: [...], "context"?: [...] }` — classifier keywords, ≤ 50 per tier, 2–60 characters of letters / digits with inner spaces, `-`, `'`, `.`. |

@@ -1017,7 +1017,7 @@ const STOP_EN_ING = String.raw`(?!\s+(?!implementing|fixing|building|wiring|writ
 // init notes / hook output). Functions so callers interpolate freely.
 // ===========================================================================
 const msg = {
-    initNote: "Stubs are placeholders. The skill fills them with real content (see references/steering-templates.md).",
+    initNote: "The steering files are templates: fill their [placeholders] with the project's real rules (from the user or the code) — doctor warns until then. How: skills/dev-spec-driven/references/steering-templates.md, in the plugin's folder.",
     addTrackNote: (tr, slug) => `Added +${tr}. Fill the new design sections, then re-run /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `already on +${tr}`,
     notes: {
@@ -1594,10 +1594,17 @@ const msg = {
       steeringSeeded: (comps, tokens) => `  filled from the code: ${comps} ${comps === 1 ? "component" : "components"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} — review the rows, then add each component's variants and notes`,
       feature: (slug, label, lang) => `Feature '${slug}' [${label}] (${lang})`,
       noFeatures: (dir) => `No features under ${dir}`,
+      // 1.42 UX-21: an empty project's next step, in the order of /spec (classify, the user's OK, init, create); init only while
+      // there is no .specs/ — `list` / `status` and `init` print it on the same predicate: no active feature
+      startHint: (init) => `  Start one: ${DEV_SPEC} classify "<idea>", then ${init ? `${DEV_SPEC} init, then ` : ""}${DEV_SPEC} create <name> --size xs|s|m|l (Claude Code: /spec <idea>).`,
       listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tasks)`,
       statusHead: (f, tracks, phase) => `Feature: ${f}  [${tracks}]  phase=${phase}`,
       statusTasks: (done, total, next) => `Tasks: ${done}/${total}` + (next ? `  next → ${next}` : ""),
       doctorHead: (f, tracks, verdict, ready) => `Doctor: ${f}  [${tracks}]  verdict=${verdict}  readyToAdvance=${ready}`,
+      // 1.42 UX-01: the next approval's own checks (nextGate) — a forecast, never a promise: the approval adds phase-order and the
+      // role sign-offs; no failing check and no artifact → nothing to approve yet — an artifact there but unreadable (nextGate.unreadable)
+      // says so, as approve does (1.42 review 1)
+      doctorNextGate: (phase, ready, ids, unreadable) => ready ? `  next gate ${phase}: checks pass` : ids ? `  next gate ${phase}: fails (${ids})` : unreadable ? `  next gate ${phase}: its file can't be read — make it a readable file` : `  next gate ${phase}: nothing to approve yet`,
       traceHead: (f, verdict, acs, covered) => `Trace: ${f}  verdict=${verdict}  ACs=${acs}  coveredByTasks=${covered}`,
       earsHead: (n, m, verdict) => `EARS: ${n} criteria, ${m} with modal, verdict=${verdict}`,
       next: (n, text, left, total) => `Next → #${n} ${text}  (${left}/${total} left)`,
@@ -1738,6 +1745,8 @@ const msg = {
       uiProjectHead: (n, files) => `  UI checks in the project's view files (${n} in the ${files} read) — each feature's report lists its own; spec_finish warns about a +ui feature's:`,
       uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} in ${files} ${files === 1 ? "file" : "files"}${tag ? " " + tag : ""} — the first: ${at}`,
       uiProjectNone: (files) => `  UI checks: nothing in the project's ${files} view ${files === 1 ? "file" : "files"}`,
+      // 1.42: the removals a focus style read elsewhere excused (`excused`) — a count and a nudge, never a finding (at: file[:line])
+      uiProjectExcused: (id, n, files, at) => `  ${id}: ${n} ${n === 1 ? "removal" : "removals"} excused in ${files} ${files === 1 ? "file" : "files"} — a focus style in the files read excuses every one; check that the elements losing their outline get one (the first: ${at})`,
       // (the project's facts by code — at: the first place, file:line)
       uiFact: {
         "no-reduced-motion": (n, at) => `  ▲ the code declares motion — an animation, a transform's transition or smooth scrolling (${n} ${n === 1 ? "place" : "places"}, the first: ${at}) — and none of the project's view files and scripts read mentions reduced motion: offer a reduced variant — @media (prefers-reduced-motion: reduce), Tailwind's motion-reduce: / motion-safe: (WCAG 2.3.3, AAA)`,
@@ -1775,7 +1784,7 @@ const msg = {
       dependsOn: (f, deps, order, unknown) => `${f} depends on: ${deps || "(none)"}` + (order != null ? `  order=${order}` : "") + (unknown ? `  ⚠ unknown deps: ${unknown}` : ""),
       trackNow: (f, tracks) => `'${f}' now [${tracks}]`,
       usage: (syntax) => `usage: ${syntax}`,
-      unknownCommand: (c) => `unknown command '${c}'. Run \`${DEV_SPEC} help\`.`,
+      unknownCommand: (c, near) => `unknown command '${c}'${near ? ` — did you mean '${near}'?` : "."} Run \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `unknown client '${c}'. Known: ${known}`,
       // --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
       noJson: (c) => `--json is not available for '${c}': it prints text only. Run it without --json.`,
@@ -1848,7 +1857,8 @@ const msg = {
       earsPlaceholder: (list) => `Criterion still holds template placeholder(s) ${list} — write the real trigger/behavior.`,
       constitutionUnfilled: "the Constitution Check section is missing or not filled in",
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
-      approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug}), or pass force: true (CLI: --force) to record the approval anyway — it stays flagged as forced.`,
+      // 1.42 (UX-04): force only on the user's explicit consent to these failing checks — the refusal offered it as an equal option
+      approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug} · ${DEV_SPEC} doctor ${slug}). force: true (CLI: --force) only when the user explicitly accepts these failing checks — it records the approval anyway, flagged as forced.`,
       approveNothing: (phase, slug, file) => `Nothing to approve: '${phase}' has no artifact in '${slug}' (${file} is missing, or its track is off) — not even with force.`,
       approveUnreadable: (phase, slug, file) => `Nothing to approve: ${file} in '${slug}' can't be read (a folder of that name, no permission, or another program holding it) — make it a readable file, then approve '${phase}'.`, // r5 review
       approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
@@ -1883,7 +1893,7 @@ const msg = {
         "test-plan.md": (slug) => `check the AC coverage with trace_check (${DEV_SPEC} trace ${slug})`,
         "eval-plan.md": (slug) => `set the thresholds and the baseline, then /spec-doctor ${slug}`,
         "tasks.md": (slug) => `break the design into real tasks (/spec ${slug} tasks), then trace_check`,
-        "change.md": (slug) => `write its summary, 1–3 EARS criteria, the approach and 1–3 tasks each with a _Verify:_ command, then approve the plan in one call — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks)`,
+        "change.md": (slug) => `write its summary, 1–3 EARS criteria, the approach and 1–3 tasks each with a _Verify:_ command, then approve the plan in one call — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks; CLI: ${DEV_SPEC} approve ${slug} --through tasks)`,
         default: (slug) => `/spec-doctor ${slug}`,
       },
       approveClassification: (slug) => `Confirm & approve the classification — /approve ${slug} classification.`,
@@ -1941,6 +1951,8 @@ const msg = {
       hidden: (p, part) => `'${p}' is in a hidden folder or is a hidden file (${part}) — spec_import reads none but the importers' own: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
       notSource: (p) => `'${p}' is no spec source spec_import reads — name a .md / .markdown / .mdc / .txt / .json / .yaml / .yml file, or the source's folder.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
+      // 1.42: spec-kit's — a whole specs/ folder was imported (its features are its sub-folders)
+      nothingSpecKit: (p) => `No spec-kit spec files found in '${p}' — a Spec Kit feature is one folder holding spec.md or tasks.md (usually specs/<nnn-name>/): import that folder.`,
       exists: (slug) => `Feature '${slug}' already exists — import never overwrites it. Pass another name.`,
       tooLarge: (rel, max) => `${rel} is over ${max} characters — too large to import whole (the part past the limit, a plan's steps included, would be lost). Split or shorten it, then import again; nothing was created.`,
       noUsableTitle: (title) => `The document's title '${title}' has no usable characters (a-z, 0-9) for a folder name — pass the feature's name (name; CLI: --name "<feature>").`,
@@ -1980,12 +1992,15 @@ const msg = {
       wRemoved: (name) => `REMOVED requirement '${name}' was not imported`,
       wRenamed: (from, to) => `RENAMED requirement '${from}' → '${to}' (imported under the new name)`,
       wSkipped: (files) => `not imported (left in place): ${files}`,
+      more: (n) => `+${n} more`, // wSkipped's names past the first 50
       // spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
-      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", quickstart: "Quickstart" },
+      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", open: "Open questions in quickstart.md" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,
-      wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts, quickstart) without the plan`,
+      wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts) without the plan`,
       // spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
       wUncoveredFr: (list) => `functional requirements no acceptance scenario covers — carried as prose under "Functional Requirements", so no task or test traces them: ${list}. Turn each into an EARS criterion with an AC ID (or cite it in one) before approving the requirements`,
+      // 1.42: the FR definitions no scenario covers became the criteria of one story (story: its US-n; list: "FR-n → US-n.AC-m, …")
+      wFrCriteria: (story, list) => `functional requirements no acceptance scenario covers became EARS criteria of story ${story} (each original kept in a comment) — check each one's wording and give it a task: ${list}`,
       wUnreadable: (file) => `${file} points outside the project — skipped`,
       done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
@@ -2078,6 +2093,14 @@ const msg = {
       cliSkipped: (list) => `  waiting: ${list}`,
     },
 
+    // 1.42 (UX-02): a task served or ticked while the plan (the tasks approval — a change's change.md) is not approved yet: the
+    // `planNote` of spec_next_task / spec_task_brief / spec_status (notApproved) and spec_complete_task (tickedEarly) — never a
+    // refusal, never a bugfix's investigation task (it writes only bug.md, which the earlier approvals sign off).
+    planGate: {
+      notApproved: (slug, file) => `The plan (${file}) is not approved yet: this task is not to be implemented — show the plan to the user and ask for its approval (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} names the step).`,
+      tickedEarly: (n, slug) => `Task ${n} was ticked before the plan was approved — show the plan to the user and ask for its approval before the next task (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} names the step).`,
+    },
+
     // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
     // IDs and file names stay English-stable.
     impact: {
@@ -2164,6 +2187,9 @@ const msg = {
       lessonsUnread: (list) => `  lessons whose cause reads as none of the five codes (a hand edit?): ${list}`,
       lessonsTruncated: (n) => `  lessons: ${n} feature folder(s) past the first 1000 not read`,
       lessonsRepeated: (cause, target, features, n) => `  repeated: ${cause} → ${target} — ${n} lessons in ${features}`,
+      // 1.42 the plugin subagents' cost (spec_metrics' project `agents`): counts from their Claude Code transcripts, never a time
+      agentsHead: (n) => `  subagents (the plugin's agents, counted from their Claude Code transcripts — no time): ${n} ${n === 1 ? "dispatch" : "dispatches"}`,
+      agentsRole: (role, n, turns, tin, tout, cached, partial) => `    ${role}  ${n} ${n === 1 ? "dispatch" : "dispatches"} · ${turns} turns · tokens in ${tin}, out ${tout}, cache read ${cached}${partial ? ` — ${partial} read only in part: a lower bound` : ""}`,
       retroText: {
         title: (f) => `# Retrospective: ${f}`,
         intro: (date) => `> Generated by dev-spec on ${date} from .state.json, .history/ and the artifacts. The numbers are derived locally; the rest is yours to write. Nothing here is applied automatically.`,
@@ -2214,7 +2240,9 @@ const msg = {
         phantomSecondary: "tasks / test plan cite unknown EC/NFR/SC IDs (typos?)",
         untracedCriteria: "criteria with a modal verb but no ID of their own (by line) — no task or test can trace them: number each one US-<story>.AC-<n>",
         inactiveAcs: "ACs under the heading of a track that is off (or a missing track pack) — not required, not traced: add the track back, or move them out of that section if they are core criteria",
-        justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a row, or approve the test plan with force to accept the gap",
+        // 1.42 (B142-01): no force advice — a forced test-plan approval never clears the gap (doctor's traceability and finish still
+        // block on it), and naming force beside "uncovered" invited forcing
+        justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a test row for each (to change or remove the AC: /spec-change)",
         plannedNotInCode: "planned tests that no test file names (put the T-ID in the test name)",
         inCodeNotInPlan: "T-IDs in test code that no feature's test plan lists",
         unresolvedImplGlobs: "_Implements:_ globs not fully resolved (the file walk stopped at its cap before a match — not counted as missing)",
@@ -2468,7 +2496,7 @@ const msg = {
         "     inclusion: manual    → never automatically; briefs list it as available on request\n" +
         "     Replace the example pattern and the bracketed lines below. -->\n\n" +
         "## Rules\n- [A rule every file matching the pattern must follow.]\n\n## Examples\n- [A short example — or a pointer to a file that shows the pattern.]\n",
-      placeholders: (list) => `still template placeholders: ${list}`,
+      placeholders: (list) => `still template placeholders: ${list} — fill them with the project's real rules (from the user or the code)`,
       scoped: "Scoped steering (fileMatch — matches this task's files):",
       manual: "Available on request (manual steering):",
     },
@@ -2731,7 +2759,6 @@ const msg = {
       noSummary: "[TBD]", // {{summary}} of a feature created without one: a generic slot, so the scaffold still reads 'placeholder'
       unknownArtifact: (a, list) => `Unknown template '${a}' — one of: ${list}, or steering/<file>.md.`,
       writeFailed: (rel, why) => `Could not write ${rel} (${why}).`,
-      writeOutside: (rel) => `Refused to write ${rel}: its folder is a link to a place outside the project.`,
       legacyFeature: ".specs/templates/ is the folder of a feature created before project templates existed (it holds a .state.json) — it stays that feature and is never read as templates. Rename it (" + DEV_SPEC + " feature rename templates <new-name>, or spec_feature rename) to use project templates.",
       builtIn: "built-in",
       override: "project",
@@ -2796,7 +2823,6 @@ const msg = {
       unknownPack: (n, list) => `No track or track pack '${n}' — the project's packs: ${list}.`,
       legacyFeature: ".specs/tracks/ is the folder of a feature created before track packs existed (it holds a .state.json) — it stays that feature and is never read as packs. Rename it (" + DEV_SPEC + " feature rename tracks <new-name>, or spec_feature rename) to use track packs.",
       writeFailed: (rel, why) => `Could not write ${rel} (${why}).`,
-      writeOutside: (rel) => `Refused to write ${rel}: its folder is a link to a place outside the project.`,
       builtIn: "built-in",
       sectionCount: (n) => `${n} section(s)`,
       signalCount: (n) => `${n} signal(s)`,
@@ -2813,7 +2839,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — a project-defined track (dev-spec 1.15). Data only: nothing in this folder is run.
 // Guide: references/project-tracks.md · validate it: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui obs data).
+  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui obs data port).
   "name": "${a.name}",
   // The stable, case-sensitive marker of its design sections, criteria and task block: [${a.token}].
   "marker": "${a.token}",

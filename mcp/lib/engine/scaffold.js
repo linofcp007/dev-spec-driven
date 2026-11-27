@@ -115,7 +115,11 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const linked = linkedSpecsFolder(projectDir, [path.join(steering, "constitution.md")]);
   if (linked) return { ok: false, linked: true, error: i18n.msg(normalizeLang(lang || projectLang(projectDir))).err.specsLinked(linked) };
   // Before anything is written: a project with no feature yet is brand-new (stamped with this engine's version below).
-  const fresh = featureDirs(projectDir).length === 0;
+  // (1.42 UX-09) Its ACTIVE ones — the folders `list` / `status` list (one isFeatureFolder over .specs/'s own folders; the
+  // archived ones never) — are the result's activeFeatures: none → the CLI prints the start hint, as `list` does. init adds none.
+  const dirs0 = featureDirs(projectDir);
+  const fresh = dirs0.length === 0;
+  const activeFeatures = dirs0.filter((f) => !f.archived).length;
   // no lang given, a brand-new project without a language of its own → the user's DEFAULT_LANG option (seeded below
   // into meta.lang like an explicit --lang, so the project keeps it on every machine).
   const userLang = !lang && fresh ? newProjectLang(projectDir) : undefined;
@@ -206,7 +210,11 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     lang: lng,
     created,
     skipped,
-    note: i18n.msg(lng).initNote,
+    // the steering note ("the steering files are templates: fill their [placeholders]…") only when this call created steering —
+    // a re-init (/spec-setup guard|checks|roles…) of a project whose steering is filled would read it as "rewrite your rules"
+    // (1.42 review 1, R1-SURF-02); the CLI prints it on the same rule, so MCP and `--json` agree
+    ...(created.length ? { note: i18n.msg(lng).initNote } : {}),
+    activeFeatures,
     guard: guardLevel(projectDir), // the CURRENT guard state (true | false | "scope" | "tests"), whether or not this call changed it
     stopCheck: stopCheckEnabled(projectDir), // the CURRENT end-of-turn evidence gate state (on unless meta.stopCheck is false)
     // the CURRENT project checks (meta.checks) {name: command}, whether or not this call changed them
@@ -410,8 +418,9 @@ function briefTargets(root, implementsList) {
 }
 function briefSteering(root, tracks, implementsList) {
   const dir = path.join(root, "steering");
-  const defaults = ["constitution.md", "tech.md", "structure.md"]
-    .concat(...optionalTracks().filter((t) => tracks.includes(t)).map((t) => trackSteeringFiles(t)));
+  // once each: two active tracks can share a steering file (+saas and +obs both name observability.md — 1.42 review 1)
+  const defaults = [...new Set(["constitution.md", "tech.md", "structure.md"]
+    .concat(...optionalTracks().filter((t) => tracks.includes(t)).map((t) => trackSteeringFiles(t))))];
   const names = safeReaddir(dir).filter((n) => /\.md$/i.test(n)).sort();
   const ordered = defaults.filter((n) => names.includes(n)).concat(names.filter((n) => !defaults.includes(n)));
   // the task's paths (briefTargets); a folder also matches "dir/**"

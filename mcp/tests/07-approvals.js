@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirname, handRoadmap, cliIn }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirname, handRoadmap, cliIn, planGateMismatches }) => {
 
   { // 1.14 B3 — team governance (approvals by role, roadmap.json meta.approvalRoles) and the fast-forward approval (spec_approve {through})
     const b3Root = path.join(tmp, "b3-governance");
@@ -1570,5 +1570,12 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirnam
       !!s8.approvals.requirements && s8.approvals.requirements.by === "carol" && !s8.approvalHistory.some((h) => h.revoked) && rv8b.ok && rv8b.revoked === "requirements",
       "1.24 r6: a revoke confirmed over elicitation refuses when the approval changed since its preview (another approval recorded meanwhile) — nothing revoked; with the current preview it revokes (got " +
       js([dry.approvedAt, rv8.code, rv8.error, rv8b.ok]) + ")");
+  }
+  // 1.42 (UX-02): spec_next_task's plan approval IS the pending-gates rule — on every feature this file built, in the state it left
+  // them (harness planGateMismatches: planApproved vs pendingGateList's `tasks`, approvalsInForce keeping `tasks`)
+  {
+    const prop = planGateMismatches(tmp);
+    ok(prop.checked > 0 && prop.mismatches.length === 0, "1.42 UX-02: next_task's planApproved agrees with the pending gates on every feature of 07-approvals (" +
+      prop.checked + " checked; mismatches: " + JSON.stringify(prop.mismatches) + ")");
   }
 };

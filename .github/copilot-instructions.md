@@ -27,7 +27,7 @@ When the task is non-trivial, follow the spec-driven workflow in `AGENTS.md` (re
   commands as MCP prompts (`/` in Copilot Chat).
 - Artifacts go in `.specs/<feature>/`. Keep AC IDs and task markers stable. Every task carries
   `_Requirements:_` and `_Verify: <command>_`, and `_Implements: <path>_` when it writes code (the files it creates or changes). Run `dev-spec doctor`
-  before advancing a phase.
+  before advancing a phase; fix what its next gate refuses (a later phase's fail waits).
 - Approvals are the user's: run `dev-spec approve <feature> <phase>` only after their explicit yes for that phase — it
   refuses while the phase's checks fail; `--force` only when the user explicitly accepts the failing checks (it stays
   flagged).

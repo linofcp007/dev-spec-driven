@@ -167,7 +167,7 @@ Keep task numbers unique and replace every scaffold placeholder task (the tasks 
 ## At every gate
 
 Present (1) what was produced · (2) key decisions + rationale · (3) tracks / sections affected · (4) risks to review ·
-(5) the `spec_doctor` verdict · (6) the next step — then ask for approval. Keep it tight.
+(5) the `spec_doctor` verdict and its `nextGate` · (6) the next step — then ask for approval. Keep it tight.
 
 At size m / l (or no size), offer the deep review once per feature, before the requirements approval (a design-first
 feature: the design's) — never at the classification gate, which it has no checklist for; the user's answer holds for

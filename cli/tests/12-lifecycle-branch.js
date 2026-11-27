@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, spawnIn, tmp, CLI }) => {
+exports.run = ({ ok, skip, all, spawnIn, tmp, CLI }) => {
   const js = JSON.stringify;
   // git isolated from the user's config (no global hooks, signing or default branch), the CLI with the same environment
   const cfg = path.join(tmp, "br-gitconfig");
@@ -32,7 +32,7 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI }) => {
     ok(o.code === 1 && /No git repository here — no branch was recorded \(feature\/loose would have been the feature's branch; the feature was created\)/.test(o.out) &&
       fs.existsSync(path.join(outside, ".specs", "loose", "requirements.md")) && !("branch" in st(outside, "loose")),
       "1.25 create --branch: outside a git repository the feature is created, no branch recorded, the note says it — exit 1 (asked for a branch, not on one) (got " + js([o.code, o.out.slice(-220)]) + ")");
-  } else ok(true, "1.25 create --branch: outside git — skipped: tmp sits inside a repository");
+  } else skip("1.25 create --branch: outside git", "tmp sits inside a repository");
 
   // usage: a track word after --branch is ambiguous; an invalid name — both refused before anything is written
   const amb = cli(["create", "Amb", "--branch", "tdd", "--project", outside]);
@@ -43,7 +43,7 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI }) => {
     notFor.code === 1 && /--branch/.test(notFor.out),
     "1.25 create --branch: `--branch tdd` (a track word as its value) and an invalid name are refused, nothing created; --branch is create / bugfix / spike's only (got " + js([amb.out.slice(0, 160), bad.out.slice(0, 120), notFor.out.slice(0, 120)]) + ")");
 
-  if (!hasGit) { ok(true, "1.25 create --branch: the git checks — skipped: no git"); return; }
+  if (!hasGit) { skip("1.25 create --branch: the git checks", "no git"); return; }
 
   const repo = path.join(tmp, "br-repo");
   fs.mkdirSync(repo, { recursive: true });
@@ -118,7 +118,7 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI }) => {
     ok(gm.code === 1 && /▲ git could not run here — the branch is recorded but was not created: git switch -c feature\/no-tool/.test(gm.out) &&
       st(repo, "no-tool").branch.name === "feature/no-tool" && st(repo, "no-tool").branch.base === "main" && current(repo) === "main",
       "1.25 create --branch: git not on PATH — the record is made from the repository's files (base main), nothing switched, the command printed, exit 1 (got " + js([gm.code, gm.out.slice(-200)]) + ")");
-  } else ok(true, "1.25 create --branch: git missing — skipped: git found beside node");
+  } else skip("1.25 create --branch: git missing", "git found beside node");
 
   // finish names the branch (a change: one change.md, the plan in one approval, one task) and log reads from the feature's start
   git(repo, "switch", "-q", "main");

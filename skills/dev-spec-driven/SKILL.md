@@ -90,7 +90,7 @@ With superpowers installed, this workflow replaces its feature-work skills — n
 | 6 Execute | code, each task ticked on evidence | `execution` | `references/verification.md` |
 
 Phases 3–4 only on +tdd / +ai; design-first does 2 before 1. Each phase: read `.specs/steering/` and the approved
-artifacts → fill → `spec_doctor` → present → the user's yes → `spec_approve`.
+artifacts → fill → `spec_doctor` (fix what its next gate refuses) → present → the user's yes → `spec_approve`.
 
 **Phase 0.**
 1. **Run `spec_classify`** (with `projectDir` — the project's track packs count): a draft of tracks, signals, size.
@@ -114,7 +114,7 @@ and its constraints round), present.
 against the registry `.specs/steering/design-system.md` (`ui-design-system` — `references/ui-design-patterns.md`). A critical flow — stock, a coupon, a
 balance, a booking, a payment (`critical-flows`, `critical-flow-tests`): `references/critical-flows.md`. For the Constitution Check
 `spec_doctor` only checks that the section is there; the human judges it.
-`spec_create` always scaffolds `quickstart.md` and `checklist.md` — fill both.
+`spec_create` scaffolds `quickstart.md` and `checklist.md` with a feature's `design.md` (never a bugfix's) — fill both.
 
 **Phases 3–4.** Every AC in ≥ 1 test row (`T-nn`); +ai: the eval sets with thresholds and a baseline. Phase 4 is the
 hard gate: every planned test written, red for the right reason, its T-ID in its name (`trace_check {code: true}`); no
@@ -159,7 +159,7 @@ stay inline. `references/subagent-execution.md` (also the final review, converge
 
 ## Gates and approvals
 
-`spec_doctor` before a phase advances: one `readyToAdvance` verdict over every check (a track section counts only
+`spec_doctor` before a phase advances: fix what its `nextGate` refuses (a track section counts only
 filled with your own text). At size m / l (or none), offer once per feature the deep review before the requirements
 approval (design-first: the design's; never at classification): fresh reviewers — the critic, a cold read — whose
 findings you triage, never apply unasked (`references/critic-review.md`).

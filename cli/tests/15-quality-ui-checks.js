@@ -203,6 +203,20 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     all("1.38 design-system (CLI): every language says the inventory's bound (its count and first place when it left removals unjudged, none of it else) and the rule line, and the unjudged clauses point to the project's UI checks (got " + js(said) + ")", {
       strings: () => said.every((x) => x.every(Boolean)),
     });
+    // 1.42 (B141-01): the removals a focus style excused — one line, printed with or without a finding (after "nothing in N files",
+    // or after the rule lines), and in --json the inventory's `excused`; no line where nothing was excused
+    const RESET = "*:focus {\n  outline: none;\n}\n", RING = "export const Button = () => <button className=\"rounded focus-visible:ring-2\">ok</button>;\n";
+    const exP = proj("excused", "en", { "src/styles/reset.css": RESET, "src/components/Button.tsx": RING });
+    const ex = runIn(["design-system", "--project", exP]), exJ = jsonOf(runIn(["design-system", "--project", exP, "--json"]));
+    const exImg = runIn(["design-system", "--project", proj("excused-img", "en", { "src/styles/reset.css": RESET, "src/components/Button.tsx": RING, "src/B.tsx": IMG })]);
+    const exLine = T.uiProjectExcused("outline-removed", 1, 1, "src/styles/reset.css:2");
+    all("1.42 (B141-01) design-system (CLI): the outline removals a focus style excused are counted on one line — after \"nothing\" or after the rule lines —, `excused` in --json; no line when nothing was excused (got " +
+      js([ex.out.slice(-500), exImg.out.slice(-600), exJ.uiChecks && exJ.uiChecks.excused]) + ")", {
+      line: () => ex.code === 0 && lineOf(ex.out, exLine) === lineOf(ex.out, T.uiProjectNone(2)) + 1 && lineOf(ex.out, T.uiProjectNone(2)) > 0,
+      withFinding: () => exImg.code === 0 && lineOf(exImg.out, exLine) === lineOf(exImg.out, T.uiProjectRule("img-no-alt", 1, 1, "src/B.tsx:1", "")) + 1,
+      json: () => js(exJ.uiChecks && exJ.uiChecks.excused) === js({ "outline-removed": { count: 1, files: 1, file: "src/styles/reset.css", line: 2 } }),
+      none: () => ![r.out, clean.out, cut.out].some((o) => o.includes("excused in")) && !/undefined/.test(exLine),
+    });
     // (1.39, D6: the fact's script search — a search 8 MB ended (33 scripts of 256K: 32 read) and one that read a script only in
     // part (300K) print `motion-scripts` after the fact, the bound named only when one ended it; the fact names the scripts)
     const MOTION = { "src/b/pop.css": "@keyframes pop { to { opacity: 1 } }\n" }, heavy = Object.assign({}, MOTION);

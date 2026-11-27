@@ -29,6 +29,13 @@
  * fully offline. When that build can't run (offline), the bare image is used and those tests report "skip".
  * --rebuild rebuilds the derived images (e.g. after pulling a newer base).
  *
+ * --alias-tmp (1.42): each suite runs with its TMPDIR behind a symlink — /tmp/alias-tmp → /tmp/real-tmp, made in the
+ * container —, so every test project's path is an ALIAS of its real one on a case-sensitive file system: the POSIX twin of
+ * Windows' 8.3 temp (ADMINI~1) and of macOS's /var → /private/var, which no machine here runs. The Summary marks those rows.
+ * A run of the DEFAULT images runs the last one (DEFAULT_IMAGES' newest) with it on, the others without (1.42, once the leg's
+ * first run — on node:22-bookworm-slim — came back clean on the integrated branch); --alias-tmp turns it on for every image; an
+ * --image list is plain unless --alias-tmp is given.
+ *
  * Exit code: 0 every suite passed on every image · 1 a suite failed (or an image could not be prepared) ·
  * 2 Docker is not available (not installed, daemon not running, or in Windows-containers mode) — or a usage error.
  * Full logs: <os.tmpdir()>/dev-spec-docker/<image>-<suite>.log (the path is printed for a failing suite).
@@ -47,7 +54,7 @@ const SUITES = { mcp: "mcp/test.js", cli: "cli/test-cli.js" };
 const SUITE_TIMEOUT_MS = 20 * 60 * 1000;
 const LOG_DIR = path.join(os.tmpdir(), "dev-spec-docker");
 
-const USAGE = `usage: node scripts/test-docker.js [--image <name>]... [--suite mcp|cli] [--jobs <n>] [--no-git] [--rebuild] [--root] [--mounted]
+const USAGE = `usage: node scripts/test-docker.js [--image <name>]... [--suite mcp|cli] [--jobs <n>] [--no-git] [--rebuild] [--root] [--mounted] [--alias-tmp]
 
 Runs mcp/test.js and cli/test-cli.js inside Linux containers (repo mounted read-only and copied into the container,
 --network none).
@@ -58,11 +65,13 @@ Runs mcp/test.js and cli/test-cli.js inside Linux containers (repo mounted read-
   --rebuild       rebuild the cached derived images (dev-spec-test:<image>)
   --root          run the suites as root (default: an unprivileged user, uid 1000)
   --mounted       run straight from the read-only bind mount (a slow file system) instead of a copy
+  --alias-tmp     run each suite with TMPDIR behind a symlink (/tmp/alias-tmp → /tmp/real-tmp): every test project's
+                  path an alias of its real one, as macOS's /var → /private/var (default: on for the last default image only)
 The first run needs network to pull the images (and apk/apt to add git); later runs are offline.
 Exit: 0 all passed · 1 a suite failed · 2 Docker is not available (or a usage error).`;
 
 function parseArgs(argv) {
-  const o = { images: [], suites: Object.keys(SUITES), jobs: 0, git: true, rebuild: false, root: false, mounted: false };
+  const o = { images: [], suites: Object.keys(SUITES), jobs: 0, git: true, rebuild: false, root: false, mounted: false, aliasTmp: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -84,11 +93,15 @@ function parseArgs(argv) {
     else if (a === "--rebuild") o.rebuild = true;
     else if (a === "--root") o.root = true;
     else if (a === "--mounted") o.mounted = true;
+    else if (a === "--alias-tmp") o.aliasTmp = true;
     else usageError(`unknown argument '${a}'`);
   }
-  if (!o.images.length) o.images = DEFAULT_IMAGES.slice();
+  o.defaultImages = !o.images.length;
+  if (o.defaultImages) o.images = DEFAULT_IMAGES.slice();
   return o;
 }
+// Does `image` run with the alias temp? --alias-tmp: every image; a run of the default images: the newest of them too.
+const aliasFor = (image, o) => !!o.aliasTmp || (!!o.defaultImages && image === DEFAULT_IMAGES[DEFAULT_IMAGES.length - 1]);
 function usageError(msg) {
   console.error(`test-docker: ${msg}\n\n${USAGE}`);
   process.exit(2);
@@ -149,6 +162,24 @@ function prepare(image, o) {
   return { ref: tag, note: "" };
 }
 
+// The container's command for one suite. Default: copy the repo (without .git) into the container's own file system and run from
+// there — where an installed plugin lives. --mounted: straight from the read-only bind mount. --alias-tmp (1.42): first the alias
+// (/tmp/alias-tmp → /tmp/real-tmp) and TMPDIR naming it — the suite's runner takes it as the chains' temp base (neutralTmpBase).
+const ALIAS_TMP = "mkdir -p /tmp/real-tmp && ln -sfn /tmp/real-tmp /tmp/alias-tmp && export TMPDIR=/tmp/alias-tmp && ";
+function suiteCommand(suite, o) {
+  const jobs = o.jobs ? ["--jobs", String(o.jobs)] : []; // the suite's own --jobs (a shared machine)
+  const run = [SUITES[suite], ...jobs].join(" ");
+  const alias = o.aliasTmp ? ALIAS_TMP : "";
+  if (o.mounted) return alias ? ["sh", "-c", `${alias}exec node ${run}`] : ["node", SUITES[suite], ...jobs];
+  return ["sh", "-c", `${alias}mkdir -p /tmp/dev-spec && cd /repo && tar --exclude=./.git -cf - . | tar -C /tmp/dev-spec -xf - && cd /tmp/dev-spec && exec node ${run}`];
+}
+// What main() runs, one entry per image: whether its suites run with the alias temp (aliasFor) and each suite's container command —
+// the one place a suite's command is built (mcp/tests/16-conventions.js reads it offline).
+const rowsPlan = (o) => o.images.map((image) => {
+  const alias = aliasFor(image, o);
+  return { image, alias, commands: o.suites.map((suite) => ({ suite, args: suiteCommand(suite, { ...o, aliasTmp: alias }) })) };
+});
+
 let runs = 0;
 function runInImage(ref, args, o) {
   const user = o.root ? [] : ["--user", "1000:1000", "-e", "HOME=/tmp"];
@@ -170,10 +201,11 @@ function main() {
   }
   fs.mkdirSync(LOG_DIR, { recursive: true });
   console.log(`dev-spec-driven — test suites in Linux containers (Docker ${d.version}, linux/${d.arch})`);
-  console.log(`repo ${ROOT} → /repo (read-only)${o.mounted ? ", run from the mount" : ", copied into the container"} · --network none · ${o.root ? "as root" : "as uid 1000"} · suites: ${o.suites.join(", ")}\n`);
+  console.log(`repo ${ROOT} → /repo (read-only)${o.mounted ? ", run from the mount" : ", copied into the container"} · --network none · ${o.root ? "as root" : "as uid 1000"} · suites: ${o.suites.join(", ")}` +
+    `${o.aliasTmp ? " · TMPDIR /tmp/alias-tmp → /tmp/real-tmp (alias tmp)" : o.defaultImages ? ` · alias tmp on ${DEFAULT_IMAGES[DEFAULT_IMAGES.length - 1]}` : ""}\n`);
 
   const rows = [];
-  for (const image of o.images) {
+  for (const { image, alias, commands } of rowsPlan(o)) {
     console.log(`▸ ${image}`);
     const p = prepare(image, o);
     if (p.error) {
@@ -184,15 +216,10 @@ function main() {
     const probe = runInImage(p.ref, ["sh", "-c", "node --version; git --version 2>/dev/null || echo 'no git'"], o);
     const [nodeV, gitV] = String(probe.stdout || "").trim().split(/\r?\n/);
     console.log(`  ${p.ref} · node ${nodeV || "?"} · ${gitV || "?"}${p.note ? " · " + p.note : ""}`);
-    const row = { image, ref: p.ref, node: nodeV || "?", results: [] };
-    for (const suite of o.suites) {
+    const row = { image, ref: p.ref, node: nodeV || "?", alias, results: [] };
+    for (const { suite, args } of commands) {
       const t0 = Date.now();
-      // Default: copy the repo (without .git) into the container's own file system and run from there — where an installed
-      // plugin lives. --mounted: straight from the read-only bind mount.
-      const jobs = o.jobs ? ["--jobs", String(o.jobs)] : []; // the suite's own --jobs (a shared machine)
-      const cmd = o.mounted ? ["node", SUITES[suite], ...jobs]
-        : ["sh", "-c", `mkdir -p /tmp/dev-spec && cd /repo && tar --exclude=./.git -cf - . | tar -C /tmp/dev-spec -xf - && cd /tmp/dev-spec && exec node ${[SUITES[suite], ...jobs].join(" ")}`];
-      const r = runInImage(p.ref, cmd, o);
+      const r = runInImage(p.ref, args, o);
       const ms = Date.now() - t0;
       const out = (r.stdout || "") + (r.stderr || "");
       const log = path.join(LOG_DIR, `${derivedTag(image).split(":")[1]}-${suite}.log`);
@@ -222,10 +249,12 @@ function main() {
     if (row.error) { bad++; console.log(`  ✗ ${row.image.padEnd(24)} ${row.error}`); continue; }
     const cells = row.results.map((r) => `${r.suite} ${r.ok ? "✓" : "✗"} ${r.passed == null ? "?" : r.passed}/${r.passed == null ? "?" : r.passed + r.failed}`);
     if (row.results.some((r) => !r.ok)) bad++;
-    console.log(`  ${row.results.every((r) => r.ok) ? "✓" : "✗"} ${row.image.padEnd(24)} node ${row.node.padEnd(9)} ${cells.join("   ")}`);
+    console.log(`  ${row.results.every((r) => r.ok) ? "✓" : "✗"} ${row.image.padEnd(24)} node ${row.node.padEnd(9)} ${cells.join("   ")}${row.alias ? "   (alias tmp)" : ""}`);
   }
   console.log(bad ? `\n${bad} of ${rows.length} image(s) failed.` : `\nAll suites passed on ${rows.length} image(s).`);
   process.exitCode = bad ? 1 : 0;
 }
 
-main();
+// (required — mcp/tests/16-conventions.js reads the arguments and the container's command offline — it runs nothing)
+if (require.main === module) main();
+else module.exports = { parseArgs, suiteCommand, aliasFor, rowsPlan, DEFAULT_IMAGES, ALIAS_TMP };

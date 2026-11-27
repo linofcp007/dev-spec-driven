@@ -37,7 +37,9 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const T = require(path.join(__dirname, "lib", "engine", "index.js")).loadLazyTier();
   const pair = exports.pair, { project } = exports.trees({ S, tmp }, "proj-cost-");
-  const registry = (tokens, more) => "# Design System\n\n| Token | Value | Use |\n|---|---|---|\n" + tokens.map(([n, v]) => "| " + n + " | " + v + " | x |").join("\n") + "\n" + (more || "");
+  // one interleaved pair (5 calls a side) under its own remeasure — every ratio of this file (1.42 perf-11: K2's too)
+  const within = (a, b, bound) => remeasure(() => pair(a, b), (x) => x.ratio <= bound);
+  const registry =(tokens, more) => "# Design System\n\n| Token | Value | Use |\n|---|---|---|\n" + tokens.map(([n, v]) => "| " + n + " | " + v + " | x |").join("\n") + "\n" + (more || "");
   const table = (head, rows) => "| " + head.join(" | ") + " |\n|" + head.map(() => "---").join("|") + "|\n" + rows.map((r) => "| " + r.join(" | ") + " |").join("\n") + "\n";
   const REG = (more) => "# Design System\n\n| Token | Value | Use |\n|---|---|---|\n| --space-4 | 16px | gaps |\n\n" + more;
   // a project with one +ui feature whose tasks name src/checkout/
@@ -72,8 +74,7 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
     const [cReg, cFile] = tokens((i, b) => "#" + (b + i * 7).toString(16)), [sReg, sFile] = tokens((i) => i + 1 + "px");
     const withTokens = feature(cReg, Object.assign(cFile, files)), none = feature(sReg, Object.assign(sFile, files));
     report(withTokens); report(none);
-    const within = (a, b, bound) => remeasure(() => pair(a, b), (x) => x.ratio <= bound);
-    const s = { kinds: within(() => T.rawValuesIn(empty, KINDS), () => T.rawValuesIn(empty), 1.5),
+    const s ={ kinds: within(() => T.rawValuesIn(empty, KINDS), () => T.rawValuesIn(empty), 1.5),
       hostile: { fonts: within(() => T.rawValuesIn(H.fonts, KINDS), () => T.rawValuesIn(plain, KINDS), 3), times: within(() => T.rawValuesIn(H.times, KINDS), () => T.rawValuesIn(plain, KINDS), 3),
         ease: within(() => T.rawValuesIn(H.ease, KINDS), () => T.rawValuesIn(plainMarkup, KINDS), 3) },
       tokens: within(() => report(withTokens), () => report(none), 1.5) };
@@ -103,13 +104,17 @@ exports.run = async ({ all, remeasure, S, tmp, require, __dirname }) => {
     };
     const R = { real: mk(TABLE, sheet), realNo: mk(REG(""), sheet), worst: mk(TABLE, worst), worstNo: mk(REG(""), worst) };
     Object.values(R).forEach((f) => f());
-    const time = (f) => { const ts = []; for (let i = 0; i < 5; i++) { const t0 = process.hrtime.bigint(); f(); ts.push(Number(process.hrtime.bigint() - t0) / 1e6); } ts.sort((a, b) => a - b); return ts[2]; };
-    const r2 = (x) => Math.round(x * 100) / 100;
-    const s = remeasure(() => ({ real: r2(time(R.real) / time(R.realNo)), worst: r2(time(R.worst) / time(R.worstNo)) }), (x) => x.real <= 1.5 && x.worst <= 3);
+    // (1.42 perf-11: two interleaved pairs, each under its own remeasure — the method's rules 3 and 4. It was one remeasure over
+    // two BLOCKED medians, and its real ratio crossed 1.5 once in 6 samples, 2.20, on a loaded machine; interleaved, 0 of 6, max
+    // 1.19 — sides 546–700 ms and 250–351 ms, ≥ 100 ms each. What K2 guards: the reader gone quadratic in a file's lines (each
+    // declaration re-reading them: 52× / 11×). What it does not — three mutants with no measurable cost at these sizes, 4 rows and
+    // values under 40 characters: the finding's text built for every finding, offUnit's parts joined inside its loop, unitRows'
+    // memo dropped)
+    const s = { real: within(R.real, R.realNo, 1.5), worst: within(R.worst, R.worstNo, 3) };
     const counts = [R.real().units.total, R.worst().units.total];
-    all("1.38 units: the units table's reader costs at most 1.5× the same report without a table on component stylesheets as written, and 3× when every declaration is a finding (got " + js(s) + ", findings " + js(counts) + ")", {
-      real: () => s.real <= 1.5 && counts[0] === 60 * 30,
-      worst: () => s.worst <= 3 && counts[1] === 60 * 300 * 3,
+    all("1.38 units: the units table's reader costs at most 1.5× the same report without a table on component stylesheets as written, and 3× when every declaration is a finding (got " + js({ s, tries: { real: s.real.tries, worst: s.worst.tries } }) + ", findings " + js(counts) + ")", {
+      real: () => s.real.ratio <= 1.5 && counts[0] === 60 * 30,
+      worst: () => s.worst.ratio <= 3 && counts[1] === 60 * 300 * 3,
     });
   }
 };

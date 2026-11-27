@@ -7,29 +7,28 @@
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
-const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, enumArg, existsCached, extractAcIds,
-  extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements, isInsideDir, writeInsideProject, isObj,
+  extractSection, extractTestIds, gateRefusal, headingHasMarker, inactiveMarkerLines, insertPackRequirements, isObj,
   isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock, packCorpusSets, packOf,
   packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText, langOption, PROTO_KEYS,
   RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY, RE_TODO_SENTINEL, RE_WIN_RESERVED,
   readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN, SILENT_SYN, ROOT_CAUSE_SYN, slugify,
-  specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription, taskMarkerValues,
+  specsDirOf, specsRoot, specsStat, statePath, steeringFrontMatter, stripHtmlComments, taskDescription, taskMarkerValues,
   tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel, trackMarker,
   trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection, writeIfAbsent;
 let today; // core.js — the local calendar date (today / dayOf)
 let taskBlocks, headingEntries; // a track block's lead section before the template's first task section (1.36, +port)
 function __link(E) { ({ taskBlocks, headingEntries, today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, enumArg, existsCached,
   extractAcIds, extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements,
-  isInsideDir, writeInsideProject, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
+  gateRefusal, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
   langOption, PROTO_KEYS, RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY,
   RE_TODO_SENTINEL, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN,
-  SILENT_SYN, ROOT_CAUSE_SYN, slugify, specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription,
+  SILENT_SYN, ROOT_CAUSE_SYN, slugify, specsDirOf, specsRoot, specsStat, statePath, steeringFrontMatter, stripHtmlComments, taskDescription,
   taskMarkerValues, tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel,
   trackMarker, trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection,
   writeIfAbsent } = E); }
@@ -106,13 +105,13 @@ function templateKey(input) {
 const templateKeyList = () => Object.keys(TEMPLATE_ARTIFACTS).join(", ");
 
 // One template file's text — BOM stripped, LF line ends; raw: also a whitespace-only one ("" — check reports it). null when
-// absent, not a regular file, or its real path is outside the project (a link, or a linked .specs/ / templates/ folder).
+// absent or not a regular file. The read gate is the containment (1.42 R4): nothing below .specs/ is read through a link — a linked
+// templates/, <lang>/ or steering/ folder or a linked file reads absent —, while .specs/ itself may be a link, as for every other
+// spec file (a project keeping its specs elsewhere). (projectDir: no longer compared — kept for the callers.)
 function readTemplateFile(abs, projectDir, raw) {
-  if (!existsCached(abs)) return null;
-  try {
-    const real = fs.realpathSync.native(abs);
-    if (!isInsideDir(fs.realpathSync.native(projectDir), real) || !fs.statSync(real).isFile()) return null;
-  } catch { return null; }
+  if (!existsCached(abs)) return null; // the read gate: a link on the way below .specs/ reads absent
+  const st = specsStat(abs); // through the gate too
+  if (!st || !st.isFile()) return null;
   const text = readIfExists(abs);
   if (text == null) return null;
   const clean = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
@@ -502,27 +501,30 @@ function initTemplates(projectDir, key, lang, lng) {
   const tdir = path.join(specsRoot(projectDir), TEMPLATES_DIR);
   const sub = lang ? [lang] : [];
   const created = [], kept = [];
-  // Writes stay inside the project: a .specs/ or templates/ folder (or a <lang>/ / steering/ one) that is a link to a folder
-  // elsewhere is refused — the nearest existing folder above each target must really be inside the project (writeInsideProject).
+  // The write gate is the containment (1.42 R4), as for every spec file: a templates/, <lang>/ or steering/ folder below .specs/
+  // that is a link is refused — the gate's own localized answer (gateRefusal: linked / wrongKind, path) —, while .specs/ itself may
+  // be a link (a project keeping its specs elsewhere: its starters land there, like its features).
   for (const k of key ? [key] : allTemplateKeys()) {
     const text = builtInTemplate(k, lng);
     if (text == null) continue;
     const parts = [...sub, ...templateRel(k).split("/")];
     const rel = ".specs/" + TEMPLATES_DIR + "/" + parts.join("/");
     const abs = path.join(tdir, ...parts);
-    if (!writeInsideProject(projectDir, abs)) return { ok: false, error: T.writeOutside(rel), created, kept };
     try {
       if (writeIfAbsent(abs, text)) created.push(rel);
       else kept.push(rel);
     } catch (e) {
+      const g = gateRefusal(e, lng);
+      if (g) return Object.assign(g, { created, kept });
       return { ok: false, error: T.writeFailed(rel, e.code || e.message), created, kept };
     }
   }
   return { ok: true, action: "init", dir: tdir, lang: lng, created, kept };
 }
 
-// two template texts the same but for a BOM, line endings and the blank lines at the end (an editor's re-save of a copy)
-const sameText = (a, b) => a != null && b != null && [a, b].map((t) => { const x = String(t).replace(/\r\n/g, "\n").replace(/\s+$/, ""); return x.charCodeAt(0) === 0xfeff ? x.slice(1) : x; }).reduce((x, y) => x === y);
+// two template texts the same but for a BOM, line endings and the blank lines at the end (an editor's re-save of a copy) —
+// trimEnd(), linear (1.42): /\s+$/ (the same characters) rescanned a long blank run inside the text from each of its starts, quadratic
+const sameText = (a, b) => a != null && b != null && [a, b].map((t) => { const x = String(t).replace(/\r\n/g, "\n").trimEnd(); return x.charCodeAt(0) === 0xfeff ? x.slice(1) : x; }).reduce((x, y) => x === y);
 // The checks of one template text (raw: with its variables; the checks read it rendered with sample values).
 function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
   const P = i18n.msg(lng).templates.problems;

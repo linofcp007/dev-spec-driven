@@ -42,7 +42,8 @@ review findings — is in History at the end.
   the design gate refuses on them), but not while design.md is still a later phase's template (`c.laterFiles`).
 - **Approve gate.** `approvePhase()` refuses (`refused`, `failing`, `checks`) while a check fails; `force:true` (`--force`)
   records it `forced: true` + the failing ids (doctor's `approval-gates` and the roadmap flag it; a clean re-approval
-  replaces it). Before the gate: an invalid `.state.json` or unreadable `roadmap.json` refuses; a spike approves only
+  replaces it). The refusal (`gates.approveRefused`) names `/spec-doctor` and the CLI's doctor line, and force only under a
+  condition: when the user explicitly accepts these failing checks (1.42, UX-04 — never as an equal option). Before the gate: an invalid `.state.json` or unreadable `roadmap.json` refuses; a spike approves only
   `execution`, a change only `tasks` / `execution` (`sizes.noGate`).
 - **Approval stamps — which later rules an approval is held to.** `approvePhase()` stamps every design approval `weigh`,
   `reuse`, `reuseGate`, `designSystem` (1.35) and `silent` (1.41), and every design AND test-plan approval `critical` (1.33), on
@@ -100,6 +101,31 @@ review findings — is in History at the end.
   and earlier phases, warns for later ones (`ears_validate`: code `placeholder`; the requirements.md hook never says "all
   clean" while one remains). `traceability` splits alike: gaps that read a LATER phase's template (`TRACE_TASK_KINDS` /
   `TRACE_PLAN_KINDS`) warn "not traced yet"; only `TRACE_VERDICT_KINDS` fail (testsNotMappedToTasks listed, never failing).
+- **What an approval waits on: `nextGate`, never `readyToAdvance`** (1.42). `readyToAdvance` is no fail anywhere — every check,
+  a later phase's included (a +sec feature's design sections fail at classification). `nextGate` {phase, ready, failing,
+  missingRoles} is `approvalChecks` of the FIRST pending gate — the approval's own checks, a forecast: the approve call adds
+  `phase-order` (an earlier phase changed since its approval, `changedApprovedPhases`, kept apart from `pending`) and the role
+  sign-offs. `unreadable` (stable) when its file is there but can't be read (approvalChecks' own flag: a folder of that name, no
+  permission, a lock — pendingGateList lists a phase whose entry exists). The CLI headline prints it (`cliOutput.doctorNextGate`:
+  checks pass · fails (its ids) · its file can't be read, as approve says · nothing to approve yet); spec_doctor's description
+  says "what the next gate's checks refuse", never what the approval would refuse.
+  A sentence that sends an agent to doctor before an approval or a phase advance is to say "fix what its next gate refuses"
+  — one that asks for several approvals at once (`spec_approve {through}`: /spec-tour, /spec-bugfix step 4, bugfix.md's
+  gate), "fix what each gate up to <the last one asked> refuses": `nextGate` is only the first pending gate, and the
+  fast-forward stops at the first refusal after the user's yes —, and none may promise an approval on it. The guard
+  (mcp/tests/17-docs-shipped-texts.js) holds only FOUR shapes to the next gate (`nextGate` or "next gate" in the same
+  sentence), read in every shipped .md / .mdc (the rule files of other tools included), each cut into sentences — a
+  paragraph, a list item or a table cell, split at ". " / "; "; a fenced line is read like any other: "run / use / call …
+  doctor … before advancing / a phase advances / approving / an, each, the next, its approval"; "each / every phase
+  boundary … run / use / call … doctor"; doctor followed directly by "first" or "before <one of those moments>" (only an
+  inline `{…}` argument and a comma between); "doctor … then the user's approval" / "then ask (the user) for (its / their)
+  approval". Another wording is not read: a pipeline ("→ `spec_doctor` →"), "`spec_doctor`, and — on the user's yes —
+  approve", "doctor, then re-approve", words between doctor and "first", another language, a .js string. The seven such
+  sentences review 2 found (/clarify, /spec-change, /spec-tour, /spec-bugfix step 4, bugfix.md's gate, AGENTS.md's
+  pipeline, SKILL.md's phase line), plus change-management.md's loop (a code block's line, unread for its wording), carry the
+  clause by hand, pinned one by one in the same file — a new sentence of another wording is not caught.
+  `changedApprovedPhases` stays out of `nextGate`: next_action's
+  re-review step and the fast-forward read it, and approvePhase adds `phase-order` itself.
 - **`next_action` — the step order, phase by phase** (doctor shows the same gate as `nextGate`). One ordered registry, as the
   checks are (1.30): `NEXT_STEPS` (engine/doctor.js) — `{id, when(x), run(x)}`, the first whose `when` holds answers, `run`
   setting `x.step`, `x.recommendation` and the result's extras; after the last task `FINISH_STEPS` the same way (`when(x, f)`).
@@ -569,6 +595,40 @@ here. "r5 review" is 1.23's fifth review.
   Silent Regressions). Finish gained three warnings and no blocker — W (dev-guardian's own findings below the gate, which
   1.40 only counted in "(N new below it)"), the METRIC warning and the lessons' —, in the order the finish batch asks them
   (CRIT_X D8.3: dev-guardian, W, metrics, lessons); the merge pinned it against the prose (12-lifecycle-lessons).
+- **1.42 —** UX-04: the refused approval read "Fix them (details: /spec-doctor …), or pass force: true … to record the approval
+  anyway" — force as an equal option, with no consent condition. It now names the CLI's doctor line too and gives force only
+  "when the user explicitly accepts these failing checks" (en / pt / es; pt-BR derived). Text only: every refusal's `code` /
+  `failing` / check lines are unchanged (06-gates-approve-refusals). Cut from the same chain (CRITIQUE-GATES): UX-02 B (a
+  template-task refusal — two downstream gates already stop a slot task, and its lowercased input disagreed with the
+  placeholder gate's lookup), UX-02 C (a stamp of the ticks no approval covered — 2 of 2 real stamps were the documented investigation ticks), SK-P1
+  (an open-checklist finish warning: 0 yield on 23 real checklists) and SK-P2's engine (0 within-feature pairs on 24 real
+  features — spec-critic's "contradict or repeat" instead).
+- **1.42 (UX-01)** — six texts (SKILL.md, AGENTS.md, the Cursor rule, /spec-doctor, /approve, phase-guide.md) and spec_doctor's
+  description made `readyToAdvance` the decision key, holding a classification or requirements approval for a later phase's
+  fail. They point at `nextGate` now; the designed "ready to approve" headline and "approve on `nextGate`" were reworded after a
+  probe showed `nextGate.ready` beside a `phase-order` refusal (the demo, its tasks approval revoked, an approved criterion
+  edited). No key changed; the gates are the same `approvalChecks`.
+- **1.42 review 1 (R1-SURF-01, -03, -09)** — the guard that the texts sending an agent to doctor name the next gate read a list
+  of seven files; GEMINI.md and the Copilot rule (`rules gemini` / `rules copilot` print them) still said "Run `dev-spec
+  doctor` before advancing" and a CLI agent there held on a later phase's fail. Both got the Cursor rule's clause, and the guard
+  reads every shipped sentence of that shape — which found /spec's phases line ("`spec_doctor`, then the user's approval") too.
+  A next-gate file that is there but unreadable printed "nothing to approve yet" (pendingGateList lists a phase whose entry
+  exists, so that form was reached only so): `nextGate.unreadable`, said as approve says it. spec_doctor's description said
+  "what the next approval would refuse" — nextGate is the next gate's own checks (phase order and roles are the approval's).
+- **1.42 review 2 (R2-TASKS-01)** — "every shipped sentence of that shape" was four wording shapes, while the doc and the
+  row's label claimed every sentence sending an agent to doctor before an approval: /clarify ("`spec_doctor`, and — on the
+  user's explicit yes — record the requirements approval"), /spec-change, /spec-tour, /spec-bugfix step 4 (four MCP prompts
+  a skill-less client gets), bugfix.md's gate, AGENTS.md's and SKILL.md's phase pipelines and change-management.md's loop
+  named no next gate. Each got the clause by hand and is pinned one by one; the claim and the label now say the four shapes
+  (widening the reader was the other option — a new mechanism for a prose finding).
+- **1.42 review 3 (R3-TASKS-01, -02)** — the clause was wrong where several approvals are asked at once: /spec-tour,
+  /spec-bugfix step 4 and bugfix.md's gate present for `spec_approve {through: "tasks"}`, while `nextGate` is only the FIRST
+  pending gate — requirements passed, the next gate read ready, bug.md's placeholders still failed the design gate, and the
+  fast-forward stopped at design after the user's yes. Those three say "fix what each gate up to tasks refuses" (the rule
+  above names the form). The narrowed claim described the shapes loosely: a fenced line IS read (change-management.md's loop is
+  unread for its wording, not for its code block), the first / before shape takes doctor directly followed by the word, the
+  boundary shape needs run / use / call, the "then" shape also reads "then ask for approval", and review 2 found seven
+  sentences, not eight — the eighth was the fixer's. The doc and the row's label say the shapes as the reader reads them.
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12
@@ -728,3 +788,22 @@ here. "r5 review" is 1.23's fifth review.
   since the requirements approval could empty Reproduction: the design gate checks both. **1.24 r6 B9** — the CLI names a
   spike's `--question` / `--timebox` on another kind (`spike.spikeOnlyCli`) and a change's create lines
   (`sizes.changeCreatedCli`).
+- **1.42 (S13) + review 1 (R1-TASKS-05)** — the root-cause instrumentation is tagged `DEBUG-<slug>` and gone before the fix's run.
+  The first removal check, `git grep -n DEBUG-<slug>`, read tracked files only (a probe file made while tracing was missed) and
+  matched a longer slug's tags (`DEBUG-login` found another bugfix's `DEBUG-login-crash`); `-w` does not help — git's word
+  boundary treats the hyphen as one. It is `git grep -n --untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)'` now, and
+  /spec-bugfix's root-cause step (the MCP prompt too) tells the agent to tag. Prose only (17-docs pins both texts).
+- **1.42 review 2 (R2-TASKS-02)** — `--untracked` also read the feature's own bug.md while it was uncommitted (`.specs/` is
+  not git-ignored by default), and its Root Cause quotes the tagged output as the evidence the design approval signed off:
+  "prints nothing" asked the agent to delete approved evidence (changed-since-approval, a finish blocker). The search leaves
+  every `.specs/` folder out by pathspec, `-- ':(exclude,glob)**/.specs/**'`. The ruled `:(top,exclude).specs` was measured
+  and not taken: it is anchored at the git root, so in a monorepo subproject (`app/.specs/`, run from `app/`) it still
+  printed bug.md; the glob form leaves out a `.specs/` at any depth, from either folder (Git Bash, PowerShell 5.1 and 7 alike).
+  17-docs RUNS the Checkpoint's command as written on both layouts. Known limit (older): `git grep` searches below the folder
+  it runs in — from a subfolder of the project it misses the rest.
+- **1.42 review 3 (R3-TASKS-03..05)** — the namesake of the new exclude: the glob leaves out EVERY folder named `.specs`, a
+  code folder of that name too (`src/.specs/helper.js` is not searched; `src/.specs.js` and `src/x.specs/` still are) — both
+  bugfix texts say so (prose; no new pathspec). /spec-bugfix step 6's code span broke right after `--`, so a line-by-line copy
+  of the MCP prompt ran a complete command, the one without the pathspec: the command is on one line now (pinned). The run
+  row read the developer's global git config (`grep.fullName`, `color.ui = always` changed the listed names): it isolates it
+  as 09-evidence-guardian.js's git rows do — an empty `GIT_CONFIG_GLOBAL`, `HOME` and `XDG_CONFIG_HOME` in tmp.

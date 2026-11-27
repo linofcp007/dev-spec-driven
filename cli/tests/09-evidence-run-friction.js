@@ -29,7 +29,15 @@ exports.run = async ({ all, runIn, runAsync, spawnAsync, tmp, require, __dirname
     fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + task(1, "Code A", ["_Implements: src/a.js_", "_Verify: node quick.js_"]) +
       task(2, "Code B", ["_Implements: src/b.js_", "_Verify: node sleep.js 1500_"]) + task(3, "Docs", ["_Verify: " + PASS + "_"]));
     const done = async (n) => runAsync(["done", f.slug, String(n), "--run", "--project", p]);
+    // (1.42 perf-14: the in-process call on the records' own clock — runAsync runs the CLI in this process, so `ms` and wall1 are
+    // the same monotonic clock: a record never exceeds the call holding it, and the pre-run and the _Verify:_ run one after the
+    // other inside it, so their two times fit in it — containment, never a race. It was `ms < 7500` and `verify < preRun`: both
+    // compared two runs' own durations, and the pre-push's parallel run failed them. What it hides: a _Verify:_ timed from the
+    // pre-run's start escapes only while the call spends more than the pre-run's ms (≥ 1.5 s) outside the two runs — the CLI's
+    // own engine work, 19 ms in the pre-push log)
+    const w0 = process.hrtime.bigint();
     const d1 = await done(1);
+    const wall1 = Number((process.hrtime.bigint() - w0) / 1000000n);
     const t1 = timings(p);
     const d2 = await done(2);
     const t2 = timings(p);
@@ -43,10 +51,10 @@ exports.run = async ({ all, runIn, runAsync, spawnAsync, tmp, require, __dirname
     const ev = JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
     const keys = (o) => Object.keys(o || {}).sort();
     all("1.41 friction: done --run times the fast check's pre-run (≥ 1.5 s) and, apart, a _Verify:_ that is another check (shorter: never with the pre-run); a _Verify:_ that IS the fast command once; one that is no check never; finish --run one line per check; no `took` line; the records carry no ms; metrics judges the fast check over its 1 s budget (got " +
-      js({ t1, t2: t2.slice(t1.length), t3: t3.length, t4: t4.slice(t3.length), out: [d1.out, d2.out, fin.out.slice(0, 200)], friction: mj && mj.friction }) + ")", {
+      js({ t1, wall1, t2: t2.slice(t1.length), t3: t3.length, t4: t4.slice(t3.length), out: [d1.out, d2.out, fin.out.slice(0, 200)], friction: mj && mj.friction }) + ")", {
       ran: () => [d1, d2, d3].every((r) => r.code === 0) && fin.out.includes("Recorded 2 project check run(s)"), // (finish: not ready — exit 1; its checks recorded)
-      preRun: () => t1.length === 2 && t1[0].check === "fast" && t1[0].by === "cli" && t1[0].ms >= 1500 && t1[0].ms < 7500,
-      verify: () => t1[1].check === "quick" && t1[1].exitCode === 0 && t1[1].ms < t1[0].ms, // (with the pre-run in it: ≥ 1.5 s more)
+      preRun: () => t1.length === 2 && t1[0].check === "fast" && t1[0].by === "cli" && t1[0].ms >= 1500 && t1[0].ms <= wall1,
+      verify: () => t1[1].check === "quick" && t1[1].exitCode === 0 && t1[0].ms + t1[1].ms <= wall1, // (with the pre-run in it: twice the pre-run)
       once: () => t2.length === 3 && t2[2].check === "fast" && t2[2].ms >= 1500,
       noCheck: () => t3.length === 3,
       finish: () => js(t4.slice(3).map((l) => [l.check, l.by])) === js([["fast", "cli"], ["quick", "cli"]]),
@@ -96,6 +104,25 @@ exports.run = async ({ all, runIn, runAsync, spawnAsync, tmp, require, __dirname
       js({ wall, t, out: (fin.stdout || "").slice(0, 200) }) + ")", {
       held: () => /kept its output open/.test((fin.stdout || "") + (fin.stderr || "")),
       exit: () => t.length === 1 && t[0].check === "serve" && t[0].ms + RUN.RUN_DRAIN_MS * 0.75 <= wall,
+    });
+  }
+
+  { // 1.42 (S9): the plugin subagents' cost on the CLI — `metrics` (the project) prints the head and one line per role after the friction
+    // line, --json carries `agents` (spec_metrics'); none of it without a record (a project with a feature: the per-feature table above it)
+    const p = path.join(tmp, "fr-agents");
+    SD.initProject(p, ["core"], "en", { checks: { test: PASS } });
+    SD.createFeature(p, { name: "Billing", tracks: ["core"] });
+    const tok = { in: 1520, out: 18340, cacheRead: 812400, cacheWrite: 64210 };
+    SD.recordAgentRun(p, { agent: "dev-spec-driven:spec-reviewer", id: "agent-c1", model: "claude-opus-4-5", turns: 31, tools: 24, tokens: tok, truncated: false });
+    const bare = path.join(tmp, "fr-agents-none");
+    SD.initProject(bare, ["core"], "en");
+    const mh = runIn(["metrics", "--project", p]), mj = jsonOf(runIn(["metrics", "--json", "--project", p])), mn = runIn(["metrics", "--project", bare]);
+    const MM = SD.msg("en").metrics, head = MM.agentsHead(1), role = MM.agentsRole("spec-reviewer", 1, 31, 1520, 18340, 812400, 0);
+    const at = (s) => mh.out.split("\n").indexOf(s);
+    all("1.42 (S9) metrics (CLI): the subagents' head and its role line, --json `agents`; nothing without a record (got " + js([mh.out.slice(-400), mj && mj.agents, mn.out.slice(-200)]) + ")", {
+      lines: () => mh.code === 0 && at(head) > 0 && at(role) === at(head) + 1,
+      json: () => mj && mj.agents && mj.agents.dispatches === 1 && js(mj.agents.roles["spec-reviewer"].tokens) === js(tok),
+      none: () => mn.code === 0 && !mn.out.includes(head.split("(")[0].trim()),
     });
   }
 };

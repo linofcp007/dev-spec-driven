@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) => {
+exports.run = async ({ ok, skip, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) => {
   const T = require(path.join(__dirname, "commands.js"));
   const MAIN = require(path.join(__dirname, "main.js"));
   const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -118,7 +118,7 @@ exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) 
   // outside a work tree: ok false (exit status, no error), gitState {}, branchFacts {repo: false}.
   {
     const G = require(path.join(__dirname, "git.js"));
-    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.27 git.js in a repository — skipped: no git");
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.27 git.js in a repository", "no git");
     else {
       const repo = path.join(tmp, "git-mod-repo");
       fs.mkdirSync(repo, { recursive: true });
@@ -253,7 +253,10 @@ exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) 
     const sA = new PassThrough(), sB = new PassThrough();
     const pA = MAIN.main(["ears", "-", "--project", p], { stdout: sink(outA), stderr: sink([]), stdin: sA, env: { ...process.env, MAIN_OVERLAP: "A" }, cwd: dA, done: () => order.push("A") });
     const pB = MAIN.main(["ears", "-", "--project", p], { stdout: sink(outB), stderr: sink([]), stdin: sB, env: { ...process.env, MAIN_OVERLAP: "B" }, cwd: dB, done: () => order.push("B") });
-    const whileWaiting = [process.env.MAIN_OVERLAP, process.cwd() === path.resolve(dA)]; // B queued: A's context only
+    // B queued: A's context only (the cwd by real path — after A's chdir process.cwd() is the PHYSICAL folder on POSIX, an aliased temp's
+    // real one; dB's real path still differs from dA's. fs.realpathSync, the JS one — never .native, which expands an 8.3 name.
+    // 1.42 review 1, R10 Step 0; review 2, R2-TESTS-01)
+    const whileWaiting = [process.env.MAIN_OVERLAP, fs.realpathSync(process.cwd()) === fs.realpathSync(dA)];
     sA.end(TEXT); // A ends first, then B
     const codeA = await pA;
     sB.end(TEXT);

@@ -19,9 +19,9 @@ Spanish.
 ## Requirements
 
 - **Claude Code 2.1.139 or later** (`claude --version`) — the hooks run in exec form (`node` started directly, no shell
-  per call), which older versions don't run; 2.1.271 or later also starts the spec critic and the verifier without
-  your CLAUDE.md. Or any MCP client: Claude Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI, Codex CLI…
-  ([INTEGRATIONS.md](./INTEGRATIONS.md)).
+  per call), which older versions don't run; 2.1.271 or later also starts the spec critic, the verifier and the UI
+  reviewer without your CLAUDE.md. Or any MCP client: Claude Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI,
+  Codex CLI… ([INTEGRATIONS.md](./INTEGRATIONS.md)).
 - **Node.js ≥ 18** on PATH (`node --version`). Node 18 and 20 are end-of-life: 22 or later is recommended (the suites pass
   on 18, 22, 24 and 26).
 - git — optional: a branch per feature, the commit a run was made on, the merge driver for the spec state.
@@ -324,7 +324,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (32 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine: 32 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
+│   ├── lib/engine/                   ← the engine: 33 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← localized content (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)

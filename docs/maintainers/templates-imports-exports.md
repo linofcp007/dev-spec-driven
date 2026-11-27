@@ -10,8 +10,11 @@ is in History at the end.
   builder (`templateOverride()`); a pt-BR feature reads `pt-BR/`, then `pt/` (`templateLangChain()`).
 - **Only allowlisted names are read:** `TEMPLATE_ARTIFACTS` (the phase artifacts, the bug and spike variants, `change`) and
   `steering/<file>.md` (a known stub or a name steering_scaffold accepts). Every path is built from the allowlist and
-  `LANGS`, never from a caller's string; at most three levels, no dot files, no linked folder, no file whose real path
-  leaves the project; `init` never writes through a link. Files are read BOM-stripped, LF; a whitespace-only one is ignored.
+  `LANGS`, never from a caller's string; at most three levels, no dot files. **Below `.specs/` the gates decide** (1.42 R4 —
+  conventions.md → The read gate / The write gate): a linked templates/, `<lang>/` or steering/ folder, or a linked template
+  file, reads absent, and `templates init` / `tracks init` answer the write gate's refusal (`gateRefusal`: `linked` / `wrongKind`,
+  the folder's path); a linked `.specs/` itself is read and written like its features (its overrides used, its starters
+  written there). Files are read BOM-stripped, LF; a whitespace-only one is ignored.
 - **Who uses them:** `createFeature` (so `spec_import` too), `applyTracks`, `initProject`, `scaffoldSteeringFile` — all
   create-only (`writeIfAbsent`), naming the templates used (`templates`). A sized feature's built-in scaffold follows its
   size; a project template is written as it says — one sized exception: an m / l feature's design from a template without
@@ -67,7 +70,9 @@ is in History at the end.
   within `BRIEF_STEERING_BUDGET`) and lists the `manual` ones. `steeringGlobMatch()` is linear with capped brace
   expansion — never a backtracking regex.
 - **Custom names** (`steering_scaffold`): `^[a-z0-9][a-z0-9-]{0,62}\.md$`, never a Windows device name or a prototype key.
-  Doctor's `steering` check warns about files still templates.
+  Doctor's `steering` check warns about files still templates, with the remedy (the project's real rules, from the user or
+  the code — an agent never invents them); spec_init's `note` says the same to every client (1.42: no longer "the skill fills
+  them" — an MCP client has none), and the CLI prints it when init created files.
 - **A seeded stub (1.35)** — `design-system.md` is the one known stub whose built-in text depends on the project:
   `scaffoldSteeringFile` writes it with the code's components and tokens in place of its slot rows (`designSystemSeed`, the
   lazy tier; `seeded` {components, tokens}) — a project template for the file still wins, and the scan runs only when the
@@ -126,12 +131,47 @@ is in History at the end.
   FR-n, NFR-n; stories (a story file wins over the PRD's copy) → US-n with their ACs; Tasks and Subtasks → `[USn]` tasks,
   `(AC: 1, 3)` → `_Requirements:_` (an uncited nested unit inherits its parent's); architecture and Dev Notes →
   design.md. One story file imports one story.
-- **`spec-kit`** — scenarios: numbered items, else bullets only under an explicit "Acceptance Scenarios" label.
-  `specKitTaskMarkers()` adds the `_Requirements: US<n>_` and `_Implements:_` sub-lines a task lacks.
-  `specKitDesignDocs()` appends research.md, data-model.md, contracts/ and quickstart.md to plan.md under localized,
-  demoted headings (`importSpec.skDocs`, `demoteMd`); a non-markdown contract is fenced (`SPECKIT_CONTRACT_EXT`); at most
-  `SPECKIT_CONTRACTS_MAX` contracts, two levels deep, the rest named in the "not imported" warning; no plan.md →
-  `wNoPlanDocs`.
+- **`spec-kit`** — scenarios: numbered items, else bullets only under an explicit "Acceptance Scenarios" label. The
+  folder's number is stripped once: `001-` or Spec Kit's `--timestamp` `YYYYMMDD-HHMMSS-`.
+  `specKitTaskMarkers()` adds the `_Requirements:_` and `_Implements:_` sub-lines a task lacks: its `[USn]` tag, then a
+  /converge ref (`convergeRef()`: from the line's end, the token after "per" — `US<n>[/AC<m>]`, `FR-n`, `SC-n` — when the
+  gap type is absent or one of `CONVERGE_COVERS`, an inclusion list: `unrequested` or an unknown type claims nothing).
+  `specKitDesignDocs()` appends research.md, data-model.md and contracts/ to plan.md under localized, demoted headings
+  (`importSpec.skDocs`, `demoteMd`); a non-markdown contract is fenced (`SPECKIT_CONTRACT_EXT`, its fence one longer than
+  its longest backtick run, by a loop); at most `SPECKIT_CONTRACTS_MAX` contracts, two levels deep, the rest — a deeper
+  folder too — named in the "not imported" warning; no plan.md → `wNoPlanDocs`. quickstart.md is the feature's
+  quickstart.md (`model.quickstart`, our title line): trace reads an SC's coverage there — it replaces a project template's
+  quickstart as requirements / design / tasks are replaced (the test plan keeps the team's), and an SC named only there no
+  longer draws doctor's `secondary-trace` warn about design.md. No gate reads quickstart.md, so each `[NEEDS
+  CLARIFICATION]` `clarificationMarkers` reads in the SOURCE quickstart (one in its title too, which ours replaces) is also
+  one design.md line, under `skDocs.open`
+  (the design gate's clarifications check counts it, as when the quickstart was a design.md section — resolved in both):
+  after the design the import writes, appended as every spec writer appends (`appendSpecText`: a plan.md or design document
+  ending inside an open code block has it closed first — joined raw, the section was code to every reader), else after the
+  scaffold's design.md, which is kept (`scaffoldDesignAppend`; never a design.md of those lines alone — once resolved it
+  would hold nothing, and the template's placeholders no longer refused — except beside a plan.md with no body (only its
+  title and / or a comment; an empty one too) and no design document, a design to import that holds nothing: its design.md
+  is the title, the note (and the comment) and the section, and the gate refuses on phase-order and the constitution check once
+  they are resolved, as the empty design.md it gave before did).
+  plan.md: `specKitPlanMarkers()` turns a `**Field**:` value that opens with a bare NEEDS CLARIFICATION into
+  `[NEEDS CLARIFICATION: Field]` (the tail kept after it) unless a letter or a digit follows the blanks (`RE_PLAN_PROSE`:
+  prose) — `.`, `(…)`, `,`, `?`, `;`, `/TBD` and the dashes are the marker —, on a line `codeBlockLines` / `commentLines`
+  call content — a field research.md resolved still reads open (fail closed).
+  **FRs:** `specKitFrCriteria()` — a definition item (`RE_FR_DEF`, the id ending there: FR-1.1 / FR-001a define nothing; the
+  first item per id) that `frCovered()` (the ONE coverage rule: a scenario cites it — `citesFr` — or holds every content
+  word) says no scenario covers becomes an EARS criterion (`earsThen` "en", `(FR-n)` appended) of ONE synthetic story,
+  title `importSpec.functional`, numbered past every story's number and every one a source text names — keyed on the
+  inputs: `RE_US_CITE` over each text the parser reads → `model.citedStory` —, so no reference the source wrote names it (a
+  ceiling past the safe integers converts nothing: the FRs stay prose, named). A definition's nested list and lazy
+  continuation lines fold into its one criterion (mdListItems' text, kept whole in the `<!-- spec-kit: … -->` line) — the
+  stated limit. `model.frKeys` (a Set per FR) → importRun's `frRefs`: a task's `FR-n` resolves to the criteria holding it,
+  for every importer, else `wUnknownRef`. `refs()` (every importer) passes a `US-n.AC-m` through as written: one naming no
+  imported criterion — a stale `US-2.AC-1` — is trace's phantom, and the tasks gate refuses it ("unknown ACs (typos?)");
+  it never names the synthetic story's criteria, numbered past it. What stays prose gets the parent's `wUncoveredFr` (`uncoveredFrs` over the lines left). `counts.stories` counts the synthetic story. **What the
+  import leaves:** `specKitLeft()` names
+  every entry of the folder but a hidden one, a `SPECKIT_KNOWN` name and the case twin of one whose read / listing reached
+  it (the decision follows the read); the exact-name rule hides a known name of the wrong kind (a FOLDER plan.md, a FILE
+  contracts). The one `wSkipped` writer shows `IMPORT_SKIPPED_SHOWN` names, then `importSpec.more`.
 - **`fluidplan`** — `.fluidplan/<id>/` (plan.json, PLAN.md, DECISIONS.md, also at the `output` / `outputDir` paths —
   `fpConfig`) or PLAN.md inline; the finalized PLAN.md and DECISIONS.md win, plan.json and answers.json fill in or stand
   alone (`fpFromPlanJson`). Pages → stories, acceptance → criteria, files → `_Implements:_` (a delete → "To delete"),
@@ -310,12 +350,24 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.41.0** (review 1, R1-MF-3) — the first sized section a project template gains: an m / l design from a template without
   Silent Regressions (templates init's own copy among them) gets the built-in one, through the track blocks' append; before,
   doctor warned `missing` on every such feature while templates check passed (quality.md's History, 1.41.0).
+- **1.42 —** R4: under a linked `.specs/` (a supported layout: both gates exempt `.specs` itself) every template override was
+  dropped silently (`source: "built-in"`, not even `ignored`) and `templates init` / `tracks init` were refused "outside the
+  project" — a project-real compare from 1.14, before either gate, that repeated the gates below `.specs/` and added that one
+  wrong refusal (track packs already compared with the real `.specs/`). Deleted (readTemplateFile's two realpaths per template,
+  files.js's project-real write check, the two "outside the project" strings): the gates decide, and a refused starter is the
+  write gate's localized answer — also in place of a raw "(ESPECSLINK)" for a link inside the project. `checkTemplates`'
+  built-in-copy test (`sameText`) trims with `trimEnd()`: its `/\s+$/` was quadratic on a long blank run inside a template
+  (24 s at 150 K blanks; 14-templates.js, a same-work bound).
 
 ### Scoped steering
 - **1.13** — scoped steering: Kiro-compatible front matter, fileMatch bodies quoted into the brief, `manual` files listed.
   Before it every default file was always in the brief — why one without front matter still counts as `always`. First
   written under "Catalog, drift, restore, guard, steering" (lifecycle.md), then moved here.
 - **1.25** — steering imported from Kiro / Cursor; the steering logic itself was left untouched.
+- **1.42 (UX-09)** — the CLI never printed spec_init's note, whose text told MCP clients a skill would fill the stubs: reworded
+  for every surface (the how-to kept, by its place in the plugin), printed when files were created; doctor's steering detail
+  gained the remedy. The offer of a test check was cut — `"test": "jest --watch"` never exits, and npm's default test script
+  fails by construction.
 
 ### Import sources and the brownfield scan
 - **1.36.0 review 1 (PORT-7)** — a +port import of a source with tasks.md had no baseline, no differential check and no
@@ -363,6 +415,46 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   must hold a `.specs/`. Scan: `tests/app.py` was a "python" entrypoint (`entryKind` reaches depth 2); any code file naming
   `@SpringBootApplication` (a JS string, a Python comment) was a "spring boot" one; a package.json with no dependency read
   "node ()".
+- **1.42 — spec-kit, brought to Spec Kit 1.4** (v1.4.5's templates and commands read). The import warned for the FRs no
+  scenario covers (not every FR: one a scenario's words hold was always accepted) and left them prose; `_Requirements: FR-n_`
+  passed refs() unchecked while trace ignored it — SK-03 converts exactly those FRs, decided per definition item (a second
+  reader of the id, as first drafted, garbled `**FR-1.1**:` into a criterion and silenced `FR-001a`: one reader, one rule). A
+  `--timestamp` folder slugged as `101500-photo-albums` (SK-04; a `nameFallback` change would have done nothing: the folder
+  name IS the hint). quickstart.md went into design.md and left the template, so doctor read "SC-001 no test or quickstart
+  step" (SK-05). plan.md's bare NEEDS CLARIFICATION passed the design gate (SK-06). /converge's `per <ref>` tasks had no
+  marker (SK-07, an inclusion list: an exclusion of `unrequested` alone fails open on any type Spec Kit adds). A deep
+  `contracts/v1/schemas/`, `checklists/`, a note were dropped with no warning (SK-01). The `specs/` refusal says what a
+  feature folder is (SK-10). Linear and throw-free: a contract's `t.replace(/\s+$/, "")` (39 s at 200,000 blanks) and its
+  `Math.max(...runs)` (RangeError at 300,000 backtick runs) — CRI-1; the FR line's and the task line's regexes (a blank run
+  meeting a U+2028: ~34 s at 200,000) and the citation pattern built from the id ("Regular expression too large" past ~50,000
+  digits) — CRI-2, each scan checked equal to its regex on every short line. Cut, prose instead: copying `checklists/` into
+  checklist.md (no reader of it), a `spec-kit-memory` steering tool (a per-tool hidden folder in the read gate for one file;
+  the copy path works end to end — brownfield.md), stripping tasks.md's front matter (a fourth front-matter reader for a
+  cosmetic stray heading), the Q→A log as decisions, the bug / assess extensions, a synthetic trade-offs section, test-plan
+  Covers cells from `[USn]`, a shared fence / comment line walker (one user left).
+- **1.42 fix 1 (review 1)** — SK-05 took quickstart.md out of design.md and asked only who READS quickstart.md (trace), never
+  which gate its content left: an open `[NEEDS CLARIFICATION]` there passed the design gate — now one design.md line each
+  (R1-IMP-1; with no design to import they follow the kept scaffold's: a first draft wrote a design.md of those lines alone,
+  which held nothing once they were resolved — the template's placeholders no longer refused). The synthetic FR story took
+  max(printed) + 1 and refs() returned null for `US-<its n>.AC-m`, which importTasks then KEPT — a stale ID became coverage of
+  the FR criterion under a warning saying it matched nothing: the number is keyed on the inputs (every story number a source
+  text names), so a stale ID is the phantom it was on main again (R1-IMP-2). Tried and reverted in the same round: dropping
+  a `US-n.AC-m` of a story the import lacks, with a warning — it made the tasks gate PASS a task citing a valid AC beside a
+  stale one (the "typos?" refusal lost) and changed every importer; a finding is never closed by an accept.
+  SK-06's inclusion list of tails (`:` `-` `–` `—`) left `.`, `(…)`, `,`, `?`, `;`, `/TBD` bare while three texts
+  promised every value: the rule is now what prose has — a letter or digit after the blanks (R1-IMP-3, the reviewer's M13).
+  frKeys' includes() over a growing list was the round's one superlinear part (40,000 scenarios citing one FR: ~800 M
+  compares) — a Set per FR. The clarification-words rule of `frCovered()` gained its row (M16, older).
+- **1.42 fix 2 (review 2)** — the quickstart's open-questions section was joined raw after plan.md and the design documents
+  (while the scaffold-kept path appended it with `appendSpecText`): one ending inside an open code block swallowed it and the
+  design gate counted none — the promise fix 1 made was false on that shape. It goes on with the writer every spec append
+  uses (R2-IMP-1). A quickstart of only its title with a question got its row (R2-IMP-4); the "never those lines alone" claim
+  names the empty plan.md it does not hold for (R2-IMP-2); brownfield.md says which values stay bare (a letter or a digit
+  after them, R2-IMP-6); R1-IMP-4's row is titled by what it pins (the type, the size, the order — not the cost, R2-IMP-3).
+- **1.42 fix 3 (review 3)** — the exception was still a narrowing by name: importRun drops plan.md's first `# ` heading, so a
+  plan.md of only its title, only an HTML comment, or both gives the same design.md as an empty one (title, note, the comment,
+  the section) and the same refusals once resolved (phase-order, the constitution check). The sentence says it by property: a
+  plan.md with no body and no design document (R3-TESTS-03). Prose only, the importer unchanged.
 
 ### Stakeholder export and release notes
 - **1.14** — `spec_export`: one offline HTML / md document (roadmap palette, light / dark + toggle, print rules).

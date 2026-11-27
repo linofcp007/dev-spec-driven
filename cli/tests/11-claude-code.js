@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, skip, all, fsCalls, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   const S16 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = JSON.stringify;
   const OPTS = ["DEV_SPEC_DEFAULT_LANG", "CLAUDE_PLUGIN_OPTION_DEFAULT_LANG", "DEV_SPEC_STOP_CHECK", "CLAUDE_PLUGIN_OPTION_STOP_CHECK",
@@ -64,7 +64,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     js(q.map((r) => [r.code, r.out, r.err.slice(0, 60)])) + ")");
   // 1.23 review 5 (M8): in a git worktree of the project (EnterWorktree: workspace.current_dir is the worktree, project_dir the
   // folder Claude Code started in), the line is the checkout the MCP server records in — the worktree's own copy holds no tick.
-  if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.23 review 5 (M8): statusline in a worktree — skipped: no git");
+  if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.23 review 5 (M8): statusline in a worktree", "no git");
   else {
     const sw = path.join(tmp, "p16c-status-wt");
     fs.cpSync(sp, sw, { recursive: true });
@@ -201,7 +201,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     const loaded = (args, input, cwd) => spawnSync(process.execPath, ["-r", pre, CLI, ...args], { encoding: "utf8", input: input || "", cwd: cwd || none, env: envNo });
     const slNone = loaded(["statusline"], js({ cwd: none, workspace: { current_dir: none } }));
     const slProj = loaded(["statusline"], js({ cwd: pr }));
-    const help = loaded(["help"]), dashHelp = loaded(["--help"]);
+    const help = loaded(["help"]), dashHelp = loaded(["--help"]), bareOverview = loaded([]); // 1.42 UX-07: the bare overview loads none either
     const time = (args, input) => { const t0 = process.hrtime.bigint(); spawnSync(process.execPath, args, { input: input || "", cwd: none, env: envNo }); return Number(process.hrtime.bigint() - t0) / 1e6; };
     const med = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
     const measure = () => {
@@ -214,6 +214,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     ok(!disagree.length && slNone.status === 0 && slNone.stdout === "" && /LOADED 0$/.test(slNone.stderr) &&
       slProj.status === 0 && /login/.test(slProj.stdout) && !/LOADED 0$/.test(slProj.stderr) &&
       help.status === 0 && /universal spec-driven CLI/.test(help.stdout) && /LOADED 0$/.test(help.stderr) && /LOADED 0$/.test(dashHelp.stderr) &&
+      bareOverview.status === 0 && /^ {2}Commands: /m.test(bareOverview.stdout) && /LOADED 0$/.test(bareOverview.stderr) &&
       s < v && s <= Math.max(250, 2.5 * n),
       "1.25.1 r7: statusline outside a dev-spec project prints nothing without loading any engine module (statusProbe agrees with statusLineProject on " + layouts.length +
       " layouts), a project still gets its line; the bare help loads none either; statusline (no project) " + Math.round(s) + " ms vs node -e 0 " + Math.round(n) + " ms and `version` (the engine) " + Math.round(v) +
@@ -297,6 +298,50 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
       mappedTtl: () => mappedOld === null && !!plainOld && plainOld.line === "x" && otherNear === null && C.STATUS_CACHE_MAPPED_TTL_MS < C.STATUS_CACHE_TTL_MS,
       racy: () => racy === false,
     });
+
+    // 1.42 perf-5 — a miss within the TTL walked .specs/ twice: the lookup took the signature to compare, then the render took it again
+    // (46–63 ms at 40 features, ~200 at 200). The lookup's signature is reused for the render it keeps — this project's only, and only
+    // one the lookup took. A count, never a time: the lstats under .specs/ of a miss on a FRESH entry whose .specs/ changed (one walk
+    // to compare, none more) equal those of a miss on an EXPIRED entry (no compare, one walk); 1.41.2 made one walk more. An entry of
+    // another project (the same candidates) is compared on its own project and the render signs its own.
+    {
+      const p5 = path.join(tmp, "perf5-sl");
+      S16.initProject(p5, ["core"], "en");
+      for (const n of ["Alpha", "Beta", "Gamma"]) cFill(S16.createFeature(p5, n, ["core"], "", undefined, "en").dir, n);
+      const pay5 = js({ cwd: p5, workspace: { current_dir: p5, project_dir: p5 } });
+      const key5 = { cands: [p5, p5, p5].map((x) => path.resolve(x)), columns: null };
+      const file5 = C.statusCacheFile(key5);
+      const entry = () => { try { return JSON.parse(fs.readFileSync(file5, "utf8")); } catch { return null; } };
+      const sl5 = () => cli(["statusline"], { input: pay5, cwd: none });
+      const under = path.join(p5, ".specs") + path.sep;
+      const lstats = (fn) => { let out; const n = fsCalls(under, () => { out = fn(); }).lstatSync || 0; return { n, out }; };
+      fs.rmSync(file5, { force: true });
+      sl5(); // the entry
+      const e0 = entry();
+      fs.writeFileSync(file5, JSON.stringify({ ...e0, at: e0.at - C.STATUS_CACHE_TTL_MS - 1000 }));
+      const A = lstats(sl5); // expired: no compare, the render's one walk
+      const eA = entry(), sigA = C.specsSignature(p5);
+      const bump = new Date(Date.now() - 60000);
+      fs.utimesSync(path.join(p5, ".specs", "alpha", "requirements.md"), bump, bump); // a change the fresh entry's signature misses
+      const B = lstats(sl5); // fresh, changed: the compare's walk, reused
+      const eB = entry(), sigB = C.specsSignature(p5);
+      // another project's entry under these candidates (the test owns the file): compared on ITS .specs/, a miss once that changed —
+      // the render signs p5, never with the other project's walk
+      const other = path.join(tmp, "perf5-sl-other");
+      S16.initProject(other, ["core"], "en");
+      C.statusCacheWrite(key5, other, C.specsSignature(other), { ok: true, found: true, line: "other" }, { near: eB.near });
+      fs.utimesSync(path.join(other, ".specs", "roadmap.json"), bump, bump);
+      const crossed = sl5();
+      const eC = entry();
+      all("1.42 perf-5: a status-line miss walks .specs/ once — a fresh entry whose .specs/ changed costs the lstats of an expired one (1.41.2: one walk more), the render keeping the signature the lookup took; another project's entry is compared on its own project and the render signs its own (got " +
+        js({ A: A.n, B: B.n, lines: [A.out.out.trim(), B.out.out.trim(), crossed.out.trim()], sigs: [!!eA && eA.sig === sigA, !!eB && eB.sig === sigB, !!eC && eC.project === path.resolve(p5) && eC.sig === C.specsSignature(p5)] }) + ")", {
+        counted: () => A.n > 0,
+        "one walk per miss": () => B.n === A.n,
+        rendered: () => /◆ /.test(A.out.out) && B.out.out === A.out.out && crossed.out === A.out.out,
+        "each kept entry signs the state it rendered": () => !!eA && eA.sig === sigA && !!eB && eB.sig === sigB,
+        "another project's walk never signs this one": () => !!eC && eC.project === path.resolve(p5) && eC.sig === C.specsSignature(p5),
+      });
+    }
   }
 
   // 1.25.1 (review 7): in a plugin's versioned cache folder the status line command printed `node "<…/<version>/cli/dev-spec.js>"

@@ -1,0 +1,72 @@
+"use strict";
+// The plan's approval on the CLI (1.42 UX-02) — next / brief / status / done print the planNote on its own ⚠ line while the plan is not approved; nothing once it is.
+
+const fs = require("fs");
+const path = require("path");
+
+// The engine's planNote (mcp/tests/08-tasks-plan-approval.js) reaches the CLI user: `next`, `status <f>` and `done` print it on its
+// own "  ⚠ " line, `brief` on stderr (stdout stays the brief a pipe takes); --json is the MCP result. An approved plan prints none.
+// Mutations listed before the fixtures: C1 next's line dropped · C2 brief's line dropped · C3 brief's line on stdout · C4 status's
+// line dropped · C5 done's line dropped · (review 1) C6 an investigation tick without the next task's line.
+exports.run = async ({ all, runIn, spawnIn, runAsync, tmp, require, __dirname }) => {
+  const js = JSON.stringify;
+  const SD = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const PG = SD.msg("en").planGate;
+  // the research probe's project: a 3-file Node repo (greet() and one node --test) and an xs change written for real
+  const p = path.join(tmp, "plan-greet");
+  SD.initProject(p, ["core"], "en");
+  const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(p, rel)), { recursive: true }); fs.writeFileSync(path.join(p, rel), text); };
+  put("package.json", js({ name: "greet", private: true, scripts: { test: "node --test test/greet.test.js" } }, null, 2) + "\n");
+  put("src/greet.js", "exports.greet = (name) => (name ? \"Hello, \" + name : \"Hello, stranger\");\n");
+  put("test/greet.test.js", "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { greet } = require(\"../src/greet.js\");\n" +
+    "test(\"greets by name\", () => assert.strictEqual(greet(\"Ann\"), \"Hello, Ann\"));\ntest(\"greets a stranger\", () => assert.strictEqual(greet(\"\"), \"Hello, stranger\"));\n");
+  const f = SD.createFeature(p, "greet-empty-name", ["core"], "greet('') says Hello, stranger", undefined, "en", undefined, { size: "xs" });
+  put(".specs/" + f.slug + "/change.md", "# Change: greet-empty-name\n\n## Summary\ngreet('') printed \"Hello, \" — it should greet a stranger.\n\n## Acceptance Criteria (EARS)\n" +
+    "1. **US-1.AC-1** — WHEN greet is called with an empty name THE SYSTEM SHALL return \"Hello, stranger\"\n\n## Approach\nOne guard in src/greet.js; nothing else reads the name.\n\n" +
+    "## Tasks\n- [ ] 1. [US1] Return \"Hello, stranger\" for an empty name\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/greet.js_\n  - _Verify: node --test test/greet.test.js_\n");
+  const note = PG.notApproved(f.slug, "change.md");
+  const P = ["--project", p];
+  const nx = runIn(["next", f.slug, ...P]), nj = runIn(["next", f.slug, "--json", ...P]);
+  const br = spawnIn(["brief", f.slug, "1", ...P]);
+  const st = runIn(["status", f.slug, ...P]);
+  const dn = await runAsync(["done", f.slug, "1", "--run", ...P]);
+  let njr = null;
+  try { njr = JSON.parse(nj.out); } catch { /* not JSON */ }
+  all("1.42 UX-02 (CLI): the plan not approved — next, status and done --run print the planNote on its own ⚠ line, brief on stderr (stdout stays the brief); --json is the MCP result (got " +
+    js([nx.out, st.out, br.stderr, dn.code, dn.out]) + ")", {
+    "next: the ⚠ line (C1)": nx.code === 0 && nx.out.split("\n").includes("  ⚠ " + note),
+    "next --json = spec_next_task": !!njr && njr.planApproved === false && njr.planNote === note,
+    "brief: the ⚠ line on stderr (C2)": br.status === 0 && br.stderr.split("\n").includes("⚠ " + note),
+    "brief: stdout is the brief alone (C3)": /^# Task 1 —|^# /.test(br.stdout) && !br.stdout.includes(note),
+    "status: the ⚠ line after the tasks line (C4)": st.code === 0 && /\n {2}⚠ /.test(st.out) && st.out.split("\n").includes("  ⚠ " + note),
+    "done --run: ticked, the tick's ⚠ line (C5)": dn.code === 0 && dn.out.split("\n").includes("  ⚠ " + PG.tickedEarly(1, f.slug)) &&
+      /- \[x\] 1\./.test(fs.readFileSync(path.join(p, ".specs", f.slug, "change.md"), "utf8")),
+  });
+  // review 1 (R1-TASKS-04, C6): a bugfix scaffolded with four tasks (≤ 1.23.0) — ticking its investigation task 2 serves #3, the red
+  // test: `done` prints next_task's ⚠ line for it; ticking #1 (it serves #2, an investigation task too) prints none
+  const g = SD.createFeature(p, "Login crash", ["core"], "Login crashes on an empty password", undefined, "en", "bugfix");
+  put(".specs/" + g.slug + "/tasks.md", "# Tasks: Login crash\n\n## Phase: Fix\n" +
+    "- [ ] 1. [shared] Reproduce the bug reliably and write the steps in bug.md → Reproduction\n  - _Requirements: US-1.AC-1_\n" +
+    "- [ ] 2. [shared] Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)\n  - _Requirements: US-1.AC-1_\n" +
+    "- [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output)\n  - _Requirements: US-1.AC-1_\n  - _Verify: node --test test/login.test.js_\n  - _Expect: fail_\n" +
+    "- [ ] 4. [US1] Fix the root cause — one change, not a bundle\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: node --test test/_\n");
+  put(".specs/" + g.slug + "/bug.md", "# Bug: Login crash\n\n## Summary\nLogin crashes on an empty password.\n\n## Reproduction\n1. Submit /login with an empty password\n2. The server answers 500.\n\n" +
+    "## Root Cause\nauth.js:42 reads password.length before the null check (stack trace: TypeError at auth.js:42).\n\n## Fix\nMove the null check first.\n");
+  const g1 = runIn(["done", g.slug, "1", "--evidence", "steps written in bug.md → Reproduction", ...P]);
+  const g2 = runIn(["done", g.slug, "2", "--evidence", "root cause written in bug.md → Root Cause", ...P]);
+  const gNote = PG.notApproved(g.slug, "tasks.md");
+  all("1.42 review 1 (CLI, R1-TASKS-04): an investigation task's done prints the ⚠ line of the next task it serves — #2's serves #3; #1's serves #2, an investigation task: none (got " + js([g1.code, g1.out, g2.code, g2.out]) + ")", {
+    "done #1: ticked, no plan line": g1.code === 0 && !/not approved yet|ticked before the plan/.test(g1.out),
+    "done #2: ticked, next #3's ⚠ line (C6)": g2.code === 0 && g2.out.split("\n").includes("  ⚠ " + gNote) && !g2.out.includes(PG.tickedEarly(2, g.slug)),
+  });
+  // the plan approved: the same commands print no plan line
+  const ap = runIn(["approve", f.slug, "tasks", ...P]);
+  const un = runIn(["undone", f.slug, "1", ...P]);
+  const nx2 = runIn(["next", f.slug, ...P]), br2 = spawnIn(["brief", f.slug, "1", ...P]), st2 = runIn(["status", f.slug, ...P]);
+  const dn2 = await runAsync(["done", f.slug, "1", "--run", ...P]);
+  const planLine = (s) => /not approved yet|ticked before the plan/.test(s);
+  all("1.42 UX-02 (CLI): once the plan is approved, next / brief / status / done --run print no plan line (got " + js([ap.code, un.code, nx2.out, st2.out, br2.stderr, dn2.out]) + ")", {
+    "approved": ap.code === 0, "unticked": un.code === 0, "next": nx2.code === 0 && !planLine(nx2.out), "brief": br2.status === 0 && !planLine(br2.stdout + br2.stderr),
+    "status": st2.code === 0 && !planLine(st2.out), "done --run": dn2.code === 0 && !planLine(dn2.out),
+  });
+};

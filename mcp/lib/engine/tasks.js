@@ -94,7 +94,9 @@ function nextTask(projectDir, name, opts = {}) {
     const w = taskWaves(blocks, tracks);
     Object.assign(res, { waves: w.waves, cycles: w.cycles, blocked: w.blocked });
   }
-  return res;
+  // 1.42 (UX-02): the plan not approved yet — planApproved: false, and planNote when a task is served (never a bugfix's investigation
+  // task); nothing on an approved plan
+  return Object.assign(res, planGateFields(state, next, f.slug, lng));
 }
 
 // A batch for parallel subagents: the next task (taskSchedule) and, when it is [P], the following open [P] tasks of
@@ -477,6 +479,38 @@ function rootCauseTaskIndex(blocks) {
     return RE_ROOT_CAUSE_TASK.test(t) && /(?<![\p{L}\p{N}_])bug\.md(?![\p{L}\p{N}_])/iu.test(t) && !mk["makes green"].length && !mk.verify.length;
   });
 }
+// 1.42 (UX-02): is the plan approved — phase `tasks` (a change's plan: its change.md)? The pending-gates rule, read the same way:
+// by TRUTHINESS (gates.js pendingGateList — approvalsInForce strips only `tests`; a change reads approvals.tasks itself), so
+// spec_next_task and spec_next_action never disagree (mcp/tests/08-tasks-plan-approval.js pins the two equal). A spike has no
+// plan gate. `state` is readState's: a wrong-shape `approvals` is already gone (not approved — fail closed); a malformed other key
+// leaves a valid approval in force. An approved plan EDITED since its approval reads approved, as pendingGateList reads it
+// (next_action asks for the re-review) — a known limit. A role sign-off still waiting writes no approvals.tasks: not approved.
+function planApproved(state) {
+  return !!state && (state.kind === "spike" || !!(state.approvals || {}).tasks);
+}
+// A bugfix's investigation task (UX-02's exemption): its prose names bug.md and it carries none of _Implements:_, _Makes green:_
+// and _Verify:_ (a marker still holding its scaffold slot, `[…]`, counts as none) — it runs nothing and writes only bug.md, which
+// the requirements and design approvals sign off (a bugfix scaffolded with four tasks, before 1.23.1, ticks 1 "reproduce" and 2
+// "root cause" before the tasks approval: references/bugfix.md says so). A task naming a file it changes is a code task, never
+// exempt — a fix "described in bug.md" too (review 1, R1-TASKS-02). Its OWN predicate (two rules, two predicates): never
+// rootCauseTaskIndex (the execution gate's line), isBugStep (it holds the CURRENT short-form steps — a short-form bugfix's task 1
+// served before the approval would lose its note) nor LEGACY_BUG_STEPS (a name list — a user-written task naming bug.md is one
+// too). It only READS the block (features with identical tasks.md text may share one scan's blocks).
+function bugInvestigationTask(kind, block) {
+  if (kind !== "bugfix" || !block) return false;
+  const mk = taskMarkers(block);
+  return !mk.implements.length && !mk["makes green"].length && !mk.verify.length && /(?<![\p{L}\p{N}_])bug\.md(?![\p{L}\p{N}_])/iu.test(taskProse(block).join(" "));
+}
+// What a result SERVING a task gains while the plan is not approved (spec_next_task, spec_task_brief, spec_status's `tasks`, the
+// `next` a tick of an investigation task serves): planApproved: false (stable — also with no task served) and planNote, its own key
+// — never `note` (the evidence channel) — only for an OPEN task that is no bugfix investigation task. {} on an approved plan: the
+// parent's result, byte for byte. Reads nothing: `state` is the caller's readState, the plan's file its kind's (a change's
+// change.md — what isChangeDir would read the same .state.json for).
+function planGateFields(state, block, slug, lng) {
+  if (planApproved(state)) return {};
+  return block && !block.done && !bugInvestigationTask(state.kind, block)
+    ? { planApproved: false, planNote: i18n.msg(lng).planGate.notApproved(slug, state.kind === "change" ? CHANGE_FILE : "tasks.md") } : { planApproved: false };
+}
 // A task's position in the WHOLE file (a brief's "next task" comes from the active view, whose objects differ).
 function blockPosition(blocks, task) {
   const pos = blocks.indexOf(task);
@@ -774,6 +808,15 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   }
   // 1.41 (stable): metrics [{name, value, unit, better, tolerance}] · metricsMalformed / metricsLastMalformed · metricsDropped
   if (metricRead) Object.assign(res, metricResultFields(metricRead.read, false));
+  // 1.42 (UX-02): this call TICKED a task while the plan is not approved — beforeApproval (stable) and planNote, its own key, never
+  // `note`: the ticked task's — or, for a bugfix's investigation task (the documented flow), the one spec_next_task gives the `next`
+  // this result serves (planGateFields — none when that one is an investigation task too; review 1, R1-TASKS-04). Never a refusal
+  // (a tick records what happened), never on an alreadyDone re-check (no tick) nor a failed run (returned above).
+  if (ticks && !planApproved(state)) {
+    res.beforeApproval = true;
+    const planNote = bugInvestigationTask(state.kind, task) ? planGateFields(state, next, f.slug, lng).planNote : i18n.msg(lng).planGate.tickedEarly(n, f.slug);
+    if (planNote) res.planNote = planNote;
+  }
   return withObserved(res); // the observed stamp on every result
 }
 
@@ -1079,9 +1122,32 @@ function backtickRuns(s) {
   };
 }
 // The scan is linear but not cheap, and one refresh asks for the same tasks.md many times (status, phase, roadmap row,
-// verification) — the last few results are kept by text. Callers get their own copies (they may annotate them).
+// verification) — the results are kept by text, the least recently used dropped first. Callers get their own copies (they may
+// annotate them). (1.42 perf-2) Bounded at TASK_BLOCKS_MEMO_MAX texts AND TASK_BLOCKS_MEMO_CHARS characters of them (the keys):
+// 32 texts thrashed past 32 features — a refresh of 40 scanned 160 times where 40 do, a warm one 160 where 0 do. A pure function of
+// the text, so nothing goes stale. What the bounds hide: past ~4 M characters held (about 400 features of 10 KB — half that when a
+// track-filtered text doubles the keys) or 1,024 texts, a project-wide call scans the oldest again, as 32 did; the newest text is
+// always kept, however long (one over 4 M is then alone: memory ≤ max(4 M, the newest text) of keys, ≤ ~26 MB with their blocks —
+// measured, 1,024 × 4 KB texts). Two features with the same text share ONE scan (taskPeerStamps returns one Set for both): a reader
+// annotates its copies, never the scan's blocks.
 const TASK_BLOCKS_MEMO = new Map();
-const TASK_BLOCKS_MEMO_MAX = 32;
+const TASK_BLOCKS_MEMO_MAX = 1024;
+const TASK_BLOCKS_MEMO_CHARS = 4 * 1024 * 1024;
+const TASK_BLOCKS_MEMO_STATE = { chars: 0 };
+// An LRU put on a Map whose insertion order is its recency: `key` → `value` set last (a key already there moves to the newest place),
+// then the OLDEST entries evicted until both bounds hold — at most `maxEntries` entries and `maxChars` characters of keys — or the
+// new one is alone (it is never evicted). `state.chars` is the kept keys' total length, exact. → map
+function lruPut(map, key, value, state, { maxEntries, maxChars }) {
+  if (map.has(key)) { map.delete(key); state.chars -= key.length; }
+  map.set(key, value);
+  state.chars += key.length;
+  while (map.size > 1 && (map.size > maxEntries || state.chars > maxChars)) {
+    const oldest = map.keys().next().value;
+    map.delete(oldest);
+    state.chars -= oldest.length;
+  }
+  return map;
+}
 // the tasks.md a block was read from, for ownRecord's renumber rule (evidence.js): every block taskBlocks() hands
 // out → the blocks of that read, and taskPeerStamps(block) → their task stamps (taskStamp: the text, ≤ 500 characters) — one
 // Set per scan, computed on first use and shared by its copies. A block built any other way (or copied by a caller) has none:
@@ -1098,15 +1164,13 @@ function taskPeerStamps(block) {
 function taskBlocks(tasksText) {
   const key = String(tasksText || "");
   let blocks = TASK_BLOCKS_MEMO.get(key);
-  if (blocks) {
-    TASK_BLOCKS_MEMO.delete(key); // most recently used last
-  } else {
-    blocks = scanTaskBlocks(key);
-    if (TASK_BLOCKS_MEMO.size >= TASK_BLOCKS_MEMO_MAX) TASK_BLOCKS_MEMO.delete(TASK_BLOCKS_MEMO.keys().next().value);
-  }
-  TASK_BLOCKS_MEMO.set(key, blocks);
+  if (!blocks) { blocks = scanTaskBlocks(key); taskBlocks.scans++; }
+  lruPut(TASK_BLOCKS_MEMO, key, blocks, TASK_BLOCKS_MEMO_STATE, { maxEntries: TASK_BLOCKS_MEMO_MAX, maxChars: TASK_BLOCKS_MEMO_CHARS }); // most recently used last
   return blocks.map((b) => { const c = { ...b, body: b.body.slice(), bodyCode: b.bodyCode.slice() }; BLOCK_PEERS.set(c, blocks); return c; });
 }
+// in-process counters for the tests (never in a result's JSON): the scans the memo missed, and the characters of text it holds
+Object.defineProperty(taskBlocks, "scans", { value: 0, writable: true, enumerable: false });
+Object.defineProperty(taskBlocks, "memoChars", { get: () => TASK_BLOCKS_MEMO_STATE.chars, enumerable: false });
 // ownLines (changeViews only): an array filled with true at every line index a task block holds — its task line, its body
 // lines and the fenced code it owns.
 function scanTaskBlocks(tasksText, ownLines) {
@@ -1697,12 +1761,14 @@ function taskBrief(projectDir, name, number, opts = {}) {
     const st0 = readState(projectDir, slug);
     const { sch, held } = portSchedule(dir, st0.kind, tracks, activeBlocks, st0.evidence, evidenceRule(projectDir));
     block = sch.next;
+    // (1.42 UX-02: no task briefed — planApproved: false while the plan is not approved, never a planNote)
+    const pg = planGateFields(st0, null, slug, lng);
     if (!block && activeBlocks.some((b) => !b.done)) { // open tasks, none can start — say why, never "all done"
-      if (held && held.ticked) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: i18n.msg(lng).port.naHeld(held.number, held.anchor, slug, held.runnable) };
+      if (held && held.ticked) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: i18n.msg(lng).port.naHeld(held.number, held.anchor, slug, held.runnable), ...pg };
       return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, ...(sch.blocked.length ? { blocked: sch.blocked } : { skipped: sch.skipped }),
-        note: taskDepsBlockedNote(sch, slug, lng) };
+        note: taskDepsBlockedNote(sch, slug, lng), ...pg };
     }
-    if (!block) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: t.allDone };
+    if (!block) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: t.allDone, ...pg };
   } else {
     const n = askedTaskNumber(number);
     if (!Number.isFinite(n)) return { ok: false, error: taskNumberError(lng, number) };
@@ -1962,6 +2028,10 @@ function taskBrief(projectDir, name, number, opts = {}) {
     if (ds.units) res.designSystem.units = ds.units;
   }
   if (block.done) res.note = t.alreadyDone(block.number);
+  // 1.42 (UX-02): the plan not approved yet — planApproved: false + planNote for an open task (never a bugfix's investigation task);
+  // kept with write: true (the controller decides the dispatch on it). The brief's markdown is unchanged: the controller reads the
+  // note, not the subagent.
+  Object.assign(res, planGateFields(state, block, slug, lng));
   if (includeBrief) res.brief = md;
   else if (write) {
     // write:true is the controller's call (references/subagent-execution.md): the brief lives in the file, so the result
@@ -2324,9 +2394,10 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
 module.exports = { parseTasks, taskDescription, nextTask, taskDependsSpec, taskSchedule, dependencyCycles, taskWaves,
   taskDepsBlockedNote, taskDepsWaitList, taskDepsCheck, tasksRewrite, checkboxBytes, completeTask, reasonInput, taskLine,
   dropTrailingCr, RE_CHECKPOINT, scanTaskLines, indentOf, hasOutsideCode, backtickRuns, nextTaskNumber, taskPeerStamps,
-  taskBlocks, unreadTaskLines, unreadTasksDetail, resolveTask, blockPosition, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
+  taskBlocks, lruPut, unreadTaskLines, unreadTasksDetail, resolveTask, blockPosition, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
   changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, taskMarkerSpans, labelMarkerSpans, taskMarkerValues, withoutTaskMarkers,
   taskMarkers, malformedMarkers, suspiciousVerify, RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections,
   taskBrief, RE_THEMATIC_BREAK, appendTasks,
+  planGateFields, // 1.42 (UX-02): spec_status's tasks (doctor.js statusFeature) — the plan-approval fields next_task / the brief carry
   readyTasks, // 1.36 guard tests (protect.js): the tasks that can start now — their exact _Implements:_ files unlock a protected test
   __link };

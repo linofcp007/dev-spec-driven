@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, rpc, payload, S, tmp, list, require, __dirname }) => {
   const i18n = require("./lib/i18n.js");
   const rd = (dir, f) => fs.readFileSync(path.join(dir, f), "utf8");
   const wr = (dir, f, t) => fs.writeFileSync(path.join(dir, f), t);
@@ -440,7 +440,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     ]);
     // the pre-commit validator traces the STAGED change.md (a mirror with .state.json): a staged phantom blocks, never "traceability clean"
     const { spawnSync } = require("child_process");
-    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) console.log("  skip - git not available: 1.21 review C1 pre-commit not run");
+    if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.21 review C1 pre-commit", "git not available");
     else {
       const repo = fresh("c1-git");
       const g = S.createFeature(repo, "Footer", undefined, "x", undefined, "en", "change");
@@ -756,5 +756,19 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
       () => /before advancing to design/.test(S.msg("en").hook.earsIssues(1, 0, "L1", true)),
       () => /in requirements\.md/.test(S.msg("en").gates.hookPlaceholders(1, "L1 [x]")),
     ]);
+  }
+
+  { // 1.42 UX-12: an xs change's fill step gives the plan's one-call approval for the CLI too, as the size s fast-forward does
+    // (planFastForward): the slash command and the MCP call alone left a CLI user without the line to run.
+    const got = ["en", "pt", "es"].map((lang) => {
+      const p = fresh("ux12-" + lang, lang);
+      const c = S.createFeature(p, "Footer typo " + lang, undefined, "fix a typo in the footer", undefined, lang, "change");
+      const na = S.nextAction(p, c.slug);
+      return [lang, na.step, na.file, na.recommendation, c.slug];
+    });
+    all("1.42 UX-12: an xs change's next step (fill change.md) names the CLI line of the plan's approval in en / pt / es — `CLI: <dev-spec> approve <slug> --through tasks` (got " +
+      JSON.stringify(got.map(([l, st, f, rec]) => [l, st, f, (rec || "").slice(-160)])) + ")",
+      Object.fromEntries(got.map(([lang, step, file, rec, slug]) => [lang, () => step === "fill" && file === "change.md" &&
+        (rec || "").includes("(/approve " + slug + " --through tasks; CLI: " + i18n.DEV_SPEC + " approve " + slug + " --through tasks)")])));
   }
 };

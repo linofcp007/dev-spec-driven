@@ -16,7 +16,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   never edited: their sha1s are pinned; 1.41: `metric-lines.v1.json`, the METRIC line's contract with dev-guardian — the same
   bytes at its `mcp/test/fixtures/metrics/`, BOTH suites pinning one sha256 literal (09-evidence-runs.js here,
   `test/unit/metrics/metricLinesFixture.test.ts` there), never edited: a change is `metric-lines/2`, a new file landed in both
-  repositories before either tags); the runner loads only
+  repositories before either tags; 1.42: `metric-bytes.v1.json`, how the two METRIC readers decode a run's bytes — the same bytes
+  at its `mcp/test/fixtures/metrics/`, both suites pinning one sha256 (09-evidence-runs.js here,
+  `test/unit/metrics/metricBytesFixture.test.ts` there), a change is `metric-bytes/2`); the runner loads only
   `NN-*.js` files. 1.41's topics: 09 — `09-evidence-friction.js` (the friction budget: `_Budget:_` lines, timings.jsonl, the
   verdict, next_action's hint) and `09-evidence-metrics.js` (METRIC lines: the reader case by case against the fixture, the
   judge, the latest run's readings, finish's comparison, Silent Regressions' unmeasured names, spec_metrics' `measured`), with
@@ -84,7 +86,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   the files it needs form a chain; every chain runs in its own child process (its own temp dir and server), at most one
   per CPU, the longest first (by the previous run's times, kept in `<os tmpdir>/dev-spec-test-times-<mcp|cli>-<id>.json` —
   `<id>` 10 hex of the checkout's root path (1.30): each worktree has its own, and each write keeps only the suite's current
-  files, so a renamed or deleted file's entry goes with the next run, `--only`'s too; a file never timed starts first). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
+  files, so a renamed or deleted file's entry goes with the next run, `--only`'s too; a file never timed starts first; 1.42: a
+  non-blank `DEV_SPEC_TEST_TIMES_ROOT` keys it by that folder instead — the parent's knob alone: no chain sees it, in any spelling
+  — and the local pre-push hook sets it to the pushing checkout, so its fresh temp worktree starts the longest chains first, where
+  every chain weighed "never timed"; never export it in a shell: every checkout would share one file, the 1.30 problem; what the
+  suites leave in the OS temp folder: `dev-spec-test-times-<mcp|cli>-<id>.json` — a run's order only — and the status line's
+  `dev-spec-statusline-<16 hex>.json` cache entries — dead 10 s after their write —, both safe to delete). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
   slowest: …`, then the total: the LAST line is always `N passed, M failed` (scripts/test-docker.js reads it). A process
   that dies or never prints its total fails the suite, a file that throws is one FAIL (its chain goes on), a server that
   stops answering (15 s) fails the run — never a drain to exit 0. On a loaded machine (1.26): a chain whose process the OS
@@ -93,7 +100,29 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   (`DEV_SPEC_TEST_CHAIN_TIMEOUT_S`) is killed with its process tree and fails — the suite never hangs on a stuck child. Each file gets its own `ok`: one it calls after its `run`
   resolved (a forgotten await) is a FAIL, "late assertion from <file>", whenever it fires — the runner lets pending timers
   run (≤ 3 s) before the total, and one fired after it prints the total again; the total is read from stdout alone (a Node
-  warning on stderr after it doesn't void the count). cli/tests/16-conventions-runner.js tests the runner on a fake suite.
+  warning on stderr after it doesn't void the count). **A check that cannot run here (1.42)** — no git, no pwsh / zsh / fish,
+  links not creatable — calls `skip(label, why)`, which every file receives beside `ok` from the runner: neither a pass nor a
+  fail, a `  skip - <label> (<why>)` line, the suite's skips summed in a `# K skipped in F file(s): <file> <n>, …` line before
+  the total (a late one is a late assertion) — never an `ok()` whose first argument is a truthy LITERAL, which counted as a pass.
+  mcp/tests/16-conventions.js refuses, in every test file with no allowance, a hand-printed skip line and an `ok(<literal>, …)` whose
+  literal is written plainly and truthy: `true`, an unsigned number but 0 (`1`, `0x1`, `1e3`, `.5`, `1n`), a non-empty string
+  with no escaped quote, a non-empty template with no `$`, `[]` / `{}`, or a falsy one negated (`!0`, `!""`) — across lines
+  too. It does not read a signed or complemented number (`-1`, `~0`), a parenthesised literal, a string with an escaped quote, a
+  template with a placeholder, `[0]`, an `ok(true)` with no label, nor a truthy EXPRESSION. A falsy literal is a fail and stays —
+  the harnesses' `ok(false, label)`. cli/tests/16-conventions-runner.js tests the runner on a fake suite, whose files
+  assert `ok(typeof exports === "object", …)`. "Links not creatable" is a win32 cause alone (a junction, a file symlink without
+  Developer Mode): a link failure skips on win32 and is rethrown elsewhere — the file FAILS, a broken fixture never a skip.
+  **Known limits**, by property (the guard reads neither; split each into its own `ok()` + `skip()` when next touched): a link
+  site that catches its error skips on ANY error (1.42's own rethrow off win32), and some older sites have no catch at all,
+  so they FAIL where a link cannot be made (the safe direction) — `rg -n "symlinkSync" mcp/tests cli/tests` lists the
+  candidates, the code beside each says which —; and a part a probe drops is a pass, or nothing, never a skip: a disjunct that
+  is true when the check cannot run (`!<link flag> || …`, `<link flag> !== true || …`, `<probe> === null || …`), a
+  hand-written stand-in result in place of the call that cannot run (`<link flag> ? <the call> : { ok: false, … }`, its checks
+  then pass on the stand-in) — the candidates:
+  `rg -n "![A-Za-z.]*[Ll]ink[A-Za-z0-9]* \|\||[Ll]ink[A-Za-z0-9]* !== true \|\||[Ll]ink[A-Za-z0-9]* \? [^;]*: \{|=== null \|\|" mcp/tests cli/tests`
+  (most `=== null ||` hits are shape checks, read each) —, or a row / fixture behind an `if (<it can run>)` with no `skip()`
+  beside it (e.g. 10-guards-probe.js's two linked layouts, 02-mcp-server.js's row that exists only where tmp has two spellings
+  — the alias leg's one extra MCP assertion).
   The MCP chains today: `01-core → 17-docs` (17-docs reads
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality-fixtures`
   (re-checks of the behavioural fixtures 17-docs-evals builds under tmp — 1.30: they were 15-quality's, and the two files were the
@@ -215,7 +244,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   mechanism** (`+ 1 s` beside a 2 s stall hides it once the twin takes 2 s); (7) puts **every timing assertion under
   `remeasure`** — a check of child processes runs them with `spawnSync`, so a retry can measure again; (8) is measured
   **before review** on Windows, node:22-bookworm-slim and node:24-alpine, alone and with the MCP suite running beside it at the
-  default `--jobs` (the pre-push's setting), its numbers in its comment.
+  default `--jobs` (the pre-push's setting), its numbers in its comment. **A mutation pass over a cost guard (1.42):** a mutant
+  that only the chain timeout catches — a reader the 1.17 H block (05-markdown-trace.js, 100,000-line inputs) guards made
+  quadratic — is a kill: run its file with `DEV_SPEC_TEST_CHAIN_TIMEOUT_S=180` and a timeout fails it in minutes, not 30.
 - **The source guards follow the layout:** the U+FEFF guard reads mcp/test.js, scripts/test-runner.js and every file of
   mcp/tests/. The engine guards (U+FEFF, backslash-stripped regex literals) also read scripts/build.js — a bundle's
   registry comes from it — and `libSources()` leaves a user-built `mcp/lib/spec.bundle.js` out (the sources verbatim: it
@@ -276,7 +307,13 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   slow file system. No network, an unprivileged user (`--root` to opt out). Only the first run needs network — to pull
   and to build a cached derived image `dev-spec-test:<image>` that adds git (`--no-git` skips it; the git-dependent tests
   then skip; `--rebuild` rebuilds it). Options `--image <name>` (repeatable), `--suite mcp|cli`, `--jobs <n>` (the suites'
-  own, in each container — a shared machine: `--jobs 4`). Exit 0 all passed · 1 a
+  own, in each container — a shared machine: `--jobs 4`), `--alias-tmp` (1.42: each suite's TMPDIR behind a symlink the
+  container makes, `/tmp/alias-tmp` → `/tmp/real-tmp` — every test project's path an alias of its real one on a case-sensitive file
+  system, the POSIX twin of Windows' 8.3 temp and of macOS's `/var` → `/private/var`: macOS itself is never run here; the Summary
+  marks the rows `(alias tmp)`. A run of the default images runs the NEWEST one under it — the leg's first run on the integrated
+  branch, on node:22-bookworm-slim, came back clean after review 1's ten test-side path fixes —; `--alias-tmp` turns it on for
+  every image, an `--image` list is plain without it; `rowsPlan(o)` is what main() runs, each image's choice and each suite's
+  command built there alone). Exit 0 all passed · 1 a
   suite failed or an image couldn't be prepared · 2 no Docker (not installed, daemon down, Windows-containers mode) or a
   usage error; logs in `<tmp>/dev-spec-docker/<image>-<suite>.log`. Never wire it to hosted CI.
 - **Plugin evals** (`claude plugin eval`, maintainer-side, cost tokens, local only): the triggering suite
@@ -289,14 +326,28 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   matter has no `disallowed_tools` (CLI 2.1.282: `max_turns`, `timeout_seconds`, `model`, `allowed_tools`,
   `artifact_publish`, `growthbook_overrides`, `append_system_prompt`, `env`) and `allowed_tools` only grants gated tools,
   so `Agent` can't be taken away per case; the triggering cases keep `max_turns: 4` (a "max turns" run error after the
-  Skill fired is harmless — evals/README.md).
+  Skill fired is harmless — evals/README.md). The review-seat cases (1.42, `--tag review-seat`: the task reviewer and the
+  verifier on one seeded task) are checked offline in the same file — shape, the seeded premise on their overlay files, no
+  regex grader matching any of the case's inputs or the seat's own agent prompt (its output template is what a reply echoes
+  first; fix round 1) — and ONE of them is built (its package byte for byte §4's commands'
+  output); a reply is graded on `last_message`, never the trace, which carries the seat's own reads of those inputs.
 - **Tests run on Windows AND Linux** (`npm run test:docker`): a `_Verify:_` a test writes must work under cmd.exe AND
   `/bin/sh` — quote it (`node -e "process.exit(0)"`; the bare `node -e process.exit(0)` is a sh syntax error that cmd.exe
   accepts); don't depend on a case-insensitive file system (assert the Linux counterpart where Windows/macOS fold case)
-  or on the text of a V8 error (Node 18 omits a RegExp's flags in its SyntaxError). A test that RUNS PowerShell (1.21.1 —
+  or on the text of a V8 error (Node 18 omits a RegExp's flags in its SyntaxError). A path a process answers from its own
+  `process.cwd()` (the PHYSICAL folder on POSIX, an aliased temp's real one; the spelling it was given on win32, 8.3 kept) is
+  compared by `fs.realpathSync` — the JS one, never `.native`, which expands an 8.3 name (1.42 review 2, R2-TESTS-01). Only
+  mcp/tests/10-guards-probe.js real-paths that value alone (`childSame`, the resolver child's): every path a surface was handed
+  keeps its spelling there, so a surface that starts answering another spelling of the right folder (its real path, an expanded
+  8.3 name) fails. Older rows real-path BOTH sides, a handed path too — 02-mcp-server.js's 1.23 roots row (a client's file://
+  root, projectDir, SPEC_PROJECT_DIR) and its 1.24 r6 `same` (init.specsDir against the root), 16-conventions.js's 1.23 `same`
+  (SPEC_PROJECT_DIR among them): on win32 they still see an 8.3 expansion (the JS realpath keeps the short name); on POSIX
+  they cannot see a surface that answers a handed path's real path. The one exception to the JS realpath is the runner's
+  own test (cli/tests/16-conventions-runner.js `realFold`): it folds as the runner's `samePath` does, `.native`, a gone
+  folder by its nearest parent's, so its startsWith negatives stay real checks on win32. A test that RUNS PowerShell (1.21.1 —
   cli/tests/09-evidence-done-run.js: `done --run --shell pwsh`, a `pwsh -Command "…"` `_Verify:_` under cmd.exe, `--shell
-  powershell`) probes the program first (`<shell> -NoProfile -NonInteractive -Command "exit 0"` → 0) and asserts `ok(true,
-  "… skipped: …")` without it — the Docker images have no pwsh, and cmd.exe / Windows PowerShell exist only on Windows. The
+  powershell`) probes the program first (`<shell> -NoProfile -NonInteractive -Command "exit 0"` → 0) and calls `skip("…",
+  "<why>")` without it — the Docker images have no pwsh, and cmd.exe / Windows PowerShell exist only on Windows. The
   POSIX-shell refusal of a double-quoted pwsh script runs everywhere (nothing is run: /bin/sh on Linux, `--shell bash` on
   Windows — skipped without Git Bash), a Pester run is stood in for by a node script printing captured Pester output, and the
   engine-level PowerShell checks (posixShellSyntax, posixPwshScript, resolveRunShell, couldNotRunOutput / pwshParseFailure
@@ -304,7 +355,7 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   The shell completion scripts (1.25, cli/tests/16-conventions-completion.js) run the same way: bash (Git Bash on Windows,
   `DEV_SPEC_TEST_BASH`), Windows PowerShell / pwsh through TabExpansion2, zsh and fish where installed (`DEV_SPEC_TEST_ZSH`,
   `DEV_SPEC_TEST_FISH` — the Docker images have neither: `apk add zsh fish bash` in a `node:24-alpine` container runs them
-  all), each skipped with an `ok(true, "… skipped")` where it isn't.
+  all), each a `skip()` where it isn't.
 - **Eval harness** (`run-evals.js`) resolves the feature with the engine's resolver (accents, legacy slugs,
   `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1). It validates
   EVERY item (`itemProblems()`: object, `id`, `input`, a grader in contains|equals|regex|refuse|judge, a value / a regex
@@ -421,3 +472,67 @@ How the rules above came to be — grep a release here.
   and re-derived by an independent oracle (a second reader of the grammar, BigInt-scaled decimals) before the copy; three
   decimal cases read `regressed` in binary floating point and `within` exactly (120 → 122.4 at 2 %, 0.7 → 0.77 at 0.07,
   0.3 → 0.33 at 10 %).
+- **1.42** — a skip was a constant-true `ok(true, "… skipped")`, counted as a pass: 69 sites in 29 test files (plus the runner
+  test's own git skip), so a Linux container's total held the PowerShell, zsh / fish and Windows-only checks it never ran, and the
+  only skips any summary saw were the two `console.log("  skip - …")` lines test-docker.js counts. The runner owns `skip()` now
+  (scripts/test-runner.js: the optional 5th field of a file's `#file` line, the `# K skipped` line before the unchanged last
+  line), all 72 sites call it, and 16-conventions.js's guard keeps the old idiom out with no allowance — the fake suite's files
+  assert `ok(1, …)`. Each machine's total drops by its own skips.
+- **1.42 —** (the tests chain: the suites' honesty) the pre-push hook's fresh temp worktree had no times file of its own, so every
+  chain weighed "never timed" and ran in file order (simulated −19 % of an MCP run at 24 jobs once ordered):
+  `DEV_SPEC_TEST_TIMES_ROOT`, the parent's own knob (its own predicate beside the host's variables; no chain sees it). The
+  checks that timed a count now count: the alias reader's three memos (`aliasStats`, in-process — two of them dropped cost
+  nothing the clocks could see), T10's corpus (a 0.35–0.8 ms side carried a ratio; the count bound stays), the read-ahead
+  stall (ONE slow take of at least 0.9 × AHEAD_STALL_MS, under twice it — the whole read's `took < 15000` was worker starts
+  and contention, and passed a doubled wait). K2 samples two interleaved pairs; capMs and the duplication guard's 5 s sit
+  under `remeasure`; done --run's timing rows are containments on one clock. Property nets: R1's four checks that survived
+  their removal in the 1.41.1 review and the read-pass sweep over a junction out (12-lifecycle-read-gate-root.js), every
+  Object.prototype name a check name's shape admits (09-evidence.js), an upper-case `[X]` reader by reader with a twin over
+  every operation's read pass (08-tasks-checkbox-case.js — the read gate's calls exported as `operationCalls`, the same 400
+  calls before and after), two milestones sharing a release-notes name (14-exports.js); `--alias-tmp` in test-docker.js,
+  opt-in. Cut: a sweep of the runner's litter in the shared temp folder (prose above instead), a time-named source guard (a
+  name list), the click-dense yardstick for the UI checks' click inputs (it changes the owner's "3× plain JSX" ruling: to the
+  owner), a 10,000 pass of the 1.17 H block (the chain timeout kills its quadratics — the mutation tip above), a slow-take
+  count on the read-ahead pair (a load false-fail — a comment instead), the import / hook clocks of 05-markdown-trace (6× and
+  ~200× margins), T10's render spy and R1(d)'s CLI row (they kill nothing the other rows do not).
+- **1.42 (UX-05, UX-01)** — `mcp/tests/17-docs-shipped-texts.js`: the properties every text the plugin ships must hold, read by
+  property, never a list of places — every .md / .mdc but CHANGELOG* and every .js; not what .gitignore ignores, hidden folders
+  but the rule files `rules` prints (cli/commands.js `RULE_FILES`), examples/, evals/, the suites' own folders, nor a
+  maintainer note's History. The file set is itself checked on a planted tree (a gap list in each place, read only where shipped).
+- **1.42 (review seats)** — no plugin eval measured the review loop's two seats, the costliest and most edited prose of
+  Phase 6. Seven `review-seat` cases (five task reviews, two verify passes) share one builder (`review_seat <variant>` in
+  evals/fixtures/lib.sh); the suite builds ONE of them (the 8th slot of the 4-wide build pool, ≈ 0 s) and checks the six others'
+  premises on their overlay files — the design's eight built cases would have cost ≈ +9 s warm / +20–25 s cold per run. A
+  `--keep-temp` probe (one paid run) settled the grading: the seat's reply is the `Agent` call's result and the main session
+  relays it, while the trace also holds the seat's reads of every input, so the graders read `last_message` and a property keeps
+  every regex grader from matching any input. Cut: the dev-guardian pair (no dev-guardian prose changes this round; its
+  deterministic half needed another chain's rule) and the long-package final-review case (with S3's protocol).
+- **1.42 (fix round 1, tests)** — review 1 of the round. The read-ahead stall row has `took < 15000` back beside the one-slow-take
+  count: each bound holds its own part (the count the stall, `took` the ~396 fallback takes after it — a 50 ms wait before each
+  passed the count alone at 27 s). The skip guard reads any truthy literal first argument: the word `true` alone let `1` and a
+  string through, so the fake suite's files assert `typeof exports === "object"`. The round's own link skips fire on win32 alone
+  (rethrown elsewhere), and 14-templates' file-link part is its own `ok()` beside its `skip()`; the older sites are the known
+  limits above. R10's Step 0: the ten path comparisons the alias leg broke compare real paths, a gone folder by its nearest
+  parent's (the runner's samePath norm alone left a gone alias folder unequal to the physical one, and an 8.3 gone folder against
+  its expanded parent made a startsWith negative vacuous on win32); the launcher row records projectPath with fs.realpathSync —
+  `.native` expands the 8.3 name the launcher's own cwd keeps, which failed this machine's run. The leg stays opt-in until a clean
+  run of both suites under it.
+- **1.42 (the alias leg's default, after fix round 1)** — the leg's first run on the integrated branch (node:22-bookworm-slim)
+  came back clean, so a run of the DEFAULT images runs the newest of them, node:26-trixie-slim, under it (the others plain, an
+  `--image` list plain unless `--alias-tmp`); the opt-in sentences above are what it was before.
+- **1.42 (fix round 2, tests)** — review 2. R10 Step 0's `.native` compares silenced a class review 1's tree caught on this
+  machine's 8.3 TEMP: a surface answering ANOTHER spelling of the right folder (its real path) — a probe or a resolver that
+  starts real-path-normalizing makes one project two candidates where a caller dedupes by spelling. The helpers compare by the JS
+  `fs.realpathSync` (which keeps the 8.3 name a win32 cwd keeps), and 10-guards-probe.js's shared `same()` is the spelling compare
+  again, the resolver child's values alone by real path. test-docker.js's `rowsPlan(o)` is what main() runs (each image's alias
+  choice, each suite's command): a main() building its command from the run's options undid the default and no row saw it. The
+  link / partial-skip known limits and the skip guard's reach are said by property (an `rg` line lists the sites), not by a list
+  of places that was incomplete the day it shipped.
+- **1.42 (fix round 3, tests)** — review 3. The real-path rule claimed every handed path kept its spelling in the compare;
+  only 10-guards-probe.js does that — 02-mcp-server.js's and 16-conventions.js's helpers real-path both sides, so on POSIX
+  they cannot see a surface answering a handed path's real path (on win32 they still see an 8.3 expansion): the rule now
+  says which row does what — the claim changed, the rows did not. The known limits' property gained the shapes it missed — a
+  `<link flag> !== true || …` disjunct (15-quality.js) and a hand-written stand-in result for the call that cannot run
+  (14-templates.js, 13-imports.js) — with one alternative each in the `rg` line, which lists candidates, read each; and some
+  older link sites have no catch and FAIL where links cannot be made, the safe direction. 12-lifecycle-read-gate-root.js's
+  sweep comment says its rule in words (it cited a lesson by a number no shipped text defines).
