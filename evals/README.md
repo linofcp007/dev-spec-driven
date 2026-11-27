@@ -1,7 +1,7 @@
 # Plugin evals (maintainers)
 
 Behaviour tests for the plugin itself, run with Claude Code's `claude plugin eval` — the "test the
-skill under pressure" idea from obra/superpowers' *writing-skills*. Two suites share this folder:
+skill under pressure" idea from obra/superpowers' *writing-skills*. Three suites share this folder:
 
 - **Triggering** (tags `triggering` / `negative`): the workflow **triggers** on planning, bug-fix, upgrade and
   close-the-feature requests, on resuming a feature (where it stands, its next task), changing an approved spec, the roadmap,
@@ -12,6 +12,9 @@ skill under pressure" idea from obra/superpowers' *writing-skills*. Two suites s
   takes the bugfix flow, records evidence instead of a bare tick, integrates locally, reports a refused gate
   instead of forcing it, and audits before upgrading. These cases load a fixture project and use the plugin's
   real MCP server.
+- **Review seats** (tag `review-seat`, 1.42): the review agents themselves — a task review by
+  `dev-spec-driven:spec-reviewer` or one verify pass by `dev-spec-driven:spec-verifier` of ONE task with a seeded
+  defect. The main session only dispatches the seat and relays its reply; no MCP server, no skill.
 
 These are not the `+ai` feature evals of a user's project (those live in `mcp/evals/run-evals.js`).
 
@@ -42,6 +45,42 @@ These are not the `+ai` feature evals of a user's project (those live in `mcp/ev
 | `behavior-gate-refused-es` | `limite-peticiones` (+saas): requirements approved, design still the scaffold (`> **TODO**` in the [SaaS] sections) | "Aprueba todas las fases que faltan …" | asks the engine (`spec_approve` / `spec_doctor` / `spec_next_action`) · never `force: true` · never writes design.md and then approves the design · *(judge)* explains the refusal, in ES |
 | `behavior-upgrade-audit-pt` | a `.specs/` from an older dev-spec: no `meta.specVersion`, no saved tracks, date-only approvals | "Atualizei o plugin … Põe as specs deste projeto em dia." | `spec_upgrade` audit (no `apply`) · never `apply: true` in this run · no file under `.specs/` edited · *(judge)* summarises and asks whether to apply, in PT |
 
+## Review-seat cases
+
+The review loop (`skills/dev-spec-driven/references/subagent-execution.md` §4–§6) is the costliest part of Phase 6 and
+the one a prompt change moves most. These cases measure its two seats on the same task: task 1 of `note-edits` (edit a
+note: a 500-character limit, only the author edits — `req.user.id`), done on a branch, its package written with §4's
+commands. `fixtures/lib.sh`'s `review_seat <variant>` builds it from `fixtures/review-seat/` (the shared `base/` and
+`spec/`, then the variant's `head/`, `implementer.md` — the implementer's report —, an optional `base/`, and a verifier
+case's `finding.md`) and writes `.execution/dispatch.md`: the inputs §5 (reviewer) or §6 (verifier) lists. The prompt
+dispatches the seat on the tier the controller uses (Model selection: the reviewer on `sonnet`, a verify pass on
+`haiku`) with that text as its prompt, and relays the reply; the regex graders read that reply (`last_message`).
+
+| Case | Seeded at HEAD | The rule it measures | Graders |
+|---|---|---|---|
+| `review-seat-owner-from-body-en` | `putNote` takes the editor from `req.body.ownerId` | Security (always) and US-1.AC-3 | dispatched · `Needs fixes` · a non-✅ line citing `src/api.js:<n>` with the body's id · *(judge)* Critical / Important or ❌ |
+| `review-seat-report-rationale-en` | the same code; the report says the body's id is used on purpose | "Do not trust the report": a rationale never lowers a finding | the same four (S7's measure: the two cases differ by the report alone) |
+| `review-seat-caller-left-en` | `getNote()` throws instead of returning null; `src/notes-report.js`, outside the diff, still tests for null | a changed contract → its call sites | dispatched · `Needs fixes` · a non-✅ line citing `src/notes-report.js:<n>` · *(judge)* |
+| `review-seat-weakened-test-en` | T-02's quoting assertion in `test/csv.test.js` (not in `_Implements:_`) becomes `assert.ok(csv.length > 0)` | a loosened existing test is Critical | dispatched · `Needs fixes` · a non-✅ line citing `test/csv.test.js` · *(judge)* Critical |
+| `review-seat-clean-en` | every criterion met and tested | the false-positive rate | dispatched · `Approved` · no `confidence NN` (no Critical / Important) · *(judge)* |
+| `verify-seat-pre-existing-en` | the finding (money as a float in `rushFee`) is on a line unchanged since BASE — a context line of the package | the verifier's "Introduced by this diff?" | dispatched · `**Verdict:** REFUTED` · `pre-existing` · *(judge)* |
+| `verify-seat-ac-missing-en` | ❌ US-1.AC-2: no length check at HEAD; the report says the client limits the text | an ❌ is CONFIRMED or REFUTED, never UNCONFIRMED | dispatched · `**Verdict:** CONFIRMED` · no `UNCONFIRMED` |
+
+**A measurement, never a gate.** Read the case scores against the reference run below, not the exit code: one run in
+three is noise at `runs: 3`. Run them after changing an agent prompt (`agents/spec-reviewer.md`, `spec-verifier.md`) or
+the review loop's prose. `node mcp/test.js` checks them offline: each case's shape, its seeded premise on the overlay files,
+that no regex grader matches any of the case's inputs (the prompt, the report, the finding, the overlay and spec files —
+and, on the one fixture the suite builds, `dispatch.md`, the brief and the package — so an echo or a relay of an input never
+passes), and that the built package is byte for byte what §4's commands write.
+
+**No shell** (native Windows): the seats read the package and the files, and can't run `git log -L` / `git blame` (the
+reviewer's §5 history check) or a focused test — the representative arm for those is Linux / WSL2 with
+`--allow-tools "Bash(git *)"`. The 1.42 probe run (`--keep-temp`, one run of `review-seat-owner-from-body-en`, CLI 2.1.292,
+$0.18) showed what the graders rest on: the plugin's agents load in the sandbox; the `Agent` call's input carries
+`subagent_type` and `model` (`"subagent_type":"dev-spec-driven:spec-reviewer","model":"sonnet"`); the subagent's reply comes
+back as that call's result and the main session relayed it verbatim; and the subagent's own `Read`s, with their results — the
+brief, the report, the package — are in the trace too, which is why these graders read the reply and never the trace.
+
 Grader design: every case has deterministic graders (`tool_used` with `input_match` on the MCP tool input, or a
 `regex` over the trace) for the behaviour, plus at most one short `llm` rubric on the final reply where wording
 matters (asking for approval, explaining a refusal, staying local). The ordering checks ("no fix before
@@ -65,6 +104,7 @@ MCP tool a grader names exists — fix a fixture there, not after a paid run.
 | `triggering` | the thirteen cases that must fire the workflow |
 | `negative` · `near-miss` | the cases that must stay silent (`near-miss`: only the seven near-misses) |
 | `behavior` | the seven behavioural cases (need `--scaffold` and the real MCP server — below) |
+| `review-seat` | the seven review-seat cases (need `--scaffold`; no MCP server — below) |
 | `evidence` · `bugfix` · `gates` · `finish` · `upgrade` | one workflow rule: `evidence` = the two evidence cases, `bugfix` = the bugfix trigger + behaviour cases, `upgrade` = the upgrade trigger + behaviour cases |
 | `en` · `pt` · `es` | every case in that language (triggering and behavioural mixed) |
 
@@ -85,7 +125,12 @@ claude plugin eval . --ablation none --tag behavior --scaffold --allow-real-serv
 # One rule only (here: the evidence rule) — same flags, one tag
 claude plugin eval . --ablation none --tag evidence --scaffold --allow-real-servers --trust-plugin --no-publish \
   --allow-tools Write Edit "mcp__plugin_dev-spec-driven_spec-driven__*" --max-cost-usd 3
+
+# Review seats — the fixtures, no MCP server, no write tool (21 runs)
+claude plugin eval . --ablation none --tag review-seat --scaffold --trust-plugin --no-publish --max-cost-usd 8 -j 3
 ```
+
+`--case` filters on a case's `name:` (its prompt.md front matter), not on its folder: `--case "Verify pass*"`.
 
 - `--scaffold` runs each case's `fixture.sh` (bash — Git Bash on Windows) in the run's empty workspace, as you.
   Only these repo-authored scripts run; they touch nothing outside the workspace.
