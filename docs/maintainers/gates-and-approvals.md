@@ -597,6 +597,13 @@ here. "r5 review" is 1.23's fifth review.
   fail. They point at `nextGate` now; the designed "ready to approve" headline and "approve on `nextGate`" were reworded after a
   probe showed `nextGate.ready` beside a `phase-order` refusal (the demo, its tasks approval revoked, an approved criterion
   edited). No key changed; the gates are the same `approvalChecks`.
+- **1.42 review 1 (R1-SURF-01, -03, -09)** — the guard that the texts sending an agent to doctor name the next gate read a list
+  of seven files; GEMINI.md and the Copilot rule (`rules gemini` / `rules copilot` print them) still said "Run `dev-spec
+  doctor` before advancing" and a CLI agent there held on a later phase's fail. Both got the Cursor rule's clause, and the guard
+  reads every shipped sentence of that shape — which found /spec's phases line ("`spec_doctor`, then the user's approval") too.
+  A next-gate file that is there but unreadable printed "nothing to approve yet" (pendingGateList lists a phase whose entry
+  exists, so that form was reached only so): `nextGate.unreadable`, said as approve says it. spec_doctor's description said
+  "what the next approval would refuse" — nextGate is the next gate's own checks (phase order and roles are the approval's).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12
@@ -756,3 +763,8 @@ here. "r5 review" is 1.23's fifth review.
   since the requirements approval could empty Reproduction: the design gate checks both. **1.24 r6 B9** — the CLI names a
   spike's `--question` / `--timebox` on another kind (`spike.spikeOnlyCli`) and a change's create lines
   (`sizes.changeCreatedCli`).
+- **1.42 (S13) + review 1 (R1-TASKS-05)** — the root-cause instrumentation is tagged `DEBUG-<slug>` and gone before the fix's run.
+  The first removal check, `git grep -n DEBUG-<slug>`, read tracked files only (a probe file made while tracing was missed) and
+  matched a longer slug's tags (`DEBUG-login` found another bugfix's `DEBUG-login-crash`); `-w` does not help — git's word
+  boundary treats the hyphen as one. It is `git grep -n --untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)'` now, and
+  /spec-bugfix's root-cause step (the MCP prompt too) tells the agent to tag. Prose only (17-docs pins both texts).

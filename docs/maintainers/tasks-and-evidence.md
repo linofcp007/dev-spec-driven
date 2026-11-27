@@ -1619,6 +1619,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   C (a stamp of the ticks no approval covered — its 2 real hits were the documented investigation ticks); gates-and-approvals.md → History →
   Gates, 1.42. The CLI's exact `next` pins of 08-tasks-deps gained the plan line (still exact); 08-tasks.js's key pin lists the
   two fields.
+- **1.42 review 1 (R1-TASKS-02 / -03 / -04, R1-MERGE-2)** — the investigation exemption read neither `_Implements:_` nor the
+  tick's `next`: a model-written "apply the fix described in bug.md" naming `src/auth.js` was served with no note, and ticking
+  the legacy task 2 served the red test #3 with none (the CLI `done` printed no ⚠ line where references/bugfix.md says STOP). The
+  exemption now needs no `_Implements:_` too (a task naming a file it changes is a code task; a slot still counts as none — the
+  limit pinned), and an investigation tick's planNote is the one next_task gives its `next` (planGateFields, the same predicate).
+  Two of the predicate's conditions had no fixture (the X1 / X2 mutants survived): a real `_Verify:_` and a `_Makes green:_` rows.
+  planGateFields' "reads nothing" was false — `tasksFileName(dir)` re-read .state.json, hidden by the primed scope its pin ran
+  in: it takes no path now (the plan file from the state's kind) and the pin counts every fs call in a fresh scope.
 
 ### End-of-turn evidence gate and scope guard
 - **1.14** — the end-of-turn gate (`stopCheck`, the Stop / SubagentStop hook, `dev-spec stop-check`) and the scope guard's `"scope"`
