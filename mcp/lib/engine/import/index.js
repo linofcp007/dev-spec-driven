@@ -582,6 +582,11 @@ function importRun(projectDir, tool, source, opts) {
     // The blocks follow the body as every spec writer appends (appendSpecText): a design that ends inside an open code
     // block (a ```mermaid never closed) had the track sections written into it, and doctor read them all 'missing'.
     put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", blocks ? appendSpecText(body, blocks, { trim: true }) : body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
+  } else if (model.scaffoldDesignAppend && cr.created.includes("design.md")) {
+    // no design to import, the scaffold's design.md kept — text the gates must still see goes after it (spec-kit: its quickstart's
+    // open questions); the template's placeholders still refuse the design gate
+    const cur = readIfExists(path.join(cr.dir, "design.md"));
+    if (cur != null) put("design.md", appendSpecText(cur, model.scaffoldDesignAppend + "\n"));
   }
   // spec-kit's quickstart.md replaces the scaffold's (a project template's too, as requirements / design / tasks are replaced): its
   // title is the scaffold's own first line, then the note and the source's text as written

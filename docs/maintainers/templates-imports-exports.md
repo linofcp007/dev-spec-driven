@@ -144,7 +144,9 @@ is in History at the end.
   quickstart as requirements / design / tasks are replaced (the test plan keeps the team's), and an SC named only there no
   longer draws doctor's `secondary-trace` warn about design.md. No gate reads quickstart.md, so each `[NEEDS
   CLARIFICATION]` `clarificationMarkers` reads in the text written there is also one design.md line, under `skDocs.open`
-  (the design gate's clarifications check counts it, as when the quickstart was a design.md section — resolved in both).
+  (the design gate's clarifications check counts it, as when the quickstart was a design.md section — resolved in both):
+  after the design the import writes, else after the scaffold's design.md, which is kept (`scaffoldDesignAppend`; never a
+  design.md of those lines alone — once resolved it would hold nothing, and the template's placeholders no longer refused).
   plan.md: `specKitPlanMarkers()` turns a `**Field**:` value that opens with a bare NEEDS CLARIFICATION into
   `[NEEDS CLARIFICATION: Field]` (the tail kept after it) unless a letter or a digit follows the blanks (`RE_PLAN_PROSE`:
   prose) — `.`, `(…)`, `,`, `?`, `;`, `/TBD` and the dashes are the marker —, on a line `codeBlockLines` / `commentLines`
@@ -427,7 +429,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   Covers cells from `[USn]`, a shared fence / comment line walker (one user left).
 - **1.42 fix 1 (review 1)** — SK-05 took quickstart.md out of design.md and asked only who READS quickstart.md (trace), never
   which gate its content left: an open `[NEEDS CLARIFICATION]` there passed the design gate — now one design.md line each
-  (R1-IMP-1). The synthetic FR story took max(printed) + 1 and refs() returned null for `US-<its n>.AC-m`, which importTasks
+  (R1-IMP-1; with no design to import they follow the kept scaffold's: a first draft wrote a design.md of those lines alone,
+  which held nothing once they were resolved — the template's placeholders no longer refused). The synthetic FR story took max(printed) + 1 and refs() returned null for `US-<its n>.AC-m`, which importTasks
   then KEPT — a stale ID became coverage of the FR criterion under a warning saying it matched nothing: the number is keyed
   on the inputs (every story number a source text names), and a `US-n.AC-m` naming no imported story is dropped with a
   warning that says so (R1-IMP-2; a refusal that returns null still means "kept as written" — a third answer, not a reused

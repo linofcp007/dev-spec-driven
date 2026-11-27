@@ -203,7 +203,11 @@ function parseSpecKit(dir, readSrc, W, src) {
     const frs = uncoveredFrs(fx ? fx.lines : [], scen);
     if (frs.length) model.warnings.push(W.wUncoveredFr(frs.join(", ")));
   }
-  if (plan != null || docs) model.design = { text: [plan == null ? null : specKitPlanMarkers(plan), docs].filter((x) => x != null).join("\n\n"), file: "plan.md" };
+  // the quickstart's open questions after the design the import writes; with none to write, after the scaffold's design.md, which is
+  // kept (importRun: scaffoldDesignAppend) — its template still refuses the design gate, and they stay counted once it is written
+  const open = model.quickstartOpen;
+  if (plan != null || docs) model.design = { text: [plan == null ? null : specKitPlanMarkers(plan), docs, open].filter((x) => x != null).join("\n\n"), file: "plan.md" };
+  else model.scaffoldDesignAppend = open;
   if (plan == null) model.warnings.push(docs ? W.wNoPlanDocs("plan.md") : W.wNoDesign("plan.md"));
   // a task's [USn] tag → _Requirements:_ (that story's ACs, resolved by importSpec), the paths it names → _Implements:_
   if (tasks != null) model.tasks = { text: specKitTaskMarkers(tasks), file: "tasks.md" };
@@ -454,10 +458,10 @@ function specKitDesignDocs(dir, read, rd, W, model, src, got) {
   const q = rd("quickstart.md");
   model.quickstart = q == null ? null : demoteMd(q, 0).trim();
   // ...whose open questions stay gated: no gate reads quickstart.md (the design gate counted them while it was a design.md section),
-  // so each [NEEDS CLARIFICATION] the counter reads in it (clarificationMarkers, on the text written there) is also one line here,
-  // under a heading naming the file — resolved in both
+  // so each [NEEDS CLARIFICATION] the counter reads in it (clarificationMarkers, on the text written there) is also one design.md
+  // line, under a heading naming the file — resolved in both. model.quickstartOpen: that section | null (parseSpecKit places it)
   const open = model.quickstart ? clarificationMarkers(model.quickstart) : [];
-  section(D.open, "quickstart.md", open.map((t) => "- [NEEDS CLARIFICATION" + (t ? ": " + t : "") + "]").join("\n"));
+  model.quickstartOpen = open.length ? "## " + D.open + "\n\n" + W.skFrom("quickstart.md") + "\n\n" + open.map((t) => "- [NEEDS CLARIFICATION" + (t ? ": " + t : "") + "]").join("\n") : null;
   if (skipped.length) model.skipped.push(...skipped);
   return parts.length ? parts.join("\n\n") : null;
 }

@@ -372,7 +372,8 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
   // 1.42 fix 1 R1-IMP-1: SK-05 moved Spec Kit's quickstart.md out of design.md, and no gate reads quickstart.md — an open
   // [NEEDS CLARIFICATION] there, which refused the design approval while it was a design.md section, passed silently. Each one the
   // counter reads in the quickstart written (a fenced or commented one is no marker there either) is also one design.md line, under
-  // a heading naming the file; with no plan.md, design.md holds them alone; a quickstart with none adds nothing. The reviewer's q1 tree.
+  // a heading naming the file; with no design to import (no plan.md, no design document) the scaffold's design.md is kept and they
+  // follow it — its placeholders still refuse once they are resolved; a quickstart with none adds nothing. The reviewer's q1 tree.
   {
     const E = require("./lib/engine/index.js");
     const W = S.msg("en").importSpec;
@@ -392,15 +393,20 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const cl = (doc.checks || []).find((c) => c.id === "clarifications") || {};
     const ap = a.r.ok ? S.approvePhase(a.p, a.r.feature, "design", "probe", {}) : {};
     const b = q1("noplan", { "spec.md": spec, "quickstart.md": quick });
+    // ...the questions resolved (their lines deleted): the kept scaffold's placeholders still refuse the design
+    if (b.r.ok) fs.writeFileSync(path.join(b.r.dir, "design.md"), b.d.split("\n").filter((l) => !/NEEDS CLARIFICATION/.test(l)).join("\n"));
+    const bAp = b.r.ok ? S.approvePhase(b.p, b.r.feature, "design", "probe", {}) : {};
     const c = q1("none", { "spec.md": spec, "plan.md": plan, "quickstart.md": "# Quickstart\n\n1. npm run dev - validates SC-001\n" });
-    const pt = q1("pt", { "spec.md": spec, "quickstart.md": quick }, "pt");
-    all("1.42 fix 1 R1-IMP-1: an open [NEEDS CLARIFICATION] in spec-kit's quickstart.md is also one design.md line (under 'Open questions in quickstart.md', a fenced / commented one never) — the design gate's clarifications check refuses again; with no plan.md design.md holds them alone; none → no section; localized (got " +
-      js({ cl, failing: ap.failing, d: a.d.slice(a.d.indexOf("## Open"), a.d.indexOf("## Open") + 220), b: b.r.warnings, c: c.d.includes("Open questions") }) + ")", [
+    const pt = q1("pt", { "spec.md": spec, "plan.md": plan, "quickstart.md": quick }, "pt");
+    all("1.42 fix 1 R1-IMP-1: an open [NEEDS CLARIFICATION] in spec-kit's quickstart.md is also one design.md line (under 'Open questions in quickstart.md', a fenced / commented one never) — the design gate's clarifications check refuses again; with no design to import they follow the scaffold's design.md, kept (its placeholders refuse once they are resolved); none → no section; localized (got " +
+      js({ cl, failing: ap.failing, d: a.d.slice(a.d.indexOf("## Open"), a.d.indexOf("## Open") + 220), b: [b.r.warnings, b.r.imported, bAp.failing, b.d.slice(-160)], c: c.d.includes("Open questions") }) + ")", [
       () => a.r.ok, () => a.d.includes("\n## Open questions in quickstart.md\n\n> From spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: which fixture set?]\n- [NEEDS CLARIFICATION]\n"),
       () => js(E.clarificationMarkers(a.d)) === js(["which fixture set?", ""]), () => !/in a code block|in a comment/.test(a.d),
       () => cl.status === "fail" && /\b2 unresolved \[NEEDS CLARIFICATION\] in design\.md/.test(cl.detail), () => !ap.ok && (ap.failing || []).includes("clarifications"),
       () => rd(a.r.dir, "quickstart.md").includes("3. Seed the demo data [NEEDS CLARIFICATION: which fixture set?]\n"),
-      () => b.r.ok && b.r.warnings.includes(W.wNoPlanDocs("plan.md")) && js(E.clarificationMarkers(b.d)) === js(["which fixture set?", ""]),
+      () => b.r.ok && b.r.warnings.includes(W.wNoDesign("plan.md")) && b.r.imported.includes("design.md") && js(E.clarificationMarkers(b.d)) === js(["which fixture set?", ""]),
+      () => b.d.indexOf("\n## Open questions in quickstart.md\n") > 0 && b.d.endsWith("\n- [NEEDS CLARIFICATION: which fixture set?]\n- [NEEDS CLARIFICATION]\n"),
+      () => !bAp.ok && (bAp.failing || []).includes("placeholders") && !(bAp.failing || []).includes("clarifications"),
       () => c.r.ok && !c.d.includes("Open questions") && !E.clarificationMarkers(c.d).length,
       () => pt.r.ok && pt.d.includes("\n## Questões em aberto do quickstart.md\n\n> Do spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: which fixture set?]\n"),
     ]);
