@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-11-27T01:02:20.330Z",
+  "generated_at": "2026-11-27T02:12:18.591Z",
   "entries": [
     {
       "identity": "005fee35b6cba3d25ce47b3a280f513cd33348b088515576f499da7fcb721ba1",
@@ -27,15 +27,6 @@
       "severity": "medium",
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/decisions.js",
-      "added": "2026-11-27T01:02:20.330Z"
-    },
-    {
-      "identity": "0267ec184412f9a47f461e671fb091b7d80a3e011987575b7af0ee0394798d3f",
-      "match_id": "588118e3a274b9ccbc208030152c1168dbf56ad76b024251aa309f6e400d1852",
-      "fingerprint": "32154c171d1b118eab7490f5cb14542fff6867b540f7b3172c05637045173e6c",
-      "severity": "medium",
-      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
-      "file_path": "mcp/lib/engine/gates.js",
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
@@ -156,15 +147,6 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
-      "identity": "0775790b00c8c6c323490976261fc755d6446afba281f8daf308cdf1e8a331f5",
-      "match_id": "77ff722a4dea6c9aaa8418693df5924b8d3d4a584d19e951974d912000e0d5a5",
-      "fingerprint": "d23c477da77ff01bfae0feb12a1d39c82e84428fff088649e37432314ecf89e4",
-      "severity": "medium",
-      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
-      "file_path": "mcp/lib/engine/import/fluidplan.js",
-      "added": "2026-11-27T01:02:20.330Z"
-    },
-    {
       "identity": "08487558748945e7158a61323f23f32ea773f509f878590d098e241152498e3e",
       "match_id": "f5234da58a58ad8f5c675a4c5ff0190d09e42aa3a5791df2c746c9891a79c8ee",
       "fingerprint": "85ad8b33d206838a3b00edf4c0dbf4590440b388f529bf80743cd431c07bb772",
@@ -219,6 +201,15 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
+      "identity": "0ed9cc4f741d6aa2c7e10fc8ab6a8f334bcab93d5505d76795ab3b77e54dfccb",
+      "match_id": "f71784488e2b4936bedc94256a9aec670c13aa2d45d4e535d4b54e28efccc68a",
+      "fingerprint": "944d6c7a3251ee86a10fc5ed2c23eb76c41f0804ea576badfa756f582bcd6572",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/finish.js",
+      "added": "2026-11-27T02:12:18.591Z"
+    },
+    {
       "identity": "0f417f2514442c8f9b0b8ea7128ad45d2dd8df95a7f25affc31935df4eef7cb3",
       "match_id": "7adb673a749f5e3cb335213f3821290123d48633eb578b1e11dbf043e589f37f",
       "fingerprint": "77c2e51e177d2bdce6cd234e7f9efa934ef407bc77c5c80ea35da8b80a57a648",
@@ -271,6 +262,15 @@
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/finish.js",
       "added": "2026-11-27T01:02:20.330Z"
+    },
+    {
+      "identity": "125584a7ea39cb2ffd514000ba0a3673998a944f040a3ea69104b715131e3bd1",
+      "match_id": "65b4423934cc66794318a17240d5c67f49510c102fbbb764c17fd5fd9056e92a",
+      "fingerprint": "7473c16a3d888819b0dc280716c52ae4e25ccc84284a70745bf04d3d9b26b7dc",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/upgrade.js",
+      "added": "2026-11-27T02:12:18.591Z"
     },
     {
       "identity": "12c72409e54d52d8fa0a12fd6feffdbbcabbc1019abf4827b746361b264768dd",
@@ -480,15 +480,6 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
-      "identity": "1b8c3c3b7f02e83f32b29012c42b24799e39228da4af09a446baa95c5406e8d6",
-      "match_id": "f636a5bfdbbf0de3dfcd9998c7045b7a44ebd2ee3cae3802f0d4c1427a2e4b20",
-      "fingerprint": "535c9c8bfcc09ecda5ae07ab8d35f8cde65120cf12d0467640cd0f8b839e8581",
-      "severity": "medium",
-      "title": "RegExp() called with a `x` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) within…",
-      "file_path": "mcp/lib/engine/tasks.js",
-      "added": "2026-11-27T01:02:20.330Z"
-    },
-    {
       "identity": "1c1aea9b82c1b7a5d277c94509aa02716e9983fb16f5f9d29fb36a596d32c4ae",
       "match_id": "2cf16f75e954f688ac26b3efec58be4f2a01474b85ff4d4a26a5ffdbb68a4e8c",
       "fingerprint": "a91e2b5926d2613a113486a3acaf25fa5577fcbe0f05f92f0ca2eeced31566ad",
@@ -586,6 +577,15 @@
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/guards.js",
       "added": "2026-11-27T01:02:20.330Z"
+    },
+    {
+      "identity": "22766ae018012a1d7986d8b3458bb8d3806b25be23364241375d416bfb461aed",
+      "match_id": "38c48bda242926800d436180e681b5175d1807ce1063633f36b4fb70a6ace5f9",
+      "fingerprint": "7eb9a1a4d99d51580da2f8fe5ed4dee05c6cfb08b357e3d674995cee3aac791d",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/trace.js",
+      "added": "2026-11-27T02:12:18.591Z"
     },
     {
       "identity": "230d1dfb56a1ee834622a6eb61ebb73c8796bdde7035e225b5e26e109d439ef5",
@@ -1218,15 +1218,6 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
-      "identity": "43100ece55e2ec1a7528c66923ee0072a375e0828cca4eea6f292357f83ad0ca",
-      "match_id": "6bdeeb3c9575b56d0e51854801382da67f0d67d148b44e813f996279ade2a4f0",
-      "fingerprint": "e50f589cc274663355ece08c1580b15a656d0822b115eaacd0432cdb939c046b",
-      "severity": "medium",
-      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
-      "file_path": "mcp/lib/engine/gates.js",
-      "added": "2026-11-27T01:02:20.330Z"
-    },
-    {
       "identity": "43b1b1a0cf78839fba714b57917c6e0722a6fc27ae52e75385998fe86f0d91f3",
       "match_id": "1422cf92989041ce3113fb28696bc6e580a7d73a7df150b3c1b1138de7af97f6",
       "fingerprint": "6451440d9eb4768350c6b4576c366a8c6433ff6ad88062bc8b3d89393c0e3e69",
@@ -1389,6 +1380,15 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
+      "identity": "4cde463635f789341d7758901869d80509862e986b112b03e4bbe4b926e8fe9b",
+      "match_id": "247b76cf62410995cadb401b93ab42f1250ebd06b50209a87e6374d2ee921d21",
+      "fingerprint": "7a1cde6e6b2c134c6251785351cdb22652a9a049af15d27033c3e969faf69a58",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/upgrade.js",
+      "added": "2026-11-27T02:12:18.591Z"
+    },
+    {
       "identity": "4d7100da194cf21b6c940739a5e94b053e04e830aab1917ddf5f532d36ebf64c",
       "match_id": "2f251c43cba8a5ef99b176e44301a50a51f12a9d7807fae6cf27e7bf584ee11b",
       "fingerprint": "f1d10a962aa0994aa91dc36f03f9c34069e6ea42255f41186cbdac09b5943b78",
@@ -1423,6 +1423,15 @@
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/quality.js",
       "added": "2026-11-27T01:02:20.330Z"
+    },
+    {
+      "identity": "4f6d1b200c7ac7b828db7b7e9f1cc2115d6afda291bce6bcdb8b12da92256c1a",
+      "match_id": "c7e28e2112b426828adf96e42f563f7a63f11126d7da6def655d0210a886640f",
+      "fingerprint": "b9e89f2f31552ebf7cb51e51fc33c8adeef81a4618bbe511686fed3cb1feeca8",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/friction.js",
+      "added": "2026-11-27T02:12:18.591Z"
     },
     {
       "identity": "4fa0649c4efcba59e58e41622ee267ab63b44df404b03f3fb06727acb30ee712",
@@ -1542,6 +1551,15 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
+      "identity": "534c3152c264b7514d3d7887f49814dbe61eaec9d17cbc918b4f91a0038f17c9",
+      "match_id": "cd3d41d8ecb668fffbc6463412acb1b877ef6847bea6cd67783396ee106674aa",
+      "fingerprint": "f1065063d556796df61c2394c1113f18319fdd4080e33e0668ba03c53204a8dc",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "hooks/spec-hook.js",
+      "added": "2026-11-27T02:12:18.591Z"
+    },
+    {
       "identity": "53873307bb31217862b54f188f0d5950d7c527c17a077646a3d4af9e27467b51",
       "match_id": "6acb52e7ebe660aae8e6265ed4fbfe23c84da9a7fa05c9d9b5d4f109b933e72a",
       "fingerprint": "218b5e5c0597c3a77014baaaf5f4e549090b08a5d5ba3cf698f41f011804ca03",
@@ -1603,6 +1621,15 @@
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/packs.js",
       "added": "2026-11-27T01:02:20.330Z"
+    },
+    {
+      "identity": "554e8d6e95fe947cf59b2963e280870c00d2df6aa476f703f1d791a5f18ad9b5",
+      "match_id": "daad11f4373afce06ebf0d2762064888e13a066fed8a0a4079b3d9bfcf27bd96",
+      "fingerprint": "abc57cb48adb0cbfd9d8b335baa6d4bc3c9931944771c3a1e6c818d04980fbe1",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/import/speckit.js",
+      "added": "2026-11-27T02:12:18.591Z"
     },
     {
       "identity": "5555bb795a39c32aab519316d9bb4bddef5862f51fff747e509db0eec837fc4a",
@@ -1713,13 +1740,13 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
-      "identity": "5ae0650cbc664bcb65c9549e96eee4d3b161387e9b260a1a14759d92f5cf047b",
-      "match_id": "6b6b89d049b80098d3ea54eb59df180dc5810d2f5ec9a8b12a4c462ae2d0443b",
-      "fingerprint": "ff1f6f373e7217cef9282415688363a83a552db2ad61522238d0ba83d5689afd",
+      "identity": "5a486e76fd547b936586386a167856639dd5a5bbb0164f37bb6cd31de38204db",
+      "match_id": "614769432bd0eb77cc84ecbc476c635483a8031e570a19696b7d94604f16ee2c",
+      "fingerprint": "43a2b47b3eee0440c4575bddd41bd017bcf656fd098fcba5801584affb2e960d",
       "severity": "medium",
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
-      "file_path": "mcp/lib/engine/import/index.js",
-      "added": "2026-11-27T01:02:20.330Z"
+      "file_path": "mcp/lib/engine/trace.js",
+      "added": "2026-11-27T02:12:18.591Z"
     },
     {
       "identity": "5b04d50feed66c75f95362bf03b72242210eebb8de0e1f3c2621adc7c1245631",
@@ -2442,13 +2469,13 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
-      "identity": "72cb61666ff88fc5b3f89be83e9beacffafcbc0cfbced757ab9616bfdb4a582d",
-      "match_id": "5933d4439bb09d9ce0a0b0122de7eda079df7553acada4f5a48d6a39fdc64035",
-      "fingerprint": "b67d7398009811728a68b33d00bcbc8d5b8cf310b1c69d1208327408d51cf11a",
+      "identity": "72e4349e486b93de87d823279057f510ffbbf1407dccef7540b467f68e5caf2f",
+      "match_id": "d10e02597868dc670895a20d9c00bc300ef391a17a6356945e9d5db430bfbe0d",
+      "fingerprint": "948ed837d4027bd8969b2fa0fbcb9920d6301c2c6f506e9487f6f1efc3296007",
       "severity": "medium",
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
-      "file_path": "mcp/lib/engine/import/index.js",
-      "added": "2026-11-27T01:02:20.330Z"
+      "file_path": "mcp/lib/engine/guards.js",
+      "added": "2026-11-27T02:12:18.591Z"
     },
     {
       "identity": "734141996321025c2ecd1d7f46bb6eec398ff0dfe66109729c17de33c8f7785b",
@@ -3360,15 +3387,6 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
-      "identity": "976f86a1cd3d5f0d8cff4f9837b3bcffb02efec91b3051fe492b45297e20984e",
-      "match_id": "c5ddab24067b0b1fe51409bcf2c0ea15ee5600dc016f99d73463f003c5388b35",
-      "fingerprint": "dbdb9d26b255ac762225e917934e8bdc1cea549ef9eb871fce7c75c9cd4bb081",
-      "severity": "medium",
-      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
-      "file_path": "mcp/lib/engine/scaffold.js",
-      "added": "2026-11-27T01:02:20.330Z"
-    },
-    {
       "identity": "97bd316f817d72e40fac378e1e345ffa8315b057105308ca2c2689f867e387f8",
       "match_id": "893b80fd1920d2a61a9c980a9992dd68aae130072290478037cef0e2da0aab21",
       "fingerprint": "4e43e6a33999190b2bf0da2b55d36a4865cad2d2978e835971b629f6d3403359",
@@ -3981,15 +3999,6 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
-      "identity": "b3fa7543bcb39b477203edd1aee77572dcfa82f5cbd9231134f17d9148c6d3ae",
-      "match_id": "6f97a8c9f72fd8b719aa0ea56af66ac46493f3b66717a9fc7658c3b5213bd499",
-      "fingerprint": "eaf7d1e5c5d59ff97dd344cfc81cbdcda02253af9957a9c64c06896e82245758",
-      "severity": "medium",
-      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
-      "file_path": "mcp/lib/engine/protect.js",
-      "added": "2026-11-27T01:02:20.330Z"
-    },
-    {
       "identity": "b478c5cce8e7fd471f612a5e65e993d765f620890f39b6d4c31661159c3eb118",
       "match_id": "651ae4b8f235545ac7a598919d5e1fbfbfad38e1f73319760bb2d6c4337573a5",
       "fingerprint": "98166162b2e782eb4e049a96a46ed764ea4e05e8e377b578b0880560a82d01b5",
@@ -4014,15 +4023,6 @@
       "severity": "medium",
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/guardian.js",
-      "added": "2026-11-27T01:02:20.330Z"
-    },
-    {
-      "identity": "b6c4ab2b5eca87888e6a9d8e4040f1d81b0295457e6afe5504d84b415705919e",
-      "match_id": "00302bca0241e21cb79cfecd8f36f5cd34f45b8727768c498f60480eb574ffce",
-      "fingerprint": "1025185bc2e67f29438f0c28fbbea9fc0c9211b5dd693ca719dfbab15415e9a0",
-      "severity": "medium",
-      "title": "RegExp() called with a `id` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) withi…",
-      "file_path": "mcp/lib/engine/tasks.js",
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
@@ -4584,6 +4584,15 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
+      "identity": "ceea79906eb68cfc05bc7c74b292eab0caa1400ba435af38b583018644dc0b9c",
+      "match_id": "ea80bbde107ab49224571a452e5b24317478a3178fab3c12384e085ae81c3a4a",
+      "fingerprint": "d12f11edff34cf88bf03c81f646422a1ab0d5bbd1437400ea7348a0f504f8d71",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/finish.js",
+      "added": "2026-11-27T02:12:18.591Z"
+    },
+    {
       "identity": "cf6b566e6e40abee6bd06fa197b7a39d809229d37ba888644c913022be4d2706",
       "match_id": "cf4316bcdd469b727e35df47b0b4635328a794233f90dc86305d2a5f7f6dc5c5",
       "fingerprint": "94810055e5f48a9a78e257d96ea09572b2f9c77ee7619954372ad2aa41d4e2b8",
@@ -4683,6 +4692,15 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
+      "identity": "d308fc1cab810a685685d62cfe8ca9780380351b4b48f93a6f84cad969cc0f9a",
+      "match_id": "6ff843c93722479a214fb9ce9fa32a1b6de6b2a02e8407dc52a12db958e75e29",
+      "fingerprint": "a06be903811b87dc326cd3bd022c1c148e1971e763a327cd9198656fb0280594",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/finish.js",
+      "added": "2026-11-27T02:12:18.591Z"
+    },
+    {
       "identity": "d351413b2b762d86f87223220edc6aa67a39646abf7c032ef4e92d93f571eddf",
       "match_id": "c4dec25c9d5bc0b8086a91e01cf561f7e7d020e6b512fb8c6faa3ac2f3df174a",
       "fingerprint": "5b24541c61972ad4eaa8eb262d2a123aad002638a4c240092ce571afbee0c71d",
@@ -4744,6 +4762,15 @@
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/guardian.js",
       "added": "2026-11-27T01:02:20.330Z"
+    },
+    {
+      "identity": "d5946a79710ac4e587dc0895608c03bed2bc556f979c2aae07f4cb6c9ae02232",
+      "match_id": "3d8382c9c0da6152c116eb4b5862b2c8dfd45d289b63a0c98e0e1e99e1586c09",
+      "fingerprint": "61f820867a08a1210d6ee6f97ef414d1c8b343bd994999be746bc24bada10b72",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/export.js",
+      "added": "2026-11-27T02:12:18.591Z"
     },
     {
       "identity": "d5ae25f033f0a57f86d610318db65ee1a7195e4922a526972a30e3d00c26f5b7",
@@ -5133,15 +5160,6 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
-      "identity": "ead1068583f92402eaf09764c5059a7f6f5769de42015ba67dff337f970a7d7f",
-      "match_id": "574c41cb413fbbf12f90963e7120e44b886b43e2255a515fc7b9ac337e05f828",
-      "fingerprint": "9492ec939692df8709496ee8cdfe0b4c98fe6f42c75989a7b525faa8dfe128b5",
-      "severity": "medium",
-      "title": "RegExp() called with a `id` function argument, this might allow an attacker to cause a Regular Expression Denial-of-Service (ReDoS) withi…",
-      "file_path": "mcp/lib/engine/tasks.js",
-      "added": "2026-11-27T01:02:20.330Z"
-    },
-    {
       "identity": "eb59721e295481ce713920f62b7af8ac4ceef1d416421e59233b0b96d2747676",
       "match_id": "d08e48a322b37bb89e344f9873328ce8dc5b352aeedc7f437bc1108fb0b3636d",
       "fingerprint": "40d67d0bd76880c863f98167db276a14f45b4b63a2e69979b2c51fdcc6ad481c",
@@ -5166,15 +5184,6 @@
       "severity": "medium",
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/protect.js",
-      "added": "2026-11-27T01:02:20.330Z"
-    },
-    {
-      "identity": "ec50b5d39c48b03410e73cf7ef5a537c70b3c7e794f5af998a40679b9a3011a9",
-      "match_id": "17c024785ce00129d3c51bdeb9d7d3922004f634d545fd9e3a3440f4cab6533f",
-      "fingerprint": "6fe833b8691812cb2975ac6a5231d395f21579d2c22f553b87b3bd2dd0409e1a",
-      "severity": "medium",
-      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
-      "file_path": "mcp/lib/engine/import/fluidplan.js",
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
@@ -5266,6 +5275,15 @@
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/scaffold.js",
       "added": "2026-11-27T01:02:20.330Z"
+    },
+    {
+      "identity": "f2132cbe6542d3cbdd42f43955b34fdacffb25b17343e6efb8e8a898cc7a0c1a",
+      "match_id": "70dbaf09ae81e580f8e42450362b77a6d3acf17f889021c9e4d269804a25e5b4",
+      "fingerprint": "87627eb58f206adb61eac062eafeceaabcd4ca455bd928b19eb6f0a7a074e4dc",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/finish.js",
+      "added": "2026-11-27T02:12:18.591Z"
     },
     {
       "identity": "f21bb7f120c5b56af640d01d814227476fc8fe1bad40ffce49340725c3cc8368",
@@ -5439,6 +5457,15 @@
       "added": "2026-11-27T01:02:20.330Z"
     },
     {
+      "identity": "f7274e901119c9e0bbd5fffe5375d14bbf9eefa128736e965f243828bb042d81",
+      "match_id": "2c067a0f4aab1c669e13997eb73738410d183e0921ee858f8c696d20d43806e8",
+      "fingerprint": "fb162b26c5b8ea41c4d7fc425c88bc4fa5233de681b86da71aff31661dc88c36",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/guards.js",
+      "added": "2026-11-27T02:12:18.591Z"
+    },
+    {
       "identity": "f7772ecd461cd48051adcbbf5b153877422c034682cac77f327e2affb48bead5",
       "match_id": "8ca9a163c970b145b094b0df41e7d685e64f30b83bc0e58e32409954cc75b98c",
       "fingerprint": "2b0798f1651902dffd751be31e64031da7e0296aaa313ee6616f58361823bdbf",
@@ -5464,6 +5491,15 @@
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/engine/scaffold.js",
       "added": "2026-11-27T01:02:20.330Z"
+    },
+    {
+      "identity": "f810cbff4fcf7fe6b280ceff0d23ba0176548827ad95299e796535b55a2cebb1",
+      "match_id": "4500db162967bb0f3711e8ed737cbb72eb8fcab9a50aaad1a771230388632a2c",
+      "fingerprint": "4895f10a8a921ec8063b7c251e6deca2d41e685ecf57f61a9b1e6c1a5e3b8f16",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/upgrade.js",
+      "added": "2026-11-27T02:12:18.591Z"
     },
     {
       "identity": "f858f905bdcd6076f1dfcf16e4f7fbd265b6fdc51c23a8bc5db48a145f598f54",
@@ -5653,6 +5689,15 @@
       "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
       "file_path": "mcp/lib/probe.js",
       "added": "2026-11-27T01:02:20.330Z"
+    },
+    {
+      "identity": "ffffc315b55ab839580ab67570a7bc7532670051d968b878564b30c98a1b9144",
+      "match_id": "e81acd752579ef0f5006ec8eb17773689d3aaba2314543948bebd4245153cd51",
+      "fingerprint": "89bbc98a0d5295ab71f69f5db621f5eba1ec6f7000683894cd0d83376c429028",
+      "severity": "medium",
+      "title": "Detected possible user input going into a `path.join` or `path.resolve` function. This could possibly lead to a path traversal vulnerabil…",
+      "file_path": "mcp/lib/engine/export.js",
+      "added": "2026-11-27T02:12:18.591Z"
     }
   ]
 }
