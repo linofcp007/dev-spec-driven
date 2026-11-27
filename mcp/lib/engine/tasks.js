@@ -1079,9 +1079,32 @@ function backtickRuns(s) {
   };
 }
 // The scan is linear but not cheap, and one refresh asks for the same tasks.md many times (status, phase, roadmap row,
-// verification) — the last few results are kept by text. Callers get their own copies (they may annotate them).
+// verification) — the results are kept by text, the least recently used dropped first. Callers get their own copies (they may
+// annotate them). (1.42 perf-2) Bounded at TASK_BLOCKS_MEMO_MAX texts AND TASK_BLOCKS_MEMO_CHARS characters of them (the keys):
+// 32 texts thrashed past 32 features — a refresh of 40 scanned 160 times where 40 do, a warm one 160 where 0 do. A pure function of
+// the text, so nothing goes stale. What the bounds hide: past ~4 M characters held (about 400 features of 10 KB — half that when a
+// track-filtered text doubles the keys) or 1,024 texts, a project-wide call scans the oldest again, as 32 did; the newest text is
+// always kept, however long (one over 4 M is then alone: memory ≤ max(4 M, the newest text) of keys, ≤ ~26 MB with their blocks —
+// measured, 1,024 × 4 KB texts). Two features with the same text share ONE scan (taskPeerStamps returns one Set for both): a reader
+// annotates its copies, never the scan's blocks.
 const TASK_BLOCKS_MEMO = new Map();
-const TASK_BLOCKS_MEMO_MAX = 32;
+const TASK_BLOCKS_MEMO_MAX = 1024;
+const TASK_BLOCKS_MEMO_CHARS = 4 * 1024 * 1024;
+const TASK_BLOCKS_MEMO_STATE = { chars: 0 };
+// An LRU put on a Map whose insertion order is its recency (a hit is deleted and set again by the caller): `key` → `value` set last,
+// then the OLDEST entries evicted until both bounds hold — at most `maxEntries` entries and `maxChars` characters of keys — or the
+// new one is alone (it is never evicted). `state.chars` is the kept keys' total length, exact. → map
+function lruPut(map, key, value, state, { maxEntries, maxChars }) {
+  if (map.has(key)) { map.delete(key); state.chars -= key.length; }
+  map.set(key, value);
+  state.chars += key.length;
+  while (map.size > 1 && (map.size > maxEntries || state.chars > maxChars)) {
+    const oldest = map.keys().next().value;
+    map.delete(oldest);
+    state.chars -= oldest.length;
+  }
+  return map;
+}
 // the tasks.md a block was read from, for ownRecord's renumber rule (evidence.js): every block taskBlocks() hands
 // out → the blocks of that read, and taskPeerStamps(block) → their task stamps (taskStamp: the text, ≤ 500 characters) — one
 // Set per scan, computed on first use and shared by its copies. A block built any other way (or copied by a caller) has none:
@@ -1098,15 +1121,13 @@ function taskPeerStamps(block) {
 function taskBlocks(tasksText) {
   const key = String(tasksText || "");
   let blocks = TASK_BLOCKS_MEMO.get(key);
-  if (blocks) {
-    TASK_BLOCKS_MEMO.delete(key); // most recently used last
-  } else {
-    blocks = scanTaskBlocks(key);
-    if (TASK_BLOCKS_MEMO.size >= TASK_BLOCKS_MEMO_MAX) TASK_BLOCKS_MEMO.delete(TASK_BLOCKS_MEMO.keys().next().value);
-  }
-  TASK_BLOCKS_MEMO.set(key, blocks);
+  if (!blocks) { blocks = scanTaskBlocks(key); taskBlocks.scans++; }
+  lruPut(TASK_BLOCKS_MEMO, key, blocks, TASK_BLOCKS_MEMO_STATE, { maxEntries: TASK_BLOCKS_MEMO_MAX, maxChars: TASK_BLOCKS_MEMO_CHARS }); // most recently used last
   return blocks.map((b) => { const c = { ...b, body: b.body.slice(), bodyCode: b.bodyCode.slice() }; BLOCK_PEERS.set(c, blocks); return c; });
 }
+// in-process counters for the tests (never in a result's JSON): the scans the memo missed, and the characters of text it holds
+Object.defineProperty(taskBlocks, "scans", { value: 0, writable: true, enumerable: false });
+Object.defineProperty(taskBlocks, "memoChars", { get: () => TASK_BLOCKS_MEMO_STATE.chars, enumerable: false });
 // ownLines (changeViews only): an array filled with true at every line index a task block holds — its task line, its body
 // lines and the fenced code it owns.
 function scanTaskBlocks(tasksText, ownLines) {
@@ -2324,7 +2345,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
 module.exports = { parseTasks, taskDescription, nextTask, taskDependsSpec, taskSchedule, dependencyCycles, taskWaves,
   taskDepsBlockedNote, taskDepsWaitList, taskDepsCheck, tasksRewrite, checkboxBytes, completeTask, reasonInput, taskLine,
   dropTrailingCr, RE_CHECKPOINT, scanTaskLines, indentOf, hasOutsideCode, backtickRuns, nextTaskNumber, taskPeerStamps,
-  taskBlocks, unreadTaskLines, unreadTasksDetail, resolveTask, blockPosition, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
+  taskBlocks, lruPut, unreadTaskLines, unreadTasksDetail, resolveTask, blockPosition, duplicateTaskNumbers, taskProse, redPhaseHint, tasksProseText,
   changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, taskMarkerSpans, labelMarkerSpans, taskMarkerValues, withoutTaskMarkers,
   taskMarkers, malformedMarkers, suspiciousVerify, RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections,
   taskBrief, RE_THEMATIC_BREAK, appendTasks,

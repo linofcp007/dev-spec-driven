@@ -709,6 +709,15 @@ Engine: the `B5` block of `engine/evidence.js`.
   `<!--` may span lines) and fenced code never hold tasks; `<!--` / `-->` inside code spans don't count. `parseTasks()` is its
   line-only projection (public through `spec_status`), so status / next / complete / brief / finish never disagree. Tasks are
   story-organized (P1 first) with `[P]` parallel markers + `**Checkpoint:**` lines; doctor checks the design's `Constitution Check`.
+- **The scan is memoized by text** (`TASK_BLOCKS_MEMO`, 1.42): an LRU of `TASK_BLOCKS_MEMO_MAX` = 1,024 texts AND
+  `TASK_BLOCKS_MEMO_CHARS` = 4 M characters of them (`lruPut`: the oldest out first, a hit moved to the newest place, the newest
+  always kept — one text over 4 M is then alone), so a refresh past 32 features no longer re-scans each text 4× (40 features: 160
+  scans → 40 cold, 0 warm; a tick 162 → 1). A pure function of the text: nothing goes stale. Callers get copies; features whose
+  tasks.md are byte-identical share ONE scan (`taskPeerStamps` returns one Set for both), so a reader annotates its copies, never
+  the scan's blocks (mcp/tests/08-tasks-memo.js holds a bugfix and a plain feature with the same text). What the bounds hide: past
+  ~4 M characters held (~400 features of 10 KB; half that when a track-filtered text doubles the keys) or 1,024 texts, a
+  project-wide call scans the oldest again; a long-lived process (the MCP server) keeps ≤ ~26 MB for it (the keys 4–8 MB, one- or
+  two-byte, + ~17.5 MB of blocks — measured at 1,024 × 4 KB). `taskBlocks.scans` counts the misses (in-process, never in a result).
 - **A task line** is `[-*+] [ ] N. text`; the tasks fingerprint's tick normalization (`uncheckTasks`, state.js) takes the same
   bullets, and a fingerprint made on `- [x]` alone still matches. Task numbers are numeric (`01.` is task 1); `resolveTask()` picks
   the first OPEN task of a duplicated number (doctor warns `duplicate-tasks`).
@@ -1463,6 +1472,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 review 8** — the `_Implements:_` slot: the model-facing prose never required the marker, so a filled xs change.md
   finished "ready" with "0 implementing file(s)" and `dupes` had "nothing to compare". The templates carry the slot, the readers
   drop it as a placeholder, the gate refuses it left in (mcp/tests/08-tasks.js).
+- **1.42 (perf-2, DS-PERF)** — the task-blocks memo held 32 texts: one refresh asks for a feature's tasks.md about four times, so
+  past 32 features every read missed (40 features: 160 scans a refresh, warm or cold; next_action 81; a tick 162). Now 1,024 texts
+  and 4 M characters (`lruPut`). The design's "a key over the bound is not inserted" was dropped in critique: a tasks.md over 4 M
+  characters would re-scan once per caller where 32 kept it; the newest is kept instead. Tested as properties (a warm refresh 0, a
+  tick 1, SessionStart ≤ one a feature), never "exactly 40".
 
 ### End-of-turn evidence gate and scope guard
 - **1.14** — the end-of-turn gate (`stopCheck`, the Stop / SubagentStop hook, `dev-spec stop-check`) and the scope guard's `"scope"`
