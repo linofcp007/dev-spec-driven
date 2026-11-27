@@ -82,7 +82,7 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `openRegular`; at most `TRANSCRIPT_MAX` (32 MB — the largest of 4,440 local dev-spec agent transcripts is 26.8 MB) in 1 MB
   chunks split on the newline byte (a line carried whole across a chunk's end), past it `truncated`. The id is the transcript's
   file name without `.jsonl` — the one id source (the payload's `agent_id` is never read: one dispatch keyed two ways would count
-  twice). **Async:** as the Bash entries — its timeout isn't enforced and `claude -p` may kill it at teardown, so a headless
+  twice). No assistant turn read, or a payload past the hook's 4 MB `MAX_INPUT` (a final message that long): nothing recorded. **Async:** as the Bash entries — its timeout isn't enforced and `claude -p` may kill it at teardown, so a headless
   session's last dispatch can go unrecorded; and because nothing kills it, it never opens a FIFO (the POSIX rows of
   mcp/tests/10-guards-hooks-cost.js "S9-c").
 - **The claim scan runs on a one-byte text** (mcp/lib/latin1-scan.js, loaded only for a prose past U+00FF; guards.js

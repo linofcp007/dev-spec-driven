@@ -231,7 +231,7 @@ function agentRunOf(file, opts = {}) {
 // session's (probe.sessionProjects — none: the engine never loads —, then spec.sessionProject: a worktree's copy maps to the checkout
 // the MCP server records in) — ONE record per dispatch. The id: the transcript's file name without .jsonl (`agent-<hex>`), the one id
 // source — a dispatch the stop gate sent back stops again and its later record wins (agentCosts). No assistant turn read (no file, an
-// empty one): nothing recorded. → null (it prints nothing).
+// empty one) or a payload past MAX_INPUT (a final message over 4 MB): nothing recorded. → null (it prints nothing).
 function recordAgent(payload) {
   const agent = payload.agent_type, file = payload.agent_transcript_path;
   if (typeof agent !== "string" || !agent.trim() || typeof file !== "string" || !file.trim()) return null;
