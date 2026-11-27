@@ -70,10 +70,23 @@ function projectRel(root, p) {
 }
 // The test files a _Verify:_ command names: its words, quotes and backticks off, a pytest `::node` / a `:line[:col]` suffix off,
 // never a glob (a word naming no file records nothing: its hash is null).
+// (1.42 B142-12) A word's quotes and brackets come off by two loops, never by the regex `^["'`(]+|["'`;,)]+$` it was: that regex's
+// `$` alternative retried from every comma of a long run (`,` × 40 K then a letter: 1.6 s a word). The same answer on every word:
+// the regex took the LEAD run at the start, then the TAIL run at the end of what was left; the loops take the TAIL run first, then
+// the LEAD run of the rest — the same characters both ways, and all of them when the two runs meet (10-guards-protected-tests.js:
+// the exhaustive table over every word of up to 6 characters of `"'`(;,)ab`).
+const WORD_LEAD = "\"'`(", WORD_TAIL = "\"'`;,)";
+function trimWord(raw) {
+  let e = raw.length;
+  while (e > 0 && WORD_TAIL.includes(raw[e - 1])) e--;
+  let s = 0;
+  while (s < e && WORD_LEAD.includes(raw[s])) s++;
+  return raw.slice(s, e);
+}
 function verifyTestPaths(cmd) {
   const out = [];
   for (const raw of String(cmd).split(/\s+/)) {
-    const w = raw.replace(/^["'`(]+|["'`;,)]+$/g, "").replace(/::.*$/, "").replace(/:\d+(?::\d+)?$/, "").replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
+    const w = trimWord(raw).replace(/::.*$/, "").replace(/:\d+(?::\d+)?$/, "").replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
     if (w && !/[*?{]/.test(w) && isTest(w)) out.push(w);
   }
   return out;
@@ -521,4 +534,6 @@ function protectedTestsDoctor(projectDir, slug, state, lng, open) {
 }
 
 module.exports = { protectWalkFirst, protectOnApproval, protectApprovalNote, protectOnTick, protectedCount, tickRecorded, protectedTestDecision,
-  protectTests, protectHashFirst, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, protectedTestsDoctor, __link };
+  protectTests, protectHashFirst, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, protectedTestsDoctor,
+  verifyTestPaths, // the engine's, for a test (10-guards-protected-tests.js: the trim's table and its cost) — not the facade's
+  __link };
