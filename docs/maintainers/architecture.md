@@ -97,11 +97,13 @@ hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|Notebook
                                (approval tools, shells, Write / Edit / NotebookEdit, other MCP servers' file tools) ·
                                PostToolUse → spec-hook.js (Write|Edit) + observe-hook.js (Bash|PowerShell, async) + plan-hook.js
                                (ExitPlanMode) · PostToolUseFailure → observe-hook.js · SessionStart → spec-hook.js · Stop +
-                               SubagentStop (^(dev-spec-driven:)?spec-(implementer|simplifier)$) → stop-hook.js
+                               SubagentStop (^(dev-spec-driven:)?spec-(implementer|simplifier)$) → stop-hook.js, then
+                               (the six plugin agents, async) → observe-hook.js
 hooks/*-hook.js                guard (opt-in guard mode) · approval (opt-in human approval guard) · observe (logs _Verify:_ /
-                               check runs, prints nothing) · spec (save checks + SessionStart lines) · stop (stale roadmap
-                               refresh, then the evidence gate) · plan (the plan-mode bridge) — each exports its decide(raw,
-                               opts), run as a process only as the main module (the tests call it in-process: hookIn)
+                               check runs and a plugin agent's counts, prints nothing) · spec (save checks + SessionStart
+                               lines) · stop (stale roadmap refresh, then the evidence gate) · plan (the plan-mode bridge) —
+                               each exports its decide(raw, opts), run as a process only as the main module (the tests call it
+                               in-process: hookIn)
 hooks/hook-utils.js            what the hooks share before the engine loads (the runner — runHook / finish —, probe.js
                                re-exported on first use, the claim pre-filter…)
 hooks/precommit-check.js       optional git pre-commit validator (a stale ROADMAP.* / SPECS.md refreshed and re-staged)
