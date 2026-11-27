@@ -83,6 +83,9 @@ History at the end.
 - **Removals go through it too:** `removeSpecFile` (a link AT the path unlinked as the link), `removeEmptySpecDir` (an EMPTY
   folder, never a link — rmdir would drop a junction). **Known limit:** a second write in one call can be refused after the
   first landed (a linked tasks.md: the evidence recorded, the tick refused) — but nothing is written THROUGH a link.
+  **Known limit (1.42 review 1):** the gate refuses a link and the wrong kind, never a special file — a FIFO at an append target
+  (`.execution/agents.jsonl`, `observed.jsonl`, `timings.jsonl`) passes, and `specWrite`'s open (no O_NONBLOCK) waits for a reader,
+  holding the async observe hook that is never killed. Only a local process can plant one (git stores no FIFO: a clone cannot).
 
 ### The read gate — nothing READ through a link below .specs/ (1.41.1)
 - **The write gate's predicate, read the other way** (`specsReadGate(p)`, engine/files.js, beside `specsWriteBlock`; both share
