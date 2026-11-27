@@ -386,7 +386,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const spec = "# Feature Specification: Albums\n\n### User Story 1 - Create (Priority: P1)\n\n**Acceptance Scenarios**:\n\n" +
       "1. **Given** a user, **When** they create an album named Trip, **Then** the album Trip is listed\n\n## Success Criteria\n\n- **SC-001**: an album is created in under 1 second\n";
     const plan = "# Implementation Plan: Albums\n\n## Summary\n\nSQLite.\n";
-    const quick = "# Quickstart: Albums\n\n1. Run `npm run dev`\n2. Open http://localhost:3000/[endpoint] - validates SC-001\n3. Seed the demo data [NEEDS CLARIFICATION: which fixture set?]\n" +
+    const quick = "# Quickstart: Albums [NEEDS CLARIFICATION: staging or local?]\n\n1. Run `npm run dev`\n2. Open http://localhost:3000/[endpoint] - validates SC-001\n3. Seed the demo data [NEEDS CLARIFICATION: which fixture set?]\n" +
       "4. Sign in as [NEEDS CLARIFICATION]\n\n```text\n[NEEDS CLARIFICATION: in a code block]\n```\n\n<!-- [NEEDS CLARIFICATION: in a comment] -->\n";
     const a = q1("plan", { "spec.md": spec, "plan.md": plan, "quickstart.md": quick });
     const doc = a.r.ok ? S.specDoctor(a.p, a.r.feature) : {};
@@ -398,17 +398,17 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const bAp = b.r.ok ? S.approvePhase(b.p, b.r.feature, "design", "probe", {}) : {};
     const c = q1("none", { "spec.md": spec, "plan.md": plan, "quickstart.md": "# Quickstart\n\n1. npm run dev - validates SC-001\n" });
     const pt = q1("pt", { "spec.md": spec, "plan.md": plan, "quickstart.md": quick }, "pt");
-    all("1.42 fix 1 R1-IMP-1: an open [NEEDS CLARIFICATION] in spec-kit's quickstart.md is also one design.md line (under 'Open questions in quickstart.md', a fenced / commented one never) — the design gate's clarifications check refuses again; with no design to import they follow the scaffold's design.md, kept (its placeholders refuse once they are resolved); none → no section; localized (got " +
+    all("1.42 fix 1 R1-IMP-1: an open [NEEDS CLARIFICATION] in spec-kit's quickstart.md is also one design.md line (under 'Open questions in quickstart.md', one in its title too — ours replaces it —, a fenced / commented one never) — the design gate's clarifications check refuses again; with no design to import they follow the scaffold's design.md, kept (its placeholders refuse once they are resolved); none → no section; localized (got " +
       js({ cl, failing: ap.failing, d: a.d.slice(a.d.indexOf("## Open"), a.d.indexOf("## Open") + 220), b: [b.r.warnings, b.r.imported, bAp.failing, b.d.slice(-160)], c: c.d.includes("Open questions") }) + ")", [
-      () => a.r.ok, () => a.d.includes("\n## Open questions in quickstart.md\n\n> From spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: which fixture set?]\n- [NEEDS CLARIFICATION]\n"),
-      () => js(E.clarificationMarkers(a.d)) === js(["which fixture set?", ""]), () => !/in a code block|in a comment/.test(a.d),
-      () => cl.status === "fail" && /\b2 unresolved \[NEEDS CLARIFICATION\] in design\.md/.test(cl.detail), () => !ap.ok && (ap.failing || []).includes("clarifications"),
-      () => rd(a.r.dir, "quickstart.md").includes("3. Seed the demo data [NEEDS CLARIFICATION: which fixture set?]\n"),
-      () => b.r.ok && b.r.warnings.includes(W.wNoDesign("plan.md")) && b.r.imported.includes("design.md") && js(E.clarificationMarkers(b.d)) === js(["which fixture set?", ""]),
+      () => a.r.ok, () => a.d.includes("\n## Open questions in quickstart.md\n\n> From spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: staging or local?]\n- [NEEDS CLARIFICATION: which fixture set?]\n- [NEEDS CLARIFICATION]\n"),
+      () => js(E.clarificationMarkers(a.d)) === js(["staging or local?", "which fixture set?", ""]), () => !/in a code block|in a comment/.test(a.d),
+      () => cl.status === "fail" && /\b3 unresolved \[NEEDS CLARIFICATION\] in design\.md/.test(cl.detail), () => !ap.ok && (ap.failing || []).includes("clarifications"),
+      () => rd(a.r.dir, "quickstart.md").includes("3. Seed the demo data [NEEDS CLARIFICATION: which fixture set?]\n") && !rd(a.r.dir, "quickstart.md").includes("staging or local"), // (its title is ours)
+      () => b.r.ok && b.r.warnings.includes(W.wNoDesign("plan.md")) && b.r.imported.includes("design.md") && js(E.clarificationMarkers(b.d)) === js(["staging or local?", "which fixture set?", ""]),
       () => b.d.indexOf("\n## Open questions in quickstart.md\n") > 0 && b.d.endsWith("\n- [NEEDS CLARIFICATION: which fixture set?]\n- [NEEDS CLARIFICATION]\n"),
       () => !bAp.ok && (bAp.failing || []).includes("placeholders") && !(bAp.failing || []).includes("clarifications"),
       () => c.r.ok && !c.d.includes("Open questions") && !E.clarificationMarkers(c.d).length,
-      () => pt.r.ok && pt.d.includes("\n## Questões em aberto do quickstart.md\n\n> Do spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: which fixture set?]\n"),
+      () => pt.r.ok && pt.d.includes("\n## Questões em aberto do quickstart.md\n\n> Do spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: staging or local?]\n"),
     ]);
   }
 
@@ -437,7 +437,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       ["quickstart.md", "# Quickstart\n\n1. Re-check us9/ac1\n", 10], ["research.md", "# Research\n\n## Decision: zip\n\nFor [US4].\n", 5], ["contracts/api.yaml", "openapi: 3.0.0\nx-story: US11\n", 12]];
     const bs = texts.map(([f, t], i) => q3("text-" + i, { "spec.md": f === "spec.md" ? t : base, ...(f === "spec.md" ? {} : { [f]: t }) }).r.mapping["Functional Requirements"]);
     const dup = q3("dup", { "spec.md": base.replace("## Requirements", "### User Story 1 - Again (Priority: P2)\n\n**Acceptance Scenarios**:\n\n1. **Given** a, **When** b, **Then** c\n\n## Requirements") });
-    const c = q3("mixed", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n## Phase 1\n\nNote _Requirements: US-5.AC-1_\n\n- [ ] T010 [US1] Create\n  - _Requirements: US-1.AC-9_\n- [ ] T011 Log\n  - _Requirements: FR-001, US-4.AC-1_\n" });
+    const c = q3("mixed", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n## Phase 1\n\nNote _Requirements: US-5.AC-1_\n\n- [ ] T010 [US1] Create\n  - _Requirements: US-1.AC-9_\n- [ ] T011 Log\n  - _Requirements: FR-001, US-4.AC-1_\n- [ ] T012 Empty\n  - _Requirements: ,_\n" });
     const kp = fresh("fx1-q3-kiro");
     put(path.join(kp, ".kiro", "specs", "k", "requirements.md"), "# Requirements\n\n## Requirements\n\n### Requirement 1\n\n**User Story:** As a user, I want to sign in, so that I reach my account.\n\n#### Acceptance Criteria\n\n" +
       "1. WHEN a user signs in THEN the system SHALL create a session\n2. WHEN a user signs out THEN the system SHALL end the session\n");
@@ -446,7 +446,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const kt = kr.ok ? rd(kr.dir, "tasks.md") : "";
     const e = q3("hostile", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n- [ ] T010 [US1] Create\n- [ ] T011 Old\n  - _Requirements: US-" + "9".repeat(20) + ".AC-1_\n" });
     const e2 = q3("hostile-printed", { "spec.md": base.replace("User Story 1 -", "User Story " + "9".repeat(20) + " -") });
-    all("1.42 fix 1 R1-IMP-2: the FR story is numbered past every story number the source names (US-2.AC-1 in tasks.md → US-3; one in spec.md, plan.md, quickstart.md, research.md or a contract alone moves it past that one; corpus12 / status-15 name none; duplicate story numbers: past the positions); a US-n.AC-m naming no story of the import is dropped (a true warning; the placeholder when nothing is left) — trace finds no phantom and the FR criterion uncovered, the tasks gate refuses; US-1.AC-9 stays trace's phantom; a valid ref beside a stale one kept alone; Kiro alike; a number past the safe integers converts no FR (got " +
+    all("1.42 fix 1 R1-IMP-2: the FR story is numbered past every story number the source names (US-2.AC-1 in tasks.md → US-3; one in spec.md, plan.md, quickstart.md, research.md or a contract alone moves it past that one; corpus12 / status-15 name none; duplicate story numbers: past the positions); a US-n.AC-m naming no story of the import is dropped (a true warning; the placeholder when nothing is left) — trace finds no phantom and the FR criterion uncovered, the tasks gate refuses; US-1.AC-9 stays trace's phantom; a valid ref beside a stale one kept alone, a marker naming nothing the placeholder; Kiro alike; a number past the safe integers converts no FR (got " +
       js({ a: [a.r.warnings, a.tc.verdict, a.tc.phantomAcsInTasks, a.tc.uncoveredByTasks, ap.failing], bs, dup: dup.r.mapping, c: [c.r.warnings, c.tc.phantomAcsInTasks, reqOf(c.tasks, 2)], k: kr.warnings, e: [e.r.counts, e.r.warnings], e2: e2.r.counts }) + ")", [
       () => a.r.ok && a.r.mapping["Functional Requirements"] === "US-3" && a.r.mapping["FR-001"] === "US-3.AC-1",
       () => a.r.warnings.includes(W.wDroppedRef(2, "US-2.AC-1")) && !a.r.warnings.some((w) => /'US-2\.AC-1' matches no imported criterion/.test(w)),
@@ -457,7 +457,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       () => dup.r.ok && dup.r.mapping["Functional Requirements"] === "US-3" && dup.r.mapping["FR-001"] === "US-3.AC-1",
       () => c.r.ok && c.r.mapping["Functional Requirements"] === "US-6", () => c.r.warnings.includes(W.wDroppedRefLine(5, "US-5.AC-1")) && /\nNote _Requirements: \[an imported criterion this task proves\]_\n/.test(c.tasks),
       () => js(reqOf(c.tasks, 1)) === js(["US-1.AC-9"]) && js(c.tc.phantomAcsInTasks) === js(["US-1.AC-9"]),
-      () => js(reqOf(c.tasks, 2)) === js(["US-6.AC-1"]) && c.r.warnings.includes(W.wDroppedRef(2, "US-4.AC-1")),
+      () => js(reqOf(c.tasks, 2)) === js(["US-6.AC-1"]) && c.r.warnings.includes(W.wDroppedRef(2, "US-4.AC-1")), () => js(reqOf(c.tasks, 3)) === js([W.taskAcPlaceholder]),
       () => kr.ok && js(reqOf(kt, 1)) === js(["US-1.AC-1"]) && js(reqOf(kt, 2)) === js(["US-1.AC-2"]) && kr.warnings.includes(W.wDroppedRef(1, "US-9.AC-1")),
       () => e.r.ok && e.r.counts.stories === 1 && !e.r.mapping["Functional Requirements"] && e.r.warnings.includes(W.wUncoveredFr("FR-001")),
       () => e2.r.ok && e2.r.counts.stories === 1 && !e2.r.mapping["Functional Requirements"] && e2.r.warnings.includes(W.wUncoveredFr("FR-001")),

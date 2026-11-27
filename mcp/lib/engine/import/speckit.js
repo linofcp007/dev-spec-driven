@@ -458,9 +458,10 @@ function specKitDesignDocs(dir, read, rd, W, model, src, got) {
   const q = rd("quickstart.md");
   model.quickstart = q == null ? null : demoteMd(q, 0).trim();
   // ...whose open questions stay gated: no gate reads quickstart.md (the design gate counted them while it was a design.md section),
-  // so each [NEEDS CLARIFICATION] the counter reads in it (clarificationMarkers, on the text written there) is also one design.md
-  // line, under a heading naming the file — resolved in both. model.quickstartOpen: that section | null (parseSpecKit places it)
-  const open = model.quickstart ? clarificationMarkers(model.quickstart) : [];
+  // so each [NEEDS CLARIFICATION] the counter reads in the SOURCE (clarificationMarkers — one in its title too, which ours replaces)
+  // is also one design.md line, under a heading naming the file — resolved in both. model.quickstartOpen: that section | null
+  // (parseSpecKit places it)
+  const open = q ? clarificationMarkers(q) : [];
   model.quickstartOpen = open.length ? "## " + D.open + "\n\n" + W.skFrom("quickstart.md") + "\n\n" + open.map((t) => "- [NEEDS CLARIFICATION" + (t ? ": " + t : "") + "]").join("\n") : null;
   if (skipped.length) model.skipped.push(...skipped);
   return parts.length ? parts.join("\n\n") : null;

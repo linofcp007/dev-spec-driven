@@ -143,7 +143,8 @@ is in History at the end.
   quickstart.md (`model.quickstart`, our title line): trace reads an SC's coverage there — it replaces a project template's
   quickstart as requirements / design / tasks are replaced (the test plan keeps the team's), and an SC named only there no
   longer draws doctor's `secondary-trace` warn about design.md. No gate reads quickstart.md, so each `[NEEDS
-  CLARIFICATION]` `clarificationMarkers` reads in the text written there is also one design.md line, under `skDocs.open`
+  CLARIFICATION]` `clarificationMarkers` reads in the SOURCE quickstart (one in its title too, which ours replaces) is also
+  one design.md line, under `skDocs.open`
   (the design gate's clarifications check counts it, as when the quickstart was a design.md section — resolved in both):
   after the design the import writes, else after the scaffold's design.md, which is kept (`scaffoldDesignAppend`; never a
   design.md of those lines alone — once resolved it would hold nothing, and the template's placeholders no longer refused).
@@ -161,7 +162,8 @@ is in History at the end.
   stated limit. `model.frKeys` (a Set per FR) → importRun's `frRefs`: a task's `FR-n` resolves to the criteria holding it,
   for every importer, else `wUnknownRef`. `refs()` (every importer): a `US-n.AC-m` passes through when an imported story
   has the number n (an AC it lacks is trace's phantom), else it is dropped (`REF_DROPPED` → `wDroppedRef` /
-  `wDroppedRefLine`; a marker left with nothing holds `taskAcPlaceholder`, which the gates refuse). What stays prose gets the
+  `wDroppedRefLine`; a marker left naming nothing — every reference dropped, or a `_Requirements: ,_` — holds
+  `taskAcPlaceholder`, which the gates refuse). What stays prose gets the
   parent's `wUncoveredFr` (`uncoveredFrs` over the lines left). `counts.stories` counts the synthetic story. **What the
   import leaves:** `specKitLeft()` names
   every entry of the folder but a hidden one, a `SPECKIT_KNOWN` name and the case twin of one whose read / listing reached

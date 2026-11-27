@@ -168,19 +168,19 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
   let n = 0;
   let anyRefs = false;
   // taskNo: the task a reference belongs to; a line no task owns is reported by its line number instead.
-  // refs(ref): the AC IDs it stands for | null (kept as written, reported) | REF_DROPPED (left out, reported); a marker whose every
-  // reference was dropped holds the placeholder a kept template task gets (fitTemplateTasks) — the gates still see it
+  // refs(ref): the AC IDs it stands for | null (kept as written, reported) | REF_DROPPED (left out, reported); a marker left naming
+  // nothing (every reference dropped, or none: `_Requirements: ,_`) holds the placeholder a kept template task gets
+  // (fitTemplateTasks) — the gates refuse it
   const rewrite = (line, taskNo, lineNo) => replaceRequirementsMarkers(line, (all, list) => {
     anyRefs = true;
     const outIds = [];
-    let dropped = false;
     for (const ref of list.split(/[,;]/).map((s) => s.trim()).filter(Boolean)) {
       const hit = refs(ref);
-      if (hit === REF_DROPPED) { dropped = true; warnings.push(taskNo != null ? W.wDroppedRef(taskNo, ref) : W.wDroppedRefLine(lineNo, ref)); }
+      if (hit === REF_DROPPED) warnings.push(taskNo != null ? W.wDroppedRef(taskNo, ref) : W.wDroppedRefLine(lineNo, ref));
       else if (hit) hit.forEach((x) => { if (!outIds.includes(x)) outIds.push(x); });
       else { outIds.push(ref); warnings.push(taskNo != null ? W.wUnknownRef(taskNo, ref) : W.wUnknownRefLine(lineNo, ref)); }
     }
-    return "_Requirements: " + (outIds.length || !dropped ? outIds.join(", ") : L.taskAcPlaceholder) + "_";
+    return "_Requirements: " + (outIds.length ? outIds.join(", ") : L.taskAcPlaceholder) + "_";
   });
   const out = [L.tasksTitle(name), "", "{{NOTE}}", ""];
   const heading = (h) => { if (out[out.length - 1].trim()) out.push(""); out.push(h); };
