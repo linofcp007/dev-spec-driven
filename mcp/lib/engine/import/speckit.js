@@ -9,9 +9,9 @@
 const path = require("path");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let blankFacts, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings, mdListItems, mdRange,
-  newImportModel, RE_MD_HR, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths;
+  newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths;
 function __link(E) { ({ blankFacts, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings,
-  mdListItems, mdRange, newImportModel, RE_MD_HR, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths } = E); }
+  mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths } = E); }
 
 // spec-kit: specs/<nnn-name>/ — spec.md (### User Story N - Title (Priority: P1) + numbered Given/When/Then
 // Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
@@ -154,7 +154,7 @@ function parseSpecKit(dir, read, W, src) {
     model.carried.push(...leftoverExtras(lines, hs, used)); // e.g. ### Non-Functional Requirements (NFR-001)
     for (const x of [...model.extra, ...model.carried]) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
     // the functional requirements travel as prose — never silently: the ones no acceptance scenario covers are named
-    const frs = uncoveredFrs((model.extra.find((x) => x.key === "functional") || { lines: [] }).lines, model.stories.flatMap((s) => s.criteria.map((c) => c.raw)));
+    const frs = uncoveredFrs((model.extra.find((x) => x.key === "functional") || { lines: [] }).lines, frScenarios(model.stories.flatMap((s) => s.criteria.map((c) => c.raw))));
     if (frs.length) model.warnings.push(W.wUncoveredFr(frs.join(", ")));
   }
   // research.md, data-model.md, contracts/ and quickstart.md are design — each under its own heading after plan.md
@@ -178,16 +178,44 @@ const FR_FILLER = new Set(["system", "systems", "must", "should", "shall", "allo
   "enable", "enables", "sistema", "deve", "devem", "permitir", "utilizador", "utilizadores", "usuário", "usuários", "debe", "deben", "usuario",
   "usuarios", "para", "como", "cada", "todos", "todas", "pelo", "pela", "por"]);
 const frWords = (s) => (String(s).toLowerCase().match(/\p{L}{4,}/gu) || []).filter((w) => !FR_FILLER.has(w)).map((w) => w.replace(/(?<!s)s$/, ""));
-function uncoveredFrs(frLines, scenarios) {
-  const scen = scenarios.map((t) => ({ text: String(t), words: new Set(frWords(t)) }));
+// /(?<![A-Za-z0-9])(FR-\d+)(?!\d)[*_\s]*:?[*_\s]*(.*)$/.exec(l) → [id, text] | null, by a scan: its two [*_\s]* runs met at a
+// line terminator after the text backtracked quadratically (~34 s at 200,000 blanks and a U+2028). The regex's own reading: the
+// FIRST id whose text after its greedy [*_\s]*:?[*_\s]* holds no line terminator (a later id is tried when one's text crosses one).
+const RE_FR_ID = /(?<![A-Za-z0-9])FR-\d+(?!\d)/g;
+const isFrPad = (c) => c === "*" || c === "_" || isWsUnit(c);
+function frLine(l) {
+  const s = String(l);
+  let lastLt = s.length - 1;
+  while (lastLt >= 0 && !isLtUnit(s[lastLt])) lastLt--;
+  RE_FR_ID.lastIndex = 0;
+  for (let m; (m = RE_FR_ID.exec(s));) {
+    let q = RE_FR_ID.lastIndex;
+    while (q < s.length && isFrPad(s[q])) q++;
+    if (s[q] === ":") { q++; while (q < s.length && isFrPad(s[q])) q++; }
+    if (q > lastLt) return [m[0], s.slice(q)];
+  }
+  return null;
+}
+// Does text cite the FR id: /(?<![A-Za-z0-9])<id>(?!\d)/ by indexOf — the pattern built from an id of ~50,000 digits threw
+// "Regular expression too large" out of the import
+function citesFr(text, id) {
+  for (let i = text.indexOf(id); i !== -1; i = text.indexOf(id, i + 1)) {
+    if ((i === 0 || !/[A-Za-z0-9]/.test(text[i - 1])) && !/[0-9]/.test(text[i + id.length] || "")) return true;
+  }
+  return false;
+}
+// THE rule "an acceptance scenario covers this FR" (id, its text): one cites it, or holds every content word of its text — none
+// while it is still [NEEDS CLARIFICATION]. scen: frScenarios(the scenarios' raw texts).
+const frScenarios = (raws) => raws.map((t) => ({ text: String(t), words: new Set(frWords(t)) }));
+function frCovered(id, body, scen) {
+  const words = /NEEDS[ _-]CLARIFICATION/i.test(body) ? [] : frWords(body);
+  return scen.some((s) => citesFr(s.text, id)) || (words.length > 0 && scen.some((s) => words.every((w) => s.words.has(w))));
+}
+function uncoveredFrs(frLines, scen) {
   const out = [];
   for (const l of frLines) {
-    const m = /(?<![A-Za-z0-9])(FR-\d+)(?!\d)[*_\s]*:?[*_\s]*(.*)$/.exec(l);
-    if (!m || out.includes(m[1])) continue;
-    const id = m[1], body = m[2];
-    const words = /NEEDS[ _-]CLARIFICATION/i.test(body) ? [] : frWords(body);
-    const cited = scen.some((s) => new RegExp("(?<![A-Za-z0-9])" + id + "(?!\\d)").test(s.text));
-    if (!cited && !(words.length && scen.some((s) => words.every((w) => s.words.has(w))))) out.push(id);
+    const m = frLine(l);
+    if (m && !out.includes(m[0]) && !frCovered(m[0], m[1], scen)) out.push(m[0]);
   }
   return out;
 }
@@ -198,7 +226,10 @@ function uncoveredFrs(frLines, scenarios) {
 // that story's AC IDs, as for a hand-written one) and `_Implements: <paths>_` for the paths its text names (planPaths — the plan
 // import's rule: a folder part and an extension, never a URL / absolute / home path / glob). A task that already carries the marker
 // (its line or an indented sub-line) keeps it.
-const RE_SK_TASK = /^(\s*)[-*+]\s+\[[ xX~\-/]\]\s+(.*)$/;
+// /^(\s*)[-*+]\s+\[[ xX~\-/]\]\s+(.*)$/ → [line, indent, text] | null, its text by restAfterBlanks: the greedy \s+(.*)$ rescanned a
+// blank run from each blank it gave back when a line terminator followed the text (~34 s at 200,000 blanks and a U+2028)
+const RE_SK_TASK_HEAD = /^(\s*)[-*+]\s+\[[ xX~\-/]\]/;
+const skTaskLine = (l) => { const h = RE_SK_TASK_HEAD.exec(l); const text = h && restAfterBlanks(l, h[0].length, true); return text == null ? null : [l, h[1], text]; };
 const RE_SK_STORY_TAG = /\[US-?(\d+)\]/i;
 const RE_SK_FENCE = /^\s{0,3}(`{3,}|~{3,})/;
 // Does line l close the fence opened with `fence` (a run of the same character, at least as long, nothing after it)?
@@ -217,7 +248,7 @@ function specKitTaskMarkers(text) {
     const f = RE_SK_FENCE.exec(l);
     if (f) { fence = f[1]; continue; }
     const opens = l.includes("<!--") && !l.slice(l.lastIndexOf("<!--")).includes("-->");
-    const m = opens ? null : RE_SK_TASK.exec(l);
+    const m = opens ? null : skTaskLine(l);
     if (opens) { inComment = true; continue; }
     if (!m) continue;
     const indent = m[1].length;
@@ -273,9 +304,12 @@ function specKitDesignDocs(dir, read, W, model, src) {
     const head = "### `contracts/" + f + "`";
     if (x === "md" || x === "markdown") contracts.push(head + "\n\n" + demoteMd(t, 2).trim());
     else {
-      const longest = Math.max(2, ...(t.match(/`+/g) || []).map((s) => s.length));
+      // the longest backtick run, by a loop: Math.max(...runs) threw RangeError on a contract of 300,000 runs (an MCP internal
+      // error, never a refusal); trimEnd: t.replace(/\s+$/, "") was quadratic on an inner blank run (39 s at 200,000 blanks)
+      let longest = 2;
+      for (let i = 0, run = 0; i < t.length; i++) { run = t.charCodeAt(i) === 96 ? run + 1 : 0; if (run > longest) longest = run; }
       const fence = "`".repeat(longest + 1);
-      contracts.push(head + "\n\n" + fence + SPECKIT_CONTRACT_EXT[x] + "\n" + t.replace(/\s+$/, "") + "\n" + fence);
+      contracts.push(head + "\n\n" + fence + SPECKIT_CONTRACT_EXT[x] + "\n" + t.trimEnd() + "\n" + fence);
     }
   }
   if (contracts.length) parts.push("## " + D.contracts + "\n\n" + W.skFrom("contracts/") + "\n\n" + contracts.join("\n\n"));
@@ -300,4 +334,4 @@ function demoteMd(text, by = 1) {
   }).join("\n");
 }
 
-module.exports = { parseSpecKit, __link };
+module.exports = { parseSpecKit, citesFr, frLine, skTaskLine, __link }; // citesFr · frLine · skTaskLine: the tests' equivalence rows

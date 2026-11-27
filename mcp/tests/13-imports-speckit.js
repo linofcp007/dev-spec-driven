@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, S, tmp }) => {
+exports.run = async ({ ok, all, S, tmp, remeasure, require }) => {
   const js = JSON.stringify;
   const fresh = (n) => { const p = path.join(tmp, "proj-r6i-" + n); S.initProject(p, ["core"]); return p; };
   const rd = (...a) => fs.readFileSync(path.join(...a), "utf8");
@@ -78,5 +78,87 @@ exports.run = async ({ ok, all, S, tmp }) => {
     const r2 = S.importSpec(p2, "spec-kit", "specs/001-photo-albums", {});
     ok(r2.ok === false && r2.tooLarge === true && /research\.md/.test(r2.error) && !fs.existsSync(path.join(p2, ".specs", "photo-albums")),
       "1.24 r6 G-I3: a spec-kit design document over the import cap refuses the import (tooLarge, nothing created) (got " + js([r2.ok, r2.error]) + ")");
+  }
+
+  // 1.42 CRI-2: the two scans that replaced a backtracking regex read what it read — every line built from a short head and a
+  // tail of up to 5 units over the characters each pattern turns on (blanks, a line separator, a CR, its marks), exhaustively.
+  {
+    const T = require("./lib/engine/index.js").loadLazyTier(); // + the lazy tier's internals (import/speckit.js frLine, skTaskLine)
+    const LS = String.fromCharCode(0x2028);
+    const tails = (alpha, max) => { const out = [""]; for (let i = 0, from = 0; i < max; i++) { const to = out.length; for (let j = from; j < to; j++) for (const c of alpha) out.push(out[j] + c); from = to; } return out; };
+    const oldFr = (l) => { const m = /(?<![A-Za-z0-9])(FR-\d+)(?!\d)[*_\s]*:?[*_\s]*(.*)$/.exec(l); return m ? [m[1], m[2]] : null; };
+    const oldTask = (l) => { const m = /^(\s*)[-*+]\s+\[[ xX~\-/]\]\s+(.*)$/.exec(l); return m ? [m[0], m[1], m[2]] : null; };
+    const frTail = tails(["*", "_", ":", " ", LS, "\r", "a", "1", "F"], 5), taskTail = tails([" ", LS, "\r", "\t", "a", "["], 5);
+    let n = 0;
+    const bad = [];
+    for (const head of ["FR-1", "- **FR-12", "aFR-1 FR-2", "FR-1" + LS + "FR-3", "x FR-"]) for (const t of frTail) {
+      n++;
+      if (js(T.frLine(head + t)) !== js(oldFr(head + t)) && bad.length < 5) bad.push(head + t);
+    }
+    for (const head of ["- [ ]", "  * [x]", "+\t[~]", LS + "- [/]", "-[ ]", "- [-]a"]) for (const t of taskTail) {
+      n++;
+      if (js(T.skTaskLine(head + t)) !== js(oldTask(head + t)) && bad.length < 10) bad.push(head + t);
+    }
+    // the citation test: /(?<![A-Za-z0-9])<id>(?!\d)/ built from the id
+    const citeTail = tails(["F", "R", "-", "1", "2", "a", " "], 6);
+    for (const id of ["FR-1", "FR-12"]) {
+      const re = new RegExp("(?<![A-Za-z0-9])" + id + "(?!\\d)");
+      for (const t of citeTail) { n++; if (T.citesFr(t, id) !== re.test(t) && bad.length < 15) bad.push(id + " in " + t); }
+    }
+    ok(n > 100000 && !bad.length, "1.42 CRI-2: frLine, skTaskLine and citesFr return what /(?<![A-Za-z0-9])(FR-\\d+)(?!\\d)[*_\\s]*:?[*_\\s]*(.*)$/, /^(\\s*)[-*+]\\s+\\[[ xX~\\-/]\\]\\s+(.*)$/ and the id-built citation pattern returned, on " + n + " lines (got " + js(bad) + ")");
+    // CRI-1's loop: a non-markdown contract's fence is one backtick longer than its longest run (at least 3)
+    const p = fresh("speckit-fence");
+    const k = speckit(p);
+    put(path.join(k, "contracts", "a.json"), "{ \"doc\": \"``` x ``` y `````\" }\n");
+    put(path.join(k, "contracts", "b.json"), "{ \"doc\": \"` x `\" }\n");
+    const r = S.importSpec(p, "spec-kit", "specs/001-photo-albums", {});
+    const d = r.ok ? rd(r.dir, "design.md") : "";
+    ok(/\n### `contracts\/a\.json`\n\n`{6}json\n\{ "doc": "``` x ``` y `````" \}\n`{6}\n/.test(d) && /\n### `contracts\/b\.json`\n\n```json\n\{ "doc": "` x `" \}\n```(?:\n|$)/.test(d),
+      "1.42 CRI-1: a fenced contract's fence is one longer than its longest backtick run, at least 3 (got " + js(d.slice(d.indexOf("### `contracts"), d.indexOf("### `contracts") + 200)) + ")");
+  }
+
+  // 1.42 linear: the spec-kit readers — one small and one big import of a whole spec-kit folder, 05-markdown-trace L2's pattern
+  // (10 × the small one's time + 6 s, under remeasure). The big folder: a contract with a 200,000-blank inner run (CRI-1:
+  // t.replace(/\s+$/, "") took 39 s), one of 300,000 backtick runs (CRI-1: Math.max(...runs) threw RangeError — an MCP internal
+  // error, no refusal), FR lines and task lines whose blank runs meet a line separator (CRI-2: the FR line reader's two
+  // [*_\s]* runs and the task line's \s+(.*)$ backtracked quadratically — 0.3 s at 20,000, ~34 s at 200,000), and the 1.42
+  // readers' own shapes: FR definitions, plan fields and converge refs with 100,000-blank runs, a converge line of 25,000 " per".
+  {
+    const N = 100000;
+    const sp = (n) => " ".repeat(n);
+    const LS = String.fromCharCode(0x2028);
+    const lp = path.join(tmp, "proj-142-sk-linear");
+    S.initProject(lp, ["core"], "en");
+    const folder = (tag, big) => {
+      const k = path.join(lp, "specs", "001-" + tag);
+      const b = (n) => (big ? sp(n) : " ");
+      put(path.join(k, "spec.md"), "# Feature Specification: " + tag + "\n\n**Input**: User description: \"x\"\n\n## User Scenarios & Testing\n\n### User Story 1 - T (Priority: P1)\n\n" +
+        "**Acceptance Scenarios**:\n\n1. **Given** a user, **When** they open it, **Then** it is shown\n\n## Requirements\n\n### Functional Requirements\n\n" +
+        "- **FR-001**:" + b(2 * N) + "System MUST keep" + b(N) + "order" + (big ? LS + "y" : "") + "\n- **FR-002**" + b(N) + ": System MUST log" + b(N) + "shares\n" +
+        "- **FR-" + (big ? "1".repeat(N) : "3") + "a**: Users MUST pick\n- FR-004" + b(N) + "System MUST z\n");
+      put(path.join(k, "plan.md"), "# Implementation Plan: " + tag + "\n\n## Technical Context\n\n**Testing**:" + b(N) + "NEEDS CLARIFICATION" + b(N) + "- pytest\n" +
+        "- **Storage**" + b(N) + ": needs clarification" + b(N) + "x\n**Note**: NEEDS CLARIFICATION" + b(N) + "markers are resolved\n");
+      put(path.join(k, "tasks.md"), "# Tasks: " + tag + "\n\n## Phase 1\n\n- [ ]" + b(2 * N) + "T001 set up" + (big ? LS + "y" : "") + "\n" +
+        "- [ ] T002 Log shares" + (big ? " per".repeat(N / 4) : "") + " per FR-002" + b(2 * N) + "(missing)\n- [ ] T003 [US1] Show it per US1/AC1" + b(N) + "\n");
+      put(path.join(k, "contracts", "blank.json"), "{" + b(2 * N) + "x}\n");
+      put(path.join(k, "contracts", "ticks.json"), (big ? "`a".repeat(3 * N) : "`a") + "\n");
+      return path.relative(lp, k);
+    };
+    let seq = 0;
+    const imp = (tag, big) => {
+      const rel = folder(tag + "-" + ++seq, big);
+      const t0 = Date.now();
+      let r;
+      try { r = S.importSpec(lp, "spec-kit", rel, { tracks: ["core"] }); } catch (e) { r = { ok: false, threw: String(e && e.message) }; }
+      return { ms: Date.now() - t0, r };
+    };
+    imp("warm", false);
+    const lin = remeasure(() => {
+      const base = imp("base", false), big = imp("big", true);
+      return { base: base.ms, ms: big.ms, ok: base.r.ok && big.r.ok, bound: 10 * Math.max(base.ms, 100) + 6000, err: big.r.threw || big.r.error };
+    }, (m) => m.ms < m.bound);
+    ok(lin.ok && lin.ms < lin.bound,
+      "1.42 linear: a spec-kit import whose contracts hold a 200,000-blank inner run and 300,000 backtick runs, whose FR and task lines meet a line separator after a 100,000-blank run, and whose FR definitions, plan fields and converge refs hold 100,000-blank runs (25,000 ' per' on one task) runs within 10 × the small import's time + 6 s — no throw (got " +
+      js({ base: lin.base, big: lin.ms, bound: lin.bound, err: lin.err, tries: lin.tries }) + ")");
   }
 };
