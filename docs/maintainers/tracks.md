@@ -37,7 +37,8 @@ GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
 - **The placeholder corpus.** `templateCorpus()` renders every set of at most two optional tracks plus all of them (the
   builders' only interplay is pairwise — quadratic, not 2^n) plus the sized builders, once, into
   `engine/corpus.generated.json` (`npm run build`; architecture.md → The build) — a new built-in track means a rebuild. T10
-  in 04-tracks-builtin.js bounds it relatively (≤ 1800 texts, ≤ 60× one all-tracks scaffold).
+  in 04-tracks-builtin.js bounds it (≤ 1800 texts; 05-markdown-readers.js pins the exact count) — by its count alone since 1.42:
+  its clock against one all-tracks scaffold (≤ 60×) had a sub-millisecond side, and a process reads the corpus pre-generated.
 - **Readers go through the accessors, never the constants.** The constants are the BUILT-IN tables; `allTracks()`
   (VALID_TRACKS + the project's valid packs, in name order after the built-in ones), `optionalTracks()`, `markerTracks()`,
   `trackMarker(tr)`, `trackSectionTable(tr)`, `trackSteeringFiles(tr)`, `trackSignalTable(tr)` add the track packs of the

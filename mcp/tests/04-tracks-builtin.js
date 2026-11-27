@@ -1180,23 +1180,18 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     ]);
 
     // --- 1.19 T10: the placeholder corpus stays bounded as tracks are added (every set of at most two optional tracks + all of them):
-    // its texts are counted and its render time is compared with one all-tracks scaffold (relative — no absolute milliseconds)
+    // its texts are counted. (1.42 perf-12: no clock any more — its render time was compared with one all-tracks scaffold, a
+    // 0.35–0.8 ms side that read 58 of its ≤ 60× in a pre-push run: a sub-millisecond side carries no ratio, and both sides call
+    // the same builders, so only more texts moved it — which the count holds. The corpus is pre-generated: a process reads
+    // corpus.generated.json, templateCorpus() runs at `npm run build` and on a stale corpus only; the exact count is
+    // 05-markdown-readers.js's `=== 1723` pin.)
     const EI = require("./lib/engine/index.js");
-    const renderAll = () => { for (const l of ["en", "pt", "es"]) { const a = { name: "x", tracks: S.VALID_TRACKS.slice(), label: "core", slug: "x", summary: "" };
-      I.classification(a, l); I.requirements(a, l); I.design(a, l); I.tasks(a, l); I.testPlan("x", l, a.tracks); I.checklist(a, l); } };
-    renderAll();
-    const ratios = [];
-    let texts = 0;
-    for (let k = 0; k < 3; k++) {
-      let t0 = process.hrtime.bigint(); for (let i = 0; i < 10; i++) renderAll(); const unit = Number(process.hrtime.bigint() - t0) / 10;
-      t0 = process.hrtime.bigint(); texts = EI.templateCorpus().length; ratios.push(Number(process.hrtime.bigint() - t0) / unit);
-    }
-    ratios.sort((a, b) => a - b);
+    const texts = EI.templateCorpus().length;
     // (1.21: +data and the size variants brought it to ~1480 texts; since 1.20 a process reads the pre-generated corpus instead.
     // 1.36: +port — 1,723 texts measured: 11 optional tracks make 68 track sets (57 before) × 7 texts × 3 languages, + its blocks; the
-    // absolute bound 1,650 → 1,800, the relative one unchanged)
-    ok(texts > 900 && texts <= 1800 && ratios[1] <= 60,
-      `1.19 T10: the template corpus renders ${texts} texts (≤ 1800) in ~${ratios[1].toFixed(0)}× one all-tracks scaffold (≤ 60×; 1.18: 628 texts, ~19×; 1.19: ~1390; 1.36: ~1720)`);
+    // absolute bound 1,650 → 1,800)
+    ok(texts > 900 && texts <= 1800,
+      `1.19 T10: the template corpus renders ${texts} texts (≤ 1800; pre-generated — the exact count is 05-markdown-readers' pin; 1.18: 628 texts; 1.19: ~1390; 1.36: ~1720)`);
 
     // --- 1.19 T11: the pt-BR twins of the new PT strings hold no European-only word, are idempotent and keep the markers / IDs
     const aBr = { name: "ARGN", tracks: ["core", "tdd", "api", "ui", "obs"], label: "core +tdd +api +ui +obs", slug: "argn", summary: "" };
