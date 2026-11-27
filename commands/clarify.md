@@ -30,6 +30,6 @@ Write each settled answer as EARS ("WHEN … THE SYSTEM SHALL …", an IF … TH
 `requirements.md` — new criteria take the next free `US-n.AC-m`, never a renumbering. Requirements already approved? That
 is a change request: `/spec-change <feature> impact` first.
 
-Then `spec_clarify` and `ears_validate` again, `spec_doctor`, and — on the user's explicit yes — record the requirements
-approval with `spec_approve`; hand off to `/spec <feature> design` (Phase 2). Respond in the user's language (EN / PT /
-ES); never switch the spec's language.
+Then `spec_clarify` and `ears_validate` again, `spec_doctor` (fix what its next gate refuses), and — on the user's
+explicit yes — record the requirements approval with `spec_approve`; hand off to `/spec <feature> design` (Phase 2).
+Respond in the user's language (EN / PT / ES); never switch the spec's language.

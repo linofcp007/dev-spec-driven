@@ -24,9 +24,9 @@ they keep, archive or remove it.
    approach in two lines, and exactly **2 tasks**, each with `_Requirements: US-1.AC-n_`, `_Implements: <path>_` and a
    **real** `_Verify: <command>_` the project can run. *Gate: a task names the criteria it proves and the command that
    proves it.*
-5. **Approve** — `spec_doctor`, show the plan, and record it with `spec_approve {name, through: "tasks"}` **only after the
-   user says yes**; never approve on their behalf, never force a refused gate — a refusal is part of the tour: show the
-   failing check and fix it. *Gate: an approval records who signed which version; an edit after it shows as changed.*
+5. **Approve** — `spec_doctor` (fix what its next gate refuses), show the plan, and record it with
+   `spec_approve {name, through: "tasks"}` **only after the user says yes**; never approve on their behalf, never force a
+   refused gate — a refusal is part of the tour: show the failing check and fix it. *Gate: an approval records who signed which version; an edit after it shows as changed.*
 6. **Execute one task** — implement task 1, run its `_Verify:_` and record the run: `spec_complete_task {name, number:
    1, evidence: {command, exitCode, summary}}` (or `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> 1 --run`).
    No shell? Ask the user to run it and paste the output — never a run nobody made. *Gate: a runnable `_Verify:_` counts
