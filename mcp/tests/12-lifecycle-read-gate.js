@@ -556,6 +556,9 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
     };
     const p2 = mk("n2", 2), p4 = mk("n4", 4);
     const under = (p) => path.join(path.resolve(p), ".specs") + path.sep;
+    // a warm-up first: the project's FIRST doctor may write once (a stale ROADMAP.md refreshed, by mtimes — on Docker's overlay file
+    // system the first run did, once in four images, and that write's forgotten memo cost "twice" one lstat more than "once")
+    E.specDoctor(p4, "f1");
     const twice = fsCalls(under(p4), () => S.withReadCache(() => { E.specDoctor(p4, "f1"); E.specDoctor(p4, "f1"); }));
     const once = fsCalls(under(p4), () => S.withReadCache(() => E.specDoctor(p4, "f1")));
     // one listing (the project's), N feature folders: the gate's calls grow by the same per-feature step from 2 to 4 features
