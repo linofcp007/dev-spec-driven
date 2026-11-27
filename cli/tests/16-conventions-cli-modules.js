@@ -254,8 +254,9 @@ exports.run = async ({ ok, skip, all, eq, run, runIn, spawnIn, tmp, CLI, __dirna
     const pA = MAIN.main(["ears", "-", "--project", p], { stdout: sink(outA), stderr: sink([]), stdin: sA, env: { ...process.env, MAIN_OVERLAP: "A" }, cwd: dA, done: () => order.push("A") });
     const pB = MAIN.main(["ears", "-", "--project", p], { stdout: sink(outB), stderr: sink([]), stdin: sB, env: { ...process.env, MAIN_OVERLAP: "B" }, cwd: dB, done: () => order.push("B") });
     // B queued: A's context only (the cwd by real path — after A's chdir process.cwd() is the PHYSICAL folder on POSIX, an aliased temp's
-    // real one; dB's real path still differs from dA's. 1.42 review 1, R10 Step 0)
-    const whileWaiting = [process.env.MAIN_OVERLAP, fs.realpathSync.native(process.cwd()) === fs.realpathSync.native(dA)];
+    // real one; dB's real path still differs from dA's. fs.realpathSync, the JS one — never .native, which expands an 8.3 name.
+    // 1.42 review 1, R10 Step 0; review 2, R2-TESTS-01)
+    const whileWaiting = [process.env.MAIN_OVERLAP, fs.realpathSync(process.cwd()) === fs.realpathSync(dA)];
     sA.end(TEXT); // A ends first, then B
     const codeA = await pA;
     sB.end(TEXT);

@@ -50,8 +50,9 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, tmp, CLI }) => {
     fs.mkdirSync(neutral, { recursive: true });
     const v = (args, env) => { // in-process (1.27) — but a bundle: the facade chooses it when it loads (a process of its own)
       // (the working folder by its real path, as a shell's process.cwd() gives it — main() compares io.cwd with the project resolved
-      // from process.cwd() after its chdir: the PHYSICAL folder on POSIX, an aliased temp's real one. 1.42 review 1, R10 Step 0)
-      const opts = { encoding: "utf8", cwd: fs.realpathSync.native(neutral), env: { ...env0, ...(env || {}) } };
+      // from process.cwd() after its chdir: the PHYSICAL folder on POSIX, an aliased temp's real one. fs.realpathSync, the JS one: on
+      // win32 it keeps an 8.3 name as process.cwd() does — never .native, which expands it. 1.42 review 1, R10 Step 0; review 2, R2-TESTS-01)
+      const opts = { encoding: "utf8", cwd: fs.realpathSync(neutral), env: { ...env0, ...(env || {}) } };
       const r = opts.env.DEV_SPEC_BUNDLE ? spawnSync(process.execPath, [CLI, ...args], opts) : spawnIn(args, opts);
       let j = null;
       try { j = JSON.parse(r.stdout); } catch { /* text */ }
