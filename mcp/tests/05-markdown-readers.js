@@ -308,6 +308,18 @@ exports.run = async ({ ok, all, S, tmp, require, __dirname }) => {
       !ap.ok && /traceability/.test(ap.error) && !S.traceGaps(tr).some((g) => g.kind === "justifiedTestGaps"),
       "1.24 r6 F3: only a test-plan entry covers an AC — one named in the Gaps list / Out of Scope is uncovered (trace_check, the matrix's no-test, the test-plan approval refused) and listed as the warning justifiedTestGaps (got " +
       js([tr.uncoveredByTests, tr.verdict, tr.warnings, ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4"].map((id) => row(id).gaps), ap.ok]) + ")");
+    // 1.42 (B142-01): the warning's label promised that a forced test-plan approval accepts the gap — doctor's traceability still
+    // fails on it and finish blocks. It gives no force advice at all (naming force beside "uncovered" invited forcing) and names
+    // /spec-change, in every language (pt-BR derived); doctor quotes the current label. [INT-4]: only THIS label's output — the
+    // refused approval's force clause, under the user's consent, is 06-gates-approve-refusals.js's.
+    const gapLines = Object.fromEntries(["en", "pt", "pt-BR", "es"].map((l) => [l, S.traceWarningLines(tr, l, ["justifiedTestGaps"])]));
+    const trc = (S.specDoctor(p, c.slug).checks || []).find((x) => x.id === "traceability") || {};
+    all("1.42 B142-01: the justifiedTestGaps label gives no force advice and names /spec-change (en / pt / pt-BR / es); doctor's traceability detail quotes it (got " +
+      js([gapLines, trc.detail]) + ")", {
+      ...Object.fromEntries(Object.entries(gapLines).flatMap(([l, ls]) => [[l + ": one line", ls.length === 1],
+        [l + ": no force word", ls.length === 1 && !/\bfor(?:c|ç|z)/i.test(ls[0])], [l + ": names /spec-change", ls.length === 1 && ls[0].includes("/spec-change")]])),
+      "doctor quotes the label": typeof trc.detail === "string" && gapLines.en.length === 1 && trc.detail.includes(gapLines.en[0]),
+    });
   }
 
   // 1.24 r6 F4: ONE reader of what a section holds — writtenContent(): a generic slot line (TODO, TBD, "…", "Pending.", **TBD**, [TBD],

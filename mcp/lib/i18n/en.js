@@ -1848,7 +1848,8 @@ const msg = {
       earsPlaceholder: (list) => `Criterion still holds template placeholder(s) ${list} — write the real trigger/behavior.`,
       constitutionUnfilled: "the Constitution Check section is missing or not filled in",
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
-      approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug}), or pass force: true (CLI: --force) to record the approval anyway — it stays flagged as forced.`,
+      // 1.42 (UX-04): force only on the user's explicit consent to these failing checks — the refusal offered it as an equal option
+      approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug} · ${DEV_SPEC} doctor ${slug}). force: true (CLI: --force) only when the user explicitly accepts these failing checks — it records the approval anyway, flagged as forced.`,
       approveNothing: (phase, slug, file) => `Nothing to approve: '${phase}' has no artifact in '${slug}' (${file} is missing, or its track is off) — not even with force.`,
       approveUnreadable: (phase, slug, file) => `Nothing to approve: ${file} in '${slug}' can't be read (a folder of that name, no permission, or another program holding it) — make it a readable file, then approve '${phase}'.`, // r5 review
       approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
@@ -2214,7 +2215,9 @@ const msg = {
         phantomSecondary: "tasks / test plan cite unknown EC/NFR/SC IDs (typos?)",
         untracedCriteria: "criteria with a modal verb but no ID of their own (by line) — no task or test can trace them: number each one US-<story>.AC-<n>",
         inactiveAcs: "ACs under the heading of a track that is off (or a missing track pack) — not required, not traced: add the track back, or move them out of that section if they are core criteria",
-        justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a row, or approve the test plan with force to accept the gap",
+        // 1.42 (B142-01): no force advice — a forced test-plan approval never clears the gap (doctor's traceability and finish still
+        // block on it), and naming force beside "uncovered" invited forcing
+        justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a test row for each (to change or remove the AC: /spec-change)",
         plannedNotInCode: "planned tests that no test file names (put the T-ID in the test name)",
         inCodeNotInPlan: "T-IDs in test code that no feature's test plan lists",
         unresolvedImplGlobs: "_Implements:_ globs not fully resolved (the file walk stopped at its cap before a match — not counted as missing)",
