@@ -527,7 +527,8 @@ exports.run = async ({ ok, skip, all, S, tmp, hookIn, __dirname, require }) => {
     // a transcript path that is a LINK (to a real transcript) is no file (lstat first — openRegular alone would follow it)
     const LINKED = path.join(tdir, "agent-l00000000000000001.jsonl");
     let linked = false;
-    try { fs.symlinkSync(T1, LINKED, "file"); linked = fs.lstatSync(LINKED).isSymbolicLink(); } catch { linked = false; }
+    // (a skip on win32 alone — a file symlink without Developer Mode; elsewhere a failure is a broken fixture: rethrown, the file FAILS)
+    try { fs.symlinkSync(T1, LINKED, "file"); linked = fs.lstatSync(LINKED).isSymbolicLink(); } catch (e) { if (process.platform !== "win32") throw e; linked = false; }
     if (!linked) skip("1.42 S9-c: a linked transcript is no file", "file links not creatable here");
     else {
       const before = lines(p).length;

@@ -107,7 +107,15 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   non-empty string, `[]` / `{}`, a falsy one negated), which counted as a pass (mcp/tests/16-conventions.js refuses one, and a
   hand-printed skip line, in every test file, with no allowance; a falsy literal is a fail and stays — the harnesses' `ok(false,
   label)` —, and a truthy EXPRESSION is not read). cli/tests/16-conventions-runner.js tests the runner on a fake suite, whose files
-  assert `ok(typeof exports === "object", …)`.
+  assert `ok(typeof exports === "object", …)`. "Links not creatable" is a win32 cause alone (a junction, a file symlink without
+  Developer Mode): a link failure skips on win32 and is rethrown elsewhere — the file FAILS, a broken fixture never a skip.
+  **Known limits** (the guard cannot read either shape; split each into its own `ok()` + `skip()` when next touched): the older
+  link sites — the `link()` helpers of the 12-lifecycle-* files (and cli/tests/12-lifecycle-read-gate.js), the inline ones of
+  02-mcp-server, 04-tracks, 13-imports, 14-exports, 18-cross-area — still skip on ANY error (1.42's own sites rethrow off win32);
+  and a part skipped INSIDE a passing assertion counts as a pass — a `!linked || …` disjunct (02-mcp-server.js's linked artifact /
+  folder rows, 13-imports.js's 1.17 F3 and review 9, 14-templates.js's B1, 16-conventions.js's G-I2, cli 12-lifecycle-read-gate.js,
+  cli 16-conventions-merge-state.js), `git: ignored === null || …` (09-evidence-guardian.js), and 02-mcp-server.js's row that
+  exists only where tmp has two spellings (neither a pass nor a skip elsewhere: the alias leg's one extra MCP assertion).
   The MCP chains today: `01-core → 17-docs` (17-docs reads
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality-fixtures`
   (re-checks of the behavioural fixtures 17-docs-evals builds under tmp — 1.30: they were 15-quality's, and the two files were the

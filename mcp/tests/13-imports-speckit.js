@@ -198,7 +198,8 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const p = fresh("speckit-left-link");
     const k = speckit(p);
     let linked = false;
-    try { fs.symlinkSync(out, path.join(k, "contracts"), "junction"); fs.symlinkSync(out, path.join(k, "linked"), "junction"); linked = true; } catch { /* no link rights */ }
+    // (no link rights is a win32 cause alone — elsewhere a failure is a broken fixture: rethrown, the file FAILS)
+    try { fs.symlinkSync(out, path.join(k, "contracts"), "junction"); fs.symlinkSync(out, path.join(k, "linked"), "junction"); linked = true; } catch (e) { if (process.platform !== "win32") throw e; }
     if (!linked) skip("1.42 SK-01: a link entry is named without '/', live or dangling", "links cannot be created here");
     else {
       const live = S.importSpec(p, "spec-kit", "specs/001-photo-albums", { name: "live" });

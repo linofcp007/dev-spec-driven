@@ -150,7 +150,8 @@ exports.run = async ({ all, eq, rpc, payload, skip, S, tmp, root, __dirname }) =
     fs.mkdirSync(outside, { recursive: true });
     fs.writeFileSync(path.join(outside, "agents.jsonl"), js({ agent: "spec-reviewer", id: "agent-x1", turns: 1, tools: 1, tokens: { in: 1, out: 1, cacheRead: 1, cacheWrite: 1 }, truncated: false }) + "\n");
     let linked = true;
-    try { fs.symlinkSync(outside, path.join(p, ".specs", ".execution"), "junction"); } catch { linked = false; }
+    // (a skip on win32 alone — elsewhere links are always creatable, and a failure is a broken fixture: rethrown, the file FAILS)
+    try { fs.symlinkSync(outside, path.join(p, ".specs", ".execution"), "junction"); } catch (e) { if (process.platform !== "win32") throw e; linked = false; }
     if (!linked) skip("1.42 (S9): agents.jsonl behind a linked .specs/.execution/", "links not creatable here");
     else {
       const r = S.recordAgentRun(p, run({ id: "agent-through-link" }));
