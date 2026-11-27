@@ -53,17 +53,21 @@ before it.
 4. Before either option, a feature with a review ledger (`.specs/<feature>/.execution/ledger.md`) files the residues after
    its last `Residues filed:` line (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` →
    Closing: the ledger goes with `.execution/`); then commit the spec state with the feature — what the run and the closing
-   wrote under `.specs/`: `git add` the feature's folder, `.specs/roadmap.json` and the generated roadmap files the project
-   has (`.specs/ROADMAP.md`, `.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the
-   finish registered components, and a steering file the run amended —, then commit (a path git ignores stays out:
-   `git add` names it and adds the rest; a git-ignored `.specs/` has nothing to commit). Git carries any other uncommitted
-   change across the switch: it is not lost and not committed (one the switch would overwrite makes it refuse, naming the
-   file: ask the user). Offer exactly two options: **1. merge into the base branch locally** — `git switch <base>`,
-   then `git merge <branch>`: the branch `spec_finish`'s merge line names (`feature/<slug>` by default, `fix/<slug>` for a
-   bugfix); without one, the branch you worked on, if it is not the base. A fast-forward when possible; a merge commit
-   (`--no-ff`, or branches that diverged) takes the merge title and summary as its message **· 2. keep the branch as it
-   is** (the residues stay on it). Run only the one the user picks; after a merge, the full suite again. Pushing is a
-   separate step the user approves.
+   wrote under `.specs/`. Before the `git add`, `git diff --cached --name-only` — a file it lists was staged before the
+   closing and would go into the commit: show those files to the user, who decides (unstage them with
+   `git restore --staged <file>`, or commit them too). Then `git add` the feature's folder, `.specs/roadmap.json` and the
+   generated roadmap files the project has (`.specs/ROADMAP.md`, `.specs/ROADMAP.html`, `.specs/SPECS.md`) — with
+   `.specs/steering/design-system.md` when the finish registered components, a steering file the run amended,
+   `.specs/guardian.cjs` when `finish --run` replaced it and `.specs/.gitignore` when the engine added lines to it —, then
+   commit (a file the run wrote is added whole: an edit of the user's in it goes into the commit too; a path git ignores
+   stays out: `git add` names it and adds the rest; a git-ignored `.specs/` has nothing to commit). An unstaged or
+   untracked change of the user's is not added, and git carries it across the switch (or the switch refuses, naming the
+   file, when the branch changed it: ask the user). Offer exactly two options: **1. merge into the base branch locally**
+   — `git switch <base>`, then `git merge <branch>`: the branch `spec_finish`'s merge line names (`feature/<slug>` by
+   default, `fix/<slug>` for a bugfix); without one, the branch you worked on, if it is not the base. A fast-forward when
+   possible; a merge commit (`--no-ff`, or branches that diverged) takes the merge title and summary as its message
+   **· 2. keep the branch as it is** (the residues stay on it). Run only the one the user picks; after a merge, the full
+   suite again. Pushing is a separate step the user approves.
 5. Once merged, delete `.specs/<feature>/.execution/` (keep `.history/`); offer `/spec-report metrics <feature> --write`
    (a retro), `/spec-report catalog --write` and, for a release, `/spec-report changelog`. A spike finishes once its
    decision is written.

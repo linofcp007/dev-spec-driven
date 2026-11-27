@@ -630,12 +630,16 @@ confidence rated a fix round, not the defect). A note holds at most 2,000 charac
 `residue-<feature>-2`, never truncated. Ledger `Residues filed: residue-<feature> (N)`; your final message lists them after
 the rulings, with the line that drops the entry (`dev-spec backlog rm residue-<feature>`).
 
-**Then commit the spec state with the feature** — what the run and the closing wrote under `.specs/`: `git add` the
-feature's folder, `.specs/roadmap.json` and the generated roadmap files the project has (`.specs/ROADMAP.md`,
-`.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the finish registered components,
-and a steering file the run amended —, then commit (a path git ignores stays out: `git add` names it and adds the rest; a
-git-ignored `.specs/` has nothing to commit). Git carries any other uncommitted change across the switch: it is not lost
-and not committed (one the switch would overwrite makes it refuse, naming the file: ask the user).
+**Then commit the spec state with the feature** — what the run and the closing wrote under `.specs/`. Before the
+`git add`, `git diff --cached --name-only` — a file it lists was staged before the closing and would go into the commit:
+show those files to the user, who decides (unstage them with `git restore --staged <file>`, or commit them too). Then
+`git add` the feature's folder, `.specs/roadmap.json` and the generated roadmap files the project has
+(`.specs/ROADMAP.md`, `.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the finish
+registered components, a steering file the run amended, `.specs/guardian.cjs` when `finish --run` replaced it and
+`.specs/.gitignore` when the engine added lines to it —, then commit (a file the run wrote is added whole: an edit of the
+user's in it goes into the commit too; a path git ignores stays out: `git add` names it and adds the rest; a git-ignored
+`.specs/` has nothing to commit). An unstaged or untracked change of the user's is not added, and git carries it across
+the switch (or the switch refuses, naming the file, when the branch changed it: ask the user).
 
 Then ask the human to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
 `.specs/<feature>/.execution/` — git history and the backlog are the record now.
