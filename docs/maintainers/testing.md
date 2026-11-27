@@ -103,8 +103,19 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   warning on stderr after it doesn't void the count). **A check that cannot run here (1.42)** — no git, no pwsh / zsh / fish,
   links not creatable — calls `skip(label, why)`, which every file receives beside `ok` from the runner: neither a pass nor a
   fail, a `  skip - <label> (<why>)` line, the suite's skips summed in a `# K skipped in F file(s): <file> <n>, …` line before
-  the total (a late one is a late assertion) — never a constant-true `ok()`, which counted as a pass (mcp/tests/16-conventions.js
-  refuses one, and a hand-printed skip line, in every test file, with no allowance). cli/tests/16-conventions-runner.js tests the runner on a fake suite.
+  the total (a late one is a late assertion) — never an `ok()` whose first argument is a truthy LITERAL (`true`, a number but 0, a
+  non-empty string, `[]` / `{}`, a falsy one negated), which counted as a pass (mcp/tests/16-conventions.js refuses one, and a
+  hand-printed skip line, in every test file, with no allowance; a falsy literal is a fail and stays — the harnesses' `ok(false,
+  label)` —, and a truthy EXPRESSION is not read). cli/tests/16-conventions-runner.js tests the runner on a fake suite, whose files
+  assert `ok(typeof exports === "object", …)`. "Links not creatable" is a win32 cause alone (a junction, a file symlink without
+  Developer Mode): a link failure skips on win32 and is rethrown elsewhere — the file FAILS, a broken fixture never a skip.
+  **Known limits** (the guard cannot read either shape; split each into its own `ok()` + `skip()` when next touched): the older
+  link sites — the `link()` helpers of the 12-lifecycle-* files (and cli/tests/12-lifecycle-read-gate.js), the inline ones of
+  02-mcp-server, 04-tracks, 13-imports, 14-exports, 18-cross-area — still skip on ANY error (1.42's own sites rethrow off win32);
+  and a part skipped INSIDE a passing assertion counts as a pass — a `!linked || …` disjunct (02-mcp-server.js's linked artifact /
+  folder rows, 13-imports.js's 1.17 F3 and review 9, 14-templates.js's B1, 16-conventions.js's G-I2, cli 12-lifecycle-read-gate.js,
+  cli 16-conventions-merge-state.js), `git: ignored === null || …` (09-evidence-guardian.js), and 02-mcp-server.js's row that
+  exists only where tmp has two spellings (neither a pass nor a skip elsewhere: the alias leg's one extra MCP assertion).
   The MCP chains today: `01-core → 17-docs` (17-docs reads
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality-fixtures`
   (re-checks of the behavioural fixtures 17-docs-evals builds under tmp — 1.30: they were 15-quality's, and the two files were the
@@ -475,3 +486,13 @@ How the rules above came to be — grep a release here.
   relays it, while the trace also holds the seat's reads of every input, so the graders read `last_message` and a property keeps
   every regex grader from matching any input. Cut: the dev-guardian pair (no dev-guardian prose changes this round; its
   deterministic half needed another chain's rule) and the long-package final-review case (with S3's protocol).
+- **1.42 (fix round 1, tests)** — review 1 of the round. The read-ahead stall row has `took < 15000` back beside the one-slow-take
+  count: each bound holds its own part (the count the stall, `took` the ~396 fallback takes after it — a 50 ms wait before each
+  passed the count alone at 27 s). The skip guard reads any truthy literal first argument: the word `true` alone let `1` and a
+  string through, so the fake suite's files assert `typeof exports === "object"`. The round's own link skips fire on win32 alone
+  (rethrown elsewhere), and 14-templates' file-link part is its own `ok()` beside its `skip()`; the older sites are the known
+  limits above. R10's Step 0: the ten path comparisons the alias leg broke compare real paths, a gone folder by its nearest
+  parent's (the runner's samePath norm alone left a gone alias folder unequal to the physical one, and an 8.3 gone folder against
+  its expanded parent made a startsWith negative vacuous on win32); the launcher row records projectPath with fs.realpathSync —
+  `.native` expands the 8.3 name the launcher's own cwd keeps, which failed this machine's run. The leg stays opt-in until a clean
+  run of both suites under it.

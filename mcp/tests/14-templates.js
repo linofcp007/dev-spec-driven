@@ -265,7 +265,9 @@ exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, list, __d
     // where the read gate and a real-path compare against the real .specs/ differ — the listing itself never enters a linked folder).
     {
       const js = (v) => JSON.stringify(v);
-      const link = (target, at, kind) => { try { fs.mkdirSync(path.dirname(at), { recursive: true }); fs.symlinkSync(target, at, kind || "junction"); return true; } catch { return false; } };
+      // (links not creatable is a win32 cause alone — a junction, a file symlink without Developer Mode: elsewhere the error is rethrown,
+      // a broken fixture FAILS instead of skipping — 1.42 fix round 1)
+      const link = (target, at, kind) => { try { fs.mkdirSync(path.dirname(at), { recursive: true }); fs.symlinkSync(target, at, kind || "junction"); return true; } catch (e) { if (process.platform !== "win32") throw e; return false; } };
       const MARK = "# R4-STORE {{name}}\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN [r4 trigger] THE SYSTEM SHALL [r4 behaviour]\n";
       const storeOf = (p, store) => { // the project's .specs/ moved to a store outside the project folder, linked back in
         fs.mkdirSync(p, { recursive: true });
@@ -313,10 +315,15 @@ exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, list, __d
           "(b) init through a linked templates/ or tracks/ is the gate's refusal, nothing written": () => ib.ok === false && ib.linked === true && ib.path === ".specs/templates/" &&
             /^Refused to write into \.specs\/templates\//.test(ib.error) && tb.ok === false && tb.linked === true && tb.path === ".specs/tracks/" &&
             js(fs.readdirSync(path.join(sb, "tpl-real"))) === js(["requirements.md"]) && fs.readdirSync(path.join(sb, "tracks-real")).length === 0,
-          "(b) a template file linked to a file inside the store reads absent (or file links can't be made here)": () => !fileLink ||
-            (((lc.templates || []).find((t) => t.artifact === "requirements") || {}).source === "built-in" && fc.ok && !/R4-STORE/.test(rd(fc.dir, "requirements.md"))),
         });
+        // (b) the file link: its own assertion where file links can be made, a skip() where they can't — never a pass for the part
+        // that did not run (1.42 fix round 1: it was a `!fileLink ||` disjunct inside the row above)
         if (!fileLink) skip("1.42 (R4): a template file linked to a file inside a linked store", "file symlinks not creatable here");
+        else {
+          const reqC = (lc.templates || []).find((t) => t.artifact === "requirements") || {};
+          ok(reqC.source === "built-in" && fc.ok && !/R4-STORE/.test(rd(fc.dir, "requirements.md")),
+            "1.42 (R4): a template file linked to a file inside a linked store reads absent — the built-in requirements.md is listed and scaffolded (got " + js({ reqC, fc: fc.ok }) + ")");
+        }
       }
     }
 

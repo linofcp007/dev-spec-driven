@@ -610,7 +610,12 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
     scoped to this project (`projectPath` = the cwd) over the user's, then the newest version. That file decides once it parses
     (a dev-guardian it doesn't list is not installed: an update's leftover folder, a disabled copy). Without it, the newest x.y.z
     folder (semver only — a commit-hash folder like `9f3e2a1b7c` read as 9 before) of `plugins/cache/*/dev-guardian/` holding
-    the CLI and not marked `.orphaned_at` (Claude Code marks an update's leftovers so).
+    the CLI and not marked `.orphaned_at` (Claude Code marks an update's leftovers so). **Known limit (1.42 review 1):**
+    `projectPath` and the cwd are compared by SPELLING (path.resolve, case-folded on win32), so another spelling of the same folder —
+    a symlinked one (POSIX's process.cwd() is the physical path; macOS's `/var` → `/private/var`), a win32 8.3 name — reads as another
+    project's: the project-scoped install is skipped and the user's runs, and the offer (the project as the engine spells it) and the
+    launcher (its process.cwd()) can pick two installs. A real-path compare changes the launcher's text (its sha1 then joins
+    `GUARDIAN_LAUNCHER_PAST`): the 1.43 backlog. mcp/tests/09-evidence-guardian.js records the spelling Claude Code would.
   - *What it runs:* only `scan`, `baseline` (the user's `baseline update`), `status` and help (`GUARDIAN_FORWARDED`); anything
     else exits 3 ("not forwarded"). A `DEV_GUARDIAN_CLI` it ran is said on stderr (`dev-guardian launcher: DEV_GUARDIAN_CLI=…`)
     and lands in the verdict (`override`) and the merge summary.

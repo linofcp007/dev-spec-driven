@@ -1009,7 +1009,8 @@ exports.run = async ({ ok, skip, all, remeasure, fsCalls, S, tmp, hookIn, __dirn
       const st = path.join(L.p, ".specs", "pay", ".state.json");
       fs.rmSync(st);
       let linked = false;
-      try { fs.symlinkSync(outside, st, "file"); linked = fs.lstatSync(st).isSymbolicLink(); } catch { linked = false; }
+      // (a skip on win32 alone — a file symlink without Developer Mode; elsewhere a failure is a broken fixture: rethrown, the file FAILS)
+      try { fs.symlinkSync(outside, st, "file"); linked = fs.lstatSync(st).isSymbolicLink(); } catch (e) { if (process.platform !== "win32") throw e; linked = false; }
       if (!linked) skip("1.42 B142-13: a linked .state.json is no Stop activity", "file links not creatable here");
       else {
         const r = probed("stop-hook", stopPl(L.p));
@@ -1024,7 +1025,7 @@ exports.run = async ({ ok, skip, all, remeasure, fsCalls, S, tmp, hookIn, __dirn
       const rmAt = path.join(K.p, ".specs", "roadmap.json");
       fs.rmSync(rmAt);
       let rmLinked = false;
-      try { fs.symlinkSync(outRm, rmAt, "file"); rmLinked = fs.lstatSync(rmAt).isSymbolicLink(); } catch { rmLinked = false; }
+      try { fs.symlinkSync(outRm, rmAt, "file"); rmLinked = fs.lstatSync(rmAt).isSymbolicLink(); } catch (e) { if (process.platform !== "win32") throw e; rmLinked = false; }
       if (!rmLinked) skip("1.42 B142-13: a linked roadmap.json holds no project check for the observe hook", "file links not creatable here");
       else {
         const r = probed("observe-hook", obsPl(K.p, "node b13-check.js"));

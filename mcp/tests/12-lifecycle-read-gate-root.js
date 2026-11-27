@@ -649,7 +649,10 @@ exports.run = async ({ ok, skip, all, eq, S, tmp, fsCalls, hookIn, require, __di
     put(path.join(out, "top.ts"), "// OUTSIDE-top\nexport const top = 1;\n");
     put(path.join(out, "deep", "g.ts"), "// OUTSIDE-deep\nexport const g = 2;\n");
     fs.mkdirSync(goneDir, { recursive: true });
-    const linked = link(out, path.join(p, "src", "linkout")) && link(goneDir, path.join(p, "src", "dangling"));
+    // (a skip on win32 alone — elsewhere links are always creatable and a failure is a broken fixture: rethrown, the file FAILS; the
+    // file's link() swallows every error, so these two are made here)
+    let linked = true;
+    try { fs.symlinkSync(out, path.join(p, "src", "linkout"), "junction"); fs.symlinkSync(goneDir, path.join(p, "src", "dangling"), "junction"); } catch (e) { if (process.platform !== "win32") throw e; linked = false; }
     if (!linked) skip("1.42 R1 (a)-(c), (e): the readers of project code over a junction out", "links not creatable here");
     else {
       fs.rmSync(goneDir, { recursive: true, force: true }); // (src/dangling now points at nothing)

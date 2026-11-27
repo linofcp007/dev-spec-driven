@@ -1391,7 +1391,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     const env0 = { ...process.env };
     delete env0.SPEC_PROJECT_DIR;
     delete env0.CLAUDE_PROJECT_DIR;
-    const same = (a, b) => (process.platform === "win32" ? String(a).toLowerCase() === String(b).toLowerCase() : a === b);
+    // (by real path: a child's resolveProjectDir() answers its process.cwd(), the PHYSICAL folder on POSIX — an aliased temp, test-docker's
+    // --alias-tmp —, while a SPEC_PROJECT_DIR keeps the spelling given; every compared folder exists. 1.42 review 1, R10 Step 0)
+    const real = (p) => { try { return fs.realpathSync.native(String(p)); } catch { return String(p); } };
+    const same = (a, b) => (process.platform === "win32" ? real(a).toLowerCase() === real(b).toLowerCase() : real(a) === real(b));
     const resolved = (cwd, env) => spawnSync(process.execPath, ["-e", "process.stdout.write(require(process.argv[1]).resolveProjectDir())", path.join(__dirname, "lib", "spec.js")],
       { cwd, env: { ...env0, ...(env || {}) }, encoding: "utf8" }).stdout;
     // (an empty .specs/ made by hand counts in the working folder itself — init fills it — never as an ancestor's project)
@@ -1457,29 +1460,41 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       (linkedEv ? "" : " (no junction here: that part skipped)") + " (got " + JSON.stringify({ hits, gated, okWrite, refusedWrite }) + ")");
   }
 
-  // 1.42 (R7): a check that cannot run here (no git, no pwsh, links not creatable) calls the runner's skip(label, why) — never a
-  // constant-true ok() (its first argument the literal `true`), which counted as a pass: a Linux container's total held the PowerShell
+  // 1.42 (R7): a check that cannot run here (no git, no pwsh, links not creatable) calls the runner's skip(label, why) — never an
+  // ok() whose first argument is a truthy LITERAL (`true`, a number but 0, a non-empty string, [] / {}, a falsy one negated — fix
+  // round 1: the guard read the word `true` alone, and a 1 or a string got through), which counted as a pass: a Linux container's total held the PowerShell
   // and Windows-only checks it never ran (80 lines did, until 1.42) — nor prints a skip line of its own (a string that starts with two
   // spaces and "skip - "): test-docker.js counted those, the runner's summary did not. Every .js file of mcp/tests/ and cli/tests/
   // (the harnesses too), as one text — an ok( spread over lines, one after `} else` —, and NO allowance: the fake suite's files
-  // (cli/tests/16-conventions-runner.js, template literals it writes to disk) assert a non-literal truth.
+  // (cli/tests/16-conventions-runner.js, template literals it writes to disk) assert a non-literal truth. A FALSY literal is a fail,
+  // never a pass — the harnesses' failure report, ok(false, label), stays; a truthy EXPRESSION (`ok(a === a, …)`) is not read.
   {
-    const SKIP_SHAPES = [/\bok\(\s*true\s*,/g, /["'`] {2}skip - /g];
-    const hitsIn = (text) => SKIP_SHAPES.flatMap((re) => [...text.matchAll(re)].map((m) => text.slice(0, m.index).split("\n").length));
-    const T = "tr" + "ue", P = " ".repeat(2) + "skip - "; // built: this file's own text must hold neither shape
-    const planted = [`ok(${T}, "x");`, `  } else ok(${T}, "y");`, `ok( ${T} ,"z")`, `ok(\n    ${T},\n    "w")`, `console.log("${P}by hand");`, "process.stdout.write(`" + P + "x`)"];
-    const clean = [`ok(${T}ish, "a")`, `ok(isTrue, "b")`, `ok(1, "c")`, `skip("d", "why d")`, `// a ${P.trim()} line`, `notok(${T}, "e")`];
+    const OK_LITERAL = /\bok\(\s*((?:!\s*)*)(true|false|null|undefined|NaN|Infinity|\d[\w.]*|\.\d\w*|"[^"\n]*"|'[^'\n]*'|`[^`$]*`|\[\s*\]|\{\s*\})\s*,/g;
+    const truthy = (bangs, lit) => {
+      const v = /^(?:false|null|undefined|NaN)$/.test(lit) ? false : /^["'`]/.test(lit) ? lit.length > 2
+        : /^[\d.]/.test(lit) ? Number(lit.replace(/_/g, "").replace(/n$/i, "")) !== 0 : true;
+      return (bangs.replace(/\s/g, "").length % 2 === 0) === v;
+    };
+    const SKIP_LINE = /["'`] {2}skip - /g;
+    const hitsIn = (text) => [...[...text.matchAll(OK_LITERAL)].filter((m) => truthy(m[1], m[2])), ...text.matchAll(SKIP_LINE)]
+      .map((m) => text.slice(0, m.index).split("\n").length);
+    // (built: this file's own text must hold none of the truthy shapes)
+    const T = "tr" + "ue", N = String(1), Q = "\"", SQ = "'", BT = "`", LB = "[", P = " ".repeat(2) + "skip - ";
+    const planted = [`ok(${T}, "x");`, `  } else ok(${T}, "y");`, `ok( ${T} ,"z")`, `ok(\n    ${T},\n    "w")`, `ok(${N}, "c")`, `ok(${N}.5, "d")`, `ok(${Q}skipped${Q}, "s")`,
+      `ok(${SQ}x${SQ}, "q")`, `ok(${BT}x${BT}, "t")`, `ok(!${0}, "n")`, `ok(! !${N}, "m")`, `ok(${LB}], "a")`, `console.log("${P}by hand");`, "process.stdout.write(`" + P + "x`)"];
+    const clean = [`ok(${T}ish, "a")`, `ok(isTrue, "b")`, `ok(${N} === n, "c")`, `ok(${Q}a${Q} === s, "d")`, `ok(typeof exports === "object", "h")`, `ok(false, label)`, `ok(0, "z")`,
+      `ok(!${N}, "f")`, `ok(!!0, "g")`, `ok(${Q}${Q}, "e")`, `skip("d", "why d")`, `// a ${P.trim()} line`, `notok(${T}, "e")`];
     const dirs = [path.join(__dirname, "tests"), path.join(root, "cli", "tests")];
     const scanned = dirs.flatMap((d) => fs.readdirSync(d).filter((n) => n.endsWith(".js")).map((n) => path.join(d, n)))
       .map((f) => ({ f, hits: hitsIn(fs.readFileSync(f, "utf8")) }));
     const found = scanned.flatMap(({ f, hits }) => hits.map((n) => path.relative(root, f).split(path.sep).join("/") + ":" + n));
-    all("1.42 (R7): no test file asserts a constant-true ok() for a check it skips, nor prints a skip line of its own — a skip is the runner's skip(label, why), counted apart from the passes; no allowance (got " +
+    all("1.42 (R7): no test file asserts an ok() whose first argument is a truthy literal (true, 1, a string…) for a check it skips, nor prints a skip line of its own — a skip is the runner's skip(label, why), counted apart from the passes; no allowance (got " +
       JSON.stringify({ files: scanned.length, found: found.slice(0, 20), more: Math.max(0, found.length - 20) }) + ")", {
-      "the planted shapes are found (spaces inside the call, one after } else, one over lines, a hand-printed skip line)": () => planted.every((t) => hitsIn(t).length === 1),
-      "a non-literal truth, skip() and a name merely ending in ok are not": () => clean.every((t) => hitsIn(t).length === 0),
+      "the planted shapes are found (true, a number, a string of each quote, a negated falsy one, [], spaces inside the call, one after } else, one over lines, a hand-printed skip line)": () => planted.every((t) => hitsIn(t).length === 1),
+      "a falsy literal (the harnesses' failure report), an expression, a non-literal truth, skip() and a name merely ending in ok are not": () => clean.every((t) => hitsIn(t).length === 0),
       "both suites' folders are read, the fake suite's file (once an allowance) too": () => dirs.every((d) => scanned.some((s) => path.dirname(s.f) === d)) &&
         scanned.length >= 150 && scanned.some((s) => path.basename(s.f) === "16-conventions-runner.js"),
-      "no constant-true ok() and no hand-printed skip line in the suites": () => found.length === 0,
+      "no truthy-literal ok() and no hand-printed skip line in the suites": () => found.length === 0,
     });
   }
 
