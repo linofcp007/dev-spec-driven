@@ -1391,7 +1391,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     const env0 = { ...process.env };
     delete env0.SPEC_PROJECT_DIR;
     delete env0.CLAUDE_PROJECT_DIR;
-    const same = (a, b) => (process.platform === "win32" ? String(a).toLowerCase() === String(b).toLowerCase() : a === b);
+    // (by real path: a child's resolveProjectDir() answers its process.cwd(), the PHYSICAL folder on POSIX — an aliased temp, test-docker's
+    // --alias-tmp —, while a SPEC_PROJECT_DIR keeps the spelling given; every compared folder exists. 1.42 review 1, R10 Step 0)
+    const real = (p) => { try { return fs.realpathSync.native(String(p)); } catch { return String(p); } };
+    const same = (a, b) => (process.platform === "win32" ? real(a).toLowerCase() === real(b).toLowerCase() : real(a) === real(b));
     const resolved = (cwd, env) => spawnSync(process.execPath, ["-e", "process.stdout.write(require(process.argv[1]).resolveProjectDir())", path.join(__dirname, "lib", "spec.js")],
       { cwd, env: { ...env0, ...(env || {}) }, encoding: "utf8" }).stdout;
     // (an empty .specs/ made by hand counts in the working folder itself — init fills it — never as an ancestor's project)

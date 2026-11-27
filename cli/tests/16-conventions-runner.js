@@ -7,6 +7,16 @@ const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, skip, all, fsCalls, tmp, __dirname }) => {
   const js = JSON.stringify;
+  // A path by its REAL spelling — the runner's samePath norm (realpath, lower-cased on win32) — and a folder gone (a chain's, removed
+  // when it exits) by its nearest existing parent's: on POSIX a chain's process.cwd() is the PHYSICAL folder while a path built from
+  // os.tmpdir() may be an alias of it (test-docker's --alias-tmp); on win32 an 8.3 spelling is expanded on both sides alike, so a
+  // startsWith negative stays a real check (a plain fallback left a gone folder 8.3 against its expanded parent). 1.42 review 1, R10 Step 0
+  const realFold = (p) => {
+    const r = path.resolve(String(p));
+    let x;
+    try { x = fs.realpathSync.native(r); } catch { const d = path.dirname(r); x = d === r ? r : path.join(realFold(d), path.basename(r)); }
+    return process.platform === "win32" ? x.toLowerCase() : x;
+  };
   const RUNNER = path.join(__dirname, "..", "scripts", "test-runner.js");
   // A fake suite built under tmp: its entry, a harness shaped like the real ones (ok, counts, fail, end → the total line and
   // an exit once stdout has flushed) and its files. Its own temp dir (TMPDIR / TEMP / TMP) holds the times file and nothing else.
@@ -234,7 +244,7 @@ exports.run = async ({ ok }) => {
     const host = { ...env, SPEC_PROJECT_DIR: root, CLAUDE_PROJECT_DIR: root, CLAUDE_PLUGIN_ROOT: root, DEV_SPEC_DEFAULT_LANG: "es", DEV_SPEC_BUNDLE: "1",
       SPEC_MCP_PROMPTS: "off", COLUMNS: "20", DEV_SPEC_TEST_BASH: "keep-me", FAKE_KEEP: "kept", DEV_GUARDIAN_CLI: root, CLAUDE_CONFIG_DIR: root };
     const seen = (out) => out.split(/\r?\n/).filter((l) => l.startsWith("ENV ")).map((l) => { try { return JSON.parse(l.slice(4)); } catch { return null; } });
-    const fold = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
+    const fold = realFold; // (a chain's cwd is the physical folder, own and its CLAUDE_CONFIG_DIR by hand the spelling given — realFold)
     const shape = (s) => !!s && /^fake-runner-[A-Za-z0-9]{6}$/.test(path.basename(s.cwd)) && fold(path.dirname(s.cwd)) === fold(own) &&
       s.files.length === 0 && !fs.existsSync(s.cwd);
     // 1.29: no DEV_GUARDIAN_CLI, and Claude Code's config folder an absent one in the chain's own folder (no installed plugin is seen)
@@ -306,7 +316,7 @@ exports.run = async ({ ok }) => {
     const viaTmp = (dir, extra) => spawnSync(process.execPath, [path.join(root, "suite.js"), ...(extra || ["--only", "12"])], { encoding: "utf8", timeout: 60000,
       env: { ...env, TMP: dir, TEMP: dir, TMPDIR: dir, ...(extra ? { DEV_SPEC_TEST_CHAIN: "12-tmp" } : {}) } });
     const view = (r) => { const l = String(r.stdout || "").split(/\r?\n/).find((x) => x.startsWith("TMPSEEN ")); try { return JSON.parse(l.slice(8)); } catch { return null; } };
-    const fold = (p) => (process.platform === "win32" ? path.resolve(String(p)).toLowerCase() : path.resolve(String(p)));
+    const fold = realFold; // (its equalities AND its startsWith negatives: both sides real, a gone chain folder by its parent — realFold)
     const plainR = viaTmp(own), namedR = viaTmp(named), handR = viaTmp(named, []), longR = viaTmp(long);
     const [pl, nm, hd, lg] = [plainR, namedR, handR, longR].map(view);
     const neutral = (v) => !!v && !/dev-?spec/i.test(v.cwd) && fold(v.tmpdir) === fold(path.dirname(v.cwd)) && [v.TMP, v.TEMP, v.TMPDIR].every((x) => fold(x) === fold(v.tmpdir));

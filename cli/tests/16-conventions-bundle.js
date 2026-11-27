@@ -45,10 +45,12 @@ exports.run = ({ ok, run, runIn, spawnIn, tmp, CLI, __dirname }) => {
     return env;
   };
 
-  // The facade takes the bundle on DEV_SPEC_BUNDLE=1 (and only then): one engine file in the require cache instead of ~36.
+  // The facade takes the bundle on DEV_SPEC_BUNDLE=1 (and only then): one engine file in the require cache instead of ~36. (The cache
+  // is keyed by the REAL path, as Node's loader takes it — fs.realpathSync, the JS one: on POSIX an aliased temp resolves, test-docker's
+  // --alias-tmp; on win32 it is the path as given. 1.42 review 1, R10 Step 0)
   const probe = (bundle) => {
     const code = "require(" + JSON.stringify(path.join(ROOT, "mcp", "lib", "spec.js")) + ");" +
-      "const k=Object.keys(require.cache);process.stdout.write(JSON.stringify({bundle:k.includes(" + JSON.stringify(bundleFile) + "),modules:k.filter((f)=>/[\\\\/]engine[\\\\/]/.test(f)).length}))";
+      "const k=Object.keys(require.cache);process.stdout.write(JSON.stringify({bundle:k.includes(" + JSON.stringify(fs.realpathSync(bundleFile)) + "),modules:k.filter((f)=>/[\\\\/]engine[\\\\/]/.test(f)).length}))";
     const r = spawnSync(process.execPath, ["-e", code], { encoding: "utf8", env: envOf(bundle, tmp) });
     try { return JSON.parse(r.stdout); } catch { return { stdout: r.stdout, stderr: String(r.stderr).slice(0, 300) }; }
   };

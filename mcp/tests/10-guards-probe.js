@@ -70,7 +70,10 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
     "state-only": "", "dot-folders": null, "generated-roadmap-md": "", "mono-classified": "packages/app", "mono-other-tool": "",
     "steering-linked": "", "feature-linked": "" };
   const want = (l) => (WANT[l.name] === null ? null : path.join(l.root, ...WANT[l.name].split("/").filter(Boolean)));
-  const same = (a, b) => (a == null || b == null ? a == b : path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()); // eslint-disable-line eqeqeq
+  // (by real path: the resolver child's process.chdir makes S.resolveProjectDir() / C.resolveProject() answer process.cwd(), the
+  // PHYSICAL folder on POSIX, while the probe keeps the spelling it was given — an aliased temp, test-docker's --alias-tmp. 1.42 review 1)
+  const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync.native(r); } catch { return r; } };
+  const same = (a, b) => (a == null || b == null ? a == b : real(a).toLowerCase() === real(b).toLowerCase()); // eslint-disable-line eqeqeq
 
   // (a) in process — the probe, the engine (isDevSpecDir, statusLineProject, sessionProject, the CLI resolver's walk), the status line's
   // probe and the shell completion's resolver, hook-utils' approval candidates

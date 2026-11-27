@@ -1068,7 +1068,10 @@ exports.run = async ({
     await se.req("initialize", { protocolVersion: "2025-06-18", capabilities: { roots: {} } });
     const listEnv = await se.call("spec_list", {});
     await se.stop();
-    const same = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+    // (by real path — a POSIX server's process.cwd() is the physical one, a path built from os.tmpdir() may be an alias of it:
+    // test-docker's --alias-tmp; a folder not made yet, cwd23/.specs, takes its nearest existing parent's. 1.42 review 1, R10 Step 0)
+    const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync.native(r); } catch { const d = path.dirname(r); return d === r ? r : path.join(real(d), path.basename(r)); } };
+    const same = (a, b) => real(a).toLowerCase() === real(b).toLowerCase();
     ok(rlA.resources.some((r) => r.uri === "specs://feature/from-roots/requirements.md") && same(listA.specsDir, path.join(rootA, ".specs")) && listA.features.length === 1 &&
       same(explicit.specsDir, path.join(other, ".specs")) && askedOnce === 1 && same(listB.specsDir, path.join(rootB, ".specs")) && askedTwice === 2 &&
       !fs.existsSync(path.join(cwd23, ".specs")) && same(listCwd.specsDir, path.join(cwd23, ".specs")) &&
@@ -1084,7 +1087,9 @@ exports.run = async ({
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const bodyOf = (res) => { try { return JSON.parse(res.result.content[0].text); } catch { return { raw: res }; } };
     const txt = (fn) => { try { return String(fn()); } catch (e) { return "THREW: " + e.message; } }; // a missing text must FAIL, not crash the run
-    const same = (a, b) => typeof a === "string" && path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+    // (by real path, as above: a server's cwd is the physical folder — 1.42 review 1, R10 Step 0)
+    const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync.native(r); } catch { const d = path.dirname(r); return d === r ? r : path.join(real(d), path.basename(r)); } };
+    const same = (a, b) => typeof a === "string" && real(a).toLowerCase() === real(b).toLowerCase();
     const fileUri = (p) => {
       const s = path.resolve(p).split(path.sep).join("/");
       return process.platform === "win32" ? "file:///" + encodeURI(s) : "file://" + encodeURI(s);
