@@ -94,6 +94,22 @@ Phase 6, opt-in.
   writes no ledger line: after one, run the review again — and the branch review reads `merge-base..HEAD`: the feature's
   work committed first), `references/critic-review.md` §1 / §3 (the gate critics: the size table's on the session's model plus one per other panel model; their merged findings go
   to the user — gates have no verifier). mcp/tests/17-docs.js pins each file's wording of these rules.
+- **Subagent cost (1.42 S9, report only — never a gate, a warning, a doctor entry or a blocker)** — engine/agents.js: what the
+  plugin's own agents (`AGENT_ROLES` = agents/*.md, a property test) cost, per role: dispatches, assistant turns, tool calls and
+  tokens (in, out, cache read, cache write). The log is `.specs/.execution/agents.jsonl` (git-ignored, beside timings.jsonl),
+  one line of COUNTS per finished dispatch — {agent, id, model?, turns, tools, tokens, truncated} — written by `recordAgentRun`
+  through evidence.js's appender (the write gate) and shape-checked on write AND read (an agent among the six, a
+  `dev-spec-driven:` prefix dropped — a copied agent of the same name is the same role, as the stop gate reads it —, an id
+  `^[\w-]{1,64}$`, counts safe integers ≥ 0, a model id ≤ 100 characters, `truncated` a boolean); past 256 KB the newest
+  well-shaped lines, up to half. `agentCosts` (spec_metrics' project `agents`, beside `friction`; never a feature's) keeps
+  ONE record per id, the LATER in the log (a dispatch the stop gate sent back finishes again, its transcript a superset), and
+  rolls them up per role (+ `truncated`: the dispatches read only in part — their counts a lower bound, said on the CLI line;
+  `models`). **No time and no feature:** a transcript's first-to-last span is wait time for a resumed agent (9.5 % of 2,194
+  real dev-spec transcripts span over an hour), and a dispatch prompt names its feature by a name, never an anchor the engine
+  records (7.4 % name two or more). The recorder is Claude Code's: the observe hook's SubagentStop (its reader and its
+  hooks.json entry — 1.42 S9-c, wired on the integrated branch after B142-13's regular-file reads) reads the agent's OWN
+  transcript (`agent_transcript_path`, never the parent session's) in the hook — never the engine, which reads nothing outside
+  the project — and hands over the counts; an MCP-only host records nothing.
 
 ## Evidence
 
@@ -1147,6 +1163,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   gate that honours the user's forced, reasoned test-plan approval for the named ACs —, a criterion's last planned test
   joined the never-pruned list (any AC, EC, NFR or SC — the re-approvals then complete unforced), and a retired AC's test is
   named to the user as one needing a `/spec-change` on its feature, never pruned.
+- **1.42 —** S9 (the subagent cost): subagent-execution.md said "roughly 2–3× the tokens" with nothing that measured it.
+  Designed as an engine-side transcript reader with time and a feature per dispatch; the critic measured 2,194 real dev-spec
+  transcripts and cut both (a span is wait time for one dispatch in ten; 7.4 % of prompts name two features — a scope by a
+  name) and moved the read to the hook (the engine never reads a path outside the project). Also from that corpus: usage
+  repeats within one message id GROW (`output_tokens`, 226 files) — per field the max per id, never the first line nor a sum
+  (2.0–2.2× the deduped); a tool_use per LINE (one content block a line); the largest transcript 26.8 MB (the hook's 32 MB
+  bound). S9-b / S9-d built the engine part (recordAgentRun, agentCosts, the metrics lines); S9-c (the hook's reader and its
+  SubagentStop entry, second in the list after the stop gate's) waits for B142-13's regular-file reads in the same file.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

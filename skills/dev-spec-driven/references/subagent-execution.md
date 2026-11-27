@@ -19,7 +19,8 @@ own gates.
 | Claude Code (or any host with a subagent tool) | Cursor / Windsurf / Copilot / Gemini / claude.ai — no subagents; use `dev-spec brief` + inline |
 | deterministic tasks on any track | **+ai prompt/eval tasks** (`inlineOnly: true` in the brief) — evals cost money and accept/revert is a judgment call |
 
-Cost: roughly 2–3× the tokens of inline execution (one implementer + one reviewer per task). Say so
+Cost: roughly 2–3× the tokens of inline execution (one implementer + one reviewer per task) — in Claude Code
+`spec_metrics`' `agents` counts it per role (dispatches, turns, tokens). Say so
 when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the user asks for it).
 
 ## Preconditions (check before Task 1)
