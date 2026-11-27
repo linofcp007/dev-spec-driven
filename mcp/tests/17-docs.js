@@ -386,9 +386,10 @@ exports.run = async ({
     "22 commands: /spec (+ /ds), /spec-bugfix, /clarify, /approve, /spec-doctor, /executeTask (+ /dsx), /spec-status (+ /dss), /roadmap, /spec-review, /spec-finish, /spec-spike, /spec-change, /feature, /spec-report, /spec-adopt, /spec-setup, /eval, /spec-upgrade, /spec-tour (got " + cmdFiles.join(", ") + ")");
   const evalRoot = path.join(root, "evals");
   // `fixtures/` holds the behavioural cases' shared scaffold (lib.sh + project trees) — not a case. Behavioural cases
-  // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below.
+  // (tag `behavior`) grade what the agent DOES, not whether the skill fires; they are checked in the A3 block below, and the
+  // review-seat cases (tag `review-seat`, 1.42: a review agent's reply) in 17-docs-evals.js.
   const evalCases = fs.readdirSync(evalRoot, { withFileTypes: true }).filter((e) => e.isDirectory() && !["results", "fixtures"].includes(e.name)).map((e) => e.name);
-  const evalBehavior = (c) => /^\s+- behavior\s*$/m.test(fs.readFileSync(path.join(evalRoot, c, "prompt.md"), "utf8"));
+  const evalBehavior = (c) => /^\s+- (?:behavior|review-seat)\s*$/m.test(fs.readFileSync(path.join(evalRoot, c, "prompt.md"), "utf8"));
   ok(evalCases.length >= 5 && evalCases.every((c) => fs.existsSync(path.join(evalRoot, c, "prompt.md")) && (evalBehavior(c) ||
     fs.readdirSync(path.join(evalRoot, c, "graders")).some((g) => /input_match: '"skill":\\s\*"dev-spec-driven:\[\\w-\]\+"'/.test(fs.readFileSync(path.join(evalRoot, c, "graders", g), "utf8"))))),
     "plugin evals: every case has prompt.md; every triggering case a grader with an intact regex");

@@ -1,0 +1,36 @@
+# Task 1 report — note-edits
+
+**Status:** DONE
+
+## What I implemented
+- US-1.AC-1 — `updateNote()` replaces the text of the author's note; `putNote` answers 200 with it (src/notes.js, src/api.js).
+- US-1.AC-2 — a text over 500 characters throws `NoteError(400)` before anything is written; the old text stays.
+- US-1.AC-3 — `putNote` passes `req.user.id`; another user's id throws `NoteError(403)`.
+- EC-1 — an unknown id throws `NoteError(404)`.
+- NFR-1 — Node core only, no dependency added.
+
+## Tests run
+- `node --test test/notes.test.js` — 5 tests (T-01 to T-04 plus the existing store test).
+- `node --test` — the whole suite, 15 tests, exit 0.
+
+## Verification evidence
+- `node --test test/notes.test.js` — exit 0
+  ```
+  ℹ tests 5
+  ℹ pass 5
+  ℹ fail 0
+  ```
+
+### Reuse
+- Reused: the in-memory store in `src/notes.js` (`NOTES`, the ids) — `updateNote()` changes the stored note in place.
+- Extended: `src/api.js` — `putNote` beside `postNote` / `getNotes`, the same `{ status, body }` answers.
+- Created: `NoteError` in `src/notes.js` because no error type carries a status (searched "Error", "status", "throw" in src/; nearest: none).
+- Duplicated on purpose: none.
+- Raw values kept on purpose: none.
+- Refactor candidates: none.
+
+## Files changed
+- src/notes.js, src/api.js, test/notes.test.js, test/csv.test.js — one commit, "feat(note-edits): task 1".
+
+## Self-review
+No concerns.
