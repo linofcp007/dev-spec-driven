@@ -164,6 +164,37 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
         js({ same, live, other, loaded: en.loaded, source: en.source, stop: [en.stop, en.claimPt], en: ["feature-a", "feature-b", "crash-on-save"].map((f) => [en[f], hereEn[f]]), done: en.done }) + ")");
     }
 
+    // 1.42 perf-8 — the glossary check's built-in template lines (the visible lines of every built-in requirements / design / change /
+    // bugfix text, per base language) come from the corpus: rendered, they cost 90–100 ms a language in each fresh process that
+    // reached the glossary check or a critical flow. The file's lines are the render's, in RENDER order (the first of two equal
+    // patterns wins: never sorted); a fresh process builds every language's patterns (pt-BR from pt's lines through toPtBr) with no
+    // builder call; the patterns from the file equal those from a render (the clone without a corpus, below — glossFromRender).
+    const glossShape = (s) => ({ exact: [...s.exact], head: [...s.head].map(([k, v]) => [k, v.map((p) => p.segs.join("|") + "#" + p.slots.join("|"))]),
+      tail: [...s.tail].map(([k, v]) => [k, v.map((p) => p.segs.join("|") + "#" + p.slots.join("|"))]), loose: s.loose.map((p) => p.segs.join("|") + "#" + p.slots.join("|")) });
+    const glossHere = ["en", "pt", "es", "pt-BR"].map((l) => glossShape(E.glossBuiltinLines(l)));
+    {
+      const rendered = Object.fromEntries(I.BASE_LANGS.map((l) => [l, E.renderGlossLines(l)]));
+      const fileGloss = fileCorpus.glossLines || {};
+      const glossChild = function (lib) {
+        const path = require("path");
+        const I = require(path.join(lib, "i18n.js")), E = require(path.join(lib, "engine", "index.js"));
+        let calls = 0;
+        for (const k of ["requirements", "design", "trackDesignBlock", "change", "bugRequirements", "bugReport"]) {
+          const f = I[k];
+          I[k] = function () { calls++; return f.apply(this, arguments); };
+        }
+        const sizes = ["en", "pt", "es", "pt-BR"].map((l) => { const s = E.glossBuiltinLines(l); return s.exact.size + s.head.size + s.tail.size + s.loose.length; });
+        process.stdout.write(JSON.stringify({ calls, sizes, source: E.builtinCorpusSource() }));
+      };
+      const child = spawnJson([script("p42-gloss.js", glossChild, "process.argv[2]"), libDir], process.env);
+      all("1.42 perf-8: the glossary check's template lines come from the corpus — the file's are the render's in render order (never sorted), a fresh process builds every language's patterns (EN / PT / ES / pt-BR) without one builder call (got " +
+        js({ sizes: I.BASE_LANGS.map((l) => [l, (fileGloss[l] || []).length, rendered[l].length]), child }) + ")", {
+        "the file's lines = the render's, in order": () => I.BASE_LANGS.every((l) => js(fileGloss[l]) === js(rendered[l]) && js(fresh.glossLines[l]) === js(rendered[l]) && js(E.builtinGlossLines(l)) === js(rendered[l])),
+        "real lines, render order (not the sorted order)": () => rendered.en.length > 200 && rendered.pt.length > 200 && js(rendered.en) !== js(sorted(rendered.en)),
+        "a fresh process: no builder call, the corpus read": () => child.calls === 0 && child.source === "file" && Array.isArray(child.sizes) && child.sizes.every((n) => n > 100),
+      });
+    }
+
     // CORPUS_SOURCES — what the sources stamp hashes — lists every mcp/lib file whose functions run while the corpus renders (V8
     // coverage of renderCorpusData, the counters reset once every language has loaded): a render that came to depend on another
     // module would otherwise keep a stale corpus after an edit there.
@@ -222,6 +253,10 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
         const dec = uniq.map((x) => [S.placeholderReport(x), S.artifactState({ text: x }), S.parseTasks(x).map((k) => [S.isPlaceholderTask(k.text), E.isBugStep(k.text)])]);
         Object.assign(out, { texts: uniq.length, placeholders: dec.reduce((n, d) => n + d[0].length, 0), hash: crypto.createHash("sha1").update(JSON.stringify(dec)).digest("hex") });
       }
+      if (mode === "gloss") { // 1.42 perf-8: the glossary check's patterns of every language (glossShape's form, above)
+        const pat = (p) => p.segs.join("|") + "#" + p.slots.join("|");
+        out.gloss = ["en", "pt", "es", "pt-BR"].map((l) => { const s = E.glossBuiltinLines(l); return { exact: [...s.exact], head: [...s.head].map(([k, v]) => [k, v.map(pat)]), tail: [...s.tail].map(([k, v]) => [k, v.map(pat)]), loose: s.loose.map(pat) }; });
+      }
       process.stdout.write(JSON.stringify(out));
     };
     const decideJs = script("p20-decide.js", decideChild, "process.argv[2], process.argv[3]");
@@ -249,8 +284,16 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
     fs.writeFileSync(corpusPath, JSON.stringify(keyless));
     const noStates = decide(cloneLib, "source");
     ok(noStates.source === "render", "1.38 build: a corpus without its uiStateNames list (+ui's state labels) is no corpus — rendered (got " + js(noStates) + ")");
+    // 1.42 perf-8: …nor one whose glossLines miss a base language or hold anything but strings
+    const glossBad = (edit) => { const c = JSON.parse(fs.readFileSync(path.join(libDir, "engine", E.CORPUS_FILE), "utf8")); edit(c.glossLines); fs.writeFileSync(corpusPath, JSON.stringify(c)); return decide(cloneLib, "source"); };
+    const noEs = glossBad((g) => { delete g.es; }), numbers = glossBad((g) => { g.pt = g.pt.concat([7]); });
+    ok(noEs.source === "render" && numbers.source === "render", "1.42 perf-8 build: a corpus whose glossLines miss a base language (es) or hold a non-string line is no corpus — rendered (got " + js([noEs, numbers]) + ")");
     fs.rmSync(corpusPath);
     const missing = decide(cloneLib, "decide");
+    const glossFromRender = decide(cloneLib, "gloss");
+    ok(glossFromRender.source === "render" && Array.isArray(glossFromRender.gloss) && js(glossFromRender.gloss) === js(glossHere) && glossHere[3].exact.length > 50,
+      "1.42 perf-8 build: without a corpus the glossary check's patterns of every language (EN / PT / ES / pt-BR — pt's lines through toPtBr) are exactly the ones this process built from the corpus file: the same keys, the same wildcard patterns in the same order (got " +
+      js({ source: glossFromRender.source, sizes: (glossFromRender.gloss || []).map((s) => [s.exact.length, s.head.length, s.tail.length, s.loose.length]), here: glossHere.map((s) => [s.exact.length, s.head.length, s.tail.length, s.loose.length]) }) + ")");
     ok(here.source === "file" && faithful.source === "file" && otherVersion.source === "file" && broken.source === "render",
       "1.20 build: a copy of the clone elsewhere reads the committed corpus (the stamp is the sources, not their path) — under another package.json version too (1.26: no version in the stamp, the corpus is the sources'); a broken corpus file → rendered (got " +
       js([here.source, faithful.source, otherVersion.source, broken.source]) + ")");
@@ -287,11 +330,16 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
         out.first = slots(design("en")).length > 0 && E.builtinCorpusSource();
         const undo = () => E.uiStateNames().labels.filter(([id]) => id === "undo").map(([, l]) => l); // 1.38: +ui's state labels, from the corpus
         out.undoBefore = undo();
+        // 1.42 perf-8: the glossary check's pt lines and patterns, read from the corpus (pt.js not loaded for them)
+        const glossHas = (s) => E.builtinGlossLines("pt").some((x) => x.includes(s));
+        const glossSet = E.glossBuiltinLines("pt");
+        out.glossBefore = [glossHas("[o que já faz por esta feature]"), glossHas("[o que faz hoje por esta feature]")];
         edit("mcp/lib/i18n/pt.js", "[o que já faz por esta feature]", "[o que faz hoje por esta feature]");
         edit("mcp/lib/i18n/pt.js", "undo: \"Desfazer\"", "undo: \"Anular a ação\"");
         out.build = rebuild();
         const pt = design("pt"); // the NEW pt.js — the code this process runs from now on
-        Object.assign(out, { source: E.builtinCorpusSource(), fresh: pt.includes("[o que faz hoje por esta feature]"), probe: slots(pt), undoAfter: undo() });
+        Object.assign(out, { source: E.builtinCorpusSource(), fresh: pt.includes("[o que faz hoje por esta feature]"), probe: slots(pt), undoAfter: undo(),
+          glossAfter: [glossHas("[o que já faz por esta feature]"), glossHas("[o que faz hoje por esta feature]")], glossRebuilt: E.glossBuiltinLines("pt") !== glossSet });
       } else if (mode === "version") { // nothing asked yet — package.json gets another version, then the build runs again
         const p = path.join(clone, "package.json");
         const gen = [path.join(lib, "engine", "corpus.generated.json"), path.join(clone, "hooks", "stop-claims.generated.json")];
@@ -338,6 +386,9 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
       Array.isArray(rLoc.undoAfter) && rLoc.undoAfter.includes("Anular a ação") && !rLoc.undoAfter.includes("Desfazer") && rLoc.undoAfter.includes("Undo"),
       "1.38: the state labels doctor's ui-states reads (uiStateNames, from the trusted corpus) are dropped with it — after pt.js changed under the process, its new Portuguese label is read (got " +
       js([rLoc.undoBefore, rLoc.undoAfter]) + ")");
+    ok(js(rLoc.glossBefore) === js([true, false]) && js(rLoc.glossAfter) === js([false, true]) && rLoc.glossRebuilt === true,
+      "1.42 perf-8: the glossary check's template lines (builtinGlossLines, from the trusted corpus) are dropped with it, and its patterns built again — after pt.js changed under the process, the reworded slot's line is the one read (got " +
+      js({ before: rLoc.glossBefore, after: rLoc.glossAfter, rebuilt: rLoc.glossRebuilt }) + ")");
 
     // The bundle (built on demand — here into tmp, for this clone's mcp/lib): the same modules in one file — the modules'
     // namespace, the corpus it embeds (source 'bundle'), their own paths (engineVersion's package.json, the approval guard's

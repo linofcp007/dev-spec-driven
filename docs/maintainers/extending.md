@@ -50,7 +50,7 @@ how they came to be — the releases and review findings — is in History at th
   (`engine/markdown.js`) if it has slots.
 - **A size-aware builder** → its `a.size` branch in the layout (`LAYOUTS`), NEVER a change to the no-size text (the pinned sha1
   in mcp/tests/06-gates-sizes.js — update it only when the no-size scaffold changes on purpose), and its sized renders in
-  `templateCorpus()` (then `npm run build`) and `glossBuiltinLines()`.
+  `templateCorpus()` and `renderGlossLines()` (markdown.js — the glossary check's template lines, 1.42), then `npm run build`.
 - **New import source** → a parser `engine/import/<tool>.js` returning the import model (`newImportModel()`; reuse
   import/common.js's readers), in `LAZY` (the lazy tier); its `IMPORT_TOOLS` (scaffold.js) and `C3_PARSERS` entries (+ `TEXT_IMPORT_TOOLS` for a single
   document); the `tool` enum of `spec_import`, the CLI's `import` entry, tests. A source that is no feature

@@ -111,15 +111,22 @@ function outsideSignature(paths) {
 }
 // The cached render for this key — its result object — while it is fresh, its project's .specs/ signature and its outside paths' hold
 // and the candidates still find the folder it was rendered for (`near`: statusNear's — given by the caller), else null.
-function statusCacheRead(key, now = Date.now(), near) {
+// statusCacheLookup → { r (that render, or null), project, signed, sig }: `signed` when this read took the project's .specs/ signature
+// (the entry well-formed, fresh, for this folder), `sig` that signature as it is NOW (null past STATUS_CACHE_ENTRIES) — a miss of the
+// same project reuses it for the render it keeps (1.42 perf-5: a miss walked .specs/ twice, 46–63 ms at 40 features, ~200 at 200),
+// never the entry's own `sig` (the stale one). Taken before the render: a change after it is a miss next time.
+function statusCacheLookup(key, now = Date.now(), near) {
+  const none = { r: null, project: null, signed: false, sig: null };
   let c;
-  try { c = JSON.parse(fs.readFileSync(statusCacheFile(key), "utf8")); } catch { return null; }
-  if (!c || typeof c !== "object" || typeof c.at !== "number" || typeof c.project !== "string" || typeof c.sig !== "string") return null;
+  try { c = JSON.parse(fs.readFileSync(statusCacheFile(key), "utf8")); } catch { return none; }
+  if (!c || typeof c !== "object" || typeof c.at !== "number" || typeof c.project !== "string" || typeof c.sig !== "string") return none;
   const ttl = c.mapped === true ? STATUS_CACHE_MAPPED_TTL_MS : STATUS_CACHE_TTL_MS;
-  if (now < c.at || now - c.at > ttl || !c.r || typeof c.r !== "object" || !Array.isArray(c.outside) || typeof c.osig !== "string") return null;
-  if (near !== undefined && c.near !== near) return null;
-  return specsSignature(c.project) === c.sig && outsideSignature(c.outside) === c.osig ? c.r : null;
+  if (now < c.at || now - c.at > ttl || !c.r || typeof c.r !== "object" || !Array.isArray(c.outside) || typeof c.osig !== "string") return none;
+  if (near !== undefined && c.near !== near) return none;
+  const sig = specsSignature(c.project);
+  return { r: sig === c.sig && outsideSignature(c.outside) === c.osig ? c.r : null, project: c.project, signed: true, sig };
 }
+const statusCacheRead = (key, now, near) => statusCacheLookup(key, now, near).r;
 // Keep a render (best effort: a temp file renamed into place — two status lines at once never read half a file). opts: { at (now),
 // started (when the render began — default at), near (statusNear's folder), mapped (the project is a worktree's checkout, not near),
 // reads (the outside paths it reported) }.
@@ -304,4 +311,4 @@ function script(shell, model) {
 
 module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, statusProbe, statusNear, STATUSLINE_LAUNCHER, statuslineCommand,
   featureNames, archivedNames, STATUS_CACHE_TTL_MS, STATUS_CACHE_MAPPED_TTL_MS, STATUS_CACHE_RACY_MS, specsSignature, outsideSignature, statusCacheFile,
-  statusCacheRead, statusCacheWrite };
+  statusCacheRead, statusCacheLookup, statusCacheWrite };

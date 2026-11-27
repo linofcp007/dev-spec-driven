@@ -1884,13 +1884,14 @@ exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, list, hoo
 
   // 1.22 review (13) — the observe hook's pre-filter stat'ed, read and probed change.md in every feature folder on every Bash call
   // (+133 ms at 150 features). It opens tasks.md once and looks at change.md only when there is no tasks.md; what it finds is
-  // unchanged (a change's change.md is still read, an oversized tasks.md still skipped).
+  // unchanged (a change's change.md is still read, an oversized tasks.md still skipped). (1.42 B142-13: counted as the change.md
+  // FILES touched — a stat, an lstat, an open, a read —, since a regular file only is opened: the lstat says there is none first.)
   {
     const js = JSON.stringify;
     const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
     const probe = path.join(tmp, "o122-probe.js"), out = path.join(tmp, "o122-probe.out");
-    fs.writeFileSync(probe, "const fs = require('fs'); let n = 0; for (const k of ['statSync', 'openSync', 'readFileSync', 'existsSync']) { const o = fs[k]; fs[k] = function (p, ...r) { if (typeof p === 'string' && /change\\.md$/.test(p)) n++; return o.call(this, p, ...r); }; }\n" +
-      "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(n)));\n");
+    fs.writeFileSync(probe, "const fs = require('fs'); const seen = new Set(); for (const k of ['statSync', 'lstatSync', 'openSync', 'readFileSync', 'existsSync']) { const o = fs[k]; fs[k] = function (p, ...r) { if (typeof p === 'string' && /change\\.md$/.test(p)) seen.add(p); return o.call(this, p, ...r); }; }\n" +
+      "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(seen.size)));\n");
     const p = path.join(tmp, "o122-prefilter");
     S.initProject(p, ["core"], "en");
     for (let i = 0; i < 5; i++) {

@@ -144,7 +144,7 @@ History at the end.
 - **Not gated, on purpose:** `.specs` itself; the project rule (`PROBE_IO`, probe.js `isDevSpecProject`) — which folder IS the project is
   one answer for the engine, the hooks, the status line and the completion (10-guards-probe.js's linked layouts), the spec text behind a
   link stays unread; the engine-free hooks' 1-bit pre-filters (observe `mentioned`, stop `recentActivity`) — they only decide whether the
-  engine runs, and its gated read decides.
+  engine runs, and its gated read decides (1.42: they open a regular file only, never through a link — claude-code-integration.md).
 - **Reported, never silent:** a linked feature folder is `feature-linked` (Feature folders, above); doctor `specs-links` (a warn) names
   each link below .specs/ the reads treat as absent — `.specs/`'s, `steering/`'s and `_archive/`'s own entries and the feature folder's
   down to four levels below it (`SPECS_LINKS_DEPTH` = 3 recursions) —, never what it points at; an approval's artifact behind a link is

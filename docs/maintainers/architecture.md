@@ -200,7 +200,11 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   quality.js `builtinTemplateAcs` reads live; `stopGate` — `builtinStopGate()`, the stop gate's lists of every language,
   `i18n.stopGateLists()`, which guards.js `stopPatterns` reads; `uiStateNames` — `uiStateNames()`, 1.38: +ui's state labels
   and the state matrix's a11y header cell of every language, `<id>\t<label>` lines, the header's id `a11y` — the one list read
-  whole, by doctor's ui-states). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
+  whole, by doctor's ui-states; `glossLines` — `builtinGlossLines()`, 1.42 perf-8: per base language, the visible lines of every
+  built-in requirements / design / change / bugfix text in RENDER order (`renderGlossLines()` — never sorted: the first of two equal
+  patterns wins), which quality.js `glossBuiltinLines` keys — pt-BR through `toPtBr` where it is used; rendered, they cost 90–100 ms
+  a language in each fresh process that reached the glossary check or a critical flow; +~94 KB of the file, 171,822 → 265,485
+  bytes, ~+0.15 ms of `JSON.parse` warm). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
   an engine set built from EVERY language's texts belongs here — a process loads only the languages it speaks
   (mcp/tests/16-conventions-build.js "I-I2" asserts an English doctor / next_action / done / finish / catalog / stop gate loads no pt.js,
   es.js or pt-br.js). A new builder or artifact goes into `templateCorpus()`, then rebuild. The per-project part (the
@@ -377,6 +381,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30.1** — the stop gate's lists (`stopGate`) joined the corpus: built from every language's table, they loaded pt.js, es.js
   and pt-br.js into every English Stop hook. Measured (median of 21 interleaved fresh processes, Windows 11, Node 26): the Stop
   hook on a claim 204.6 → 188.7 ms; the corpus grew from ~129 KB to ~152 KB.
+- **1.42 (perf-8, DS-PERF)** — `glossLines` joined the corpus: the glossary check's built-in template lines rendered ~146 texts a
+  language in each fresh process (636 builder calls for the four languages; −90–100 ms a language — measured by the critic in
+  fresh processes; pt-BR keeps its ~88 ms of `toPtBr`). No hook reaches it: the one-shot CLI doctor / next / finish / clarify /
+  approve and an MCP server's first such call. Its visible-lines rule moved with it (`glossVisibleLines`, ONE copy in markdown.js,
+  quality.js's project templates read through it); quality.js keeps the keying and rebuilds a language's patterns when the corpus
+  is dropped mid-process (it keys them on the lines array it got).
 - **1.38.0** — `uiStateNames` joined the corpus (CRIT_4 must-fix 6): doctor's ui-states recognises a state-matrix row by a
   label of ANY language, and rendered, those labels loaded pt.js, es.js and pt-br.js into every English doctor of a +ui
   feature. The first list read whole rather than asked `.has()` (`<id>\t<label>` lines); `CORPUS_KEYS` holds it, so a corpus

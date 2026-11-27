@@ -60,7 +60,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   session started in a subfolder or a sibling checkout keep their lint and their `lastEditAt` stamp (12-lifecycle-read-gate-root.js);
   a save through a link named `.specs` below `.specs/` is the known limit (conventions.md → The read gate). It never
   refreshes ROADMAP.md / SPECS.md: a save leaves `.specs/.execution/roadmap-stale` (`markRoadmapStale`) for the Stop /
-  SubagentStop hook to refresh at the end of the turn (lifecycle.md → Roadmap files). **SessionStart** fires in every session of
+  SubagentStop hook to refresh at the end of the turn — after its gate, and not on a turn it sends back (1.42: that turn's next
+  stop refreshes; lifecycle.md → Roadmap files). **SessionStart** fires in every session of
   every project (the plugin is user-wide), so `sessionMayBeDevSpec()` runs the raw probe first — a superset of what
   `sessionProject()` can pick; it prints ≤ `SESSION_MAX_FEATURES` = 20 feature lines, then "+N more"
   (mcp/tests/10-guards-hooks-cost.js). **The Stop hook** ends before the engine loads when the closing message holds no claim
@@ -131,7 +132,12 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   OS temp folder), `claimProse` / `claimScan` / `claimMatch` (the Stop hook's pre-filter) and `parseProjectDir(v, base)` /
   `fileUriToPath` / `unexpandedVar` — ONE reading of an MCP tool's projectDir (`{none}` · `{dir}` · `{code: project-dotdot |
   project-network | project-uri}`), which **mcp/server.js** requires too (`HOOK_UTILS`, its `RE_DOTDOT` included). mcp/tests/
-  10-guards-guard-downs.js and 10-guards-shell-writes.js check they agree with the engine's.
+  10-guards-guard-downs.js and 10-guards-shell-writes.js check they agree with the engine's. **A hook's raw read below `.specs/`
+  opens a REGULAR file only (1.42)** — probe.js `readRegularJson` (roadmap.json in the guard, Stop and observe hooks, each
+  `.state.json` of the Stop pre-filter), observe-hook `readTasksText` (an lstat, then `openRegular`): a link, a FIFO, a device, a
+  folder or an lstat that throws is no file, as the engine's read gate reads it, and each hook keeps its own no-file answer (the
+  guard: the user's default; the Stop gate: the user's option; the observe hook: no checks, change.md) — a FIFO tasks.md held
+  every Bash call's async observe hook in one open for the rest of the session (mcp/tests/10-guards-hooks-cost.js "B142-13").
 - **What the hooks and the engine both read — mcp/lib/probe.js, ONE copy** (never a renamed copy in a hook: the 8-line duplication
   guard can't see one — review 8): the approval pre-filter (`approvalPlain`, `approvalMayBe` over `APPROVAL_CANDIDATE_TESTS`,
   `RE_APPROVAL_VERB` — the engine's `approvalCandidate` adds a PowerShell `-EncodedCommand`'s decoded script, the hook passes any
@@ -226,6 +232,18 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   — with `systemMessage: userNote` on a deny; its raw pre-check reads `meta.guard === "tests"` and `DEV_SPEC_GUARD_DEFAULT=tests`.
   Each feature's tasks.md is parsed once per call (`blocksOf`, shared by the scope and protected-test readings). **git stays the
   user's**: no git reading at this level either — finish's hash check names what a git command changed.
+- **One read-cache scope per project per hook event (1.42 perf-1).** The hook first lists every (project, path) check — target by
+  target, the session's project then the file's own (`seen`), every engine call but `guardCheck` made then, outside any scope —, runs
+  each project's checks inside ONE `spec.withReadCache` (in the order the projects first appear), and folds the results in the
+  checks' own order (the strictest wins, the first among equals, the first note) — the object the per-target loop printed. Each
+  feature's tasks.md / `.state.json` is read once per project per event, and parsed once per process (the task-blocks memo,
+  tasks-and-evidence.md → Tasks: ONE scanner): a 16-file `sed -i` on 200 features read 6,400 files (6.8–7.4 s in-process), now 400
+  (0.70–0.83 s; 40 features 1.4–2.3 s → 0.15–0.18 s). **Per project, never one scope over two:** a scope's gate root comes from the
+  OUTERMOST project it recorded (files.js `gateRootOf`) and its template / pack memo from the call's project — on ordinary layouts
+  the answers are the same, but a package below a folder NAMED `.specs` (`vendor/.specs/pkg`) would read its own linked `.specs/` as
+  a refused deeper part under the root's scope. guardCheck, guards.js and the facade are unchanged. **Known limit:** a decision
+  past the hook's 10 s timeout lets the edit through, as every guard trouble does (fail-open by policy — a deadline that asked on
+  slowness alone was cut: a partial plan would silently allow a protected test an unread feature holds).
 - **Inside / outside the project** is decided on real paths too (`insideDirAlias()`: an 8.3 name, a junction or symlink to the
   project is inside), never for a NETWORK path (`isNetworkPath`): its realpath would open an SMB connection to a host the agent
   named — `networkPathInside()` decides on the text (inside only under root's own `\\host\share\…`), so a project on a share
@@ -539,7 +557,11 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (cli/completion.js `statusCacheRead` / `statusCacheWrite`, no engine): kept in the OS temp folder per key (this CLI, the
   candidate folders resolved, `$COLUMNS`) with `specsSignature()` of the project's `.specs/` taken BEFORE it rendered — every
   entry's path, size, mtime and ctime, ≤ `STATUS_CACHE_ENTRIES` (4,000; past it: no cache), links never entered — and served while
-  that signature holds and it is under `STATUS_CACHE_TTL_MS` (10 s) old. Any change under `.specs/` shows at the next render. **What
+  that signature holds and it is under `STATUS_CACHE_TTL_MS` (10 s) old. Any change under `.specs/` shows at the next render. A miss
+  walks `.specs/` once (1.42 perf-5): `statusCacheLookup` returns the signature it took to compare (`signed`, the entry well-formed,
+  fresh and for this folder) and the render keeps it when the entry's project is the one rendered — never the entry's own `sig`,
+  never another project's walk (it saved 46–63 ms at 40 features, ~200 at 200, where nearly every render within 10 s of a Bash
+  call is such a miss). **What
   it reads OUTSIDE `.specs/` (1.30.1)** shows at the next render too: the render reports the paths its answer depends on there
   (`statusLine(dir, {reads})` — Phase 4's test files, read or missing, `statusTestsGate`; the gates and the finish step read only the
   spec and state files) and the entry signs them (`outside` / `osig`: size, mtime, ctime or absent — ≤ 64, else no cache); a file
@@ -738,6 +760,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   No hook, matcher or agent tool list changed: spec-reviewer gained a prune mode (its description +9 characters, 222 of ~250)
   and spec-implementer a fix round's `### Causes` block and the METRIC-line rule — prose (tasks-and-evidence.md → Subagent-driven
   execution).
+- **1.42 (B142-13)** — the hooks' raw readers below `.specs/` took the approval hook's 1.41.1 rule (a regular file only; probe.js
+  `readRegularJson`): a FIFO roadmap.json held the guard and Stop hooks to their timeout, and a FIFO tasks.md left one async observe
+  hook blocked in its open per Bash call (Claude Code never kills an async hook). Where absence relaxes, checked site by site: a
+  folder / FIFO / link roadmap.json in the guard is the user's default (the parent: off, or a hang then a pass), in the Stop gate
+  the user's option (equal for a folder); a link / FIFO `.state.json` is no activity and a non-regular tasks.md sends the observe
+  hook to change.md — the engine reads all of them absent, so the pre-filters stay supersets. 12-lifecycle-read-gate.js's tracer
+  exempts `recentActivity`, `mentioned` and `readTasksText` no more.
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.
@@ -786,6 +815,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.38.0** (chain P) — `isTestFile`'s three test-harness conventions reach the guard: a `__mocks__/` / `__fixtures__/` file and a
   Cypress `*.cy.<script>` are test files — allowed at the scope level (`test-file`) and in Phase 4 (`tests-phase`), protected at
   level tests (markdown-and-trace.md → Test code and file reads, the blast radius).
+- **1.42 (perf-1, DS-PERF)** — the hook called `guardCheck` once per (target, project), each in a read-cache scope of its own: every
+  feature's tasks.md and `.state.json` read again per target (a 16-file `sed -i` on 200 features: 6,400 reads, ~13 s as a process —
+  past the 10 s timeout, so the edit passed with no guard answer). One scope per project now, the fold unchanged; hook-only (guards.js,
+  the facade and i18n untouched). Cut in critique: an engine-side check of many targets on one plan (with the scope and the
+  task-blocks memo, 16 targets already cost ~the 1-target time + ~20 ms each at 200 features) and a 6 s deadline that asked (a
+  policy change for a fail-open hook, and a partial plan would silently allow a protected test) — reopen with a real edit past 3 s. The equivalence
+  property drives the review's legit commands, the monorepo / CI corpus (moved, verbatim, into mcp/tests/guard-commands.js) and
+  the controller's package and `dupes --json` writes ([INT-3]) through both folds. A scope over two projects is equivalent on
+  ordinary layouts (its mutant survives; the doc line above says where it is not).
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer
@@ -925,3 +963,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30.1** — the cache's blind spot: for up to 10 s a change OUTSIDE `.specs/` the line reads didn't show (a Phase 4 test written —
   "write the tests" stayed; a `.specs/` made nearer the cwd; a worktree's mapping): the render reports its outside paths and the
   entry signs them, the probe's folder is compared at each read, a mapped render keeps 2 s.
+- **1.42 (perf-5, DS-PERF)** — a status-line miss within the TTL walked `.specs/` twice (completion.js's compare, then commands.js
+  before the render): `statusCacheLookup` hands its signature to the render (`statusCacheRead` is its `.r`). The other half of the
+  item — signing a `.history/` folder by its listing instead of each snapshot — was cut: a hand edit inside a snapshot would show
+  only after the TTL, narrowing "any change under `.specs/` shows at the next render" for −7 ms at mid size.

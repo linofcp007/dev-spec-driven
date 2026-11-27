@@ -231,14 +231,18 @@ first; how they came to be — the releases and review findings — is in Histor
   Windows), and a cross-call cache would serve a same-tick, same-size rewrite stale — the files approvals fingerprint.
 - **A hand edit refreshes them ONCE A TURN.** The PostToolUse save hook only lints and stamps
   `.specs/.execution/roadmap-stale` (`markRoadmapStale()`, git-ignored with `.execution/`; a save of `ROADMAP.*` or the root
-  SPECS.md / UPGRADE.md stamps nothing). `refreshStaleRoadmap()` runs at the **Stop / SubagentStop hook** (before the gate,
-  whatever it says; the engine loaded only for a stamped project), **SessionStart**, **every engine mutation** (the stamp cleared
-  first — a save meanwhile stamps again) and the **pre-commit check** (hooks/precommit-check.js, which re-adds a STAGED generated
-  file). mcp/tests/10-guards-guard-downs.js ("I-I1") covers each.
+  SPECS.md / UPGRADE.md stamps nothing). `refreshStaleRoadmap()` runs at the **Stop / SubagentStop hook** (AFTER the gate, unless
+  it sends the turn back — 1.42 perf-3: the refresh no longer delays a block; that turn's next stop carries `stop_hook_active`, is
+  never sent back and refreshes; a gate that throws refreshes too; the engine loaded only for a stamped project), **SessionStart**,
+  **every engine mutation** (the stamp cleared first — a save meanwhile stamps again) and the **pre-commit check**
+  (hooks/precommit-check.js, which re-adds a STAGED generated file). mcp/tests/10-guards-guard-downs.js ("I-I1") covers each,
+  10-guards-stop-gate.js ("perf-3") the block that keeps the stamp.
 - **The lag is safe:** at most one turn, and nothing decides from these files — approvals fingerprint a feature's own artifacts
   (`textFingerprint`), every verdict computes from the specs, and the project probe (mcp/lib/probe.js `isDevSpecProject`) reads
   only ROADMAP.md's marker. The `specs://roadmap` / `specs://catalog` resources serve `staleGeneratedText()` while stamped. Still
-  stale: a commit inside the turn without the pre-commit check, a stamp in a project the session never stops in.
+  stale: a commit inside the turn without the pre-commit check, a stamp in a project the session never stops in, and — a known
+  limit — a refresh killed mid-way (the hook's timeout, a headless session's teardown): `maybeRefreshRoadmap` clears the stamp
+  FIRST, so ROADMAP.md stays stale with no stamp until the next mutation or save.
 - **The backlog:** `roadmap.json` `backlog: [{name,note}]`, one line each (`flatText()`); `spec_create`, restore and a rename
   onto the name drop the item — and return it with its note, `removedFromBacklog: [{name, note}]` (1.30); a NEW feature created
   from it keeps the note as an HTML comment under its first artifact's title (`backlogNoteInto`: bug.md, requirements.md,
@@ -383,3 +387,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   652, without a stamp unchanged; SessionStart unchanged.
 - **1.27** — one dev-spec project probe (mcp/lib/probe.js `isDevSpecProject`) for the hooks, the status line, the CLI and the
   engine; a generated ROADMAP.md is one of its signals.
+- **1.42 (perf-3, DS-PERF)** — the Stop hook refreshed BEFORE its gate, whatever it said: a block waited for the refresh (1.2–2 s
+  at 200 features) and could be pushed past the hook's timeout. It decides first now and refreshes only when the turn ends
+  there (the gate's whole body inside one `try`, so a throw anywhere still refreshes). Rejected in design: an async refresh entry —
+  its two premises were false (refreshes run outside every lock; a killed one leaves no stamp, `maybeRefreshRoadmap` clears it
+  first) and it opened a lost-update race with the next turn's mutation.

@@ -318,4 +318,124 @@ exports.run = async ({ ok, skip, all, S, tmp, hookIn, __dirname, require }) => {
     ok(/exported-thing/.test(r.stdout) && !/own-thing/.test(r.stdout) && /own-thing/.test(r2.stdout),
       "1.23 review 5 (M8): SessionStart without a payload cwd lists CLAUDE_PROJECT_DIR's features, never the hook process folder's .specs/ (that one only when nothing is exported) (got " + js([r.stdout.slice(0, 160), r2.stdout.slice(0, 160)]) + ")");
   }
+
+  // 1.42 perf-1 — the guard hook runs each project's checks in ONE read-cache scope and folds the results target by target. THE
+  // property: on every fixture × level (on / scope / tests) × command, the hook prints exactly what the 1.41.2 loop printed — a
+  // REFERENCE written here from it: target by target, the session's project then the file's own, one guardCheck call each (its own
+  // scope), the strictest wins (deny > a protected test's ask > any ask), the first among equals, the first note. The commands: the
+  // review's legit commands and the monorepo / CI corpus (mcp/tests/guard-commands.js), the controller's package and detector writes
+  // ([INT-3]: allowed at every level), and edits real-shaped for the fixtures — covering, forced, pending, stale, a spike, a test plan,
+  // protected tests with a lift, a folder of code, a glob at level tests, an outside path, README.md, a monorepo whose package is a
+  // project of its own (one that asks, one forced-only).
+  {
+    const CMD = require("./tests/guard-commands.js");
+    const PR = require("./lib/probe.js");
+    const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
+    const HOOK = require(guardJs);
+    const put = (dir, rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
+    const state = (dir, slug, patch) => { const sp = path.join(dir, ".specs", slug, ".state.json"); const st = JSON.parse(fs.readFileSync(sp, "utf8")); fs.writeFileSync(sp, js({ ...st, ...patch }, null, 2)); };
+    const AT = "2026-01-01T00:00:00Z";
+    const feature = (dir, name, impl, approvals, extra) => {
+      const f = S.createFeature(dir, { name, tracks: ["core"], lang: "en", ...(extra || {}) });
+      put(f.dir, "tasks.md", "# Tasks\n\n" + impl.map((x, i) => "- [ ] " + (i + 1) + ". [US1] Do " + x + "\n  - _Requirements: US-1.AC-1_\n  - _Implements: " + x + "_\n").join(""));
+      if (approvals) state(dir, f.slug, { approvals });
+      return f.slug;
+    };
+    const project = (name, guard) => { const d = path.join(tmp, "proj-perf1-" + name); S.initProject(d, ["core"], "en", { guard }); fs.writeFileSync(path.join(d, ".specs", "ROADMAP.md"), "# Roadmap\n\nHand-written.\n"); return d; };
+    const setLevel = (dir, guard, approvalGuard = "off") => { const f = path.join(dir, ".specs", "roadmap.json"); const rm = JSON.parse(fs.readFileSync(f, "utf8")); rm.meta = { ...(rm.meta || {}), guard, approvalGuard }; fs.writeFileSync(f, js(rm, null, 2)); };
+    // P1: one project with every kind of feature
+    const P1 = project("one", "scope");
+    for (const f of ["src/pay/a.js", "src/pay/b.js", "src/lib/u.js", "src/gen/x.js", "src/other.js", "test/pay.test.js", "test/old.test.js", "test/lifted.test.js", "test/unit/a.test.js", "tmpl.js"]) put(P1, f, "x\n");
+    const co = feature(P1, "Checkout", ["src/pay/a.js", "src/pay/b.js", "src/lib/", "src/gen/*.js", "test/pay.test.js"], { tasks: { at: AT, by: "t" } });
+    state(P1, co, { protectedTests: { at: AT, via: "approval", files: { "test/pay.test.js": "0123456789abcdef", "test/old.test.js": "0123456789abcdef", "test/lifted.test.js": "0123456789abcdef", "test/unit/a.test.js": "0123456789abcdef" },
+      lifts: [{ file: "test/lifted.test.js", at: AT, by: "me", reason: "rewritten on purpose" }] } });
+    feature(P1, "Invoices", ["src/invoices/pdf.js"], { tasks: { at: AT, by: "t", forced: true } });
+    feature(P1, "Draft", ["src/draft/x.js"], null);
+    feature(P1, "Stale", ["src/stale/y.js"], { tasks: { at: AT, by: "t", fingerprint: "0000000000000000" } });
+    feature(P1, "Plan", ["src/plan/z.js"], { "test-plan": { at: AT, by: "t" } });
+    S.createFeature(P1, { name: "Research", kind: "spike", lang: "en" });
+    // P2: a monorepo — the root at the level, packages/app a project of its own (guard on) whose feature waits for its tasks approval
+    const P2 = project("mono", "scope");
+    feature(P2, "Web", ["packages/app/src/t1.js", "src/root.js"], { tasks: { at: AT, by: "t" } });
+    const P2app = path.join(P2, "packages", "app");
+    fs.mkdirSync(P2app, { recursive: true });
+    S.initProject(P2app, ["core"], "en", { guard: "on" });
+    feature(P2app, "App", ["src/t1.js"], null);
+    // P3: the same layout, both projects forced-only (two notes: the first is printed)
+    const P3 = project("mono-forced", "scope");
+    feature(P3, "Web", ["packages/app/src/t1.js", "src/t2.js"], { tasks: { at: AT, by: "t", forced: true } });
+    const P3app = path.join(P3, "packages", "app");
+    fs.mkdirSync(P3app, { recursive: true });
+    S.initProject(P3app, ["core"], "en", { guard: "on" });
+    feature(P3app, "App", ["src/t1.js"], { tasks: { at: AT, by: "t", forced: true } });
+    const W = (dir, rel) => ["Write", null, path.isAbsolute(rel) ? rel : path.join(dir, rel)];
+    const EDITS1 = [["Bash", "sed -i 's/a/b/' src/pay/a.js src/pay/b.js src/lib/u.js src/gen/x.js src/other.js"], ["Bash", "rm -rf src/lib"],
+      ["Bash", "cp tmpl.js src/invoices/pdf.js && cp tmpl.js src/draft/x.js"], ["Bash", "echo x > test/old.test.js"],
+      ["Bash", "sed -i s/x/y/ src/other.js test/old.test.js test/pay.test.js test/lifted.test.js"], ["Bash", "rm -rf tes?/unit"],
+      ["PowerShell", "Set-Content -Path src" + BS + "pay" + BS + "a.js -Value x; Copy-Item tmpl.js src" + BS + "stale" + BS + "y.js"],
+      W(P1, "src/pay/a.js"), W(P1, "src/other.js"), W(P1, "README.md"), W(P1, ".specs/checkout/tasks.md"), W(P1, "test/old.test.js"), W(P1, "test/lifted.test.js"),
+      W(P1, path.join(tmp, "perf1-outside", "x.js"))];
+    const N4 = ["Bash", "sed -i 's/a/b/' packages/app/src/t1.js src/t2.js"], N5 = ["Bash", "sed -i 's/a/b/' packages/app/src/t1.js"];
+    const EDITS2 = [N4, ["Bash", "sed -i s/a/b/ src/root.js packages/app/src/t1.js"], W(P2, "packages/app/src/t1.js")];
+    const EDITS3 = [N5, ["Bash", "sed -i 's/a/b/' src/t2.js packages/app/src/t1.js"]];
+    const payload = (dir, [tool, command, file]) => ({ hook_event_name: "PreToolUse", cwd: dir, tool_name: tool, tool_input: command !== null ? { command } : { file_path: file, content: "x" } });
+    // THE reference: the 1.41.2 loop over single guardCheck calls (each the facade's own read-cache scope)
+    const rank = (r) => (r.decision === "deny" ? 3 : r.decision === "ask" ? (r.why === "protected-test" ? 2 : 1) : 0);
+    const reference = (pl) => {
+      const ti = pl.tool_input, cwd = pl.cwd;
+      const command = pl.tool_name === "Bash" || pl.tool_name === "PowerShell" ? ti.command : null;
+      if (command !== null && !HOOK.mayWrite(command)) return null;
+      const local = (p) => typeof p === "string" && p.trim() && !PR.isNetwork(p);
+      const targets = command === null ? [ti.file_path] : S.shellWriteTargets(command, pl.tool_name === "PowerShell" ? "ps" : "bash");
+      const s0 = S.sessionProject({ cwd, anchors: [] });
+      let best = null, note = null;
+      for (const t of targets) {
+        const abs = local(t) ? S.sessionPath(s0 || { root: cwd }, t, cwd) : null;
+        const own = abs ? S.sessionProject({ cwd: path.dirname(abs), anchors: [] }) : null;
+        const seen = new Set();
+        for (const s of [s0, own]) {
+          if (!s || seen.has(s.project)) continue;
+          seen.add(s.project);
+          const r = S.guardCheck(s.project, S.sessionPath(s, t, cwd), s.project);
+          if (rank(r) > (best ? rank(best) : 0)) best = r;
+          if (r.note && !note) note = r.note;
+        }
+      }
+      if (best) return Object.assign({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: best.decision, permissionDecisionReason: best.reason } }, best.userNote ? { systemMessage: best.userNote } : {});
+      return note ? { systemMessage: note } : null;
+    };
+    const hooked = (pl) => { const r = hookIn(guardJs, { input: js(pl), env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", DEV_SPEC_GUARD_DEFAULT: "" }, encoding: "utf8" }); try { return r.stdout ? JSON.parse(r.stdout) : null; } catch { return { unparsed: r.stdout }; } };
+    const legitMono = Object.values(CMD.legitMonorepo()).map(([tool, command]) => [tool, command]);
+    const RUNS = [[P1, [...CMD.LEGIT_REVIEW, ...CMD.controllerWrites("checkout", 3), ...EDITS1]], [P2, [...legitMono, ...EDITS2]], [P3, EDITS3]];
+    const differ = [], seenAnswers = new Map(), ctrl = [];
+    let compared = 0;
+    // (tests + approvalGuard deny: a protected test is refused — the strictest answer)
+    for (const level of [true, "scope", "tests", "tests+deny"]) {
+      for (const d of [P1, P2, P3]) setLevel(d, level === "tests+deny" ? "tests" : level, level === "tests+deny" ? "deny" : "off");
+      for (const [dir, cmds] of RUNS) {
+        for (const c of cmds) {
+          const pl = payload(dir, c);
+          const got = hooked(pl), want = reference(pl);
+          compared++;
+          const key = got ? (got.hookSpecificOutput ? got.hookSpecificOutput.permissionDecision + (/protected/.test(js(got)) ? "-protected" : "") : "note") : "silent";
+          seenAnswers.set(key, (seenAnswers.get(key) || 0) + 1);
+          if (js(got) !== js(want)) differ.push(String(level) + " " + path.basename(dir) + " " + c[0] + " " + String(c[1] || c[2]).slice(0, 80) + " → " + js(got).slice(0, 160) + " ≠ " + js(want).slice(0, 160));
+          if (CMD.controllerWrites("checkout", 3).some((w) => w[1] === c[1])) ctrl.push(got);
+        }
+      }
+    }
+    // the fold's order and its notes, named: own's ask on t1 before s0's on t2 (both plain asks — the first among equals), the first note
+    setLevel(P2, "scope"); setLevel(P3, "scope");
+    const n4 = hooked(payload(P2, N4)), n5 = hooked(payload(P3, N5));
+    all("1.42 perf-1: the guard hook (one read-cache scope per project, folded target by target) prints exactly what the 1.41.2 loop over single guardCheck calls printed — " +
+      "every fixture × level (on / scope / tests / tests at approvalGuard deny) × command, the legit corpora and the controller's writes allowed (got " + js({ compared, answers: Object.fromEntries(seenAnswers), differ: differ.slice(0, 6), more: Math.max(0, differ.length - 6),
+        n4: n4 && n4.hookSpecificOutput && n4.hookSpecificOutput.permissionDecisionReason.slice(0, 120), n5: n5 && n5.systemMessage && n5.systemMessage.slice(0, 120) }) + ")", {
+      "the same printed object everywhere": () => compared >= 360 && differ.length === 0,
+      "not vacuous: silent, notes, plain asks, protected-test asks and denies all met": () => ["silent", "ask", "note", "ask-protected", "deny-protected"].every((k) => (seenAnswers.get(k) || 0) > 0),
+      "[INT-3] the controller's package and detector writes: allowed at every level": () => ctrl.length === 28 && ctrl.every((x) => x === null),
+      "the fold's order: own's ask on t1 (packages/app awaits its tasks approval) before the root's scope ask on t2": () => !!n4 && n4.hookSpecificOutput.permissionDecision === "ask" && /\bapp\b/.test(n4.hookSpecificOutput.permissionDecisionReason) &&
+        js(n4) === js(reference(payload(P2, N4))),
+      "the first note: the root's forced note before the package's": () => !!n5 && typeof n5.systemMessage === "string" && /\bweb\b/.test(n5.systemMessage) && !/\bapp\b/.test(n5.systemMessage) && js(n5) === js(reference(payload(P3, N5))),
+    });
+  }
 };

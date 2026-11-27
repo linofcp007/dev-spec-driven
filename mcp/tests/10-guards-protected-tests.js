@@ -1249,4 +1249,58 @@ exports.run = async ({ ok, all, eq, remeasure, fsCalls, rpc, payload, S, tmp, ho
   eq(["en", "pt", "es"].map((l) => [M(l).doctorLiftAfterFinish("a", "x, y", null), M(l).doctorLiftAfterFinish("a", "x", "x")]).map(([many, one], i) =>
     [/the tests stay|os testes ficam|las pruebas quedan/.test(many), [/the test stays/, /o teste fica/, /la prueba queda/][i].test(one)]),
   [[true, true], [true, true], [true, true]], "1.36.0 review 4 guard tests: doctor's lift-after-finish line — several files in the plural, one in the singular (EN, PT, ES)");
+
+  { // 1.42 B142-12: a _Verify:_ word's quotes and brackets come off by two loops (protect.js trimWord), never the quadratic regex it
+    // was. The ORACLE is that regex pipeline, written here: equal on real commands and on EVERY word of up to 6 characters over
+    // `"'`(;,)ab` ("a" spelled `a.test.js`, so a trim that keeps or drops one character too many changes a listed test file), then
+    // the cost as a same-length yardstick: `,` × 32 K + `x` (the regex's `$` alternative retried from every comma: ~400 ms a word)
+    // against `x` × 32 K + `,` (linear for both) — the same split, replaces and isTest on both sides, each side's per-call time a
+    // median of 5 interleaved samples of ≥ 20 ms. What the 20× bound hides: a slowdown both shapes share (a linear one), and a
+    // quadratic still under 20× at 32 K (the parent's was ~4,000×).
+    const isTestW = (x) => E.isCodeFile(x) && E.isTestFile(x);
+    const oracle = (cmd) => {
+      const out = [];
+      for (const raw of String(cmd).split(/\s+/)) {
+        const x = raw.replace(/^["'`(]+|["'`;,)]+$/g, "").replace(/::.*$/, "").replace(/:\d+(?::\d+)?$/, "").replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
+        if (x && !/[*?{]/.test(x) && isTestW(x)) out.push(x);
+      }
+      return out;
+    };
+    const real = ["node --test test/csv.test.js", "npx vitest run tests", "node --test \"test/q.test.js\"", "pytest tests/test_api.py::test_x",
+      "rspec spec/a_spec.rb:12 && node --test test/listed.test.js", "node --test test/auth.test.js test/fresh.test.js",
+      "npm run api:diff && npm test -- tests/contract/orders.test.ts", "(cd web && npx jest 'src/cart.test.tsx')", "`npx vitest run src/a.spec.ts:12:3`;",
+      "pytest \"tests/test_a.py::TestA::test_b\", -q", "go test ./pkg/... -run TestX", ".\\node_modules\\.bin\\jest test\\win.test.js", "./scripts/t.sh ./test/a.test.js"];
+    const ALPHA = ["\"", "'", "`", "(", ";", ",", ")", "a", "b"];
+    const words = [""];
+    for (let len = 1, prev = [""]; len <= 6; len++) {
+      const next = [];
+      for (const p of prev) for (const c of ALPHA) next.push(p + c);
+      for (const x of next) words.push(x);
+      prev = next;
+    }
+    // 512 words a command (the split is the function's own): one call a side per command, ~0.8 s for the whole table
+    const cmds = [];
+    for (let i = 0; i < words.length; i += 512) cmds.push(words.slice(i, i + 512).map((x) => x.replace(/a/g, "a.test.js")).join(" "));
+    const differ = cmds.filter((c) => js(E.verifyTestPaths(c)) !== js(oracle(c)));
+    const listed = cmds.reduce((n, c) => n + oracle(c).length, 0);
+    const got = real.map((c) => E.verifyTestPaths(c));
+    all("1.42 B142-12 guard tests: a _Verify:_ command's test files — the trim by two loops equals the regex it replaced on real commands and on every word of up to 6 characters of `\"'`(;,)ab` (got " +
+      js({ words: words.length, listed, differ: differ.length, first: differ[0] && differ[0].slice(0, 200), real: got }) + ")", {
+      table: () => words.length === 597871 && differ.length === 0 && listed > 100000,
+      real: () => js(got) === js(real.map(oracle)),
+      listsReal: () => js(got[4]) === js(["spec/a_spec.rb", "test/listed.test.js"]) && js(got[7]) === js(["src/cart.test.tsx"]) && js(got[8]) === js(["src/a.spec.ts"]) &&
+        js(got[9]) === js(["tests/test_a.py"]) && js(got[11]) === js(["test/win.test.js"]) && js(got[12]) === js(["test/a.test.js"]),
+    });
+    const perCall = (s) => { let n = 0, el; const t0 = process.hrtime.bigint(); do { E.verifyTestPaths(s); n++; el = Number(process.hrtime.bigint() - t0) / 1e6; } while (el < 20); return el / n; };
+    const med = (xs) => xs.slice().sort((a, b) => a - b)[xs.length >> 1];
+    const commas = ",".repeat(32768) + "x", letters = "x".repeat(32768) + ",";
+    const lin = remeasure(() => {
+      const a = [], b = [];
+      for (let k = 0; k < 5; k++) { a.push(perCall(commas)); b.push(perCall(letters)); }
+      return { commasMs: med(a), lettersMs: med(b), ratio: med(a) / med(b) };
+    }, (s) => s.ratio <= 20);
+    ok(lin.ratio <= 20 && js(E.verifyTestPaths(commas)) === "[]",
+      "1.42 B142-12 guard tests: the trim is linear — a word of 32 K commas then a letter costs ≤ 20× a word of 32 K letters then a comma (the same length, the same work after the trim; the regex it replaced: ~4,000×) (got " +
+      js({ commasMs: +lin.commasMs.toFixed(4), lettersMs: +lin.lettersMs.toFixed(4), ratio: +lin.ratio.toFixed(2), tries: lin.tries }) + ")");
+  }
 };

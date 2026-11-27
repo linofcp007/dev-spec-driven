@@ -714,6 +714,15 @@ Engine: the `B5` block of `engine/evidence.js`.
   `<!--` may span lines) and fenced code never hold tasks; `<!--` / `-->` inside code spans don't count. `parseTasks()` is its
   line-only projection (public through `spec_status`), so status / next / complete / brief / finish never disagree. Tasks are
   story-organized (P1 first) with `[P]` parallel markers + `**Checkpoint:**` lines; doctor checks the design's `Constitution Check`.
+- **The scan is memoized by text** (`TASK_BLOCKS_MEMO`, 1.42): an LRU of `TASK_BLOCKS_MEMO_MAX` = 1,024 texts AND
+  `TASK_BLOCKS_MEMO_CHARS` = 4 M characters of them (`lruPut`: the oldest out first, a hit moved to the newest place, the newest
+  always kept — one text over 4 M is then alone), so a refresh past 32 features no longer re-scans each text 4× (40 features: 160
+  scans → 40 cold, 0 warm; a tick 162 → 1). A pure function of the text: nothing goes stale. Callers get copies; features whose
+  tasks.md are byte-identical share ONE scan (`taskPeerStamps` returns one Set for both), so a reader annotates its copies, never
+  the scan's blocks (mcp/tests/08-tasks-memo.js holds a bugfix and a plain feature with the same text). What the bounds hide: past
+  ~4 M characters held (~400 features of 10 KB; half that when a track-filtered text doubles the keys) or 1,024 texts, a
+  project-wide call scans the oldest again; a long-lived process (the MCP server) keeps ≤ ~26 MB for it (the keys 4–8 MB, one- or
+  two-byte, + ~17.5 MB of blocks — measured at 1,024 × 4 KB). `taskBlocks.scans` counts the misses (in-process, never in a result).
 - **A task line** is `[-*+] [ ] N. text`; the tasks fingerprint's tick normalization (`uncheckTasks`, state.js) takes the same
   bullets, and a fingerprint made on `- [x]` alone still matches. Task numbers are numeric (`01.` is task 1); `resolveTask()` picks
   the first OPEN task of a duplicated number (doctor warns `duplicate-tasks`).
@@ -824,7 +833,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   claude-code-integration.md → Which project a hook reads). Silent with nothing to say, no project, the gate off (`meta.stopCheck`
   exactly `false`; unset → the user's `DEV_SPEC_STOP_CHECK`; `init --stop-check on|off`), or — Stop only — no `.state.json` string
   parsing as a date in the window: a raw superset of `stopActivity()` before the engine loads (≤ `STOP_PRE_MAX_FEATURES` = 500
-  folders, ≤ 1 MB a file; its `STOP_RECENT_HOURS` is checked against the engine's). CLI: `dev-spec stop-check [--message
+  folders, ≤ 1 MB a file; its `STOP_RECENT_HOURS` is checked against the engine's; 1.42: a regular file only — a linked, FIFO or
+  folder `.state.json` is skipped unopened, and a roadmap.json that is no regular file is the user's option, as the engine's read
+  gate reads both). CLI: `dev-spec stop-check [--message
   "<text>"|-] [--agent <type>]` (exit 1 = would block).
 - **The claim pre-filter (Stop only).** `hooks/stop-claims.generated.json` — COMMITTED, from `npm run build` (guards.js
   `stopClaimFilter()`): the claim patterns (`stopClaimSources()`), `STOP_WORD`, stopProse's regexes (`RE_STOP_FENCE` /
@@ -1001,7 +1012,9 @@ warn); guards.js keeps only the call in `guardCheck` (claude-code-integration.md
   - *The pre-filter* (before the engine loads): `observedNorm` / `observedBodies` — ONE copy, mcp/lib/probe.js's, which the engine's
     observeRun reads too (mcp/tests/09-evidence.js checks neither file keeps its own) — the command's bodies, normalized as the matcher
     reads them, must each appear in a tasks.md read the same way (≤ 2 MB;
-    dot / `_` folders skipped; UTF-16 decoded; change.md only without tasks.md; one open per folder) or a meta.checks command — a
+    dot / `_` folders skipped; UTF-16 decoded; change.md only without tasks.md; one lstat and one open per folder; 1.42: a regular
+    file only — a linked, FIFO or folder tasks.md is none, so change.md is read, as the engine's change alias reads it, and a
+    roadmap.json that is no regular file holds no checks) or a meta.checks command — a
     SUPERSET of the matcher (mcp/tests/09-evidence-matcher.js). A WHOLE bracketed `_Verify:_` value (`RE_VERIFY_PLACEHOLDER`, the
     scaffold's) is taken out first, as the engine never runs one (tasks.js `scanTaskMarkers`: `^\[.*\]$`). observeRun repeats the
     test before parsing. No cached `_Verify:_` index (a stale one would silently drop observations). It prints nothing, reads stdin
@@ -1478,6 +1491,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 review 8** — the `_Implements:_` slot: the model-facing prose never required the marker, so a filled xs change.md
   finished "ready" with "0 implementing file(s)" and `dupes` had "nothing to compare". The templates carry the slot, the readers
   drop it as a placeholder, the gate refuses it left in (mcp/tests/08-tasks.js).
+- **1.42 (perf-2, DS-PERF)** — the task-blocks memo held 32 texts: one refresh asks for a feature's tasks.md about four times, so
+  past 32 features every read missed (40 features: 160 scans a refresh, warm or cold; next_action 81; a tick 162). Now 1,024 texts
+  and 4 M characters (`lruPut`). The design's "a key over the bound is not inserted" was dropped in critique: a tasks.md over 4 M
+  characters would re-scan once per caller where 32 kept it; the newest is kept instead. Tested as properties (a warm refresh 0, a
+  tick 1, SessionStart ≤ one a feature), never "exactly 40".
 
 ### End-of-turn evidence gate and scope guard
 - **1.14** — the end-of-turn gate (`stopCheck`, the Stop / SubagentStop hook, `dev-spec stop-check`) and the scope guard's `"scope"`
@@ -1518,6 +1536,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   stopClaims ~110 ms slower and the pre-filter ~30 ms; claim patterns, triggers and admissions are built on first use (a message
   runs ~18 of ~47). Every hook's pre-check became mcp/lib/probe.js (`sessionProjects` / `sessionAnchors`, the one rule
   `isDevSpecProject`).
+- **1.42 (B142-13, DS-PERF)** — the Stop hook's raw reads open a regular file only (probe.js `readRegularJson`): a FIFO roadmap.json
+  or `.state.json` held the hook to its timeout, a LINKED `.state.json` was followed (the engine then loaded only to read it as
+  absent). gateOff's no-file answer stays the user's option; the pre-filter stays a superset (the engine's read gate reads all three
+  absent).
 
 ### Protected tests
 - **1.36** — tests the implementer cannot alter: a fourth guard level, `tests` (engine/protect.js). Cut from the design before
@@ -1585,6 +1607,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.38.0** (chain P) — `isTestFile` gained Cypress's `*.cy.<script>`, `__mocks__/` and `__fixtures__/` (markdown-and-trace.md →
   Test code and file reads): at level tests a manual mock or a fixture module is now a protected test — snapshotted at the
   tasks approval, its edits asked about, finish's check — as a test file under `tests/` always was.
+- **1.42 (B142-12, DS-PERF)** — the tick record's `_Verify:_` reader (protect.js `verifyTestPaths`) took a word's quotes and
+  brackets off with `^["'`(]+|["'`;,)]+$`, quadratic on a long comma run (40 K commas then a letter: 1.6 s a word); two loops
+  (`trimWord`: the tail run, then the lead run of the rest) take the same characters — the exhaustive table over every word of up
+  to 6 of `"'`(;,)ab` and real commands (10-guards-protected-tests.js), the cost as a same-length yardstick ≤ 20× (the parent's
+  ~4,000×).
 
 ### Harness-observed evidence
 - **1.14 F1** — the observe hook, the `observed` stamp, `meta.evidence` and reason `unobserved`. Its feature review: **R1** — an
@@ -1621,3 +1648,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (the friction budget), the observed line unchanged (09-evidence-friction pins its keys). Only runs the matcher reads as the
   check alone are timed: of this repository's 2,139 foreground check runs in its own transcripts 93 % were piped — the hook
   mostly times the fast check run on its own; the suite's numbers come from `finish --run` / `done --run`.
+- **1.42 (B142-13, DS-PERF)** — the pre-filter opens a regular file only: a FIFO tasks.md (or roadmap.json) left one hook process
+  blocked in its open per Bash call for the rest of the session (an async hook is never killed), a linked one was read through.
+  A tasks.md that is no regular file is none — change.md is read, as the engine's change alias reads it (returning "unreadable"
+  there would have skipped the change); one lstat more per folder.

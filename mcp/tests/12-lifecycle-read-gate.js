@@ -142,9 +142,10 @@ exports.run = async ({ ok, skip, all, eq, S, tmp, hookIn, fsCalls, require, __di
   // An fs tracer: every fs.*Sync call made by fn whose path lies in the project and whose REAL location (the nearest existing
   // ancestor's real path) is inside `outside` — a read, a stat, a listing, an existence probe or a write through a link. lstat / readlink
   // / unlink of a link itself are judged by its folder; realpath is the gates' own reading (never content). `exempt`: the frames
-  // allowed to (the engine-free 1-bit pre-filters and the project rule — DESIGN §1-E).
+  // allowed to (the engine-free 1-bit pre-filters and the project rule — DESIGN §1-E). (1.42 B142-13: the Stop and observe hooks'
+  // pre-filters — recentActivity, mentioned, readTasksText — open a regular file only now, so they left the list: the tracer holds them.)
   const NOFOLLOW = new Set(["lstatSync", "readlinkSync", "unlinkSync", "lutimesSync", "symlinkSync", "rmSync", "rmdirSync"]);
-  const EXEMPT = /\b(?:isDevSpecProject|recentActivity|mentioned|readTasksText|refreshStale)\b/;
+  const EXEMPT = /\b(?:isDevSpecProject|refreshStale)\b/;
   const traced = (projectDir, outside, fn) => {
     const rp = fs.realpathSync.native;
     const proj = fold(path.resolve(projectDir));

@@ -18,8 +18,9 @@
  *     project checks. (Plugin subagents ignore `hooks` in their frontmatter, so the plugin's hooks.json is where this
  *     lives.)
  * The decision is the engine's (spec.stopCheck — `dev-spec stop-check` prints the same one).
- * First, whatever the gate says: ROADMAP.md / SPECS.md left stale by the turn's spec saves (the save hook's stamp)
- * are refreshed, once — the save hook no longer refreshes them on every Write / Edit.
+ * Then, unless the gate sends the turn back: ROADMAP.md / SPECS.md left stale by the turn's spec saves (the save hook's stamp)
+ * are refreshed, once — the save hook no longer refreshes them on every Write / Edit. A turn sent back keeps the stamp (1.42): its
+ * next stop refreshes (it carries stop_hook_active and is never sent back), as do SessionStart, the next mutation and the pre-commit check.
  *
  * It never sends a stop back twice in a row (`stop_hook_active`), is silent (exit 0, no output) when there is nothing to
  * say, when the project has no dev-spec .specs/ or when roadmap.json meta.stopCheck is false (spec_init {stopCheck: false} /
@@ -50,11 +51,11 @@ function userStopCheckOff() {
 // user's option too (spec.stopCheckEnabled's rule — DEV_SPEC_STOP_CHECK=off used to be ignored while the file didn't parse).
 // Read raw: the engine is loaded only when the gate may have something to say.
 function gateOff(dir) {
-  // (1.41.1) a roadmap.json that is a LINK is none — the engine's read gate never reads through it (stopCheckEnabled: the user's option,
-  // else on): its target's stopCheck: false never turns the gate off
-  try { if (fs.lstatSync(path.join(dir, ".specs", "roadmap.json")).isSymbolicLink()) return userStopCheckOff(); } catch { /* absent: below */ }
   try {
-    const j = probe().readJsonFile(path.join(dir, ".specs", "roadmap.json"));
+    // a roadmap.json that is no REGULAR file is none — the engine's read gate reads it absent (stopCheckEnabled: the user's option, else
+    // on): 1.41.1 a link (its target's stopCheck: false never turns the gate off), 1.42 a FIFO, a folder (probe.js readRegularJson)
+    const j = probe().readRegularJson(path.join(dir, ".specs", "roadmap.json"));
+    if (j === undefined) return userStopCheckOff();
     const meta = !!j && typeof j === "object" && !!j.meta && typeof j.meta === "object" ? j.meta : {};
     return meta.stopCheck === false || (typeof meta.stopCheck !== "boolean" && userStopCheckOff());
   } catch {
@@ -68,7 +69,8 @@ function gateOff(dir) {
 // 5 minutes in the future (the engine's stopActivity). A superset of what the engine counts: ANY string value of a feature
 // folder's .state.json that parses as a date in that window (lastTickAt, lastEditAt, ticks, evidence `at` / `noteAt` /
 // history, approvals…). None → silent, the engine's answer too. Bounded: ≤ STOP_PRE_MAX_FEATURES folders, ≤ 1 MB a file;
-// past a bound, the engine decides.
+// past a bound, the engine decides. A .state.json that is no regular file (a link, a FIFO, a folder — 1.42) is skipped unopened:
+// the engine's read gate reads it absent too, so the superset holds.
 const STOP_RECENT_HOURS = 4;
 const STOP_PRE_MAX_FEATURES = 500;
 function recentActivity(dir) {
@@ -88,10 +90,11 @@ function recentActivity(dir) {
   for (const d of dirs) {
     const file = path.join(root, d.name, ".state.json");
     let st;
-    try { st = fs.statSync(file); } catch { continue; } // no state: no recorded activity
+    try { st = fs.lstatSync(file); } catch { continue; } // no state: no recorded activity
+    if (!st.isFile()) continue;
     if (st.size > 1024 * 1024) return true;
     let j;
-    try { j = probe().readJsonFile(file); } catch { continue; } // unreadable: the engine skips it too (UTF-16 with a BOM is read)
+    try { j = probe().readRegularJson(file); } catch { continue; } // unreadable: the engine skips it too (UTF-16 with a BOM is read)
     if (walk(j, 0)) return true;
   }
   return false;
@@ -173,7 +176,10 @@ function lastAssistantText(file) {
   return "";
 }
 
-// The hook's decision on one payload → {decision: "block", reason} or null (silent); a stale ROADMAP.md / SPECS.md refreshed first.
+// The hook's decision on one payload → {decision: "block", reason} or null (silent). The gate decides FIRST; a stale ROADMAP.md /
+// SPECS.md (the save hook's stamp) is refreshed only when the turn ends here — never before an answer that sends it back (1.42 perf-3:
+// the refresh, 1.2–2 s at 200 features, delayed the block and could push it past the hook's timeout). A turn sent back keeps its stamp:
+// its next stop (stop_hook_active — never sent back twice), SessionStart, the next engine mutation or the pre-commit check refreshes it.
 function decide(raw) {
   const payload = payloadOf(raw);
   if (!payload) return null;
@@ -186,7 +192,13 @@ function decide(raw) {
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
   const anchors = probe().sessionAnchors();
   const projects = probe().sessionProjects({ cwd, anchors });
-  refreshStale(projects); // the turn's spec saves → ROADMAP.md / SPECS.md, once
+  let answer = null;
+  try { answer = gate(payload, event, cwd, anchors, projects); } catch { answer = null; } // a gate in trouble never blocks — and still refreshes
+  if (!answer) refreshStale(projects); // the turn's spec saves → ROADMAP.md / SPECS.md, once
+  return answer;
+}
+// The gate itself → the block, or null: everything after the projects are known (the pre-filters, the engine, its decision).
+function gate(payload, event, cwd, anchors, projects) {
   if (payload.stop_hook_active === true) return null; // already sent back once: never twice in a row
   const cands = projects.filter((d) => !gateOff(d));
   if (!cands.length) return null;

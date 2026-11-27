@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadmap }) => {
+exports.run = async ({ ok, skip, all, remeasure, fsCalls, S, tmp, hookIn, __dirname, require, handRoadmap }) => {
   const js = JSON.stringify;
   const HOOKS = path.join(__dirname, "..", "hooks");
   // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR never leak into the hooks.
@@ -864,38 +864,8 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const BS = String.fromCharCode(92);
     const pkg = (i, w = 2) => "pkg-" + String(i).padStart(w, "0");
     const times = (n, f, sep) => Array.from({ length: n }, (_, i) => f(i)).join(sep);
-    const CI = ["set -euo pipefail", "export NODE_ENV=production CI=true FORCE_COLOR=0", "export ARTIFACTS=\"$PWD/artifacts\"", "mkdir -p \"$ARTIFACTS\" dist logs",
-      "npm ci --no-audit --prefer-offline > logs/install.log 2>&1",
-      times(40, (i) => "( cd packages/" + pkg(i) + " && npm run lint > ../../logs/lint-" + pkg(i) + ".log && npm test -- --ci --reporters=default > ../../logs/test-" + pkg(i) + ".log )", "\n"),
-      times(40, (i) => "cp -r packages/" + pkg(i) + "/dist \"$ARTIFACTS/" + pkg(i) + "\"", "\n"), "tar -czf dist/artifacts.tgz -C \"$ARTIFACTS\" .",
-      "find logs -name '*.log' -size +1M -exec gzip {} \\;", "node cli/dev-spec.js doctor --json > logs/doctor.json"].join("\n");
-    const ALLOW = ["allow|", "allow|", "allow|", "allow|"];
-    // [tool, command, the four decisions, targets, their sha1] — ed680c92's answers
-    const LEGIT = {
-      "append FLAGS ×300 then tsc": ["Bash", "FLAGS=\"\"; " + times(300, (i) => "FLAGS=\"$FLAGS --include=src/module" + i + "\"", "; ") + "; tsc $FLAGS > build.log; node cli/dev-spec.js status", ALLOW, 1, "6bed715518e0"],
-      "append FLAGS ×500 then tsc": ["Bash", "FLAGS=\"\"; " + times(500, (i) => "FLAGS=\"$FLAGS --include=src/m" + i + "\"", "; ") + "; tsc $FLAGS > build.log; node cli/dev-spec.js status", ALLOW, 1, "6bed715518e0"],
-      "cd ../next && build ×150": ["Bash", "cd packages/" + pkg(0) + " && " + times(150, (i) => "npm run build > build.log && cd ../" + pkg(i + 1), " && ") + " && node ../../cli/dev-spec.js status", ALLOW, 33, "40eb0179c0cf"],
-      "cd pkg && rm -rf dist && cd .. ×300": ["Bash", "cd packages && " + times(300, (i) => "cd " + pkg(i, 3) + " && rm -rf dist && cd ..", " && ") + " && node ../cli/dev-spec.js status", ALLOW, 33, "e548c8ac3f16"],
-      "a 70-character cd, then rm -f of 1,000 files": ["Bash", "cd services/billing-api-gateway/internal/handlers/v2/generated/protobuf && rm -f " + times(1000, (i) => "f" + String(i).padStart(4, "0") + ".pb.go", " ") +
-        " && node ../../../../../../../cli/dev-spec.js status", ALLOW, 64, "9dbec889f913"],
-      "ROOT=<60>; cp $ROOT/src/fN $ROOT/out/fN ×700": ["Bash", "ROOT=/home/ci/workspace/monorepo/packages/frontend-dashboard; " + times(700, (i) => "cp $ROOT/src/f" + i + ".ts $ROOT/out/f" + i + ".ts", "; ") + "; node cli/dev-spec.js status", ALLOW, 64, "cf6057296854"],
-      "export PATH=\"$PATH:…\" ×200": ["Bash", times(200, (i) => "export PATH=\"$PATH:/opt/tools/bin" + i + "\"", "; ") + "; node cli/dev-spec.js doctor", ALLOW, 0, "da39a3ee5e6b"],
-      "CFLAGS=\"$CFLAGS -I$INC/pkgN\" ×150 then make": ["Bash", "INC=/usr/local/include; CFLAGS=\"\"; " + times(150, (i) => "CFLAGS=\"$CFLAGS -I$INC/" + pkg(i) + "\"", "; ") + "; make CFLAGS=\"$CFLAGS\" > make.log; node cli/dev-spec.js status", ALLOW, 1, "006d8d8d5e2c"],
-      "pushd pkg && build && popd ×200": ["Bash", times(200, (i) => "pushd packages/" + pkg(i, 3) + " && npm run build && popd", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "cd /repo && git status && cd sub && … && cd .. ×150": ["Bash", times(150, (i) => "cd /repo && git status && cd sub-" + i + " && git status && cd ..", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "a CI script of ~8 K": ["Bash", CI, ALLOW, 64, "7da8baf62a26"],
-      "a PowerShell build script": ["PowerShell", "$root = 'C:" + BS + "repo'; Set-Location $root; $out = ''; " + times(200, (i) => "$out = \"$out;$root" + BS + "packages" + BS + pkg(i, 3) + BS + "dist\"", "; ") + "; " +
-        times(50, (i) => "Set-Location \"$root" + BS + "packages" + BS + pkg(i, 3) + "\"; npm run build; Set-Location $root", "; ") + "; node cli" + BS + "dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "sh -c 'cd \"$1\" && npm test' _ pkg ×50": ["Bash", times(50, (i) => "sh -c 'cd \"$1\" && npm test' _ packages/" + pkg(i), " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "cd pkg && … && cd .. ×200, then an approve": ["Bash", "cd packages && " + times(200, (i) => "cd " + pkg(i, 3) + " && rm -rf dist && cd ..", " && ") + " && node ../cli/dev-spec.js approve feat requirements",
-        ["deny|approve:requirements", "deny|approve:requirements", "ask|approve:requirements", "ask|approve:requirements"], 33, "e548c8ac3f16"],
-      "F=\"$F -Iinclude/pkg\" ×100, then a test write": ["Bash", "F=x; " + times(100, (i) => "F=\"$F -Iinclude/" + pkg(i, 3) + "\"", "; ") + "; D=tests; echo hi > $D/protected.test.js; node cli/dev-spec.js status", ALLOW, 1, "590079460ad3"],
-      "git commit with a 3 K heredoc message": ["Bash", "git add -A && git commit -m \"$(cat <<'EOF'\nfeat: the monorepo build\n\n" + times(60, (i) => "- " + pkg(i) + ": the build script, the lint config and the test runner moved to the shared preset", "\n") +
-        "\nEOF\n)\" && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "cp dist files ×400": ["Bash", times(400, (i) => "cp packages/" + pkg(i, 3) + "/dist/index.js dist/" + pkg(i, 3) + ".js", " && ") + " && node cli/dev-spec.js status", ALLOW, 64, "43c976b4ac72"],
-      "cd ../../ chains (two up, one down) ×100": ["Bash", "cd apps/web/src && " + times(100, (i) => "cd ../../" + pkg(i) + "/src && npm run build", " && ") + " && node ../../../cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "a cd into .specs/ and out, reading": ["Bash", "cd .specs && cat roadmap.json && cd .. && " + times(100, (i) => "cat packages/" + pkg(i) + "/package.json", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-    };
+    // [tool, command, the four decisions, targets, their sha1] — ed680c92's answers (the corpus: mcp/tests/guard-commands.js)
+    const LEGIT = require("./tests/guard-commands.js").legitMonorepo();
     const decide = (tool, command, level, win) => {
       const r = E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command }, cwd: "/work/mono" }, level, { meta: {}, lang: "en", win });
       return { s: r.decision + "|" + (r.actions || []).map((a) => a.kind + ":" + (a.why || a.setting || a.phase || "")).join(","), r };
@@ -976,5 +946,154 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const foldGot = Object.fromEntries(Object.entries(FOLD).map(([k, [c, m]]) => [k, facts(c, m)]));
     all("1.41.1 fix round 2 (R2H-F2): the cd folder folded reads every path as ed680c92 did — the root, a drive, a leading `..`, `.`, PowerShell's backslashes (got " + js(foldGot) + ")",
       Object.fromEntries(Object.entries(FOLD).map(([k, [, , want]]) => [k, js(foldGot[k]) === js(want)])));
+  }
+
+  // 1.42 B142-13 — the hooks' raw readers open a REGULAR file only (probe.js readRegularJson; observe-hook readTasksText): a roadmap.json,
+  // a .state.json or a tasks.md that is a folder, a FIFO or a link is none, as the engine's read gate reads it, and each hook keeps its
+  // own "no file" answer — the guard: the user's default; the Stop gate: the user's option; the observe hook: no checks / on to change.md.
+  // Folder rows run everywhere; FIFO rows on POSIX only (win32 makes none), each spawn bounded (a regression fails the row, never hangs
+  // the suite: a FIFO's open waited for a writer — the observe hook is async, so Claude Code never killed it).
+  {
+    const plant = (p, rel, kind) => { // replace .specs/<rel> by a folder or a FIFO → planted?
+      const at = path.join(p, ".specs", rel);
+      fs.rmSync(at, { recursive: true, force: true });
+      if (kind === "dir") { fs.mkdirSync(at); return true; }
+      return spawnSync("mkfifo", [at]).status === 0;
+    };
+    const guardPl = (p) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd: p, tool_name: "Write", tool_input: { file_path: path.join(p, "src", "a.js"), content: "x" } });
+    const stopPl = (p) => ({ session_id: "s", hook_event_name: "Stop", cwd: p, stop_hook_active: false, last_assistant_message: "All tasks are done." });
+    const obsPl = (p, command) => ({ session_id: "s", hook_event_name: "PostToolUse", cwd: p, tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: 0 } });
+    const decisionOf = (r) => { try { const o = JSON.parse(r.stdout); return o.hookSpecificOutput ? o.hookSpecificOutput.permissionDecision : o.decision || "printed"; } catch { return r.stdout ? "unparsed" : "silent"; } };
+    const logged = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l).command); } catch { return []; } };
+    // a project with an unverified tick of today (the Stop gate's activity) and — unless `noChange` — a change whose change.md names
+    // `node b13-<name>.js`; `kinds`: .specs/<rel> → "dir" | "fifo" (tasks.md: the change's)
+    const proj = (name, kinds, noChange) => {
+      const p = project("b13-" + name);
+      const f = S.createFeature(p, "Pay", ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [ ] 1. [US1] Charge\n  - _Verify: npm test_\n- [ ] 2. [US1] Refund\n");
+      S.completeTask(p, "pay", 1);
+      const ch = noChange ? null : S.createFeature(p, "Tweak", undefined, "", undefined, "en", undefined, { size: "xs" });
+      if (ch) fs.writeFileSync(path.join(ch.dir, "change.md"), fs.readFileSync(path.join(ch.dir, "change.md"), "utf8").replace(/_Verify: [^_\n]*_/, "_Verify: node b13-" + name + ".js_"));
+      const planted = Object.entries(kinds).every(([rel, kind]) => plant(p, rel === "tasks.md" ? path.join(path.basename(ch.dir), "tasks.md") : rel, kind));
+      return { p, ch: ch && ch.dir, planted };
+    };
+    // folders — everywhere
+    const D = proj("dir", { "roadmap.json": "dir", "tasks.md": "dir" });
+    const dGuard = hook("guard-hook", guardPl(D.p), { DEV_SPEC_GUARD_DEFAULT: "scope" });
+    const dGuardOff = hook("guard-hook", guardPl(D.p));
+    const dStopOff = probed("stop-hook", stopPl(D.p), { DEV_SPEC_STOP_CHECK: "off" });
+    const dStopOn = probed("stop-hook", stopPl(D.p));
+    const dObs = hook("observe-hook", obsPl(D.p, "node b13-dir.js"));
+    const saved = process.env.DEV_SPEC_GUARD_DEFAULT;
+    process.env.DEV_SPEC_GUARD_DEFAULT = "scope";
+    let engineLevel;
+    try { engineLevel = S.guardLevel(D.p); } finally { if (saved === undefined) delete process.env.DEV_SPEC_GUARD_DEFAULT; else process.env.DEV_SPEC_GUARD_DEFAULT = saved; }
+    all("1.42 B142-13: a roadmap.json that is a FOLDER is none — the guard takes the user's default (DEV_SPEC_GUARD_DEFAULT=scope: ask, as the engine's guardLevel reads it), the Stop gate the user's option (off: silent, the engine never loaded; unset: the claim sent back); a FOLDER tasks.md is none — the observe hook reads the change's change.md, and logs its _Verify:_ run (got " +
+      js({ planted: D.planted, guard: decisionOf(dGuard), guardOff: decisionOf(dGuardOff), engineLevel, stopOff: [dStopOff.stdout, dStopOff.engine], stopOn: [decisionOf(dStopOn), dStopOn.engine], obs: logged(D.ch), failed: spawnFailures([dGuard, dGuardOff, dObs]) }) + ")", {
+      planted: () => D.planted,
+      "guard: the user's default — ask, as the engine reads it": () => decisionOf(dGuard) === "ask" && engineLevel === "scope",
+      "guard: no default — silent": () => dGuardOff.status === 0 && dGuardOff.stdout === "",
+      "Stop gate off by the user's option — silent, the engine never loaded": () => dStopOff.status === 0 && dStopOff.stdout === "" && dStopOff.engine === false,
+      "Stop gate on (no option) — the claim over an unverified tick is sent back": () => decisionOf(dStopOn) === "block" && dStopOn.engine === true,
+      "observe: a folder tasks.md is none — the change.md beside it logs the run": () => dObs.status === 0 && js(logged(D.ch)) === js(["node b13-dir.js"]),
+    });
+    // a .state.json that is a LINK (to a file of today's activity, outside the project): the Stop pre-filter reads no activity through
+    // it — silent before the engine loads (it followed the link: the engine then loaded to read the same file as absent). A count, not
+    // a time: whether mcp/lib/spec.js was required.
+    {
+      const L = proj("link", {}, true);
+      const outside = path.join(tmp, "b13-outside-state.json");
+      fs.writeFileSync(outside, js({ lastTickAt: new Date().toISOString(), ticks: { 1: new Date().toISOString() } }));
+      const st = path.join(L.p, ".specs", "pay", ".state.json");
+      fs.rmSync(st);
+      let linked = false;
+      try { fs.symlinkSync(outside, st, "file"); linked = fs.lstatSync(st).isSymbolicLink(); } catch { linked = false; }
+      if (!linked) skip("1.42 B142-13: a linked .state.json is no Stop activity", "file links not creatable here");
+      else {
+        const r = probed("stop-hook", stopPl(L.p));
+        ok(r.status === 0 && r.stdout === "" && r.engine === false,
+          "1.42 B142-13: a .state.json that is a LINK (to a file of today's activity) is no Stop activity — silent, the engine never loaded (the pre-filter followed it: the engine loaded only to read it as absent) (got " + js(r) + ")");
+      }
+      // …and a roadmap.json that is a LINK (to one whose meta.checks names the run) holds no project check for the observe hook: no
+      // engine, nothing logged (its pre-filter read the target's checks: the engine loaded, then read the link as absent)
+      const K = proj("link-checks", {}, true);
+      const outRm = path.join(tmp, "b13-outside-roadmap.json");
+      fs.writeFileSync(outRm, js({ features: {}, meta: { checks: { test: "node b13-check.js" } } }));
+      const rmAt = path.join(K.p, ".specs", "roadmap.json");
+      fs.rmSync(rmAt);
+      let rmLinked = false;
+      try { fs.symlinkSync(outRm, rmAt, "file"); rmLinked = fs.lstatSync(rmAt).isSymbolicLink(); } catch { rmLinked = false; }
+      if (!rmLinked) skip("1.42 B142-13: a linked roadmap.json holds no project check for the observe hook", "file links not creatable here");
+      else {
+        const r = probed("observe-hook", obsPl(K.p, "node b13-check.js"));
+        ok(r.status === 0 && r.engine === false && !fs.existsSync(path.join(K.p, ".specs", ".execution", "observed.jsonl")),
+          "1.42 B142-13: a roadmap.json that is a LINK holds no project check for the observe hook's pre-filter — the engine never loaded, nothing logged (got " + js(r) + ")");
+      }
+    }
+    // FIFOs — POSIX only; each spawn bounded at 9 s (hooks.json's timeout is 10 s; a FIFO opened for reading waits for a writer)
+    if (process.platform === "win32") skip("1.42 B142-13: a FIFO roadmap.json / .state.json / tasks.md is never opened by the guard, Stop and observe hooks", "win32 makes no FIFO");
+    else {
+      const F = proj("fifo", { "roadmap.json": "fifo", "tasks.md": "fifo" });
+      // the only feature (no change: its .state.json would be activity of its own) with its .state.json a FIFO
+      const F2 = proj("fifo-state", { [path.join("pay", ".state.json")]: "fifo" }, true);
+      const bounded = (name, pl, env) => {
+        const t = Date.now();
+        const r = spawnSync(process.execPath, [path.join(HOOKS, name + ".js")], { input: js(pl), encoding: "utf8", env: hookEnv(env), cwd: tmp, timeout: 9000 });
+        return { status: r.status, stdout: String(r.stdout || ""), ms: Date.now() - t, killed: r.status === null ? "killed by " + r.signal : r.error ? String(r.error.code) : null };
+      };
+      const R = {
+        guardScope: bounded("guard-hook", guardPl(F.p), { DEV_SPEC_GUARD_DEFAULT: "scope" }),
+        guardOff: bounded("guard-hook", guardPl(F.p)),
+        stopOff: bounded("stop-hook", stopPl(F.p), { DEV_SPEC_STOP_CHECK: "off" }),
+        stopOn: bounded("stop-hook", stopPl(F2.p)),
+        obs: bounded("observe-hook", obsPl(F.p, "node b13-fifo.js")),
+      };
+      const ended = (r) => r.killed === null && r.status === 0 && r.ms < 8000;
+      all("1.42 B142-13 (POSIX): a FIFO roadmap.json, .state.json or tasks.md is never opened — every hook ends well before its timeout: the guard takes the user's default (scope: ask; none: silent), the Stop gate the user's option (off: silent) and no FIFO .state.json activity (silent), the observe hook reads the change.md beside a FIFO tasks.md and logs its run (got " +
+        js({ planted: [F.planted, F2.planted], R: Object.fromEntries(Object.entries(R).map(([k, r]) => [k, [decisionOf(r), r.ms, r.killed]])), obs: logged(F.ch) }) + ")", {
+        planted: () => F.planted && F2.planted,
+        "guard, scope by default: ask, ended": () => ended(R.guardScope) && decisionOf(R.guardScope) === "ask",
+        "guard, no default: silent, ended": () => ended(R.guardOff) && R.guardOff.stdout === "",
+        "Stop gate off by the user's option: silent, ended": () => ended(R.stopOff) && R.stopOff.stdout === "",
+        "Stop gate on, the only tick's .state.json a FIFO: no activity — silent, ended": () => ended(R.stopOn) && R.stopOn.stdout === "",
+        "observe: a FIFO tasks.md is none — the change.md beside it logs the run, ended": () => ended(R.obs) && js(logged(F.ch)) === js(["node b13-fifo.js"]),
+      });
+    }
+  }
+
+  // 1.42 perf-1 — the guard hook reads each feature's tasks.md / .state.json ONCE per project per event: one read-cache scope per
+  // project around its checks (a 16-file `sed -i` on 200 features read 6,400 files, ~7 s). A count, never a time: the fs calls on
+  // every feature's tasks.md and .state.json for a `sed -i` of 5 in-scope files equal those for 1 file (1.41.2: 5×), and a Write of
+  // README.md (no code: decided before the plan) reads none of them.
+  {
+    const p = project("perf1-reads");
+    S.initProject(p, ["core"], "en", { guard: "scope" });
+    handRoadmap(p);
+    const files = [];
+    for (const name of ["Pay", "Cart", "Search"]) {
+      const f = S.createFeature(p, name, ["core"], "", undefined, "en");
+      const slug = f.slug;
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + [1, 2, 3, 4, 5].map((n) => "- [ ] " + n + ". [US1] Step " + n + " of " + name + "\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/" + slug + "/m" + n + ".js_\n").join(""));
+      const sp = path.join(f.dir, ".state.json");
+      const st = JSON.parse(fs.readFileSync(sp, "utf8"));
+      st.approvals = { ...(st.approvals || {}), tasks: { at: "2026-01-01T00:00:00Z", by: "t" } };
+      fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+      files.push(path.join(f.dir, "tasks.md"), sp);
+    }
+    const run = (input) => hookIn(path.join(HOOKS, "guard-hook.js"), { input: js({ hook_event_name: "PreToolUse", cwd: p, ...input }), env: hookEnv(), encoding: "utf8" });
+    const reads = (input) => {
+      let out;
+      const counts = files.map((f) => fsCalls(f, () => { out = run(input); }));
+      return { n: counts.reduce((a, c) => a + Object.values(c).reduce((x, y) => x + y, 0), 0), out };
+    };
+    const sed = (n) => ({ tool_name: "Bash", tool_input: { command: "sed -i 's/a/b/' " + [1, 2, 3, 4, 5].slice(0, n).map((k) => "src/pay/m" + k + ".js").join(" ") } });
+    const one = reads(sed(1)), five = reads(sed(5)), readme = reads({ tool_name: "Write", tool_input: { file_path: path.join(p, "README.md"), content: "x" } });
+    all("1.42 perf-1: the guard hook reads each feature's tasks.md / .state.json once per project per event — a `sed -i` of 5 in-scope files makes the same fs calls on them as one of 1 file (1.41.2: 5×), a Write of README.md none; both edits allowed (got " +
+      js({ one: one.n, five: five.n, readme: readme.n, out: [one.out.stdout, five.out.stdout] }) + ")", {
+      counted: () => one.n > 0,
+      "5 targets read what 1 does": () => five.n === one.n,
+      "README.md reads none": () => readme.n === 0,
+      allowed: () => one.out.status === 0 && one.out.stdout === "" && five.out.status === 0 && five.out.stdout === "",
+    });
   }
 };
