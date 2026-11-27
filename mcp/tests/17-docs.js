@@ -340,8 +340,9 @@ exports.run = async ({
     const uiAgent = docsWs(docsRead("agents", "spec-ui-reviewer.md")), uiRef = docsWs(docsRef("ui-review.md"));
     all("1.32: the visual review (agents/spec-ui-reviewer.md, references/ui-review.md) wired into the task loop, /executeTask and SKILL.md; the re-run after a fix, the autonomy grant, learnings → steering, the skeleton first", {
       agent: () => /^model: inherit$/m.test(front("spec-ui-reviewer.md")) && ["never the code, the diff or the conversation", "the pair is **INVALID**",
-        "**Blocker**: a user would notice it and the code can fix it", "its **place**: the region and the element", "### UI review: Match | Differences | Invalid",
-        "Shopify's Helix"].every((s) => uiAgent.includes(s)),
+        "**Blocker**: a user would notice it and the code can fix it", "its **place**: the region and the element", "### UI review: Match | Differences | Invalid"].every((s) => uiAgent.includes(s)) &&
+        // 1.42 (UX-13a): the credit lives in references/ui-review.md alone — the agent's copy, paid per visual review, is gone
+        uiRef.includes("Adapted from the UI review gate of Shopify's Helix (shopify.engineering/helix)") && !uiAgent.includes("Helix"),
       // 1.37: no reference no longer means no review — the floor alone runs (the 1.37 block below); still never "passed"
       neverPassed: () => /\*\*No reference → the floor alone\*\*[^.]*\. It is never "passed"\./.test(uiRef) && /skipped \(no capture tool\)` and say so at the checkpoint\. Never "passed"\./.test(uiRef),
       imagesOnly: () => /Never the code, the diff, the brief or your view of it\./.test(uiRef) && /Don't open the images yourself/.test(uiRef) &&

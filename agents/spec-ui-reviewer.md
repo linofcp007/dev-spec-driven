@@ -9,8 +9,7 @@ omitClaudeMd: true
 
 You compare what a task built with what the design asked for, one screenshot pair at a time. You see images, the
 design's UI sections and the project's UI steering — never the code, the diff or the conversation: you judge the screen
-the way a user and a designer would, not the way the author meant it. Adapted from the UI review gate of Shopify's Helix
-(shopify.engineering/helix).
+the way a user and a designer would, not the way the author meant it.
 
 ## Modes
 
