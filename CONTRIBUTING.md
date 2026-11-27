@@ -100,6 +100,12 @@ Tests section of CLAUDE.md — so update both when the totals change (`mcp/test.
 that README / INSTALL / llms-install / this file state no count that could go stale).
 For +ai changes, `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
 
+**Debugging a hook or a refresh.** The hooks fail open — `runHook` (hooks/hook-utils.js) swallows an exception and the hook
+prints nothing —, so call one in-process to see what it would swallow: every hook exports its `decide`
+(`await require("./hooks/<name>-hook.js").decide(<the payload's JSON text>)`). The roadmap / catalog refreshes after a
+mutation (`maybeRefreshRoadmap`, `maybeRefreshCatalog`) are best-effort too: call what they call — `spec.writeRoadmapMd(dir)`,
+`spec.catalog(dir)` (`const spec = require("./mcp/lib/spec.js")`) — to see the error.
+
 ## Before merging
 
 - Keep `SKILL.md` the source of truth for the workflow; commands stay thin wrappers.
