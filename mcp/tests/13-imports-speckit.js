@@ -181,9 +181,12 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const k4 = path.join(p4, "specs", "004-case");
     put(path.join(k4, "Spec.md"), "# Feature Specification: Case\n\n### User Story 1 - T (Priority: P1)\n\n**Acceptance Scenarios**:\n\n1. **Given** a, **When** b, **Then** c\n");
     put(path.join(k4, "tasks.md"), "# Tasks: Case\n\n- [ ] T001 do it\n");
+    put(path.join(k4, "Contracts", "api.yaml"), "openapi: 3.0.0\n");
     const r4 = S.importSpec(p4, "spec-kit", "specs/004-case", {});
-    ok(r4.ok && (folds ? !left(r4).length && r4.counts.stories === 1 : js(left(r4)) === js([["Spec.md"]]) && r4.counts.stories === 0),
-      "1.42 SK-01: a lone Spec.md is named only where read('spec.md') did not reach it — " + (folds ? "this file system folds case: it is the spec, not named" : "this file system is case-sensitive: named") + " (got " + js([r4.ok, left(r4), r4.counts]) + ")");
+    const d4 = r4.ok && fs.existsSync(path.join(r4.dir, "design.md")) ? rd(r4.dir, "design.md") : "";
+    ok(r4.ok && (folds ? !left(r4).length && r4.counts.stories === 1 && d4.includes("### `contracts/api.yaml`")
+      : js(left(r4)) === js([["Contracts/", "Spec.md"]]) && r4.counts.stories === 0 && !d4.includes("api.yaml")),
+      "1.42 SK-01: a lone Spec.md / Contracts/ is named only where the read of spec.md / the listing of contracts/ did not reach it — " + (folds ? "this file system folds case: they are the spec and the contracts, not named" : "this file system is case-sensitive: named") + " (got " + js([r4.ok, left(r4), r4.counts]) + ")");
   }
   // links (where they can be created): a link entry is named without "/" whether its target is there or not — the same warnings
   // both ways; `contracts` linked out of the project is one wUnreadable, never named as left
