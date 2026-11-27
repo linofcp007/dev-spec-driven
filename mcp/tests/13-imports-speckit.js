@@ -318,6 +318,36 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     ]);
   }
 
+  // 1.42 SK-07: Spec Kit's /converge appends `- [ ] T042 <text> per <ref> (<gap-type>)` — the requirement the task works toward —
+  // and the import gave those tasks no _Requirements:_. The ref at the line's end, after "per", becomes one (after the [USn] tag)
+  // when the type means coverage (none, missing, partial, contradicts — an inclusion list: unrequested, optional, an unknown type
+  // claim nothing); US<n>/AC<m> resolves through the parser's own keys (the story PRINTED n), FR-n through the FR criteria.
+  {
+    const p = fresh("speckit-converge");
+    const k = path.join(p, "specs", "005-converge");
+    put(path.join(k, "spec.md"), ["# Feature Specification: Converge", "", "### User Story 1 - Create albums (Priority: P1)", "", "**Acceptance Scenarios**:", "",
+      "1. **Given** a user, **When** they create an album named Trip, **Then** the album is listed", "2. **Given** an album, **When** the user adds 501 photos, **Then** the system rejects the last one", "",
+      "### User Story 3 - Share albums (Priority: P2)", "", "**Acceptance Scenarios**:", "", "1. **Given** an album, **When** the owner shares it, **Then** the invitee can view it", "",
+      "## Requirements", "", "### Functional Requirements", "", "- **FR-001**: System MUST let users create albums", "- **FR-004**: System MUST log every share link created", ""].join("\n"));
+    const lines = ["T042 Log every share link per FR-004 (missing)", "T043 Reject the 501st photo per US1/AC2 (partial)", "T044 Open a shared album under 2 s per SC-002 (partial)",
+      "T045 Remove the debug album export per Constitution I (unrequested)", "T046 Remove the extra export per US3/AC1 (unrequested)", "T047 Per US1 rules, add an audit log in src/a.ts",
+      "T048 [US3] Rate-limit shares per FR-004 (partial)", "T049 Fix the album link per US-1/AC-1", "T050 Cap uploads per FR-004.", "T051 Split exports per FR-004, FR-001 (missing)",
+      "T052 Wire creation per FR-001 (missing)", "T053 Tidy per US1/AC1 (optional)", "T054 Re-check per US1/AC1 (drift)", "T055 Share per US3/AC1 (contradicts)",
+      "T056 Ghost per US4/AC1 (missing)", "T057 Notes per FR-004 (see notes)"];
+    put(path.join(k, "tasks.md"), "# Tasks: Converge\n\n## Phase 5: Convergence\n\n" + lines.map((l) => "- [ ] " + l + "\n").join("") + "- [ ] T058 Own per FR-004 (missing)\n  - _Requirements: US1_\n");
+    const r = S.importSpec(p, "spec-kit", "specs/005-converge", {});
+    const tasks = r.ok ? rd(r.dir, "tasks.md") : "";
+    const req = (n) => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === n) || { lines: [] }).requirements;
+    const got = Array.from({ length: 17 }, (_, i) => req(i + 1));
+    const W = S.msg("en").importSpec;
+    const want = [["US-4.AC-1"], ["US-1.AC-2"], ["SC-002"], [], [], [], ["US-3.AC-1", "US-4.AC-1"], ["US-1.AC-1"], ["US-4.AC-1"], [], ["FR-001"], [], [], ["US-3.AC-1"], ["US4/AC1"], [], ["US-1.AC-1", "US-1.AC-2"]];
+    all("1.42 SK-07: a /converge task's `per <ref> (<type>)` becomes its _Requirements:_ (after its [USn] tag) for none / missing / partial / contradicts — FR-004 → its FR criterion US-4.AC-1, US1/AC2 and US-1/AC-1 by the parser's keys, US3/AC1 → the story printed 3, SC-002 as written; unrequested / optional / drift / '(see notes)' / two refs / a mid-text 'Per' claim nothing; FR-001 (covered by words, no criterion) and US4/AC1 (the FR story) are reported; a task's own _Requirements:_ kept (got " +
+      js(got) + ")", [
+      () => r.ok, () => js(got) === js(want), () => r.warnings.includes(W.wUnknownRef(11, "FR-001")), () => r.warnings.includes(W.wUnknownRef(15, "US4/AC1")),
+      () => r.mapping["User Story 3"] === "US-3" && r.mapping["Functional Requirements"] === "US-4", () => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === 6)).implements.includes("src/a.ts"),
+    ]);
+  }
+
   // 1.42 CRI-2: the two scans that replaced a backtracking regex read what it read — every line built from a short head and a
   // tail of up to 5 units over the characters each pattern turns on (blanks, a line separator, a CR, its marks), exhaustively.
   {

@@ -601,6 +601,9 @@ function importRun(projectDir, tool, source, opts) {
       if (/^(?:SC|NFR|EC)-\d+$/.test(ref)) return [ref];
       if (/^FR-\d+$/.test(ref)) return frRefs.get(ref) || null;
       if (t === "kiro" && critMap.has(ref)) return [critMap.get(ref)];
+      // spec-kit's /converge `per US1/AC2`: scenario 2 of the story PRINTED 1 (the parser's own key — the synthetic story has none)
+      const sa = t === "spec-kit" ? /^US-?(\d+)\/AC-?(\d+)$/i.exec(ref) : null;
+      if (sa) { const id = critMap.get(`User Story ${+sa[1]} / Scenario ${+sa[2]}`); return id ? [id] : null; }
       const whole = ref.match(/^(?:requirement\s+|requisito\s+|user story\s+|US-?)?(\d+)$/i);
       if (whole) { const sn = storyNo(+whole[1]); if (sn != null && acOf.get(sn).length) return acOf.get(sn); }
       return null;

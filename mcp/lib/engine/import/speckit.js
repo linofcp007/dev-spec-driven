@@ -284,6 +284,39 @@ function uncoveredFrs(frLines, scen) {
 const RE_SK_TASK_HEAD = /^(\s*)[-*+]\s+\[[ xX~\-/]\]/;
 const skTaskLine = (l) => { const h = RE_SK_TASK_HEAD.exec(l); const text = h && restAfterBlanks(l, h[0].length, true); return text == null ? null : [l, h[1], text]; };
 const RE_SK_STORY_TAG = /\[US-?(\d+)\]/i;
+// Spec Kit's /converge appends `- [ ] T042 <text> per <source-ref> (<gap-type>)`: the requirement the task works toward. Read from
+// the text's END, by a scan (a /[ \t]+$/ trim was quadratic on an inner blank run): an optional `(<type>)` after a blank, then the
+// last token (`.`, `,`, `;` dropped) right after the word "per", of a requirement's shape — US<n>[/AC<m>] (dashes allowed), FR-<n>,
+// SC-<n>; `plan: …`, `Constitution II`, a mid-text "Per US1 rules" read none. The type GRANTS the claim only when it means the task
+// works toward the requirement (CONVERGE_COVERS — an inclusion list, so it fails closed: `unrequested` — removing what no
+// requirement asked for —, a type Spec Kit adds later, a user's `(optional)` claim nothing). Two refs (`per FR-4, FR-5`) claim
+// nothing: the stated limit. → the ref as written | null
+const CONVERGE_COVERS = ["missing", "partial", "contradicts"];
+const RE_CONVERGE_REF = /^(?:US-?\d+(?:\/AC-?\d+)?|FR-\d+|SC-\d+)$/;
+function convergeRef(text) {
+  const s = String(text);
+  let e = s.length;
+  while (e > 0 && isWsUnit(s[e - 1])) e--;
+  if (s[e - 1] === ")") {
+    const o = s.lastIndexOf("(", e - 2);
+    if (o > 0 && isWsUnit(s[o - 1]) && /^[A-Za-z-]{1,20}$/.test(s.slice(o + 1, e - 1))) {
+      if (!CONVERGE_COVERS.includes(s.slice(o + 1, e - 1).toLowerCase())) return null;
+      e = o;
+      while (e > 0 && isWsUnit(s[e - 1])) e--;
+    }
+  }
+  let b = e;
+  while (b > 0 && !isWsUnit(s[b - 1])) b--;
+  let te = e;
+  while (te > b && ".,;".includes(s[te - 1])) te--;
+  const ref = s.slice(b, te);
+  if (!RE_CONVERGE_REF.test(ref)) return null;
+  let pe = b;
+  while (pe > 0 && isWsUnit(s[pe - 1])) pe--;
+  let pb = pe;
+  while (pb > 0 && !isWsUnit(s[pb - 1])) pb--;
+  return pe < b && s.slice(pb, pe).toLowerCase() === "per" ? ref : null;
+}
 const RE_SK_FENCE = /^\s{0,3}(`{3,}|~{3,})/;
 // Does line l close the fence opened with `fence` (a run of the same character, at least as long, nothing after it)?
 const skClosesFence = (l, fence) => { const f = RE_SK_FENCE.exec(l); return !!f && f[1][0] === fence[0] && f[1].length >= fence.length && !l.slice(f.index + f[0].length).trim(); };
@@ -310,7 +343,10 @@ function specKitTaskMarkers(text) {
     const own = lines.slice(i, j).join("\n");
     const sub = " ".repeat(indent + 2) + "- ";
     const tag = RE_SK_STORY_TAG.exec(m[2]);
-    if (tag && !/_Requirements:/i.test(own)) out.push(sub + "_Requirements: US" + tag[1] + "_");
+    const reqs = tag ? ["US" + tag[1]] : []; // the source's two claims: its story tag, then a /converge ref
+    const cv = convergeRef(m[2]);
+    if (cv && !reqs.includes(cv)) reqs.push(cv);
+    if (reqs.length && !/_Requirements:/i.test(own)) out.push(sub + "_Requirements: " + reqs.join(", ") + "_");
     const paths = planPaths(m[2]);
     if (paths.length && !/_Implements:/i.test(own)) out.push(sub + "_Implements: " + paths.join(", ") + "_");
   }
