@@ -67,6 +67,7 @@ review_seat() {
   g log --oneline task-1-base..HEAD  >  "$x/task-1-review.diff"
   g diff --stat   task-1-base..HEAD  >> "$x/task-1-review.diff"
   g diff -U10     task-1-base..HEAD  >> "$x/task-1-review.diff"
+  node "$PLUGIN_ROOT/cli/dev-spec.js" dupes note-edits --json  >  "$x/task-1-dupes.json"
   base="$(g rev-parse task-1-base)"; head="$(g rev-parse HEAD)"
   refs="$(cd "$PLUGIN_ROOT/skills/dev-spec-driven/references" && { pwd -W 2>/dev/null || pwd; })/"
   if [ -f "$rs/finding.md" ]; then
@@ -86,6 +87,7 @@ review_seat() {
       echo "- Brief: $x/task-1-brief.md"
       echo "- Implementer's report: $x/task-1-report.md"
       echo "- Review package (commit list + stat + full diff): $x/task-1-review.diff"
+      echo "- The duplicate detector's file: $x/task-1-dupes.json"
       echo "- BASE: $base · HEAD: $head"
       echo "- Active tracks: core"
       echo "- References folder: $refs"

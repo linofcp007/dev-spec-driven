@@ -2343,6 +2343,27 @@ exports.run = async ({
         /A fast-forward when possible; a merge commit \(`--no-ff`, or branches that diverged\) takes the merge title and summary as its message/.test(step4) &&
         !/git merge <name>/.test(FIN) && !/already on the base/.test(FIN),
     });
+
+    // S4(a): the duplicate detector before the TASK review. Its JSON goes to a file beside the package (§4's fence — so the
+    // review-seat fixture, tied to the fence's output, follows), never into the controller's context; the REVIEWER keeps the
+    // runs in the package's files (the path's tail: a monorepo's stat paths are the repository's, the detector's the project's).
+    // A capped list is never a "none" (L8, L12): only counts.existing 0 is, and a list shorter than its total is the top DUP_TOP.
+    const sec4 = section(SUBX, "### 4. Review package"), fence4 = (sec4.match(/```\n([\s\S]*?)```/) || [])[1] || "";
+    const DUP_TOP = +((fs.readFileSync(path.join(root, "mcp", "lib", "engine", "dupes.js"), "utf8").match(/^const DUP_TOP = (\d+);/m) || [])[1]);
+    const GUIDE = ws(raw("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md")), EXEC = ws(raw("commands", "executeTask.md"));
+    all("1.42 (S4a): the task review gets the duplicate detector's file — §4 writes it beside the package, never through the controller's context; the reviewer keeps the runs in the package's files (by the path's tail), says none only at counts.existing 0 and knows a list shorter than its total is the top " + DUP_TOP, {
+      fenceLine: /^node "<clone>\/cli\/dev-spec\.js" dupes <feature> --json {2}> {2}\.specs\/<feature>\/\.execution\/task-N-dupes\.json$/m.test(fence4),
+      notInContext: /The last line is the duplicate detector, run from the project root \(`<clone>`: the plugin's folder, as the tools' messages print it\): its runs go to the reviewer in that file, never through your context — the reviewer keeps the ones in the package's files\./.test(ws(sec4)),
+      dispatch: /in \*\*task\*\* mode with: the brief path, the report path, the diff path, the detector's file \(`task-N-dupes\.json`, §4\), BASE\/HEAD/.test(SUB),
+      cost: /one implementer \+ one reviewer per task, and one duplicate-detector run — seconds, its output kept in a file/.test(SUB),
+      reviewerInput: /\*\*Task mode\*\* — one task's diff\. Inputs: [^\n]*the duplicate detector's file \(`task-N-dupes\.json`\)/.test(REV),
+      reviewerFilter: /In task mode they come as the detector's file: only a run whose place is in the package's `--stat` files counts \(match the path's tail — the stat is the repository's, the detector's the project's\)/.test(REV),
+      noneOnlyAtZero: /`counts\.existing` 0 is the only "none"/.test(REV),
+      capTold: Number.isInteger(DUP_TOP) && REV.includes("`duplicates` shorter than `total` is the top " + DUP_TOP + " — a run this task added can be past it"),
+      pinsKept: /the duplicate detector's `existing` runs first when the dispatch carries them/.test(REV) && /"Duplicated on purpose" is not/.test(REV),
+      guide: /\(the task review, the final review, `\/spec-review branch` \/ `converge` run it first\)/.test(GUIDE),
+      exec: /`dev-spec-driven:spec-reviewer` \(with the duplicate detector's file — subagent-execution\.md §4;/.test(EXEC),
+    });
   }
 
   // Release hygiene: the three version fields agree.

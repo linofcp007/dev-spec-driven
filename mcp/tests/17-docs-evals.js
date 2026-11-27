@@ -321,7 +321,7 @@ exports.run = async ({ ok, all, skip, S, root, tmp, require }) => {
       const fenceRan = fence.length >= 3 && fence.every((l) => {
         const t = [...l.matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2]), op = t.findIndex((w) => w === ">" || w === ">>");
         if (op < 1 || op !== t.length - 2) return false;
-        const sub = (w) => w.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, root).replace(/<feature>/g, "note-edits").replace(/\bBASE\b/g, "task-1-base").replace(/\btask-N-/g, "task-1-");
+        const sub = (w) => w.replace(/\$\{CLAUDE_PLUGIN_ROOT\}|<clone>/g, root).replace(/<feature>/g, "note-edits").replace(/\bBASE\b/g, "task-1-base").replace(/\btask-N-/g, "task-1-");
         const [cmd, ...args] = t.slice(0, op).map(sub), out = sub(t[op + 1]);
         const r = spawnSync(cmd === "node" ? process.execPath : cmd, args, { cwd: rep, env });
         if (r.status !== 0) return false;

@@ -19,8 +19,8 @@ own gates.
 | Claude Code (or any host with a subagent tool) | Cursor / Windsurf / Copilot / Gemini / claude.ai — no subagents; use `dev-spec brief` + inline |
 | deterministic tasks on any track | **+ai prompt/eval tasks** (`inlineOnly: true` in the brief) — evals cost money and accept/revert is a judgment call |
 
-Cost: roughly 2–3× the tokens of inline execution (one implementer + one reviewer per task). Say so
-when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the user asks for it).
+Cost: roughly 2–3× the tokens of inline execution (one implementer + one reviewer per task, and one duplicate-detector
+run — seconds, its output kept in a file). Say so when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the user asks for it).
 
 ## Preconditions (check before Task 1)
 
@@ -201,15 +201,18 @@ Write the diff to a file so it never enters your context:
 git log --oneline BASE..HEAD  >  .specs/<feature>/.execution/task-N-review.diff
 git diff --stat   BASE..HEAD  >> .specs/<feature>/.execution/task-N-review.diff
 git diff -U10     BASE..HEAD  >> .specs/<feature>/.execution/task-N-review.diff
+node "<clone>/cli/dev-spec.js" dupes <feature> --json  >  .specs/<feature>/.execution/task-N-dupes.json
 ```
 
 (Same commands in PowerShell or bash. Use the recorded BASE — never `HEAD~1`, which drops all but the
-last commit of a multi-commit task.)
+last commit of a multi-commit task.) The last line is the duplicate detector, run from the project root (`<clone>`: the
+plugin's folder, as the tools' messages print it): its runs go to the reviewer in that file, never through your context —
+the reviewer keeps the ones in the package's files.
 
 ### 5. Dispatch the reviewer
 
 Dispatch **`dev-spec-driven:spec-reviewer`** in **task** mode with: the brief path, the report path, the diff
-path, BASE/HEAD, the active tracks and the references folder path. The reviewer returns a verdict **per AC ID** (✅ / ❌ / ⚠️ cannot
+path, the detector's file (`task-N-dupes.json`, §4), BASE/HEAD, the active tracks and the references folder path. The reviewer returns a verdict **per AC ID** (✅ / ❌ / ⚠️ cannot
 verify from the diff), track checks, the project's written rules and the history of rewritten lines, and Critical /
 Important / Minor findings, each Critical / Important one rated 0–100. Never tell a reviewer what not to flag. Resolve
 every ⚠️ yourself (you hold the cross-task context); a confirmed gap is a failed spec review. With a review panel, this ONE

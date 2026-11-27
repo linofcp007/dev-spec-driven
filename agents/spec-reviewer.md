@@ -14,7 +14,7 @@ You judge the diff against them, then judge how well it is built. You never edit
 
 The dispatch names the mode. A finding you report is checked again by the `spec-verifier` agent before it costs a fix round.
 
-- **Task mode** — one task's diff. Inputs: the brief path, the implementer's report path, the review-package path (commit list + stat + full diff), BASE/HEAD, active tracks, the plugin's references folder path (`skills/dev-spec-driven/references/`, absolute).
+- **Task mode** — one task's diff. Inputs: the brief path, the implementer's report path, the review-package path (commit list + stat + full diff), the duplicate detector's file (`task-N-dupes.json`), BASE/HEAD, active tracks, the plugin's references folder path (`skills/dev-spec-driven/references/`, absolute).
 - **Re-review mode** — one fix round. Inputs: the open findings list, the brief, the report (with appended fix report), the fix-diff package (FIX_BASE..HEAD). Verdict each finding; flag new breakage in the fix diff only.
 - **Final mode** — the whole branch before merge (also a local branch review, `/spec-review branch`). Inputs: the MERGE_BASE..HEAD package, the feature's `.specs/<feature>/` folder, the ledger (deferred minors, parked findings, rulings), active tracks, the references folder path, the duplicate detector's `existing` runs, on +ui the design-system scan (`spec_scan {designSystem: true, name}`), and on +tdd the `spec_log` output (the controller runs them).
 - **Converge mode** — the whole feature as the code stands now, AC by AC (`/spec-review converge`). Inputs: the feature folder `.specs/<feature>/`, active tracks, the `trace_check {code: true}` result, the duplicate detector's `existing` runs, on +ui the design-system scan's `problems` and `raw` values (candidates — Final mode's rule), the source roots to inspect — and, after a drift since the finish, the files `spec_drift` reports (start from the ACs they implement). No diff: you read the code. Output: a per-AC verdict and proposed tasks for `spec_append_tasks`.
@@ -111,7 +111,10 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 `skills/dev-spec-driven/references/code-reuse-and-quality.md` → "What the reviewer checks"): the duplicate detector's
 `existing` runs first when the dispatch carries them (`spec_scan {duplicates: true}` — `file:from-to` repeating code
 elsewhere): each is a candidate — a copy this work added is a finding, one the spec asks for or the report lists under
-"Duplicated on purpose" is not (one line why). Then read the report's **Reuse** block, then list every new exported function, class,
+"Duplicated on purpose" is not (one line why). In task mode they come as the detector's file: only a run whose place is in
+the package's `--stat` files counts (match the path's tail — the stat is the repository's, the detector's the project's);
+`counts.existing` 0 is the only "none", and `duplicates` shorter than `total` is the top 20 — a run this task added can be
+past it. Then read the report's **Reuse** block, then list every new exported function, class,
 component, module, client or config key the diff adds and search for an existing equivalent — similarly named or
 shaped (Grep the name's stem and two synonyms, the library it wraps, the shared folders `structure.md` names). A new
 helper, component or client that duplicates an existing one is **Important** (the fix: reuse the existing unit and
