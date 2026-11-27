@@ -154,6 +154,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   folder or an lstat that throws is no file, as the engine's read gate reads it, and each hook keeps its own no-file answer (the
   guard: the user's default; the Stop gate: the user's option; the observe hook: no checks, change.md) — a FIFO tasks.md held
   every Bash call's async observe hook in one open for the rest of the session (mcp/tests/10-guards-hooks-cost.js "B142-13").
+  Known limit: a regular roadmap.json holding valid JSON that is no object (`null`, `[]`) turns the guard hook's pre-filter off,
+  while the engine reads it as no `meta` and applies the user's `DEV_SPEC_GUARD_DEFAULT` — looser than its engine, no escalation:
+  whoever can write that file can write `meta.guard: false`, which turns the engine's guard off too (both trees, 1.41.2 and 1.42).
   The observe hook's SubagentStop reader opens an agent's transcript (outside the project) by the same rule — an lstat, then
   `openRegular` —, never a copy of `readRegularJson`'s body (it reads in chunks).
 - **What the hooks and the engine both read — mcp/lib/probe.js, ONE copy** (never a renamed copy in a hook: the 8-line duplication
@@ -781,7 +784,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.42 (B142-13)** — the hooks' raw readers below `.specs/` took the approval hook's 1.41.1 rule (a regular file only; probe.js
   `readRegularJson`): a FIFO roadmap.json held the guard and Stop hooks to their timeout, and a FIFO tasks.md left one async observe
   hook blocked in its open per Bash call (Claude Code never kills an async hook). Where absence relaxes, checked site by site: a
-  folder / FIFO / link roadmap.json in the guard is the user's default (the parent: off, or a hang then a pass), in the Stop gate
+  folder / FIFO / link roadmap.json in the guard is the user's default (the parent: off for a folder, a hang then a pass for a
+  FIFO; a link took the user's default since 1.41.1 — review 1, R1-PERF-3), in the Stop gate
   the user's option (equal for a folder); a link / FIFO `.state.json` is no activity and a non-regular tasks.md sends the observe
   hook to change.md — the engine reads all of them absent, so the pre-filters stay supersets. 12-lifecycle-read-gate.js's tracer
   exempts `recentActivity`, `mentioned` and `readTasksText` no more.

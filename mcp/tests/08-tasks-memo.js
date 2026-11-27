@@ -25,12 +25,14 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, require, __dirname }) => {
     got.push([keys(), st.chars]); // b refreshed: c evicted, not b
     put("ffff"); put("gggg");
     got.push([keys(), st.chars]); // ffff: 4 entries → d out; gggg: 4 entries (10 characters) → b out
+    put("jj"); // 4 entries → e out: 3 entries at EXACTLY maxChars (10) — kept (review 1, R1-PERF-2: a `>=` bound evicted ffff here)
+    got.push([keys(), st.chars]);
     put("hhhhhhhhhhh"); // 11 characters: over the bound alone — kept, alone
     got.push([keys(), st.chars]);
     put("i");
     got.push([keys(), st.chars]); // the over-size key evicted by the next put (its own put kept it)
-    eq(got.concat([[sum(), m.get("i")]]), [["b,c,d", 3], ["d,b,e", 3], ["e,ffff,gggg", 9], ["hhhhhhhhhhh", 11], ["i", 1], [1, "I"]],
-      "1.42 perf-2 lruPut: the oldest evicted first, a hit moved to the newest place, the characters bound and the entries bound both held, the newest kept even over the bound (alone), chars exact");
+    eq(got.concat([[sum(), m.get("i")]]), [["b,c,d", 3], ["d,b,e", 3], ["e,ffff,gggg", 9], ["ffff,gggg,jj", 10], ["hhhhhhhhhhh", 11], ["i", 1], [1, "I"]],
+      "1.42 perf-2 lruPut: the oldest evicted first, a hit moved to the newest place, the characters bound and the entries bound both held (a total of exactly maxChars kept), the newest kept even over the bound (alone), chars exact");
   }
 
   // A 40-feature project (more than the 32 texts the memo held before): each tasks.md a real-shaped 10-task plan — _Requirements:_,
