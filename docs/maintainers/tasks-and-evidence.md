@@ -1296,6 +1296,23 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   once (the engine dedupes a backlog note only on its exact text). Prose rows: a capped zero (`truncated` / `partial`) is no
   "none"; S15 exempts an AC that IS the check's result; SK-P2's "repeat" is within the feature; the review seats' no-echo
   property reads each seat's own agent prompt (the pre-existing grader matched the verifier's verdict list).
+- **1.42 fix round 2 (FX2-PROSE)** — review 2 of fix round 1's prose. (1) The residue keyed on ONE verifier line, "its
+  `Exists at HEAD` line says yes" — but four of the template's seven refutation reasons (intended, silenced on purpose, no rule
+  says so, nitpick) can say yes there and are no defect, so the backlog would have recorded intended behaviour and accepted
+  suppressions as defects; `/spec-review branch` keyed the same fact on two other lines and labelled it `pre-existing
+  (deferred)`, which Closing files as `unverified`. Now ONE predicate on two inputs — refuted as pre-existing or not in the
+  diff (the verdict's reason) with its `Exists at HEAD` line yes — in the same words in §6, Closing and `/spec-review branch`,
+  one ledger form `refuted (NN, <why>, real at HEAD)`; every other reason of the verifier's template is named as no residue
+  (17-docs reads the reasons from agents/spec-verifier.md, so a new reason must be classed). (2) The commit "until `git status
+  --porcelain -- .specs` is empty", with "a change neither you nor these steps made is the user's: ask", asked on every close:
+  the ticks (`tasks.md`) and the run's backlog entries are listed and no closing step wrote them, and a declined change left
+  no way out. It is `git add` of what the run and the closing wrote now — the feature's folder, roadmap.json, the generated
+  roadmap files the project has, the registry / a steering file when written —, in the same words in both texts; git carries
+  any other change across the switch (a switch that would overwrite one refuses, naming the file: ask). (3) "A `Residues
+  filed:` line means they are filed" lost the residues of a kept branch closed again: the lines after the LAST one are filed.
+  (4) Two keys read less than they claimed: the recovery-verb check now reads both whole texts, the sign-off is counted per
+  sentence over every spelling. Also: the stale "still a template" rationale above (UX-10 was cut; the stub hash serves doctor
+  and the steering importer).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
