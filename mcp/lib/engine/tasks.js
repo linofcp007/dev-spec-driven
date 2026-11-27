@@ -1890,10 +1890,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
 
   // Steering: the default files (as before) + front-matter scoped ones (always / fileMatch on _Implements:_ paths).
   const steer = briefSteering(root, tracks, mk.implements);
-  // 1.42 (UX-10): a file still a template (briefSteering's `template`) is listed apart — "still templates, nothing binding yet" —, never
-  // under "Read before coding"; it stays in the result's steering.included (template: true)
-  const steering = steer.included.filter((s) => !s.template).map((s) => rel(path.join(steer.dir, s.name)));
-  const steeringTemplates = steer.included.filter((s) => s.template).map((s) => rel(path.join(steer.dir, s.name)));
+  const steering = steer.included.map((s) => rel(path.join(steer.dir, s.name)));
 
   const paths = {
     dir: exDir,
@@ -1939,7 +1936,6 @@ function taskBrief(projectDir, name, number, opts = {}) {
     unresolved,
     design: { path: rel(path.join(dir, "design.md")), toc: sections.map((s) => s.title), included, omitted },
     steering,
-    steeringTemplates,
     steeringScoped: steer.included.filter((s) => s.body).map((s) => ({ path: rel(path.join(steer.dir, s.name)), patterns: s.patterns, body: s.body })),
     steeringManual: steer.manual.map((n) => rel(path.join(steer.dir, n))),
     verify: mk.verify,
@@ -1988,7 +1984,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // which steering the brief carries and why (inclusion mode; the patterns/paths that matched a fileMatch file)
     steering: {
       included: steer.included.map((s) => Object.assign({ file: rel(path.join(steer.dir, s.name)), inclusion: s.inclusion },
-        s.inclusion === "fileMatch" ? { patterns: s.patterns, matched: s.matched, quoted: !!s.body } : {}, s.template ? { template: true } : {})),
+        s.inclusion === "fileMatch" ? { patterns: s.patterns, matched: s.matched, quoted: !!s.body } : {})),
       manual: steer.manual.map((n) => rel(path.join(steer.dir, n))),
     },
     paths,

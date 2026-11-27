@@ -237,71 +237,30 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, f
       ["en", "pt", "es"].every((l) => qText.includes("> - Rule " + l + ".")) && !/Replace the example pattern|Substitui o padrão|Sustituye el patrón|inclusion: always/.test(qText),
       "brief steering quotes keep a '<!--' inside fenced code or an inline code span (and an unclosed one in backticks); an inline trailing comment and the EN/PT/ES stub guidance comment are removed (got " + qRows.map((s) => s.file + ":" + s.quoted).join(",") + ")");
 
-    // 1.42 (UX-10): the brief told the implementer to "read before coding" steering files that are still templates — a fresh init's
-    // stubs hold "[e.g., Every write is idempotent …]" rules nobody adopted. A file that is a built-in stub verbatim (any language:
-    // the corpus's hashes of the CURRENT stubs) or nothing but headings is listed apart, "still templates — nothing binding yet", and
-    // keeps its row in steering.included with template: true (nothing goes absent). Its own predicate — never doctor's "a placeholder
-    // left": a partly filled tech.md stays binding. Known limits, pinned: a stub scaffolded by ≤ 1.25 (another hash — it named
-    // /prReview) reads as the team's text, binding (the parent's reading); a project template whose text IS a built-in stub reads as a
-    // template (the predicate is the text), the team's own text stays binding.
-    // Mutations listed before the fixtures: T1 the predicate swapped for artifactState "placeholder" · T2 the predicate always false ·
-    // T3 the flag set, the line not rendered · T4 the templates dropped from included · T5 a template key on every row · T6
-    // headingsOnly dropped · T7 a read made for a template file.
+    // 1.42 review 1 (R1-TASKS-01: UX-10 cut · R1-TASKS-07): every default steering file is "read before coding", a track's built-in
+    // stub too — it holds the team's defaults (security.md's "parameterized queries only", distributed.md's outbox, testing-standards.md's
+    // failing test first), never "nothing binding" — and each file ONCE: +saas and +obs both name observability.md (it was listed twice,
+    // in the brief and in steering.included). Mutations listed before the fixture: D1 the dedupe dropped · D2 a stub moved off the
+    // Read line (UX-10's templates line back) · D3 a template key on an included row.
     {
-      const I18N = require("./lib/i18n.js");
-      const mkp = (n, lang = "en") => { const p = path.join(tmp, "proj-ux10-" + n); S.initProject(p, ["core"], lang); const f = S.createFeature(p, "Work", ["core"], "", undefined, lang);
-        fs.writeFileSync(path.join(f.dir, "tasks.md"), "- [ ] 1. [US1] Add the endpoint\n  - _Implements: src/api/users.ts_\n"); return { p, slug: f.slug, st: path.join(p, ".specs", "steering") }; };
-      const view = (x, lang = "en") => {
-        const b = S.taskBrief(x.p, x.slug, 1);
-        const lines = (b.brief || "").split("\n"), B = I18N.brief(lang);
-        const row = (pre) => lines.find((l) => l.startsWith(pre)) || null;
-        return { b, read: row(B.steeringRead), templates: row(B.steeringTemplates),
-          flagged: b.steering.included.filter((s) => s.template === true).map((s) => s.file.replace(".specs/steering/", "")),
-          keys: b.steering.included.map((s) => s.file.replace(".specs/steering/", "") + ":" + ("template" in s ? s.template : "-")) };
-      };
-      const fresh = mkp("fresh");
-      const v1 = view(fresh);
-      const partial = mkp("partial");
-      fs.writeFileSync(path.join(partial.st, "tech.md"), fs.readFileSync(path.join(partial.st, "tech.md"), "utf8").replace("- Frontend: []", "- Frontend: React"));
-      fs.writeFileSync(path.join(partial.st, "structure.md"), "# Project Structure\n\n## Layout\n\n## Naming\n");
-      const v2 = view(partial);
-      const pt = mkp("pt", "pt");
-      const v3 = view(pt, "pt");
-      // the stub an engine ≤ 1.25 scaffolded (it named /prReview): no current hash — the team's text as far as the rule can tell
-      const old = mkp("old");
-      fs.writeFileSync(path.join(old.st, "constitution.md"), I18N.steeringStub("constitution.md", "en").replace("`/spec-review`", "`/prReview`"));
-      const v4 = view(old);
-      // project templates (.specs/templates/steering/): one holding a built-in stub verbatim, one holding the team's own text
-      const tplStub = path.join(tmp, "proj-ux10-tpl-stub"), tplOwn = path.join(tmp, "proj-ux10-tpl-own");
-      for (const [p, text] of [[tplStub, I18N.steeringStub("constitution.md", "en")], [tplOwn, "# Constitution\n\n## Principles\n1. Every handler validates its input.\n"]]) {
-        fs.mkdirSync(path.join(p, ".specs", "templates", "steering"), { recursive: true });
-        fs.writeFileSync(path.join(p, ".specs", "templates", "steering", "constitution.md"), text);
-      }
-      const ts = mkp("tpl-stub"), to = mkp("tpl-own"); // mkp re-inits the folders above: the template was there first
-      const v5 = view(ts), v6 = view(to);
-      const P = (f) => "`.specs/steering/" + f + "`";
-      all("1.42 UX-10: the brief lists steering files that are still templates apart (a built-in stub verbatim in any language, or headings only), never under 'Read before coding'; they keep their included row with template: true; a partly filled file, an old engine's stub and the team's template text stay binding (got " +
-        JSON.stringify([v1.read, v1.templates, v1.keys, v2.read, v2.templates, v2.keys, v3.templates, v4.keys, v5.keys, v6.keys]) + ")", {
-        "fresh: every default flagged": v1.flagged.join() === "constitution.md,tech.md,structure.md",
-        "fresh: none read before coding (T2)": v1.read === null,
-        "fresh: the templates line lists them (T3)": v1.templates === I18N.brief("en").steeringTemplates + " " + ["constitution.md", "tech.md", "structure.md"].map(P).join(", "),
-        "fresh: included unchanged (T4)": v1.b.steering.included.map((s) => s.file.replace(".specs/steering/", "") + ":" + s.inclusion).join() === "constitution.md:always,tech.md:always,structure.md:always",
-        "partly filled tech.md stays binding (T1)": v2.read === I18N.brief("en").steeringRead + " " + P("tech.md"),
-        "headings-only structure.md is a template (T6)": v2.templates === I18N.brief("en").steeringTemplates + " " + [P("constitution.md"), P("structure.md")].join(", "),
-        "a binding row carries no template key (T5)": v2.keys.includes("tech.md:-"),
-        "pt: the PT stubs flagged, the PT line": v3.flagged.join() === "constitution.md,tech.md,structure.md" && v3.templates === I18N.brief("pt").steeringTemplates + " " + ["constitution.md", "tech.md", "structure.md"].map(P).join(", "),
-        "an ≤ 1.25 stub stays binding (known limit)": v4.keys.includes("constitution.md:-"),
-        "a project template that is a stub verbatim: a template": v5.keys.includes("constitution.md:true"),
-        "the team's project template: binding": v6.keys.includes("constitution.md:-"),
+      const READ = require("./lib/i18n.js").brief("en").steeringRead;
+      const p = path.join(tmp, "proj-r1t07-steer");
+      const tracks = ["core", "tdd", "saas", "sec", "dist", "obs"];
+      S.initProject(p, tracks, "en");
+      const f = S.createFeature(p, "Checkout", tracks, "", undefined, "en");
+      const b = S.taskBrief(p, f.slug, 1);
+      const P = (n) => ".specs/steering/" + n;
+      const want = ["constitution.md", "tech.md", "structure.md", "testing-standards.md", "scale.md", "observability.md", "cost.md", "security.md", "distributed.md"];
+      const lines = String(b.brief || "").split("\n");
+      const readLines = lines.filter((l) => l.startsWith(READ));
+      const inc = (b.steering && b.steering.included) || [];
+      all("1.42 review 1 (R1-TASKS-01 / -07): a fresh +tdd +saas +sec +dist +obs feature's brief reads every default steering file before coding, the track stubs included, each once (got " +
+        JSON.stringify([readLines, inc]) + ")", {
+        "one Read line, every default once, in order (D1, D2)": readLines.length === 1 && readLines[0] === READ + " " + want.map((n) => "`" + P(n) + "`").join(", "),
+        "steering.included lists them once (D1)": inc.map((s) => s.file).join() === want.map(P).join(),
+        "every row always, no template key (D3)": inc.length === want.length && inc.every((s) => s.inclusion === "always" && !("template" in s)),
+        "no other line names a steering file (D2)": lines.filter((l) => l.includes(".specs/steering/")).length === 1,
       });
-      // the cost, as counts (T7): the same fs calls under the project for the fresh stubs and for the same files filled in
-      const filled = mkp("filled");
-      for (const f of ["constitution.md", "tech.md", "structure.md"]) fs.writeFileSync(path.join(filled.st, f), "# " + f + "\n\n- A rule the team adopted for " + f + ".\n");
-      const vf = view(filled); // each side's call measured after one of its own (no first-call effect on one side only)
-      const fsCallsOf = (x) => fsCalls(x.p + path.sep, () => S.taskBrief(x.p, x.slug, 1));
-      const c1 = fsCallsOf(fresh), c2 = fsCallsOf(filled);
-      ok(JSON.stringify(c1) === JSON.stringify(c2) && JSON.stringify(c1) !== "{}" && vf.templates === null && vf.read !== null,
-        "1.42 UX-10: the templates line reads nothing new — a brief over stub steering makes the same fs calls under the project as over the same files filled in (got " + JSON.stringify([c1, c2]) + ")");
     }
 
     // (H4) steering_scaffold custom names: localized stub with front matter; known names keep their templates; rejections.

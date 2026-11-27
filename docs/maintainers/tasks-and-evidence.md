@@ -21,15 +21,10 @@ Phase 6, opt-in.
   characters, the rest named — `lessons` {quoted, omitted}; `decisions` never quotes a lesson: lifecycle.md → Decisions and
   spikes). `write: true` keeps `refs.examples` {quoted, gone, total} and `refs.lessons` {quoted, omitted} only.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
-- **Steering still a template (1.42, UX-10).** An `always` / `fileMatch` file `briefSteering()` includes whose body is a
-  built-in stub verbatim (`isSteeringStub` — any language, the corpus's hashes of the CURRENT stubs) or nothing but headings
-  (`headingsOnly`) holds no project rule yet: its row in `steering.included` gains `template: true` and the brief lists it apart
-  (`brief.steeringTemplates`, "Still templates — nothing binding yet"), never under "Read before coding" (`brief.steeringRead`).
-  Its own predicate — never doctor's `steeringPlaceholders` (a placeholder left): a partly filled tech.md stays binding. Nothing
-  goes absent (the row stays; the result's `included` is the parent's). Known limits: a stub an older engine scaffolded (≤ 1.25:
-  another hash) or edited by one word reads as the team's text and stays binding; a project template whose text IS a built-in
-  stub reads as one (the predicate is the text). It hashes text the brief already read — no new read (10-guards.js pins the
-  same fs calls over stubs and over filled files). The SubagentStop gate and the brief's other parts do not read the list.
+- **The brief's steering.** "Read before coding" (`brief.steeringRead`) lists every `always` file `briefSteering()` includes —
+  the default ones (constitution / tech / structure and each active track's `trackSteeringFiles`) ONCE each (+saas and +obs both
+  name observability.md; 1.42 review 1) — a built-in stub verbatim too: a track's stub holds the team's defaults (security.md's
+  "parameterized queries only", distributed.md's outbox), so the brief never calls one "nothing binding" (UX-10, cut: History).
 - **The plan's approval at the task surfaces (1.42, UX-02).** `spec_next_task`, `spec_task_brief` and `spec_status {name}`
   (`tasks.…`) carry `planApproved: false` while the plan is not approved — `planApproved()` (tasks.js) reads phase `tasks` (a
   change's change.md) by TRUTHINESS, the pending-gates rule (`pendingGateList`; `approvalsInForce` strips only `tests`), so
@@ -1239,11 +1234,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (safe integers), the largest transcript 26.8 MB (none past 32 MB, p99 6.9 MB), and found the one shape the critic's corpus
   didn't name: Claude Code's own API-error line (`<synthetic>`, `isApiErrorMessage`, zero usage — every one so marked), last in 12
   dev-spec transcripts — counted, it would have added a turn and handed the engine a model it leaves out, so the reader skips it.
-- **1.42 —** UX-10 (DS-TASKS): the brief listed a fresh init's constitution / tech / structure stubs under "Read before coding",
-  their `[e.g., …]` rules read as binding. A file that is a built-in stub verbatim or headings only is listed apart and flagged
-  `template: true` in `steering.included` (the row kept: nothing absent). Doctor's "a placeholder left" was rejected as the
-  predicate (a partly filled tech.md would drop out). The constitution stub's text was NOT reworded this round (SK-P3 narrowed to
-  spec-critic's row): every project inited since 1.30 holds its current hash, and a new text would have made those binding again.
+- **1.42 —** UX-10 (DS-TASKS), built then CUT in review 1 (R1-TASKS-01, HIGH): the brief listed a file that was a built-in stub
+  verbatim or headings only apart — "Still templates — nothing binding yet" — instead of under "Read before coding". Its premise,
+  "a verbatim stub holds no project rule", was checked against the three core stubs only: the TRACK stubs hold concrete rules
+  (security.md: parameterized queries only; privacy.md: no personal data in logs; distributed.md: idempotent
+  consumers, the outbox; testing-standards.md: a failing test first; ui.md: WCAG 2.2 AA), the brief calls its lists binding, and
+  doctor reads the observability.md / cost.md stubs as `filled` — so a +sec implementer was told its secure-coding rules did not
+  apply, and one changed letter made the file binding again. Back to the parent's line (every file read before coding); the
+  review's older finding R1-TASKS-07 kept as one dedupe (observability.md, named by +saas and +obs, was listed twice).
 - **1.42 (the review loop's prose)** — built, prose only: S1 (the residues filed before the merge — the ledger went with
   `.execution/` and nothing read it, so parked, unconfirmed and pre-existing findings vanished at the merge); S4(a) (the
   task review gets the duplicate detector's file; the cap answered by the reviewer's own rule, never a "none" from a top-20);

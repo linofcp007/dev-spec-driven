@@ -209,13 +209,11 @@ function renderBrief(d, lang) {
   const constraints = d.globalConstraints || [];
   const scoped = d.steeringScoped || []; // fileMatch steering matching this task's files, quoted (front matter stripped)
   const manual = d.steeringManual || [];
-  const templates = d.steeringTemplates || []; // 1.42 (UX-10): steering files still templates — listed, never "read before coding"
-  if (constraints.length || d.steering.length || templates.length || manual.length) {
+  if (constraints.length || d.steering.length || manual.length) {
     push("", t.steering);
     if (constraints.length) push(t.constraintsIntro, ...constraints);
-    if (constraints.length && (d.steering.length || templates.length)) push("");
+    if (constraints.length && d.steering.length) push("");
     if (d.steering.length) push(t.steeringRead + " " + d.steering.map((p) => "`" + p + "`").join(", "));
-    if (templates.length) push(t.steeringTemplates + " " + templates.map((p) => "`" + p + "`").join(", "));
     const S = MSG[normalizeLang(lang)].scopedSteering;
     // Quoted as a blockquote: the file's own headings can't break the brief's outline.
     if (scoped.length) push("", S.scoped);
