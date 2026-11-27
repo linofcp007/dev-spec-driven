@@ -33,8 +33,8 @@
  * container —, so every test project's path is an ALIAS of its real one on a case-sensitive file system: the POSIX twin of
  * Windows' 8.3 temp (ADMINI~1) and of macOS's /var → /private/var, which no machine here runs. The Summary marks those rows.
  * A run of the DEFAULT images runs the last one (DEFAULT_IMAGES' newest) with it on, the others without (1.42, once the leg's
- * first run came back clean on the integrated branch); --alias-tmp turns it on for every image; an --image list is plain unless
- * --alias-tmp is given.
+ * first run — on node:22-bookworm-slim — came back clean on the integrated branch); --alias-tmp turns it on for every image; an
+ * --image list is plain unless --alias-tmp is given.
  *
  * Exit code: 0 every suite passed on every image · 1 a suite failed (or an image could not be prepared) ·
  * 2 Docker is not available (not installed, daemon not running, or in Windows-containers mode) — or a usage error.
@@ -173,6 +173,12 @@ function suiteCommand(suite, o) {
   if (o.mounted) return alias ? ["sh", "-c", `${alias}exec node ${run}`] : ["node", SUITES[suite], ...jobs];
   return ["sh", "-c", `${alias}mkdir -p /tmp/dev-spec && cd /repo && tar --exclude=./.git -cf - . | tar -C /tmp/dev-spec -xf - && cd /tmp/dev-spec && exec node ${run}`];
 }
+// What main() runs, one entry per image: whether its suites run with the alias temp (aliasFor) and each suite's container command —
+// the one place a suite's command is built (mcp/tests/16-conventions.js reads it offline).
+const rowsPlan = (o) => o.images.map((image) => {
+  const alias = aliasFor(image, o);
+  return { image, alias, commands: o.suites.map((suite) => ({ suite, args: suiteCommand(suite, { ...o, aliasTmp: alias }) })) };
+});
 
 let runs = 0;
 function runInImage(ref, args, o) {
@@ -199,7 +205,7 @@ function main() {
     `${o.aliasTmp ? " · TMPDIR /tmp/alias-tmp → /tmp/real-tmp (alias tmp)" : o.defaultImages ? ` · alias tmp on ${DEFAULT_IMAGES[DEFAULT_IMAGES.length - 1]}` : ""}\n`);
 
   const rows = [];
-  for (const image of o.images) {
+  for (const { image, alias, commands } of rowsPlan(o)) {
     console.log(`▸ ${image}`);
     const p = prepare(image, o);
     if (p.error) {
@@ -210,11 +216,10 @@ function main() {
     const probe = runInImage(p.ref, ["sh", "-c", "node --version; git --version 2>/dev/null || echo 'no git'"], o);
     const [nodeV, gitV] = String(probe.stdout || "").trim().split(/\r?\n/);
     console.log(`  ${p.ref} · node ${nodeV || "?"} · ${gitV || "?"}${p.note ? " · " + p.note : ""}`);
-    const io = { ...o, aliasTmp: aliasFor(image, o) };
-    const row = { image, ref: p.ref, node: nodeV || "?", alias: io.aliasTmp, results: [] };
-    for (const suite of o.suites) {
+    const row = { image, ref: p.ref, node: nodeV || "?", alias, results: [] };
+    for (const { suite, args } of commands) {
       const t0 = Date.now();
-      const r = runInImage(p.ref, suiteCommand(suite, io), o);
+      const r = runInImage(p.ref, args, o);
       const ms = Date.now() - t0;
       const out = (r.stdout || "") + (r.stderr || "");
       const log = path.join(LOG_DIR, `${derivedTag(image).split(":")[1]}-${suite}.log`);
@@ -252,4 +257,4 @@ function main() {
 
 // (required — mcp/tests/16-conventions.js reads the arguments and the container's command offline — it runs nothing)
 if (require.main === module) main();
-else module.exports = { parseArgs, suiteCommand, aliasFor, DEFAULT_IMAGES, ALIAS_TMP };
+else module.exports = { parseArgs, suiteCommand, aliasFor, rowsPlan, DEFAULT_IMAGES, ALIAS_TMP };
