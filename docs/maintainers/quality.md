@@ -2162,8 +2162,10 @@ view needs (the detail points there), tooling-reference.md's id.
   folder target itself, case-folded where the file system folds case); an Applies-to FOLDER matches nothing without `/**`
   (the references say so — no folder rule of its own); a gone file is named (`gone`), never quoted; a list cell, and an
   annotated one (1.41.0 review 3: read as its path, the brief wrapped "`x.ts` (note)" in a span of its own — a stray backtick
-  — and nested the spans of "Svc (`a.ts`, `b.ts`)"), is quoted as written (`asWritten`: the renderer prints it without a
-  code span of its own around it; the gone check still reads the annotated cell's path) — and with no glob its Copy
+  — and nested the spans of "Svc (`a.ts`, `b.ts`)"), and one whose path reading still holds a backtick ("`x.ts`, the handler",
+  "`x.ts` the handler" — 1.42: the renderer's own condition, a backtick can't sit inside its one span), is quoted as written
+  (`asWritten`: the renderer prints it without a code span of its own around it; the gone check still reads the annotated
+  cell's path; doctor, exemplarGone and exemplarMany never read the new condition) — and with no glob its Copy
   folder is read off the cell as ONE path, so it may match no task (1.41.0 review 2: said, no matching of its own); at most
   `REF_BRIEF_ROWS` (6) rows within `REF_BRIEF_CHARS` (1,200), `omitted` counts the rest; rows but none for the task → the
   count line. `null` without a real row.
@@ -4100,6 +4102,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   in a span of its own — "`` `src/x.js` (… setup)` ``" a stray backtick, "`` `Service (`a.js`, `b.js`)` ``" nested spans
   (R3-B-2): such a cell is quoted as written (`asWritten`), judged by its path as before (the reviewer's q3.js / q2b.js: every
   doctor status the same on 9a16f5b6). The references name the annotated forms — `path (note)` / `path — note` — and say a
-  `,` / `;` note makes the cell a list (R3-B-3, prose). Left: a `,` note with no path-like word ("`x.ts`, the handler") is
-  neither a list nor annotated — never judged (no extension at its end), but the brief still wraps its path reading (a stray
-  backtick), as on 9a16f5b6; a rule for it would be one more predicate.
+  `,` / `;` note makes the cell a list (R3-B-3, prose).
+- **1.42 —** B142-08: a `,` note with no path-like word ("`x.ts`, the handler"), or a note after a blank ("`x.ts` the handler"),
+  is neither a list nor annotated — never judged (no extension at its end) —, and the brief wrapped its path reading in its own
+  span (a stray backtick; 1.41.0 left it: "a rule for it would be one more predicate"). It is quoted as written by the
+  renderer's condition alone (the reading holds a backtick) — no judging predicate, so doctor's answers are unchanged. A cell
+  with an even count of its own ("`x.ts` uses `helper`") rendered the same before; only its JSON `copy` / `asWritten` moved.
+  The test is the exact property (an asWritten line holds exactly the cell's own backticks, any other copy none), never "an even
+  count" (a cell with one tick of its own stays one).
