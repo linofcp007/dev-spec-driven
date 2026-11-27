@@ -307,7 +307,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   so `Agent` can't be taken away per case; the triggering cases keep `max_turns: 4` (a "max turns" run error after the
   Skill fired is harmless — evals/README.md). The review-seat cases (1.42, `--tag review-seat`: the task reviewer and the
   verifier on one seeded task) are checked offline in the same file — shape, the seeded premise on their overlay files, no
-  regex grader matching any of the case's inputs — and ONE of them is built (its package byte for byte §4's commands'
+  regex grader matching any of the case's inputs or the seat's own agent prompt (its output template is what a reply echoes
+  first; fix round 1) — and ONE of them is built (its package byte for byte §4's commands'
   output); a reply is graded on `last_message`, never the trace, which carries the seat's own reads of those inputs.
 - **Tests run on Windows AND Linux** (`npm run test:docker`): a `_Verify:_` a test writes must work under cmd.exe AND
   `/bin/sh` — quote it (`node -e "process.exit(0)"`; the bare `node -e process.exit(0)` is a sh syntax error that cmd.exe

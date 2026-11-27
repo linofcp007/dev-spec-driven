@@ -102,10 +102,13 @@ Phase 6, opt-in.
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
   runs the simplifier's, each verified before it costs a fix. **1.42:** the task review too — §4 writes `dupes --json` beside the
-  package, the reviewer keeps the runs in the package's files and says "none" only at `counts.existing` 0. A residue (a
-  `pre-existing (deferred)`, an `unconfirmed (NN)` the final review let ship, a `parked (real)`) is filed as ONE
-  `residue-<feature>` backlog entry and committed before `git switch` (Closing); a defect confirmed again at another place is
-  asked for as a class in the task's `_Implements:_` files (§7). The `review-seat` evals measure both seats (testing.md).
+  package, the reviewer keeps the runs in the package's files and says "none" only at `counts.existing` 0 with neither
+  `truncated` nor `partial`. A residue — a defect that exists at HEAD and ships (a `pre-existing (deferred)`, a refutation
+  the verifier found `real at HEAD`, a `parked (real)`, an `unconfirmed (NN)` or a class place the final review let ship) —
+  is filed once as ONE `residue-<feature>` backlog entry (Closing); the closing order is one in Closing and /spec-finish:
+  finish, the `execution` sign-off, the residues, a commit of what `git status --porcelain -- .specs` lists until it is
+  empty, the merge. A defect confirmed again at another place is asked for as a class in the task's `_Implements:_` files
+  (§7). The `review-seat` evals measure both seats (testing.md); no regex grader matches its seat's own agent prompt.
 - **Each agent prompt has a byte cap (1.42 S14)** — an agents/*.md is paid on every dispatch of its agent. mcp/tests/17-docs.js
   `AGENT_CAPS` holds one cap per file and fails when an agents/*.md has none (a new agent), a cap names a file that is gone, or
   a file is past its cap — its bytes as shipped (LF), never characters (an em dash costs three). The caps: reviewer 27,800 ·
@@ -1272,6 +1275,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   eval weighs a prompt's size against its review quality, so the 2 % is the agreed slack, not a target. Cut: moving converge
   and prune into an agent of their own (a 7th agent changes the pinned agent count, AGENTS.md, `rules agents` and the plugin
   listing — a new mechanism for a LOW).
+- **1.42 fix round 1 (FX-PROMPTS)** — the two closing texts gave opposite orders (Closing: residues, commit, then the
+  sign-off; /spec-finish: the sign-off, then residues and commit), and both committed two named files, while the sign-off and
+  finish's drift baseline rewrite the feature's `.state.json` and the roadmap files after any earlier commit — `git switch`
+  refused, and git's own message offers to park the change. ONE order now, with the commit as a property of the tree (what
+  `git status --porcelain -- .specs` lists, until empty; a git-ignored `.specs/` lists nothing), and no recovery verb named.
+  The residue set is a property too (a defect that exists at HEAD and ships): a verifier refutation real at HEAD (its own
+  `Exists at HEAD` line) had been dropped while the reviewer's unverified label for the same fact was filed; a class place the
+  final review lets ship, and the final review's and `/spec-review branch`'s own pre-existing / 50–79 lines, join it; filed
+  once (the engine dedupes a backlog note only on its exact text). Prose rows: a capped zero (`truncated` / `partial`) is no
+  "none"; S15 exempts an AC that IS the check's result; SK-P2's "repeat" is within the feature; the review seats' no-echo
+  property reads each seat's own agent prompt (the pre-existing grader matched the verifier's verdict list).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
