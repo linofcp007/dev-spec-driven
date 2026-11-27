@@ -9,11 +9,11 @@
 const path = require("path");
 const i18n = require("../../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let blankFacts, clarificationMarkers, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit, isWsUnit, leftoverExtras, markRange,
-  mdBody, mdHeadings, mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines,
+let appendSpecText, blankFacts, clarificationMarkers, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit, isWsUnit, leftoverExtras,
+  markRange, mdBody, mdHeadings, mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines,
   titleFromStory, unusedLines, planPaths;
-function __link(E) { ({ blankFacts, clarificationMarkers, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit, isWsUnit,
-  leftoverExtras, markRange, mdBody, mdHeadings, mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd,
+function __link(E) { ({ appendSpecText, blankFacts, clarificationMarkers, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit,
+  isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings, mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd,
   stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths } = E); }
 
 // spec-kit: specs/<nnn-name>/ — spec.md (### User Story N - Title (Priority: P1) + numbered Given/When/Then
@@ -204,10 +204,14 @@ function parseSpecKit(dir, readSrc, W, src) {
     if (frs.length) model.warnings.push(W.wUncoveredFr(frs.join(", ")));
   }
   // the quickstart's open questions after the design the import writes; with none to write, after the scaffold's design.md, which is
-  // kept (importRun: scaffoldDesignAppend) — its template still refuses the design gate, and they stay counted once it is written
+  // kept (importRun: scaffoldDesignAppend) — its template still refuses the design gate, and they stay counted once it is written.
+  // Appended as every spec writer appends (appendSpecText): a plan.md or design document ending inside an open code block (a
+  // ```mermaid never closed) has it closed first — joined raw, the section was code to every reader and the gate counted none
   const open = model.quickstartOpen;
-  if (plan != null || docs) model.design = { text: [plan == null ? null : specKitPlanMarkers(plan), docs, open].filter((x) => x != null).join("\n\n"), file: "plan.md" };
-  else model.scaffoldDesignAppend = open;
+  if (plan != null || docs) {
+    const body = [plan == null ? null : specKitPlanMarkers(plan), docs].filter((x) => x != null).join("\n\n");
+    model.design = { text: open == null ? body : appendSpecText(body, open, { trim: true, join: "\n\n" }), file: "plan.md" };
+  } else model.scaffoldDesignAppend = open;
   if (plan == null) model.warnings.push(docs ? W.wNoPlanDocs("plan.md") : W.wNoDesign("plan.md"));
   // a task's [USn] tag → _Requirements:_ (that story's ACs, resolved by importSpec), the paths it names → _Implements:_
   if (tasks != null) model.tasks = { text: specKitTaskMarkers(tasks), file: "tasks.md" };
