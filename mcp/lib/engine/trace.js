@@ -1634,7 +1634,7 @@ function matrixCsv(matrices, lang, opts = {}) {
 const RTM_ICON = { verified: "✅", implemented: "⚠", planned: "☐", untraced: "✗" };
 // A table cell: a '|' escaped, lines folded (mdCell), and an HTML comment opener neutralized — markdownToHtml drops
 // <!-- … --> first, so an opener in one cell and a closer in a later one would swallow the cells between them.
-const rtmCell = (s) => mdCell(s).replace(/<!--/g, "&lt;!--");
+const rtmCell = (s) => mdCell(s).replace(/<!-{2}/g, "&lt;!--");
 // The requirement's cell (the row's first text — only its ID before it, no backtick): an opener inside a code span stays as
 // written (commentInert's rule — "escape `<!--` in names" showed `&lt;!--` in the export's code).
 const rtmTextCell = (s) => inertOutsideCode(mdCell(s), false);

@@ -912,7 +912,7 @@ const RE_TASK_FENCE_OPEN = /^(\s*)(?:(?=(`{3,}))\2[^`]*|(?=(~{3,}))\3.*)$/;
 // its line (an HTML block) may run past the end of its list item's paragraph; one after text on the line is
 // inline and ends with the paragraph — never past the next task line. A "-->" inside fenced code or an inline
 // code span doesn't count as the closer that lets a comment open.
-const RE_PARA_BREAK = /^\s*$|^\s*(?:[-*+]|\d+[.)])(?:\s|$)|^\s{0,3}#{1,6}(?:\s|$)|^\s*(?:`{3,}|~{3,})|^\s*<!--/;
+const RE_PARA_BREAK = /^\s*$|^\s*(?:[-*+]|\d+[.)])(?:\s|$)|^\s{0,3}#{1,6}(?:\s|$)|^\s*(?:`{3,}|~{3,})|^\s*<!-{2}/;
 function scanTaskLines(tasksText) {
   const lines = String(tasksText || "").split("\n").map(dropTrailingCr);
   // Facts about the lines BELOW each line, so an unclosed marker is known the moment it opens (linear

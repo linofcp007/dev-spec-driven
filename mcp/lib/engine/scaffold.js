@@ -509,7 +509,7 @@ function sizeDesignText(text, tracks, size, lng) {
     const sec = (TRACK_SECTIONS[tr] || []).find((s) => headingMatches(lines[h], s.syn, true));
     if (!sec) continue;
     let end = k + 1 < heads.length ? heads[k + 1] : lines.length;
-    for (let i = h + 1; i < end; i++) if (/^<!--/.test(lines[i])) { end = i; break; } // the design's closing comment is no section's
+    for (let i = h + 1; i < end; i++) if (/^<!-{2}/.test(lines[i])) { end = i; break; } // the design's closing comment is no section's
     secs.push({ h, end, tr, name: sec.name });
   }
   const plan = new Map(MARKER_TRACKS.filter((t) => tracks.includes(t)).map((t) => [t, sizedTrackSections(t, tracks, size)]));
@@ -680,7 +680,7 @@ function bugCreateInput(opts, M) {
     if (k === "condition" || k === "behaviour") {
       let s = v.replace(/\s+/g, " ").trim();
       if (s.length > BUG_LINE_MAX) return { error: M.bugPrefill.oneLine(bugInputName(k, opts), BUG_LINE_MAX) };
-      s = (k === "condition" ? s.replace(RE_BUG_IF_LEAD, "").replace(RE_BUG_THEN_TAIL, "") : s.replace(RE_BUG_SHALL_LEAD, "")).replace(/<!--/g, "&lt;!--").trim();
+      s = (k === "condition" ? s.replace(RE_BUG_IF_LEAD, "").replace(RE_BUG_THEN_TAIL, "") : s.replace(RE_BUG_SHALL_LEAD, "")).replace(/<!-{2}/g, "&lt;!--").trim();
       if (s) texts[k] = s;
     } else {
       if (v.length > BUG_TEXT_MAX) return { error: M.decisions.tooLong(bugInputName(k, opts), BUG_TEXT_MAX) };
@@ -1102,7 +1102,7 @@ function backlogNoteInto(dir, created, items, lng) {
   const abs = path.join(dir, file);
   const text = readIfExists(abs);
   if (text == null) return null;
-  const inert = (s) => flatText(s).replace(/<!--/g, "&lt;!--").replace(/--!?>/g, "--&gt;");
+  const inert = (s) => flatText(s).replace(/<!-{2}/g, "&lt;!--").replace(/--!?>/g, "--&gt;");
   const nl = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = notes.map((b) => "<!-- " + inert(i18n.msg(lng).featureOps.fromBacklog(b.name, b.note)) + " -->").join(nl);
   const title = /^#[ \t][^\r\n]*/m.exec(text);
@@ -1504,7 +1504,7 @@ function restoreCoveredSections(dir, gone, after, lng, vars) {
     const h = sec ? lines.findIndex((l) => /^## /.test(l) && l.includes(TRACK_MARKER[tr]) && headingMatches(l, sec.syn, true)) : -1;
     if (h === -1) continue;
     let end = h + 1;
-    while (end < lines.length && !/^## /.test(lines[end]) && !/^<!--/.test(lines[end])) end++;
+    while (end < lines.length && !/^## /.test(lines[end]) && !/^<!-{2}/.test(lines[end])) end++;
     blocks.push(lines.slice(h, end).join("\n").trimEnd());
     names.push(lines[h].replace(/^##\s+/, "").trim());
   }

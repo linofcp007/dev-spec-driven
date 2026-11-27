@@ -298,7 +298,7 @@ function trimBlanksEnd(l) {
 // markers).
 function safeSpecText(s, lesson) {
   const st = { fence: null };
-  const out = String(s).replace(/\r\n?/g, "\n").replace(/<!--/g, "&lt;!--").split("\n").map(trimBlanksEnd).map((l) => {
+  const out = String(s).replace(/\r\n?/g, "\n").replace(/<!-{2}/g, "&lt;!--").split("\n").map(trimBlanksEnd).map((l) => {
     if (fenceStep(st, l)) return l;
     if (/^\s{0,3}#{1,6}(?:\s|$)/.test(l)) return l.replace("#", "\\#");
     if (decisionMarker(l) || outcomeMarker(l)) return l.replace("_", "\\_");
@@ -344,7 +344,7 @@ function decisionInput(input, D) {
   };
   const title = str("title", DECISION_TITLE_MAX * 4, true, D.titleRequired);
   if (title.error) return title;
-  const t1 = title.value.replace(/\s+/g, " ").trim().replace(/<!--/g, "&lt;!--");
+  const t1 = title.value.replace(/\s+/g, " ").trim().replace(/<!-{2}/g, "&lt;!--");
   if (t1.length > DECISION_TITLE_MAX) return { error: D.tooLong("title", DECISION_TITLE_MAX) };
   const decision = str("decision", DECISION_TEXT_MAX, true, D.decisionRequired);
   if (decision.error) return decision;
@@ -748,7 +748,7 @@ function adrFileName(n, title) {
   const s = slugify(mdPlainText(title)).slice(0, ADR_SLUG_MAX).replace(/-+$/, "");
   return adrNumber(n) + "-" + (s || "decision") + ".md";
 }
-const adrInert = (s) => String(s == null ? "" : s).replace(/<!--/g, "&lt;!--");
+const adrInert = (s) => String(s == null ? "" : s).replace(/<!-{2}/g, "&lt;!--");
 // A link label: [ and ] escaped — outside code spans (backtickRuns, read left to right), a backslash escape already there kept
 // whole, a trailing lone backslash doubled (it would escape the closing bracket).
 function adrLabel(s) {

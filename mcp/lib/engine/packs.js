@@ -75,7 +75,7 @@ function packTextOk(s, max) {
 function packGuidanceOk(s) {
   if (typeof s !== "string") return false;
   const t = s.trim();
-  return t.length >= 1 && t.length <= PACK_LIMITS.guidanceLen && !/[\u0000-\u001f\u007f]/.test(t) && !/<!--|-->/.test(t) && !/^(?:#|```|~~~)/.test(t);
+  return t.length >= 1 && t.length <= PACK_LIMITS.guidanceLen && !/[\u0000-\u001f\u007f]/.test(t) && !/<!-{2}|-{2}>/.test(t) && !/^(?:#|```|~~~)/.test(t);
 }
 // JSON with `//` line and `/* */` block comments (the commented example `init` writes) → the JSON text with every comment blanked
 // (line breaks kept, so JSON.parse positions still point at the right line), or null for a block comment that never closes. One
