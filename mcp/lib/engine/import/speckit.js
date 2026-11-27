@@ -9,12 +9,12 @@
 const path = require("path");
 const i18n = require("../../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let blankFacts, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings,
-  mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines,
-  planPaths;
-function __link(E) { ({ blankFacts, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit, isWsUnit, leftoverExtras, markRange,
+let blankFacts, clarificationMarkers, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit, isWsUnit, leftoverExtras, markRange,
   mdBody, mdHeadings, mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines,
-  titleFromStory, unusedLines, planPaths } = E); }
+  titleFromStory, unusedLines, planPaths;
+function __link(E) { ({ blankFacts, clarificationMarkers, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit, isWsUnit,
+  leftoverExtras, markRange, mdBody, mdHeadings, mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd,
+  stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths } = E); }
 
 // spec-kit: specs/<nnn-name>/ — spec.md (### User Story N - Title (Priority: P1) + numbered Given/When/Then
 // Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
@@ -72,8 +72,18 @@ function specKitStoryHeading(text) {
 }
 // What the parser reads in a feature folder — every other entry is named as left in place (specKitLeft).
 const SPECKIT_KNOWN = ["spec.md", "plan.md", "tasks.md", "research.md", "data-model.md", "quickstart.md", "contracts"];
-function parseSpecKit(dir, read, W, src) {
+// A story number a source text names — US-n, US<n>, [USn], US-n.AC-m, US<n>/AC<m>, any case, extractAcIds' left boundary
+const RE_US_CITE = /(?<![A-Za-z0-9])US-?(\d+)/gi;
+function parseSpecKit(dir, readSrc, W, src) {
   const got = new Set(); // the SPECKIT_KNOWN names the parser's reads reached (a case twin's on a case-insensitive file system)
+  // every text read is scanned for the story numbers it names: the synthetic FR story is numbered past the highest (importRun) —
+  // keyed on the inputs, so no reference the source wrote (a stale US-2.AC-1, a namesake in a note) reaches its criteria
+  let cited = 0;
+  const read = (file) => {
+    const t = readSrc(file);
+    if (t != null) for (const m of t.matchAll(RE_US_CITE)) { const v = +m[1]; if (v > cited) cited = v; }
+    return t;
+  };
   const rd = (name) => { const t = read(path.join(dir, name)); if (t != null) got.add(name); return t; };
   const spec = rd("spec.md");
   const plan = rd("plan.md");
@@ -92,6 +102,13 @@ function parseSpecKit(dir, read, W, src) {
     const from = e >= 2 ? t.lastIndexOf(")", e - 2) + 1 : 0;
     return (t.slice(0, from) + t.slice(from).replace(/(?<!\s)\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i, "")).trim();
   };
+  // research.md, data-model.md and contracts/ are design — each under its own heading after plan.md (they were skipped with a
+  // warning: "not imported"); quickstart.md is the feature's quickstart.md (model.quickstart), each of its open questions one
+  // design.md line. Read through `read` like every source file: inside the project, a file over the import cap refuses the import.
+  // Read before the spec's stories are numbered: every number the source names is known then (cited).
+  const docs = specKitDesignDocs(dir, read, rd, W, model, src, got);
+  model.skipped.push(...specKitLeft(dir, src, got));
+  model.citedStory = cited;
   if (spec != null) {
     const lines = stripHtmlComments(spec).split(/\r?\n/);
     const hs = mdHeadings(lines);
@@ -164,15 +181,20 @@ function parseSpecKit(dir, read, W, src) {
     // FR's own text, and a second FR-003 line would read "covered" by the first one's criterion)
     const scen = frScenarios(model.stories.flatMap((s) => s.criteria.map((c) => c.raw)));
     const fx = model.extra.find((x) => x.key === "functional");
-    const frCriteria = fx ? specKitFrCriteria(fx, scen) : [];
+    // the synthetic story's number (importRun) is past every story's — printed or by position — and every cited one: when that is
+    // no safe integer (a hostile US-<20 digits>), there is no number to write — the FRs stay prose, named as on the parent
+    let ceil = Math.max(cited, model.stories.length);
+    for (const s of model.stories) if (s.printed > ceil) ceil = s.printed;
+    const frCriteria = fx && Number.isSafeInteger(ceil + 1) ? specKitFrCriteria(fx, scen) : [];
     if (fx && !tidyLines(fx.lines).length) model.extra.splice(model.extra.indexOf(fx), 1); // every line of it became a criterion
     // FR-n → the keys of the criteria that hold it (importRun's frRefs: a task citing FR-n covers them): a converted FR its own
-    // criterion, a cited one each criterion whose scenario cites it (citesFr's reading)
+    // criterion, a cited one each criterion whose scenario cites it (citesFr's reading). A Set per FR: 40,000 scenarios citing one
+    // FR made a list's includes() 800 M compares (R1-IMP-4).
     model.frKeys = new Map();
-    const holds = (fr, key) => { if (!model.frKeys.has(fr)) model.frKeys.set(fr, []); if (!model.frKeys.get(fr).includes(key)) model.frKeys.get(fr).push(key); };
+    const holds = (fr, key) => { let keys = model.frKeys.get(fr); if (!keys) model.frKeys.set(fr, (keys = new Set())); keys.add(key); };
     for (const s of model.stories) for (const c of s.criteria) for (const fr of String(c.raw).match(RE_FR_ID) || []) holds(fr, c.key);
     for (const c of frCriteria) holds(c.key, c.key);
-    // one story of its own, last, reachable by no number the source wrote (importRun: storyNo, refs)
+    // one story of its own, last, reachable by no number the source wrote (importRun numbers it past `cited`)
     if (frCriteria.length) model.stories.push({ synthetic: true, printed: null, key: "Functional Requirements", title: null, priority: null, prose: [], quote: [], after: [], criteria: frCriteria });
     if (!model.stories.length) model.warnings.push(W.wNoRequirements("spec.md"));
     for (const x of [...model.extra, ...model.carried]) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
@@ -181,12 +203,11 @@ function parseSpecKit(dir, read, W, src) {
     const frs = uncoveredFrs(fx ? fx.lines : [], scen);
     if (frs.length) model.warnings.push(W.wUncoveredFr(frs.join(", ")));
   }
-  // research.md, data-model.md and contracts/ are design — each under its own heading after plan.md (they were skipped with a
-  // warning: "not imported"); quickstart.md is the feature's quickstart.md (model.quickstart). Read through `read` like every
-  // source file: inside the project, a file over the import cap refuses the import.
-  const docs = specKitDesignDocs(dir, read, rd, W, model, src, got);
-  model.skipped.push(...specKitLeft(dir, src, got));
-  if (plan != null || docs) model.design = { text: [plan == null ? null : specKitPlanMarkers(plan), docs].filter((x) => x != null).join("\n\n"), file: "plan.md" };
+  // the quickstart's open questions after the design the import writes; with none to write, after the scaffold's design.md, which is
+  // kept (importRun: scaffoldDesignAppend) — its template still refuses the design gate, and they stay counted once it is written
+  const open = model.quickstartOpen;
+  if (plan != null || docs) model.design = { text: [plan == null ? null : specKitPlanMarkers(plan), docs, open].filter((x) => x != null).join("\n\n"), file: "plan.md" };
+  else model.scaffoldDesignAppend = open;
   if (plan == null) model.warnings.push(docs ? W.wNoPlanDocs("plan.md") : W.wNoDesign("plan.md"));
   // a task's [USn] tag → _Requirements:_ (that story's ACs, resolved by importSpec), the paths it names → _Implements:_
   if (tasks != null) model.tasks = { text: specKitTaskMarkers(tasks), file: "tasks.md" };
@@ -352,13 +373,15 @@ function specKitTaskMarkers(text) {
 }
 // spec-kit's /plan marks an unknown of its Technical Context bare — `**Testing**: NEEDS CLARIFICATION` ("mark unknowns as NEEDS
 // CLARIFICATION"; its own gate errors on any left) — and the engine counts only `[NEEDS CLARIFICATION…]` (clarificationMarkers): the
-// design gate let them through. A `**Field**:` / `**Field:**` (a list item's too) whose value OPENS with it, then nothing or a
-// `:` / `-` / `–` / `—` and a tail, gets `[NEEDS CLARIFICATION: Field]`, the tail kept verbatim after it (inside the brackets a tail
-// past the reader's 500 characters was no marker any more). Only on a line that is content as the counter reads it — no fenced
-// or indented code (codeBlockLines), no part in a comment (commentLines); prose after it ("NEEDS CLARIFICATION markers are
-// resolved …") and the template's `[e.g., … or NEEDS CLARIFICATION]` stay. A field Phase 0 resolved in research.md while plan.md
-// still says NEEDS CLARIFICATION reads open: fail closed (one line to edit).
+// design gate let them through. A `**Field**:` / `**Field:**` (a list item's too) whose value OPENS with it, then anything but a
+// letter or a digit after the blanks (nothing, `:`, `-`, `—`, `.`, `(p95 not agreed)`, `, maybe`, `?`, `;`, `/TBD` — /plan writes
+// them all), gets `[NEEDS CLARIFICATION: Field]`, the tail kept verbatim after it (inside the brackets a tail past the reader's 500
+// characters was no marker any more). Only on a line that is content as the counter reads it — no fenced or indented code
+// (codeBlockLines), no part in a comment (commentLines); prose after it — a letter or digit follows: "NEEDS CLARIFICATION markers
+// are resolved …" — and the template's `[e.g., … or NEEDS CLARIFICATION]` stay. A field Phase 0 resolved in research.md while
+// plan.md still says NEEDS CLARIFICATION reads open: fail closed (one line to edit).
 const RE_PLAN_FIELD = /^([ \t]*(?:[-*+][ \t]+)?\*\*([^*\]\n]{1,80}?)(?:\*\*[ \t]*:|:\*\*)[ \t]*)NEEDS[ _-]CLARIFICATION/i;
+const RE_PLAN_PROSE = /^[\p{L}\p{N}]/u; // what follows the blanks when the words go on as prose
 function specKitPlanMarkers(text) {
   const lines = String(text).split("\n");
   const code = codeBlockLines(lines), cl = commentLines(lines);
@@ -369,7 +392,7 @@ function specKitPlanMarkers(text) {
     const rest = l.slice(m[0].length);
     let q = 0;
     while (q < rest.length && isWsUnit(rest[q])) q++;
-    if (q < rest.length && !":-–—".includes(rest[q])) return l;
+    if (RE_PLAN_PROSE.test(rest.slice(q, q + 2))) return l; // (two units: a letter past U+FFFF is a surrogate pair)
     changed = true;
     return m[1] + "[NEEDS CLARIFICATION: " + m[2].trim() + "]" + rest;
   });
@@ -434,6 +457,12 @@ function specKitDesignDocs(dir, read, rd, W, model, src, got) {
   // one holding only its title ("") leaves the scaffold's
   const q = rd("quickstart.md");
   model.quickstart = q == null ? null : demoteMd(q, 0).trim();
+  // ...whose open questions stay gated: no gate reads quickstart.md (the design gate counted them while it was a design.md section),
+  // so each [NEEDS CLARIFICATION] the counter reads in the SOURCE (clarificationMarkers — one in its title too, which ours replaces)
+  // is also one design.md line, under a heading naming the file — resolved in both. model.quickstartOpen: that section | null
+  // (parseSpecKit places it)
+  const open = q ? clarificationMarkers(q) : [];
+  model.quickstartOpen = open.length ? "## " + D.open + "\n\n" + W.skFrom("quickstart.md") + "\n\n" + open.map((t) => "- [NEEDS CLARIFICATION" + (t ? ": " + t : "") + "]").join("\n") : null;
   if (skipped.length) model.skipped.push(...skipped);
   return parts.length ? parts.join("\n\n") : null;
 }

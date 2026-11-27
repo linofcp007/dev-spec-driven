@@ -476,10 +476,11 @@ function importRun(projectDir, tool, source, opts) {
   const mapping = {};
 
   // Stories keep their printed numbers when those are unique (spec-kit's [USn] task tags point at them). A synthetic story (spec-kit's
-  // FR criteria — speckit.js) has none: it comes after them, the next number (by a loop: a spread of 100,000 numbers throws).
+  // FR criteria — speckit.js) has none: it comes after them, numbered past every story's number and every one the source names
+  // (model.citedStory — speckit.js scans each text it reads; a loop: a spread of 100,000 numbers throws).
   const printed = model.stories.filter((s) => !s.synthetic).map((s) => s.printed);
   const keepNumbers = printed.every((p) => Number.isInteger(p) && p > 0) && new Set(printed).size === printed.length;
-  let synthN = null; // the synthetic story's number — no reference the source wrote reaches it (refs, storyNo)
+  let synthN = null; // the synthetic story's number — no reference the source wrote names it (a stale US-<n>.AC-1 stays stale)
   const acOf = new Map(); // story number → its AC IDs
   const critMap = new Map(); // source criterion key → new AC ID
   const notEars = [];
@@ -490,7 +491,8 @@ function importRun(projectDir, tool, source, opts) {
   // fence it leaves open (inertBlock) — it swallowed every criterion after it.
   const req = [L.featureTitle(name), "", note, "", L.summary, model.summary ? commentInert(model.summary) : L.summaryPlaceholder, "", L.stories];
   model.stories.forEach((s, idx) => {
-    const n = !s.synthetic ? (keepNumbers ? s.printed : idx + 1) : (synthN = keepNumbers ? printed.reduce((a, p) => (p > a ? p : a), 0) + 1 : idx + 1);
+    const n = !s.synthetic ? (keepNumbers ? s.printed : idx + 1)
+      : (synthN = Math.max(keepNumbers ? printed.reduce((a, p) => (p > a ? p : a), 0) : idx, model.citedStory || 0) + 1);
     mapping[s.key] = "US-" + n;
     const title = s.synthetic ? L.functional.replace(/^#+\s*/, "") : s.title;
     req.push("", L.story(n, s.priority, title == null ? title : commentInert(title)));
@@ -520,7 +522,7 @@ function importRun(projectDir, tool, source, opts) {
   // it), after the identity mapping: an FR a carried line also names (Clarifications) keeps its AC
   const frRefs = new Map();
   for (const [fr, keys] of model.frKeys || []) {
-    const ids = keys.map((k) => critMap.get(k)).filter(Boolean);
+    const ids = Array.from(keys, (k) => critMap.get(k)).filter(Boolean); // (a Set per FR — speckit.js)
     if (ids.length) { frRefs.set(fr, ids); mapping[fr] = ids.join(", "); }
   }
   const syn = model.stories.find((s) => s.synthetic);
@@ -575,6 +577,11 @@ function importRun(projectDir, tool, source, opts) {
     // The blocks follow the body as every spec writer appends (appendSpecText): a design that ends inside an open code
     // block (a ```mermaid never closed) had the track sections written into it, and doctor read them all 'missing'.
     put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", blocks ? appendSpecText(body, blocks, { trim: true }) : body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
+  } else if (model.scaffoldDesignAppend && cr.created.includes("design.md")) {
+    // no design to import, the scaffold's design.md kept — text the gates must still see goes after it (spec-kit: its quickstart's
+    // open questions); the template's placeholders still refuse the design gate
+    const cur = readIfExists(path.join(cr.dir, "design.md"));
+    if (cur != null) put("design.md", appendSpecText(cur, model.scaffoldDesignAppend + "\n"));
   }
   // spec-kit's quickstart.md replaces the scaffold's (a project template's too, as requirements / design / tasks are replaced): its
   // title is the scaffold's own first line, then the note and the source's text as written
@@ -593,12 +600,13 @@ function importRun(projectDir, tool, source, opts) {
     // _Requirements:_ references → new AC IDs: a criterion ("1.1"), a whole requirement/story ("2", "Requirement 2",
     // "US2") or an ID that is already dev-spec's. Anything else is kept as written and reported.
     const storyNo = (s) => { const idx = model.stories.findIndex((x) => x.printed === s); return idx === -1 ? null : keepNumbers ? s : idx + 1; };
-    // An AC ID passes through — but never one of the synthetic story's (a stale US-<n>.AC-1 for a story the source deleted would
-    // cover an FR criterion silently); FR-n is no stable ID (trace ignores it, spec_append_tasks refuses it): only one an imported
-    // criterion holds (frRefs), else it is reported, kept as written
+    // An AC ID passes through as written — one naming no imported criterion (a stale US-2.AC-1 for a story the source deleted) is
+    // trace's phantom, and the tasks gate refuses it ("unknown ACs (typos?)"). It never names the synthetic FR story: that one is
+    // numbered past every story number the source names. FR-n is no stable ID (trace ignores it, spec_append_tasks refuses it): only
+    // one an imported criterion holds (frRefs), else it is reported, kept as written
     const refs = (ref) => {
       const ac = /^US-(\d+)\.AC-\d+$/.exec(ref);
-      if (ac) return synthN != null && +ac[1] === synthN ? null : [ref];
+      if (ac) return [ref];
       if (/^(?:SC|NFR|EC)-\d+$/.test(ref)) return [ref];
       if (/^FR-\d+$/.test(ref)) return frRefs.get(ref) || null;
       if (t === "kiro" && critMap.has(ref)) return [critMap.get(ref)];

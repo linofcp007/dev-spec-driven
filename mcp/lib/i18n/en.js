@@ -1993,7 +1993,7 @@ const msg = {
       wSkipped: (files) => `not imported (left in place): ${files}`,
       more: (n) => `+${n} more`, // wSkipped's names past the first 50
       // spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
-      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts" },
+      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", open: "Open questions in quickstart.md" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts) without the plan`,
       // spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers

@@ -1888,7 +1888,7 @@ const msg = {
       wRenamed: (from, to) => `requisito RENAMED '${from}' → '${to}' (importado con el nombre nuevo)`,
       wSkipped: (files) => `no importados (se quedan donde están): ${files}`,
       more: (n) => `+${n} más`,
-      skDocs: { research: "Investigación", dataModel: "Modelo de datos", contracts: "Contratos" },
+      skDocs: { research: "Investigación", dataModel: "Modelo de datos", contracts: "Contratos", open: "Preguntas abiertas de quickstart.md" },
       skFrom: (file) => `> De spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `no hay ${file} en el origen — design.md tiene los documentos de diseño encontrados a su lado (investigación, modelo de datos, contratos) sin el plan`,
       wUncoveredFr: (list) => `requisitos funcionales que ningún escenario de aceptación cubre — quedaron como texto en "Requisitos Funcionales", así que ninguna tarea ni prueba los traza: ${list}. Convierte cada uno en un criterio EARS con un ID de AC (o cítalo en uno) antes de aprobar los requisitos`,
