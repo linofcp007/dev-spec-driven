@@ -14,6 +14,8 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   };
   const put = (x, txt) => fs.writeFileSync(path.join(x.dir, "tasks.md"), txt);
   const tasksOf = (x) => fs.readFileSync(path.join(x.dir, "tasks.md"), "utf8");
+  // 1.42 (UX-02): these plans are not approved — `next` prints the plan's ⚠ line under the task it serves (the line pinned exactly)
+  const planLine = (x, lang = "en") => "  ⚠ " + SD.msg(lang).planGate.notApproved(x.slug, "tasks.md") + "\n";
 
   // next --waves: the next task, then the waves; --json is spec_next_task {waves}'s result; --waves=false prints none.
   const w = mk("waves");
@@ -24,7 +26,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   let njr = null;
   try { njr = JSON.parse(nj.out); } catch { /* not JSON */ }
   const nOff = runIn(["next", w.slug, "--waves=false", "--project", w.p]);
-  ok(n1.code === 0 && n1.out === "Next → #1 Schema  (4/4 left)\nWaves (3):\n  1. #1\n  2. #2 #3\n  3. #4\n" && njr && JSON.stringify(njr) === JSON.stringify(SD.nextTask(w.p, w.slug, { waves: true })) &&
+  ok(n1.code === 0 && n1.out === "Next → #1 Schema  (4/4 left)\n" + planLine(w) + "Waves (3):\n  1. #1\n  2. #2 #3\n  3. #4\n" && njr && JSON.stringify(njr) === JSON.stringify(SD.nextTask(w.p, w.slug, { waves: true })) &&
     JSON.stringify(njr.waves) === "[[1],[2,3],[4]]" && nOff.code === 0 && !/Waves/.test(nOff.out),
     "feature F3: next --waves prints the next task and the waves (#1 · #2 #3 · #4); --json is spec_next_task {waves}'s result; --waves=false prints no waves (got " + JSON.stringify([n1.out, nOff.out]) + ")");
 
@@ -34,7 +36,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   put(s, "# Tasks\n\n- [ ] 1. Late\n  - _Depends: 2_\n- [ ] 2. Early\n");
   const sn = runIn(["next", s.slug, "--project", s.p]);
   ok(dn.code === 0 && /^Task 4 done\. 1\/4 {2}next → #1 Schema\n {2}⚠ Task 4 was ticked while its dependencies #2, #3 are still open/.test(dn.out) && /^- \[x\] 4\./m.test(tasksOf(w)) &&
-    sn.code === 0 && sn.out === "Next → #2 Early  (2/2 left)\n  waiting: #1 waits on #2\n",
+    sn.code === 0 && sn.out === "Next → #2 Early  (2/2 left)\n" + planLine(s) + "  waiting: #1 waits on #2\n",
     "feature F3: done on a task whose _Depends:_ are open ticks it and warns (never refused); next passes over a waiting task and names what it waits on (got " + JSON.stringify([dn.out, sn.out]) + ")");
 
   // No open task can start: next / brief / done say so (never 'all done'); doctor fails task-deps (exit 1).
@@ -70,6 +72,6 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const pt = mk("pt", "pt");
   put(pt, "# Tarefas\n\n- [ ] 1. Base\n- [ ] 2. Topo\n  - _Depends: 1_\n- [ ] 3. Laço\n  - _Depends: 3_\n");
   const pn = runIn(["next", pt.slug, "--waves", "--project", pt.p]);
-  ok(pn.code === 0 && /^Próxima → #1 Base {2}\(faltam 3\/3\)\nOndas \(2\):\n {2}1\. #1\n {2}2\. #2\n {2}⚠ ciclo: #3\n {2}⚠ bloqueadas: #3 espera por #3\n$/.test(pn.out),
+  ok(pn.code === 0 && pn.out === "Próxima → #1 Base  (faltam 3/3)\n" + planLine(pt, "pt") + "Ondas (2):\n  1. #1\n  2. #2\n  ⚠ ciclo: #3\n  ⚠ bloqueadas: #3 espera por #3\n",
     "feature F3: next --waves in a PT feature — 'Ondas', the cycle and the blocked task in Portuguese (got " + JSON.stringify(pn.out) + ")");
 };

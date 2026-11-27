@@ -26,6 +26,7 @@
  *                            environment), cwd, input — instead of spawnSync(process.execPath, [cli/dev-spec.js, …args], o) (below)
  *   handRoadmap(projectDir)  a hand-written .specs/ROADMAP.md: the project's mutations skip the roadmap refresh — for a project
  *                            whose tests read nothing of its ROADMAP.md (below) → projectDir
+ *   planGateMismatches(under) next_task's planApproved against the pending-gates rule on every feature under `under` (below)
  *   child · abort(reason)    the server process · fail the run now (a private server that stops answering)
  *   require · __dirname · __filename   mcp/test.js's, so the test code reads paths from mcp/ — require("./lib/i18n.js"),
  *                            path.join(__dirname, "server.js") — whichever file of mcp/tests/ it lives in
@@ -155,6 +156,32 @@ function handRoadmap(projectDir) {
   fs.writeFileSync(path.join(projectDir, ".specs", "ROADMAP.md"), "# Roadmap\n\nHand-written (the tests' setup): never refreshed.\n");
   return projectDir;
 }
+// 1.42 (UX-02): spec_next_task's plan approval against the pending-gates rule, on every feature folder with a tasks file under
+// `under` (each project folder in it, and `under` itself: <project>/.specs/<feature>/) — the features a test file built, in whatever
+// state it left them. next_task's `planApproved` (absent = approved) must be "phase tasks is not pending" (gates.js pendingGateList),
+// and approvalsInForce must keep `tasks` as it is (it strips only `tests`). → { checked, dirs, mismatches: [{ dir, planApproved,
+// pending, inForce }] } (no assertion). 08-tasks-plan-approval.js runs it on its fixtures; 06-gates.js and 07-approvals.js on theirs.
+function planGateMismatches(under) {
+  const E = require("../lib/engine/index.js");
+  const out = { checked: 0, dirs: [], mismatches: [] };
+  const dirs = (d) => { try { return fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name); } catch { return []; } };
+  for (const p of [under, ...dirs(under).map((n) => path.join(under, n))]) {
+    for (const name of dirs(path.join(p, ".specs")).filter((n) => !/^[._]/.test(n))) {
+      const nt = S.nextTask(p, name);
+      if (!nt.ok) continue; // no tasks file, no feature of that name, a folder the read gate refuses
+      S.withReadCache(() => {
+        const dir = path.join(p, ".specs", name);
+        const st = S.readState(p, name), tracks = E.detectTracks(dir);
+        const pending = E.pendingGateList(dir, tracks, st.kind || "feature", st.approvals).includes("tasks");
+        const inForce = E.approvalsInForce(dir, tracks, st.approvals).tasks === (st.approvals || {}).tasks;
+        out.checked++;
+        out.dirs.push(dir);
+        if ((nt.planApproved !== false) === pending || !inForce) out.mismatches.push({ dir, planApproved: nt.planApproved !== false, pending, inForce });
+      });
+    }
+  }
+  return out;
+}
 
 let pass = 0,
   fail = 0;
@@ -272,7 +299,7 @@ async function setup(chain) {
   muted = false;
   const ctx = {
     ok, ...assertHelpers(ok), rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature, hookIn, cliIn,
-    handRoadmap,
+    handRoadmap, planGateMismatches,
     child, abort, init, list, ctDesc, ntvSentence,
     require: createRequire(MCP_TEST), __dirname: MCP_DIR, __filename: MCP_TEST,
   };

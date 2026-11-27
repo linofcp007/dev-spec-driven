@@ -1765,7 +1765,7 @@ const msg = {
       earsPlaceholder: (list) => `El criterio aún tiene placeholder(s) de la plantilla ${list} — escribe el disparador/comportamiento real.`,
       constitutionUnfilled: "la sección Verificación de la Constitución falta o está sin rellenar",
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
-      approveRefused: (phase, slug, ids, lines) => `No se puede aprobar '${phase}' de '${slug}' — verificaciones que fallan: ${ids}.\n${lines}\nCorrígelas (detalles: /spec-doctor ${slug}), o pasa force: true (CLI: --force) para registrar la aprobación igualmente — queda marcada como forzada.`,
+      approveRefused: (phase, slug, ids, lines) => `No se puede aprobar '${phase}' de '${slug}' — verificaciones que fallan: ${ids}.\n${lines}\nCorrígelas (detalles: /spec-doctor ${slug} · ${DEV_SPEC} doctor ${slug}). force: true (CLI: --force) solo cuando el usuario acepta explícitamente estas verificaciones que fallan — la aprobación queda registrada igualmente, marcada como forzada.`,
       approveNothing: (phase, slug, file) => `Nada que aprobar: '${phase}' no tiene artefacto en '${slug}' (${file} no existe, o su track está desactivado) — ni con force.`,
       approveUnreadable: (phase, slug, file) => `Nada que aprobar: ${file} en '${slug}' no se puede leer (una carpeta con ese nombre, sin permiso u otro programa que lo tiene abierto) — conviértelo en un fichero legible y luego aprueba '${phase}'.`,
       approveForced: (ids) => `Aprobado con force — las verificaciones que fallan quedan registradas con la aprobación: ${ids}.`,
@@ -1977,6 +1977,11 @@ const msg = {
       cliSkipped: (list) => `  en espera: ${list}`,
     },
 
+    planGate: {
+      notApproved: (slug, file) => `El plan (${file}) aún no está aprobado: esta tarea no es para implementar — muestra el plan al usuario y pídele su aprobación (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} indica el paso).`,
+      tickedEarly: (n, slug) => `La tarea ${n} se marcó antes de que el plan estuviera aprobado — muestra el plan al usuario y pídele su aprobación antes de la tarea siguiente (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} indica el paso).`,
+    },
+
     impact: {
       reopenTasks: "reopen se aplica a requirements, design, test-plan y eval-plan — un cambio en tasks.md se revisa y se vuelve a aprobar; no reabre nada.",
       changePhase: (phase, slug) => `'${slug}' es un cambio: sus criterios y sus tareas son un solo fichero, change.md, aprobado como el plan (fase tasks) — no hay fase ${phase}. spec_impact {name: "${slug}"} (fase tasks, la predeterminada) compara ambos: los criterios por ID, las tareas por número.`,
@@ -2109,7 +2114,7 @@ const msg = {
         phantomSecondary: "las tareas / el plan de pruebas citan IDs EC/NFR/SC desconocidos (¿erratas?)",
         untracedCriteria: "criterios con verbo modal pero sin ID propio (por línea) — ninguna tarea ni prueba puede trazarlos: numera cada uno US-<historia>.AC-<n>",
         inactiveAcs: "ACs bajo el encabezado de un track desactivado (o de un paquete de track que falta) — no se exigen ni se trazan: vuelve a activar el track, o sácalos de esa sección si son criterios del core",
-        justifiedTestGaps: "ACs que el plan de pruebas solo nombra en una nota (Lagunas / Fuera de Alcance), nunca en una fila de prueba — siguen sin cobertura: añade una fila, o aprueba el plan de pruebas con force para aceptar la laguna",
+        justifiedTestGaps: "ACs que el plan de pruebas solo nombra en una nota (Lagunas / Fuera de Alcance), nunca en una fila de prueba — siguen sin cobertura: añade una fila de prueba para cada uno (para cambiar o retirar el AC: /spec-change)",
         plannedNotInCode: "pruebas planificadas que ningún fichero de prueba nombra (pon el T-ID en el nombre de la prueba)",
         inCodeNotInPlan: "T-IDs en el código de prueba que ningún plan de pruebas incluye",
         unresolvedImplGlobs: "globs de _Implements:_ no resueltos del todo (el recorrido de ficheros se detuvo en su límite antes de una coincidencia — no cuentan como ausentes)",
@@ -3748,6 +3753,7 @@ const brief = {
     verification: "## Verificación (_Verify:_)",
     verifyRule: "Ejecuta cada comando _Verify:_ de arriba sobre el código final y pon en el informe el comando exacto, su exit code y las últimas líneas de la salida — el controlador los registra con spec_complete_task como evidencia de la tarea.",
     steeringRead: "Lee antes de programar:",
+    steeringTemplates: "Aún plantillas — nada vinculante por ahora:",
     unresolved: "## ⚠ Referencias sin resolver",
     unresolvedNote: "La tarea cita estos IDs pero la spec no los define. Responde NEEDS_CONTEXT en vez de adivinar.",
     dod: "## Definición de hecho",

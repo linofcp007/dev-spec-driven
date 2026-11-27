@@ -1850,7 +1850,8 @@ const msg = {
       earsPlaceholder: (list) => `Criterion still holds template placeholder(s) ${list} — write the real trigger/behavior.`,
       constitutionUnfilled: "the Constitution Check section is missing or not filled in",
       checkLine: (id, detail) => `  ✗ ${id}${detail ? " — " + detail : ""}`,
-      approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug}), or pass force: true (CLI: --force) to record the approval anyway — it stays flagged as forced.`,
+      // 1.42 (UX-04): force only on the user's explicit consent to these failing checks — the refusal offered it as an equal option
+      approveRefused: (phase, slug, ids, lines) => `Can't approve '${phase}' for '${slug}' — failing checks: ${ids}.\n${lines}\nFix them (details: /spec-doctor ${slug} · ${DEV_SPEC} doctor ${slug}). force: true (CLI: --force) only when the user explicitly accepts these failing checks — it records the approval anyway, flagged as forced.`,
       approveNothing: (phase, slug, file) => `Nothing to approve: '${phase}' has no artifact in '${slug}' (${file} is missing, or its track is off) — not even with force.`,
       approveUnreadable: (phase, slug, file) => `Nothing to approve: ${file} in '${slug}' can't be read (a folder of that name, no permission, or another program holding it) — make it a readable file, then approve '${phase}'.`, // r5 review
       approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
@@ -2085,6 +2086,14 @@ const msg = {
       cliSkipped: (list) => `  waiting: ${list}`,
     },
 
+    // 1.42 (UX-02): a task served or ticked while the plan (the tasks approval — a change's change.md) is not approved yet: the
+    // `planNote` of spec_next_task / spec_task_brief / spec_status (notApproved) and spec_complete_task (tickedEarly) — never a
+    // refusal, never a bugfix's investigation task (it writes only bug.md, which the earlier approvals sign off).
+    planGate: {
+      notApproved: (slug, file) => `The plan (${file}) is not approved yet: this task is not to be implemented — show the plan to the user and ask for its approval (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} names the step).`,
+      tickedEarly: (n, slug) => `Task ${n} was ticked before the plan was approved — show the plan to the user and ask for its approval before the next task (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} names the step).`,
+    },
+
     // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
     // IDs and file names stay English-stable.
     impact: {
@@ -2224,7 +2233,9 @@ const msg = {
         phantomSecondary: "tasks / test plan cite unknown EC/NFR/SC IDs (typos?)",
         untracedCriteria: "criteria with a modal verb but no ID of their own (by line) — no task or test can trace them: number each one US-<story>.AC-<n>",
         inactiveAcs: "ACs under the heading of a track that is off (or a missing track pack) — not required, not traced: add the track back, or move them out of that section if they are core criteria",
-        justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a row, or approve the test plan with force to accept the gap",
+        // 1.42 (B142-01): no force advice — a forced test-plan approval never clears the gap (doctor's traceability and finish still
+        // block on it), and naming force beside "uncovered" invited forcing
+        justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a test row for each (to change or remove the AC: /spec-change)",
         plannedNotInCode: "planned tests that no test file names (put the T-ID in the test name)",
         inCodeNotInPlan: "T-IDs in test code that no feature's test plan lists",
         unresolvedImplGlobs: "_Implements:_ globs not fully resolved (the file walk stopped at its cap before a match — not counted as missing)",
@@ -4020,6 +4031,7 @@ const brief = {
     verification: "## Verification (_Verify:_)",
     verifyRule: "Run every _Verify:_ command above on the final code and put the exact command, its exit code and the last lines of its output in the report — the controller records them with spec_complete_task as the task's evidence.",
     steeringRead: "Read before coding:",
+    steeringTemplates: "Still templates — nothing binding yet:", // 1.42 (UX-10): steering files that are a built-in stub verbatim or headings only
     unresolved: "## ⚠ Unresolved references",
     unresolvedNote: "The task cites these IDs but the spec doesn't define them. Report NEEDS_CONTEXT instead of guessing.",
     dod: "## Definition of done",

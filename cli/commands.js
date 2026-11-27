@@ -844,6 +844,7 @@ const COMMANDS = [
       return out(r, (r) => {
         log(T.statusHead(r.feature, r.tracks, T.phase(r.phase)));
         log(T.statusTasks(r.tasks.done, r.tasks.total, r.tasks.next ? "#" + r.tasks.next.number + " " + r.tasks.next.text : null));
+        if (r.tasks.planNote) log("  ⚠ " + r.tasks.planNote); // 1.42 (UX-02): a next task while the plan is not approved
         // ✓ only when FILLED (the doctor's rule): ◐ present but still a TODO/empty, ✗ missing — in the feature language.
         const fm = spec.msg(spec.featureLang(projectDir, r.feature));
         if (r.branch) log(fm.branch.statusLine(r.branch.name, r.branch.base, r.branch.commit ? r.branch.commit.slice(0, 7) : null, r.branch.current)); // 1.25
@@ -988,6 +989,7 @@ const COMMANDS = [
       return out(r, (r) => {
         // No task can start while some are open (a cycle, a _Depends:_ naming no task): say so — never "all done".
         log(r.next ? T.next(r.next.number, r.next.text, r.remaining, r.total) : r.remaining ? r.note : T.allDone);
+        if (r.planNote) log("  ⚠ " + r.planNote); // 1.42 (UX-02): the plan is not approved yet — the task served is not to be implemented
         if (r.next && r.skipped && r.skipped.length) log(D.cliSkipped(waits(r.skipped)));
         if (r.batch && r.batch.length > 1) log(T.batch(r.batch.map((b) => "#" + b.number + " [" + b.implements.join(", ") + "]").join("  ")));
         if (r.waves) {
@@ -1047,6 +1049,8 @@ const COMMANDS = [
           log(T.ledgerAt(r.paths.ledger));
         }
         if (r.unresolved.acs.length || r.unresolved.tests.length) err(T.unresolved([...r.unresolved.acs, ...r.unresolved.tests].join(", ")));
+        // 1.42 (UX-02): the plan is not approved yet — on stderr, like the unresolved references: stdout stays the brief
+        if (r.planNote) err("⚠ " + r.planNote);
       });
     },
   },
@@ -1093,6 +1097,7 @@ const COMMANDS = [
           log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : r.done < r.total ? "" : D.allDone));
           if (r.redRecorded) log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // _Expect: fail_
           if (r.note) log("  ⚠ " + r.note);
+          if (r.planNote) log("  ⚠ " + r.planNote); // 1.42 (UX-02): ticked before the plan's approval — its own line, never the note's
           metricRunLines(r, spec.msg(spec.featureLang(projectDir, r.feature)).metric, "").forEach((l) => log(l)); // 1.41: stored, never judged here
         });
       };

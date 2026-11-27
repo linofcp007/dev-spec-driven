@@ -118,7 +118,8 @@ matrix. The rules come first; how they came to be — the releases and review fi
 - **Coverage = a test ENTRY** (`testPlanEntries()` — `uncoveredByTests`, the matrix's `no-test`, the test-plan approval): a
   table row with a T-ID in its Test ID column (`RE_TEST_ID_HEADER`, else the first; pipe-less GFM tables too), a list item
   or a heading led by a T-ID (+ its body). An AC named only outside the entries (a Gaps / Out of Scope note) stays a gap —
-  accepting it is a forced approval — and the warning `justifiedTestGaps` (+tdd, `TRACE_WARNING_ORDER` after the secondary
+  a forced test-plan approval does not clear it: doctor's traceability still fails, finish blocks; the warning's label gives
+  no force advice (1.42) — and the warning `justifiedTestGaps` (+tdd, `TRACE_WARNING_ORDER` after the secondary
   kinds) lists it.
 - **Retired or not:** an AC a shipped feature retired (`_Supersedes:_`) needs a test entry like any other — the pruning pass
   never removes a criterion's last planned test (subagent-execution.md; History → Readers, 1.41.0).
@@ -337,6 +338,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   backlog. The 1.40 justified-gap path does not finish either: a forced, reasoned test-plan approval leaves doctor's
   traceability failing, so finish stays blocked (`doctor`). 05-markdown-trace pins the namesake, the reused id and the pruned
   retired AC refused as 1.40 refuses them; trace_check's output equals 1.40's on every replayed shape.
+- **1.42 —** B142-01: the `justifiedTestGaps` label said "or approve the test plan with force to accept the gap" — a forced
+  approval accepts nothing there (doctor's traceability fails, finish blocks), and naming force beside "uncovered" invited
+  it. The force clause went entirely (not reworded to say what force does): add a test row for each, `/spec-change` to change
+  or remove the AC. 05-markdown-readers pins the absence of a force word in this label's output only, in en / pt / pt-BR /
+  es, and doctor quoting it (the refused approval keeps force, under the user's consent — gates-and-approvals.md, UX-04).
 
 ### Requirements traceability matrix
 - **1.14 F5** — the matrix: `trace_check {matrix: true}`, `trace --matrix` / `--csv`, the export's section and `.rtm.csv`.

@@ -42,7 +42,8 @@ review findings — is in History at the end.
   the design gate refuses on them), but not while design.md is still a later phase's template (`c.laterFiles`).
 - **Approve gate.** `approvePhase()` refuses (`refused`, `failing`, `checks`) while a check fails; `force:true` (`--force`)
   records it `forced: true` + the failing ids (doctor's `approval-gates` and the roadmap flag it; a clean re-approval
-  replaces it). Before the gate: an invalid `.state.json` or unreadable `roadmap.json` refuses; a spike approves only
+  replaces it). The refusal (`gates.approveRefused`) names `/spec-doctor` and the CLI's doctor line, and force only under a
+  condition: when the user explicitly accepts these failing checks (1.42, UX-04 — never as an equal option). Before the gate: an invalid `.state.json` or unreadable `roadmap.json` refuses; a spike approves only
   `execution`, a change only `tasks` / `execution` (`sizes.noGate`).
 - **Approval stamps — which later rules an approval is held to.** `approvePhase()` stamps every design approval `weigh`,
   `reuse`, `reuseGate`, `designSystem` (1.35) and `silent` (1.41), and every design AND test-plan approval `critical` (1.33), on
@@ -569,6 +570,14 @@ here. "r5 review" is 1.23's fifth review.
   Silent Regressions). Finish gained three warnings and no blocker — W (dev-guardian's own findings below the gate, which
   1.40 only counted in "(N new below it)"), the METRIC warning and the lessons' —, in the order the finish batch asks them
   (CRIT_X D8.3: dev-guardian, W, metrics, lessons); the merge pinned it against the prose (12-lifecycle-lessons).
+- **1.42 —** UX-04: the refused approval read "Fix them (details: /spec-doctor …), or pass force: true … to record the approval
+  anyway" — force as an equal option, with no consent condition. It now names the CLI's doctor line too and gives force only
+  "when the user explicitly accepts these failing checks" (en / pt / es; pt-BR derived). Text only: every refusal's `code` /
+  `failing` / check lines are unchanged (06-gates-approve-refusals). Cut from the same chain (CRITIQUE-GATES): UX-02 B (a
+  template-task refusal — two downstream gates already stop a slot task, and its lowercased input disagreed with the
+  placeholder gate's lookup), UX-02 C (a stamp of the ticks no approval covered — 2 of 2 real stamps were the documented investigation ticks), SK-P1
+  (an open-checklist finish warning: 0 yield on 23 real checklists) and SK-P2's engine (0 within-feature pairs on 24 real
+  features — spec-critic's "contradict or repeat" instead).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

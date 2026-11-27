@@ -21,6 +21,35 @@ Phase 6, opt-in.
   characters, the rest named — `lessons` {quoted, omitted}; `decisions` never quotes a lesson: lifecycle.md → Decisions and
   spikes). `write: true` keeps `refs.examples` {quoted, gone, total} and `refs.lessons` {quoted, omitted} only.
   Labels: the i18n `BRIEF` table + `renderBrief()`. Its IDs come from `taskProse()`. The default task is `taskSchedule()`'s next.
+- **Steering still a template (1.42, UX-10).** An `always` / `fileMatch` file `briefSteering()` includes whose body is a
+  built-in stub verbatim (`isSteeringStub` — any language, the corpus's hashes of the CURRENT stubs) or nothing but headings
+  (`headingsOnly`) holds no project rule yet: its row in `steering.included` gains `template: true` and the brief lists it apart
+  (`brief.steeringTemplates`, "Still templates — nothing binding yet"), never under "Read before coding" (`brief.steeringRead`).
+  Its own predicate — never doctor's `steeringPlaceholders` (a placeholder left): a partly filled tech.md stays binding. Nothing
+  goes absent (the row stays; the result's `included` is the parent's). Known limits: a stub an older engine scaffolded (≤ 1.25:
+  another hash) or edited by one word reads as the team's text and stays binding; a project template whose text IS a built-in
+  stub reads as one (the predicate is the text). It hashes text the brief already read — no new read (10-guards.js pins the
+  same fs calls over stubs and over filled files). The SubagentStop gate and the brief's other parts do not read the list.
+- **The plan's approval at the task surfaces (1.42, UX-02).** `spec_next_task`, `spec_task_brief` and `spec_status {name}`
+  (`tasks.…`) carry `planApproved: false` while the plan is not approved — `planApproved()` (tasks.js) reads phase `tasks` (a
+  change's change.md) by TRUTHINESS, the pending-gates rule (`pendingGateList`; `approvalsInForce` strips only `tests`), so
+  next_task and next_action never disagree (the harness's `planGateMismatches` checks it on every fixture of
+  08-tasks-plan-approval, 06-gates and 07-approvals); a spike has no plan gate; a role sign-off still waiting writes no
+  `approvals.tasks`. When a task is SERVED (next's task, the briefed open task, status's next) the result gains `planNote`
+  (`planGate.notApproved` — "this task is not to be implemented: show the plan to the user and ask for its approval") — its own
+  key, never `note` (the evidence channel, pinned `undefined` on ticks by older tests); `spec_complete_task` that TICKS a task
+  gains `beforeApproval: true` and `planNote` (`planGate.tickedEarly`) — never on an `alreadyDone` re-check or a failed run.
+  Never a refusal (a tick records what happened). **The exemption:** a bugfix's investigation task (`bugInvestigationTask()` —
+  kind bugfix, its prose names `bug.md`, no `_Makes green:_` / `_Verify:_`: it runs nothing and writes only bug.md, which the
+  requirements / design approvals sign off) carries no `planNote` (`beforeApproval` stays a fact) — the four-task scaffold of
+  ≤ 1.23.0 ticks 1 and 2 before the tasks approval by design (references/bugfix.md says so; it is kept word for word). Its own
+  predicate: never `rootCauseTaskIndex`, `isBugStep` (the CURRENT short-form steps — its task 1 would lose the note) nor
+  `LEGACY_BUG_STEPS` (a name list); it only READS the block (features with identical tasks.md may share one scan's blocks —
+  DS-PERF's memo). The brief's markdown is unchanged (the controller decides the dispatch, not the subagent); the CLI prints
+  the note on a "  ⚠ " line (`next`, `status <f>`, `done`), `brief` on stderr (stdout stays the brief). An approved plan's results
+  are the parent's, byte for byte (the keys absent, not `true`). Known limit: an approved plan EDITED since its approval reads
+  approved, as pendingGateList reads it (next_action asks for the re-review). No new read: `planGateFields()` builds the fields
+  from the state the call already holds (08-tasks-plan-approval pins it and the equal fs calls of approved / unapproved twins).
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`, 6,000 characters since 1.38: a view task keeps +ui's filled state
   matrix — `[UI] UI States`, ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views — beside the other `[UI]` sections, all five up to 2 views;
   the brief ~≤ 10 KB) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
@@ -1190,6 +1219,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (2.0–2.2× the deduped); a tool_use per LINE (one content block a line); the largest transcript 26.8 MB (the hook's 32 MB
   bound). S9-b / S9-d built the engine part (recordAgentRun, agentCosts, the metrics lines); S9-c (the hook's reader and its
   SubagentStop entry, second in the list after the stop gate's) waits for B142-13's regular-file reads in the same file.
+- **1.42 —** UX-10 (DS-TASKS): the brief listed a fresh init's constitution / tech / structure stubs under "Read before coding",
+  their `[e.g., …]` rules read as binding. A file that is a built-in stub verbatim or headings only is listed apart and flagged
+  `template: true` in `steering.included` (the row kept: nothing absent). Doctor's "a placeholder left" was rejected as the
+  predicate (a partly filled tech.md would drop out). The constitution stub's text was NOT reworded this round (SK-P3 narrowed to
+  spec-critic's row): every project inited since 1.30 holds its current hash, and a new text would have made those binding again.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
@@ -1521,6 +1555,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   and 4 M characters (`lruPut`). The design's "a key over the bound is not inserted" was dropped in critique: a tasks.md over 4 M
   characters would re-scan once per caller where 32 kept it; the newest is kept instead. Tested as properties (a warm refresh 0, a
   tick 1, SessionStart ≤ one a feature), never "exactly 40".
+- **1.42 —** UX-02 A (DS-TASKS, HIGH): next_task, the brief, status and complete_task read no approval — an agent was served,
+  and ticked, the scaffold's template tasks before any plan existed. They now SAY it (planApproved / planNote / beforeApproval,
+  never a refusal: a tick records what happened). The critic's narrowings, each a finding against the first design: the bugfix
+  investigation exemption (dev-guardian's 73 real features held 4 ticks before a tasks approval, all the legacy investigation
+  steps references/bugfix.md tells the agent to tick); `planNote` its own key, never appended to `note` (six `note === undefined`
+  pins on unapproved ticks); a note only where a task is served or ticked (an imported all-done feature has none to name); the
+  pending-gates truthiness, not `isRecord` (one rule, one predicate); no "invalid state reads not approved" (stateFromFile keeps
+  a valid approval beside a malformed key). Cut: B (a template-task refusal — two downstream gates already stop a slot task) and
+  C (a stamp of the ticks no approval covered — its 2 real hits were the documented investigation ticks); gates-and-approvals.md → History →
+  Gates, 1.42. The CLI's exact `next` pins of 08-tasks-deps gained the plan line (still exact); 08-tasks.js's key pin lists the
+  two fields.
 
 ### End-of-turn evidence gate and scope guard
 - **1.14** — the end-of-turn gate (`stopCheck`, the Stop / SubagentStop hook, `dev-spec stop-check`) and the scope guard's `"scope"`
