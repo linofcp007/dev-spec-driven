@@ -285,6 +285,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const req2 = r2.ok ? rd(r2.dir, "requirements.md") : "";
     all("1.42 SK-03: a spec of FRs only imports them as US-1's criteria (no 'no requirements' warning); a PT modal kept, a PT text with none in English tokens, an empty one no EARS (got " + js([r2.warnings, req2.slice(req2.indexOf("### US-1"), req2.indexOf("### US-1") + 500)]) + ")", [
       () => r2.ok, () => r2.counts.stories === 1 && r2.counts.criteria === 3, () => /\n### US-1: Requisitos Funcionais\n/.test(req2),
+      () => !/\n## Requisitos Funcionais\n/.test(req2), // (its section, every line a criterion now, is dropped)
       () => /1\. \*\*US-1\.AC-1\*\* — O sistema DEVE guardar cada álbum \(FR-001\)\n/.test(req2), () => /2\. \*\*US-1\.AC-2\*\* — THE SYSTEM SHALL ensure that fotos ordenadas por data \(FR-002\)\n/.test(req2),
       () => /3\. \*\*US-1\.AC-3\*\* — \*\*FR-003\*\*: \[NEEDS CLARIFICATION: /.test(req2), () => !r2.warnings.some((w) => w === S.msg("pt").importSpec.wNoRequirements("spec.md")),
     ]);
@@ -293,25 +294,27 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     // prose — named in the parent's warning, the converted ones too (em dash, a dot after the bold id)
     const p3 = fresh("speckit-fr-ids");
     put(path.join(p3, "specs", "003-ids", "spec.md"), ["# Feature Specification: Ids", "", "### User Story 1 - Albums (Priority: P1)", "", "**Acceptance Scenarios**:", "",
-      "1. **Given** a user, **When** they create an album named Trip, **Then** the album is listed", "", "## Requirements", "", "### Functional Requirements", "",
+      "1. **Given** a user, **When** they create an album named Trip, **Then** the album is listed", "", "### User Story 3 - Share (Priority: P2)", "", "**Acceptance Scenarios**:", "",
+      "1. **Given** an album, **When** the owner shares it, **Then** the invitee views it", "", "## Requirements", "", "### Functional Requirements", "",
       "- **FR-001**: System MUST let users create albums", "- **FR-001a**: System MUST tag albums with colors", "- **FR-1.1**: System MUST cap uploads at 50 MB",
       "- **FR-1.2**: System MUST resize uploads", "- **FR-003**: System MUST export albums as zip", "- **FR-003**: System MUST export albums as tar",
       "- FR-006 — MUST keep originals", "- **FR-007**. Albums MUST sort by date", "- **FR-008** System MUST purge trash weekly", "- Note: FR-009 is TBD",
       "- **FR-010**: System MUST caption each photo with an LLM prompt", ""].join("\n"));
-    put(path.join(p3, "specs", "003-ids", "tasks.md"), "# Tasks: Ids\n\n- [ ] T001 Export\n  - _Requirements: US-2.AC-1_\n- [ ] T002 Sort\n  - _Requirements: FR-007_\n");
+    put(path.join(p3, "specs", "003-ids", "tasks.md"), "# Tasks: Ids\n\n- [ ] T001 Export\n  - _Requirements: US-4.AC-1_\n- [ ] T002 Sort\n  - _Requirements: FR-007_\n");
     const r3 = S.importSpec(p3, "spec-kit", "specs/003-ids", {});
     const req3 = r3.ok ? rd(r3.dir, "requirements.md") : "";
     const W3 = S.msg("en").importSpec;
-    all("1.42 SK-03: FR-001a / FR-1.1 / FR-1.2 are no definitions (prose, named as the parent named them: FR-001, FR-1), a second FR-003 line, a definition with no separator and a mention stay prose and are named; FR-003 (first), FR-006 (em dash), FR-007 ('**FR-007**.') convert; a stale US-2.AC-1 is reported, FR-007 resolves (got " +
+    all("1.42 SK-03: FR-001a / FR-1.1 / FR-1.2 are no definitions (prose, named as the parent named them: FR-001, FR-1), a second FR-003 line, a definition with no separator and a mention stay prose and are named; FR-003 (first), FR-006 (em dash), FR-007 ('**FR-007**.') convert; stories 1 and 3 make it US-4, a stale US-4.AC-1 is reported, FR-007 resolves (got " +
       js([r3.warnings, r3.mapping]) + ")", [
-      () => r3.ok, () => r3.warnings.includes(W3.wFrCriteria("US-2", "FR-003 → US-2.AC-1, FR-006 → US-2.AC-2, FR-007 → US-2.AC-3, FR-010 → US-2.AC-4")),
+      () => r3.ok, () => r3.warnings.includes(W3.wFrCriteria("US-4", "FR-003 → US-4.AC-1, FR-006 → US-4.AC-2, FR-007 → US-4.AC-3, FR-010 → US-4.AC-4")),
       () => r3.tracks.includes("ai"), // the classifier still reads the converted FRs (the parent read them as prose): an LLM one is +ai
       () => r3.warnings.includes(W3.wUncoveredFr("FR-001, FR-1, FR-003, FR-008, FR-009")), () => !/\(FR-1\)|\(FR-001\)|SHALL ensure that 1\*\*:/.test(req3),
       () => /\n- \*\*FR-003\*\*: System MUST export albums as tar\n/.test(req3) && !/\n- \*\*FR-003\*\*: System MUST export albums as zip\n/.test(req3),
       () => /\n- \*\*FR-001a\*\*: System MUST tag albums with colors\n- \*\*FR-1\.1\*\*: System MUST cap uploads at 50 MB\n/.test(req3),
-      () => /\*\*US-2\.AC-2\*\* — THE SYSTEM SHALL ensure that MUST keep originals \(FR-006\)/.test(req3), () => /\*\*US-2\.AC-3\*\* — THE SYSTEM SHALL ensure that albums MUST sort by date \(FR-007\)/.test(req3),
+      () => /\n### US-4: Functional Requirements\n/.test(req3) && /\n### US-3 \(P2\): Share\n/.test(req3),
+      () => /\*\*US-4\.AC-2\*\* — THE SYSTEM SHALL ensure that MUST keep originals \(FR-006\)/.test(req3), () => /\*\*US-4\.AC-3\*\* — THE SYSTEM SHALL ensure that albums MUST sort by date \(FR-007\)/.test(req3),
       () => /\n- \*\*FR-008\*\* System MUST purge trash weekly\n- Note: FR-009 is TBD\n/.test(req3),
-      () => r3.warnings.includes(W3.wUnknownRef(1, "US-2.AC-1")), () => r3.mapping["FR-007"] === "US-2.AC-3" && !r3.warnings.some((w) => /task 2:/.test(w)),
+      () => r3.warnings.includes(W3.wUnknownRef(1, "US-4.AC-1")), () => r3.mapping["FR-007"] === "US-4.AC-3" && !r3.warnings.some((w) => /task 2:/.test(w)),
     ]);
   }
 
