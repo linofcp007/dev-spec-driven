@@ -9,7 +9,7 @@ const { spawnSync } = require("child_process");
 // Runs after 01-core, in the same process: it reads ctx.vDir — the v1.12 project whose login-loop feature 01-core took to its finish (the prose guard reads its merge summary).
 exports.deps = ["01-core"];
 exports.run = async ({
-  ok, all, S, root, tmp, libSources, maintainerNotes, approveBefore, init, list, require, __dirname, vDir,
+  ok, skip, all, S, root, tmp, libSources, maintainerNotes, approveBefore, init, list, require, __dirname, vDir,
 }) => {
 
   { // --- 1.13 batch 6: the docs' worked examples pass the engine's own gates; no stale test counts ---
@@ -747,23 +747,63 @@ exports.run = async ({
     // file created while tracing, and `DEBUG-login` matched another bugfix's `DEBUG-login-crash` (`-w` too: a hyphen is a word
     // boundary); /spec-bugfix's step 3 (the root cause, also the MCP prompt) tells the agent to tag. Mutations: G1 --untracked dropped
     // · G2 the boundary dropped (or `-w`) · G3 step 3's tag sentence dropped.
+    // Review 2 (R2-TASKS-02): `--untracked` also read the feature's own uncommitted bug.md, whose Root Cause quotes the tagged
+    // output as its evidence — "prints nothing" then asked to delete the approved evidence. A pathspec leaves every `.specs/`
+    // folder out: `':(exclude,glob)**/.specs/**'` (any depth — the ruled `:(top,exclude).specs` is anchored at the git root and
+    // missed a monorepo subproject's app/.specs, run from app/). The documented command is RUN below on both layouts.
+    // Mutations: G4 the pathspec dropped · G5 the top-anchored pathspec · G6 the pathspec dropped from the Checkpoint only.
     {
       const s13Ref = dWs(dRef("bugfix.md")), s13Cmd = dWs(dRead("commands", "spec-bugfix.md"));
       const fixStep = (s13Ref.match(/4\. \*\*Fix\*\* \(task 2\)\.[\s\S]*?(?=\*\*Checkpoint:\*\*)/) || [""])[0], checkpoint = (s13Ref.match(/\*\*Checkpoint:\*\*.*?Close with/) || [""])[0];
       const step3 = (s13Cmd.match(/3\. \*\*Root cause with evidence\*\*.*?4\. \*\*STOP/) || [""])[0];
       const step6 = (s13Cmd.match(/6\. \*\*Fix the cause\*\*.*?7\. \*\*Close\*\*/) || [""])[0];
-      const grep = (tag) => "`git grep -n --untracked -E 'DEBUG-<" + tag + ">([^[:alnum:]_-]|$)'` prints nothing";
-      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n --untracked` with a tag boundary prints nothing — never 'passes'); /spec-bugfix steps 3 and 6 say so; the four-task sentence is kept (got " +
+      const grep = (tag) => "`git grep -n --untracked -E 'DEBUG-<" + tag + ">([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'` prints nothing";
+      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n --untracked` with a tag boundary, every .specs/ folder left out by pathspec, prints nothing — never 'passes'); /spec-bugfix steps 3 and 6 say so; the four-task sentence is kept (got " +
         JSON.stringify([fixStep, checkpoint, step3, step6]) + ")", {
         "phase 2 tags each instrument line": /instrument each boundary once and run it[^.]*\.[^.]*Tag every instrument line `DEBUG-<slug>`/.test(s13Ref),
-        "phase 4 removes it before task 2's run (G1, G2)": fixStep.includes("Remove the instrumentation before task 2's run: " + grep("slug")),
-        "the Checkpoint asks for it gone (G1, G2)": checkpoint.includes(grep("slug")),
+        "phase 4 removes it before task 2's run (G1, G2, G4)": fixStep.includes("Remove the instrumentation before task 2's run: " + grep("slug")),
+        "the Checkpoint asks for it gone (G1, G2, G4, G6)": checkpoint.includes(grep("slug")),
         "/spec-bugfix step 3 tags (G3)": /tag every instrument line you add `DEBUG-<feature>`/.test(step3),
-        "/spec-bugfix step 6 (G1, G2)": /remove the instrumentation first, every line tagged `DEBUG-<feature>`/.test(step6) && step6.includes(grep("feature")),
+        "/spec-bugfix step 6 (G1, G2, G4)": /remove the instrumentation first, every line tagged `DEBUG-<feature>`/.test(step6) && step6.includes(grep("feature")),
+        "bug.md's quoted evidence is said to stay": /the pathspec leaves every `\.specs\/` folder out — `bug\.md`'s quoted evidence is no instrument line, so it stays/.test(fixStep) &&
+          /and so does every `\.specs\/` folder — `bug\.md`'s quoted evidence is no instrument line\)/.test(step6),
         "never 'passes' / 'succeeds' for the search": ![s13Ref, s13Cmd].some((t) => /git grep -n[^`]*DEBUG-<(?:slug|feature)>[^`]*`? (?:passes|succeeds|returns 0)/.test(t)),
         "no bare or -w search left": ![s13Ref, s13Cmd].some((t) => /git grep -n (?:-w )?DEBUG-</.test(t)),
         "the four-task sentence, word for word": s13Ref.includes("(A bugfix scaffolded before this had four tasks — 1 reproduce, 2 root cause, 3 the red test, 4 the fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --evidence \"…\"`, once `bug.md` holds them.)"),
       });
+      // The Checkpoint's command, RUN as written (its words, the quoted ones unquoted, <slug> → login) from the project root, on a
+      // project at the git root and on a monorepo subproject (app/): bug.md, uncommitted, quotes `DEBUG-login:` (the approved
+      // evidence — never listed), a file made while tracing holds the instrument line (listed), another bugfix's
+      // `DEBUG-login-crash` stays out; with the probe gone it prints nothing and exits 1. Nothing is committed (no hook, no identity).
+      const s13Cmdline = (checkpoint.match(/`(git grep [^`]*)`/) || [])[1] || "";
+      const s13Argv = (s13Cmdline.match(/'[^']*'|\S+/g) || []).map((w) => w.replace(/^'|'$/g, "").replace(/<slug>/g, "login"));
+      if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.42 review 2 (R2-TASKS-02) the documented DEBUG search, run", "git not available");
+      else {
+        const s13Env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" };
+        const s13Git = (cwd, ...a) => spawnSync("git", ["-c", "core.autocrlf=false", ...a], { cwd, encoding: "utf8", env: s13Env });
+        const s13Layout = (name, sub) => {
+          const repo = path.join(tmp, "s13-grep-" + name), proj = sub ? path.join(repo, sub) : repo;
+          fs.mkdirSync(path.join(proj, ".specs", "login"), { recursive: true });
+          fs.mkdirSync(path.join(proj, "src"), { recursive: true });
+          s13Git(repo, "init", "-q");
+          fs.writeFileSync(path.join(proj, "crash.js"), "console.log(\"DEBUG-login-crash: trace\");\n");
+          s13Git(repo, "add", "-A");
+          fs.writeFileSync(path.join(proj, ".specs", "login", "bug.md"), "# Bug: login\n\n## Root Cause\nauth.js:1 reads p.length. Evidence: `DEBUG-login: p=undefined at auth.js:1`.\n");
+          fs.writeFileSync(path.join(proj, "src", "probe.js"), "console.log(\"DEBUG-login:\", p);\n");
+          const run = () => { const r = s13Git(proj, ...s13Argv.slice(1)); return [r.status, (r.stdout || "").split(/\r?\n/).filter(Boolean).map((l) => l.replace(/:.*$/, ""))]; };
+          const found = run();
+          fs.unlinkSync(path.join(proj, "src", "probe.js"));
+          return [found, run()];
+        };
+        const s13Plain = s13Layout("plain", ""), s13Mono = s13Layout("mono", "app");
+        const s13Want = JSON.stringify([[0, ["src/probe.js"]], [1, []]]);
+        all("1.42 review 2 (R2-TASKS-02): the Checkpoint's DEBUG search, run as written from the project root, lists the instrument line of a file made while tracing and never the uncommitted bug.md's quoted evidence nor another bugfix's longer tag — at the git root and in a monorepo subproject; once removed it prints nothing (got " +
+          JSON.stringify({ argv: s13Argv, plain: s13Plain, mono: s13Mono }) + ")", {
+          command: s13Argv[0] === "git" && s13Argv[1] === "grep" && s13Argv.includes("--untracked") && s13Argv.indexOf("--") > 1,
+          plain: JSON.stringify(s13Plain) === s13Want,
+          monorepo: JSON.stringify(s13Mono) === s13Want,
+        });
+      }
     }
     // D9: the implementer and the reviewer get explicit tool lists — no Agent tool (they never dispatch subagents).
     const d9Tools = (x) => ((dRead("agents", x).split(/^---$/m)[1] || "").match(/^tools: (.*)$/m) || [])[1] || "";
@@ -2395,15 +2435,30 @@ exports.run = async ({
     // S1: the review loop's residues — the findings a feature ships with still open — are filed before the merge, since the ledger
     // goes with .execution/ and nothing else reads it. The set is a PROPERTY (fix round 1, R1-PROMPTS-02/03): a defect that exists
     // at HEAD and ships — pre-existing (deferred) (the reviewer's Pre-existing label, renamed from "Out of scope (deferred)", which
-    // the re-review keeps for a deferred minor — the namesake), a refutation the verifier found real at HEAD (its Exists at HEAD
-    // line: yes), parked (real), an unconfirmed (NN) finding or a class place outside a task the final review let ship; never parked
-    // (contested) or another refutation (no defect), never minor (deferred). ONE entry per feature (keyed on the slug, an input),
-    // filed once (R1-PROMPTS-10), split at the 2,000-character note limit. ONE closing order in both files (R1-PROMPTS-01): finish →
-    // the execution sign-off → the residues → commit what `git status --porcelain -- .specs` lists until it prints nothing (the
-    // sign-off and the finish rewrite .state.json and the roadmap files after any earlier commit; a git-ignored .specs/ lists
-    // nothing — R1-PROMPTS-05) → switch + merge; no recovery verb that parks or drops the spec state is ever named.
-    // UX-11: step 4 names the branch the merge line names, with no guess for a feature without a recorded one.
-    all("1.42 (S1 + UX-11, fix round 1): the residues — a defect that exists at HEAD and ships: pre-existing (deferred), a refutation real at HEAD, parked (real), an unconfirmed (NN) or a class place outside a task the final review let ship — filed once as ONE residue-<feature> backlog entry, the defect in the controller's own words, the note split at 2,000 characters; ONE closing order in Closing and /spec-finish (finish, the execution sign-off, the residues, then the commit until `git status --porcelain -- .specs` is empty, then the merge); /spec-finish step 4 merges the branch spec_finish's merge line names", {
+    // the re-review keeps for a deferred minor — the namesake), a refutation real at HEAD, parked (real), an unconfirmed (NN)
+    // finding or a class place outside a task the final review let ship; never parked (contested) or another refutation (no
+    // defect), never minor (deferred). Fix round 2 (R2-PROMPTS-01 / -04): "real at HEAD" is ONE predicate on TWO verifier inputs —
+    // its verdict's reason (pre-existing / not in the diff) AND its Exists at HEAD line (yes) — written the same in §6, Closing and
+    // /spec-review branch (an intended, silenced, no-rule or nitpick refutation can say "Exists at HEAD: yes" and is no defect);
+    // every other reason of the verifier's template is named as no residue, so a reason added there must be classed here.
+    // ONE entry per feature (keyed on the slug, an input), split at the 2,000-character note limit; the lines after the ledger's
+    // LAST `Residues filed:` line are the ones filed (R2-PROMPTS-03: a kept branch's later residues). ONE closing order in both
+    // files (R1-PROMPTS-01): finish → the execution sign-off → the residues → the commit → switch + merge. The commit (R2-PROMPTS-02)
+    // adds what the run and the closing wrote — the feature's folder, roadmap.json, the generated roadmap files, the registry / a
+    // steering file when written — in the SAME words in both texts; git carries any other change across the switch (fix round 1's
+    // "until git status is empty … ask the user" asked on every close: the ticks' tasks.md is listed and no closing step wrote it);
+    // no recovery verb that parks or drops a change is named in either whole text (R2-PROMPTS-05), the sign-off asked in ONE
+    // sentence of each, whatever its spelling. UX-11: step 4 names the branch the merge line names, no guess without one.
+    const VERIFIER = raw("agents", "spec-verifier.md");
+    const verdictReasons = ((VERIFIER.match(/REFUTED \(under 50\) — ([^\n]*)/) || [])[1] || "").split(" | ").map((s) => s.trim().replace(/ \(cite\)$/, ""));
+    const REAL = "refuted as pre-existing or not in the diff with its `Exists at HEAD` line yes";
+    const sec6 = ws(section(SUBX, "### 6. Verify the findings")), REVIEW = ws(raw("commands", "spec-review.md"));
+    const otherReasons = verdictReasons.filter((r) => r !== "pre-existing" && r !== "not in the diff");
+    const COMMIT = "what the run and the closing wrote under `.specs/`: `git add` the feature's folder, `.specs/roadmap.json` and the generated roadmap files the project has (`.specs/ROADMAP.md`, `.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the finish registered components, and a steering file the run amended —, then commit (a path git ignores stays out: `git add` names it and adds the rest; a git-ignored `.specs/` has nothing to commit). Git carries any other uncommitted change across the switch: it is not lost and not committed (one the switch would overwrite makes it refuse, naming the file: ask the user).";
+    const commitIn = (t, lead) => { const i = t.indexOf(lead); if (i < 0) return ""; const rest = t.slice(i + lead.length), j = rest.indexOf("ask the user)."); return j < 0 ? "" : rest.slice(0, j + "ask the user).".length); };
+    const SIGN = /spec_approve|dev-spec approve|approve `execution`|phase: "execution"|sign(?:s|ed)? off the `execution`/;
+    const signSentences = (t) => t.split(/(?<=\.)\s+/).filter((s) => SIGN.test(s)).length;
+    all("1.42 (S1 + UX-11, fix rounds 1-2): the residues — a defect that exists at HEAD and ships: pre-existing (deferred), a refutation real at HEAD (refuted as pre-existing or not in the diff AND its Exists at HEAD line yes — one predicate in §6, Closing and /spec-review branch), parked (real), an unconfirmed (NN) or a class place outside a task the final review let ship — the ones after the last `Residues filed:` line filed as ONE residue-<feature> backlog entry, the defect in the controller's own words, the note split at 2,000 characters; ONE closing order in Closing and /spec-finish (finish, the execution sign-off asked in one sentence, the residues, then the commit of what the run and the closing wrote — the same words in both —, then the merge); /spec-finish step 4 merges the branch spec_finish's merge line names", {
       reviewerLabel: /one "Pre-existing \(deferred\)" line at most/.test(REV) && !/one "Out of scope \(deferred\)" line at most/.test(REV) &&
         /outside the fix diff → "Out of scope \(deferred\)", one line each — it never reopens the loop/.test(REV),
       ledgerKinds: ["Task 3: pre-existing (deferred): <one-liner>", "Task 3: parked (real) — ", "Task 3: parked (contested) — ", "Residues filed: residue-<feature> (3)"].every((l) => ledger.includes(l)) &&
@@ -2411,36 +2466,56 @@ exports.run = async ({
       fixLoopRoutes: /Nor does a reviewer's `Pre-existing \(deferred\)` line \(a problem already there at BASE\): ledger it `pre-existing \(deferred\)` — a residue, filed at Closing\./.test(fix) &&
         /out-of-scope observations become deferred minors\./.test(fix) && !/out-of-scope observations[^.]*residue/.test(fix),
       breaker: /Reviewer wrong\/contestable → `parked \(contested\)` with a ruling; real but nothing builds on it → `parked \(real\)` with a ruling \(a residue, filed at Closing\)\./.test(fix),
-      set: /A residue is a defect that exists at HEAD and ships: a `pre-existing \(deferred\)` line, a refutation `real at HEAD`, a `parked \(real\)` one, an `unconfirmed \(NN\)` finding or a class place outside a task the final review let ship — never a `parked \(contested\)` one or another refutation \(no defect: the reviewer was wrong\), never a `minor \(deferred\)` one/.test(closing),
-      // R1-PROMPTS-02: §6 ledgers a refutation the verifier found real at HEAD (its own Exists at HEAD line — an input) as a residue
-      refutedRealAtHead: /\*\*Under 50\*\* → refuted: ledger `refuted \(NN, <why>\)` and drop it — unless its `Exists at HEAD` line says yes \(a real defect this diff didn't make\): ledger `refuted \(NN, <why>, real at HEAD\)`, a residue, filed at Closing\./.test(ws(section(SUBX, "### 6. Verify the findings"))) &&
-        ledger.includes("Task 3: refuted (0, pre-existing, real at HEAD): <one-liner>") && /- Exists at HEAD: /.test(raw("agents", "spec-verifier.md")),
+      set: closing.includes("A residue is a defect that exists at HEAD and ships: a `pre-existing (deferred)` line, a refutation `real at HEAD` (§6: " + REAL + "), a `parked (real)` one, an `unconfirmed (NN)` finding or a class place outside a task the final review let ship — never a `parked (contested)` one or another refutation (") &&
+        /never a `minor \(deferred\)` one/.test(closing),
+      // R1-PROMPTS-02 + R2-PROMPTS-01: §6 ledgers a refutation as a residue on TWO verifier inputs — its reason and its Exists line
+      refutedRealAtHead: sec6.includes("**Under 50** → refuted: ledger `refuted (NN, <why>)` and drop it — unless it is " + REAL + " (a real defect this diff didn't make): ledger `refuted (NN, <why>, real at HEAD)`, a residue, filed at Closing.") &&
+        !/unless its `Exists at HEAD` line says yes/.test(sec6) &&
+        ledger.includes("Task 3: refuted (0, pre-existing, real at HEAD): <one-liner>") && /- Exists at HEAD: /.test(VERIFIER),
+      // one predicate, the same words, in the three texts that ledger it (R2-PROMPTS-01 / -04: /spec-review branch keyed on two other
+      // lines and labelled the same verified fact `pre-existing (deferred)`, which Closing files as `unverified`)
+      onePredicate: [sec6, closing, REVIEW].every((t) => t.split(REAL).length === 2) &&
+        REVIEW.includes("and each one " + REAL + " (checked yourself: your answers to the first two questions) `Final review: refuted (NN, <why>, real at HEAD): …` — residues `/spec-finish` files (`subagent-execution.md` → Closing; any other refutation is none)") &&
+        !/Final review: pre-existing \(deferred\)/.test(REVIEW) && !/real at HEAD that the branch did not introduce/.test(REVIEW),
+      // its two reasons are the verifier template's own words, and every OTHER reason of the template is named as no residue — in
+      // §6 and in Closing (an intended / silenced / no-rule / nitpick refutation says "Exists at HEAD: yes" and is no defect)
+      reasonsFromTemplate: verdictReasons.length >= 7 && ["pre-existing", "not in the diff"].every((r) => verdictReasons.includes(r)) &&
+        otherReasons.length === verdictReasons.length - 2 &&
+        otherReasons.every((r) => (sec6.match(/Any other reason — (.*?) — is no residue, whatever its `Exists at HEAD` line says\./) || [, ""])[1].split(", ").includes(r)) &&
+        otherReasons.every((r) => (closing.match(/another refutation \((.*?): no defect to file\)/) || [, ""])[1].split(", ").includes(r)),
       name: /name: "residue-<feature>"/.test(closing) && /dev-spec backlog add residue-<feature> "residues: …"/.test(closing) && !/residue-<topic>/.test(SUB),
       ownWords: /<the defect, in your own words, never the reviewer's text>/.test(closing) && /<confidence NN \| ruling: why it shipped \| real at HEAD \| unverified>/.test(closing) &&
         /a pre-existing line or a class place never had a verify pass: `unverified`; a refutation real at HEAD: `real at HEAD` \(its confidence rated a fix round, not the defect\)/.test(closing),
-      // R1-PROMPTS-10: once — the ledger line is the mark (the engine dedupes a backlog note only on its exact text)
-      once: /\*\*File the residues before the merge\*\* — once: a `Residues filed:` ledger line means they are filed\./.test(closing) && /files its residues, once \(/.test(step4),
+      // R1-PROMPTS-10 + R2-PROMPTS-03: the ledger line is the mark (the engine dedupes a backlog note only on its exact text) — the
+      // lines after the LAST one are the ones filed (kept the branch, ran more tasks, closed again: its later residues are new)
+      once: closing.includes("**File the residues before the merge** — the residue lines after the ledger's last `Residues filed:` line (the ones above it are filed; no such line: every one).") &&
+        /files the residues after its last `Residues filed:` line \(/.test(step4) && !/means they are filed|files its residues, once/.test(closing + FIN),
       split: /A note holds at most 2,000 characters — the rest goes in `residue-<feature>-2`, never truncated\./.test(closing),
-      // R1-PROMPTS-01 / 05: the commit is a property of the tree, after everything that writes the spec state
-      // (a change the closing steps didn't make is the user's work in progress: asked, never swept into the feature's commit)
-      commitState: /commit what `git status --porcelain -- \.specs` lists until it prints nothing — `git switch <base>` refuses while any of it is modified; a change neither you nor these steps made is the user's work: ask before committing it\. A git-ignored `\.specs\/` lists nothing: nothing to commit\./.test(closing) &&
-        /then commit with the feature what `git status --porcelain -- \.specs` lists — steps 1–3 and the residues wrote it; a change they didn't make is the user's, ask first — until it prints nothing: `git switch <base>` refuses while any of it is modified \(a git-ignored `\.specs\/` lists nothing: nothing to commit\)\. Offer exactly two options/.test(step4) &&
-        !/commit `\.specs\/roadmap\.json` and `\.specs\/ROADMAP\.md`/.test(closing + FIN) && !/\bstash\b|switch -f|--force|add -f/.test(closing + step4),
+      // R1-PROMPTS-01 / 05 + R2-PROMPTS-02: the commit adds what the run and the closing wrote, after everything that writes the
+      // spec state, in the SAME words in both texts; git carries any other change across the switch (never asked on every close,
+      // never swept into the feature's commit); a git-ignored .specs/ has nothing to commit (its add would refuse)
+      commitState: commitIn(closing, "**Then commit the spec state with the feature** — ") === COMMIT &&
+        commitIn(step4, "then commit the spec state with the feature — ") === COMMIT && step4.includes(COMMIT + " Offer exactly two options") &&
+        !/user's work|is the user's, ask|porcelain -- \.specs|until it prints nothing|refuses while any of it/.test(closing + FIN) &&
+        !/git add (?:-A|--all|-u|\.(?=[\s`])|-- \.specs(?=[\s`]))/.test(closing + FIN),
+      // R2-PROMPTS-05: no recovery verb that parks or drops a change, in EITHER WHOLE text (the old key read Closing + step 4)
+      noRecoveryVerb: !/\bstash\b|switch -f|--force|add -f|checkout --|reset --hard/.test(closing + FIN),
       // residues and the commit before the merge, after the sign-off — the same order in both files
       beforeMerge: (() => { const at = ["Ask the human to approve `execution`", "**File the residues before the merge**", "**Then commit the spec state with the feature**", "Then ask the human to choose: merge locally or keep the branch", "delete `.specs/<feature>/.execution/`"].map((s) => closing.indexOf(s));
         return at.every((i, k) => i > 0 && (k === 0 || at[k - 1] < i)); })() &&
         /One order, `\/spec-finish`'s: the finish, the `execution` sign-off, the residues, the commit, then the merge\./.test(closing),
-      finishOrder: (() => { const at = [FIN.indexOf("call `spec_approve {name, phase: \"execution\"}` only on their yes"), FIN.indexOf(" 4. Before either option"), FIN.indexOf("files its residues, once"), FIN.indexOf("then commit with the feature what `git status --porcelain -- .specs` lists"), FIN.indexOf("Offer exactly two options")];
+      finishOrder: (() => { const at = [FIN.indexOf("call `spec_approve {name, phase: \"execution\"}` only on their yes"), FIN.indexOf(" 4. Before either option"), FIN.indexOf("files the residues after its last `Residues filed:` line"), FIN.indexOf("then commit the spec state with the feature — "), FIN.indexOf("Offer exactly two options")];
         return at.every((i, k) => i > 0 && (k === 0 || at[k - 1] < i)); })() &&
-        // the sign-off asked ONCE in each text (a second call after the options would be a second order)
-        FIN.split("spec_approve").length === 2 && closing.split("approve `execution`").length === 2,
+        // the sign-off asked in ONE sentence of each text, whatever its spelling (R2-PROMPTS-05: a second ask spelled as a call
+        // survived a count of one spelling) — a second call after the options would be a second order
+        signSentences(FIN) === 1 && signSentences(closing) === 1,
       listed: /your final message lists them after the rulings, with the line that drops the entry \(`dev-spec backlog rm residue-<feature>`\)/.test(closing) &&
         /git history and the backlog are the record now\./.test(closing),
       // R1-PROMPTS-04: the final review and /spec-review branch ledger their own pre-existing and 50–79 lines, so Closing files them;
       // step 4 keys on the ledger (a property), not on how the feature ran
       finalLedger: /Ledger its own lines as a task's are: a `Pre-existing \(deferred\)` line `Final review: pre-existing \(deferred\): …`, a verified 50–79 one `Final review: unconfirmed \(NN\): …`, a refutation real at HEAD with `real at HEAD` \(§6\) — Closing files them\./.test(ws(section(SUBX, "## Final review"))) &&
-        /ledger each 50–79 one `Final review: unconfirmed \(NN\): …` and each one real at HEAD that the branch did not introduce `Final review: pre-existing \(deferred\): …` — residues `\/spec-finish` files \(`subagent-execution\.md` → Closing\)/.test(ws(raw("commands", "spec-review.md"))),
-      finishStep4: /^Before either option, a feature with a review ledger \(`\.specs\/<feature>\/\.execution\/ledger\.md`\) files its residues, once \(`\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/dev-spec-driven\/references\/subagent-execution\.md` → Closing/.test(step4) &&
+        /ledger each 50–79 one `Final review: unconfirmed \(NN\): …` and each one refuted as/.test(REVIEW),
+      finishStep4: /^Before either option, a feature with a review ledger \(`\.specs\/<feature>\/\.execution\/ledger\.md`\) files the residues after its last `Residues filed:` line \(`\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/dev-spec-driven\/references\/subagent-execution\.md` → Closing/.test(step4) &&
         !/a feature run with subagents files/.test(FIN),
       finishBranch: /`git switch <base>`, then `git merge <branch>`: the branch `spec_finish`'s merge line names \(`feature\/<slug>` by default, `fix\/<slug>` for a bugfix\); without one, the branch you worked on, if it is not the base\./.test(step4) &&
         /A fast-forward when possible; a merge commit \(`--no-ff`, or branches that diverged\) takes the merge title and summary as its message/.test(step4) &&
@@ -2496,7 +2571,8 @@ exports.run = async ({
     // SK-P6 is a PROPERTY (would a user or caller notice the swap?), never a track list (L1); its exemptions are what the critic
     // can check — the feature's own story / summary, the steering (Grep), an approved artifact — never "the user's request" it
     // never sees (it starts fresh); always Minor (placement). SK-P3 asks per principle; the constitution stub is untouched (its
-    // whole-file hash is the brief's "still a template" test). S15 stays within 150 bytes: the critic is paid per pre-flight too.
+    // whole-file hash is doctor's steering-placeholder test and the steering importer's, isSteeringStub — the brief's "still a
+    // template" test was UX-10, cut in review 1). S15 stays within 150 bytes: the critic is paid per pre-flight too.
     const CRITIC = raw("agents", "spec-critic.md");
     const cell = (cat) => (CRITIC.match(new RegExp("^\\| \\*\\*" + cat + "\\*\\* \\| (.*) \\|$", "m")) || [])[1] || "";
     const clarity = cell("Clarity"), consistency = cell("Consistency"), testability = cell("Testability");

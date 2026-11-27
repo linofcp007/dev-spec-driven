@@ -90,7 +90,7 @@ edit an approved artifact
   → human decides: intended? which done tasks must be redone?
   → spec_impact --reopen (only with that OK)
   → update what the change reaches: design sections, test-plan rows, tasks (new work: spec_append_tasks)
-  → spec_doctor, then re-approve each changed phase (a new snapshot)
+  → spec_doctor (fix what its next gate refuses), then re-approve each changed phase (a new snapshot)
   → redo the reopened tasks with fresh evidence
 ```
 

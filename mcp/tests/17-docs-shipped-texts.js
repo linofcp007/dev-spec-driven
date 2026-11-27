@@ -181,12 +181,30 @@ exports.run = async ({ all, S, root, tmp, require }) => {
     const docTexts = texts.filter(([rel]) => /\.(md|mdc)$/.test(rel));
     const sent = docTexts.flatMap(([rel, t]) => sends(t).map((x) => ({ rel, ...x })));
     const unnamed = sent.filter((x) => !x.named).map((x) => x.rel + " :: " + x.s.slice(0, 120));
-    all("1.42 UX-01: no shipped text holds an approval on readyToAdvance or promises one on nextGate; every shipped sentence that sends an agent to doctor before an approval names its next gate (hits: " + js(hits) + "; " + sent.length + " sentences in " +
+    all("1.42 UX-01: no shipped text holds an approval on readyToAdvance or promises one on nextGate; every shipped sentence of the four shapes read (run … doctor … before advancing / an approval, each phase boundary … doctor, doctor first / before a phase advances, doctor then the user's approval) names its next gate (hits: " + js(hits) + "; " + sent.length + " sentences in " +
       new Set(sent.map((x) => x.rel)).size + " texts; unnamed: " + js(unnamed) + ")", {
       noHold: hits.length === 0,
       named: unnamed.length === 0,
       // the property reads every kind of text that sends one: a rule file of another tool, the skill, a command
       read: sent.some((x) => Object.values(RULE_FILES).includes(x.rel)) && sent.some((x) => x.rel.startsWith("skills/")) && sent.some((x) => x.rel.startsWith("commands/")) && sent.length >= 5,
     });
+    // Review 2 (R2-TASKS-01): the shapes are not the property — eight shipped sentences of other wordings (a pipeline, "doctor,
+    // and — on the user's yes — approve", a code block's loop) sent an agent to doctor before an approval and named no next gate;
+    // four of them are MCP prompts a skill-less client gets. Each now carries the clause, pinned here one by one; the reader does
+    // NOT read them (the narrowed claim of the row above and of gates-and-approvals.md — a new sentence of another wording is
+    // not caught). Mutations listed before the fixtures: Q1 … Q8 each sentence's clause dropped.
+    const byRel = Object.fromEntries(docTexts.map(([rel, t]) => [rel, t.replace(/\s+/g, " ")]));
+    const pinned = [
+      ["commands/clarify.md", "Then `spec_clarify` and `ears_validate` again, `spec_doctor` (fix what its next gate refuses), and — on the user's explicit yes — record the requirements approval with `spec_approve`"],
+      ["commands/spec-change.md", "Then update what the change reaches, `spec_doctor` (fix what its next gate refuses), and — on the user's yes — re-approve each changed phase with `spec_approve`."],
+      ["commands/spec-tour.md", "5. **Approve** — `spec_doctor` (fix what its next gate refuses), show the plan, and record it with `spec_approve {name, through: \"tasks\"}`"],
+      ["commands/spec-bugfix.md", "run `spec_doctor` and fix what its next gate refuses, then present the reproduction, the root cause with its evidence and the fix you propose — and wait."],
+      ["skills/dev-spec-driven/references/bugfix.md", "run `spec_doctor` (fix what its next gate refuses), and present the reproduction, the root cause and its evidence for the approvals"],
+      ["AGENTS.md", "Each phase: fill the scaffold, `dev-spec doctor` (fix what its next gate refuses), present it, and record the user's yes."],
+      ["skills/dev-spec-driven/SKILL.md", "→ fill → `spec_doctor` (fix what its next gate refuses) → present → the user's yes → `spec_approve`."],
+      ["skills/dev-spec-driven/references/change-management.md", "→ spec_doctor (fix what its next gate refuses), then re-approve each changed phase (a new snapshot)"],
+    ];
+    all("1.42 review 2 (R2-TASKS-01): the eight sentences of other wordings that send an agent to doctor before an approval name its next gate — pinned one by one, none of them read by the four shapes (the documented limit)",
+      Object.fromEntries(pinned.map(([rel, s]) => [rel, () => (byRel[rel] || "").includes(s) && sends(s).length === 0])));
   }
 };

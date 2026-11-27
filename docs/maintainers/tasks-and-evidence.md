@@ -106,10 +106,13 @@ Phase 6, opt-in.
   runs the simplifier's, each verified before it costs a fix. **1.42:** the task review too — §4 writes `dupes --json` beside the
   package, the reviewer keeps the runs in the package's files and says "none" only at `counts.existing` 0 with neither
   `truncated` nor `partial`. A residue — a defect that exists at HEAD and ships (a `pre-existing (deferred)`, a refutation
-  the verifier found `real at HEAD`, a `parked (real)`, an `unconfirmed (NN)` or a class place the final review let ship) —
-  is filed once as ONE `residue-<feature>` backlog entry (Closing); the closing order is one in Closing and /spec-finish:
-  finish, the `execution` sign-off, the residues, a commit of what `git status --porcelain -- .specs` lists until it is
-  empty, the merge. A defect confirmed again at another place is asked for as a class in the task's `_Implements:_` files
+  `real at HEAD` — refuted as pre-existing or not in the diff with its `Exists at HEAD` line yes, one predicate on two verifier
+  inputs in §6, Closing and `/spec-review branch` —, a `parked (real)`, an `unconfirmed (NN)` or a class place the final review
+  let ship) — is filed as ONE `residue-<feature>` backlog entry (Closing: the lines after the ledger's last `Residues filed:`
+  line); the closing order is one in Closing and /spec-finish, in the same words: finish, the `execution` sign-off, the
+  residues, a commit of what the run and the closing wrote (`git add` the feature's folder, roadmap.json, the generated roadmap
+  files, the registry / a steering file when written — git carries any other change across the switch), the merge. A defect
+  confirmed again at another place is asked for as a class in the task's `_Implements:_` files
   (§7). The `review-seat` evals measure both seats (testing.md); no regex grader matches its seat's own agent prompt.
 - **Each agent prompt has a byte cap (1.42 S14)** — an agents/*.md is paid on every dispatch of its agent. mcp/tests/17-docs.js
   `AGENT_CAPS` holds one cap per file and fails when an agents/*.md has none (a new agent), a cap names a file that is gone, or
@@ -1271,7 +1274,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   findings and the re-review's out-of-scope lines (they stay deferred minors: the label is the namesake the rename removes);
   the dev-guardian review-seat pair (no dev-guardian prose changed; its deterministic half needed another chain's rule);
   SK-P2's within-feature engine check (0 pairs in 2,614 real comparisons) and SK-P3's stub rewrite (the stub's whole-file
-  hash is the brief's "still a template" test). The agent-prompt byte ratchet (S14) waited for the integrated branch (below).
+  hash is the brief's "still a template" test — that test was UX-10, cut in review 1; the hash still serves doctor's
+  steering-placeholder check and the steering importer, `isSteeringStub`). The agent-prompt byte ratchet (S14) waited for the
+  integrated branch (below).
 - **1.42 —** S14 (a byte ratchet per agent prompt): only SKILL.md, the verifier (≤ 4,000) and the UI reviewer (≤ 7,000) had a
   byte cap, while this round alone added 614 B to the reviewer — a prompt paid on every task, re-review, final and simplify
   dispatch. A cap per agents/*.md (`AGENT_CAPS`), set on the integrated branch after every chain's agent edits at
@@ -1291,6 +1296,24 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   once (the engine dedupes a backlog note only on its exact text). Prose rows: a capped zero (`truncated` / `partial`) is no
   "none"; S15 exempts an AC that IS the check's result; SK-P2's "repeat" is within the feature; the review seats' no-echo
   property reads each seat's own agent prompt (the pre-existing grader matched the verifier's verdict list).
+- **1.42 fix round 2 (FX2-PROSE)** — review 2 of fix round 1's prose. (1) The residue keyed on ONE verifier line, "its
+  `Exists at HEAD` line says yes" — but four of the template's seven refutation reasons (intended, silenced on purpose, no rule
+  says so, nitpick) can say yes there and are no defect, so the backlog would have recorded intended behaviour and accepted
+  suppressions as defects; `/spec-review branch` keyed the same fact on two other lines and labelled it `pre-existing
+  (deferred)`, which Closing files as `unverified`. Now ONE predicate on two inputs — refuted as pre-existing or not in the
+  diff (the verdict's reason) with its `Exists at HEAD` line yes — in the same words in §6, Closing and `/spec-review branch`,
+  one ledger form `refuted (NN, <why>, real at HEAD)`; every other reason of the verifier's template is named as no residue
+  (17-docs reads the reasons from agents/spec-verifier.md, so a new reason must be classed). (2) The commit "until `git status
+  --porcelain -- .specs` is empty", with "a change neither you nor these steps made is the user's: ask", asked on every close:
+  the ticks (`tasks.md`) and the run's backlog entries are listed and no closing step wrote them, and a declined change left
+  no way out. It is `git add` of what the run and the closing wrote now — the feature's folder, roadmap.json, the generated
+  roadmap files the project has, the registry / a steering file when written —, in the same words in both texts; a path git
+  ignores stays out (`git add` names it, exits 1 and adds the rest — said, so no agent forces it in); git carries any other
+  change across the switch (a switch that would overwrite one refuses, naming the file: ask). (3) "A `Residues
+  filed:` line means they are filed" lost the residues of a kept branch closed again: the lines after the LAST one are filed.
+  (4) Two keys read less than they claimed: the recovery-verb check now reads both whole texts, the sign-off is counted per
+  sentence over every spelling. Also: the stale "still a template" rationale above (UX-10 was cut; the stub hash serves doctor
+  and the steering importer).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

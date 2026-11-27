@@ -109,11 +109,15 @@ review findings — is in History at the end.
   permission, a lock — pendingGateList lists a phase whose entry exists). The CLI headline prints it (`cliOutput.doctorNextGate`:
   checks pass · fails (its ids) · its file can't be read, as approve says · nothing to approve yet); spec_doctor's description
   says "what the next gate's checks refuse", never what the approval would refuse.
-  Every shipped sentence that sends an agent to doctor before an approval or a phase advance says to fix what its next gate
-  refuses — none promises an approval on it (mcp/tests/17-docs-shipped-texts.js reads every shipped .md / .mdc, the rule files
-  of other tools included, by the sentence's shape: "run … doctor … before advancing / an approval", "at each phase boundary",
-  "`spec_doctor` … first", "`spec_doctor`, then the user's approval"; another wording, another language or a .js string is not
-  read). `changedApprovedPhases` stays out of `nextGate`: next_action's
+  A sentence that sends an agent to doctor before an approval or a phase advance is to say "fix what its next gate refuses",
+  and none may promise an approval on it. The guard (mcp/tests/17-docs-shipped-texts.js) holds only FOUR shapes to the next
+  gate, read in every shipped .md / .mdc (the rule files of other tools included): "run … doctor … before advancing / an
+  approval", "at each phase boundary … doctor", "`spec_doctor` … first" / "before a phase advances", "`spec_doctor`, then the
+  user's approval". Another wording is not read: a pipeline ("→ `spec_doctor` →"),
+  "`spec_doctor`, and — on the user's yes — approve", a code block, another language, a .js string. The eight such sentences
+  review 2 found (/clarify, /spec-change, /spec-tour, /spec-bugfix step 4, bugfix.md's gate, AGENTS.md's pipeline, SKILL.md's
+  phase line, change-management.md's loop) carry the clause by hand, pinned one by one in the same file — a new sentence of
+  another wording is not caught. `changedApprovedPhases` stays out of `nextGate`: next_action's
   re-review step and the fast-forward read it, and approvePhase adds `phase-order` itself.
 - **`next_action` — the step order, phase by phase** (doctor shows the same gate as `nextGate`). One ordered registry, as the
   checks are (1.30): `NEXT_STEPS` (engine/doctor.js) — `{id, when(x), run(x)}`, the first whose `when` holds answers, `run`
@@ -604,6 +608,12 @@ here. "r5 review" is 1.23's fifth review.
   A next-gate file that is there but unreadable printed "nothing to approve yet" (pendingGateList lists a phase whose entry
   exists, so that form was reached only so): `nextGate.unreadable`, said as approve says it. spec_doctor's description said
   "what the next approval would refuse" — nextGate is the next gate's own checks (phase order and roles are the approval's).
+- **1.42 review 2 (R2-TASKS-01)** — "every shipped sentence of that shape" was four wording shapes, while the doc and the
+  row's label claimed every sentence sending an agent to doctor before an approval: /clarify ("`spec_doctor`, and — on the
+  user's explicit yes — record the requirements approval"), /spec-change, /spec-tour, /spec-bugfix step 4 (four MCP prompts
+  a skill-less client gets), bugfix.md's gate, AGENTS.md's and SKILL.md's phase pipelines and change-management.md's loop
+  named no next gate. Each got the clause by hand and is pinned one by one; the claim and the label now say the four shapes
+  (widening the reader was the other option — a new mechanism for a prose finding).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12
@@ -768,3 +778,11 @@ here. "r5 review" is 1.23's fifth review.
   matched a longer slug's tags (`DEBUG-login` found another bugfix's `DEBUG-login-crash`); `-w` does not help — git's word
   boundary treats the hyphen as one. It is `git grep -n --untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)'` now, and
   /spec-bugfix's root-cause step (the MCP prompt too) tells the agent to tag. Prose only (17-docs pins both texts).
+- **1.42 review 2 (R2-TASKS-02)** — `--untracked` also read the feature's own bug.md while it was uncommitted (`.specs/` is
+  not git-ignored by default), and its Root Cause quotes the tagged output as the evidence the design approval signed off:
+  "prints nothing" asked the agent to delete approved evidence (changed-since-approval, a finish blocker). The search leaves
+  every `.specs/` folder out by pathspec, `-- ':(exclude,glob)**/.specs/**'`. The ruled `:(top,exclude).specs` was measured
+  and not taken: it is anchored at the git root, so in a monorepo subproject (`app/.specs/`, run from `app/`) it still
+  printed bug.md; the glob form leaves out a `.specs/` at any depth, from either folder (Git Bash, PowerShell 5.1 and 7 alike).
+  17-docs RUNS the Checkpoint's command as written on both layouts. Known limit (older): `git grep` searches below the folder
+  it runs in — from a subfolder of the project it misses the rest.

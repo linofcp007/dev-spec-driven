@@ -50,11 +50,15 @@ before it.
    registry, adds the design's New components to `.specs/steering/design-system.md` (`designSystem.registered`): a change to
    commit with the feature. Forced approvals appear under "Waived gates", a feature's protected tests (what changed, the
    lifts, the accepts) under "Protected tests".
-4. Before either option, a feature with a review ledger (`.specs/<feature>/.execution/ledger.md`) files its residues, once
-   (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` → Closing: the ledger goes with
-   `.execution/`); then commit with the feature what `git status --porcelain -- .specs` lists — steps 1–3 and the residues
-   wrote it; a change they didn't make is the user's, ask first — until it prints nothing: `git switch <base>` refuses while
-   any of it is modified (a git-ignored `.specs/` lists nothing: nothing to commit). Offer exactly two options: **1. merge into the base branch locally** — `git switch <base>`,
+4. Before either option, a feature with a review ledger (`.specs/<feature>/.execution/ledger.md`) files the residues after
+   its last `Residues filed:` line (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` →
+   Closing: the ledger goes with `.execution/`); then commit the spec state with the feature — what the run and the closing
+   wrote under `.specs/`: `git add` the feature's folder, `.specs/roadmap.json` and the generated roadmap files the project
+   has (`.specs/ROADMAP.md`, `.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the
+   finish registered components, and a steering file the run amended —, then commit (a path git ignores stays out:
+   `git add` names it and adds the rest; a git-ignored `.specs/` has nothing to commit). Git carries any other uncommitted
+   change across the switch: it is not lost and not committed (one the switch would overwrite makes it refuse, naming the
+   file: ask the user). Offer exactly two options: **1. merge into the base branch locally** — `git switch <base>`,
    then `git merge <branch>`: the branch `spec_finish`'s merge line names (`feature/<slug>` by default, `fix/<slug>` for a
    bugfix); without one, the branch you worked on, if it is not the base. A fast-forward when possible; a merge commit
    (`--no-ff`, or branches that diverged) takes the merge title and summary as its message **· 2. keep the branch as it

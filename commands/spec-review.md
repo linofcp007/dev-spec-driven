@@ -25,9 +25,10 @@ this branch introduce it, is it not what an AC or `decisions.md` asks for? Rate 
 With a subagent tool, write the diff to `.specs/<feature>/.execution/review.diff` and dispatch one
 `dev-spec-driven:spec-verifier` per finding (the finding verbatim, the diff, the merge base and HEAD, the feature folder) —
 in parallel; without one, check each yourself and say so. Report the findings rated 80 or more by severity, the rest one
-line each under "Unconfirmed (below 80)", and ledger each 50–79 one `Final review: unconfirmed (NN): …` and each one real at
-HEAD that the branch did not introduce `Final review: pre-existing (deferred): …` — residues `/spec-finish` files
-(`subagent-execution.md` → Closing); then `trace_check {name}` (`matrix: true` for the traceability matrix).
+line each under "Unconfirmed (below 80)", and ledger each 50–79 one `Final review: unconfirmed (NN): …` and each one refuted
+as pre-existing or not in the diff with its `Exists at HEAD` line yes (checked yourself: your answers to the first two
+questions) `Final review: refuted (NN, <why>, real at HEAD): …` — residues `/spec-finish` files (`subagent-execution.md` →
+Closing; any other refutation is none); then `trace_check {name}` (`matrix: true` for the traceability matrix).
 **A review panel** (`spec_next_action {name}`'s `reviewPanel`) with a subagent tool: the reviewers are fresh — write the
 package as above and dispatch, in one message, one final-mode `dev-spec-driven:spec-reviewer` on the most capable model and
 one on each panel model not already it (`model` on each), instead of reviewing yourself; merge their findings, then verify

@@ -73,7 +73,7 @@ Every command, flag and exit code: `dev-spec help` and `skills/dev-spec-driven/r
 ## The pipeline (Spec mode)
 
 Before any spec work, read `.specs/steering/` (`constitution.md` — the project's non-negotiables — first). Each phase:
-fill the scaffold, `dev-spec doctor`, present it, and record the user's yes. Phase detail:
+fill the scaffold, `dev-spec doctor` (fix what its next gate refuses), present it, and record the user's yes. Phase detail:
 `skills/dev-spec-driven/references/phase-guide.md`.
 
 0. **Classify** — `dev-spec classify` drafts the tracks and a size; check a track you doubt against its section of `skills/dev-spec-driven/references/classification-matrix.md` and get the user's approval of the mode, tracks and size (xs a one-file change, s one story, m / l the full chain). Then `dev-spec init <tracks> --lang <xx>` if `.specs/steering/` is missing, and `dev-spec create "<name>" <tracks> --size <xs|s|m|l> --lang <xx>` once. Size m / l (or no size) seeds `classification.md`: record the decision there and `dev-spec approve <feature> classification` on the user's yes; size s or xs has no `classification.md` and no classification gate — record it in the Summary of `requirements.md` (s) or `change.md` (xs).

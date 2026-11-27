@@ -90,7 +90,7 @@ With superpowers installed, this workflow replaces its feature-work skills — n
 | 6 Execute | code, each task ticked on evidence | `execution` | `references/verification.md` |
 
 Phases 3–4 only on +tdd / +ai; design-first does 2 before 1. Each phase: read `.specs/steering/` and the approved
-artifacts → fill → `spec_doctor` → present → the user's yes → `spec_approve`.
+artifacts → fill → `spec_doctor` (fix what its next gate refuses) → present → the user's yes → `spec_approve`.
 
 **Phase 0.**
 1. **Run `spec_classify`** (with `projectDir` — the project's track packs count): a draft of tracks, signals, size.
