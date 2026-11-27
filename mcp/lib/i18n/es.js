@@ -1972,6 +1972,11 @@ const msg = {
       cliSkipped: (list) => `  en espera: ${list}`,
     },
 
+    planGate: {
+      notApproved: (slug, file) => `El plan (${file}) aún no está aprobado: esta tarea no es para implementar — muestra el plan al usuario y pídele su aprobación (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} indica el paso).`,
+      tickedEarly: (n, slug) => `La tarea ${n} se marcó antes de que el plan estuviera aprobado — muestra el plan al usuario y pídele su aprobación antes de la tarea siguiente (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} indica el paso).`,
+    },
+
     impact: {
       reopenTasks: "reopen se aplica a requirements, design, test-plan y eval-plan — un cambio en tasks.md se revisa y se vuelve a aprobar; no reabre nada.",
       changePhase: (phase, slug) => `'${slug}' es un cambio: sus criterios y sus tareas son un solo fichero, change.md, aprobado como el plan (fase tasks) — no hay fase ${phase}. spec_impact {name: "${slug}"} (fase tasks, la predeterminada) compara ambos: los criterios por ID, las tareas por número.`,

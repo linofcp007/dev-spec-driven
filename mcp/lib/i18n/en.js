@@ -2079,6 +2079,14 @@ const msg = {
       cliSkipped: (list) => `  waiting: ${list}`,
     },
 
+    // 1.42 (UX-02): a task served or ticked while the plan (the tasks approval — a change's change.md) is not approved yet: the
+    // `planNote` of spec_next_task / spec_task_brief / spec_status (notApproved) and spec_complete_task (tickedEarly) — never a
+    // refusal, never a bugfix's investigation task (it writes only bug.md, which the earlier approvals sign off).
+    planGate: {
+      notApproved: (slug, file) => `The plan (${file}) is not approved yet: this task is not to be implemented — show the plan to the user and ask for its approval (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} names the step).`,
+      tickedEarly: (n, slug) => `Task ${n} was ticked before the plan was approved — show the plan to the user and ask for its approval before the next task (spec_next_action {name: "${slug}"} · ${DEV_SPEC} next-action ${slug} names the step).`,
+    },
+
     // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
     // IDs and file names stay English-stable.
     impact: {

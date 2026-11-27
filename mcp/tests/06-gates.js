@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname, hookIn, handRoadmap }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname, hookIn, handRoadmap, planGateMismatches }) => {
 
   { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
     const w5 = path.join(tmp, "proj-wp5");
@@ -1650,5 +1650,12 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
       approve: () => ap.ok === false && js(ap.failing) === js(["clarifications"]),
       pt: () => /^2 \[NEEDS CLARIFICATION\] por resolver no design\.md — resolve-os antes de aprovar o design$/.test(S.msg("pt").doctor.clarificationsOpenDesign(2)),
     });
+  }
+  // 1.42 (UX-02): spec_next_task's plan approval IS the pending-gates rule — on every feature this file built, in the state it left
+  // them (harness planGateMismatches: planApproved vs pendingGateList's `tasks`, approvalsInForce keeping `tasks`)
+  {
+    const prop = planGateMismatches(tmp);
+    ok(prop.checked > 0 && prop.mismatches.length === 0, "1.42 UX-02: next_task's planApproved agrees with the pending gates on every feature of 06-gates (" +
+      prop.checked + " checked; mismatches: " + JSON.stringify(prop.mismatches) + ")");
   }
 };
