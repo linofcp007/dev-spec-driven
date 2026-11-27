@@ -149,9 +149,10 @@ is in History at the end.
   after the design the import writes, appended as every spec writer appends (`appendSpecText`: a plan.md or design document
   ending inside an open code block has it closed first — joined raw, the section was code to every reader), else after the
   scaffold's design.md, which is kept (`scaffoldDesignAppend`; never a design.md of those lines alone — once resolved it
-  would hold nothing, and the template's placeholders no longer refused — except beside an EMPTY plan.md, a design to import
-  that holds nothing: its design.md is the title, the note and the section, and the gate refuses on phase-order and the
-  constitution check once they are resolved, as the empty design.md it gave before did).
+  would hold nothing, and the template's placeholders no longer refused — except beside a plan.md with no body (only its
+  title and / or a comment; an empty one too) and no design document, a design to import that holds nothing: its design.md
+  is the title, the note (and the comment) and the section, and the gate refuses on phase-order and the constitution check once
+  they are resolved, as the empty design.md it gave before did).
   plan.md: `specKitPlanMarkers()` turns a `**Field**:` value that opens with a bare NEEDS CLARIFICATION into
   `[NEEDS CLARIFICATION: Field]` (the tail kept after it) unless a letter or a digit follows the blanks (`RE_PLAN_PROSE`:
   prose) — `.`, `(…)`, `,`, `?`, `;`, `/TBD` and the dashes are the marker —, on a line `codeBlockLines` / `commentLines`
@@ -450,6 +451,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   uses (R2-IMP-1). A quickstart of only its title with a question got its row (R2-IMP-4); the "never those lines alone" claim
   names the empty plan.md it does not hold for (R2-IMP-2); brownfield.md says which values stay bare (a letter or a digit
   after them, R2-IMP-6); R1-IMP-4's row is titled by what it pins (the type, the size, the order — not the cost, R2-IMP-3).
+- **1.42 fix 3 (review 3)** — the exception was still a narrowing by name: importRun drops plan.md's first `# ` heading, so a
+  plan.md of only its title, only an HTML comment, or both gives the same design.md as an empty one (title, note, the comment,
+  the section) and the same refusals once resolved (phase-order, the constitution check). The sentence says it by property: a
+  plan.md with no body and no design document (R3-TESTS-03). Prose only, the importer unchanged.
 
 ### Stakeholder export and release notes
 - **1.14** — `spec_export`: one offline HTML / md document (roadmap palette, light / dark + toggle, print rules).

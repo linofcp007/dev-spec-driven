@@ -758,15 +758,19 @@ exports.run = async ({
       const step3 = (s13Cmd.match(/3\. \*\*Root cause with evidence\*\*.*?4\. \*\*STOP/) || [""])[0];
       const step6 = (s13Cmd.match(/6\. \*\*Fix the cause\*\*.*?7\. \*\*Close\*\*/) || [""])[0];
       const grep = (tag) => "`git grep -n --untracked -E 'DEBUG-<" + tag + ">([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'` prints nothing";
-      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n --untracked` with a tag boundary, every .specs/ folder left out by pathspec, prints nothing — never 'passes'); /spec-bugfix steps 3 and 6 say so; the four-task sentence is kept (got " +
+      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n --untracked` with a tag boundary, every folder named .specs left out by pathspec — a code folder of that name too, said —, prints nothing — never 'passes'); /spec-bugfix steps 3 and 6 say so, step 6's command on one line; the four-task sentence is kept (got " +
         JSON.stringify([fixStep, checkpoint, step3, step6]) + ")", {
         "phase 2 tags each instrument line": /instrument each boundary once and run it[^.]*\.[^.]*Tag every instrument line `DEBUG-<slug>`/.test(s13Ref),
         "phase 4 removes it before task 2's run (G1, G2, G4)": fixStep.includes("Remove the instrumentation before task 2's run: " + grep("slug")),
         "the Checkpoint asks for it gone (G1, G2, G4, G6)": checkpoint.includes(grep("slug")),
         "/spec-bugfix step 3 tags (G3)": /tag every instrument line you add `DEBUG-<feature>`/.test(step3),
         "/spec-bugfix step 6 (G1, G2, G4)": /remove the instrumentation first, every line tagged `DEBUG-<feature>`/.test(step6) && step6.includes(grep("feature")),
-        "bug.md's quoted evidence is said to stay": /the pathspec leaves every `\.specs\/` folder out — `bug\.md`'s quoted evidence is no instrument line, so it stays/.test(fixStep) &&
-          /and so does every `\.specs\/` folder — `bug\.md`'s quoted evidence is no instrument line\)/.test(step6),
+        // review 3 (R3-TASKS-04): the namesake said — the pathspec leaves out a CODE folder named .specs too
+        "bug.md's quoted evidence is said to stay, a code folder named .specs said to be left out": /the pathspec leaves out every folder named `\.specs`, a code folder of that name too — `bug\.md`'s quoted evidence is no instrument line, so it stays/.test(fixStep) &&
+          /and so does every folder named `\.specs`, a code folder of that name too — `bug\.md`'s quoted evidence is no instrument line\)/.test(step6),
+        // review 3 (R3-TASKS-05): /spec-bugfix step 6's command on ONE line of the MCP prompt's markdown — a line-by-line copy that
+        // stopped at `--` ran a complete command, the one without the pathspec
+        "/spec-bugfix step 6's command on one line": dRead("commands", "spec-bugfix.md").split(/\r?\n/).some((l) => l.includes("`git grep -n --untracked -E 'DEBUG-<feature>([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'`")),
         "never 'passes' / 'succeeds' for the search": ![s13Ref, s13Cmd].some((t) => /git grep -n[^`]*DEBUG-<(?:slug|feature)>[^`]*`? (?:passes|succeeds|returns 0)/.test(t)),
         "no bare or -w search left": ![s13Ref, s13Cmd].some((t) => /git grep -n (?:-w )?DEBUG-</.test(t)),
         "the four-task sentence, word for word": s13Ref.includes("(A bugfix scaffolded before this had four tasks — 1 reproduce, 2 root cause, 3 the red test, 4 the fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --evidence \"…\"`, once `bug.md` holds them.)"),
@@ -779,7 +783,12 @@ exports.run = async ({
       const s13Argv = (s13Cmdline.match(/'[^']*'|\S+/g) || []).map((w) => w.replace(/^'|'$/g, "").replace(/<slug>/g, "login"));
       if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.42 review 2 (R2-TASKS-02) the documented DEBUG search, run", "git not available");
       else {
-        const s13Env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" };
+        // the developer's own git config stays out (review 3, R3-TASKS-03: a global `grep.fullName` or `color.ui = always` changed the
+        // listed names, a global excludes file could hide the probe) — an empty global config, HOME and XDG_CONFIG_HOME in tmp, as
+        // 09-evidence-guardian.js's git rows do
+        const s13Cfg = path.join(tmp, "s13-gitconfig");
+        fs.writeFileSync(s13Cfg, "");
+        const s13Env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: s13Cfg, HOME: tmp, XDG_CONFIG_HOME: tmp, GIT_TERMINAL_PROMPT: "0" };
         const s13Git = (cwd, ...a) => spawnSync("git", ["-c", "core.autocrlf=false", ...a], { cwd, encoding: "utf8", env: s13Env });
         const s13Layout = (name, sub) => {
           const repo = path.join(tmp, "s13-grep-" + name), proj = sub ? path.join(repo, sub) : repo;
@@ -2445,20 +2454,30 @@ exports.run = async ({
     // LAST `Residues filed:` line are the ones filed (R2-PROMPTS-03: a kept branch's later residues). ONE closing order in both
     // files (R1-PROMPTS-01): finish → the execution sign-off → the residues → the commit → switch + merge. The commit (R2-PROMPTS-02)
     // adds what the run and the closing wrote — the feature's folder, roadmap.json, the generated roadmap files, the registry / a
-    // steering file when written — in the SAME words in both texts; git carries any other change across the switch (fix round 1's
-    // "until git status is empty … ask the user" asked on every close: the ticks' tasks.md is listed and no closing step wrote it);
-    // no recovery verb that parks or drops a change is named in either whole text (R2-PROMPTS-05), the sign-off asked in ONE
-    // sentence of each, whatever its spelling. UX-11: step 4 names the branch the merge line names, no guess without one.
+    // steering file / the launcher / .specs/.gitignore when written — in the SAME words in both texts (fix round 1's "until git
+    // status is empty … ask the user" asked on every close: the ticks' tasks.md is listed and no closing step wrote it). Fix round 3
+    // (R3-PROMPTS-01 / -02 / -03): a plain `git commit` commits the whole INDEX, so "git carries any other uncommitted change: not
+    // committed" was false for a change staged before the closing — the texts look at the index first (`git diff --cached
+    // --name-only`: those files go to the user, an input, so nothing is asked when nothing was staged), say that a file the run
+    // wrote is added whole, and that only an unstaged or untracked change is carried across the switch; no sweeping add in either
+    // whole text. No recovery verb that parks or drops a change is named in either whole text (R2-PROMPTS-05), the sign-off asked
+    // in ONE sentence of each, whatever its spelling. UX-11: step 4 names the branch the merge line names, no guess without one.
     const VERIFIER = raw("agents", "spec-verifier.md");
     const verdictReasons = ((VERIFIER.match(/REFUTED \(under 50\) — ([^\n]*)/) || [])[1] || "").split(" | ").map((s) => s.trim().replace(/ \(cite\)$/, ""));
     const REAL = "refuted as pre-existing or not in the diff with its `Exists at HEAD` line yes";
     const sec6 = ws(section(SUBX, "### 6. Verify the findings")), REVIEW = ws(raw("commands", "spec-review.md"));
     const otherReasons = verdictReasons.filter((r) => r !== "pre-existing" && r !== "not in the diff");
-    const COMMIT = "what the run and the closing wrote under `.specs/`: `git add` the feature's folder, `.specs/roadmap.json` and the generated roadmap files the project has (`.specs/ROADMAP.md`, `.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the finish registered components, and a steering file the run amended —, then commit (a path git ignores stays out: `git add` names it and adds the rest; a git-ignored `.specs/` has nothing to commit). Git carries any other uncommitted change across the switch: it is not lost and not committed (one the switch would overwrite makes it refuse, naming the file: ask the user).";
+    const COMMIT = "what the run and the closing wrote under `.specs/`. Before the `git add`, `git diff --cached --name-only` — a file it lists was staged before the closing and would go into the commit: show those files to the user, who decides (unstage them with `git restore --staged <file>`, or commit them too). Then `git add` the feature's folder, `.specs/roadmap.json` and the generated roadmap files the project has (`.specs/ROADMAP.md`, `.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the finish registered components, a steering file the run amended, `.specs/guardian.cjs` when `finish --run` replaced it and `.specs/.gitignore` when the engine added lines to it —, then commit (a file the run wrote is added whole: an edit of the user's in it goes into the commit too; a path git ignores stays out: `git add` names it and adds the rest; a git-ignored `.specs/` has nothing to commit). An unstaged or untracked change of the user's is not added, and git carries it across the switch (or the switch refuses, naming the file, when the branch changed it: ask the user).";
+    // the exclusion lists (every refutation reason that is NO residue) of §6 and Closing — read by two keys below
+    const excl6 = (sec6.match(/Any other reason — (.*?) — is no residue, whatever its `Exists at HEAD` line says\./) || [, ""])[1];
+    const exclC = (closing.match(/another refutation \((.*?): no defect to file\)/) || [, ""])[1];
+    // R3-PROMPTS-05: a sentence of §6 / Closing that pairs "residue" with a no-residue reason once its exclusion list is taken out
+    // (an intended refutation filed as a residue after all — the rule then contradicts itself)
+    const contrary = (t, excl) => (excl ? t.split(excl).join("") : t).split(/(?<=\.)\s+/).filter((s) => /\bresidues?\b/i.test(s) && otherReasons.some((r) => s.includes(r)));
     const commitIn = (t, lead) => { const i = t.indexOf(lead); if (i < 0) return ""; const rest = t.slice(i + lead.length), j = rest.indexOf("ask the user)."); return j < 0 ? "" : rest.slice(0, j + "ask the user).".length); };
     const SIGN = /spec_approve|dev-spec approve|approve `execution`|phase: "execution"|sign(?:s|ed)? off the `execution`/;
     const signSentences = (t) => t.split(/(?<=\.)\s+/).filter((s) => SIGN.test(s)).length;
-    all("1.42 (S1 + UX-11, fix rounds 1-2): the residues — a defect that exists at HEAD and ships: pre-existing (deferred), a refutation real at HEAD (refuted as pre-existing or not in the diff AND its Exists at HEAD line yes — one predicate in §6, Closing and /spec-review branch), parked (real), an unconfirmed (NN) or a class place outside a task the final review let ship — the ones after the last `Residues filed:` line filed as ONE residue-<feature> backlog entry, the defect in the controller's own words, the note split at 2,000 characters; ONE closing order in Closing and /spec-finish (finish, the execution sign-off asked in one sentence, the residues, then the commit of what the run and the closing wrote — the same words in both —, then the merge); /spec-finish step 4 merges the branch spec_finish's merge line names", {
+    all("1.42 (S1 + UX-11, fix rounds 1-3): the residues — a defect that exists at HEAD and ships: pre-existing (deferred), a refutation real at HEAD (refuted as pre-existing or not in the diff AND its Exists at HEAD line yes — one predicate in §6, Closing and /spec-review branch), parked (real), an unconfirmed (NN) or a class place outside a task the final review let ship — the ones after the last `Residues filed:` line filed as ONE residue-<feature> backlog entry, the defect in the controller's own words, the note split at 2,000 characters; ONE closing order in Closing and /spec-finish (finish, the execution sign-off asked in one sentence, the residues, then the commit of what the run and the closing wrote, a file staged before it shown to the user — the same words in both, no sweeping add —, then the merge); /spec-finish step 4 merges the branch spec_finish's merge line names", {
       reviewerLabel: /one "Pre-existing \(deferred\)" line at most/.test(REV) && !/one "Out of scope \(deferred\)" line at most/.test(REV) &&
         /outside the fix diff → "Out of scope \(deferred\)", one line each — it never reopens the loop/.test(REV),
       ledgerKinds: ["Task 3: pre-existing (deferred): <one-liner>", "Task 3: parked (real) — ", "Task 3: parked (contested) — ", "Residues filed: residue-<feature> (3)"].every((l) => ledger.includes(l)) &&
@@ -2481,8 +2500,11 @@ exports.run = async ({
       // §6 and in Closing (an intended / silenced / no-rule / nitpick refutation says "Exists at HEAD: yes" and is no defect)
       reasonsFromTemplate: verdictReasons.length >= 7 && ["pre-existing", "not in the diff"].every((r) => verdictReasons.includes(r)) &&
         otherReasons.length === verdictReasons.length - 2 &&
-        otherReasons.every((r) => (sec6.match(/Any other reason — (.*?) — is no residue, whatever its `Exists at HEAD` line says\./) || [, ""])[1].split(", ").includes(r)) &&
-        otherReasons.every((r) => (closing.match(/another refutation \((.*?): no defect to file\)/) || [, ""])[1].split(", ").includes(r)),
+        otherReasons.every((r) => excl6.split(", ").includes(r)) && otherReasons.every((r) => exclC.split(", ").includes(r)),
+      // R3-PROMPTS-05 (mutants R3-m3 / R3-m4): and no contrary rule — neither exclusion list names a residue's own reason, and no
+      // other sentence of §6 or Closing files a no-residue reason as a residue
+      noContraryRule: excl6 !== "" && exclC !== "" && ["pre-existing", "not in the diff"].every((r) => !excl6.includes(r) && !exclC.includes(r)) &&
+        contrary(sec6, excl6).length === 0 && contrary(closing, exclC).length === 0,
       name: /name: "residue-<feature>"/.test(closing) && /dev-spec backlog add residue-<feature> "residues: …"/.test(closing) && !/residue-<topic>/.test(SUB),
       ownWords: /<the defect, in your own words, never the reviewer's text>/.test(closing) && /<confidence NN \| ruling: why it shipped \| real at HEAD \| unverified>/.test(closing) &&
         /a pre-existing line or a class place never had a verify pass: `unverified`; a refutation real at HEAD: `real at HEAD` \(its confidence rated a fix round, not the defect\)/.test(closing),
@@ -2491,13 +2513,17 @@ exports.run = async ({
       once: closing.includes("**File the residues before the merge** — the residue lines after the ledger's last `Residues filed:` line (the ones above it are filed; no such line: every one).") &&
         /files the residues after its last `Residues filed:` line \(/.test(step4) && !/means they are filed|files its residues, once/.test(closing + FIN),
       split: /A note holds at most 2,000 characters — the rest goes in `residue-<feature>-2`, never truncated\./.test(closing),
-      // R1-PROMPTS-01 / 05 + R2-PROMPTS-02: the commit adds what the run and the closing wrote, after everything that writes the
-      // spec state, in the SAME words in both texts; git carries any other change across the switch (never asked on every close,
-      // never swept into the feature's commit); a git-ignored .specs/ has nothing to commit (its add would refuse)
+      // R1-PROMPTS-01 / 05 + R2-PROMPTS-02 + R3-PROMPTS-01..03: the commit adds what the run and the closing wrote, after everything
+      // that writes the spec state, in the SAME words in both texts — the index looked at first (a file staged before the closing
+      // goes to the user), a file the run wrote added whole, only an unstaged / untracked change carried across the switch (never
+      // asked on every close); a git-ignored .specs/ has nothing to commit (its add would refuse)
       commitState: commitIn(closing, "**Then commit the spec state with the feature** — ") === COMMIT &&
         commitIn(step4, "then commit the spec state with the feature — ") === COMMIT && step4.includes(COMMIT + " Offer exactly two options") &&
         !/user's work|is the user's, ask|porcelain -- \.specs|until it prints nothing|refuses while any of it/.test(closing + FIN) &&
-        !/git add (?:-A|--all|-u|\.(?=[\s`])|-- \.specs(?=[\s`]))/.test(closing + FIN),
+        // fix round 2's promise, false for a staged change (R3-PROMPTS-01), gone from both
+        !/any other uncommitted change|not lost and not committed/.test(closing + FIN),
+      // R3-PROMPTS-05 (mutants R3-m1 / R3-m2): no sweeping add in either WHOLE text, with or without `--`, a trailing slash or a glob
+      noSweepingAdd: !/git add (?:-A|--all|-u|\.(?=[\s`])|(?:-- )?\.specs\/?(?=[\s`*]))/.test(SUB + " " + FIN),
       // R2-PROMPTS-05: no recovery verb that parks or drops a change, in EITHER WHOLE text (the old key read Closing + step 4)
       noRecoveryVerb: !/\bstash\b|switch -f|--force|add -f|checkout --|reset --hard/.test(closing + FIN),
       // residues and the commit before the merge, after the sign-off — the same order in both files

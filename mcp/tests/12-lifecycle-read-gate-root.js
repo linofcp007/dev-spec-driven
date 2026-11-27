@@ -692,8 +692,9 @@ exports.run = async ({ ok, skip, all, eq, S, tmp, fsCalls, hookIn, require, __di
         doctor: () => !!rex && rex.status === "warn" && rex.detail === S.msg("en").quality.refExamplesGone("`src/missing.ts`", 0, ".specs/steering/structure.md"),
         lessons: () => js(lessons.map((l) => [l.ok, l.gone])) === js([[true, false], [true, false], [false, true]]),
       });
-      // (e) the sweep — lesson 13: every operation of the table, its read pass, over this project: no read or listing behind the
-      // junction, nothing behind it in any result. No allowance: a hit is a containment finding, fixed where the reader lives.
+      // (e) the sweep — a gate's scope is proven by driving EVERY entry, never by naming the readers it should reach: every operation
+      // of the table, its read pass, over this project: no read or listing behind the junction, nothing behind it in any result. No
+      // allowance: a hit is a containment finding, fixed where the reader lives.
       const pass = operationCalls(OPERATIONS, { names: ["code"], other: "code", report: "code" })(false);
       const sweepHits = [], sweepLeaks = [], driven = new Set();
       const ahead = process.env.DEV_SPEC_TEST_AHEAD;

@@ -146,12 +146,15 @@ exports.run = async ({ all, S, root, tmp, require }) => {
     // The texts that SEND an agent to doctor before an approval / before advancing, by PROPERTY (review 1, R1-SURF-01: a list of
     // seven missed GEMINI.md's and the Copilot rule's "Run `dev-spec doctor` before advancing" — `rules gemini` / `rules copilot`
     // print them): every shipped .md / .mdc (the rule files of other tools included) is cut into sentences (a paragraph, a list
-    // item or a table cell, split at ". " / "; "), and a sentence that orders doctor at an approval — "run … doctor … before
-    // advancing / an approval", "at each phase boundary run … doctor", "`spec_doctor` before a phase advances" / "… first",
-    // "`spec_doctor`, then the user's approval" — names the next gate (`nextGate` / "next gate") in that same sentence.
-    // What the shapes hide: an order to doctor in another wording (another language, "check with doctor", a code block), and the
-    // engine's .js strings. Mutations listed before the fixtures: N1 GEMINI.md's clause dropped · N2 the Copilot rule's · N3
-    // commands/spec.md's · N4 the "run … before" shape dropped · N5 the next gate read in the whole file, not the sentence.
+    // item or a table cell, split at ". " / "; " — a fenced line is read like any other), and a sentence that orders doctor at an
+    // approval — "run / use / call … doctor … before advancing / an approval", "each / every phase boundary … run / use / call …
+    // doctor", doctor directly followed by "first" / "before a phase advances" (only an inline `{…}` argument and a comma between),
+    // "doctor … then the user's approval" / "then ask (the user) for (its / their) approval" — names the next gate (`nextGate` /
+    // "next gate") in that same sentence. What the shapes hide: an order to doctor in another wording (another language, "check
+    // with doctor", words between doctor and "first", "doctor, then re-approve"), and the engine's .js strings (review 3,
+    // R3-TASKS-02: a fenced line IS read — change-management.md's loop is unread for its wording). Mutations listed before the
+    // fixtures: N1 GEMINI.md's clause dropped · N2 the Copilot rule's · N3 commands/spec.md's · N4 the "run … before" shape
+    // dropped · N5 the next gate read in the whole file, not the sentence.
     const units = (t) => t.replace(/\r\n/g, "\n").split(/\n\s*\n|\n(?=\s*(?:[-*]|\d+\.)\s)|\|/).flatMap((p) => p.replace(/\s+/g, " ").split(/(?<=[.;])\s+(?=[A-Z0-9`*(_[-])/));
     const D = "(?:spec_doctor|/spec-doctor|\\bdoctor)\\b", SS = "(?:(?!\\.\\s).)"; // doctor on any surface · a character of the same sentence
     const MOMENT = "(?:advanc\\w*|a phase advances|approving|(?:an?|each|the next|the|its) approval)\\b";
@@ -181,30 +184,32 @@ exports.run = async ({ all, S, root, tmp, require }) => {
     const docTexts = texts.filter(([rel]) => /\.(md|mdc)$/.test(rel));
     const sent = docTexts.flatMap(([rel, t]) => sends(t).map((x) => ({ rel, ...x })));
     const unnamed = sent.filter((x) => !x.named).map((x) => x.rel + " :: " + x.s.slice(0, 120));
-    all("1.42 UX-01: no shipped text holds an approval on readyToAdvance or promises one on nextGate; every shipped sentence of the four shapes read (run … doctor … before advancing / an approval, each phase boundary … doctor, doctor first / before a phase advances, doctor then the user's approval) names its next gate (hits: " + js(hits) + "; " + sent.length + " sentences in " +
+    all("1.42 UX-01: no shipped text holds an approval on readyToAdvance or promises one on nextGate; every shipped sentence of the four shapes read (run / use / call … doctor … before advancing / an approval, each / every phase boundary … run / use / call … doctor, doctor directly followed by first / before a phase advances, doctor … then the user's approval / then ask for approval) names its next gate (hits: " + js(hits) + "; " + sent.length + " sentences in " +
       new Set(sent.map((x) => x.rel)).size + " texts; unnamed: " + js(unnamed) + ")", {
       noHold: hits.length === 0,
       named: unnamed.length === 0,
       // the property reads every kind of text that sends one: a rule file of another tool, the skill, a command
       read: sent.some((x) => Object.values(RULE_FILES).includes(x.rel)) && sent.some((x) => x.rel.startsWith("skills/")) && sent.some((x) => x.rel.startsWith("commands/")) && sent.length >= 5,
     });
-    // Review 2 (R2-TASKS-01): the shapes are not the property — eight shipped sentences of other wordings (a pipeline, "doctor,
-    // and — on the user's yes — approve", a code block's loop) sent an agent to doctor before an approval and named no next gate;
-    // four of them are MCP prompts a skill-less client gets. Each now carries the clause, pinned here one by one; the reader does
+    // Review 2 (R2-TASKS-01): the shapes are not the property — seven shipped sentences of other wordings (a pipeline, "doctor,
+    // and — on the user's yes — approve"), plus change-management.md's arrow loop (a code block's line, unread for its wording),
+    // sent an agent to doctor before an approval and named no next gate; four of them are MCP prompts a skill-less client gets. Each now carries the clause, pinned here one by one; the reader does
     // NOT read them (the narrowed claim of the row above and of gates-and-approvals.md — a new sentence of another wording is
     // not caught). Mutations listed before the fixtures: Q1 … Q8 each sentence's clause dropped.
     const byRel = Object.fromEntries(docTexts.map(([rel, t]) => [rel, t.replace(/\s+/g, " ")]));
     const pinned = [
       ["commands/clarify.md", "Then `spec_clarify` and `ears_validate` again, `spec_doctor` (fix what its next gate refuses), and — on the user's explicit yes — record the requirements approval with `spec_approve`"],
       ["commands/spec-change.md", "Then update what the change reaches, `spec_doctor` (fix what its next gate refuses), and — on the user's yes — re-approve each changed phase with `spec_approve`."],
-      ["commands/spec-tour.md", "5. **Approve** — `spec_doctor` (fix what its next gate refuses), show the plan, and record it with `spec_approve {name, through: \"tasks\"}`"],
-      ["commands/spec-bugfix.md", "run `spec_doctor` and fix what its next gate refuses, then present the reproduction, the root cause with its evidence and the fix you propose — and wait."],
-      ["skills/dev-spec-driven/references/bugfix.md", "run `spec_doctor` (fix what its next gate refuses), and present the reproduction, the root cause and its evidence for the approvals"],
+      // R3-TASKS-01: the three that ask for several approvals at once (`spec_approve {through: "tasks"}`) name each gate up to the last
+      // one asked — nextGate is only the first pending gate, and the fast-forward stops at the first refusal after the user's yes
+      ["commands/spec-tour.md", "5. **Approve** — `spec_doctor` (fix what each gate up to tasks refuses — `nextGate` is only the first), show the plan, and record it with `spec_approve {name, through: \"tasks\"}`"],
+      ["commands/spec-bugfix.md", "run `spec_doctor` and fix what each gate up to tasks refuses (`nextGate` is only the first), then present the reproduction, the root cause with its evidence and the fix you propose — and wait."],
+      ["skills/dev-spec-driven/references/bugfix.md", "run `spec_doctor` (fix what each gate up to tasks refuses — `nextGate` is only the first), and present the reproduction, the root cause and its evidence for the approvals (requirements, design = `bug.md`, test-plan, tasks)"],
       ["AGENTS.md", "Each phase: fill the scaffold, `dev-spec doctor` (fix what its next gate refuses), present it, and record the user's yes."],
       ["skills/dev-spec-driven/SKILL.md", "→ fill → `spec_doctor` (fix what its next gate refuses) → present → the user's yes → `spec_approve`."],
       ["skills/dev-spec-driven/references/change-management.md", "→ spec_doctor (fix what its next gate refuses), then re-approve each changed phase (a new snapshot)"],
     ];
-    all("1.42 review 2 (R2-TASKS-01): the eight sentences of other wordings that send an agent to doctor before an approval name its next gate — pinned one by one, none of them read by the four shapes (the documented limit)",
+    all("1.42 reviews 2-3 (R2-TASKS-01, R3-TASKS-01): the eight sentences of other wordings that send an agent to doctor before an approval name the gates it waits on — its next gate, or each gate up to tasks where /spec-tour, /spec-bugfix and bugfix.md ask for several approvals at once — pinned one by one, none of them read by the four shapes (the documented limit)",
       Object.fromEntries(pinned.map(([rel, s]) => [rel, () => (byRel[rel] || "").includes(s) && sends(s).length === 0])));
   }
 };

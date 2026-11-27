@@ -110,8 +110,10 @@ Phase 6, opt-in.
   inputs in §6, Closing and `/spec-review branch` —, a `parked (real)`, an `unconfirmed (NN)` or a class place the final review
   let ship) — is filed as ONE `residue-<feature>` backlog entry (Closing: the lines after the ledger's last `Residues filed:`
   line); the closing order is one in Closing and /spec-finish, in the same words: finish, the `execution` sign-off, the
-  residues, a commit of what the run and the closing wrote (`git add` the feature's folder, roadmap.json, the generated roadmap
-  files, the registry / a steering file when written — git carries any other change across the switch), the merge. A defect
+  residues, a commit of what the run and the closing wrote (first `git diff --cached --name-only`: a file staged before the
+  closing goes to the user; then `git add` the feature's folder, roadmap.json, the generated roadmap files, the registry / a
+  steering file / `.specs/guardian.cjs` / `.specs/.gitignore` when written — a file the run wrote is added whole; git carries
+  an unstaged or untracked change across the switch), the merge. A defect
   confirmed again at another place is asked for as a class in the task's `_Implements:_` files
   (§7). The `review-seat` evals measure both seats (testing.md); no regex grader matches its seat's own agent prompt.
 - **Each agent prompt has a byte cap (1.42 S14)** — an agents/*.md is paid on every dispatch of its agent. mcp/tests/17-docs.js
@@ -1314,6 +1316,18 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (4) Two keys read less than they claimed: the recovery-verb check now reads both whole texts, the sign-off is counted per
   sentence over every spelling. Also: the stale "still a template" rationale above (UX-10 was cut; the stub hash serves doctor
   and the steering importer).
+- **1.42 fix round 3 (FX3-DSD)** — review 3 of that commit (the closing commit's third MEDIUM in a row: back to an explicit
+  user action). "Git carries any other uncommitted change across the switch: it is not lost and not committed" was false for
+  a STAGED change — a plain `git commit` commits the whole index, so a change the user staged (or an implementer commit a hook
+  refused left staged) went into the spec-state commit and, with the merge, to the base. Taken out: before the `git add`, both
+  texts run `git diff --cached --name-only` — a file it lists was staged before the closing: the user decides (unstage it with
+  `git restore --staged <file>`, or commit it too). Keyed on an input (the index), so nothing is asked when nothing was staged,
+  never on every close; only an unstaged or untracked change is said to be carried. A file the run wrote is added whole — a
+  user's edit in it goes into the commit too, said (the accept, not a new check). The list gains the engine's two writes
+  under `.specs/` the run makes: `.specs/guardian.cjs` when `finish --run` replaced an earlier version's launcher
+  (`launcherRefreshed`; verification.md says it is committed) and `.specs/.gitignore` when `ensureLockIgnore` added lines.
+  The 17-docs keys read more: no sweeping add (`git add .specs`, `-- .specs/`, `-A`, `.`) in either whole text, and no
+  contrary residue rule (a no-residue reason filed as one, or a residue's own reason in an exclusion list).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
