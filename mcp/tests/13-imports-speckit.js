@@ -95,6 +95,39 @@ exports.run = async ({ ok, all, S, tmp, remeasure, require }) => {
       "1.42 SK-04: a spec-kit folder's number is stripped once — YYYYMMDD-HHMMSS- (Spec Kit's --timestamp) or digits — 20261120-101500-photo-albums → photo-albums, 004-2026-roadmap keeps 2026-, a 7-digit time is no timestamp, one strip only (got " + js(got) + ")");
   }
 
+  // 1.42 SK-06: spec-kit's /plan marks an unknown bare (`**Testing**: NEEDS CLARIFICATION`) and the engine counts only bracketed
+  // markers — the imported design passed its gate with open unknowns. A field whose value opens with it gets
+  // `[NEEDS CLARIFICATION: <field>]`, its tail verbatim after it; a fenced, indented or commented copy, prose after it and the
+  // template's `[e.g., … or NEEDS CLARIFICATION]` stay. research.md resolving one (Phase 0) still reads open: fail closed.
+  {
+    const E = require("./lib/engine/index.js");
+    const p = fresh("speckit-plan");
+    const k = speckit(p);
+    const long = "x".repeat(600);
+    put(path.join(k, "plan.md"), ["# Implementation Plan: Photo Albums", "", "**Branch**: `001-photo-albums` | **Date**: 2026-11-21 | **Spec**: [spec.md](./spec.md)", "",
+      "## Summary", "", "Albums stored in SQLite, served by Fastify.", "", "## Technical Context", "", "<!--", "  ACTION REQUIRED: Replace the content in this section with the technical details",
+      "  for the project.", "-->", "", "**Language/Version**: TypeScript 5.6", "**Primary Dependencies**: Fastify", "- **Storage**: needs clarification",
+      "**Testing:** NEEDS CLARIFICATION - pytest or vitest?", "**Target Platform**: Linux server", "**Performance Goals**: NEEDS CLARIFICATION — " + long,
+      "**Constraints**: NEEDS CLARIFICATION", "**Scale/Scope**: [e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]", "",
+      "**Note**: NEEDS CLARIFICATION markers are resolved in research.md (Phase 0).", "", "<!--", "**Project Type**: NEEDS CLARIFICATION", "-->", "",
+      "```text", "**Project Type**: NEEDS CLARIFICATION", "```", "", "Example:", "", "    **Project Type**: NEEDS CLARIFICATION", ""].join("\r\n"));
+    put(path.join(k, "research.md"), "# Research: Photo Albums\n\n## Decision: Testing framework\n\n- Decision: vitest\n- Rationale: one runner for the API and the UI\n");
+    const r = S.importSpec(p, "spec-kit", "specs/001-photo-albums", { tracks: ["core"] });
+    const d = r.ok ? rd(r.dir, "design.md") : "";
+    const doc = r.ok ? S.specDoctor(p, r.feature) : {};
+    const cl = ((doc.checks || []).find((c) => c.id === "clarifications") || {}).detail || "";
+    all("1.42 SK-06: plan.md's bare NEEDS CLARIFICATION values become markers the design gate counts — Storage, Testing, Performance Goals, Constraints; the field name alone in the marker, the tail verbatim after it; fenced / indented / commented copies, the Note's prose and the template's [e.g., …] untouched; research.md's resolution does not hide one (got " +
+      js({ markers: E.clarificationMarkers(d), cl, tc: d.slice(d.indexOf("**Language"), d.indexOf("**Note")) }) + ")", [
+      () => r.ok, () => js(E.clarificationMarkers(d)) === js(["Storage", "Testing", "Performance Goals", "Constraints"]),
+      () => /\n- \*\*Storage\*\*: \[NEEDS CLARIFICATION: Storage\]\r?\n/.test(d), () => /\n\*\*Testing:\*\* \[NEEDS CLARIFICATION: Testing\] - pytest or vitest\?\r?\n/.test(d),
+      () => d.includes("**Performance Goals**: [NEEDS CLARIFICATION: Performance Goals] — " + long), () => /\n\*\*Constraints\*\*: \[NEEDS CLARIFICATION: Constraints\]\r?\n/.test(d),
+      () => d.includes("**Scale/Scope**: [e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]"), () => d.includes("**Note**: NEEDS CLARIFICATION markers are resolved"),
+      () => /<!--\r?\n\*\*Project Type\*\*: NEEDS CLARIFICATION\r?\n-->/.test(d), () => /```text\r?\n\*\*Project Type\*\*: NEEDS CLARIFICATION\r?\n```/.test(d),
+      () => /\n {4}\*\*Project Type\*\*: NEEDS CLARIFICATION\r?\n/.test(d), () => /\b4 unresolved \[NEEDS CLARIFICATION\] in design\.md/.test(cl),
+      () => /- Decision: vitest/.test(d),
+    ]);
+  }
+
   // 1.42 CRI-2: the two scans that replaced a backtracking regex read what it read — every line built from a short head and a
   // tail of up to 5 units over the characters each pattern turns on (blanks, a line separator, a CR, its marks), exhaustively.
   {

@@ -8,10 +8,11 @@
  */
 const path = require("path");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let blankFacts, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings, mdListItems, mdRange,
-  newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths;
-function __link(E) { ({ blankFacts, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings,
-  mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths } = E); }
+let blankFacts, codeBlockLines, commentLines, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings, mdListItems,
+  mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths;
+function __link(E) { ({ blankFacts, codeBlockLines, commentLines, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody,
+  mdHeadings, mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory,
+  unusedLines, planPaths } = E); }
 
 // spec-kit: specs/<nnn-name>/ — spec.md (### User Story N - Title (Priority: P1) + numbered Given/When/Then
 // Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
@@ -163,7 +164,7 @@ function parseSpecKit(dir, read, W, src) {
   // (they were skipped with a warning: "not imported"). Read through `read` like every source file: inside the project, a file
   // over the import cap refuses the import.
   const docs = specKitDesignDocs(dir, read, W, model, src);
-  if (plan != null || docs) model.design = { text: [plan, docs].filter((x) => x != null).join("\n\n"), file: "plan.md" };
+  if (plan != null || docs) model.design = { text: [plan == null ? null : specKitPlanMarkers(plan), docs].filter((x) => x != null).join("\n\n"), file: "plan.md" };
   if (plan == null) model.warnings.push(docs ? W.wNoPlanDocs("plan.md") : W.wNoDesign("plan.md"));
   // a task's [USn] tag → _Requirements:_ (that story's ACs, resolved by importSpec), the paths it names → _Implements:_
   if (tasks != null) model.tasks = { text: specKitTaskMarkers(tasks), file: "tasks.md" };
@@ -265,6 +266,32 @@ function specKitTaskMarkers(text) {
   }
   return out.join(eol);
 }
+// spec-kit's /plan marks an unknown of its Technical Context bare — `**Testing**: NEEDS CLARIFICATION` ("mark unknowns as NEEDS
+// CLARIFICATION"; its own gate errors on any left) — and the engine counts only `[NEEDS CLARIFICATION…]` (clarificationMarkers): the
+// design gate let them through. A `**Field**:` / `**Field:**` (a list item's too) whose value OPENS with it, then nothing or a
+// `:` / `-` / `–` / `—` and a tail, gets `[NEEDS CLARIFICATION: Field]`, the tail kept verbatim after it (inside the brackets a tail
+// past the reader's 500 characters was no marker any more). Only on a line that is content as the counter reads it — no fenced
+// or indented code (codeBlockLines), no part in a comment (commentLines); prose after it ("NEEDS CLARIFICATION markers are
+// resolved …") and the template's `[e.g., … or NEEDS CLARIFICATION]` stay. A field Phase 0 resolved in research.md while plan.md
+// still says NEEDS CLARIFICATION reads open: fail closed (one line to edit).
+const RE_PLAN_FIELD = /^([ \t]*(?:[-*+][ \t]+)?\*\*([^*\]\n]{1,80}?)(?:\*\*[ \t]*:|:\*\*)[ \t]*)NEEDS[ _-]CLARIFICATION/i;
+function specKitPlanMarkers(text) {
+  const lines = String(text).split("\n");
+  const code = codeBlockLines(lines), cl = commentLines(lines);
+  let changed = false;
+  const out = lines.map((l, i) => {
+    const m = code[i] || cl[i].vis !== l ? null : RE_PLAN_FIELD.exec(l);
+    if (!m) return l;
+    const rest = l.slice(m[0].length);
+    let q = 0;
+    while (q < rest.length && isWsUnit(rest[q])) q++;
+    if (q < rest.length && !":-–—".includes(rest[q])) return l;
+    changed = true;
+    return m[1] + "[NEEDS CLARIFICATION: " + m[2].trim() + "]" + rest;
+  });
+  return changed ? out.join("\n") : text;
+}
+
 // spec-kit's design documents beside plan.md, in its own order (research → data model → contracts → quickstart),
 // as design.md sections: `## <localized title>`, a provenance line, then the document — its first-line title dropped and every
 // other heading one level down (outside fenced code), so its sections stay under ours; a contract that is no markdown goes into a
