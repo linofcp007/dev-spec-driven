@@ -300,10 +300,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   slow file system. No network, an unprivileged user (`--root` to opt out). Only the first run needs network — to pull
   and to build a cached derived image `dev-spec-test:<image>` that adds git (`--no-git` skips it; the git-dependent tests
   then skip; `--rebuild` rebuilds it). Options `--image <name>` (repeatable), `--suite mcp|cli`, `--jobs <n>` (the suites'
-  own, in each container — a shared machine: `--jobs 4`), `--alias-tmp` (1.42, opt-in: each suite's TMPDIR behind a symlink the
+  own, in each container — a shared machine: `--jobs 4`), `--alias-tmp` (1.42: each suite's TMPDIR behind a symlink the
   container makes, `/tmp/alias-tmp` → `/tmp/real-tmp` — every test project's path an alias of its real one on a case-sensitive file
   system, the POSIX twin of Windows' 8.3 temp and of macOS's `/var` → `/private/var`: macOS itself is never run here; the Summary
-  marks the rows `(alias tmp)`; it becomes the last image's default only after a clean run of both suites under it). Exit 0 all passed · 1 a
+  marks the rows `(alias tmp)`. A run of the default images runs the NEWEST one under it — its first run on the integrated branch
+  came back clean, after review 1's ten test-side path fixes —; `--alias-tmp` turns it on for every image, an `--image` list is
+  plain without it). Exit 0 all passed · 1 a
   suite failed or an image couldn't be prepared · 2 no Docker (not installed, daemon down, Windows-containers mode) or a
   usage error; logs in `<tmp>/dev-spec-docker/<image>-<suite>.log`. Never wire it to hosted CI.
 - **Plugin evals** (`claude plugin eval`, maintainer-side, cost tokens, local only): the triggering suite

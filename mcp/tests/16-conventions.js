@@ -561,6 +561,16 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       mounted: () => mounted === "sh -c " + TD.ALIAS_TMP + "exec node mcp/test.js",
       jobs: () => cmdOf(["--alias-tmp", "--jobs", "4"], "cli").endsWith("exec node cli/test-cli.js --jobs 4"),
     });
+    // 1.42 (after review 1): the leg's first run on the integrated branch came back clean, so a run of the DEFAULT images runs
+    // the newest of them under it; every other default image, and any --image list, stays plain unless --alias-tmp is given.
+    const dflt = TD.parseArgs([]), listed = TD.parseArgs(["--image", TD.DEFAULT_IMAGES[TD.DEFAULT_IMAGES.length - 1]]), forced = TD.parseArgs(["--alias-tmp"]);
+    const newest = TD.DEFAULT_IMAGES[TD.DEFAULT_IMAGES.length - 1];
+    all("1.42: a run of the default images runs the newest (" + newest + ") with the alias temp and the others without; an --image list is plain; --alias-tmp turns it on for every image", {
+      newestOn: () => TD.aliasFor(newest, dflt) === true,
+      othersOff: () => TD.DEFAULT_IMAGES.slice(0, -1).every((im) => TD.aliasFor(im, dflt) === false),
+      listedOff: () => TD.aliasFor(newest, listed) === false,
+      forcedAll: () => TD.DEFAULT_IMAGES.every((im) => TD.aliasFor(im, forced) === true),
+    });
   }
 
   // 1.17: no regex literal lost its backslashes (a heredoc'd edit once turned /^\s*status\s*:/i into /^s*statuss*:/i in

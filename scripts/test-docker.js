@@ -29,9 +29,12 @@
  * fully offline. When that build can't run (offline), the bare image is used and those tests report "skip".
  * --rebuild rebuilds the derived images (e.g. after pulling a newer base).
  *
- * --alias-tmp (1.42, opt-in): each suite runs with its TMPDIR behind a symlink — /tmp/alias-tmp → /tmp/real-tmp, made in the
+ * --alias-tmp (1.42): each suite runs with its TMPDIR behind a symlink — /tmp/alias-tmp → /tmp/real-tmp, made in the
  * container —, so every test project's path is an ALIAS of its real one on a case-sensitive file system: the POSIX twin of
  * Windows' 8.3 temp (ADMINI~1) and of macOS's /var → /private/var, which no machine here runs. The Summary marks those rows.
+ * A run of the DEFAULT images runs the last one (DEFAULT_IMAGES' newest) with it on, the others without (1.42, once the leg's
+ * first run came back clean on the integrated branch); --alias-tmp turns it on for every image; an --image list is plain unless
+ * --alias-tmp is given.
  *
  * Exit code: 0 every suite passed on every image · 1 a suite failed (or an image could not be prepared) ·
  * 2 Docker is not available (not installed, daemon not running, or in Windows-containers mode) — or a usage error.
@@ -63,7 +66,7 @@ Runs mcp/test.js and cli/test-cli.js inside Linux containers (repo mounted read-
   --root          run the suites as root (default: an unprivileged user, uid 1000)
   --mounted       run straight from the read-only bind mount (a slow file system) instead of a copy
   --alias-tmp     run each suite with TMPDIR behind a symlink (/tmp/alias-tmp → /tmp/real-tmp): every test project's
-                  path an alias of its real one, as macOS's /var → /private/var (opt-in)
+                  path an alias of its real one, as macOS's /var → /private/var (default: on for the last default image only)
 The first run needs network to pull the images (and apk/apt to add git); later runs are offline.
 Exit: 0 all passed · 1 a suite failed · 2 Docker is not available (or a usage error).`;
 
@@ -93,9 +96,12 @@ function parseArgs(argv) {
     else if (a === "--alias-tmp") o.aliasTmp = true;
     else usageError(`unknown argument '${a}'`);
   }
-  if (!o.images.length) o.images = DEFAULT_IMAGES.slice();
+  o.defaultImages = !o.images.length;
+  if (o.defaultImages) o.images = DEFAULT_IMAGES.slice();
   return o;
 }
+// Does `image` run with the alias temp? --alias-tmp: every image; a run of the default images: the newest of them too.
+const aliasFor = (image, o) => !!o.aliasTmp || (!!o.defaultImages && image === DEFAULT_IMAGES[DEFAULT_IMAGES.length - 1]);
 function usageError(msg) {
   console.error(`test-docker: ${msg}\n\n${USAGE}`);
   process.exit(2);
@@ -190,7 +196,7 @@ function main() {
   fs.mkdirSync(LOG_DIR, { recursive: true });
   console.log(`dev-spec-driven — test suites in Linux containers (Docker ${d.version}, linux/${d.arch})`);
   console.log(`repo ${ROOT} → /repo (read-only)${o.mounted ? ", run from the mount" : ", copied into the container"} · --network none · ${o.root ? "as root" : "as uid 1000"} · suites: ${o.suites.join(", ")}` +
-    `${o.aliasTmp ? " · TMPDIR /tmp/alias-tmp → /tmp/real-tmp (alias tmp)" : ""}\n`);
+    `${o.aliasTmp ? " · TMPDIR /tmp/alias-tmp → /tmp/real-tmp (alias tmp)" : o.defaultImages ? ` · alias tmp on ${DEFAULT_IMAGES[DEFAULT_IMAGES.length - 1]}` : ""}\n`);
 
   const rows = [];
   for (const image of o.images) {
@@ -204,10 +210,11 @@ function main() {
     const probe = runInImage(p.ref, ["sh", "-c", "node --version; git --version 2>/dev/null || echo 'no git'"], o);
     const [nodeV, gitV] = String(probe.stdout || "").trim().split(/\r?\n/);
     console.log(`  ${p.ref} · node ${nodeV || "?"} · ${gitV || "?"}${p.note ? " · " + p.note : ""}`);
-    const row = { image, ref: p.ref, node: nodeV || "?", results: [] };
+    const io = { ...o, aliasTmp: aliasFor(image, o) };
+    const row = { image, ref: p.ref, node: nodeV || "?", alias: io.aliasTmp, results: [] };
     for (const suite of o.suites) {
       const t0 = Date.now();
-      const r = runInImage(p.ref, suiteCommand(suite, o), o);
+      const r = runInImage(p.ref, suiteCommand(suite, io), o);
       const ms = Date.now() - t0;
       const out = (r.stdout || "") + (r.stderr || "");
       const log = path.join(LOG_DIR, `${derivedTag(image).split(":")[1]}-${suite}.log`);
@@ -237,7 +244,7 @@ function main() {
     if (row.error) { bad++; console.log(`  ✗ ${row.image.padEnd(24)} ${row.error}`); continue; }
     const cells = row.results.map((r) => `${r.suite} ${r.ok ? "✓" : "✗"} ${r.passed == null ? "?" : r.passed}/${r.passed == null ? "?" : r.passed + r.failed}`);
     if (row.results.some((r) => !r.ok)) bad++;
-    console.log(`  ${row.results.every((r) => r.ok) ? "✓" : "✗"} ${row.image.padEnd(24)} node ${row.node.padEnd(9)} ${cells.join("   ")}${o.aliasTmp ? "   (alias tmp)" : ""}`);
+    console.log(`  ${row.results.every((r) => r.ok) ? "✓" : "✗"} ${row.image.padEnd(24)} node ${row.node.padEnd(9)} ${cells.join("   ")}${row.alias ? "   (alias tmp)" : ""}`);
   }
   console.log(bad ? `\n${bad} of ${rows.length} image(s) failed.` : `\nAll suites passed on ${rows.length} image(s).`);
   process.exitCode = bad ? 1 : 0;
@@ -245,4 +252,4 @@ function main() {
 
 // (required — mcp/tests/16-conventions.js reads the arguments and the container's command offline — it runs nothing)
 if (require.main === module) main();
-else module.exports = { parseArgs, suiteCommand, DEFAULT_IMAGES, ALIAS_TMP };
+else module.exports = { parseArgs, suiteCommand, aliasFor, DEFAULT_IMAGES, ALIAS_TMP };
