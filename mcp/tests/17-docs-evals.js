@@ -223,7 +223,7 @@ exports.run = async ({ ok, all, skip, S, root, tmp, require }) => {
     // the controller acts on (§6: under 50 → refuted, or the verdict word) and matches those three recorded lines, never a
     // confirmation, an unconfirmed one or the output template; the ❌ case's CONFIRMED grader takes both bold placements, never
     // the template's `CONFIRMED (80+) | UNCONFIRMED (50–79) | …` line.
-    const seatGrader = (c, g) => { const gfm = front(readEv(c, "graders", g)); try { return new RegExp(yamlQuoted(gfm, "pattern"), (gfm.match(/^flags:\s*(\S+)\s*$/m) || [])[1] || ""); } catch { return null; } };
+    const seatGrader = (c, g) => { if (!fs.existsSync(path.join(evDir, c, "graders", g))) return null; const gfm = front(readEv(c, "graders", g)); try { return new RegExp(yamlQuoted(gfm, "pattern"), (gfm.match(/^flags:\s*(\S+)\s*$/m) || [])[1] || ""); } catch { return null; } };
     const refutedRe = seatGrader("verify-seat-pre-existing-en", "verdict.md"), confirmedRe = seatGrader("verify-seat-ac-missing-en", "verdict.md");
     const verifierTemplate = (fs.readFileSync(path.join(root, "agents", "spec-verifier.md"), "utf8").match(/^\*\*Verdict:\*\* CONFIRMED \(80\+\) \|.*$/m) || [""])[0];
     const refRecorded = [
