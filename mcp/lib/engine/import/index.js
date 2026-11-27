@@ -260,6 +260,7 @@ const C3_PARSERS = { plan: parsePlan, execplan: parseExecPlan, bmad: parseBmad, 
 // refusal is the real import's refusal, plus `dryRun: true`.
 const DRY_RUN_FILE_CHARS = 4000;
 const DRY_RUN_TOTAL_CHARS = 24000;
+const IMPORT_SKIPPED_SHOWN = 50; // the "not imported" warning's names (importSpec.wSkipped), then `+N more` (importSpec.more)
 function importSpec(projectDir, tool, source, opts = {}) {
   if (opts.dryRun !== true) return importRun(projectDir, tool, source, opts);
   const { value, writes } = withDryRun(() => importRun(projectDir, tool, source, opts));
@@ -623,7 +624,11 @@ function importRun(projectDir, tool, source, opts) {
   const clsFile = path.join(cr.dir, "classification.md");
   const clsText = readIfExists(clsFile);
   if (clsText != null) put("classification.md", clsText.replace(/^(#\s[^\n]*\n)/, (h1) => `${h1}\n${note}\n`));
-  if (model.skipped.length) warnings.push(W.wSkipped(model.skipped.join(", ")));
+  // at most IMPORT_SKIPPED_SHOWN names, then the count of the rest (a project root imported as a spec-kit folder lists all of it)
+  if (model.skipped.length) {
+    const more = model.skipped.length - IMPORT_SKIPPED_SHOWN;
+    warnings.push(W.wSkipped(model.skipped.slice(0, IMPORT_SKIPPED_SHOWN).join(", ") + (more > 0 ? ", " + W.more(more) : "")));
+  }
   if (!isDryRun()) maybeRefreshRoadmap(projectDir); // a dry run renders no roadmap (it would only be recorded, at a walk's cost)
   // what the mapping holds, counted (a dry run shows them before anything is written): stories, criteria, tasks, decisions
   const decisionIds = new Set(Object.values(mapping).filter((v) => /^D-\d+$/.test(v)));

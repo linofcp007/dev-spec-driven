@@ -1980,6 +1980,7 @@ const msg = {
       wRemoved: (name) => `REMOVED requirement '${name}' was not imported`,
       wRenamed: (from, to) => `RENAMED requirement '${from}' → '${to}' (imported under the new name)`,
       wSkipped: (files) => `not imported (left in place): ${files}`,
+      more: (n) => `+${n} more`, // wSkipped's names past the first 50
       // spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
       skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", quickstart: "Quickstart" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,

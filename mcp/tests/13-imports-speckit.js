@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, S, tmp, remeasure, require }) => {
+exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
   const js = JSON.stringify;
   const fresh = (n) => { const p = path.join(tmp, "proj-r6i-" + n); S.initProject(p, ["core"]); return p; };
   const rd = (...a) => fs.readFileSync(path.join(...a), "utf8");
@@ -126,6 +126,83 @@ exports.run = async ({ ok, all, S, tmp, remeasure, require }) => {
       () => /\n {4}\*\*Project Type\*\*: NEEDS CLARIFICATION\r?\n/.test(d), () => /\b4 unresolved \[NEEDS CLARIFICATION\] in design\.md/.test(cl),
       () => /- Decision: vitest/.test(d),
     ]);
+  }
+
+  // 1.42 SK-01: what a spec-kit import leaves in the feature folder is named — checklists/, a note, a contracts folder deeper than
+  // two levels were dropped silently ("nothing is dropped silently"): every entry but a hidden one, a name the parser reads and
+  // the case twin of one whose read reached it; a folder with "/", decided on the entry (a link without it — live or dangling, the
+  // same words); at most 50 names, then "+N more". The exact-name rule's stated limit: a FOLDER named plan.md is not named.
+  {
+    const left = (r) => (r.warnings || []).filter((w) => w.startsWith("not imported (left in place): ")).map((w) => w.slice("not imported (left in place): ".length).split(", "));
+    const p = fresh("speckit-left");
+    const k = speckit(p);
+    put(path.join(k, "checklists", "requirements.md"), "# Specification Quality Checklist: Photo Albums\n\n- [ ] No [NEEDS CLARIFICATION] markers remain\n");
+    put(path.join(k, "checklists", "security.md"), "# Security Checklist: Photo Albums\n\n- [ ] CHK001 Are share-link lifetimes specified? [Completeness, Spec §FR-001]\n");
+    put(path.join(k, "notes.txt"), "scratch\n");
+    put(path.join(k, ".DS_Store"), "x");
+    put(path.join(k, "contracts", "albums.yaml"), "openapi: 3.0.0\n");
+    put(path.join(k, "contracts", "v1", "schemas", "album.json"), "{}\n");
+    const r = S.importSpec(p, "spec-kit", "specs/001-photo-albums", {});
+    // a folder of 60 extra notes, a FOLDER named plan.md (the stated limit: not named) and a case twin of a known name whose read
+    // failed (a folder Quickstart.md: no file read it, on any file system — named)
+    const p2 = fresh("speckit-left-cap");
+    const k2 = path.join(p2, "specs", "002-cap");
+    put(path.join(k2, "spec.md"), "# Feature Specification: Cap\n\n### User Story 1 - T (Priority: P1)\n\n**Acceptance Scenarios**:\n\n1. **Given** a, **When** b, **Then** c\n");
+    put(path.join(k2, "tasks.md"), "# Tasks: Cap\n\n- [ ] T001 [US1] do it\n");
+    fs.mkdirSync(path.join(k2, "plan.md"), { recursive: true });
+    fs.mkdirSync(path.join(k2, "Quickstart.md"), { recursive: true });
+    for (let i = 1; i <= 60; i++) put(path.join(k2, "n-" + String(i).padStart(2, "0") + ".md"), "note\n");
+    const r2 = S.importSpec(p2, "spec-kit", "specs/002-cap", {});
+    const l2 = left(r2)[0] || [];
+    // the project root imported as a spec-kit folder (path "."): its entries are named, capped, never a hidden one (.specs, .git)
+    const p3 = fresh("speckit-left-root");
+    put(path.join(p3, "spec.md"), "# Feature Specification: Root\n\n### User Story 1 - T (Priority: P1)\n\n**Acceptance Scenarios**:\n\n1. **Given** a, **When** b, **Then** c\n");
+    put(path.join(p3, "package.json"), "{}\n");
+    put(path.join(p3, "src", "index.js"), "x\n");
+    put(path.join(p3, ".git", "HEAD"), "ref: refs/heads/main\n");
+    for (let i = 1; i <= 55; i++) put(path.join(p3, "f-" + String(i).padStart(2, "0") + ".txt"), "x\n");
+    const r3 = S.importSpec(p3, "spec-kit", ".", { name: "root-import" });
+    const l3 = left(r3)[0] || [];
+    all("1.42 SK-01: a spec-kit import names what it leaves — checklists/, notes.txt, contracts/v1/schemas/ (never .DS_Store, never a name it reads); 50 names then '+N more'; a folder named plan.md is not named (the exact-name rule's limit), a Quickstart.md folder no read reached is; the project root's entries are named, never .specs/ or .git/ (got " +
+      js({ r: left(r), r2: [l2.length, l2[0], l2[49], l2[50]], r3: [l3.length, l3.slice(0, 3), l3[50]] }) + ")", [
+      () => r.ok, () => js(left(r)) === js([["contracts/v1/schemas/", "checklists/", "notes.txt"]]),
+      () => r2.ok, () => left(r2).length === 1, () => l2.length === 51, () => l2[0] === "Quickstart.md/", () => l2[1] === "n-01.md", () => l2[49] === "n-49.md",
+      () => l2[50] === "+11 more", () => !l2.some((x) => /^plan\.md/i.test(x)),
+      () => r3.ok, () => l3.length === 51, () => l3[50] === "+7 more", () => l3[0] === "f-01.txt" && l3[49] === "f-50.txt", // (package.json and src/ sort after f-55.txt: among the 7 more)
+      () => !l3.some((x) => x.startsWith(".")), () => !l3.includes("spec.md"),
+      () => S.msg("pt").importSpec.more(3) === "+3 mais" && S.msg("es").importSpec.more(3) === "+3 más",
+    ]);
+    // the decision follows the read, never the file system: a lone Spec.md is the spec on a case-insensitive file system (read
+    // reached it — not named) and none on a case-sensitive one (named)
+    const probe = path.join(tmp, "proj-142-case-probe");
+    put(path.join(probe, "a"), "x");
+    const folds = fs.existsSync(path.join(probe, "A"));
+    const p4 = fresh("speckit-left-case");
+    const k4 = path.join(p4, "specs", "004-case");
+    put(path.join(k4, "Spec.md"), "# Feature Specification: Case\n\n### User Story 1 - T (Priority: P1)\n\n**Acceptance Scenarios**:\n\n1. **Given** a, **When** b, **Then** c\n");
+    put(path.join(k4, "tasks.md"), "# Tasks: Case\n\n- [ ] T001 do it\n");
+    const r4 = S.importSpec(p4, "spec-kit", "specs/004-case", {});
+    ok(r4.ok && (folds ? !left(r4).length && r4.counts.stories === 1 : js(left(r4)) === js([["Spec.md"]]) && r4.counts.stories === 0),
+      "1.42 SK-01: a lone Spec.md is named only where read('spec.md') did not reach it — " + (folds ? "this file system folds case: it is the spec, not named" : "this file system is case-sensitive: named") + " (got " + js([r4.ok, left(r4), r4.counts]) + ")");
+  }
+  // links (where they can be created): a link entry is named without "/" whether its target is there or not — the same warnings
+  // both ways; `contracts` linked out of the project is one wUnreadable, never named as left
+  {
+    const out = path.join(tmp, "proj-142-left-outside");
+    put(path.join(out, "x.yaml"), "openapi: 3.0.0\n");
+    const p = fresh("speckit-left-link");
+    const k = speckit(p);
+    let linked = false;
+    try { fs.symlinkSync(out, path.join(k, "contracts"), "junction"); fs.symlinkSync(out, path.join(k, "linked"), "junction"); linked = true; } catch { /* no link rights */ }
+    if (!linked) skip("1.42 SK-01: a link entry is named without '/', live or dangling", "links cannot be created here");
+    else {
+      const live = S.importSpec(p, "spec-kit", "specs/001-photo-albums", { name: "live" });
+      fs.rmSync(out, { recursive: true, force: true });
+      const dead = S.importSpec(p, "spec-kit", "specs/001-photo-albums", { name: "dead" });
+      const unread = (r) => (r.warnings || []).filter((w) => /contracts points outside the project/.test(w)).length;
+      ok(live.ok && dead.ok && js(live.warnings) === js(dead.warnings) && (live.warnings || []).includes("not imported (left in place): linked") && unread(live) === 1,
+        "1.42 SK-01: a link entry is named without '/', live or dangling (the same warnings both ways); contracts linked out is one wUnreadable, never named as left (got " + js([live.warnings, dead.warnings]) + ")");
+    }
   }
 
   // 1.42 CRI-2: the two scans that replaced a backtracking regex read what it read — every line built from a short head and a

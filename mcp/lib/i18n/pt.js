@@ -1882,6 +1882,7 @@ const msg = {
       wRemoved: (name) => `o requisito REMOVED '${name}' não foi importado`,
       wRenamed: (from, to) => `requisito RENAMED '${from}' → '${to}' (importado com o nome novo)`,
       wSkipped: (files) => `não importados (ficam onde estão): ${files}`,
+      more: (n) => `+${n} mais`,
       skDocs: { research: "Investigação", dataModel: "Modelo de dados", contracts: "Contratos", quickstart: "Arranque rápido" },
       skFrom: (file) => `> Do spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `não há ${file} na origem — o design.md tem os documentos de design encontrados ao lado (investigação, modelo de dados, contratos, arranque rápido) sem o plano`,

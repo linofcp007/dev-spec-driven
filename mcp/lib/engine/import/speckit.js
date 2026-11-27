@@ -68,10 +68,14 @@ function specKitStoryHeading(text) {
   }
   return null;
 }
+// What the parser reads in a feature folder — every other entry is named as left in place (specKitLeft).
+const SPECKIT_KNOWN = ["spec.md", "plan.md", "tasks.md", "research.md", "data-model.md", "quickstart.md", "contracts"];
 function parseSpecKit(dir, read, W, src) {
-  const spec = read(path.join(dir, "spec.md"));
-  const plan = read(path.join(dir, "plan.md"));
-  const tasks = read(path.join(dir, "tasks.md"));
+  const got = new Set(); // the SPECKIT_KNOWN names the parser's reads reached (a case twin's on a case-insensitive file system)
+  const rd = (name) => { const t = read(path.join(dir, name)); if (t != null) got.add(name); return t; };
+  const spec = rd("spec.md");
+  const plan = rd("plan.md");
+  const tasks = rd("tasks.md");
   if (spec == null && tasks == null) return null;
   const model = newImportModel();
   // the feature's number, once: spec-kit's sequential `001-` or its --timestamp `YYYYMMDD-HHMMSS-` (Spec Kit's own reading of
@@ -163,7 +167,8 @@ function parseSpecKit(dir, read, W, src) {
   // research.md, data-model.md, contracts/ and quickstart.md are design — each under its own heading after plan.md
   // (they were skipped with a warning: "not imported"). Read through `read` like every source file: inside the project, a file
   // over the import cap refuses the import.
-  const docs = specKitDesignDocs(dir, read, W, model, src);
+  const docs = specKitDesignDocs(dir, read, rd, W, model, src, got);
+  model.skipped.push(...specKitLeft(dir, src, got));
   if (plan != null || docs) model.design = { text: [plan == null ? null : specKitPlanMarkers(plan), docs].filter((x) => x != null).join("\n\n"), file: "plan.md" };
   if (plan == null) model.warnings.push(docs ? W.wNoPlanDocs("plan.md") : W.wNoDesign("plan.md"));
   // a task's [USn] tag → _Requirements:_ (that story's ACs, resolved by importSpec), the paths it names → _Implements:_
@@ -296,35 +301,38 @@ function specKitPlanMarkers(text) {
 // as design.md sections: `## <localized title>`, a provenance line, then the document — its first-line title dropped and every
 // other heading one level down (outside fenced code), so its sections stay under ours; a contract that is no markdown goes into a
 // fenced block (its language from the extension). contracts/ is read two levels deep, sorted, at most SPECKIT_CONTRACTS_MAX files of
-// a text kind (SPECKIT_CONTRACT_EXT); the rest are named in model.skipped (the import's "not imported" warning). → the text | null.
+// a text kind (SPECKIT_CONTRACT_EXT); the rest are named in model.skipped (the import's "not imported" warning) — a folder deeper
+// than two levels too (`contracts/v1/schemas/`: dropped silently until 1.42). rd(name): the feature folder's file (got records it),
+// read: any path. → the text | null.
 const SPECKIT_CONTRACTS_MAX = 30;
 const SPECKIT_CONTRACT_EXT = { md: "", markdown: "", yaml: "yaml", yml: "yaml", json: "json", jsonc: "json", graphql: "graphql", gql: "graphql",
   proto: "proto", txt: "", http: "http", rest: "http", xml: "xml", avsc: "json", sql: "sql" };
-function specKitDesignDocs(dir, read, W, model, src) {
+function specKitDesignDocs(dir, read, rd, W, model, src, got) {
   const D = W.skDocs;
   const parts = [];
   // (a document holding nothing but its title carries nothing: no empty section)
   const section = (title, file, body) => { if (body.trim()) parts.push("## " + title + "\n\n" + W.skFrom(file) + "\n\n" + body.trim()); };
   for (const [file, title] of [["research.md", D.research], ["data-model.md", D.dataModel]]) {
-    const t = read(path.join(dir, file));
+    const t = rd(file);
     if (t != null && t.trim()) section(title, file, demoteMd(t));
   }
   const cdir = path.join(dir, "contracts");
-  const files = [];
+  const files = [], deep = [];
   const walk = (d, rel, depth) => {
     const es = src && src.list ? src.list(d) : null; // importSourceAt's listing (1.41.1): a folder whose real path leaves the project is none
     if (!es) return;
+    if (depth === 1) got.add("contracts");
     for (const e of es) {
       if (e.name.startsWith(".")) continue;
       const r = rel ? rel + "/" + e.name : e.name;
-      if (e.isDirectory()) { if (depth < 2) walk(path.join(d, e.name), r, depth + 1); }
+      if (e.isDirectory()) { if (depth < 2) walk(path.join(d, e.name), r, depth + 1); else deep.push(r + "/"); }
       else files.push(r);
     }
   };
   walk(cdir, "", 1);
   const kind = (f) => { const x = (/\.([A-Za-z0-9]+)$/.exec(f) || [])[1]; return x != null && Object.prototype.hasOwnProperty.call(SPECKIT_CONTRACT_EXT, x.toLowerCase()) ? x.toLowerCase() : null; };
   const textual = files.filter((f) => kind(f) != null);
-  const skipped = files.filter((f) => kind(f) == null).concat(textual.slice(SPECKIT_CONTRACTS_MAX)).map((f) => "contracts/" + f);
+  const skipped = files.filter((f) => kind(f) == null).concat(textual.slice(SPECKIT_CONTRACTS_MAX), deep).map((f) => "contracts/" + f);
   const contracts = [];
   for (const f of textual.slice(0, SPECKIT_CONTRACTS_MAX)) {
     const t = read(path.join(cdir, ...f.split("/")));
@@ -342,10 +350,26 @@ function specKitDesignDocs(dir, read, W, model, src) {
     }
   }
   if (contracts.length) parts.push("## " + D.contracts + "\n\n" + W.skFrom("contracts/") + "\n\n" + contracts.join("\n\n"));
-  const q = read(path.join(dir, "quickstart.md"));
+  const q = rd("quickstart.md");
   if (q != null && q.trim()) section(D.quickstart, "quickstart.md", demoteMd(q));
   if (skipped.length) model.skipped.push(...skipped);
   return parts.length ? parts.join("\n\n") : null;
+}
+// What the import leaves in the feature folder (checklists/, notes, an extra file were dropped silently), named for the "not
+// imported" warning: every entry but a hidden one, a name the parser reads (SPECKIT_KNOWN, exactly) and the case twin of one whose
+// read reached it (Windows' `Spec.md` that read("spec.md") read — on a case-sensitive file system that read fails and `Spec.md` is
+// named: the decision follows the read, never the file system). A folder ends in "/", decided on the ENTRY (a link is named
+// without it, live or dangling: the 1.41.1 rule). What the exact-name rule hides: a known name of the wrong kind — a FOLDER named
+// plan.md, a FILE named contracts — whose read / listing gives null with no warning.
+function specKitLeft(dir, src, got) {
+  const es = src && src.list ? src.list(dir) : null;
+  if (!es) return [];
+  const names = new Set(es.map((e) => e.name));
+  return es.filter((e) => {
+    if (e.name.startsWith(".") || SPECKIT_KNOWN.includes(e.name)) return false;
+    const low = e.name.toLowerCase();
+    return !(SPECKIT_KNOWN.includes(low) && !names.has(low) && got.has(low));
+  }).map((e) => e.name + (e.isDirectory() ? "/" : ""));
 }
 // A markdown document as a design.md section's body: its title (a first non-blank `# ` line) dropped and every ATX heading `by`
 // levels down (at most ######), outside fenced code — a `#` line in a code block is code.
