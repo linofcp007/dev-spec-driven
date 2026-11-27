@@ -231,6 +231,18 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   — with `systemMessage: userNote` on a deny; its raw pre-check reads `meta.guard === "tests"` and `DEV_SPEC_GUARD_DEFAULT=tests`.
   Each feature's tasks.md is parsed once per call (`blocksOf`, shared by the scope and protected-test readings). **git stays the
   user's**: no git reading at this level either — finish's hash check names what a git command changed.
+- **One read-cache scope per project per hook event (1.42 perf-1).** The hook first lists every (project, path) check — target by
+  target, the session's project then the file's own (`seen`), every engine call but `guardCheck` made then, outside any scope —, runs
+  each project's checks inside ONE `spec.withReadCache` (in the order the projects first appear), and folds the results in the
+  checks' own order (the strictest wins, the first among equals, the first note) — the object the per-target loop printed. Each
+  feature's tasks.md / `.state.json` is read once per project per event, and parsed once per process (the task-blocks memo,
+  tasks-and-evidence.md → Tasks: ONE scanner): a 16-file `sed -i` on 200 features read 6,400 files (6.8–7.4 s in-process), now 400
+  (0.70–0.83 s; 40 features 1.4–2.3 s → 0.15–0.18 s). **Per project, never one scope over two:** a scope's gate root comes from the
+  OUTERMOST project it recorded (files.js `gateRootOf`) and its template / pack memo from the call's project — on ordinary layouts
+  the answers are the same, but a package below a folder NAMED `.specs` (`vendor/.specs/pkg`) would read its own linked `.specs/` as
+  a refused deeper part under the root's scope. guardCheck, guards.js and the facade are unchanged. **Known limit:** a decision
+  past the hook's 10 s timeout lets the edit through, as every guard trouble does (fail-open by policy — a deadline that asked on
+  slowness alone was cut: a partial plan would silently allow a protected test an unread feature holds).
 - **Inside / outside the project** is decided on real paths too (`insideDirAlias()`: an 8.3 name, a junction or symlink to the
   project is inside), never for a NETWORK path (`isNetworkPath`): its realpath would open an SMB connection to a host the agent
   named — `networkPathInside()` decides on the text (inside only under root's own `\\host\share\…`), so a project on a share
@@ -798,6 +810,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.38.0** (chain P) — `isTestFile`'s three test-harness conventions reach the guard: a `__mocks__/` / `__fixtures__/` file and a
   Cypress `*.cy.<script>` are test files — allowed at the scope level (`test-file`) and in Phase 4 (`tests-phase`), protected at
   level tests (markdown-and-trace.md → Test code and file reads, the blast radius).
+- **1.42 (perf-1, DS-PERF)** — the hook called `guardCheck` once per (target, project), each in a read-cache scope of its own: every
+  feature's tasks.md and `.state.json` read again per target (a 16-file `sed -i` on 200 features: 6,400 reads, ~13 s as a process —
+  past the 10 s timeout, so the edit passed with no guard answer). One scope per project now, the fold unchanged; hook-only (guards.js,
+  the facade and i18n untouched). Cut in critique: an engine `guardCheckMany` / `guardPlan` (with the scope and the task-blocks memo,
+  16 targets already cost ~the 1-target time + ~20 ms each at 200 features) and a 6 s deadline that asked (a policy change for a
+  fail-open hook, and a partial plan would silently allow a protected test) — reopen with a real edit past 3 s. The equivalence
+  property drives the review's legit commands, the monorepo / CI corpus (moved, verbatim, into mcp/tests/guard-commands.js) and
+  the controller's package and `dupes --json` writes ([INT-3]) through both folds. A scope over two projects is equivalent on
+  ordinary layouts (its mutant survives; the doc line above says where it is not).
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer

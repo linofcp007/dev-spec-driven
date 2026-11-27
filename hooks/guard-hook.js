@@ -22,7 +22,8 @@
  *
  * It NEVER blocks on its own trouble: a malformed payload, a broken roadmap.json or any internal error exits 0
  * silently. It is cheap: guard off costs one small file read (the engine is loaded only when the guard is on),
- * and the decision reads roadmap.json plus each feature's .state.json / tasks.md — never a repo walk.
+ * and the decision reads roadmap.json plus each feature's .state.json / tasks.md — never a repo walk — ONCE per project per call,
+ * however many files a command writes (1.42: one read-cache scope per project around its checks).
  * The edited file's path is the agent's: a network one (\\host\share\…) is never stat'ed or realpath'ed — inside / outside
  * is decided on its text (spec.networkPathInside), so no SMB connection goes to a host the agent named.
  * The candidate project folders (the payload's cwd, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the user's — and (
@@ -156,18 +157,30 @@ function decide(raw) {
   let best = null; // the strictest answer of every target (1.36): deny > a protected test's ask > any other ask — one ask on another
   const rank = (r) => (r.decision === "deny" ? 3 : r.decision === "ask" ? (r.why === "protected-test" ? 2 : 1) : 0); // file must not hide it
   const s0 = spec.sessionProject({ cwd, anchors });
+  // (1.42 perf-1) Every (project, path) check first, target by target — the session's project and the nearest one above the file (a
+  // monorepo's package), each guarded one decides — with every engine call but guardCheck made HERE, outside any read-cache scope.
+  const checks = [];
   for (const t of targets) {
-    // the session's project and the nearest one above the file (a monorepo's package) — each guarded one decides
     const abs = local(t) ? spec.sessionPath(s0 || { root: cwd || process.cwd() }, t, cwd) : null;
     const own = abs ? spec.sessionProject({ cwd: path.dirname(abs), anchors }) : null;
     const seen = new Set();
     for (const s of [s0, own]) {
       if (!s || seen.has(s.project)) continue;
       seen.add(s.project);
-      const r = spec.guardCheck(s.project, spec.sessionPath(s, t, cwd), s.project);
-      if (rank(r) > (best ? rank(best) : 0)) best = r;
-      if (r.note && !note) note = r.note;
+      checks.push({ project: s.project, file: spec.sessionPath(s, t, cwd) });
     }
+  }
+  // …then ONE read-cache scope per PROJECT (never one over two: the gate root's base and the template scope are the call's project —
+  // engine/files.js withReadCache), in the order the projects first appear: each feature's tasks.md / .state.json read once per
+  // event, not once per target (a 16-file `sed -i` on 200 features: 6.4 K reads, ~7 s, past half the hook's timeout).
+  const results = new Array(checks.length);
+  for (const project of [...new Set(checks.map((c) => c.project))]) {
+    spec.withReadCache(() => { checks.forEach((c, i) => { if (c.project === project) results[i] = spec.guardCheck(project, c.file, project); }); });
+  }
+  // …and folded in the checks' own order (target by target): the strictest wins, the first among equals, the first note
+  for (const r of results) {
+    if (rank(r) > (best ? rank(best) : 0)) best = r;
+    if (r.note && !note) note = r.note;
   }
   if (best) {
     return Object.assign({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: best.decision, permissionDecisionReason: best.reason } },

@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, skip, all, remeasure, S, tmp, __dirname, require, handRoadmap }) => {
+exports.run = async ({ ok, skip, all, remeasure, fsCalls, S, tmp, hookIn, __dirname, require, handRoadmap }) => {
   const js = JSON.stringify;
   const HOOKS = path.join(__dirname, "..", "hooks");
   // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR never leak into the hooks.
@@ -864,38 +864,8 @@ exports.run = async ({ ok, skip, all, remeasure, S, tmp, __dirname, require, han
     const BS = String.fromCharCode(92);
     const pkg = (i, w = 2) => "pkg-" + String(i).padStart(w, "0");
     const times = (n, f, sep) => Array.from({ length: n }, (_, i) => f(i)).join(sep);
-    const CI = ["set -euo pipefail", "export NODE_ENV=production CI=true FORCE_COLOR=0", "export ARTIFACTS=\"$PWD/artifacts\"", "mkdir -p \"$ARTIFACTS\" dist logs",
-      "npm ci --no-audit --prefer-offline > logs/install.log 2>&1",
-      times(40, (i) => "( cd packages/" + pkg(i) + " && npm run lint > ../../logs/lint-" + pkg(i) + ".log && npm test -- --ci --reporters=default > ../../logs/test-" + pkg(i) + ".log )", "\n"),
-      times(40, (i) => "cp -r packages/" + pkg(i) + "/dist \"$ARTIFACTS/" + pkg(i) + "\"", "\n"), "tar -czf dist/artifacts.tgz -C \"$ARTIFACTS\" .",
-      "find logs -name '*.log' -size +1M -exec gzip {} \\;", "node cli/dev-spec.js doctor --json > logs/doctor.json"].join("\n");
-    const ALLOW = ["allow|", "allow|", "allow|", "allow|"];
-    // [tool, command, the four decisions, targets, their sha1] — ed680c92's answers
-    const LEGIT = {
-      "append FLAGS ×300 then tsc": ["Bash", "FLAGS=\"\"; " + times(300, (i) => "FLAGS=\"$FLAGS --include=src/module" + i + "\"", "; ") + "; tsc $FLAGS > build.log; node cli/dev-spec.js status", ALLOW, 1, "6bed715518e0"],
-      "append FLAGS ×500 then tsc": ["Bash", "FLAGS=\"\"; " + times(500, (i) => "FLAGS=\"$FLAGS --include=src/m" + i + "\"", "; ") + "; tsc $FLAGS > build.log; node cli/dev-spec.js status", ALLOW, 1, "6bed715518e0"],
-      "cd ../next && build ×150": ["Bash", "cd packages/" + pkg(0) + " && " + times(150, (i) => "npm run build > build.log && cd ../" + pkg(i + 1), " && ") + " && node ../../cli/dev-spec.js status", ALLOW, 33, "40eb0179c0cf"],
-      "cd pkg && rm -rf dist && cd .. ×300": ["Bash", "cd packages && " + times(300, (i) => "cd " + pkg(i, 3) + " && rm -rf dist && cd ..", " && ") + " && node ../cli/dev-spec.js status", ALLOW, 33, "e548c8ac3f16"],
-      "a 70-character cd, then rm -f of 1,000 files": ["Bash", "cd services/billing-api-gateway/internal/handlers/v2/generated/protobuf && rm -f " + times(1000, (i) => "f" + String(i).padStart(4, "0") + ".pb.go", " ") +
-        " && node ../../../../../../../cli/dev-spec.js status", ALLOW, 64, "9dbec889f913"],
-      "ROOT=<60>; cp $ROOT/src/fN $ROOT/out/fN ×700": ["Bash", "ROOT=/home/ci/workspace/monorepo/packages/frontend-dashboard; " + times(700, (i) => "cp $ROOT/src/f" + i + ".ts $ROOT/out/f" + i + ".ts", "; ") + "; node cli/dev-spec.js status", ALLOW, 64, "cf6057296854"],
-      "export PATH=\"$PATH:…\" ×200": ["Bash", times(200, (i) => "export PATH=\"$PATH:/opt/tools/bin" + i + "\"", "; ") + "; node cli/dev-spec.js doctor", ALLOW, 0, "da39a3ee5e6b"],
-      "CFLAGS=\"$CFLAGS -I$INC/pkgN\" ×150 then make": ["Bash", "INC=/usr/local/include; CFLAGS=\"\"; " + times(150, (i) => "CFLAGS=\"$CFLAGS -I$INC/" + pkg(i) + "\"", "; ") + "; make CFLAGS=\"$CFLAGS\" > make.log; node cli/dev-spec.js status", ALLOW, 1, "006d8d8d5e2c"],
-      "pushd pkg && build && popd ×200": ["Bash", times(200, (i) => "pushd packages/" + pkg(i, 3) + " && npm run build && popd", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "cd /repo && git status && cd sub && … && cd .. ×150": ["Bash", times(150, (i) => "cd /repo && git status && cd sub-" + i + " && git status && cd ..", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "a CI script of ~8 K": ["Bash", CI, ALLOW, 64, "7da8baf62a26"],
-      "a PowerShell build script": ["PowerShell", "$root = 'C:" + BS + "repo'; Set-Location $root; $out = ''; " + times(200, (i) => "$out = \"$out;$root" + BS + "packages" + BS + pkg(i, 3) + BS + "dist\"", "; ") + "; " +
-        times(50, (i) => "Set-Location \"$root" + BS + "packages" + BS + pkg(i, 3) + "\"; npm run build; Set-Location $root", "; ") + "; node cli" + BS + "dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "sh -c 'cd \"$1\" && npm test' _ pkg ×50": ["Bash", times(50, (i) => "sh -c 'cd \"$1\" && npm test' _ packages/" + pkg(i), " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "cd pkg && … && cd .. ×200, then an approve": ["Bash", "cd packages && " + times(200, (i) => "cd " + pkg(i, 3) + " && rm -rf dist && cd ..", " && ") + " && node ../cli/dev-spec.js approve feat requirements",
-        ["deny|approve:requirements", "deny|approve:requirements", "ask|approve:requirements", "ask|approve:requirements"], 33, "e548c8ac3f16"],
-      "F=\"$F -Iinclude/pkg\" ×100, then a test write": ["Bash", "F=x; " + times(100, (i) => "F=\"$F -Iinclude/" + pkg(i, 3) + "\"", "; ") + "; D=tests; echo hi > $D/protected.test.js; node cli/dev-spec.js status", ALLOW, 1, "590079460ad3"],
-      "git commit with a 3 K heredoc message": ["Bash", "git add -A && git commit -m \"$(cat <<'EOF'\nfeat: the monorepo build\n\n" + times(60, (i) => "- " + pkg(i) + ": the build script, the lint config and the test runner moved to the shared preset", "\n") +
-        "\nEOF\n)\" && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "cp dist files ×400": ["Bash", times(400, (i) => "cp packages/" + pkg(i, 3) + "/dist/index.js dist/" + pkg(i, 3) + ".js", " && ") + " && node cli/dev-spec.js status", ALLOW, 64, "43c976b4ac72"],
-      "cd ../../ chains (two up, one down) ×100": ["Bash", "cd apps/web/src && " + times(100, (i) => "cd ../../" + pkg(i) + "/src && npm run build", " && ") + " && node ../../../cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-      "a cd into .specs/ and out, reading": ["Bash", "cd .specs && cat roadmap.json && cd .. && " + times(100, (i) => "cat packages/" + pkg(i) + "/package.json", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
-    };
+    // [tool, command, the four decisions, targets, their sha1] — ed680c92's answers (the corpus: mcp/tests/guard-commands.js)
+    const LEGIT = require("./tests/guard-commands.js").legitMonorepo();
     const decide = (tool, command, level, win) => {
       const r = E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command }, cwd: "/work/mono" }, level, { meta: {}, lang: "en", win });
       return { s: r.decision + "|" + (r.actions || []).map((a) => a.kind + ":" + (a.why || a.setting || a.phase || "")).join(","), r };
@@ -1089,5 +1059,41 @@ exports.run = async ({ ok, skip, all, remeasure, S, tmp, __dirname, require, han
         "observe: a FIFO tasks.md is none — the change.md beside it logs the run, ended": () => ended(R.obs) && js(logged(F.ch)) === js(["node b13-fifo.js"]),
       });
     }
+  }
+
+  // 1.42 perf-1 — the guard hook reads each feature's tasks.md / .state.json ONCE per project per event: one read-cache scope per
+  // project around its checks (a 16-file `sed -i` on 200 features read 6,400 files, ~7 s). A count, never a time: the fs calls on
+  // every feature's tasks.md and .state.json for a `sed -i` of 5 in-scope files equal those for 1 file (1.41.2: 5×), and a Write of
+  // README.md (no code: decided before the plan) reads none of them.
+  {
+    const p = project("perf1-reads");
+    S.initProject(p, ["core"], "en", { guard: "scope" });
+    handRoadmap(p);
+    const files = [];
+    for (const name of ["Pay", "Cart", "Search"]) {
+      const f = S.createFeature(p, name, ["core"], "", undefined, "en");
+      const slug = f.slug;
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + [1, 2, 3, 4, 5].map((n) => "- [ ] " + n + ". [US1] Step " + n + " of " + name + "\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/" + slug + "/m" + n + ".js_\n").join(""));
+      const sp = path.join(f.dir, ".state.json");
+      const st = JSON.parse(fs.readFileSync(sp, "utf8"));
+      st.approvals = { ...(st.approvals || {}), tasks: { at: "2026-01-01T00:00:00Z", by: "t" } };
+      fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+      files.push(path.join(f.dir, "tasks.md"), sp);
+    }
+    const run = (input) => hookIn(path.join(HOOKS, "guard-hook.js"), { input: js({ hook_event_name: "PreToolUse", cwd: p, ...input }), env: hookEnv(), encoding: "utf8" });
+    const reads = (input) => {
+      let out;
+      const counts = files.map((f) => fsCalls(f, () => { out = run(input); }));
+      return { n: counts.reduce((a, c) => a + Object.values(c).reduce((x, y) => x + y, 0), 0), out };
+    };
+    const sed = (n) => ({ tool_name: "Bash", tool_input: { command: "sed -i 's/a/b/' " + [1, 2, 3, 4, 5].slice(0, n).map((k) => "src/pay/m" + k + ".js").join(" ") } });
+    const one = reads(sed(1)), five = reads(sed(5)), readme = reads({ tool_name: "Write", tool_input: { file_path: path.join(p, "README.md"), content: "x" } });
+    all("1.42 perf-1: the guard hook reads each feature's tasks.md / .state.json once per project per event — a `sed -i` of 5 in-scope files makes the same fs calls on them as one of 1 file (1.41.2: 5×), a Write of README.md none; both edits allowed (got " +
+      js({ one: one.n, five: five.n, readme: readme.n, out: [one.out.stdout, five.out.stdout] }) + ")", {
+      counted: () => one.n > 0,
+      "5 targets read what 1 does": () => five.n === one.n,
+      "README.md reads none": () => readme.n === 0,
+      allowed: () => one.out.status === 0 && one.out.stdout === "" && five.out.status === 0 && five.out.stdout === "",
+    });
   }
 };
