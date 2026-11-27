@@ -1536,7 +1536,7 @@ const msg = {
       statusHead: (f, tracks, phase) => `Función: ${f}  [${tracks}]  fase: ${phase}`,
       statusTasks: (done, total, next) => `Tareas: ${done}/${total}` + (next ? `  siguiente → ${next}` : ""),
       doctorHead: (f, tracks, verdict, ready) => `Diagnóstico: ${f}  [${tracks}]  veredicto=${verdict}  lista para avanzar: ${ready}`,
-      doctorNextGate: (phase, ready, ids) => ready ? `  siguiente gate ${phase}: las verificaciones pasan` : ids ? `  siguiente gate ${phase}: falla (${ids})` : `  siguiente gate ${phase}: aún nada que aprobar`,
+      doctorNextGate: (phase, ready, ids, unreadable) => ready ? `  siguiente gate ${phase}: las verificaciones pasan` : ids ? `  siguiente gate ${phase}: falla (${ids})` : unreadable ? `  siguiente gate ${phase}: su fichero no se puede leer — conviértelo en un fichero legible` : `  siguiente gate ${phase}: aún nada que aprobar`,
       traceHead: (f, verdict, acs, covered) => `Trazabilidad: ${f}  veredicto=${verdict}  ACs=${acs}  cubiertos por tareas=${covered}`,
       earsHead: (n, m, verdict) => `EARS: ${n} criterios, ${m} con verbo modal, veredicto=${verdict}`,
       next: (n, text, left, total) => `Siguiente → #${n} ${text}  (quedan ${left}/${total})`,

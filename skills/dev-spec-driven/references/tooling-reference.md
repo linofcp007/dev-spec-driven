@@ -175,7 +175,8 @@ refuses `phase-order`: an earlier phase changed since its approval).
 - **`approval-gates`** — pending phases (every phase whose artifact exists, a bugfix's `design` on `bug.md`, Phase 4
   `tests` on +tdd / +ai once its plan exists or was approved — again once its sign-off no longer covers the plan: a T-ID
   planned since, or a plan re-approved with other content —, a phase still missing a role's sign-off), forced approvals with their
-  failing checks, and what the next approval would refuse (`nextGate {phase, ready, failing, missingRoles}`).
+  failing checks, and what the next gate's checks refuse (`nextGate {phase, ready, failing, missingRoles}`; `unreadable` when its
+  file is there but can't be read).
 
 ## MCP prompts and resources (other MCP clients)
 

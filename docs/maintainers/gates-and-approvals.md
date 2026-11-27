@@ -105,8 +105,11 @@ review findings — is in History at the end.
   a later phase's included (a +sec feature's design sections fail at classification). `nextGate` {phase, ready, failing,
   missingRoles} is `approvalChecks` of the FIRST pending gate — the approval's own checks, a forecast: the approve call adds
   `phase-order` (an earlier phase changed since its approval, `changedApprovedPhases`, kept apart from `pending`) and the role
-  sign-offs. The CLI headline prints it (`cliOutput.doctorNextGate`: checks pass · fails (its ids) · nothing to approve yet), and
-  every shipped sentence that sends an agent to doctor before an approval or a phase advance says to fix what its next gate
+  sign-offs. `unreadable` (stable) when its file is there but can't be read (approvalChecks' own flag: a folder of that name, no
+  permission, a lock — pendingGateList lists a phase whose entry exists). The CLI headline prints it (`cliOutput.doctorNextGate`:
+  checks pass · fails (its ids) · its file can't be read, as approve says · nothing to approve yet); spec_doctor's description
+  says "what the next gate's checks refuse", never what the approval would refuse.
+  Every shipped sentence that sends an agent to doctor before an approval or a phase advance says to fix what its next gate
   refuses — none promises an approval on it (mcp/tests/17-docs-shipped-texts.js reads every shipped .md / .mdc, the rule files
   of other tools included, by the sentence's shape: "run … doctor … before advancing / an approval", "at each phase boundary",
   "`spec_doctor` … first", "`spec_doctor`, then the user's approval"; another wording, another language or a .js string is not

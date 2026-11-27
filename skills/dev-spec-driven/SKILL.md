@@ -114,7 +114,7 @@ and its constraints round), present.
 against the registry `.specs/steering/design-system.md` (`ui-design-system` — `references/ui-design-patterns.md`). A critical flow — stock, a coupon, a
 balance, a booking, a payment (`critical-flows`, `critical-flow-tests`): `references/critical-flows.md`. For the Constitution Check
 `spec_doctor` only checks that the section is there; the human judges it.
-`spec_create` scaffolds `quickstart.md` and `checklist.md` with `design.md` — fill both.
+`spec_create` scaffolds `quickstart.md` and `checklist.md` with a feature's `design.md` (never a bugfix's) — fill both.
 
 **Phases 3–4.** Every AC in ≥ 1 test row (`T-nn`); +ai: the eval sets with thresholds and a baseline. Phase 4 is the
 hard gate: every planned test written, red for the right reason, its T-ID in its name (`trace_check {code: true}`); no

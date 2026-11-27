@@ -1602,8 +1602,9 @@ const msg = {
       statusTasks: (done, total, next) => `Tasks: ${done}/${total}` + (next ? `  next → ${next}` : ""),
       doctorHead: (f, tracks, verdict, ready) => `Doctor: ${f}  [${tracks}]  verdict=${verdict}  readyToAdvance=${ready}`,
       // 1.42 UX-01: the next approval's own checks (nextGate) — a forecast, never a promise: the approval adds phase-order and the
-      // role sign-offs; no failing check and no artifact → nothing to approve yet
-      doctorNextGate: (phase, ready, ids) => ready ? `  next gate ${phase}: checks pass` : ids ? `  next gate ${phase}: fails (${ids})` : `  next gate ${phase}: nothing to approve yet`,
+      // role sign-offs; no failing check and no artifact → nothing to approve yet — an artifact there but unreadable (nextGate.unreadable)
+      // says so, as approve does (1.42 review 1)
+      doctorNextGate: (phase, ready, ids, unreadable) => ready ? `  next gate ${phase}: checks pass` : ids ? `  next gate ${phase}: fails (${ids})` : unreadable ? `  next gate ${phase}: its file can't be read — make it a readable file` : `  next gate ${phase}: nothing to approve yet`,
       traceHead: (f, verdict, acs, covered) => `Trace: ${f}  verdict=${verdict}  ACs=${acs}  coveredByTasks=${covered}`,
       earsHead: (n, m, verdict) => `EARS: ${n} criteria, ${m} with modal, verdict=${verdict}`,
       next: (n, text, left, total) => `Next → #${n} ${text}  (${left}/${total} left)`,

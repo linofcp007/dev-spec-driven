@@ -881,7 +881,7 @@ const COMMANDS = [
         // 1.42 UX-01: + the next approval's own checks (nextGate) — readyToAdvance is every check, a later phase's included
         const ng = r.nextGate;
         log(T.doctorHead(r.feature, r.tracks, T.word(r.verdict).toUpperCase(), T.bool(r.readyToAdvance)) +
-          (ng ? T.doctorNextGate(ng.phase, ng.ready, (ng.failing || []).map((x) => x.id).join(", ")) : ""));
+          (ng ? T.doctorNextGate(ng.phase, ng.ready, (ng.failing || []).map((x) => x.id).join(", "), ng.unreadable) : ""));
         r.checks.forEach((x) => log("  " + (x.status === "pass" ? "✓" : x.status === "warn" ? "▲" : "✗") + " " + x.id + (x.detail ? " — " + x.detail : "")));
       });
     },

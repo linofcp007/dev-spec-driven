@@ -1536,7 +1536,7 @@ const msg = {
       statusHead: (f, tracks, phase) => `Feature: ${f}  [${tracks}]  fase: ${phase}`,
       statusTasks: (done, total, next) => `Tarefas: ${done}/${total}` + (next ? `  próxima → ${next}` : ""),
       doctorHead: (f, tracks, verdict, ready) => `Diagnóstico: ${f}  [${tracks}]  veredicto=${verdict}  pronta para avançar: ${ready}`,
-      doctorNextGate: (phase, ready, ids) => ready ? `  próximo gate ${phase}: as verificações passam` : ids ? `  próximo gate ${phase}: falha (${ids})` : `  próximo gate ${phase}: ainda nada a aprovar`,
+      doctorNextGate: (phase, ready, ids, unreadable) => ready ? `  próximo gate ${phase}: as verificações passam` : ids ? `  próximo gate ${phase}: falha (${ids})` : unreadable ? `  próximo gate ${phase}: o seu ficheiro não pode ser lido — torna-o um ficheiro legível` : `  próximo gate ${phase}: ainda nada a aprovar`,
       traceHead: (f, verdict, acs, covered) => `Rastreabilidade: ${f}  veredicto=${verdict}  ACs=${acs}  cobertos por tarefas=${covered}`,
       earsHead: (n, m, verdict) => `EARS: ${n} critérios, ${m} com verbo modal, veredicto=${verdict}`,
       next: (n, text, left, total) => `Próxima → #${n} ${text}  (faltam ${left}/${total})`,

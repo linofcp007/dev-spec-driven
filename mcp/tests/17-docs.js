@@ -133,10 +133,12 @@ exports.run = async ({
   const docsQs = path.join(tmp, "proj-ux16");
   S.initProject(docsQs, ["core"], "en");
   const docsQsFiles = (f) => ["design.md", "quickstart.md", "checklist.md"].filter((x) => fs.existsSync(path.join(f.dir, x))).join(",");
+  // (review 1, R1-SURF-08: a bugfix on a marker track gets design.md — its track sections — and neither file: "a feature's")
   const docsQsGot = [S.createFeature(docsQs, "alpha", ["core"]), S.createFeature(docsQs, { name: "delta", tracks: ["core"], size: "m" }),
-    S.createFeature(docsQs, { name: "beta", tracks: ["core"], size: "xs" }), S.createFeature(docsQs, "gamma", ["core"], undefined, undefined, undefined, "bugfix")].map(docsQsFiles);
-  ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /`spec_create` scaffolds `quickstart\.md` and `checklist\.md` with `design\.md` — fill both\./.test(docsSkill) &&
-    !/always scaffolds `quickstart\.md`/.test(docsSkill) && JSON.stringify(docsQsGot) === JSON.stringify(["design.md,quickstart.md,checklist.md", "design.md,quickstart.md,checklist.md", "", ""]) &&
+    S.createFeature(docsQs, { name: "beta", tracks: ["core"], size: "xs" }), S.createFeature(docsQs, "gamma", ["core"], undefined, undefined, undefined, "bugfix"),
+    S.createFeature(docsQs, "crash two", ["tdd", "saas"], "the tenant app crashes on save", undefined, "en", "bugfix")].map(docsQsFiles);
+  ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /`spec_create` scaffolds `quickstart\.md` and `checklist\.md` with a feature's `design\.md` \(never a bugfix's\) — fill both\./.test(docsSkill) &&
+    !/always scaffolds `quickstart\.md`/.test(docsSkill) && JSON.stringify(docsQsGot) === JSON.stringify(["design.md,quickstart.md,checklist.md", "design.md,quickstart.md,checklist.md", "", "", "design.md"]) &&
     !/^\| Tool \|/m.test(docsSkill) && (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
     "SKILL.md claims are honest (constitution check = section presence; 1.42 UX-16: quickstart / checklist come with design.md — a feature, not a change or a bugfix); the tool table lives in tooling-reference.md (got " + JSON.stringify(docsQsGot) + ")");
   // 1.42 UX-06: `/spec` with no argument — a returning user who names no feature — routes through spec_status {}: one feature in

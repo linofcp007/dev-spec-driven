@@ -856,7 +856,9 @@ function approvalGatesView(c) {
   let next = null;
   if (pending.length) {
     const g = approvalChecks(c.projectDir, c.slug, c.dir, pending[0], c.tracks, c.kind, c.lang);
-    next = { phase: pending[0], ready: g.artifact && !g.checks.length, failing: g.checks };
+    // unreadable (stable): its file is there but can't be read — a folder of that name, no permission, a lock (approve says so);
+    // never "nothing to approve yet" (1.42 review 1, R1-SURF-03)
+    next = { phase: pending[0], ready: g.artifact && !g.checks.length, failing: g.checks, ...(g.unreadable ? { unreadable: true } : {}) };
     if (rv.pending[pending[0]]) next.missingRoles = rv.pending[pending[0]].missing;
     if (rv.pending[pending[0]] && rv.pending[pending[0]].signoffsComplete) next.signoffsComplete = true; // re-sign to complete
   }
