@@ -818,9 +818,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.42 (perf-1, DS-PERF)** — the hook called `guardCheck` once per (target, project), each in a read-cache scope of its own: every
   feature's tasks.md and `.state.json` read again per target (a 16-file `sed -i` on 200 features: 6,400 reads, ~13 s as a process —
   past the 10 s timeout, so the edit passed with no guard answer). One scope per project now, the fold unchanged; hook-only (guards.js,
-  the facade and i18n untouched). Cut in critique: an engine `guardCheckMany` / `guardPlan` (with the scope and the task-blocks memo,
-  16 targets already cost ~the 1-target time + ~20 ms each at 200 features) and a 6 s deadline that asked (a policy change for a
-  fail-open hook, and a partial plan would silently allow a protected test) — reopen with a real edit past 3 s. The equivalence
+  the facade and i18n untouched). Cut in critique: an engine-side check of many targets on one plan (with the scope and the
+  task-blocks memo, 16 targets already cost ~the 1-target time + ~20 ms each at 200 features) and a 6 s deadline that asked (a
+  policy change for a fail-open hook, and a partial plan would silently allow a protected test) — reopen with a real edit past 3 s. The equivalence
   property drives the review's legit commands, the monorepo / CI corpus (moved, verbatim, into mcp/tests/guard-commands.js) and
   the controller's package and `dupes --json` writes ([INT-3]) through both folds. A scope over two projects is equivalent on
   ordinary layouts (its mutant survives; the doc line above says where it is not).
