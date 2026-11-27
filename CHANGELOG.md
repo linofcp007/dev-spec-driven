@@ -3,7 +3,7 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
-## [1.41.1] — 2026-11-26
+## [1.41.1] — 2026-11-27
 
 A security patch from a full triage of dev-guardian 3.17's scan of this repository (629 findings: 600 false positives,
 29 real, each settled against the code). The approval guard can no longer be run out of time, and nothing below `.specs/` is
@@ -25,8 +25,9 @@ read through a link. Nothing 1.41.0 passed on a project without links is refused
   `deny` as a command too long to read already was (the reason says which limit). Monorepo build loops, `FLAGS="$FLAGS …"`
   appends, `cd pkg && … && cd ..` chains, CI scripts and long PowerShell scripts stay well under both.
 - **The approval hook never opens a file that is not a regular file** (a FIFO or a device named `roadmap.json` /
-  `ROADMAP.md`): it reads as a missing one, and the hook asks when that project holds features. Such a file made by a
-  script where the guard does not look is listed among the guards' known limits.
+  `ROADMAP.md`): it reads as a missing one, and the hook asks when that project holds features. So does a file whose type
+  cannot be read (on Windows, a Linux FIFO under a WSL path) — it is never opened. Such a file made by a script where the
+  guard does not look is listed among the guards' known limits.
 - **Nothing below `.specs/` is read through a link.** Writes there have been refused since 1.24 when a folder or file on the
   way is a symbolic link or junction; reads still followed one, so a linked feature folder, `steering/` or spec file could
   have text from outside the project copied into next_task, the task brief, trace_check, the catalog, retro.md or a merge
@@ -64,11 +65,11 @@ read through a link. Nothing 1.41.0 passed on a project without links is refused
   so a project-wide `drift` (the SessionStart check), the feature list, the status line and doctor pay no extra call per feature.
 
 ### Tests
-- mcp/tests/12-lifecycle-read-gate.js, -root.js, -scope.js (+ the CLI twin): every operation, resource, CLI command, hook and the
-  MCP server driven on projects full of links under an fs tracer; each guard decision where absence would relax it; the gate's
-  root; the counts. mcp/tests/10-guards-hooks-cost.js: the approval hook's deadline paths through the real process, the
-  matcher against the old one (random and exhaustive tables), 19 real-shaped legit commands answering as 1.41.0, the hostile
-  shapes as ratios. Totals: MCP <N> · CLI <M>.
+- `node mcp/test.js` 3225 assertions (was 3156), `node cli/test-cli.js` 723 (was 719). New: mcp/tests/12-lifecycle-read-gate.js,
+  -root.js, -scope.js (+ the CLI twin): every operation, resource, CLI command, hook and the MCP server driven on projects full
+  of links under an fs tracer; each guard decision where absence would relax it; the gate's root; the counts.
+  mcp/tests/10-guards-hooks-cost.js: the approval hook's deadline paths through the real process, the matcher against the old
+  one (random and exhaustive tables), 19 real-shaped legit commands answering as 1.41.0, the hostile shapes as ratios.
 
 ## [1.41.0] — 2026-11-26
 
