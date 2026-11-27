@@ -194,6 +194,14 @@ ok(runIn(["wat"]).code === 1, "unknown command exits non-zero");
   fs.mkdirSync(path.join(P("bare"), ".specs"), { recursive: true });
   const bareList = runIn(["list", "--project", P("bare")]), bareSt = runIn(["status", "--project", P("bare")]);
   const bareJson = runIn(["list", "--json", "--project", P("bare")]);
+  // review 2 (R2-TASKS-04): steeringMissing only while there is NO feature yet — a project with one whose product.md is gone names
+  // nothing (doctor's `steering` check says it there); the same project with its feature folder gone names product.md
+  runIn(["init", "--project", P("featmiss")]);
+  runIn(["create", "Pay flow", "--project", P("featmiss")]);
+  fs.rmSync(path.join(P("featmiss"), ".specs", "steering", "product.md"));
+  const featMissList = JSON.parse(runIn(["list", "--json", "--project", P("featmiss")]).out), featMissSt = JSON.parse(runIn(["status", "--json", "--project", P("featmiss")]).out);
+  fs.rmSync(path.join(P("featmiss"), ".specs", "pay-flow"), { recursive: true });
+  const noFeatList = JSON.parse(runIn(["list", "--json", "--project", P("featmiss")]).out);
   const fresh = runIn(["init", "--project", P("fresh")]);
   const empty = runIn(["list", "--project", P("fresh")]);
   const bareStatus = runIn(["status", "--project", P("fresh")]);
@@ -214,6 +222,8 @@ ok(runIn(["wat"]).code === 1, "unknown command exits non-zero");
     missing: () => /No features under/.test(missing.out) && hintRe(true).test(missing.out),
     bareSpecs: () => bareList.code === 0 && hintRe(true).test(bareList.out) && hintRe(true).test(bareSt.out) &&
       JSON.parse(bareJson.out).steeringMissing.join() === "constitution.md,product.md,tech.md,structure.md",
+    steeringMissingNoFeatureOnly: () => featMissList.features.length === 1 && !("steeringMissing" in featMissList) && !("steeringMissing" in featMissSt) &&
+      noFeatList.features.length === 0 && JSON.stringify(noFeatList.steeringMissing) === "[\"product.md\"]",
     freshNote: () => fresh.out.includes("\n  " + note("en") + "\n") && hintRe(false).test(fresh.out) && !hintRe(true).test(fresh.out),
     empty: () => hintRe(false).test(empty.out) && hintRe(false).test(bareStatus.out),
     reinitNoNote: () => !reinit.out.includes(note("en")) && hintRe(false).test(reinit.out),
