@@ -115,7 +115,11 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const linked = linkedSpecsFolder(projectDir, [path.join(steering, "constitution.md")]);
   if (linked) return { ok: false, linked: true, error: i18n.msg(normalizeLang(lang || projectLang(projectDir))).err.specsLinked(linked) };
   // Before anything is written: a project with no feature yet is brand-new (stamped with this engine's version below).
-  const fresh = featureDirs(projectDir).length === 0;
+  // (1.42 UX-09) Its ACTIVE ones — the folders `list` / `status` list (one isFeatureFolder over .specs/'s own folders; the
+  // archived ones never) — are the result's activeFeatures: none → the CLI prints the start hint, as `list` does. init adds none.
+  const dirs0 = featureDirs(projectDir);
+  const fresh = dirs0.length === 0;
+  const activeFeatures = dirs0.filter((f) => !f.archived).length;
   // no lang given, a brand-new project without a language of its own → the user's DEFAULT_LANG option (seeded below
   // into meta.lang like an explicit --lang, so the project keeps it on every machine).
   const userLang = !lang && fresh ? newProjectLang(projectDir) : undefined;
@@ -207,6 +211,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     created,
     skipped,
     note: i18n.msg(lng).initNote,
+    activeFeatures,
     guard: guardLevel(projectDir), // the CURRENT guard state (true | false | "scope" | "tests"), whether or not this call changed it
     stopCheck: stopCheckEnabled(projectDir), // the CURRENT end-of-turn evidence gate state (on unless meta.stopCheck is false)
     // the CURRENT project checks (meta.checks) {name: command}, whether or not this call changed them

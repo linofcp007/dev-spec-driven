@@ -280,12 +280,19 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     S.scaffoldSteeringFile(d11, "api-rules.md");
     fs.unlinkSync(path.join(dSt, "tech.md"));
     const ds3 = docSt(d11, "dash");
-    ok(ds2.status === "pass" && ds2.detail === S.msg("en").doctor.steeringOk && ds3.status === "warn" && ds3.detail === "missing: tech.md; still template placeholders: api-rules.md (2)",
-      "filled steering → pass; a custom stub still holding placeholders (front matter set aside) and a missing core file are both reported");
+    ok(ds2.status === "pass" && ds2.detail === S.msg("en").doctor.steeringOk && ds3.status === "warn" && ds3.detail === "missing: tech.md; still template placeholders: api-rules.md (2) — fill them with the project's real rules (from the user or the code)",
+      "filled steering → pass; a custom stub still holding placeholders (front matter set aside) and a missing core file are both reported (1.42 UX-09: with the remedy — the project's real rules, never invented)");
     const d11pt = path.join(tmp, "proj-wp11-doctor-pt");
     S.initProject(d11pt, ["core"], "pt");
     S.createFeature(d11pt, "Painel", ["core"]);
     ok(/ainda com placeholders do template: .*constitution\.md/.test(docSt(d11pt, "painel").detail), "the doctor steering detail is localized (PT)");
+    // 1.42 UX-09: the remedy in every language — the project's real rules, from the user or the code (an agent never invents them)
+    const d11es = path.join(tmp, "proj-wp11-doctor-es");
+    S.initProject(d11es, ["core"], "es");
+    S.createFeature(d11es, "Panel", ["core"]);
+    const remPt = docSt(d11pt, "painel").detail, remEs = docSt(d11es, "panel").detail;
+    ok(/ — preenche-os com as regras reais do projeto \(do utilizador ou do código\)$/.test(remPt) && / — rellénalos con las reglas reales del proyecto \(del usuario o del código\)$/.test(remEs),
+      "1.42 UX-09: the doctor steering detail names the remedy in PT and ES too — fill them with the project's real rules, from the user or the code (got " + JSON.stringify([remPt.slice(-90), remEs.slice(-90)]) + ")");
 
     // (D4) PostToolUse: saving design.md runs its mandatory checks for the ACTIVE tracks (EN + PT).
     const runPost = (file) => { const r = hookIn(specHookJs, { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: file } }), encoding: "utf8" });

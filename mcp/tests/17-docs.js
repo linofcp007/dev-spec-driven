@@ -139,6 +139,12 @@ exports.run = async ({
     !/always scaffolds `quickstart\.md`/.test(docsSkill) && JSON.stringify(docsQsGot) === JSON.stringify(["design.md,quickstart.md,checklist.md", "design.md,quickstart.md,checklist.md", "", ""]) &&
     !/^\| Tool \|/m.test(docsSkill) && (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
     "SKILL.md claims are honest (constitution check = section presence; 1.42 UX-16: quickstart / checklist come with design.md — a feature, not a change or a bugfix); the tool table lives in tooling-reference.md (got " + JSON.stringify(docsQsGot) + ")");
+  // 1.42 UX-06: `/spec` with no argument — a returning user who names no feature — routes through spec_status {}: one feature in
+  // flight is resumed, several are listed to choose from, none starts Phase 0 (it routed an existing feature or a new idea only).
+  const docsSpecCmd = docsRead("commands", "spec.md").replace(/\s+/g, " ");
+  ok(/- \*\*No argument\*\* → `spec_status \{\}`: one feature in flight \(not complete\) → resume it as below; several → list them with their phase and progress and ask which; none → ask for the idea \(Phase 0\)\./.test(docsSpecCmd) &&
+    docsSpecCmd.indexOf("**No argument**") < docsSpecCmd.indexOf("**An existing feature**"),
+    "1.42 UX-06: /spec with no argument routes through spec_status {} — one in flight: resume; several: list and ask which; none: Phase 0 — before the existing-feature route");
   // The expected set IS the live tools/list — a hand-kept list went stale (it stopped at 23 tools while the server had 29).
   const docsTools = list.result.tools.map((t) => t.name);
   // 1.26: the README is one file per language — README.md (EN, the reference), README.pt.md (PT-PT), README.es.md (ES) — with

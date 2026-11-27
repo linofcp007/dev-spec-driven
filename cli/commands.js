@@ -164,7 +164,8 @@ function main2list(c) {
   const r = c.call("list");
   const T = c.projectText();
   c.out(r, (r) => {
-    if (!r.exists || !r.features.length) return c.log(T.noFeatures(r.specsDir));
+    // 1.42 UX-21: no active feature (init's activeFeatures, the same folders) → the next step, init first without a .specs/
+    if (!r.exists || !r.features.length) { c.log(T.noFeatures(r.specsDir)); return c.log(T.startHint(!r.exists)); }
     r.features.forEach((f) => c.log(T.listLine(f.name, f.tracks, T.phase(f.phase), f.tasksDone, f.tasks)));
   });
 }
@@ -657,6 +658,7 @@ const COMMANDS = [
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         log(c.cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || c.cliText(r.lang).nothingNew, r.skipped.join(", ")));
+        if (r.created.length) log("  " + r.note); // 1.42 UX-09: the new steering files are templates — fill them (how: the note)
         if (r.guardNote) log("  " + r.guardNote);
         if (r.stopCheckNote) log("  " + r.stopCheckNote);
         if (r.evidenceNote) log("  " + r.evidenceNote); // 1.14 F1
@@ -670,6 +672,7 @@ const COMMANDS = [
         if (r.fastCheckNote) log("  " + r.fastCheckNote); // 1.36: --fast-check set it / off, or its check was removed
         if (r.fastCheckOffer) log("  " + r.fastCheckOffer.note); // 1.36: none set, the root manifests suggest one — offered, never set
         if (r.reviewModelsNote) log("  " + r.reviewModelsNote); // 1.36: --review-models set it, or the stored value is ignored
+        if (r.activeFeatures === 0) log(c.cliText(r.lang).startHint(false)); // 1.42 UX-09: no active feature — as `list` says
       });
     },
   },
@@ -872,7 +875,10 @@ const COMMANDS = [
       if (r.verdict === "fail") c.exitCode = 1; // scriptable: blocking checks → non-zero
       const T = c.featureText(r.feature);
       return out(r, (r) => {
-        log(T.doctorHead(r.feature, r.tracks, T.word(r.verdict).toUpperCase(), T.bool(r.readyToAdvance)));
+        // 1.42 UX-01: + the next approval's own checks (nextGate) — readyToAdvance is every check, a later phase's included
+        const ng = r.nextGate;
+        log(T.doctorHead(r.feature, r.tracks, T.word(r.verdict).toUpperCase(), T.bool(r.readyToAdvance)) +
+          (ng ? T.doctorNextGate(ng.phase, ng.ready, (ng.failing || []).map((x) => x.id).join(", ")) : ""));
         r.checks.forEach((x) => log("  " + (x.status === "pass" ? "✓" : x.status === "warn" ? "▲" : "✗") + " " + x.id + (x.detail ? " — " + x.detail : "")));
       });
     },

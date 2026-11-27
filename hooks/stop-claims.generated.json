@@ -3,10 +3,10 @@
  "sources": {
   "mcp/lib/i18n.js": 45057,
   "mcp/lib/i18n/common.js": 17216,
-  "mcp/lib/i18n/en.js": 445802,
-  "mcp/lib/i18n/es.js": 459815,
+  "mcp/lib/i18n/en.js": 446891,
+  "mcp/lib/i18n/es.js": 460507,
   "mcp/lib/i18n/pt-br.js": 55144,
-  "mcp/lib/i18n/pt.js": 456798,
+  "mcp/lib/i18n/pt.js": 457478,
   "mcp/lib/engine/guards.js": 234221
  },
  "word": {

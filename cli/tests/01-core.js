@@ -8,7 +8,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, run, runIn, tmp, CLI, runAsync }) => {
+exports.run = async ({ ok, all, run, runIn, tmp, CLI, runAsync, require, __dirname }) => {
 // help
 ok(runIn(["help"]).out.includes("universal spec-driven CLI"), "help prints usage");
 
@@ -177,4 +177,63 @@ ok(fin.code === 1 && /fix\(login-loop\): bounce to \/login/.test(fin.out) && /Ro
 
 // unknown command errors
 ok(runIn(["wat"]).code === 1, "unknown command exits non-zero");
+
+{ // 1.42 UX-09 / UX-21: init says the steering files are templates (and how to fill them), and an empty project's next step is printed
+  // where the user stands — init and list / status, on ONE predicate: no active feature (the folders `list` lists; archived ones
+  // never count) —, in /spec's order: classify, init (only while there is no .specs/), create.
+  const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+  const { DEV_SPEC } = require(path.join(__dirname, "..", "mcp", "lib", "i18n.js"));
+  const hintLine = (init) => "  Start one: " + [DEV_SPEC + " classify \"<idea>\""].concat(init ? [DEV_SPEC + " init"] : [], [DEV_SPEC + " create <name> --size xs|s|m|l"]).join(", then ") +
+    " (Claude Code: /spec <idea>).";
+  const hintRe = (init) => ({ test: (out) => out.split(/\r?\n/).includes(hintLine(init)) });
+  const P = (n) => path.join(tmp, "ux21-" + n);
+  fs.mkdirSync(P("none")); // a project folder without .specs/
+  const missing = runIn(["list", "--project", P("none")]);
+  const fresh = runIn(["init", "--project", P("fresh")]);
+  const empty = runIn(["list", "--project", P("fresh")]);
+  const bareStatus = runIn(["status", "--project", P("fresh")]);
+  const reinit = runIn(["init", "--project", P("fresh")]);
+  runIn(["create", "Pay flow", "--project", P("fresh")]);
+  const withFeat = runIn(["init", "--project", P("fresh")]);
+  const listed = runIn(["list", "--project", P("fresh")]);
+  // an archived-only project: no active feature — the hint in init AND in list (the same predicate)
+  runIn(["init", "--project", P("arch")]);
+  runIn(["create", "Old flow", "--project", P("arch")]);
+  const arch = runIn(["feature", "archive", "old-flow", "--project", P("arch")]);
+  const archInit = runIn(["init", "--project", P("arch")]);
+  const archList = runIn(["list", "--project", P("arch")]);
+  const ptInit = runIn(["init", "--lang", "pt", "--project", P("pt")]);
+  const esList = (runIn(["init", "--lang", "es", "--project", P("es")]), runIn(["list", "--project", P("es")]));
+  const note = (l) => S.msg(l).initNote;
+  all("1.42 UX-09 / UX-21: init prints the steering note when it created files and the start hint while no feature is active; list / status print the hint on the same predicate (init first only without .specs/); the order classify → init → create", {
+    missing: () => /No features under/.test(missing.out) && hintRe(true).test(missing.out),
+    freshNote: () => fresh.out.includes("\n  " + note("en") + "\n") && hintRe(false).test(fresh.out) && !hintRe(true).test(fresh.out),
+    empty: () => hintRe(false).test(empty.out) && hintRe(false).test(bareStatus.out),
+    reinitNoNote: () => !reinit.out.includes(note("en")) && hintRe(false).test(reinit.out),
+    withFeature: () => !hintRe(false).test(withFeat.out) && !hintRe(false).test(listed.out) && /pay-flow/.test(listed.out),
+    archivedOnly: () => arch.code === 0 && hintRe(false).test(archInit.out) && hintRe(false).test(archList.out),
+    jsonCount: () => JSON.parse(runIn(["init", "--json", "--project", P("arch")]).out).activeFeatures === 0 &&
+      JSON.parse(runIn(["init", "--json", "--project", P("fresh")]).out).activeFeatures === 1,
+    pt: () => ptInit.out.includes(note("pt")) && ptInit.out.includes("  Para começar uma: " + DEV_SPEC + " classify \"<ideia>\", depois " + DEV_SPEC + " create <nome>"),
+    es: () => esList.out.includes("  Para empezar una: " + DEV_SPEC + " classify \"<idea>\", luego " + DEV_SPEC + " create <nombre>"),
+    // the note is for every client: it no longer says a skill fills the files (an MCP client has none), and keeps the how-to
+    noSkill: () => ["en", "pt", "es"].every((l) => !/\bskill\b/i.test(note(l)) && note(l).includes("skills/dev-spec-driven/references/steering-templates.md")),
+  });
+  // the predicate is ONE: init's activeFeatures is the count of the folders listFeatures lists — active, a hand-made folder that is
+  // no feature name, _archive/, a file and a hidden folder beside them
+  const mix = P("mix");
+  S.initProject(mix, ["core"], "en");
+  S.createFeature(mix, "Alpha", ["core"]);
+  S.createFeature(mix, "Beta", ["core"]);
+  S.createFeature(mix, "Gamma", ["core"]);
+  S.archiveFeature(mix, "gamma");
+  fs.mkdirSync(path.join(mix, ".specs", "My Feature"));
+  fs.mkdirSync(path.join(mix, ".specs", ".hidden"));
+  fs.writeFileSync(path.join(mix, ".specs", "notes.md"), "# notes\n");
+  const mixInit = S.initProject(mix, ["core"], "en");
+  const mixList = S.listFeatures(mix);
+  ok(mixInit.activeFeatures === mixList.features.length && mixList.features.length === 2,
+    "1.42 UX-09: init's activeFeatures is the count of the features `list` lists (active only: 2 of alpha, beta, archived gamma, 'My Feature/', .hidden/, notes.md) (got " +
+    JSON.stringify([mixInit.activeFeatures, mixList.features.map((f) => f.name)]) + ")");
+}
 };
