@@ -106,6 +106,11 @@ Phase 6, opt-in.
   `pre-existing (deferred)`, an `unconfirmed (NN)` the final review let ship, a `parked (real)`) is filed as ONE
   `residue-<feature>` backlog entry and committed before `git switch` (Closing); a defect confirmed again at another place is
   asked for as a class in the task's `_Implements:_` files (§7). The `review-seat` evals measure both seats (testing.md).
+- **Each agent prompt has a byte cap (1.42 S14)** — an agents/*.md is paid on every dispatch of its agent. mcp/tests/17-docs.js
+  `AGENT_CAPS` holds one cap per file and fails when an agents/*.md has none (a new agent), a cap names a file that is gone, or
+  a file is past its cap — its bytes as shipped (LF), never characters (an em dash costs three). The caps: reviewer 27,800 ·
+  implementer 18,700 · critic 16,900 · simplifier 8,300 (ceil(bytes × 1.02 / 100) × 100 on the integrated 1.42 branch) · UI
+  reviewer 7,000 · verifier 4,000 (their older pins, kept). Past one: trim, or raise it in one line with the reason in the commit.
 - **`reviewPanel` (1.36)** — `roadmap.json → meta.reviewModels`, opt-in: 2–3 model names checked by SHAPE, never a list of
   known names (`RE_MODEL_NAME`: up to 128 characters — a Bedrock profile ARN —, a leading letter or digit, an optional `[1m]`
   suffix; `REVIEW_RESERVED` inherit / default / diverse / off / none; duplicates case-insensitive, stored as given), the word
@@ -1258,7 +1263,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   findings and the re-review's out-of-scope lines (they stay deferred minors: the label is the namesake the rename removes);
   the dev-guardian review-seat pair (no dev-guardian prose changed; its deterministic half needed another chain's rule);
   SK-P2's within-feature engine check (0 pairs in 2,614 real comparisons) and SK-P3's stub rewrite (the stub's whole-file
-  hash is the brief's "still a template" test). The agent-prompt byte ratchet (S14) waits for the integrated branch.
+  hash is the brief's "still a template" test). The agent-prompt byte ratchet (S14) waited for the integrated branch (below).
+- **1.42 —** S14 (a byte ratchet per agent prompt): only SKILL.md, the verifier (≤ 4,000) and the UI reviewer (≤ 7,000) had a
+  byte cap, while this round alone added 614 B to the reviewer — a prompt paid on every task, re-review, final and simplify
+  dispatch. A cap per agents/*.md (`AGENT_CAPS`), set on the integrated branch after every chain's agent edits at
+  ceil(bytes × 1.02 / 100) × 100: reviewer 27,211 → 27,800, implementer 18,303 → 18,700, critic 16,543 → 16,900, simplifier
+  8,118 → 8,300; the verifier's and the UI reviewer's pins kept (the formula would have raised both). A test row only — no
+  eval weighs a prompt's size against its review quality, so the 2 % is the agreed slack, not a target. Cut: moving converge
+  and prune into an agent of their own (a 7th agent changes the pinned agent count, AGENTS.md, `rules agents` and the plugin
+  listing — a new mechanism for a LOW).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.
