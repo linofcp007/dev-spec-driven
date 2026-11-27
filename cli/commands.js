@@ -432,12 +432,13 @@ function statusLineRender(c) {
         // folder and it is fresh (review 8: the engine loaded after every message) — cli/completion.js statusCacheRead; else the
         // engine renders, kept with the .specs/ signature taken before it read and the outside paths it reports (1.30.1)
         const key = { cands: cands.map((x) => (typeof x === "string" ? path.resolve(c.cwd, x) : null)), columns: columns || null };
-        const cached = COMPLETION.statusCacheRead(key, Date.now(), near);
-        if (cached) r = cached;
+        const look = COMPLETION.statusCacheLookup(key, Date.now(), near);
+        if (look.r) r = look.r;
         else {
           const pdir = spec.statusLineProject(cands);
           if (pdir) {
-            const sig = COMPLETION.specsSignature(pdir);
+            // the signature the lookup just took, when it was this project's (1.42 perf-5: one walk of .specs/ per miss, not two)
+            const sig = look.signed && path.resolve(look.project) === path.resolve(pdir) ? look.sig : COMPLETION.specsSignature(pdir);
             const reads = [], started = Date.now();
             r = spec.statusLine(pdir, { columns, reads });
             COMPLETION.statusCacheWrite(key, pdir, sig, r, { started, near, reads, mapped: path.resolve(pdir) !== path.resolve(near) });

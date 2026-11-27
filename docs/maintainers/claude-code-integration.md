@@ -557,7 +557,11 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (cli/completion.js `statusCacheRead` / `statusCacheWrite`, no engine): kept in the OS temp folder per key (this CLI, the
   candidate folders resolved, `$COLUMNS`) with `specsSignature()` of the project's `.specs/` taken BEFORE it rendered — every
   entry's path, size, mtime and ctime, ≤ `STATUS_CACHE_ENTRIES` (4,000; past it: no cache), links never entered — and served while
-  that signature holds and it is under `STATUS_CACHE_TTL_MS` (10 s) old. Any change under `.specs/` shows at the next render. **What
+  that signature holds and it is under `STATUS_CACHE_TTL_MS` (10 s) old. Any change under `.specs/` shows at the next render. A miss
+  walks `.specs/` once (1.42 perf-5): `statusCacheLookup` returns the signature it took to compare (`signed`, the entry well-formed,
+  fresh and for this folder) and the render keeps it when the entry's project is the one rendered — never the entry's own `sig`,
+  never another project's walk (it saved 46–63 ms at 40 features, ~200 at 200, where nearly every render within 10 s of a Bash
+  call is such a miss). **What
   it reads OUTSIDE `.specs/` (1.30.1)** shows at the next render too: the render reports the paths its answer depends on there
   (`statusLine(dir, {reads})` — Phase 4's test files, read or missing, `statusTestsGate`; the gates and the finish step read only the
   spec and state files) and the entry signs them (`outside` / `osig`: size, mtime, ctime or absent — ≤ 64, else no cache); a file
@@ -959,3 +963,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30.1** — the cache's blind spot: for up to 10 s a change OUTSIDE `.specs/` the line reads didn't show (a Phase 4 test written —
   "write the tests" stayed; a `.specs/` made nearer the cwd; a worktree's mapping): the render reports its outside paths and the
   entry signs them, the probe's folder is compared at each read, a mapped render keeps 2 s.
+- **1.42 (perf-5, DS-PERF)** — a status-line miss within the TTL walked `.specs/` twice (completion.js's compare, then commands.js
+  before the render): `statusCacheLookup` hands its signature to the render (`statusCacheRead` is its `.r`). The other half of the
+  item — signing a `.history/` folder by its listing instead of each snapshot — was cut: a hand edit inside a snapshot would show
+  only after the TTL, narrowing "any change under `.specs/` shows at the next render" for −7 ms at mid size.
