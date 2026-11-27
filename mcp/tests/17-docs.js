@@ -2385,6 +2385,25 @@ exports.run = async ({
       reviewer: /A class finding is ADDRESSED only when every place listed is fixed and a search of the task's `_Implements:_` files finds no other\./.test(REV),
       readWhole: /\*\*Read the package once\*\* — one too long for a single Read in parts \(`offset` \/ `limit`\) to its last line, never through the shell \(it cuts long output\)\./.test(REV),
     });
+
+    // The critic's gate rows (GATES' SK-P2 / SK-P3 / S15 as prose, REVIEW's SK-P6) — one cell each, read from the table row.
+    // SK-P6 is a PROPERTY (would a user or caller notice the swap?), never a track list (L1); its exemptions are what the critic
+    // can check — the feature's own story / summary, the steering (Grep), an approved artifact — never "the user's request" it
+    // never sees (it starts fresh); always Minor (placement). SK-P3 asks per principle; the constitution stub is untouched (its
+    // whole-file hash is the brief's "still a template" test). S15 stays within 150 bytes: the critic is paid per pre-flight too.
+    const CRITIC = raw("agents", "spec-critic.md");
+    const cell = (cat) => (CRITIC.match(new RegExp("^\\| \\*\\*" + cat + "\\*\\* \\| (.*) \\|$", "m")) || [])[1] || "";
+    const clarity = cell("Clarity"), consistency = cell("Consistency"), testability = cell("Testability");
+    const s15 = "; a task citing an AC whose only `_Verify:_` is a project check's command, naming no test of it — it proves nothing broke, not the AC";
+    const p6 = (clarity.match(/; an AC naming an internal choice.*$/) || [""])[0];
+    all("1.42 (SK-P6, SK-P3, S15, SK-P2): spec-critic flags an AC naming an internal choice no user or caller would notice swapped — Minor, unless the swap IS the feature, the steering sets it or an approved artifact does, never a bugfix's; asks each constitution principle answered; flags a task proved only by a project check (≤ 150 B); and ACs that repeat each other", {
+      p6Property: /^; an AC naming an internal choice no user or caller would notice swapped \(a framework, database, library — not an endpoint path or a schema others read\): Minor, it belongs in the design/.test(p6),
+      p6Exempt: /unless the swap IS the feature \(story or summary\), `\.specs\/steering\/` sets it \(Grep\) or an approved artifact the requirements follow; never a bugfix's criteria\.$/.test(p6),
+      p6NotAList: !/\+api|\+data|\+port|the user's request|Important/.test(p6) && /words the glossary says to avoid \(the doctor's `glossary` check\)/.test(clarity),
+      p3: /each principle of `constitution\.md` answered in the design's Constitution Check \(by number or name, with how the design meets it\) — "all principles respected" with none named is a finding\./.test(consistency),
+      p2: /^ACs that contradict or repeat each other, the design, the constitution, or `Out of Scope`/.test(consistency),
+      s15: testability.endsWith(s15 + ".") && Buffer.byteLength(s15) <= 150 && /^ACs no test could fail; test-plan rows that don't actually exercise the AC they claim to cover/.test(testability),
+    });
   }
 
   // Release hygiene: the three version fields agree.
