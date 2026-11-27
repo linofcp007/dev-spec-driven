@@ -460,3 +460,7 @@ How the rules above came to be — grep a release here.
   owner), a 10,000 pass of the 1.17 H block (the chain timeout kills its quadratics — the mutation tip above), a slow-take
   count on the read-ahead pair (a load false-fail — a comment instead), the import / hook clocks of 05-markdown-trace (6× and
   ~200× margins), T10's render spy and R1(d)'s CLI row (they kill nothing the other rows do not).
+- **1.42 (UX-05, UX-01)** — `mcp/tests/17-docs-shipped-texts.js`: the properties every text the plugin ships must hold, read by
+  property, never a list of places — every .md / .mdc but CHANGELOG* and every .js; not what .gitignore ignores, hidden folders
+  but the rule files `rules` prints (cli/commands.js `RULE_FILES`), examples/, evals/, the suites' own folders, nor a
+  maintainer note's History. The file set is itself checked on a planted tree (a gap list in each place, read only where shipped).

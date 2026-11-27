@@ -70,7 +70,9 @@ is in History at the end.
   within `BRIEF_STEERING_BUDGET`) and lists the `manual` ones. `steeringGlobMatch()` is linear with capped brace
   expansion — never a backtracking regex.
 - **Custom names** (`steering_scaffold`): `^[a-z0-9][a-z0-9-]{0,62}\.md$`, never a Windows device name or a prototype key.
-  Doctor's `steering` check warns about files still templates.
+  Doctor's `steering` check warns about files still templates, with the remedy (the project's real rules, from the user or
+  the code — an agent never invents them); spec_init's `note` says the same to every client (1.42: no longer "the skill fills
+  them" — an MCP client has none), and the CLI prints it when init created files.
 - **A seeded stub (1.35)** — `design-system.md` is the one known stub whose built-in text depends on the project:
   `scaffoldSteeringFile` writes it with the code's components and tokens in place of its slot rows (`designSystemSeed`, the
   lazy tier; `seeded` {components, tokens}) — a project template for the file still wins, and the scan runs only when the
@@ -345,6 +347,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   Before it every default file was always in the brief — why one without front matter still counts as `always`. First
   written under "Catalog, drift, restore, guard, steering" (lifecycle.md), then moved here.
 - **1.25** — steering imported from Kiro / Cursor; the steering logic itself was left untouched.
+- **1.42 (UX-09)** — the CLI never printed spec_init's note, whose text told MCP clients a skill would fill the stubs: reworded
+  for every surface (the how-to kept, by its place in the plugin), printed when files were created; doctor's steering detail
+  gained the remedy. The offer of a test check was cut — `"test": "jest --watch"` never exits, and npm's default test script
+  fails by construction.
 
 ### Import sources and the brownfield scan
 - **1.36.0 review 1 (PORT-7)** — a +port import of a source with tasks.md had no baseline, no differential check and no

@@ -1006,7 +1006,7 @@ const STOP_PT_I = String.raw`(?:terminei|conclu[íi]|implementei|verifiquei|acab
 // init notes / hook output). Functions so callers interpolate freely.
 // ===========================================================================
 const msg = {
-    initNote: "Os stubs são placeholders. A skill preenche-os com conteúdo real (ver references/steering-templates.md).",
+    initNote: "Os ficheiros de steering são modelos: preenche os seus [placeholders] com as regras reais do projeto (do utilizador ou do código) — o doctor avisa até lá. Como: skills/dev-spec-driven/references/steering-templates.md, na pasta do plugin.",
     addTrackNote: (tr, slug) => `+${tr} adicionado. Preenche as novas secções de design e volta a correr /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `já tem +${tr}`,
     notes: {
@@ -1531,10 +1531,12 @@ const msg = {
       steeringSeeded: (comps, tokens) => `  preenchido a partir do código: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} — falta rever as linhas e acrescentar as variantes e as notas de cada componente`,
       feature: (slug, label, lang) => `Feature '${slug}' [${label}] (${lang})`,
       noFeatures: (dir) => `Não há features em ${dir}`,
+      startHint: (init) => `  Para começar uma: ${DEV_SPEC} classify "<ideia>", depois ${init ? `${DEV_SPEC} init, depois ` : ""}${DEV_SPEC} create <nome> --size xs|s|m|l (no Claude Code: /spec <ideia>).`,
       listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tarefas)`,
       statusHead: (f, tracks, phase) => `Feature: ${f}  [${tracks}]  fase: ${phase}`,
       statusTasks: (done, total, next) => `Tarefas: ${done}/${total}` + (next ? `  próxima → ${next}` : ""),
       doctorHead: (f, tracks, verdict, ready) => `Diagnóstico: ${f}  [${tracks}]  veredicto=${verdict}  pronta para avançar: ${ready}`,
+      doctorNextGate: (phase, ready, ids) => ready ? `  próximo gate ${phase}: as verificações passam` : ids ? `  próximo gate ${phase}: falha (${ids})` : `  próximo gate ${phase}: ainda nada a aprovar`,
       traceHead: (f, verdict, acs, covered) => `Rastreabilidade: ${f}  veredicto=${verdict}  ACs=${acs}  cobertos por tarefas=${covered}`,
       earsHead: (n, m, verdict) => `EARS: ${n} critérios, ${m} com verbo modal, veredicto=${verdict}`,
       next: (n, text, left, total) => `Próxima → #${n} ${text}  (faltam ${left}/${total})`,
@@ -1708,7 +1710,7 @@ const msg = {
       dependsOn: (f, deps, order, unknown) => `${f} depende de: ${deps || "(nenhuma)"}` + (order != null ? `  ordem=${order}` : "") + (unknown ? `  ⚠ dependências desconhecidas: ${unknown}` : ""),
       trackNow: (f, tracks) => `'${f}' agora [${tracks}]`,
       usage: (syntax) => `uso: ${syntax}`,
-      unknownCommand: (c) => `comando desconhecido '${c}'. Corre \`${DEV_SPEC} help\`.`,
+      unknownCommand: (c, near) => `comando desconhecido '${c}'${near ? ` — será '${near}'?` : "."} Corre \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `cliente desconhecido '${c}'. Conhecidos: ${known}`,
       noJson: (c) => `--json não está disponível para '${c}': só imprime texto. Corre-o sem --json.`,
       flagNotFor: (flag, c, list) => `${flag} não é uma opção de '${c}'` + (list ? ` (as suas opções: ${list})` : " (não tem nenhuma)") + `. Corre \`${DEV_SPEC} help\`.`,
@@ -1796,7 +1798,7 @@ const msg = {
         "test-plan.md": (slug) => `verifica a cobertura dos ACs com trace_check (${DEV_SPEC} trace ${slug})`,
         "eval-plan.md": (slug) => `define os limiares e a baseline, depois /spec-doctor ${slug}`,
         "tasks.md": (slug) => `divide o design em tarefas reais (/spec ${slug} tasks), depois trace_check`,
-        "change.md": (slug) => `escrever o resumo, 1–3 critérios EARS, a abordagem e 1–3 tarefas, cada uma com um comando _Verify:_, e depois aprovar o plano numa só chamada — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks)`,
+        "change.md": (slug) => `escrever o resumo, 1–3 critérios EARS, a abordagem e 1–3 tarefas, cada uma com um comando _Verify:_, e depois aprovar o plano numa só chamada — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks; CLI: ${DEV_SPEC} approve ${slug} --through tasks)`,
         default: (slug) => `/spec-doctor ${slug}`,
       },
       approveClassification: (slug) => `Confirma e aprova a classificação — /approve ${slug} classification.`,
@@ -2328,7 +2330,7 @@ const msg = {
         "     inclusion: manual    → nunca automaticamente; os briefs listam-no como disponível a pedido\n" +
         "     Substitui o padrão de exemplo e as linhas entre parênteses retos abaixo. -->\n\n" +
         "## Regras\n- [Uma regra que todos os ficheiros que correspondem ao padrão têm de seguir.]\n\n## Exemplos\n- [Um exemplo curto — ou uma referência a um ficheiro que mostre o padrão.]\n",
-      placeholders: (list) => `ainda com placeholders do template: ${list}`,
+      placeholders: (list) => `ainda com placeholders do template: ${list} — preenche-os com as regras reais do projeto (do utilizador ou do código)`,
       scoped: "Steering com âmbito (fileMatch — corresponde aos ficheiros desta tarefa):",
       manual: "Disponível a pedido (steering manual):",
     },
@@ -2653,7 +2655,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — um track definido pelo projeto (dev-spec 1.15). Só dados: nada nesta pasta é executado.
 // Guia: references/project-tracks.md · validação: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = o nome desta pasta: ^[a-z][a-z0-9]{1,19}$, nunca um track incluído (core tdd saas ai sec privacy dist api ui obs data).
+  // = o nome desta pasta: ^[a-z][a-z0-9]{1,19}$, nunca um track incluído (core tdd saas ai sec privacy dist api ui obs data port).
   "name": "${a.name}",
   // O marcador estável (sensível a maiúsculas) das secções de design, dos critérios e do bloco de tarefas: [${a.token}].
   "marker": "${a.token}",

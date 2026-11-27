@@ -116,6 +116,12 @@ const agentsBytes = Buffer.byteLength(fs.readFileSync(path.join(__dirname, "..",
 const printedBytes = Buffer.byteLength(rulesOut[4].r.out);
 ok(agentsBytes <= 16000 && (ROOT4.length > 100 || printedBytes <= 16384) && printedBytes < 32768,
   "AGENTS.md ≤ 16,000 bytes (" + agentsBytes + ") and `rules agents` prints ≤ 16 KiB (" + printedBytes + ", clone path " + ROOT4.length + " chars) — half of Codex's 32 KiB default");
+// 1.42 UX-01: the promise is for a clone path up to 100 characters, and this clone's is shorter — the copy is computed at 100:
+// each of its clone paths 100 bytes long (the rest of the text is the same at any path).
+const pathCopies = rulesOut[4].r.out.split(ROOT4).length - 1;
+const printedAt100 = printedBytes + pathCopies * (100 - Buffer.byteLength(ROOT4));
+ok(pathCopies >= 10 && printedAt100 <= 16384,
+  "1.42 UX-01: `rules agents` printed at a 100-character clone path stays ≤ 16 KiB (" + printedAt100 + " bytes: " + pathCopies + " clone paths, this one " + ROOT4.length + " chars)");
 const rbad = runIn(["rules", "vim"]);
 ok(rbad.code === 1 && /cursor, windsurf, copilot, gemini, agents/.test(rbad.out), "rules <unknown> exits 1 and lists the valid tools");
 

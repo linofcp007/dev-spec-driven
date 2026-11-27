@@ -19,9 +19,9 @@ Spanish.
 ## Requirements
 
 - **Claude Code 2.1.139 or later** (`claude --version`) — the hooks run in exec form (`node` started directly, no shell
-  per call), which older versions don't run; 2.1.271 or later also starts the spec critic and the verifier without
-  your CLAUDE.md. Or any MCP client: Claude Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI, Codex CLI…
-  ([INTEGRATIONS.md](./INTEGRATIONS.md)).
+  per call), which older versions don't run; 2.1.271 or later also starts the spec critic, the verifier and the UI
+  reviewer without your CLAUDE.md. Or any MCP client: Claude Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI,
+  Codex CLI… ([INTEGRATIONS.md](./INTEGRATIONS.md)).
 - **Node.js ≥ 18** on PATH (`node --version`). Node 18 and 20 are end-of-life: 22 or later is recommended (the suites pass
   on 18, 22, 24 and 26).
 - git — optional: a branch per feature, the commit a run was made on, the merge driver for the spec state.

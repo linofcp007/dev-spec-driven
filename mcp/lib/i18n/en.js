@@ -1017,7 +1017,7 @@ const STOP_EN_ING = String.raw`(?!\s+(?!implementing|fixing|building|wiring|writ
 // init notes / hook output). Functions so callers interpolate freely.
 // ===========================================================================
 const msg = {
-    initNote: "Stubs are placeholders. The skill fills them with real content (see references/steering-templates.md).",
+    initNote: "The steering files are templates: fill their [placeholders] with the project's real rules (from the user or the code) — doctor warns until then. How: skills/dev-spec-driven/references/steering-templates.md, in the plugin's folder.",
     addTrackNote: (tr, slug) => `Added +${tr}. Fill the new design sections, then re-run /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `already on +${tr}`,
     notes: {
@@ -1594,10 +1594,16 @@ const msg = {
       steeringSeeded: (comps, tokens) => `  filled from the code: ${comps} ${comps === 1 ? "component" : "components"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} — review the rows, then add each component's variants and notes`,
       feature: (slug, label, lang) => `Feature '${slug}' [${label}] (${lang})`,
       noFeatures: (dir) => `No features under ${dir}`,
+      // 1.42 UX-21: an empty project's next step, in the order of /spec (classify, the user's OK, init, create); init only while
+      // there is no .specs/ — `list` / `status` and `init` print it on the same predicate: no active feature
+      startHint: (init) => `  Start one: ${DEV_SPEC} classify "<idea>", then ${init ? `${DEV_SPEC} init, then ` : ""}${DEV_SPEC} create <name> --size xs|s|m|l (Claude Code: /spec <idea>).`,
       listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tasks)`,
       statusHead: (f, tracks, phase) => `Feature: ${f}  [${tracks}]  phase=${phase}`,
       statusTasks: (done, total, next) => `Tasks: ${done}/${total}` + (next ? `  next → ${next}` : ""),
       doctorHead: (f, tracks, verdict, ready) => `Doctor: ${f}  [${tracks}]  verdict=${verdict}  readyToAdvance=${ready}`,
+      // 1.42 UX-01: the next approval's own checks (nextGate) — a forecast, never a promise: the approval adds phase-order and the
+      // role sign-offs; no failing check and no artifact → nothing to approve yet
+      doctorNextGate: (phase, ready, ids) => ready ? `  next gate ${phase}: checks pass` : ids ? `  next gate ${phase}: fails (${ids})` : `  next gate ${phase}: nothing to approve yet`,
       traceHead: (f, verdict, acs, covered) => `Trace: ${f}  verdict=${verdict}  ACs=${acs}  coveredByTasks=${covered}`,
       earsHead: (n, m, verdict) => `EARS: ${n} criteria, ${m} with modal, verdict=${verdict}`,
       next: (n, text, left, total) => `Next → #${n} ${text}  (${left}/${total} left)`,
@@ -1777,7 +1783,7 @@ const msg = {
       dependsOn: (f, deps, order, unknown) => `${f} depends on: ${deps || "(none)"}` + (order != null ? `  order=${order}` : "") + (unknown ? `  ⚠ unknown deps: ${unknown}` : ""),
       trackNow: (f, tracks) => `'${f}' now [${tracks}]`,
       usage: (syntax) => `usage: ${syntax}`,
-      unknownCommand: (c) => `unknown command '${c}'. Run \`${DEV_SPEC} help\`.`,
+      unknownCommand: (c, near) => `unknown command '${c}'${near ? ` — did you mean '${near}'?` : "."} Run \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `unknown client '${c}'. Known: ${known}`,
       // --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
       noJson: (c) => `--json is not available for '${c}': it prints text only. Run it without --json.`,
@@ -1886,7 +1892,7 @@ const msg = {
         "test-plan.md": (slug) => `check the AC coverage with trace_check (${DEV_SPEC} trace ${slug})`,
         "eval-plan.md": (slug) => `set the thresholds and the baseline, then /spec-doctor ${slug}`,
         "tasks.md": (slug) => `break the design into real tasks (/spec ${slug} tasks), then trace_check`,
-        "change.md": (slug) => `write its summary, 1–3 EARS criteria, the approach and 1–3 tasks each with a _Verify:_ command, then approve the plan in one call — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks)`,
+        "change.md": (slug) => `write its summary, 1–3 EARS criteria, the approach and 1–3 tasks each with a _Verify:_ command, then approve the plan in one call — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks; CLI: ${DEV_SPEC} approve ${slug} --through tasks)`,
         default: (slug) => `/spec-doctor ${slug}`,
       },
       approveClassification: (slug) => `Confirm & approve the classification — /approve ${slug} classification.`,
@@ -2489,7 +2495,7 @@ const msg = {
         "     inclusion: manual    → never automatically; briefs list it as available on request\n" +
         "     Replace the example pattern and the bracketed lines below. -->\n\n" +
         "## Rules\n- [A rule every file matching the pattern must follow.]\n\n## Examples\n- [A short example — or a pointer to a file that shows the pattern.]\n",
-      placeholders: (list) => `still template placeholders: ${list}`,
+      placeholders: (list) => `still template placeholders: ${list} — fill them with the project's real rules (from the user or the code)`,
       scoped: "Scoped steering (fileMatch — matches this task's files):",
       manual: "Available on request (manual steering):",
     },
@@ -2832,7 +2838,7 @@ const msg = {
       initJson: (a) => `// Track pack +${a.name} — a project-defined track (dev-spec 1.15). Data only: nothing in this folder is run.
 // Guide: references/project-tracks.md · validate it: dev-spec tracks check (spec_tracks {action: "check"}).
 {
-  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui obs data).
+  // = this folder's name: ^[a-z][a-z0-9]{1,19}$, never a built-in track (core tdd saas ai sec privacy dist api ui obs data port).
   "name": "${a.name}",
   // The stable, case-sensitive marker of its design sections, criteria and task block: [${a.token}].
   "marker": "${a.token}",

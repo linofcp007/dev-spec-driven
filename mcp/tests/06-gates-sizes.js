@@ -757,4 +757,18 @@ exports.run = async ({ ok, skip, all, rpc, payload, S, tmp, list, require, __dir
       () => /in requirements\.md/.test(S.msg("en").gates.hookPlaceholders(1, "L1 [x]")),
     ]);
   }
+
+  { // 1.42 UX-12: an xs change's fill step gives the plan's one-call approval for the CLI too, as the size s fast-forward does
+    // (planFastForward): the slash command and the MCP call alone left a CLI user without the line to run.
+    const got = ["en", "pt", "es"].map((lang) => {
+      const p = fresh("ux12-" + lang, lang);
+      const c = S.createFeature(p, "Footer typo " + lang, undefined, "fix a typo in the footer", undefined, lang, "change");
+      const na = S.nextAction(p, c.slug);
+      return [lang, na.step, na.file, na.recommendation, c.slug];
+    });
+    all("1.42 UX-12: an xs change's next step (fill change.md) names the CLI line of the plan's approval in en / pt / es — `CLI: <dev-spec> approve <slug> --through tasks` (got " +
+      JSON.stringify(got.map(([l, st, f, rec]) => [l, st, f, (rec || "").slice(-160)])) + ")",
+      Object.fromEntries(got.map(([lang, step, file, rec, slug]) => [lang, () => step === "fill" && file === "change.md" &&
+        (rec || "").includes("(/approve " + slug + " --through tasks; CLI: " + i18n.DEV_SPEC + " approve " + slug + " --through tasks)")])));
+  }
 };

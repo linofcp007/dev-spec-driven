@@ -128,9 +128,23 @@ exports.run = async ({
   ok(/real defect[^\n]*\/spec-bugfix/.test(docsSkill) && /Bounded/.test(docsRef("classification-matrix.md")) && /\/spec-bugfix/.test(docsRef("classification-matrix.md")) &&
     /Bounded/.test(docsRef("bugfix.md")) && /\*\*After Phase 0 approval:\*\* `spec_init \{tracks, lang\}` if steering is missing, then\s+`spec_create \{name, tracks, size, lang\}` \*\*once\*\*/.test(docsSkill),
     "mode routing sends a real defect to /spec-bugfix and knows Bounded (SKILL, matrix, bugfix.md); spec_init → spec_create (with the size, 1.24 r6 H2) once, after Phase 0 approval");
-  ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /always scaffolds `quickstart\.md`/.test(docsSkill) && !/^\| Tool \|/m.test(docsSkill) &&
-    (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
-    "SKILL.md claims are honest (constitution check = section presence; quickstart/checklist always scaffolded); the tool table lives in tooling-reference.md");
+  // 1.42 UX-16: quickstart.md and checklist.md come with design.md — a feature of any size —, never with a change (xs), a bugfix
+  // or a spike: SKILL.md said "always". The sentence is held to spec_create's own scaffold.
+  const docsQs = path.join(tmp, "proj-ux16");
+  S.initProject(docsQs, ["core"], "en");
+  const docsQsFiles = (f) => ["design.md", "quickstart.md", "checklist.md"].filter((x) => fs.existsSync(path.join(f.dir, x))).join(",");
+  const docsQsGot = [S.createFeature(docsQs, "alpha", ["core"]), S.createFeature(docsQs, { name: "delta", tracks: ["core"], size: "m" }),
+    S.createFeature(docsQs, { name: "beta", tracks: ["core"], size: "xs" }), S.createFeature(docsQs, "gamma", ["core"], undefined, undefined, undefined, "bugfix")].map(docsQsFiles);
+  ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /`spec_create` scaffolds `quickstart\.md` and `checklist\.md` with `design\.md` — fill both\./.test(docsSkill) &&
+    !/always scaffolds `quickstart\.md`/.test(docsSkill) && JSON.stringify(docsQsGot) === JSON.stringify(["design.md,quickstart.md,checklist.md", "design.md,quickstart.md,checklist.md", "", ""]) &&
+    !/^\| Tool \|/m.test(docsSkill) && (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
+    "SKILL.md claims are honest (constitution check = section presence; 1.42 UX-16: quickstart / checklist come with design.md — a feature, not a change or a bugfix); the tool table lives in tooling-reference.md (got " + JSON.stringify(docsQsGot) + ")");
+  // 1.42 UX-06: `/spec` with no argument — a returning user who names no feature — routes through spec_status {}: one feature in
+  // flight is resumed, several are listed to choose from, none starts Phase 0 (it routed an existing feature or a new idea only).
+  const docsSpecCmd = docsRead("commands", "spec.md").replace(/\s+/g, " ");
+  ok(/- \*\*No argument\*\* → `spec_status \{\}`: one feature in flight \(not complete\) → resume it as below; several → list them with their phase and progress and ask which; none → ask for the idea \(Phase 0\)\./.test(docsSpecCmd) &&
+    docsSpecCmd.indexOf("**No argument**") < docsSpecCmd.indexOf("**An existing feature**"),
+    "1.42 UX-06: /spec with no argument routes through spec_status {} — one in flight: resume; several: list and ask which; none: Phase 0 — before the existing-feature route");
   // The expected set IS the live tools/list — a hand-kept list went stale (it stopped at 23 tools while the server had 29).
   const docsTools = list.result.tools.map((t) => t.name);
   // 1.26: the README is one file per language — README.md (EN, the reference), README.pt.md (PT-PT), README.es.md (ES) — with
@@ -333,6 +347,22 @@ exports.run = async ({
         /After a drift, an ❌ the change didn't intend is a regression of a shipped AC \(`\/spec-bugfix`, not a task\); one it intended is a spec change\./.test(docsWs(docsRead("commands", "spec-review.md"))),
       briefInstructions: () => /the root `CLAUDE\.md` and the files it imports \(`@path`\), `\.claude\/CLAUDE\.md` and `CLAUDE\.local\.md` when present, and a `CLAUDE\.md` in the folders of the files the brief names/.test(critic) &&
         !/`AGENTS\.md`/.test(critic),
+    });
+    // 1.42 UX-17: each README's requirements line names every agent that starts without CLAUDE.md — the set is read from the
+    // agents' front matter (`omitClaudeMd: true`), never a name list: 1.41's named the critic and the verifier, not the UI reviewer.
+    // A new such agent needs its display name here (and in the three sentences), and one that keeps CLAUDE.md again leaves both.
+    const freshNames = {
+      "spec-critic.md": { en: "the spec critic", pt: "o crítico da spec", es: "el crítico de la spec" },
+      "spec-verifier.md": { en: "the verifier", pt: "o verificador", es: "el verificador" },
+      "spec-ui-reviewer.md": { en: "the UI reviewer", pt: "o revisor de interface", es: "el revisor de interfaz" },
+    };
+    const freshAgents = agentFiles.filter((a) => /^omitClaudeMd: true$/m.test(front(a))).sort();
+    const freshSentence = { en: /2\.1\.271 or later also starts ([^.]*) without your CLAUDE\.md\./, pt: /a 2\.1\.271 ou posterior também arranca ([^.]*) sem o teu CLAUDE\.md\./,
+      es: /la 2\.1\.271 o posterior además arranca ([^.]*) sin tu CLAUDE\.md\./ };
+    const freshGot = docsReadmes.map(([lang, , t]) => [lang, (docsWs(t).match(freshSentence[lang]) || [])[1] || ""]);
+    all("1.42 UX-17: each README's Claude Code line names every omitClaudeMd agent (from agents/*.md's front matter: " + freshAgents.join(", ") + ") and no other (got " + JSON.stringify(freshGot) + ")", {
+      sameSet: JSON.stringify(Object.keys(freshNames).sort()) === JSON.stringify(freshAgents) && freshAgents.length >= 3,
+      named: freshGot.every(([lang, s]) => s && freshAgents.every((a) => s.includes((freshNames[a] || {})[lang] || "\0"))),
     });
     // 1.32 (from Shopify's Helix): the visual review of a +ui task — an image-only reviewer, INVALID on different states,
     // never "passed" without a reference or a capture; it re-runs after a fix that changes a view; more autonomy only on

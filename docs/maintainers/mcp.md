@@ -209,7 +209,10 @@ backlog action, impact's phase, a task number) answers in the validator's words 
   ≥ 1024) a message gets -32600 once (`args.tooLarge`) and the rest of its line is skipped. On stdin close the server exits
   after its flush.
 - **`initialize`** echoes a supported `protocolVersion` (`SUPPORTED_PROTOCOLS`: 2024-11-05 … 2025-11-25), else the latest;
-  default `2024-11-05`. Its instructions name spec_next_action as the "where am I / what now?" call.
+  default `2024-11-05`. Its instructions name spec_next_action as the "where am I / what now?" call (spec_status {} for the
+  features) and state the approval loop — per phase the artifact, spec_doctor, spec_approve on the user's explicit yes —, the
+  one place a client without the skill reads it; the prompts they name are prompts/list's (a test parses them). They are paid
+  in every session: no catalogue there.
 - **Messages.** No `id` member = a notification: no reply, no tool run. An `id` that isn't a string or an integer → -32600
   (id null); no string `method` → -32600, except a client's response (`result` / `error`), ignored whatever its id. A batch
   gets ONE array; malformed input -32600 / -32700; an unknown method -32601; an unknown tool -32602 (`args.unknownTool`).
@@ -283,6 +286,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   five codes — an enum was +156) and "(a decision, a discovery or a lesson — a finding's `cause` and `target` file)": +64
   (44,701 → 44,765). The round's other items — the friction budget, METRIC lines, W, the pruning pass, Reference Examples —
   spend 0 here: their prose lives in the references (verification.md, subagent-execution.md, tooling-reference.md).
+- **1.42 (UX-01, UX-20)** — spec_doctor no longer "decides whether a feature can advance a phase" (`readyToAdvance` is no fail
+  anywhere, a later phase's included; the next approval's own checks are `nextGate`): −18; spec_next_task picks "by section,
+  then by number", not "in number order": +11 — 44,765 → 44,758 of 45,000. Dropping `PROJECT_DIR`'s description (−961, the
+  1.24 r6 A5 row) was cut: no chain of the round needed the room. SKILL.md 15,260 → 15,256 of 15,360 (UX-01 −14, UX-16 +10).
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.
@@ -367,3 +374,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   waits `MCP_LOCK_WAIT_MS` (2 s), where the client retrying beats a frozen server.
 - **1.25.1 review 7** — a `roots/list` timeout no longer cancels the request: a later answer was dropped and the cwd stayed
   the default for the session (`late` handler, `rootsGen`).
+- **1.42 (UX-03)** — the instructions said "spec_create …, then spec_status / spec_next_task / spec_complete_task to drive
+  execution", skipping the approval loop a skill-less client never reads elsewhere, and named `spec-impact`, a prompt folded
+  into `spec-change` in 1.26. The loop in its tightened form (+120 characters per session: spec_approve's description already
+  carries the consent rule) and the spec_status pointer; llms-install.md's rule-file step is no longer "(Optional)".

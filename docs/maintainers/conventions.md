@@ -390,7 +390,11 @@ History at the end.
   reaches the engine as false (`boolFlag()`), as on MCP.
 - **Help:** `--help` anywhere runs nothing. `<command> --help`, `-h` (a switch) and `help <command>` print `helpFor()` — the
   entry's `help` lines and its `COMMAND_OPTIONS`; otherwise `helpText()`, every entry's lines in table order. A new entry's
-  `help` starts `  <name> ` at two spaces (a test checks it).
+  `help` starts `  <name> ` at two spaces (a test checks it). A bare `dev-spec` (no command, no flag) prints `helpOverview()`
+  (1.42): the first steps in /spec's order — the start hint's (`cliOutput.startHint`: classify, init, create) — and every entry
+  with a `help` by name, in table order, under 120 columns; it reads only the entries' static `name` / `help` (no engine). An
+  unknown command names the closest command or alias (`closestName` over `COMMAND_INDEX`, `didYouMean` in `--json`) — never a
+  feature name, never run.
 - **Numbers:** `--cap`, `--max`, `--timeout`, `--min-lines` go through `intFlag()` (an integer ≥ 1, ≤ the entry's `bounds` —
   `--timeout` ≤ 2147483, Node's timer limit; next `--max` ≤ 8; a `[least, most]` pair for dupes `--min-lines`, 4–100 — the MCP
   schema's `minimum` / `maximum`). Where the CLI passes raw strings the engine refuses what the MCP schema
@@ -644,6 +648,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   it).
 - **1.28** — `tests` became a CLI switch (`dupes --tests`); `bounds` takes a `[least, most]` pair (`dupes --min-lines` 4–100,
   the schema's minimum — `--min-lines 3` passed the old ≥ 1 rule where MCP refuses `minLines: 3`).
+- **1.42 (UX-07, UX-08)** — a bare `dev-spec` printed the whole 31 KB reference: it prints `helpOverview()`; `help`, `--help` and
+  `-h` keep the reference (a `--help | grep <flag>` reads flags — the critic kept them, and cut the overview's slash-command
+  mapping line: 3 of the 11 commands next_action names, a name list). An unknown command names the closest one (`nxt` →
+  `next`); a feature-name suggestion was cut — a sibling (`auth-v1` for `auth-v3`) is a namesake an agent would act on.
 
 ### Shell completion
 - **1.25** — `completion <shell>` and the hidden `__complete`; `IMPORT_TOOLS` among the value lists. `__complete` measured ~80

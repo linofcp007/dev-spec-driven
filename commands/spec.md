@@ -6,6 +6,8 @@ argument-hint: "[feature | idea] [requirements|design|test-plan|eval-plan|tests|
 Use the **dev-spec-driven** skill. Request: $ARGUMENTS
 
 **Route the request.**
+- **No argument** → `spec_status {}`: one feature in flight (not complete) → resume it as below; several → list them
+  with their phase and progress and ask which; none → ask for the idea (Phase 0).
 - **An existing feature** (`.specs/<feature>/`) → `spec_next_action {name}`: report its tracks, phase, doctor verdict and
   `changedSinceApproval`, then do the ONE step it names — never skip a step to reach a later one. With a phase named,
   do that phase once the phases before it are approved.

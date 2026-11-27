@@ -50,8 +50,8 @@ no API key.
    slash commands) and read-only **resources** (`specs://roadmap`, `specs://feature/{slug}/{artifact}`, …). To hide
    the prompts, add `"env": { "SPEC_MCP_PROMPTS": "off" }` to the server entry.
 
-5. **(Optional) Give the agent the workflow.** `node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js rules agents`
-   prints `AGENTS.md` with absolute paths — paste it into the client's rules or custom instructions. Tools without
+5. **Give the agent the workflow** — every client but Claude Code's plugin (whose skill carries it):
+   `node /ABSOLUTE/PATH/dev-spec-driven/cli/dev-spec.js rules agents` prints `AGENTS.md` with absolute paths — paste it into the client's rules or custom instructions. Tools without
    Claude Code hooks should run `dev-spec stop-check --message "…"` (or the MCP tool `spec_stop_check`) before claiming a
    task is done (it is in there).
 

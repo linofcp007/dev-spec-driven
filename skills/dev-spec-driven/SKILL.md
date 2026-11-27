@@ -114,7 +114,7 @@ and its constraints round), present.
 against the registry `.specs/steering/design-system.md` (`ui-design-system` — `references/ui-design-patterns.md`). A critical flow — stock, a coupon, a
 balance, a booking, a payment (`critical-flows`, `critical-flow-tests`): `references/critical-flows.md`. For the Constitution Check
 `spec_doctor` only checks that the section is there; the human judges it.
-`spec_create` always scaffolds `quickstart.md` and `checklist.md` — fill both.
+`spec_create` scaffolds `quickstart.md` and `checklist.md` with `design.md` — fill both.
 
 **Phases 3–4.** Every AC in ≥ 1 test row (`T-nn`); +ai: the eval sets with thresholds and a baseline. Phase 4 is the
 hard gate: every planned test written, red for the right reason, its T-ID in its name (`trace_check {code: true}`); no
@@ -159,7 +159,7 @@ stay inline. `references/subagent-execution.md` (also the final review, converge
 
 ## Gates and approvals
 
-`spec_doctor` before a phase advances: one `readyToAdvance` verdict over every check (a track section counts only
+`spec_doctor` before a phase advances: fix what its `nextGate` refuses (a track section counts only
 filled with your own text). At size m / l (or none), offer once per feature the deep review before the requirements
 approval (design-first: the design's; never at classification): fresh reviewers — the critic, a cold read — whose
 findings you triage, never apply unasked (`references/critic-review.md`).

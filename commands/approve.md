@@ -6,8 +6,8 @@ argument-hint: "[feature] [phase | --through <phase>] [--role name] [--force [--
 
 The user's approval of a phase gate. Args: $ARGUMENTS
 
-1. `spec_doctor {name}` first — show the verdict. No phase given? Show the one `spec_next_action` names and ask which to
-   approve: record only what the user approves.
+1. `spec_doctor {name}` first — show the verdict and its `nextGate`. No phase given? Show the one `spec_next_action`
+   names and ask which to approve: record only what the user approves.
 2. Record it with `spec_approve {name, phase}` — classification · requirements · design · test-plan · eval-plan · tests ·
    tasks · execution. `--through <phase>` → `spec_approve {name, through}`: every filled planning phase up to it, in
    order, each through its own gate — how a size xs / s plan is approved; it stops at the first refusal and never

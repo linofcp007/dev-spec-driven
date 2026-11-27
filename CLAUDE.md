@@ -119,7 +119,7 @@ dupes.js, design-values.js, design-system.js, ui-checks.js, breakpoints.js, impo
 **i18n:** every user-facing string lives in `mcp/lib/i18n/*` — `en.js` · `pt.js` · `es.js` hold the same keys (EN is the
 reference), assembled by the `mcp/lib/i18n.js` facade; pt-BR is DERIVED from pt (`i18n/pt-br.js`, `toPtBr`), never
 written by hand. IDs and markers stay English-stable (languages.md). The one English-only output is the CLI's help text
-(`--help`, `help <command>`'s command lines — `helpText()`), whatever `--lang` says; only `help <command>`'s frame lines follow the project language.
+(`--help`, `help <command>`'s command lines — `helpText()` —, a bare `dev-spec`'s `helpOverview()`), whatever `--lang` says; only `help <command>`'s frame lines follow the project language.
 
 ## Gotchas that bite in every area
 - **Hooks: never reference `hooks/hooks.json` in `plugin.json`.** Claude Code auto-loads the standard
