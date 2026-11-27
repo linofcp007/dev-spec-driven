@@ -1307,8 +1307,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   --porcelain -- .specs` is empty", with "a change neither you nor these steps made is the user's: ask", asked on every close:
   the ticks (`tasks.md`) and the run's backlog entries are listed and no closing step wrote them, and a declined change left
   no way out. It is `git add` of what the run and the closing wrote now — the feature's folder, roadmap.json, the generated
-  roadmap files the project has, the registry / a steering file when written —, in the same words in both texts; git carries
-  any other change across the switch (a switch that would overwrite one refuses, naming the file: ask). (3) "A `Residues
+  roadmap files the project has, the registry / a steering file when written —, in the same words in both texts; a path git
+  ignores stays out (`git add` names it, exits 1 and adds the rest — said, so no agent forces it in); git carries any other
+  change across the switch (a switch that would overwrite one refuses, naming the file: ask). (3) "A `Residues
   filed:` line means they are filed" lost the residues of a kept branch closed again: the lines after the LAST one are filed.
   (4) Two keys read less than they claimed: the recovery-verb check now reads both whole texts, the sign-off is counted per
   sentence over every spelling. Also: the stale "still a template" rationale above (UX-10 was cut; the stub hash serves doctor

@@ -633,9 +633,9 @@ the rulings, with the line that drops the entry (`dev-spec backlog rm residue-<f
 **Then commit the spec state with the feature** — what the run and the closing wrote under `.specs/`: `git add` the
 feature's folder, `.specs/roadmap.json` and the generated roadmap files the project has (`.specs/ROADMAP.md`,
 `.specs/ROADMAP.html`, `.specs/SPECS.md`) — with `.specs/steering/design-system.md` when the finish registered components,
-and a steering file the run amended —, then commit (a git-ignored `.specs/`: nothing to commit). Git carries any other
-uncommitted change across the switch: it is not lost and not committed (one the switch would overwrite makes it refuse,
-naming the file: ask the user).
+and a steering file the run amended —, then commit (a path git ignores stays out: `git add` names it and adds the rest; a
+git-ignored `.specs/` has nothing to commit). Git carries any other uncommitted change across the switch: it is not lost
+and not committed (one the switch would overwrite makes it refuse, naming the file: ask the user).
 
 Then ask the human to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
 `.specs/<feature>/.execution/` — git history and the backlog are the record now.
