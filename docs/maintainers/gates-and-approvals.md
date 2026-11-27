@@ -109,15 +109,22 @@ review findings — is in History at the end.
   permission, a lock — pendingGateList lists a phase whose entry exists). The CLI headline prints it (`cliOutput.doctorNextGate`:
   checks pass · fails (its ids) · its file can't be read, as approve says · nothing to approve yet); spec_doctor's description
   says "what the next gate's checks refuse", never what the approval would refuse.
-  A sentence that sends an agent to doctor before an approval or a phase advance is to say "fix what its next gate refuses",
-  and none may promise an approval on it. The guard (mcp/tests/17-docs-shipped-texts.js) holds only FOUR shapes to the next
-  gate, read in every shipped .md / .mdc (the rule files of other tools included): "run … doctor … before advancing / an
-  approval", "at each phase boundary … doctor", "`spec_doctor` … first" / "before a phase advances", "`spec_doctor`, then the
-  user's approval". Another wording is not read: a pipeline ("→ `spec_doctor` →"),
-  "`spec_doctor`, and — on the user's yes — approve", a code block, another language, a .js string. The eight such sentences
-  review 2 found (/clarify, /spec-change, /spec-tour, /spec-bugfix step 4, bugfix.md's gate, AGENTS.md's pipeline, SKILL.md's
-  phase line, change-management.md's loop) carry the clause by hand, pinned one by one in the same file — a new sentence of
-  another wording is not caught. `changedApprovedPhases` stays out of `nextGate`: next_action's
+  A sentence that sends an agent to doctor before an approval or a phase advance is to say "fix what its next gate refuses"
+  — one that asks for several approvals at once (`spec_approve {through}`: /spec-tour, /spec-bugfix step 4, bugfix.md's
+  gate), "fix what each gate up to <the last one asked> refuses": `nextGate` is only the first pending gate, and the
+  fast-forward stops at the first refusal after the user's yes —, and none may promise an approval on it. The guard
+  (mcp/tests/17-docs-shipped-texts.js) holds only FOUR shapes to the next gate (`nextGate` or "next gate" in the same
+  sentence), read in every shipped .md / .mdc (the rule files of other tools included), each cut into sentences — a
+  paragraph, a list item or a table cell, split at ". " / "; "; a fenced line is read like any other: "run / use / call …
+  doctor … before advancing / a phase advances / approving / an, each, the next, its approval"; "each / every phase
+  boundary … run / use / call … doctor"; doctor followed directly by "first" or "before <one of those moments>" (only an
+  inline `{…}` argument and a comma between); "doctor … then the user's approval" / "then ask (the user) for (its / their)
+  approval". Another wording is not read: a pipeline ("→ `spec_doctor` →"), "`spec_doctor`, and — on the user's yes —
+  approve", "doctor, then re-approve", words between doctor and "first", another language, a .js string. The seven such
+  sentences review 2 found (/clarify, /spec-change, /spec-tour, /spec-bugfix step 4, bugfix.md's gate, AGENTS.md's
+  pipeline, SKILL.md's phase line), plus change-management.md's loop (a code block's line, unread for its wording), carry the
+  clause by hand, pinned one by one in the same file — a new sentence of another wording is not caught.
+  `changedApprovedPhases` stays out of `nextGate`: next_action's
   re-review step and the fast-forward read it, and approvePhase adds `phase-order` itself.
 - **`next_action` — the step order, phase by phase** (doctor shows the same gate as `nextGate`). One ordered registry, as the
   checks are (1.30): `NEXT_STEPS` (engine/doctor.js) — `{id, when(x), run(x)}`, the first whose `when` holds answers, `run`

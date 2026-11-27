@@ -72,9 +72,9 @@ fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --e
    approval is refused until it is.
 
    **→ Gate: STOP here.** Fill the criterion (`US-1.AC-1`: the real condition and the correct behaviour), the test
-   plan's File column and the tasks' `_Verify:_` commands, run `spec_doctor` (fix what its next gate refuses), and
-   present the reproduction, the root cause and its evidence for the approvals (requirements, design = `bug.md`,
-   test-plan, tasks). Wait for the yes.
+   plan's File column and the tasks' `_Verify:_` commands, run `spec_doctor` (fix what each gate up to tasks refuses —
+   `nextGate` is only the first), and present the reproduction, the root cause and its evidence for the approvals
+   (requirements, design = `bug.md`, test-plan, tasks). Wait for the yes.
 3. **Failing regression test** (task 1). Write `T-01` so it reproduces the bug and watch it fail *for the
    right reason* (the wrong behaviour, not a typo or a missing import). The scaffold marks task 1 **`_Expect: fail_`**
    with a `_Verify: [command that runs T-01]_` slot — fill in the real command (and add guard test `T-02`):
@@ -89,10 +89,10 @@ fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --e
    improvements. Remove the instrumentation before task 2's run: `git grep -n --untracked -E
    'DEBUG-<slug>([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'` prints nothing (`--untracked`: a file you created
    while tracing is searched too; the boundary keeps a longer slug's tags, `DEBUG-<slug>-…` — another bugfix's —, out; the
-   pathspec leaves every `.specs/` folder out — `bug.md`'s quoted evidence is no instrument line, so it stays; it finds
-   only the tagged lines — an untagged one stays, so tag every one). Run `T-01`, `T-02` and the full suite
-   (`_Verify:_` records the evidence). Consider defence in depth: should the invalid value also be rejected at the
-   boundary where it entered?
+   pathspec leaves out every folder named `.specs`, a code folder of that name too — `bug.md`'s quoted evidence is no
+   instrument line, so it stays; it finds only the tagged lines — an untagged one stays, so tag every one). Run `T-01`,
+   `T-02` and the full suite (`_Verify:_` records the evidence). Consider defence in depth: should the invalid value also
+   be rejected at the boundary where it entered?
 
 **Checkpoint:** the reproduction steps no longer reproduce the bug, the full suite is green and that `git grep -n
 --untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'` prints nothing. Close with

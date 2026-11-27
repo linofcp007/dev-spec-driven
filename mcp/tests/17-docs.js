@@ -758,15 +758,19 @@ exports.run = async ({
       const step3 = (s13Cmd.match(/3\. \*\*Root cause with evidence\*\*.*?4\. \*\*STOP/) || [""])[0];
       const step6 = (s13Cmd.match(/6\. \*\*Fix the cause\*\*.*?7\. \*\*Close\*\*/) || [""])[0];
       const grep = (tag) => "`git grep -n --untracked -E 'DEBUG-<" + tag + ">([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'` prints nothing";
-      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n --untracked` with a tag boundary, every .specs/ folder left out by pathspec, prints nothing — never 'passes'); /spec-bugfix steps 3 and 6 say so; the four-task sentence is kept (got " +
+      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n --untracked` with a tag boundary, every folder named .specs left out by pathspec — a code folder of that name too, said —, prints nothing — never 'passes'); /spec-bugfix steps 3 and 6 say so, step 6's command on one line; the four-task sentence is kept (got " +
         JSON.stringify([fixStep, checkpoint, step3, step6]) + ")", {
         "phase 2 tags each instrument line": /instrument each boundary once and run it[^.]*\.[^.]*Tag every instrument line `DEBUG-<slug>`/.test(s13Ref),
         "phase 4 removes it before task 2's run (G1, G2, G4)": fixStep.includes("Remove the instrumentation before task 2's run: " + grep("slug")),
         "the Checkpoint asks for it gone (G1, G2, G4, G6)": checkpoint.includes(grep("slug")),
         "/spec-bugfix step 3 tags (G3)": /tag every instrument line you add `DEBUG-<feature>`/.test(step3),
         "/spec-bugfix step 6 (G1, G2, G4)": /remove the instrumentation first, every line tagged `DEBUG-<feature>`/.test(step6) && step6.includes(grep("feature")),
-        "bug.md's quoted evidence is said to stay": /the pathspec leaves every `\.specs\/` folder out — `bug\.md`'s quoted evidence is no instrument line, so it stays/.test(fixStep) &&
-          /and so does every `\.specs\/` folder — `bug\.md`'s quoted evidence is no instrument line\)/.test(step6),
+        // review 3 (R3-TASKS-04): the namesake said — the pathspec leaves out a CODE folder named .specs too
+        "bug.md's quoted evidence is said to stay, a code folder named .specs said to be left out": /the pathspec leaves out every folder named `\.specs`, a code folder of that name too — `bug\.md`'s quoted evidence is no instrument line, so it stays/.test(fixStep) &&
+          /and so does every folder named `\.specs`, a code folder of that name too — `bug\.md`'s quoted evidence is no instrument line\)/.test(step6),
+        // review 3 (R3-TASKS-05): /spec-bugfix step 6's command on ONE line of the MCP prompt's markdown — a line-by-line copy that
+        // stopped at `--` ran a complete command, the one without the pathspec
+        "/spec-bugfix step 6's command on one line": dRead("commands", "spec-bugfix.md").split(/\r?\n/).some((l) => l.includes("`git grep -n --untracked -E 'DEBUG-<feature>([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'`")),
         "never 'passes' / 'succeeds' for the search": ![s13Ref, s13Cmd].some((t) => /git grep -n[^`]*DEBUG-<(?:slug|feature)>[^`]*`? (?:passes|succeeds|returns 0)/.test(t)),
         "no bare or -w search left": ![s13Ref, s13Cmd].some((t) => /git grep -n (?:-w )?DEBUG-</.test(t)),
         "the four-task sentence, word for word": s13Ref.includes("(A bugfix scaffolded before this had four tasks — 1 reproduce, 2 root cause, 3 the red test, 4 the fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --evidence \"…\"`, once `bug.md` holds them.)"),
@@ -779,7 +783,12 @@ exports.run = async ({
       const s13Argv = (s13Cmdline.match(/'[^']*'|\S+/g) || []).map((w) => w.replace(/^'|'$/g, "").replace(/<slug>/g, "login"));
       if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.42 review 2 (R2-TASKS-02) the documented DEBUG search, run", "git not available");
       else {
-        const s13Env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" };
+        // the developer's own git config stays out (review 3, R3-TASKS-03: a global `grep.fullName` or `color.ui = always` changed the
+        // listed names, a global excludes file could hide the probe) — an empty global config, HOME and XDG_CONFIG_HOME in tmp, as
+        // 09-evidence-guardian.js's git rows do
+        const s13Cfg = path.join(tmp, "s13-gitconfig");
+        fs.writeFileSync(s13Cfg, "");
+        const s13Env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: s13Cfg, HOME: tmp, XDG_CONFIG_HOME: tmp, GIT_TERMINAL_PROMPT: "0" };
         const s13Git = (cwd, ...a) => spawnSync("git", ["-c", "core.autocrlf=false", ...a], { cwd, encoding: "utf8", env: s13Env });
         const s13Layout = (name, sub) => {
           const repo = path.join(tmp, "s13-grep-" + name), proj = sub ? path.join(repo, sub) : repo;
