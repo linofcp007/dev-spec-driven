@@ -56,7 +56,8 @@ the open findings it ships with; the hooks stay fast on large projects; and the 
 - doctor's headline ends with the next approval's own checks — `next gate <phase>: checks pass`, `fails (<ids>)`,
   `nothing to approve yet`, or that the gate's file cannot be read (`nextGate.unreadable`) — and the skill, the commands,
   the references and every rule file say to fix what that gate refuses rather than wait on `readyToAdvance` (which also
-  counts later phases' checks).
+  counts later phases' checks); /spec-tour, /spec-bugfix and bugfix.md, which ask for several approvals at once, say to
+  fix what each gate up to tasks refuses.
 - `/spec` with no argument lists the features in flight (or resumes the only one); `list` / `status` on an empty project
   print the next step (classify → init → create), and keep the `init` step while a core steering file is missing — with no
   feature yet, `spec_status {}` names them (`steeringMissing`). `spec_init`'s result gains `activeFeatures`, and its
@@ -65,7 +66,8 @@ the open findings it ships with; the hooks stay fast on large projects; and the 
   (`excused`), with one CLI line asking to check those elements — report only, the verdict unchanged.
 - `/spec-bugfix`: instrumentation added while tracing the root cause is tagged `DEBUG-<slug>`, and its removal is checked
   before the fix's run with `git grep -n --untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)' -- ':(exclude,glob)**/.specs/**'`
-  (new files too; bug.md's quoted evidence and another bugfix's longer tag stay out; also in a monorepo subproject).
+  (new files too; every folder named `.specs` is left out, so bug.md's quoted evidence is no hit, and so is another
+  bugfix's longer tag; also in a monorepo subproject).
 - The task reviewer gets the duplicate detector's output for its task, in a file beside the review package, and never
   reads a capped result (`truncated` / `partial`) as "no duplicates"; a defect that comes back at another place during a
   task's fix rounds is fixed as a class across the task's files.
@@ -77,10 +79,14 @@ the open findings it ships with; the hooks stay fast on large projects; and the 
 
 ### Changed
 - **A feature closes in one order:** the finish, the execution sign-off, the review loop's residues, then a commit of what
-  the run and the closing wrote — the feature's folder, `roadmap.json`, the generated roadmap files and, when written, the
-  design-system registry or an amended steering file (a path git ignores stays out) — then the switch and the merge. Any
-  other uncommitted change stays out of the commit and git carries it across the switch. `/spec-finish`'s merge step
-  names the branch to merge and no longer contradicts itself about fast-forwards.
+  the run and the closing wrote, then the switch and the merge. The commit first lists what is already staged
+  (`git diff --cached --name-only`): a file staged before the closing would go into it, so you decide whether to unstage
+  it (`git restore --staged <file>`) or commit it too. It then adds the feature's folder, `roadmap.json`, the generated
+  roadmap files and, when the run wrote them, the design-system registry, an amended steering file, the
+  `.specs/guardian.cjs` launcher `finish --run` refreshed and the lines the engine added to `.specs/.gitignore` (a path
+  git ignores stays out). A file the run wrote is added whole, so an edit of yours in it is committed with it; an unstaged
+  or untracked change of yours is not added, and git carries it across the switch. `/spec-finish`'s merge step names the
+  branch to merge and no longer contradicts itself about fast-forwards.
 - The task brief lists a steering file once when two active tracks name it (+saas and +obs: observability.md).
 - A bugfix task that names a file it changes (`_Implements:_`) is no investigation task: it gets the plan note before the
   tasks approval; ticking an investigation task carries the note of the next task it serves.
