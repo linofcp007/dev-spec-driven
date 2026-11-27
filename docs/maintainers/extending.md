@@ -45,7 +45,10 @@ how they came to be — the releases and review findings — is in History at th
 - **New track** → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
   one → The track model (registries and classifier `SIGNALS` in `engine/tracks.js`, its template tasks in `TRACK_TASK_PLAN` of
   `mcp/lib/i18n.js`, its words in each language's `text`), its sections' `tier`, any `TRACK_OVERLAPS` / `TRACK_TASK_OVERLAPS` /
-  `CORE_SUPERSEDED_BY` entry; no section name or synonym may start another section's (`sectionOverlaps()`).
+  `CORE_SUPERSEDED_BY` entry; no section name or synonym may start another section's (`sectionOverlaps()`). Then every list
+  of the built-in tracks in the shipped texts names it: mcp/tests/17-docs-shipped-texts.js fails on a run of 9+ track words
+  missing one (1.41 left +port out of ten — the starter track.json comment among them); a list of 8 or fewer is a subset by
+  choice, never judged, so check those by hand.
 - **New artifact** → the resource allowlist, `TEMPLATE_ARTIFACTS` (`engine/templates.js`) and `templateCorpus()`
   (`engine/markdown.js`) if it has slots.
 - **A size-aware builder** → its `a.size` branch in the layout (`LAYOUTS`), NEVER a change to the no-size text (the pinned sha1
@@ -143,6 +146,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (`COMMANDS`, cli/commands.js) replace the server's dispatch cases and the CLI's hand-kept flag → option lists; createFeature /
   completeTask take an options object; one check registry (`DOCTOR_CHECKS`, `GATES`) for doctor and the approval gates; the
   shared i18n layouts, so a size branch or a track's task plan is written once.
+- **1.42 (UX-05)** — +port (1.36) was missing from ten lists of the built-in tracks (spec-change.md, project-tracks.md ×2,
+  tooling-reference.md ×3, workflows.md, the track-pack starter comment in en / pt / es): a property over every shipped text
+  (a run of 9+ track words names every track of its kind), not a list of places — no allowlist; the bound's hidden case (8 or
+  fewer words) is stated in the test.
 
 ### The 1.26 command set (old → new)
 1.26 folded the 55 slash commands into 22 (claude-code-integration.md → 22 commands, 2 of them model-invocable). There are

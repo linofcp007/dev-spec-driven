@@ -100,6 +100,14 @@ review findings — is in History at the end.
   and earlier phases, warns for later ones (`ears_validate`: code `placeholder`; the requirements.md hook never says "all
   clean" while one remains). `traceability` splits alike: gaps that read a LATER phase's template (`TRACE_TASK_KINDS` /
   `TRACE_PLAN_KINDS`) warn "not traced yet"; only `TRACE_VERDICT_KINDS` fail (testsNotMappedToTasks listed, never failing).
+- **What an approval waits on: `nextGate`, never `readyToAdvance`** (1.42). `readyToAdvance` is no fail anywhere — every check,
+  a later phase's included (a +sec feature's design sections fail at classification). `nextGate` {phase, ready, failing,
+  missingRoles} is `approvalChecks` of the FIRST pending gate — the approval's own checks, a forecast: the approve call adds
+  `phase-order` (an earlier phase changed since its approval, `changedApprovedPhases`, kept apart from `pending`) and the role
+  sign-offs. The CLI headline prints it (`cliOutput.doctorNextGate`: checks pass · fails (its ids) · nothing to approve yet), and
+  the texts that send an agent to doctor say to fix what its next gate refuses — none promises an approval on it
+  (mcp/tests/17-docs-shipped-texts.js reads every shipped text). `changedApprovedPhases` stays out of `nextGate`: next_action's
+  re-review step and the fast-forward read it, and approvePhase adds `phase-order` itself.
 - **`next_action` — the step order, phase by phase** (doctor shows the same gate as `nextGate`). One ordered registry, as the
   checks are (1.30): `NEXT_STEPS` (engine/doctor.js) — `{id, when(x), run(x)}`, the first whose `when` holds answers, `run`
   setting `x.step`, `x.recommendation` and the result's extras; after the last task `FINISH_STEPS` the same way (`when(x, f)`).
@@ -569,6 +577,11 @@ here. "r5 review" is 1.23's fifth review.
   Silent Regressions). Finish gained three warnings and no blocker — W (dev-guardian's own findings below the gate, which
   1.40 only counted in "(N new below it)"), the METRIC warning and the lessons' —, in the order the finish batch asks them
   (CRIT_X D8.3: dev-guardian, W, metrics, lessons); the merge pinned it against the prose (12-lifecycle-lessons).
+- **1.42 (UX-01)** — six texts (SKILL.md, AGENTS.md, the Cursor rule, /spec-doctor, /approve, phase-guide.md) and spec_doctor's
+  description made `readyToAdvance` the decision key, holding a classification or requirements approval for a later phase's
+  fail. They point at `nextGate` now; the designed "ready to approve" headline and "approve on `nextGate`" were reworded after a
+  probe showed `nextGate.ready` beside a `phase-order` refusal (the demo, its tasks approval revoked, an approved criterion
+  edited). No key changed; the gates are the same `approvalChecks`.
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

@@ -431,3 +431,7 @@ How the rules above came to be — grep a release here.
   (scripts/test-runner.js: the optional 5th field of a file's `#file` line, the `# K skipped` line before the unchanged last
   line), all 72 sites call it, and 16-conventions.js's guard keeps the old idiom out with no allowance — the fake suite's files
   assert `ok(1, …)`. Each machine's total drops by its own skips.
+- **1.42 (UX-05, UX-01)** — `mcp/tests/17-docs-shipped-texts.js`: the properties every text the plugin ships must hold, read by
+  property, never a list of places — every .md / .mdc but CHANGELOG* and every .js; not what .gitignore ignores, hidden folders
+  but the rule files `rules` prints (cli/commands.js `RULE_FILES`), examples/, evals/, the suites' own folders, nor a
+  maintainer note's History. The file set is itself checked on a planted tree (a gap list in each place, read only where shipped).
