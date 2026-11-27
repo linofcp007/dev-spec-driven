@@ -691,6 +691,24 @@ exports.run = async ({
       d8Bug.indexOf("done <feature> 1 --run") < d8Bug.indexOf("done <feature> 2 --run") && !/done <feature> [34]\b/.test(d8Bug) &&
       /no task stands for them/.test(d8Ref) && /\*\*Failing regression test\*\* \(task 1\)/.test(d8Ref) && /\*\*Fix\*\* \(task 2\)/.test(d8Ref),
       "full review D8: /spec-tour sizes the change (step 3) and fills change.md (step 4) before approving it (step 5); /spec-bugfix and references/bugfix.md: task 1 is the red regression test (its red run first), task 2 the fix — no reproduce / root-cause task to tick");
+    // 1.42 (S13): the root-cause phase instruments each boundary, and nothing said to take the instrumentation out. Each instrument
+    // line is tagged DEBUG-<slug>, removed before the fix's run, and the Checkpoint asks for it gone — by `git grep -n`, which EXITS 1
+    // when it finds nothing: the prose says "prints nothing", never "passes" / "succeeds". /spec-bugfix's step 6 says it too. The legacy
+    // four-task sentence (tick 1 and 2 with a note) stays word for word: the plan note's investigation exemption rests on it (UX-02).
+    {
+      const s13Ref = dWs(dRef("bugfix.md")), s13Cmd = dWs(dRead("commands", "spec-bugfix.md"));
+      const fixStep = (s13Ref.match(/4\. \*\*Fix\*\* \(task 2\)\.[\s\S]*?(?=\*\*Checkpoint:\*\*)/) || [""])[0], checkpoint = (s13Ref.match(/\*\*Checkpoint:\*\*.*?Close with/) || [""])[0];
+      const step6 = (s13Cmd.match(/6\. \*\*Fix the cause\*\*.*?7\. \*\*Close\*\*/) || [""])[0];
+      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n` prints nothing — never 'passes'); /spec-bugfix step 6 says so; the four-task sentence is kept (got " +
+        JSON.stringify([fixStep, checkpoint, step6]) + ")", {
+        "phase 2 tags each instrument line": /instrument each boundary once and run it[^.]*\.[^.]*Tag every instrument line `DEBUG-<slug>`/.test(s13Ref),
+        "phase 4 removes it before task 2's run": /Remove the instrumentation before task 2's run: `git grep -n DEBUG-<slug>` prints nothing/.test(fixStep),
+        "the Checkpoint asks for it gone": /`git grep -n DEBUG-<slug>` prints nothing/.test(checkpoint),
+        "/spec-bugfix step 6": /remove the instrumentation first, every line tagged `DEBUG-<feature>`[^\n]*`git grep -n DEBUG-<feature>` prints nothing/.test(step6),
+        "never 'passes' / 'succeeds' for the search": ![s13Ref, s13Cmd].some((t) => /git grep -n DEBUG-<(?:slug|feature)>`? (?:passes|succeeds|returns 0)/.test(t)),
+        "the four-task sentence, word for word": s13Ref.includes("(A bugfix scaffolded before this had four tasks — 1 reproduce, 2 root cause, 3 the red test, 4 the fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --evidence \"…\"`, once `bug.md` holds them.)"),
+      });
+    }
     // D9: the implementer and the reviewer get explicit tool lists — no Agent tool (they never dispatch subagents).
     const d9Tools = (x) => ((dRead("agents", x).split(/^---$/m)[1] || "").match(/^tools: (.*)$/m) || [])[1] || "";
     ok(["spec-implementer.md", "spec-reviewer.md", "spec-critic.md"].every((x) => d9Tools(x) && !/\b(?:Agent|Task)\b/.test(d9Tools(x))) &&

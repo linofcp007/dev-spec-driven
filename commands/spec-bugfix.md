@@ -25,7 +25,8 @@ Bug: $ARGUMENTS
    for the right reason and record the red run — `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> 1 --run`
    (or `spec_complete_task` with the failing run). No shell? Ask the user to run it and paste the output — never apply
    the fix on a red nobody saw, and never send a subagent to look for a shell.
-6. **Fix the cause** (one change, task 2), run the suite and record it:
+6. **Fix the cause** (one change, task 2) — remove the instrumentation first, every line tagged `DEBUG-<feature>`
+   while you traced the root cause: `git grep -n DEBUG-<feature>` prints nothing —, run the suite and record it:
    `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> 2 --run`.
 7. **Close** with `spec_finish` (the user's `/spec-finish`): the merge summary carries the root cause and the fix.
 
