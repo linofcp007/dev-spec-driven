@@ -103,8 +103,11 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   warning on stderr after it doesn't void the count). **A check that cannot run here (1.42)** — no git, no pwsh / zsh / fish,
   links not creatable — calls `skip(label, why)`, which every file receives beside `ok` from the runner: neither a pass nor a
   fail, a `  skip - <label> (<why>)` line, the suite's skips summed in a `# K skipped in F file(s): <file> <n>, …` line before
-  the total (a late one is a late assertion) — never a constant-true `ok()`, which counted as a pass (mcp/tests/16-conventions.js
-  refuses one, and a hand-printed skip line, in every test file, with no allowance). cli/tests/16-conventions-runner.js tests the runner on a fake suite.
+  the total (a late one is a late assertion) — never an `ok()` whose first argument is a truthy LITERAL (`true`, a number but 0, a
+  non-empty string, `[]` / `{}`, a falsy one negated), which counted as a pass (mcp/tests/16-conventions.js refuses one, and a
+  hand-printed skip line, in every test file, with no allowance; a falsy literal is a fail and stays — the harnesses' `ok(false,
+  label)` —, and a truthy EXPRESSION is not read). cli/tests/16-conventions-runner.js tests the runner on a fake suite, whose files
+  assert `ok(typeof exports === "object", …)`.
   The MCP chains today: `01-core → 17-docs` (17-docs reads
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality-fixtures`
   (re-checks of the behavioural fixtures 17-docs-evals builds under tmp — 1.30: they were 15-quality's, and the two files were the

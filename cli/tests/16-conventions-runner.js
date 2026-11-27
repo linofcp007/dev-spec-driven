@@ -28,23 +28,23 @@ const end = () => { console.log("\\n" + pass + " passed, " + fail + " failed"); 
 exports.setup = () => ({ ctx: { ok }, counts: () => ({ pass, fail }), fail: (label) => ok(false, label), end });
 `);
   w("tests/01-clean.js", `// clean
-exports.run = async ({ ok }) => { ok(1, "clean one"); };
+exports.run = async ({ ok }) => { ok(typeof exports === "object", "clean one"); };
 `);
   // A forgotten await in the LAST file of its chain: its assertion fires 50 ms after run() resolved (the CLI harness exited first).
   w("tests/02-late.js", `// a late assertion that ends its chain
-exports.run = async ({ ok }) => { ok(1, "on time"); setTimeout(() => ok(1, "fired by a timer after run() resolved"), 50); };
+exports.run = async ({ ok }) => { ok(typeof exports === "object", "on time"); setTimeout(() => ok(typeof exports === "object", "fired by a timer after run() resolved"), 50); };
 `);
   // …and one that fires while the NEXT file of its chain runs (it counted as that file's pass).
   w("tests/03-pair-a.js", `// a late assertion that fires during the next file
-exports.run = async ({ ok }) => { ok(1, "a on time"); setTimeout(() => ok(1, "a's late one"), 30); };
+exports.run = async ({ ok }) => { ok(typeof exports === "object", "a on time"); setTimeout(() => ok(typeof exports === "object", "a's late one"), 30); };
 `);
   w("tests/04-pair-b.js", `// needs 03-pair-a
 exports.deps = ["03-pair-a"];
-exports.run = async ({ ok }) => { await new Promise((r) => setTimeout(r, 400)); ok(1, "b on time"); };
+exports.run = async ({ ok }) => { await new Promise((r) => setTimeout(r, 400)); ok(typeof exports === "object", "b on time"); };
 `);
   // A Node warning, and a line written to stderr at exit — after the total line.
   w("tests/05-stderr.js", `// stderr after the total
-exports.run = async ({ ok }) => { ok(1, "w on time"); process.emitWarning("a warning"); process.on("exit", () => process.stderr.write("STDERR-AFTER-TOTAL\\n")); };
+exports.run = async ({ ok }) => { ok(typeof exports === "object", "w on time"); process.emitWarning("a warning"); process.on("exit", () => process.stderr.write("STDERR-AFTER-TOTAL\\n")); };
 `);
   const env = { ...process.env, TMPDIR: own, TEMP: own, TMP: own };
   delete env.DEV_SPEC_TEST_CHAIN; // this process is itself a chain of the CLI suite: the fake one starts as a parent
@@ -116,7 +116,7 @@ exports.run = async ({ ok }) => { ok(1, "w on time"); process.emitWarning("a war
     w("tests/17-times-env.js", `// what a chain sees of the parent's times knob (any spelling)
 exports.run = async ({ ok }) => {
   console.log("TIMESENV " + JSON.stringify(Object.keys(process.env).filter((k) => /^dev_spec_test_times_root$/i.test(k))));
-  ok(1, "times env seen");
+  ok(typeof exports === "object", "times env seen");
 };
 `);
     fs.copyFileSync(path.join(root, "tests", "17-times-env.js"), path.join(twin, "tests", "17-times-env.js"));
@@ -193,7 +193,7 @@ exports.run = async ({ ok, remeasure }) => {
   const never = remeasure(() => ({ v: ++m }), () => false);
   const first = remeasure(() => ({ v: ++k }), () => true);
   console.log("REMEASURE " + JSON.stringify([pass2.v, pass2.tries, n, never.v, never.tries, m, first.v, first.tries, k, Object.keys(pass2)]));
-  ok(1, "remeasured");
+  ok(typeof exports === "object", "remeasured");
 };
 `);
     w("tests/10-hang.js", `// a chain that never finishes
@@ -224,7 +224,7 @@ exports.run = async ({ ok }) => {
   const fs = require("fs");
   const env = Object.fromEntries(${js(KEYS)}.map((k) => [k, process.env[k] === undefined ? null : process.env[k]]));
   console.log("ENV " + JSON.stringify({ cwd: process.cwd(), files: fs.readdirSync(process.cwd()), env }));
-  ok(1, "env seen");
+  ok(typeof exports === "object", "env seen");
 };
 `;
     w("tests/06-env.js", envFile);
@@ -269,7 +269,7 @@ exports.run = async ({ ok }) => {
   const env = Object.fromEntries(${js(NODE_KEYS)}.map((k) => [k, process.env[k] === undefined ? null : process.env[k]]));
   const kid = require("child_process").spawnSync(process.execPath, ["-e", "process.stdout.write(String(!!globalThis.__hostPreload))"], { encoding: "utf8" }).stdout;
   console.log("NODEENV " + JSON.stringify({ preloaded: !!globalThis.__hostPreload, kid, env }));
-  ok(1, "node env seen");
+  ok(typeof exports === "object", "node env seen");
 };
 `);
     const host = { ...env, NODE_OPTIONS: "--require " + js(pre), NODE_COMPILE_CACHE: path.join(own, "cc"), NODE_DISABLE_COMPILE_CACHE: "1",
@@ -298,7 +298,7 @@ exports.run = async ({ ok }) => {
     w("tests/12-tmp.js", `// where a chain's temp folder is
 exports.run = async ({ ok }) => {
   console.log("TMPSEEN " + JSON.stringify({ cwd: process.cwd(), tmpdir: require("os").tmpdir(), TMP: process.env.TMP || null, TEMP: process.env.TEMP || null, TMPDIR: process.env.TMPDIR || null }));
-  ok(1, "tmp seen");
+  ok(typeof exports === "object", "tmp seen");
 };
 `);
     const named = path.join(own, "dev-spec-tmp"), long = path.join(own, "l".repeat(Math.max(1, 110 - own.length)), "tmp");
@@ -347,7 +347,7 @@ exports.run = async ({ ok }) => {
   g(["add", "b.txt"]);
   g(${js(id)}.concat(["commit", "-q", "-m", "chain"]));
   console.log("GITENV " + JSON.stringify({ env, log: g(["log", "--format=%s"]).stdout.trim() }));
-  ok(1, "git env seen");
+  ok(typeof exports === "object", "git env seen");
 };
 `);
     const gd = path.join(outer, ".git");
@@ -412,7 +412,7 @@ exports.run = async ({ ok }) => {
   // Two processes (the parent sums them); 15 needs 16, so its chain runs 16 first — the line still lists the files in name order.
   {
     w("tests/14-skips.js", `// skips beside a pass, and one after run() resolved
-exports.run = async ({ ok, skip }) => { skip("a", "why a"); ok(1, "a real one"); skip("b"); setTimeout(() => skip("late"), 30); };
+exports.run = async ({ ok, skip }) => { skip("a", "why a"); ok(typeof exports === "object", "a real one"); skip("b"); setTimeout(() => skip("late"), 30); };
 `);
     w("tests/15-skip-one.js", `// a file that only skips — after the file it needs
 exports.deps = ["16-skip-dep"];
