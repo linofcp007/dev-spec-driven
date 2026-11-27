@@ -360,4 +360,41 @@ exports.run = async ({ ok }) => {
       onPromise: () => /must be synchronous/.test(asyncErr || "") && asyncRestored === true,
     });
   }
+
+  // 1.42 (R7) — skip(label, why), the runner's own (every file receives it beside ok; no harness change): a check that cannot run
+  // here is neither a pass nor a fail. Its `  skip - <label> (<why>)` line (test-docker.js counts those), the file's count on its
+  // #file line (stripped from the output like the rest of it) and the suite's sum in ONE `# K skipped in F file(s): <file> <n>, …`
+  // line, in file order, after the `# N file(s)` line and before the total — the LAST line stays `N passed, M failed` (RE_TOTAL:
+  // release-counts.js, the pre-push hook). A skip after run() resolved is a late assertion; a suite with no skip prints no line.
+  // Two processes (the parent sums them); 15 needs 16, so its chain runs 16 first — the line still lists the files in name order.
+  {
+    w("tests/14-skips.js", `// skips beside a pass, and one after run() resolved
+exports.run = async ({ ok, skip }) => { skip("a", "why a"); ok(1, "a real one"); skip("b"); setTimeout(() => skip("late"), 30); };
+`);
+    w("tests/15-skip-one.js", `// a file that only skips — after the file it needs
+exports.deps = ["16-skip-dep"];
+exports.run = async ({ skip }) => { skip("c", "why c"); };
+`);
+    w("tests/16-skip-dep.js", `// needed by 15-skip-one
+exports.run = async ({ skip }) => { skip("d", "why d"); };
+`);
+    const sk = fake("--only", "14,15");
+    const ls = sk.stdout.trimEnd().split(/\r?\n/);
+    const at = (re) => ls.findIndex((l) => re.test(l));
+    const filesAt = at(/^# 3 file\(s\) in 2 process\(es\), /), skipAt = at(/^# \d+ skipped in /);
+    const shownSkips = ls.filter((l) => /^ {2}skip - /.test(l)).map((l) => l.replace(/^ {2}skip - /, ""));
+    const dockerSrc = fs.readFileSync(path.join(__dirname, "..", "scripts", "test-docker.js"), "utf8");
+    all("1.42 (R7): skip(label, why) is neither a pass nor a fail — a `  skip - ` line each, the files' counts summed in one `# K skipped in F file(s): …` line (file order) between the `# N file(s)` line and the total, which stays the last line; a late skip is a late assertion; no skip, no line (got " +
+      js({ code: sk.code, tail: ls.slice(-4), shownSkips, fails: ls.filter((l) => /FAIL/.test(l)) }) + ")", {
+      total: () => sk.code === 1 && lastLine(sk.stdout) === "1 passed, 1 failed" && js((sk.stdout.match(R.RE_TOTAL) || []).slice(1)) === js(["1", "1"]),
+      skipLine: () => ls[skipAt] === "# 4 skipped in 3 file(s): 14-skips 2, 15-skip-one 1, 16-skip-dep 1",
+      beforeTotal: () => filesAt >= 0 && filesAt < skipAt && skipAt === ls.length - 3 && ls[ls.length - 2] === "",
+      shown: () => js(shownSkips) === js(["a (why a)", "b", "d (why d)", "c (why c)"]),
+      dockerCount: () => dockerSrc.includes("(out.match(/^ {2}skip - /gm) || []).length") && (sk.out.match(/^ {2}skip - /gm) || []).length === 4,
+      notAPass: () => /\n {2}ok {3}- a real one\r?\n/.test(sk.out) && !/ok {3}- (?:a|b|c|d|late)\r?\n/.test(sk.out),
+      late: () => /FAIL - late assertion from 14-skips — it ran after the file's run\(\) had resolved \(a missing await\?\): late \(a skip\)/.test(sk.out),
+      fileLinesStripped: () => !/^#file /m.test(sk.out),
+      noSkipNoLine: () => !/skipped in/.test(whole.out) && !/skipped in/.test(st.out),
+    });
+  }
 };

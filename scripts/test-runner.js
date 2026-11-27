@@ -19,7 +19,9 @@
  * order, then ONE total. The LAST line is always
  * `N passed, M failed` — scripts/test-docker.js reads it — and a chain that dies without its total fails the suite (the
  * run never drains to exit 0). An assertion a file makes after its run() resolved (a forgotten await) is a FAIL — a "late
- * assertion", labelled with its file — never a silent pass or a lost line.
+ * assertion", labelled with its file — never a silent pass or a lost line. A check that cannot run here (no git, no pwsh, no
+ * links) calls `skip(label, why)` — every file receives it beside `ok`: neither a pass nor a fail, a `  skip - <label> (<why>)`
+ * line, and the suite's skips are summed in a `# K skipped in F file(s): <file> <n>, …` line before the total (1.42).
  *
  *   node <suite> [--only <file|area|NN>[,…]]... [--list] [--times] [--jobs <n>] [--help]
  */
@@ -33,7 +35,7 @@ const CHAIN_ENV = "DEV_SPEC_TEST_CHAIN"; // set in a child: the comma-separated 
 const CWD_ENV = "DEV_SPEC_TEST_CWD"; // set in a child: its own working folder (a fresh, empty temp folder — isolate())
 const RE_TEST_FILE = /^(\d{2})-([a-z0-9]+(?:-[a-z0-9]+)*)\.js$/;
 const RE_TOTAL = /\n(\d+) passed, (\d+) failed\s*$/;
-const RE_FILE_STATS = /^#file (\S+) (\d+) (\d+) (\d+)\r?\n/gm; // a child's report of one file: stem, passed, failed, ms
+const RE_FILE_STATS = /^#file (\S+) (\d+) (\d+) (\d+)(?: (\d+))?\r?\n/gm; // a child's report of one file: stem, passed, failed, ms, skipped (1.42)
 
 // Exit only once stdout has flushed. On Linux a pipe (docker, `| tee`, `| less`, this runner's own parent) takes writes
 // asynchronously once its 64 KB buffer is full, and process.exit() drops whatever is still queued — the tail of the
@@ -412,7 +414,7 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
     const stats = [];
     for (const r of all) {
       const m = r.stdout.match(RE_TOTAL);
-      for (const s of r.out.matchAll(RE_FILE_STATS)) stats.push({ stem: s[1], passed: +s[2], failed: +s[3], ms: +s[4] });
+      for (const s of r.out.matchAll(RE_FILE_STATS)) stats.push({ stem: s[1], passed: +s[2], failed: +s[3], ms: +s[4], skipped: +(s[5] || 0) });
       let shown = r.out.replace(RE_FILE_STATS, "");
       const at = m ? shown.lastIndexOf(m[0].trimEnd()) : -1; // the chain's total line leaves (whatever stderr wrote after it stays)
       if (at >= 0) shown = shown.slice(0, at) + "\n" + shown.slice(at + m[0].trimEnd().length).replace(/^[ \t]*\r?\n/, "");
@@ -427,6 +429,14 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
     const slow = all.slice().sort((a, b) => b.ms - a.ms)[0];
     console.log(`\n# ${sel.run.length} file(s) in ${chains.length} process(es), ${secs(Date.now() - t0)}` +
       (slow ? ` — slowest: ${slow.chain.map((f) => f.stem).join(" + ")} ${secs(slow.ms)}` : ""));
+    // 1.42: the skips (skip() — a check that could not run here), apart from the passes: only when there are some, in file
+    // order. The LAST line stays the total (RE_TOTAL, test-docker.js, release-counts.js); test-docker.js counts the `  skip - `
+    // lines themselves.
+    const fileAt = new Map(sel.run.map((f, i) => [f.stem, i]));
+    const skips = stats.filter((s) => s.skipped > 0).sort((a, b) => fileAt.get(a.stem) - fileAt.get(b.stem));
+    if (skips.length) {
+      console.log(`# ${skips.reduce((n, s) => n + s.skipped, 0)} skipped in ${skips.length} file(s): ${skips.map((s) => `${s.stem} ${s.skipped}`).join(", ")}`);
+    }
     if (o.times) {
       const w = Math.max(...stats.map((s) => s.stem.length), 4);
       for (const s of stats.sort((a, b) => b.ms - a.ms)) console.log(`#   ${s.stem.padEnd(w)}  ${String(s.passed).padStart(4)} passed  ${String(s.failed).padStart(3)} failed  ${secs(s.ms).padStart(7)}`);
@@ -569,6 +579,10 @@ function remeasure(measure, holds, tries = 2) {
 // chain settles, or after end() printed the total (the total is printed again, so the last line stays the count). Before,
 // such an assertion passed silently into another file's count, or was dropped: the CLI harness exits at once, the MCP
 // harness's total stopped being the last line ("without a clean total").
+// 1.42: and its own `skip(label, why)` — a check that cannot run here (no git, no pwsh, links not creatable). A skip is neither a
+// pass nor a fail: a `  skip - <label> (<why>)` line, counted on the file's `#file` line (its 5th field) and summed by the parent
+// apart from the total. It was `ok(true, "… skipped")`, a pass: a Linux container's total held the PowerShell and Windows-only
+// checks it never ran. A skip after run() resolved is a late assertion, like a late ok.
 async function runChildChain(opts) {
   isolate(opts.tmpPrefix); // before any test file or harness loads (a no-op in the folder the runner started it in)
   const stems = String(process.env[CHAIN_ENV]).split(",").filter(Boolean);
@@ -590,17 +604,18 @@ async function runChildChain(opts) {
     console.log(`# ${f.stem}`);
     const before = h.counts();
     const t0 = Date.now();
-    let open = true;
+    let open = true, skipped = 0;
     const ok = (cond, label) => (open ? h.ctx.ok(cond, label) : late(f, label));
+    const skip = (label, why) => (open ? (skipped++, console.log("  skip - " + label + (why ? " (" + why + ")" : ""))) : late(f, label + " (a skip)"));
     try {
-      const left = await require(f.file).run({ ...h.ctx, ok, ...assertHelpers(ok) });
+      const left = await require(f.file).run({ ...h.ctx, ok, skip, ...assertHelpers(ok) });
       if (left && typeof left === "object") Object.assign(h.ctx, left); // values for the files that need this one
     } catch (e) {
       h.fail(`${f.stem} threw: ${(e && e.stack) || e}`);
     }
     open = false;
     const after = h.counts();
-    console.log(`#file ${f.stem} ${after.pass - before.pass} ${after.fail - before.fail} ${Date.now() - t0}`);
+    console.log(`#file ${f.stem} ${after.pass - before.pass} ${after.fail - before.fail} ${Date.now() - t0} ${skipped}`);
   }
   await settle();
   ended = true;
