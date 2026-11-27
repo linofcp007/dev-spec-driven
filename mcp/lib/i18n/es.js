@@ -1671,6 +1671,8 @@ const msg = {
       uiProjectHead: (n, files) => `  Comprobaciones de interfaz en los ficheros de vista del proyecto (${n} en ${files === 1 ? "el fichero leído" : `los ${files} leídos`}) — el informe de cada funcionalidad lista las suyas; spec_finish avisa de las de una funcionalidad +ui:`,
       uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} en ${files} ${files === 1 ? "fichero" : "ficheros"}${tag ? " " + tag : ""} — la primera: ${at}`,
       uiProjectNone: (files) => `  Comprobaciones de interfaz: nada en ${files === 1 ? "el fichero de vista" : `los ${files} ficheros de vista`} del proyecto`,
+      // 1.42: las eliminaciones que un estilo de foco leído en otro sitio dispensó (`excused`) — un recuento y un recordatorio, nunca un hallazgo
+      uiProjectExcused: (id, n, files, at) => `  ${id}: ${n} ${n === 1 ? "eliminación dispensada" : "eliminaciones dispensadas"} en ${files} ${files === 1 ? "fichero" : "ficheros"} — un estilo de foco en los ficheros leídos las dispensa todas; comprueba que los elementos que pierden el contorno reciben uno (la primera: ${at})`,
       // (los hechos del proyecto por código — at: el primer lugar, fichero:línea)
       uiFact: {
         "no-reduced-motion": (n, at) => `  ▲ el código declara movimiento — una animación, una transición de transform o un desplazamiento suave (${n} ${n === 1 ? "lugar" : "lugares"}, el primero: ${at}) — y ninguno de los ficheros de vista y scripts del proyecto leídos menciona el movimiento reducido: ofrecer una variante reducida — @media (prefers-reduced-motion: reduce), motion-reduce: / motion-safe: de Tailwind (WCAG 2.3.3, AAA)`,
@@ -2052,6 +2054,9 @@ const msg = {
       lessonsUnread: (list) => `  lecciones cuya causa no es ninguno de los cinco códigos (¿una edición a mano?): ${list}`,
       lessonsTruncated: (n) => `  lecciones: ${n} carpeta(s) de funcionalidad más allá de las primeras 1000 sin leer`,
       lessonsRepeated: (cause, target, features, n) => `  repetida: ${cause} → ${target} — ${n} lecciones en ${features}`,
+      // 1.42 el coste de los subagentes del plugin (el `agents` de spec_metrics del proyecto): recuentos de sus transcripciones de Claude Code, nunca un tiempo
+      agentsHead: (n) => `  subagentes (los agentes del plugin, contados a partir de sus transcripciones de Claude Code — sin tiempo): ${n} ${n === 1 ? "ejecución" : "ejecuciones"}`,
+      agentsRole: (role, n, turns, tin, tout, cached, partial) => `    ${role}  ${n} ${n === 1 ? "ejecución" : "ejecuciones"} · ${turns} turnos · tokens de entrada ${tin}, de salida ${tout}, leídos de caché ${cached}${partial ? ` — ${partial} ${partial === 1 ? "leída" : "leídas"} solo en parte: un mínimo` : ""}`,
       retroText: {
         title: (f) => `# Retrospectiva: ${f}`,
         intro: (date) => `> Generada por dev-spec el ${date} a partir de .state.json, .history/ y los artefactos. Los números se calculan localmente; el resto te toca a ti. Nada de esto se aplica automáticamente.`,
@@ -2565,7 +2570,6 @@ const msg = {
       noSummary: "[por definir]",
       unknownArtifact: (a, list) => `Plantilla desconocida '${a}' — una de: ${list}, o steering/<fichero>.md.`,
       writeFailed: (rel, why) => `No se pudo escribir ${rel} (${why}).`,
-      writeOutside: (rel) => `Me niego a escribir ${rel}: su carpeta es un enlace a un lugar fuera del proyecto.`,
       legacyFeature: ".specs/templates/ es la carpeta de una función creada antes de que existieran las plantillas del proyecto (tiene un .state.json) — sigue siendo esa función y nunca se lee como plantillas. Cámbiale el nombre (" + DEV_SPEC + " feature rename templates <nuevo-nombre>, o spec_feature rename) para usar plantillas del proyecto.",
       builtIn: "de serie",
       override: "del proyecto",
@@ -2626,7 +2630,6 @@ const msg = {
       unknownPack: (n, list) => `No hay track ni track pack '${n}' — los packs del proyecto: ${list}.`,
       legacyFeature: ".specs/tracks/ es la carpeta de una función creada antes de que existieran los track packs (tiene un .state.json) — sigue siendo esa función y nunca se lee como packs. Cámbiale el nombre (" + DEV_SPEC + " feature rename tracks <nuevo-nombre>, o spec_feature rename) para usar track packs.",
       writeFailed: (rel, why) => `No se pudo escribir ${rel} (${why}).`,
-      writeOutside: (rel) => `Rechazado escribir ${rel}: su carpeta es un enlace a un lugar fuera del proyecto.`,
       builtIn: "de serie",
       sectionCount: (n) => `${n} sección(es)`,
       signalCount: (n) => `${n} señal(es)`,

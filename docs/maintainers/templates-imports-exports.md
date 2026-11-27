@@ -10,8 +10,11 @@ is in History at the end.
   builder (`templateOverride()`); a pt-BR feature reads `pt-BR/`, then `pt/` (`templateLangChain()`).
 - **Only allowlisted names are read:** `TEMPLATE_ARTIFACTS` (the phase artifacts, the bug and spike variants, `change`) and
   `steering/<file>.md` (a known stub or a name steering_scaffold accepts). Every path is built from the allowlist and
-  `LANGS`, never from a caller's string; at most three levels, no dot files, no linked folder, no file whose real path
-  leaves the project; `init` never writes through a link. Files are read BOM-stripped, LF; a whitespace-only one is ignored.
+  `LANGS`, never from a caller's string; at most three levels, no dot files. **Below `.specs/` the gates decide** (1.42 R4 —
+  conventions.md → The read gate / The write gate): a linked templates/, `<lang>/` or steering/ folder, or a linked template
+  file, reads absent, and `templates init` / `tracks init` answer the write gate's refusal (`gateRefusal`: `linked` / `wrongKind`,
+  the folder's path); a linked `.specs/` itself is read and written like its features (its overrides used, its starters
+  written there). Files are read BOM-stripped, LF; a whitespace-only one is ignored.
 - **Who uses them:** `createFeature` (so `spec_import` too), `applyTracks`, `initProject`, `scaffoldSteeringFile` — all
   create-only (`writeIfAbsent`), naming the templates used (`templates`). A sized feature's built-in scaffold follows its
   size; a project template is written as it says — one sized exception: an m / l feature's design from a template without
@@ -310,6 +313,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.41.0** (review 1, R1-MF-3) — the first sized section a project template gains: an m / l design from a template without
   Silent Regressions (templates init's own copy among them) gets the built-in one, through the track blocks' append; before,
   doctor warned `missing` on every such feature while templates check passed (quality.md's History, 1.41.0).
+- **1.42 —** R4: under a linked `.specs/` (a supported layout: both gates exempt `.specs` itself) every template override was
+  dropped silently (`source: "built-in"`, not even `ignored`) and `templates init` / `tracks init` were refused "outside the
+  project" — a project-real compare from 1.14, before either gate, that repeated the gates below `.specs/` and added that one
+  wrong refusal (track packs already compared with the real `.specs/`). Deleted (readTemplateFile's two realpaths per template,
+  files.js's project-real write check, the two "outside the project" strings): the gates decide, and a refused starter is the
+  write gate's localized answer — also in place of a raw "(ESPECSLINK)" for a link inside the project. `checkTemplates`'
+  built-in-copy test (`sameText`) trims with `trimEnd()`: its `/\s+$/` was quadratic on a long blank run inside a template
+  (24 s at 150 K blanks; 14-templates.js, a same-work bound).
 
 ### Scoped steering
 - **1.13** — scoped steering: Kiro-compatible front matter, fileMatch bodies quoted into the brief, `manual` files listed.

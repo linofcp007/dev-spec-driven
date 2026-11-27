@@ -1951,7 +1951,13 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `focus-visible:ring-2`) excuses a removal in the inventory, never in that feature report or its finish (review 1 of 1.38,
   UP-6 — kept: a class-list search project-wide reads every view file; ui-code-scan.md says it; cut again in 1.40: the
   feature reports would lose 91 warnings, ≈ 55–60 % of them certain defects — the inventory's excuse hides about as many, a
-  1.41 count). `limits`, its own — never the report's `limits`,
+  1.41 count). **The excused ones are counted** (1.42 B141-01): `excused` {`outline-removed`: {count, files, file, line?}} —
+  the deleted rule entry as it was, so an off rule, an inline silence and a finding past a file's cap follow the rule's own
+  semantics; never in total / byRule / rules, no key when nothing was excused (a cut pass with no focus style: its limit's
+  count, not `excused`). The CLI prints one line for it (`cliOutput.uiProjectExcused`, with or without a finding above) — a
+  count and a "check that…" nudge, never a finding: on the legit reset-plus-rings pattern (`*:focus { outline: none }` beside
+  `focus-visible:ring-2`) it shows every time, which is the point. The feature report gets no such key (its own focus search,
+  its own rule — 15-quality-ui-checks.js pins its key set). `limits`, its own — never the report's `limits`,
   `truncated` or `inSync`: `ui-files` {read, count?, file?, line?: the removals it left unjudged}, `view-size`, `line-length`,
   `tag-length` {read, count, file: the smallest path}, (1.39) `motion-scripts` (the fact's script search, below) (the pass
   builds them; featureReport builds the feature's). The CLI
@@ -2167,8 +2173,10 @@ view needs (the detail points there), tooling-reference.md's id.
   folder target itself, case-folded where the file system folds case); an Applies-to FOLDER matches nothing without `/**`
   (the references say so — no folder rule of its own); a gone file is named (`gone`), never quoted; a list cell, and an
   annotated one (1.41.0 review 3: read as its path, the brief wrapped "`x.ts` (note)" in a span of its own — a stray backtick
-  — and nested the spans of "Svc (`a.ts`, `b.ts`)"), is quoted as written (`asWritten`: the renderer prints it without a
-  code span of its own around it; the gone check still reads the annotated cell's path) — and with no glob its Copy
+  — and nested the spans of "Svc (`a.ts`, `b.ts`)"), and one whose path reading still holds a backtick ("`x.ts`, the handler",
+  "`x.ts` the handler" — 1.42: the renderer's own condition, a backtick can't sit inside its one span), is quoted as written
+  (`asWritten`: the renderer prints it without a code span of its own around it; the gone check still reads the annotated
+  cell's path; doctor, exemplarGone and exemplarMany never read the new condition) — and with no glob its Copy
   folder is read off the cell as ONE path, so it may match no task (1.41.0 review 2: said, no matching of its own); at most
   `REF_BRIEF_ROWS` (6) rows within `REF_BRIEF_CHARS` (1,200), `omitted` counts the rest; rows but none for the task → the
   count line. `null` without a real row.
@@ -4026,6 +4034,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `[smallish]` —, `xlarge`, any `[\w-]+:` hint, the `:`, the sheet's `@apply` on the old const, D1's declarations guard)
   and 1.38's 17 replayed on the new const (each step, `\d*`, the end guard, both brackets, the `length:` hint, a digit /
   `.`, each math function, `!?`, the `:`, the class-line test, any arbitrary value).
+- **1.42 —** B141-01 (the 1.41 count above): the inventory's excuse deleted the outline-removed entry and counted it
+  nowhere; it is kept as `excused` (report only — verdict, total, byRule and limits byte-identical) with one CLI line. Not
+  built: a ui-code-scan.md edit (its rule already says it; 94 bytes left under its cap) — tooling-reference.md names the key,
+  pinned by 17-docs.js's key walk, whose fixture now holds an excused removal.
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table
@@ -4105,6 +4117,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   in a span of its own — "`` `src/x.js` (… setup)` ``" a stray backtick, "`` `Service (`a.js`, `b.js`)` ``" nested spans
   (R3-B-2): such a cell is quoted as written (`asWritten`), judged by its path as before (the reviewer's q3.js / q2b.js: every
   doctor status the same on 9a16f5b6). The references name the annotated forms — `path (note)` / `path — note` — and say a
-  `,` / `;` note makes the cell a list (R3-B-3, prose). Left: a `,` note with no path-like word ("`x.ts`, the handler") is
-  neither a list nor annotated — never judged (no extension at its end), but the brief still wraps its path reading (a stray
-  backtick), as on 9a16f5b6; a rule for it would be one more predicate.
+  `,` / `;` note makes the cell a list (R3-B-3, prose).
+- **1.42 —** B142-08: a `,` note with no path-like word ("`x.ts`, the handler"), or a note after a blank ("`x.ts` the handler"),
+  is neither a list nor annotated — never judged (no extension at its end) —, and the brief wrapped its path reading in its own
+  span (a stray backtick; 1.41.0 left it: "a rule for it would be one more predicate"). It is quoted as written by the
+  renderer's condition alone (the reading holds a backtick) — no judging predicate, so doctor's answers are unchanged. A cell
+  with an even count of its own ("`x.ts` uses `helper`") rendered the same before; only its JSON `copy` / `asWritten` moved.
+  The test is the exact property (an asWritten line holds exactly the cell's own backticks, any other copy none), never "an even
+  count" (a cell with one tick of its own stays one).

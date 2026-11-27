@@ -2416,6 +2416,9 @@ function exemplarGone(root, cell) {
 // judged; at most REF_BRIEF_ROWS rows within REF_BRIEF_CHARS (`omitted` counts the rest). (1.41.0 review 3) A cell in the annotated
 // single-path form (RE_IMPL_ANNOTATED on its exemplarPath reading) is quoted as written too — as its path reading the brief wrapped
 // "`a.js` (note)" in a span of its own (a stray backtick) and nested the spans of "Svc (`a.js`, `b.js`)"; judged by its path still.
+// (1.42 B142-08) So is a cell whose path reading still holds a backtick ("`a.js`, the handler", "`a.js` the handler": neither a
+// list nor annotated) — the renderer's own condition: a text holding a backtick can't sit inside the one code span it wraps a path
+// in. Rendering only: exemplarGone, exemplarMany and doctor read the cell as before.
 // → { file, quoted: [{pattern, copy (its path — the cell itself when asWritten), appliesTo, asWritten?}], gone: [path], omitted, total }
 // | null (no row in the table).
 function briefExamples(projectDir, targets) {
@@ -2434,8 +2437,9 @@ function briefExamples(projectDir, targets) {
   const quoted = [], gone = [];
   let omitted = 0, budget = REF_BRIEF_CHARS;
   for (const r of ref.rows.filter(matches)) {
-    const asWritten = exemplarMany(r.copy) || RE_IMPL_ANNOTATED.test(exemplarPath(r.copy));
-    const copy = asWritten ? r.copy : exemplarPath(r.copy);
+    const reading = exemplarPath(r.copy);
+    const asWritten = exemplarMany(r.copy) || RE_IMPL_ANNOTATED.test(reading) || reading.includes("`");
+    const copy = asWritten ? r.copy : reading;
     const lost = exemplarGone(root, r.copy);
     if (lost) { gone.push(lost); continue; }
     const cost = r.pattern.length + copy.length + r.appliesTo.length;

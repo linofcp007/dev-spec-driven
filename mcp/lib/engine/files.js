@@ -677,15 +677,15 @@ function withRoadmapLock(projectDir, fn, onBusy) {
 
 // JSON state (.specs/roadmap.json, .specs/<feature>/.state.json). A file that EXISTS but doesn't parse
 // is never treated as empty — the next write would silently erase deps/backlog/approvals/lang. A
-// leading BOM (Windows editors) is tolerated.
+// leading BOM (Windows editors) is tolerated. A parse failure's `error` is the stable code "invalid-json" (1.42 R13): the caller
+// says it, in the project's language (`err.invalidJson(errorRel, errorDetail)`) — an English sentence here was never shown.
 function readJson(file) {
   const raw = readIfExists(file);
   if (raw == null) return { exists: false, data: null, error: null };
   try {
     return { exists: true, data: JSON.parse(raw.replace(/^\uFEFF/, "")), error: null };
   } catch (e) {
-    const rel = jsonRel(file);
-    return { exists: true, data: null, error: `${rel} is not valid JSON (${e.message}) — fix it by hand; refusing to overwrite it.`, errorRel: rel, errorDetail: e.message };
+    return { exists: true, data: null, error: "invalid-json", errorRel: jsonRel(file), errorDetail: e.message };
   }
 }
 
@@ -1358,16 +1358,6 @@ function isInsideDir(root, p) {
   const r = f(root.endsWith(path.sep) ? root : root + path.sep);
   return f(p) === f(root) || f(p).startsWith(r);
 }
-// A starter file's write stays inside the project (spec_templates init, spec_tracks init): the nearest existing folder above `abs`
-// really lies in projectDir — a .specs/, templates/ or tracks/ folder (or one below) that is a link to a folder elsewhere is not.
-// No project folder yet: nothing in it is a link (true).
-function writeInsideProject(projectDir, abs) {
-  let real;
-  try { real = fs.realpathSync.native(projectDir); } catch { return true; }
-  let d = path.dirname(abs);
-  while (!fs.existsSync(d) && path.dirname(d) !== d) d = path.dirname(d);
-  try { return isInsideDir(real, fs.realpathSync.native(d)); } catch { return false; }
-}
 
 // The real path of p even when it doesn't exist yet: the real path (fs.realpathSync.native — 8.3 short names, junctions
 // and symlinks resolved) of its nearest EXISTING ancestor, plus the segments below it. null when nothing resolves (EACCES, ELOOP…:
@@ -1429,5 +1419,5 @@ module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensu
   ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel, shapeError, withReadCache,
   readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, readFileHeads, decodeText, existsCached,
   existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
-  FOLD_CASE, toPosix, isInsideDir, writeInsideProject, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO,
+  FOLD_CASE, toPosix, isInsideDir, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO,
   specsReadBlocked, readBytes, specsStat, entryAt, projectFileReal, realRootOf, seedParts, __link };

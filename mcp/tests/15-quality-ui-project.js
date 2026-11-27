@@ -112,6 +112,21 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       excused: () => u.total === 0 && !("outline-removed" in u.byRule) && fr.total === 0,
       stands: () => js(un.rules["outline-removed"]) === js({ level: "warn", files: 1, file: "src/styles/reset.css", line: 3 }) && qr.byRule["outline-removed"] === 1,
     });
+    // 1.42 (B141-01): the removals the excuse deleted were counted nowhere (≈ 50–60 in 94 files of one real project) — kept as
+    // `excused`, the rule entry as it was (count, files, first place), never in total / byRule / rules; no key where nothing was
+    // excused (the removal stands), nor where the project switched the rule off (its findings never reach the rule entry: `off`
+    // counts them) — a focus style there too
+    const o = project("excuse-off", { "src/styles/reset.css": RESET, "src/components/Button.tsx": BUTTON,
+      ".specs/steering/design-system.md": "# Design System\n\n_UI checks off: outline-removed (the kit resets it)_\n" });
+    const uo = inv(o);
+    all("1.42 (B141-01): the project inventory counts the outline removals a focus style excused — `excused` {outline-removed: count, files, file, line}, never in total / byRule / rules; none when nothing was excused or the rule is off (got " +
+      js({ excused: u.excused, none: "excused" in un, off: [uo.excused, uo.off] }) + ")", {
+      "the excused removal, counted as the rule entry was": () => js(u.excused) === js({ "outline-removed": { count: 1, files: 1, file: "src/styles/reset.css", line: 3 } }) &&
+        u.total === 0 && js(u.byRule) === "{}" && js(u.rules) === "{}",
+      "no key when the removal stands": () => !("excused" in un) && un.total === 1,
+      "no key when the rule is off (a focus style read too): `off` counts it": () => !("excused" in uo) && uo.total === 0 &&
+        js(uo.off) === js([{ rule: "outline-removed", reason: "the kit resets it", count: 1 }]),
+    });
   }
 
   { // past the feature report's 48 project sheets the inventory judges: 60 sheets, a focus style in a late one → excused (the
@@ -210,6 +225,10 @@ exports.run = async ({ all, rpc, payload, remeasure, S, tmp, require, __dirname 
       chars: () => js(c.limits.filter((l) => l.code === "ui-files")) === js([{ code: "ui-files", read: 129, count: 1, file: "a/r.css", line: 3 }]),
       sheetsFirst: () => cf.total === 0 && js(cf.limits.filter((l) => l.code === "ui-files")) === js([{ code: "ui-files", read: 130 }]),
       focus: () => f.total === 0 && js(f.limits) === js([{ code: "ui-files", read: 5000 }]),
+      // (1.42 B141-01: a cut pass with no focus style excuses nothing — its removals are the limit's count, never `excused`; one
+      // that read a focus style before the cut counts them as excused)
+      "1.42: excused only where a focus style excused": () => !("excused" in u) && !("excused" in c) &&
+        js(f.excused) === js({ "outline-removed": { count: 1, files: 1, file: "a/r.css", line: 3 } }),
     });
   }
 

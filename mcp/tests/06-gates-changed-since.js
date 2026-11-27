@@ -66,6 +66,38 @@ exports.run = async ({ ok, S, tmp, root }) => {
       js([before.decision, na.step, na.changedSinceApproval, g.decision, g.why, gs.decision, gEdit.decision, gEdit.stale, naEdit.changedSinceApproval, gc.decision, nc.changedSinceApproval]) + ")");
   }
 
+  // 1.42 (R14): fingerprintText's CRLF fold (state.js) is masked twice — wsText trims every line (a 1.24+ approval's wsFingerprint
+  // matches a CRLF re-save without the fold, and a 1.13+ .history snapshot too), and fingerprintMatches' pre-1.22 legacy tasks path
+  // folds CRLF itself — so only an approval of requirements.md (or design.md…) holding a fingerprint and neither a wsFingerprint nor a
+  // snapshot shows it: a 1.11–1.12 approval, or a teammate's clone without the committed .history/. A characterization row: it passes
+  // on the parent by design and is proven by killing its mutant (the fold removed). uncheckTasks' order against the fold is
+  // equivalent (its regex is ^-anchored with /gm, never $), so no tasks.md row.
+  {
+    const a = approved("r14-crlf");
+    const sp = path.join(a.f.dir, ".state.json");
+    const st = JSON.parse(fs.readFileSync(sp, "utf8"));
+    const strip = (o) => { if (o && typeof o === "object") for (const k of Object.keys(o)) if (/ws|snapshot/i.test(k)) delete o[k]; };
+    Object.values(st.approvals || {}).forEach(strip);
+    (st.approvalHistory || []).forEach(strip);
+    fs.writeFileSync(sp, JSON.stringify(st, null, 2));
+    fs.rmSync(path.join(a.f.dir, ".history"), { recursive: true, force: true });
+    const rec = (JSON.parse(fs.readFileSync(sp, "utf8")).approvals || {}).requirements || {};
+    const ch = () => S.nextAction(a.p, a.f.slug).changedSinceApproval || [];
+    const rp = path.join(a.f.dir, "requirements.md");
+    const lf = fs.readFileSync(rp, "utf8").replace(/\r\n/g, "\n");
+    const before = ch();
+    fs.writeFileSync(rp, lf.replace(/\n/g, "\r\n"));
+    const crlf = ch();
+    fs.writeFileSync(rp, String.fromCharCode(0xfeff) + lf.replace(/\n/g, "\r\n"));
+    const bomCrlf = ch();
+    fs.writeFileSync(rp, lf.replace("Export invoices as CSV.", "Export invoices as XML."));
+    const edited = ch();
+    ok(a.ok && typeof rec.fingerprint === "string" && !Object.keys(rec).some((k) => /ws|snapshot/i.test(k)) && !fs.existsSync(path.join(a.f.dir, ".history")) &&
+      lf.includes("Export invoices as CSV.") && js(before) === "[]" && js(crlf) === "[]" && js(bomCrlf) === "[]" && js(edited) === '["requirements.md"]',
+      "1.42 (R14): a fingerprint-only requirements approval (no wsFingerprint, no snapshot, no .history/) — requirements.md re-saved with CRLF, then with a BOM + CRLF, is not changed since approval on next_action; a one-word edit is (got " +
+      js({ rec: Object.keys(rec), before, crlf, bomCrlf, edited }) + ")");
+  }
+
   // Finding 1 — the traceability matrix compared the approved requirements by the strict fingerprint (with a snapshot: two strict
   // fingerprints): a whitespace-only edit read changed: true while next_action called requirements.md unchanged.
   {

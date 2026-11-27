@@ -299,6 +299,49 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     });
   }
 
+  // --- 1.42 (B142-08): a cell whose path reading (exemplarPath) still holds a backtick — "`a.js`, the handler", "`a.js` the handler":
+  // neither a list nor annotated — is quoted as written too: the brief wrapped its reading in a span of its own, a stray backtick
+  // ("`src/x.js`, the handler`"). The EXACT property over every quoted row: an asWritten row's line holds exactly the cell's own
+  // backticks (one tick of the cell's own stays one — an even count is not the rule), and any other row's copy holds none (the line:
+  // its one span). Rendering only: the gone row is still named, plain / link rows keep their path. Two tables: the brief quotes 6.
+  {
+    const p = demo("stray-tick");
+    const H = "src/api-keys/service.js", G = "src/api-keys/gone.js", A = "src/api-keys/**";
+    const one = [
+      ["Plain", "`" + H + "`", A], ["Link", "[the service](" + H + ")", A], ["Annotated", "`" + H + "` (the handler shape)", A],
+      ["List", "`" + H + "`, `src/api-keys/index.js`", A], ["Comma note", "`" + H + "`, the handler", A], ["Blank note", "`" + H + "` the handler", A],
+      ["Gone", "`" + G + "`", A],
+    ];
+    const two = [
+      ["Balanced", "`" + H + "` uses `createKey`", A], // the parent rendered it balanced (4 ticks) and the same: only copy / asWritten move
+      ["Odd", H + ", the `createKey", A], // one tick of the cell's own: printed as written, one tick
+      ["Plain", "`" + H + "`", A], ["Gone", "`" + G + "`", A],
+    ];
+    const ticks = (s) => (s.match(/`/g) || []).length;
+    const run = (rows) => {
+      structure(p, table(["Pattern", "Copy", "Applies to"], rows));
+      const b = S.taskBrief(p, "api-keys", 5, {}), d = check(p);
+      const q = (b.examples && b.examples.quoted) || [];
+      const lineOf = (r) => b.brief.split("\n").find((l) => l.startsWith("- **" + r.pattern + "** — ")) || "";
+      const cellOf = (r) => (rows.find((x) => x[0] === r.pattern) || [])[1];
+      const exact = q.length > 0 && q.every((r) => (r.asWritten === true
+        ? r.copy === cellOf(r) && ticks(lineOf(r)) === ticks(cellOf(r)) && lineOf(r) === "- **" + r.pattern + "** — " + r.copy + " (" + A + ")"
+        : !("asWritten" in r) && ticks(r.copy) === 0 && lineOf(r) === "- **" + r.pattern + "** — `" + r.copy + "` (" + A + ")"));
+      return { b, d, q, exact, row: (n) => q.find((r) => r.pattern === n) || {} };
+    };
+    const a = run(one), c = run(two);
+    all("1.42 (B142-08): the brief quotes a Copy cell whose path reading keeps a backtick as written — an asWritten line holds exactly the cell's own backticks, any other copy none; plain / link / annotated / list rows keep their answers and the gone file is named (got " +
+      js({ one: a.q, two: c.q, gone: [a.b.examples && a.b.examples.gone, c.b.examples && c.b.examples.gone] }) + ")", {
+      "the exact property over every quoted row (both tables)": () => a.exact && c.exact && a.q.length === 6 && c.q.length === 3,
+      "the two new shapes and the balanced / odd ones are quoted as written": () => ["Comma note", "Blank note"].every((n) => a.row(n).asWritten === true && a.row(n).copy === one.find((x) => x[0] === n)[1]) &&
+        ["Balanced", "Odd"].every((n) => c.row(n).asWritten === true && c.row(n).copy === two.find((x) => x[0] === n)[1]) && ticks(c.row("Odd").copy) === 1,
+      "plain and link keep their path, annotated and list stay as written": () => a.row("Plain").copy === H && !("asWritten" in a.row("Plain")) && a.row("Link").copy === H && !("asWritten" in a.row("Link")) &&
+        a.row("Annotated").asWritten === true && a.row("List").asWritten === true && c.row("Plain").copy === H,
+      "the gone file is named, never quoted; doctor warns on it alone": () => js(a.b.examples.gone) === js([G]) && js(c.b.examples.gone) === js([G]) && !a.row("Gone").pattern &&
+        a.d && a.d.status === "warn" && a.d.detail === Q().refExamplesGone("`" + G + "`", 0, FILE) && c.d && c.d.detail === a.d.detail,
+    });
+  }
+
   // --- 1.41.0 review 1 (M22): without a glob, a Copy file's folder matches a target's folder case-folded where the file system folds case
   {
     const p = demo("fold");
@@ -368,7 +411,7 @@ exports.run = async ({ ok, all, eq, S, tmp, fsCalls, require, __dirname }) => {
     const log = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8").replace(/\s+/g, " ");
     const FORMS = "a note after the one path — `path (note)` or `path — note` — is no second file, whatever it names: the path is judged, the cell quoted as written; a `,` or `;` note makes the cell a list, which is never judged";
     all("1.41.0 review 3: tooling-reference.md and the CHANGELOG name the annotated forms — `path (note)` / `path — note` is no second file, the cell quoted as written; a `,` / `;` note makes the cell a list, never judged", {
-      tooling: tr.includes(FORMS + ") — `examples` {file, quoted [{pattern, copy, appliesTo, `asWritten` on a list or annotated cell}]"),
+      tooling: tr.includes(FORMS + ") — `examples` {file, quoted [{pattern, copy, appliesTo, `asWritten` on a list or annotated cell, or one whose path reading keeps a backtick}]"),
       changelog: log.includes("a cell naming several paths anyway is quoted as written, never judged; " + FORMS + "); doctor's project-level `reference-examples`") &&
         !log.includes("while a note after the one path is no second file"),
     });

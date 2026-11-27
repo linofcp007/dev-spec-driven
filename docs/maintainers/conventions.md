@@ -77,7 +77,9 @@ History at the end.
   committed link under .specs/ (`.execution/merge-summary.md -> ~/.bashrc`) would get spec text written where it points.
 - **The refusal** is an Error (`code` ESPECSLINK / ESPECSKIND, `gate`, a localized message — `err.specsLinked`…) that the
   facade answers as the call's result (`gateRefusal`: `{ok: false, linked | wrongKind: true, path, error}`) on every surface.
-  Feature mutators meet it at their lock, before any write (`featureLocked` / `withMoveLock`); best-effort writers swallow it.
+  Feature mutators meet it at their lock, before any write (`featureLocked` / `withMoveLock`); best-effort writers swallow it;
+  the starters (`templates init`, `tracks init`) answer it with `gateRefusal` (+ `created` / `kept`) — 1.42 R4: no
+  containment check of their own (templates-imports-exports.md → Project templates).
 - **Removals go through it too:** `removeSpecFile` (a link AT the path unlinked as the link), `removeEmptySpecDir` (an EMPTY
   folder, never a link — rmdir would drop a junction). **Known limit:** a second write in one call can be refused after the
   first landed (a linked tasks.md: the evidence recorded, the tick refused) — but nothing is written THROUGH a link.
@@ -117,7 +119,10 @@ History at the end.
   the link: the hook traces / lints that project's spec and stamps its `.state.json` (review 2's R2-R-2). No new capability — the
   model's own Write / Edit already went through the link, and Read follows it too. Round 2 answered it with the gates' root rule and
   broke the plain case (fix round 3, R3-R-1: on a project below a folder named `.specs` whose session anchor holds no saved file —
-  Claude Code in a subfolder, a sibling checkout, no anchor — the hook went silent and the stop gate with it); taken out.
+  Claude Code in a subfolder, a sibling checkout, no anchor — the hook went silent and the stop gate with it); taken out. The case
+  fold is JavaScript's `toLowerCase`, not NTFS's upcase table: a project folder named with a character the two fold differently
+  (the Kelvin sign U+212A, the Ohm sign U+2126, the Angstrom sign U+212B) is constructed, not fixed (1.42 R12 — ASCII-only folding
+  would refuse `Café.ts` against `café.ts`, and a byte-exact real-path compare needs a predicate of its own).
 - **What a listing proved is not asked again (`seedParts`, fix round 1):** every listing of `.specs/` or of a folder below it the gate
   let through (`readDirDisk`, `safeReaddir`, `featureDirs`, `listFeatures`) seeds the memo with its plain entries — a Dirent that says
   "directory" / "file" is no reparse point at all (Windows types every reparse point as a link; POSIX: d_type, Node's own lstat for
@@ -173,7 +178,8 @@ History at the end.
   `loadRoadmap()` check each key's type), **is an ERROR every mutator returns before its destructive step** (`roadmapError()`,
   `state.invalid`) — never "repaired" into `{}` (that erases deps, approvals, `meta.lang`). Readers get a sanitized copy and
   SAY it: doctor fails `state`, next_action's step is `fix`, spec_finish blocks, the status line says repair. A leading BOM is
-  tolerated; `writeIfAbsent` uses `flag:"wx"`.
+  tolerated; `writeIfAbsent` uses `flag:"wx"`. readJson's `error` is the code `invalid-json`; the caller says it
+  (`err.invalidJson(errorRel, errorDetail)`, the project's language).
 - **`writeFileAtomic` is durable and never tears a file in place:** a `wx` temp file (`<file>.<pid>.<ts>.tmp`), written whole,
   fsynced, renamed, its folder fsynced on POSIX (best effort where refused). A rename Windows refuses (EPERM / EACCES / EBUSY —
   a scanner, the indexer) is retried ~1.6 s, never for a read-only target; then the write is REFUSED — the old content
@@ -452,6 +458,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.25** — `removeEmptySpecDir` (the ADR export's emptied folders).
 - **1.25.1 review 7** — the raw-write guard covers mcp/evals/: the eval harness's raw fs.writeFileSync of evals/baseline.json
   followed a link under .specs/.
+- **1.42 —** R4: the starters (`templates init`, `tracks init`) kept a project-real check of their own from 1.14, before the gate;
+  under a linked `.specs/` it refused them (the gate lets that layout write), and for a link inside the project it let the gate's
+  raw `(ESPECSLINK)` through. Removed: they answer the gate's refusal with `gateRefusal`.
 
 ### The read gate
 - **1.41.1 (dev-guardian 3.17 triage, R2)** — the writes were gated since 1.24, the reads followed a committed link: a linked feature
@@ -474,6 +483,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   to the outermost `.specs` when no anchor held the saved file — on a link-free project below a folder named `.specs` the hook went
   silent, no `lastEditAt`, and the Stop gate no longer blocked a hand-ticked "all done". Reverted to the nearest-`.specs` text
   walk (which also drops R3-R-2's realpath of a UNC `~1` segment); R2-R-2 is a known limit.
+- **1.42 —** R4: the template reader's project-real compare (two realpaths per template) is gone — the read gate is its
+  containment, as for every spec file (a linked `.specs/` had every override dropped silently). R12: the case fold's known limit
+  (`toLowerCase` vs NTFS's upcase table) is written down, not fixed (both fixes broke legit names).
 
 ### The dry-run sink
 - **1.25** — the sink (`withDryRun`), for `spec_import {dryRun}`: one switch in the write primitives, made possible by the 1.24
@@ -491,6 +503,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   disk or a concurrent reader met it empty or half written) and followed a link the gate had checked a moment before. Chosen
   over a `.bak` copy: nothing to clean up or recover by hand, the gate's guarantee kept whole. The fsync measured ~0.5 ms per
   write (Windows / NTFS).
+- **1.42 —** R13: readJson's `error` held an English sentence no surface ever showed (every reader truth-tests it; the two that say it
+  localize `errorRel` / `errorDetail`); it is the code `invalid-json` (mcp/tests/16-conventions.js). design-system.js lost an unused
+  component-name regex (nothing read it).
 
 ### Merging the spec state
 - **1.21 F1a** — the merge driver: two branches that both approved, ticked or recorded evidence conflicted in `.state.json` /

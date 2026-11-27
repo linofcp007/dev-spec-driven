@@ -49,6 +49,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   metric.js                    the METRIC line (1.41): its reader and judge, finish's comparison, spec_metrics' one walk + `measured`
   guardian.js                  dev-guardian's gate (the check `guardian`): the launcher, the CLI lookup, the verdict, its guard rules
   friction.js                  the friction budget (1.41): tech.md's _Budget:_ lines, timings.jsonl, spec_metrics' friction, the hint
+  agents.js                    the plugin subagents' cost (1.42): agents.jsonl (counts per dispatch), spec_metrics' project `agents`
   trace.js                     criterion blocks, the EARS linter, trace_check, the traceability matrix
   gates.js                     the gate walk, pending gates, flows, detectPhase; spec_approve; .history/, spec_impact
   doctor.js                    the check registry (DOCTOR_CHECKS, GATES, approvalChecks), spec_doctor, next_action, status,
@@ -168,7 +169,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 27 modules loaded with the engine (+ dupes.js, design-values.js,
+  costs ~0.65 ms before any compile (the open is the expensive part): 28 modules loaded with the engine (+ dupes.js, design-values.js,
   design-system.js, ui-checks.js, breakpoints.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
   the module of the concept; a new file must earn its load cost. The facade's first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
@@ -323,6 +324,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   observed.jsonl's, generalized) and tasks.js's marker span reader under its own label (`labelMarkerSpans`). No module for the
   lessons (decisions.js) or Reference Examples (quality.js): `projectPath` and `onDisk` moved verbatim from the lazy
   design-system.js into the eager quality.js, which both read (quality.md → History, Reference examples).
+- **1.42 —** S9: one eager module, 28 with the engine (README's trees: 33). **engine/agents.js**, the plugin subagents' cost
+  (tasks-and-evidence.md → Subagent-driven execution): after friction.js — the observe hook's SubagentStop records through it
+  (its `recordAgentRun`; the transcript itself is read in the hook, never by the engine: a path outside the project) and
+  spec_metrics reads it (`agentCosts`, `agentLines`, linked by finish.js). It reuses evidence.js's one appender and tail reader,
+  as friction.js does; a module of its own rather than ~120 more lines in friction.js, whose rule (a check's measured time
+  against a budget) it does not share.
 
 ### The module rule
 - **1.36** — engine/port.js, +port's fence (the anchors, the gate tasks.js applies, doctor's port-* checks, finish's re-check):
