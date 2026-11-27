@@ -109,7 +109,8 @@ function devSpecWithoutRoadmap(dir) {
   return probe().isDevSpecProject(dir);
 }
 // Guard on? Read raw — the engine (and its i18n tables) is only loaded for a guarded project. No roadmap.json in a dev-spec
-// .specs/ → the user's default (spec.guardLevel's rule); an unreadable or broken one → off. One that is no regular file (a link, a
+// .specs/ → the user's default (spec.guardLevel's rule); an unreadable or broken one → off — valid JSON that is no object too, where
+// the engine applies the user's default: a known limit, no escalation (claude-code-integration.md). One that is no regular file (a link, a
 // FIFO, a folder) is no roadmap.json, as the engine reads it: the user's default above, never opened (probe.js readRegularJson).
 function guardOn(dir) {
   if (userGuardDefault() && devSpecWithoutRoadmap(dir)) return true;

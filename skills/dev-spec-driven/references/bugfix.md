@@ -85,13 +85,15 @@ fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --e
    — don't write the fix on a red you haven't seen, and don't send a subagent (or a tool search) to find a shell:
    stop and ask.
 4. **Fix** (task 2). One change that removes the root cause — not a bundle of "while I'm here"
-   improvements. Remove the instrumentation before task 2's run: `git grep -n DEBUG-<slug>` prints nothing (it
-   finds only the tagged lines — an untagged one stays, so tag every one). Run `T-01`, `T-02` and the full suite
+   improvements. Remove the instrumentation before task 2's run: `git grep -n --untracked -E
+   'DEBUG-<slug>([^[:alnum:]_-]|$)'` prints nothing (`--untracked`: a file you created while tracing is searched too; the
+   boundary keeps a longer slug's tags, `DEBUG-<slug>-…` — another bugfix's —, out; it finds only the tagged lines — an
+   untagged one stays, so tag every one). Run `T-01`, `T-02` and the full suite
    (`_Verify:_` records the evidence). Consider defence in depth: should the invalid value also be rejected at the
    boundary where it entered?
 
-**Checkpoint:** the reproduction steps no longer reproduce the bug, the full suite is green and `git grep -n
-DEBUG-<slug>` prints nothing. Close with `/spec-finish` — the merge summary carries the root cause and the fix from
+**Checkpoint:** the reproduction steps no longer reproduce the bug, the full suite is green and that `git grep -n
+--untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)'` prints nothing. Close with `/spec-finish` — the merge summary carries the root cause and the fix from
 `bug.md`.
 
 `T-02` guards behaviour that already works, so it passes before the fix too: it sits in no task's `_Makes green:_`

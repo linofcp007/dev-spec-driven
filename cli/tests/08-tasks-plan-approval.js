@@ -7,7 +7,7 @@ const path = require("path");
 // The engine's planNote (mcp/tests/08-tasks-plan-approval.js) reaches the CLI user: `next`, `status <f>` and `done` print it on its
 // own "  ⚠ " line, `brief` on stderr (stdout stays the brief a pipe takes); --json is the MCP result. An approved plan prints none.
 // Mutations listed before the fixtures: C1 next's line dropped · C2 brief's line dropped · C3 brief's line on stdout · C4 status's
-// line dropped · C5 done's line dropped.
+// line dropped · C5 done's line dropped · (review 1) C6 an investigation tick without the next task's line.
 exports.run = async ({ all, runIn, spawnIn, runAsync, tmp, require, __dirname }) => {
   const js = JSON.stringify;
   const SD = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -41,6 +41,23 @@ exports.run = async ({ all, runIn, spawnIn, runAsync, tmp, require, __dirname })
     "status: the ⚠ line after the tasks line (C4)": st.code === 0 && /\n {2}⚠ /.test(st.out) && st.out.split("\n").includes("  ⚠ " + note),
     "done --run: ticked, the tick's ⚠ line (C5)": dn.code === 0 && dn.out.split("\n").includes("  ⚠ " + PG.tickedEarly(1, f.slug)) &&
       /- \[x\] 1\./.test(fs.readFileSync(path.join(p, ".specs", f.slug, "change.md"), "utf8")),
+  });
+  // review 1 (R1-TASKS-04, C6): a bugfix scaffolded with four tasks (≤ 1.23.0) — ticking its investigation task 2 serves #3, the red
+  // test: `done` prints next_task's ⚠ line for it; ticking #1 (it serves #2, an investigation task too) prints none
+  const g = SD.createFeature(p, "Login crash", ["core"], "Login crashes on an empty password", undefined, "en", "bugfix");
+  put(".specs/" + g.slug + "/tasks.md", "# Tasks: Login crash\n\n## Phase: Fix\n" +
+    "- [ ] 1. [shared] Reproduce the bug reliably and write the steps in bug.md → Reproduction\n  - _Requirements: US-1.AC-1_\n" +
+    "- [ ] 2. [shared] Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)\n  - _Requirements: US-1.AC-1_\n" +
+    "- [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output)\n  - _Requirements: US-1.AC-1_\n  - _Verify: node --test test/login.test.js_\n  - _Expect: fail_\n" +
+    "- [ ] 4. [US1] Fix the root cause — one change, not a bundle\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n  - _Verify: node --test test/_\n");
+  put(".specs/" + g.slug + "/bug.md", "# Bug: Login crash\n\n## Summary\nLogin crashes on an empty password.\n\n## Reproduction\n1. Submit /login with an empty password\n2. The server answers 500.\n\n" +
+    "## Root Cause\nauth.js:42 reads password.length before the null check (stack trace: TypeError at auth.js:42).\n\n## Fix\nMove the null check first.\n");
+  const g1 = runIn(["done", g.slug, "1", "--evidence", "steps written in bug.md → Reproduction", ...P]);
+  const g2 = runIn(["done", g.slug, "2", "--evidence", "root cause written in bug.md → Root Cause", ...P]);
+  const gNote = PG.notApproved(g.slug, "tasks.md");
+  all("1.42 review 1 (CLI, R1-TASKS-04): an investigation task's done prints the ⚠ line of the next task it serves — #2's serves #3; #1's serves #2, an investigation task: none (got " + js([g1.code, g1.out, g2.code, g2.out]) + ")", {
+    "done #1: ticked, no plan line": g1.code === 0 && !/not approved yet|ticked before the plan/.test(g1.out),
+    "done #2: ticked, next #3's ⚠ line (C6)": g2.code === 0 && g2.out.split("\n").includes("  ⚠ " + gNote) && !g2.out.includes(PG.tickedEarly(2, g.slug)),
   });
   // the plan approved: the same commands print no plan line
   const ap = runIn(["approve", f.slug, "tasks", ...P]);

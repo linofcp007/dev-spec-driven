@@ -101,7 +101,8 @@ function recentActivity(dir) {
 }
 
 // the end of the turn: a ROADMAP.md / SPECS.md left stale by spec saves (the save hook's stamp, spec.ROADMAP_STALE_FILE
-// in .specs/.execution/) is refreshed ONCE here, whatever the gate then says (a second stop in a row, the gate off). One stat per
+// in .specs/.execution/) is refreshed ONCE here, after the gate and only when it lets the turn end (decide(): a second stop in a
+// row and the gate off included) — a turn sent back keeps its stamp, its next stop (stop_hook_active) refreshes. One stat per
 // project; the engine loads only for a stamped one.
 const ROADMAP_STALE = path.join(".specs", ".execution", "roadmap-stale");
 function refreshStale(dirs) {

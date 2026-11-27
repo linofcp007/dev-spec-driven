@@ -22,7 +22,7 @@ Use the **dev-spec-driven** skill. Request: $ARGUMENTS
   or `change.md` (xs). A spec or plan from Kiro, spec-kit, OpenSpec, plan mode or BMAD: `spec_import` instead of
   re-typing it.
 
-**The phases** (each one: fill the artifact, `spec_doctor`, then the user's approval):
+**The phases** (each one: fill the artifact, `spec_doctor` — fix what its next gate refuses —, then the user's approval):
 - **requirements** — EARS criteria with stable IDs (`US-1.AC-1`, `EC-1`, `NFR-1`, `SC-001`), every placeholder
   replaced; `ears_validate`, then `spec_clarify` for the gaps.
 - **design** — the active tracks' sections, Alternatives & Trade-offs, Risks, Reuse & Integration, the Constitution Check.

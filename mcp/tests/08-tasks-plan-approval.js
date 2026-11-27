@@ -15,7 +15,9 @@ const path = require("path");
 // bugfix task · A7 the exemption keyed on the legacy step names · A8 planNote with no task served · A9 planNote appended to
 // `note` · A10 planNote on an alreadyDone re-check · A11 an isRecord test instead of the pending-gates truthiness · A12 planNote in
 // the brief's markdown · A13 planNote on a done briefed task · A14 status without the fields · A15 a memo of the exemption keyed
-// on the task text alone ([INT-1]: features with identical tasks.md may share one scan's blocks) · A16 a read in planGateFields.
+// on the task text alone ([INT-1]: features with identical tasks.md may share one scan's blocks) · A16 a read in planGateFields ·
+// (review 1) A17 an investigation tick's result without the planNote of the `next` it serves · A18 the exemption's _Implements:_
+// condition dropped · X1 its _Verify:_ condition dropped · X2 its _Makes green:_ condition dropped.
 exports.run = async ({ all, eq, S, tmp, fsCalls, handRoadmap, planGateMismatches, require, __dirname }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
@@ -88,8 +90,10 @@ exports.run = async ({ all, eq, S, tmp, fsCalls, handRoadmap, planGateMismatches
   }
 
   // F2 — a bugfix scaffolded with four tasks (≤ 1.23.0), bug.md filled, nothing approved: tasks 1 and 2 (reproduce, root cause —
-  // they name bug.md, run nothing) carry no planNote, served or ticked (beforeApproval stays a fact); task 3 (the red test) and 4 (the
-  // fix) carry it (A5, A6). A user-written PT investigation task naming bug.md is one too — no name list (A7).
+  // they name bug.md, run nothing) carry no planNote, served or briefed (beforeApproval stays a fact); task 3 (the red test) and 4 (the
+  // fix) carry it (A5, A6). A tick serves its `next`: #1's serves #2, an investigation task too — no planNote; #2's serves #3, so
+  // it carries next_task's planNote for #3 (review 1, R1-TASKS-04 — A17). A user-written PT investigation task naming bug.md is one
+  // too — no name list (A7).
   {
     const p = project("legacy-bug");
     handRoadmap(p);
@@ -104,15 +108,41 @@ exports.run = async ({ all, eq, S, tmp, fsCalls, handRoadmap, planGateMismatches
     put(fp.dir, "tasks.md", "# Tarefas\n\n## Fase: Correção\n- [ ] 1. [shared] Escrever a causa raiz em bug.md, com a evidência\n  - _Requirements: US-1.AC-1_\n" +
       "- [ ] 2. [US1] Corrigir a causa raiz\n  - _Requirements: US-1.AC-1_\n  - _Verify: node --test test/_\n");
     const pn1 = S.nextTask(pt, fp.slug), pb2 = S.taskBrief(pt, fp.slug, 2);
-    all("1.42 UX-02 (F2): a four-task bugfix before the tasks approval — its investigation tasks 1 / 2 carry no planNote (served, briefed or ticked; beforeApproval still says the tick came first), tasks 3 / 4 carry it; a user-written PT task naming bug.md is exempt too (got " +
+    all("1.42 UX-02 (F2): a four-task bugfix before the tasks approval — its investigation tasks 1 / 2 carry no planNote (served or briefed; beforeApproval still says the tick came first), tasks 3 / 4 carry it, and the tick of #2 carries #3's (the next it serves); a user-written PT task naming bug.md is exempt too (got " +
       js([n1, b.map(newKeys), t1, t2, n3, pn1, newKeys(pb2)]) + ")", {
       "next #1: planApproved false, no planNote (A5)": n1.next && n1.next.number === 1 && n1.planApproved === false && n1.planNote === undefined,
       "brief #1 / #2: no planNote": b[0].planApproved === false && b[0].planNote === undefined && b[1].planApproved === false && b[1].planNote === undefined,
       "brief #3 / #4: planNote (A6)": b[2].planNote === PG("en").notApproved(f.slug, "tasks.md") && b[3].planNote === PG("en").notApproved(f.slug, "tasks.md"),
-      "tick #1 / #2: beforeApproval, no planNote": t1.ok && t1.beforeApproval === true && t1.planNote === undefined && t2.ok && t2.beforeApproval === true && t2.planNote === undefined,
+      "tick #1: beforeApproval, serves #2 (an investigation task): no planNote": t1.ok && t1.beforeApproval === true && t1.next && t1.next.number === 2 && t1.planNote === undefined,
+      "tick #2: beforeApproval, serves #3: next_task's planNote for it (A17)": t2.ok && t2.beforeApproval === true && t2.next && t2.next.number === 3 && t2.planNote === PG("en").notApproved(f.slug, "tasks.md") && t2.note === undefined,
       "next #3: planNote": n3.next && n3.next.number === 3 && n3.planNote === PG("en").notApproved(f.slug, "tasks.md"),
       "PT: a user-written investigation task is exempt (A7)": pn1.next && pn1.next.number === 1 && pn1.planApproved === false && pn1.planNote === undefined,
       "PT: its fix carries the PT planNote": pb2.planNote === PG("pt").notApproved(fp.slug, "tasks.md"),
+    });
+  }
+
+  // F2b (review 1: R1-TASKS-02 / -03) — the exemption's edges: bugfix tasks whose prose names bug.md, nothing approved. A task that
+  // names a file it changes is a code task (a model-written "apply the fix described in bug.md", _Implements: src/auth.js_ — A18),
+  // one with a real _Verify:_ (the red test written from bug.md's steps — X1) or a _Makes green:_ (the fix of the cause bug.md
+  // records — X2) too: each carries the planNote, served and briefed. Known limit, pinned: a marker still holding its scaffold slot
+  // counts as none — the short-form red test edited to cite bug.md before its slots are filled reads as an investigation task.
+  {
+    const p = project("bug-edges");
+    handRoadmap(p);
+    const one = (name, task) => { const f = S.createFeature(p, name, ["core"], "Login crashes on an empty password", undefined, "en", "bugfix"); put(f.dir, "tasks.md", "# Tasks: " + name + "\n\n## Phase: Fix\n" + task); put(f.dir, "bug.md", BUG); return f; };
+    const fix = one("Model fix", "- [ ] 1. [US1] Apply the fix described in bug.md → Fix to src/auth.js\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/auth.js_\n");
+    const red = one("Red from steps", "- [ ] 1. [US1] Write regression test T-01 from the steps in bug.md → Reproduction and watch it fail\n  - _Requirements: US-1.AC-1_\n  - _Verify: node --test test/login.test.js_\n  - _Expect: fail_\n");
+    const green = one("Green from cause", "- [ ] 1. [US1] Fix the root cause bug.md → Root Cause records\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n");
+    const slots = one("Slots left", "- [ ] 1. [US1] Write regression test T-01 from the steps in bug.md → Reproduction and watch it fail\n  - _Requirements: US-1.AC-1_\n  - _Implements: [the test file T-01 goes in]_\n  - _Verify: [command that runs T-01]_\n  - _Expect: fail_\n");
+    const got = Object.fromEntries([["fix", fix], ["red", red], ["green", green], ["slots", slots]].map(([k, f]) => {
+      const nx = S.nextTask(p, f.slug), br = S.taskBrief(p, f.slug, 1), note = PG("en").notApproved(f.slug, "tasks.md");
+      return [k, { served: !!nx.next && nx.next.number === 1, next: nx.planNote === note, brief: br.planNote === note, none: nx.planNote === undefined && br.planNote === undefined && nx.planApproved === false }];
+    }));
+    all("1.42 review 1 (R1-TASKS-02 / -03): a bugfix task naming bug.md is exempt only with no _Implements:_, _Makes green:_ or _Verify:_ — a fix naming its file, a real _Verify:_ and a _Makes green:_ each carry the planNote; a slot counts as none (got " + js(got) + ")", {
+      "a fix naming the file it changes: planNote (A18)": got.fix.served && got.fix.next && got.fix.brief,
+      "a real _Verify:_: planNote (X1)": got.red.served && got.red.next && got.red.brief,
+      "a _Makes green:_: planNote (X2)": got.green.served && got.green.next && got.green.brief,
+      "every marker still a slot: exempt (known limit)": got.slots.served && got.slots.none,
     });
   }
 
@@ -248,10 +278,13 @@ exports.run = async ({ all, eq, S, tmp, fsCalls, handRoadmap, planGateMismatches
     const fa = twin("Twin approved", true), fu = twin("Twin open", false);
     const under = p + path.sep;
     const sum = (c) => Object.values(c).reduce((a, b) => a + b, 0);
-    // inside one call's read scope, as the surfaces run it: the state the caller read is all it reads (the file a change's tasks
-    // live in comes from that same .state.json)
+    // planGateFields takes no path: the state the caller read is all it reads (a change's plan file comes from that state's kind).
+    // Counted in a FRESH read scope with nothing read before it (review 1, R1-MERGE-2: inside a scope readState had primed, a
+    // re-read of the state was a cache hit and counted nothing), every fs call whatever its path ("" — a relative one too).
+    const st = E.readState(p, fu.slug), block = E.taskBlocks(TASKS)[0];
+    E.planGateFields(st, block, fu.slug, "en"); // warm: a lazy require on the first call is no read of the call
     let fields = null;
-    S.withReadCache(() => { const st = E.readState(p, fu.slug), block = E.taskBlocks(TASKS)[0]; fields = fsCalls(under, () => E.planGateFields(st, block, fu.dir, fu.slug, "en")); });
+    S.withReadCache(() => { fields = fsCalls("", () => E.planGateFields(st, block, fu.slug, "en")); });
     const ops = {
       next: (f) => S.nextTask(p, f.slug), brief: (f) => S.taskBrief(p, f.slug, 1), status: (f) => S.statusFeature(p, f.slug),
       tick: (f) => S.completeTask(p, f.slug, 2, "shown to the user"),

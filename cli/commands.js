@@ -164,8 +164,9 @@ function main2list(c) {
   const r = c.call("list");
   const T = c.projectText();
   c.out(r, (r) => {
-    // 1.42 UX-21: no active feature (init's activeFeatures, the same folders) → the next step, init first without a .specs/
-    if (!r.exists || !r.features.length) { c.log(T.noFeatures(r.specsDir)); return c.log(T.startHint(!r.exists)); }
+    // 1.42 UX-21: no active feature (init's activeFeatures, the same folders) → the next step; init in it while a core steering file
+    // is missing — no .specs/, or one another command made (review 1, R1-SURF-07: the engine's steeringMissing, doctor's predicate)
+    if (!r.exists || !r.features.length) { c.log(T.noFeatures(r.specsDir)); return c.log(T.startHint(!r.exists || !!r.steeringMissing)); }
     r.features.forEach((f) => c.log(T.listLine(f.name, f.tracks, T.phase(f.phase), f.tasksDone, f.tasks)));
   });
 }
@@ -659,7 +660,7 @@ const COMMANDS = [
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         log(c.cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || c.cliText(r.lang).nothingNew, r.skipped.join(", ")));
-        if (r.created.length) log("  " + r.note); // 1.42 UX-09: the new steering files are templates — fill them (how: the note)
+        if (r.note) log("  " + r.note); // 1.42 UX-09: the new steering files are templates — fill them (how: the note; the engine's rule: only when it created some)
         if (r.guardNote) log("  " + r.guardNote);
         if (r.stopCheckNote) log("  " + r.stopCheckNote);
         if (r.evidenceNote) log("  " + r.evidenceNote); // 1.14 F1
@@ -880,7 +881,7 @@ const COMMANDS = [
         // 1.42 UX-01: + the next approval's own checks (nextGate) — readyToAdvance is every check, a later phase's included
         const ng = r.nextGate;
         log(T.doctorHead(r.feature, r.tracks, T.word(r.verdict).toUpperCase(), T.bool(r.readyToAdvance)) +
-          (ng ? T.doctorNextGate(ng.phase, ng.ready, (ng.failing || []).map((x) => x.id).join(", ")) : ""));
+          (ng ? T.doctorNextGate(ng.phase, ng.ready, (ng.failing || []).map((x) => x.id).join(", "), ng.unreadable) : ""));
         r.checks.forEach((x) => log("  " + (x.status === "pass" ? "✓" : x.status === "warn" ? "▲" : "✗") + " " + x.id + (x.detail ? " — " + x.detail : "")));
       });
     },
@@ -1103,7 +1104,7 @@ const COMMANDS = [
           log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : r.done < r.total ? "" : D.allDone));
           if (r.redRecorded) log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // _Expect: fail_
           if (r.note) log("  ⚠ " + r.note);
-          if (r.planNote) log("  ⚠ " + r.planNote); // 1.42 (UX-02): ticked before the plan's approval — its own line, never the note's
+          if (r.planNote) log("  ⚠ " + r.planNote); // 1.42 (UX-02): ticked before the plan's approval (a bugfix's investigation tick: the next task's note) — its own line, never the note's
           metricRunLines(r, spec.msg(spec.featureLang(projectDir, r.feature)).metric, "").forEach((l) => log(l)); // 1.41: stored, never judged here
         });
       };

@@ -136,17 +136,57 @@ exports.run = async ({ all, S, root, tmp, require }) => {
     // classification) —, so six texts that said "advance only on readyToAdvance" held approvals for a later phase's work.
     // nextGate is the next approval's own checks, a forecast: the approval call adds phase-order (an earlier phase changed
     // since its approval — nextGate ready, the approve refused), so no text may promise it: never "approve on nextGate",
-    // "the next approval would pass" or "ready to approve" (in any language) — "fix what it refuses" is what holds.
+    // "the next approval would pass" or "ready to approve" (in any language) — "fix what it refuses" is what holds. Nor "what the
+    // next approval would refuse" (review 1, R1-SURF-09: spec_doctor's description, read by skill-less clients — nextGate is the
+    // next gate's own checks; the approval adds phase order and roles).
     const texts = shippedTexts(root);
     const RE_HOLD = [/(?:advanc\w*|proceed)\W+(?:only\s+)?on\s+`?readyToAdvance/i, /one `readyToAdvance` verdict/i];
-    const RE_PROMISE = [/approve\s+on\s+(?:its\s+)?`?nextGate/i, /next approval (?:would |will )?pass/i, /ready to approve|pronto para aprovar|listo para aprobar/i];
+    const RE_PROMISE = [/approve\s+on\s+(?:its\s+)?`?nextGate/i, /next approval (?:would |will )?(?:pass|refuse)/i, /ready to approve|pronto para aprovar|listo para aprobar/i];
     const hits = texts.flatMap(([rel, t]) => RE_HOLD.concat(RE_PROMISE).filter((re) => re.test(t.replace(/\s+/g, " "))).map((re) => rel + " " + re.source));
-    const SIX = ["skills/dev-spec-driven/SKILL.md", "AGENTS.md", ".cursor/rules/dev-spec-driven.mdc", "commands/spec-doctor.md", "commands/approve.md",
-      "skills/dev-spec-driven/references/phase-guide.md", "skills/dev-spec-driven/references/tooling-reference.md"];
-    const named = SIX.filter((f) => /`nextGate`|next gate/.test((texts.find(([rel]) => rel === f) || [, ""])[1]));
-    all("1.42 UX-01: no shipped text holds an approval on readyToAdvance or promises one on nextGate; the texts that send an agent to doctor before an approval name its next gate (hits: " + js(hits) + "; naming: " + named.length + "/" + SIX.length + ")", {
+    // The texts that SEND an agent to doctor before an approval / before advancing, by PROPERTY (review 1, R1-SURF-01: a list of
+    // seven missed GEMINI.md's and the Copilot rule's "Run `dev-spec doctor` before advancing" — `rules gemini` / `rules copilot`
+    // print them): every shipped .md / .mdc (the rule files of other tools included) is cut into sentences (a paragraph, a list
+    // item or a table cell, split at ". " / "; "), and a sentence that orders doctor at an approval — "run … doctor … before
+    // advancing / an approval", "at each phase boundary run … doctor", "`spec_doctor` before a phase advances" / "… first",
+    // "`spec_doctor`, then the user's approval" — names the next gate (`nextGate` / "next gate") in that same sentence.
+    // What the shapes hide: an order to doctor in another wording (another language, "check with doctor", a code block), and the
+    // engine's .js strings. Mutations listed before the fixtures: N1 GEMINI.md's clause dropped · N2 the Copilot rule's · N3
+    // commands/spec.md's · N4 the "run … before" shape dropped · N5 the next gate read in the whole file, not the sentence.
+    const units = (t) => t.replace(/\r\n/g, "\n").split(/\n\s*\n|\n(?=\s*(?:[-*]|\d+\.)\s)|\|/).flatMap((p) => p.replace(/\s+/g, " ").split(/(?<=[.;])\s+(?=[A-Z0-9`*(_[-])/));
+    const D = "(?:spec_doctor|/spec-doctor|\\bdoctor)\\b", SS = "(?:(?!\\.\\s).)"; // doctor on any surface · a character of the same sentence
+    const MOMENT = "(?:advanc\\w*|a phase advances|approving|(?:an?|each|the next|the|its) approval)\\b";
+    const SENDS = new RegExp([
+      "\\b(?:run|use|call)\\b" + SS + "{0,100}" + D + SS + "{0,100}\\bbefore\\s+" + MOMENT,
+      "\\b(?:each|every) phase boundary\\b" + SS + "{0,60}\\b(?:run|use|call)\\b" + SS + "{0,60}" + D,
+      D + "[^`\\s]*`?(?:\\s*\\{[^}]*\\}`?)?,?\\s+(?:before\\s+" + MOMENT + "|first\\b)",
+      D + SS + "{0,80}\\bthen\\s+(?:the user's approval|ask (?:the user\\s+)?for (?:its\\s+|their\\s+)?approval)\\b",
+    ].join("|"), "i");
+    const NAMED = /`nextGate`|next gate/i;
+    const sends = (t) => units(t).filter((s) => SENDS.test(s)).map((s) => ({ s: s.trim(), named: NAMED.test(s) }));
+    const shapes = [ // [label, text, sentences sent, named]
+      ["the parent's GEMINI.md", "  Mandatory design sections must be filled. Run `dev-spec doctor <feature>` before advancing.\n- Approvals are the user's: run", 1, 0],
+      ["the parent's Copilot rule over a line break", "Every task carries `_Verify: <command>_`. Run `dev-spec doctor`\n  before advancing a phase.\n- Approvals", 1, 0],
+      ["the cursor rule (a path's dot is no sentence end)", "Run `node cli/dev-spec.js doctor <feature>` before advancing a phase; fix what its next gate refuses (a later phase's fail waits).", 1, 1],
+      ["AGENTS.md's phase boundary", "At each phase boundary run `dev-spec doctor <feature>` and fix what its next gate refuses.", 1, 1],
+      ["SKILL.md's gate line", "`spec_doctor` before a phase advances: fix what its `nextGate` refuses.", 1, 1],
+      ["/approve's first step", "1. `spec_doctor {name}` first — show the verdict and its `nextGate`. No phase given?", 1, 1],
+      ["/spec's phases, unnamed", "**The phases** (each one: fill the artifact, `spec_doctor`, then the user's approval):", 1, 0],
+      ["the next gate in ANOTHER sentence is not this one's (N5)", "Run `dev-spec doctor` before advancing a phase. The next gate is in the result.", 1, 0],
+      ["doctor that warns is no order", "a content hash each — past them doctor warns; a `feature protect` run before the approval doesn't replace it", 0, 0],
+      ["a README cell", "| `/spec-doctor [--deep]` | Ready to advance? `--deep` adds fresh reviewers |", 0, 0],
+    ];
+    const shapeGot = shapes.map(([, t]) => { const r = sends(t); return [r.length, r.filter((x) => x.named).length]; });
+    all("1.42 review 1 (R1-SURF-01): the reader of 'a sentence that sends an agent to doctor before an approval', on real shapes — the run / boundary / first / then orders read, the next gate read in that sentence only; a doctor that warns and a README cell are none (got " + js(shapeGot) + ")",
+      Object.fromEntries(shapes.map(([label, , n, k], i) => [label, () => js(shapeGot[i]) === js([n, k])])));
+    const docTexts = texts.filter(([rel]) => /\.(md|mdc)$/.test(rel));
+    const sent = docTexts.flatMap(([rel, t]) => sends(t).map((x) => ({ rel, ...x })));
+    const unnamed = sent.filter((x) => !x.named).map((x) => x.rel + " :: " + x.s.slice(0, 120));
+    all("1.42 UX-01: no shipped text holds an approval on readyToAdvance or promises one on nextGate; every shipped sentence that sends an agent to doctor before an approval names its next gate (hits: " + js(hits) + "; " + sent.length + " sentences in " +
+      new Set(sent.map((x) => x.rel)).size + " texts; unnamed: " + js(unnamed) + ")", {
       noHold: hits.length === 0,
-      named: named.length === SIX.length,
+      named: unnamed.length === 0,
+      // the property reads every kind of text that sends one: a rule file of another tool, the skill, a command
+      read: sent.some((x) => Object.values(RULE_FILES).includes(x.rel)) && sent.some((x) => x.rel.startsWith("skills/")) && sent.some((x) => x.rel.startsWith("commands/")) && sent.length >= 5,
     });
   }
 };

@@ -467,7 +467,8 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     runIn(["init", "--lang", "pt", "--project", pt]);
     const human = (w, dir) => runIn([w, "--project", dir || p]);
     const json = (w) => { const r = spawnIn([w, "--json", "--project", p]); let doc = null; try { doc = JSON.parse(r.stdout); } catch { /* reported */ } return { code: r.status, doc }; };
-    const rows = { nxt: "next", nextaction: "next-action", stauts: "status", nq: "na", frobnicate: null };
+    // (review 1, SURF-06 M5: every word was 1 edit off — `stat` is 2 off `status`, within ⌊6 / 3⌋; a bound of 1 would drop it)
+    const rows = { nxt: "next", nextaction: "next-action", stauts: "status", stat: "status", nq: "na", frobnicate: null };
     const got = Object.fromEntries(Object.keys(rows).map((w) => [w, { h: human(w), j: json(w) }]));
     const ptNxt = human("nxt", pt);
     all("1.42 UX-08: an unknown command names the closest command or alias (nxt → next, nextaction → next-action, stauts → status, nq → the alias na), none far off (frobnicate); exit 1, nothing run; --json didYouMean; Portuguese in a pt project (got " +

@@ -133,10 +133,12 @@ exports.run = async ({
   const docsQs = path.join(tmp, "proj-ux16");
   S.initProject(docsQs, ["core"], "en");
   const docsQsFiles = (f) => ["design.md", "quickstart.md", "checklist.md"].filter((x) => fs.existsSync(path.join(f.dir, x))).join(",");
+  // (review 1, R1-SURF-08: a bugfix on a marker track gets design.md — its track sections — and neither file: "a feature's")
   const docsQsGot = [S.createFeature(docsQs, "alpha", ["core"]), S.createFeature(docsQs, { name: "delta", tracks: ["core"], size: "m" }),
-    S.createFeature(docsQs, { name: "beta", tracks: ["core"], size: "xs" }), S.createFeature(docsQs, "gamma", ["core"], undefined, undefined, undefined, "bugfix")].map(docsQsFiles);
-  ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /`spec_create` scaffolds `quickstart\.md` and `checklist\.md` with `design\.md` — fill both\./.test(docsSkill) &&
-    !/always scaffolds `quickstart\.md`/.test(docsSkill) && JSON.stringify(docsQsGot) === JSON.stringify(["design.md,quickstart.md,checklist.md", "design.md,quickstart.md,checklist.md", "", ""]) &&
+    S.createFeature(docsQs, { name: "beta", tracks: ["core"], size: "xs" }), S.createFeature(docsQs, "gamma", ["core"], undefined, undefined, undefined, "bugfix"),
+    S.createFeature(docsQs, "crash two", ["tdd", "saas"], "the tenant app crashes on save", undefined, "en", "bugfix")].map(docsQsFiles);
+  ok(/`spec_doctor` only checks that the section is there/.test(docsSkill) && /`spec_create` scaffolds `quickstart\.md` and `checklist\.md` with a feature's `design\.md` \(never a bugfix's\) — fill both\./.test(docsSkill) &&
+    !/always scaffolds `quickstart\.md`/.test(docsSkill) && JSON.stringify(docsQsGot) === JSON.stringify(["design.md,quickstart.md,checklist.md", "design.md,quickstart.md,checklist.md", "", "", "design.md"]) &&
     !/^\| Tool \|/m.test(docsSkill) && (docsRef("tooling-reference.md").match(/^\| `(?:spec_|ears_|trace_|steering_)/gm) || []).length >= 22,
     "SKILL.md claims are honest (constitution check = section presence; 1.42 UX-16: quickstart / checklist come with design.md — a feature, not a change or a bugfix); the tool table lives in tooling-reference.md (got " + JSON.stringify(docsQsGot) + ")");
   // 1.42 UX-06: `/spec` with no argument — a returning user who names no feature — routes through spec_status {}: one feature in
@@ -741,17 +743,25 @@ exports.run = async ({
     // line is tagged DEBUG-<slug>, removed before the fix's run, and the Checkpoint asks for it gone — by `git grep -n`, which EXITS 1
     // when it finds nothing: the prose says "prints nothing", never "passes" / "succeeds". /spec-bugfix's step 6 says it too. The legacy
     // four-task sentence (tick 1 and 2 with a note) stays word for word: the plan note's investigation exemption rests on it (UX-02).
+    // Review 1 (R1-TASKS-05): the search is `git grep -n --untracked -E 'DEBUG-<slug>([^[:alnum:]_-]|$)'` — a plain git grep skipped a
+    // file created while tracing, and `DEBUG-login` matched another bugfix's `DEBUG-login-crash` (`-w` too: a hyphen is a word
+    // boundary); /spec-bugfix's step 3 (the root cause, also the MCP prompt) tells the agent to tag. Mutations: G1 --untracked dropped
+    // · G2 the boundary dropped (or `-w`) · G3 step 3's tag sentence dropped.
     {
       const s13Ref = dWs(dRef("bugfix.md")), s13Cmd = dWs(dRead("commands", "spec-bugfix.md"));
       const fixStep = (s13Ref.match(/4\. \*\*Fix\*\* \(task 2\)\.[\s\S]*?(?=\*\*Checkpoint:\*\*)/) || [""])[0], checkpoint = (s13Ref.match(/\*\*Checkpoint:\*\*.*?Close with/) || [""])[0];
+      const step3 = (s13Cmd.match(/3\. \*\*Root cause with evidence\*\*.*?4\. \*\*STOP/) || [""])[0];
       const step6 = (s13Cmd.match(/6\. \*\*Fix the cause\*\*.*?7\. \*\*Close\*\*/) || [""])[0];
-      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n` prints nothing — never 'passes'); /spec-bugfix step 6 says so; the four-task sentence is kept (got " +
-        JSON.stringify([fixStep, checkpoint, step6]) + ")", {
+      const grep = (tag) => "`git grep -n --untracked -E 'DEBUG-<" + tag + ">([^[:alnum:]_-]|$)'` prints nothing";
+      all("1.42 S13: the bugfix instrumentation is tagged DEBUG-<slug>, removed before the fix's run and gone at the Checkpoint (`git grep -n --untracked` with a tag boundary prints nothing — never 'passes'); /spec-bugfix steps 3 and 6 say so; the four-task sentence is kept (got " +
+        JSON.stringify([fixStep, checkpoint, step3, step6]) + ")", {
         "phase 2 tags each instrument line": /instrument each boundary once and run it[^.]*\.[^.]*Tag every instrument line `DEBUG-<slug>`/.test(s13Ref),
-        "phase 4 removes it before task 2's run": /Remove the instrumentation before task 2's run: `git grep -n DEBUG-<slug>` prints nothing/.test(fixStep),
-        "the Checkpoint asks for it gone": /`git grep -n DEBUG-<slug>` prints nothing/.test(checkpoint),
-        "/spec-bugfix step 6": /remove the instrumentation first, every line tagged `DEBUG-<feature>`[^\n]*`git grep -n DEBUG-<feature>` prints nothing/.test(step6),
-        "never 'passes' / 'succeeds' for the search": ![s13Ref, s13Cmd].some((t) => /git grep -n DEBUG-<(?:slug|feature)>`? (?:passes|succeeds|returns 0)/.test(t)),
+        "phase 4 removes it before task 2's run (G1, G2)": fixStep.includes("Remove the instrumentation before task 2's run: " + grep("slug")),
+        "the Checkpoint asks for it gone (G1, G2)": checkpoint.includes(grep("slug")),
+        "/spec-bugfix step 3 tags (G3)": /tag every instrument line you add `DEBUG-<feature>`/.test(step3),
+        "/spec-bugfix step 6 (G1, G2)": /remove the instrumentation first, every line tagged `DEBUG-<feature>`/.test(step6) && step6.includes(grep("feature")),
+        "never 'passes' / 'succeeds' for the search": ![s13Ref, s13Cmd].some((t) => /git grep -n[^`]*DEBUG-<(?:slug|feature)>[^`]*`? (?:passes|succeeds|returns 0)/.test(t)),
+        "no bare or -w search left": ![s13Ref, s13Cmd].some((t) => /git grep -n (?:-w )?DEBUG-</.test(t)),
         "the four-task sentence, word for word": s13Ref.includes("(A bugfix scaffolded before this had four tasks — 1 reproduce, 2 root cause, 3 the red test, 4 the fix; it stays valid as it is: tick 1 and 2 with a note, `dev-spec done <f> 1 --evidence \"…\"`, once `bug.md` holds them.)"),
       });
     }

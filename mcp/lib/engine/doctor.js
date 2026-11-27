@@ -235,6 +235,12 @@ function listFeatures(projectDir) {
   });
   const res = { specsDir: root, exists: true, features };
   if (ignored.length) res.ignored = ignored;
+  // 1.42 review 1 (R1-SURF-07): no feature yet and a core steering file missing (the doctor `steering` check's own predicate) —
+  // the start hint's `init` step is still due (a .specs/ another command made holds no steering)
+  if (!features.length) {
+    const missing = CORE_STEERING.filter((f) => !existsRaw(path.join(root, "steering", f)));
+    if (missing.length) res.steeringMissing = missing;
+  }
   return res;
 }
 
@@ -296,7 +302,7 @@ function statusFeature(projectDir, name) {
   const branch = branchView(projectDir, st); // the feature's own git branch (create --branch) — and where HEAD is now
   // 1.42 (UX-02): the plan not approved yet — tasks.planApproved: false, and tasks.planNote while a task is next (never a bugfix's
   // investigation task); nothing on an approved plan (the tasks object as before)
-  const planGate = planGateFields(st, next, dir, slug, featureLang(projectDir, slug));
+  const planGate = planGateFields(st, next, slug, featureLang(projectDir, slug));
   return {
     ok: true,
     feature: slug,
@@ -850,7 +856,9 @@ function approvalGatesView(c) {
   let next = null;
   if (pending.length) {
     const g = approvalChecks(c.projectDir, c.slug, c.dir, pending[0], c.tracks, c.kind, c.lang);
-    next = { phase: pending[0], ready: g.artifact && !g.checks.length, failing: g.checks };
+    // unreadable (stable): its file is there but can't be read — a folder of that name, no permission, a lock (approve says so);
+    // never "nothing to approve yet" (1.42 review 1, R1-SURF-03)
+    next = { phase: pending[0], ready: g.artifact && !g.checks.length, failing: g.checks, ...(g.unreadable ? { unreadable: true } : {}) };
     if (rv.pending[pending[0]]) next.missingRoles = rv.pending[pending[0]].missing;
     if (rv.pending[pending[0]] && rv.pending[pending[0]].signoffsComplete) next.signoffsComplete = true; // re-sign to complete
   }

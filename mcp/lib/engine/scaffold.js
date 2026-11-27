@@ -29,7 +29,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   writeFileAtomic, writeIfAbsent, writeRoadmap, designSystemSeed, DESIGN_SYSTEM_FILE,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub, headingsOnly,
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
 let guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher; // guardian.js — 1.29 (init --guardian)
 let reviewModelsInput, reviewModelsSetting, setReviewModels; // guards.js — 1.36 the review panel (init --review-models)
@@ -53,7 +53,7 @@ function __link(E) { ({ existsRaw, entryAt, splitLeadSection, beforeFirstTaskSec
   writeFileAtomic, writeIfAbsent, writeRoadmap, designSystemSeed, DESIGN_SYSTEM_FILE,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub, headingsOnly,
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher,
   reviewModelsInput, reviewModelsSetting, setReviewModels, fastCheckInput, fastPlan, setFastCheck, fastCheckOf, fastCheckOffer } = E); }
 
@@ -210,7 +210,10 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     lang: lng,
     created,
     skipped,
-    note: i18n.msg(lng).initNote,
+    // the steering note ("the steering files are templates: fill their [placeholders]…") only when this call created steering —
+    // a re-init (/spec-setup guard|checks|roles…) of a project whose steering is filled would read it as "rewrite your rules"
+    // (1.42 review 1, R1-SURF-02); the CLI prints it on the same rule, so MCP and `--json` agree
+    ...(created.length ? { note: i18n.msg(lng).initNote } : {}),
     activeFeatures,
     guard: guardLevel(projectDir), // the CURRENT guard state (true | false | "scope" | "tests"), whether or not this call changed it
     stopCheck: stopCheckEnabled(projectDir), // the CURRENT end-of-turn evidence gate state (on unless meta.stopCheck is false)
@@ -415,8 +418,9 @@ function briefTargets(root, implementsList) {
 }
 function briefSteering(root, tracks, implementsList) {
   const dir = path.join(root, "steering");
-  const defaults = ["constitution.md", "tech.md", "structure.md"]
-    .concat(...optionalTracks().filter((t) => tracks.includes(t)).map((t) => trackSteeringFiles(t)));
+  // once each: two active tracks can share a steering file (+saas and +obs both name observability.md — 1.42 review 1)
+  const defaults = [...new Set(["constitution.md", "tech.md", "structure.md"]
+    .concat(...optionalTracks().filter((t) => tracks.includes(t)).map((t) => trackSteeringFiles(t))))];
   const names = safeReaddir(dir).filter((n) => /\.md$/i.test(n)).sort();
   const ordered = defaults.filter((n) => names.includes(n)).concat(names.filter((n) => !defaults.includes(n)));
   // the task's paths (briefTargets); a folder also matches "dir/**"
@@ -429,13 +433,7 @@ function briefSteering(root, tracks, implementsList) {
     if (text == null) continue; // a directory named *.md, an unreadable file
     const fm = steeringFrontMatter(text);
     const inclusion = fm.frontMatter ? fm.inclusion : defaults.includes(name) ? "always" : null;
-    // 1.42 (UX-10): a file whose body is still a template holds no project rule yet — a built-in stub verbatim (any language: the
-    // corpus's hashes of the CURRENT stubs) or nothing but headings. Its own predicate, never doctor's "any placeholder left"
-    // (steeringPlaceholders): a partly filled tech.md stays binding. Flagged, never dropped: the file stays in `included`. A stub
-    // scaffolded by an older engine (≤ 1.25: another hash) or edited by a word reads as the team's text — stays binding (the parent's
-    // reading). A project template whose text is a built-in stub verbatim is read as one: the predicate is the text.
-    const template = isSteeringStub(name, fm.body) || headingsOnly(fm.body) ? { template: true } : {};
-    if (inclusion === "always") included.push({ name, inclusion, ...template });
+    if (inclusion === "always") included.push({ name, inclusion });
     else if (inclusion === "fileMatch" && fm.patterns.length) {
       const matched = targets.filter((t) => fm.patterns.some((p) => steeringGlobMatch(p, t) || steeringGlobMatch(p, t + "/")));
       if (!matched.length) continue;
@@ -447,7 +445,7 @@ function briefSteering(root, tracks, implementsList) {
       const body = scanTaskLines(fm.body).map((l) => l.vis).join("\n").replace(/(?<![ \t])(?:[ \t]*\n){3,}/g, "\n\n").trim();
       const quote = body && artifactState({ text: body }) === "filled" && body.length <= budget;
       if (quote) budget -= body.length;
-      included.push({ name, inclusion, patterns: fm.patterns, matched, body: quote ? body : null, ...template });
+      included.push({ name, inclusion, patterns: fm.patterns, matched, body: quote ? body : null });
     } else if (inclusion === "manual" || inclusion === "fileMatch") manual.push(name);
   }
   return { dir, included, manual };

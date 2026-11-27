@@ -123,6 +123,8 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, tmp, CLI }) => {
     const p = path.join(tmp, "ux07");
     runIn(["init", "--project", p]);
     const bare = spawnIn([], { cwd: p }), help = runIn(["help"]), dashH = runIn(["--help"]), h = runIn(["-h"]);
+    // review 1 (SURF-06 M1): "no command, no FLAG" — a flag with no command (--lang pt, --project) prints the whole help, as before
+    const flagOnly = [runIn(["--lang", "pt"]), runIn(["--project", p])];
     const lines = bare.stdout.replace(/\r?\n$/, "").split(/\r?\n/);
     // the Commands: block — "  Commands: a · b" and its indented continuation lines, up to the blank line
     const at = lines.findIndex((l) => l.startsWith("  Commands: "));
@@ -143,6 +145,7 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, tmp, CLI }) => {
       stepsAreCommands: () => steps.length >= 6 && steps.every((w) => CMD.COMMAND_INDEX.has(w)),
       hintOrder: () => hint.length === 3 && JSON.stringify(steps.slice(0, 3)) === JSON.stringify(hint),
       helpUnchanged: () => help.out.replace(/\r?\n$/, "") === CMD.helpText() && dashH.out.replace(/\r?\n$/, "") === CMD.helpText() && h.out.replace(/\r?\n$/, "") === CMD.helpText(),
+      flagOnlyWholeHelp: () => flagOnly.every((r) => r.out.replace(/\r?\n$/, "") === CMD.helpText()),
     });
   }
 

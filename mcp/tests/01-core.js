@@ -245,6 +245,25 @@ exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, require, __
   const ptDir = path.join(tmp, "proj-pt");
   const ptInit = payload(await rpc("tools/call", { name: "spec_init", arguments: { tracks: ["saas", "ai"], lang: "pt", projectDir: ptDir } }));
   ok(ptInit.lang === "pt" && typeof ptInit.note === "string", "spec_init lang:pt sets the project language");
+  // 1.42 review 1 (R1-SURF-02): the steering note ("the steering files are templates: fill their [placeholders]…") comes only with a
+  // call that created steering — /spec-setup's re-inits (guard, checks, roles…) of a project whose steering is filled got it on
+  // every call while the CLI printed it only on a create; the engine decides it now, so MCP and the CLI's --json agree
+  {
+    const reDir = path.join(tmp, "proj-pt-reinit"); // its own project: later statements read proj-pt as built above
+    payload(await rpc("tools/call", { name: "spec_init", arguments: { lang: "pt", projectDir: reDir } }));
+    for (const f of ["constitution.md", "product.md", "tech.md", "structure.md"]) fs.writeFileSync(path.join(reDir, ".specs", "steering", f), "# " + f + "\n\n- A rule the team adopted.\n");
+    const ptRe = payload(await rpc("tools/call", { name: "spec_init", arguments: { guard: "on", projectDir: reDir } }));
+    const ptSec = payload(await rpc("tools/call", { name: "spec_init", arguments: { tracks: ["sec"], projectDir: reDir } }));
+    const cliRe = spawnSync(process.execPath, [path.join(root, "cli", "dev-spec.js"), "init", "--json", "--guard", "off", "--project", reDir], { encoding: "utf8", cwd: tmp });
+    let cliJson = {};
+    try { cliJson = JSON.parse(cliRe.stdout); } catch { /* not JSON */ }
+    all("1.42 review 1 (R1-SURF-02): spec_init returns the steering note only when it created steering — a re-init that created nothing has none (MCP and the CLI's --json alike), a new track's stub brings it (got " +
+      JSON.stringify([ptRe.created, ptRe.note, ptSec.created, !!ptSec.note, cliJson.created, cliJson.note]) + ")", {
+      "MCP re-init: nothing created, no note": ptRe.ok !== false && Array.isArray(ptRe.created) && ptRe.created.length === 0 && !("note" in ptRe),
+      "a new track's steering created: the note": Array.isArray(ptSec.created) && ptSec.created.includes("security.md") && ptSec.note === S.msg("pt").initNote,
+      "CLI --json re-init: no note": cliRe.status === 0 && Array.isArray(cliJson.created) && cliJson.created.length === 0 && !("note" in cliJson),
+    });
+  }
   const ptConst = fs.readFileSync(path.join(ptDir, ".specs", "steering", "constitution.md"), "utf8");
   ok(/# Constituição/.test(ptConst) && /Princípios/.test(ptConst), "spec_init lang:pt writes Portuguese steering");
   const ptFeat = payload(await rpc("tools/call", { name: "spec_create", arguments: { name: "Resumo Faturas", tracks: ["saas", "ai"], projectDir: ptDir } }));

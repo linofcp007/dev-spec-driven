@@ -96,7 +96,7 @@ function nextTask(projectDir, name, opts = {}) {
   }
   // 1.42 (UX-02): the plan not approved yet — planApproved: false, and planNote when a task is served (never a bugfix's investigation
   // task); nothing on an approved plan
-  return Object.assign(res, planGateFields(state, next, f.dir, f.slug, lng));
+  return Object.assign(res, planGateFields(state, next, f.slug, lng));
 }
 
 // A batch for parallel subagents: the next task (taskSchedule) and, when it is [P], the following open [P] tasks of
@@ -488,26 +488,28 @@ function rootCauseTaskIndex(blocks) {
 function planApproved(state) {
   return !!state && (state.kind === "spike" || !!(state.approvals || {}).tasks);
 }
-// A bugfix's investigation task (UX-02's exemption): its prose names bug.md and it carries neither _Makes green:_ nor _Verify:_ —
-// it runs nothing and writes only bug.md, which the requirements and design approvals sign off (a bugfix scaffolded with four
-// tasks, before 1.23.1, ticks 1 "reproduce" and 2 "root cause" before the tasks approval: references/bugfix.md says so). Its OWN
-// predicate (two rules, two predicates): never rootCauseTaskIndex (the execution gate's line), isBugStep (it holds the CURRENT
-// short-form steps — a short-form bugfix's task 1 served before the approval would lose its note) nor LEGACY_BUG_STEPS (a name
-// list — a user-written task naming bug.md is one too). It only READS the block (features with identical tasks.md text may share
-// one scan's blocks).
+// A bugfix's investigation task (UX-02's exemption): its prose names bug.md and it carries none of _Implements:_, _Makes green:_
+// and _Verify:_ (a marker still holding its scaffold slot, `[…]`, counts as none) — it runs nothing and writes only bug.md, which
+// the requirements and design approvals sign off (a bugfix scaffolded with four tasks, before 1.23.1, ticks 1 "reproduce" and 2
+// "root cause" before the tasks approval: references/bugfix.md says so). A task naming a file it changes is a code task, never
+// exempt — a fix "described in bug.md" too (review 1, R1-TASKS-02). Its OWN predicate (two rules, two predicates): never
+// rootCauseTaskIndex (the execution gate's line), isBugStep (it holds the CURRENT short-form steps — a short-form bugfix's task 1
+// served before the approval would lose its note) nor LEGACY_BUG_STEPS (a name list — a user-written task naming bug.md is one
+// too). It only READS the block (features with identical tasks.md text may share one scan's blocks).
 function bugInvestigationTask(kind, block) {
   if (kind !== "bugfix" || !block) return false;
   const mk = taskMarkers(block);
-  return !mk["makes green"].length && !mk.verify.length && /(?<![\p{L}\p{N}_])bug\.md(?![\p{L}\p{N}_])/iu.test(taskProse(block).join(" "));
+  return !mk.implements.length && !mk["makes green"].length && !mk.verify.length && /(?<![\p{L}\p{N}_])bug\.md(?![\p{L}\p{N}_])/iu.test(taskProse(block).join(" "));
 }
-// What a result SERVING a task gains while the plan is not approved (spec_next_task, spec_task_brief, spec_status's `tasks`):
-// planApproved: false (stable — also with no task served) and planNote, its own key — never `note` (the evidence channel) — only
-// for an OPEN task that is no bugfix investigation task. {} on an approved plan: the parent's result, byte for byte. Reads
-// nothing: `state` is the caller's.
-function planGateFields(state, block, dir, slug, lng) {
+// What a result SERVING a task gains while the plan is not approved (spec_next_task, spec_task_brief, spec_status's `tasks`, the
+// `next` a tick of an investigation task serves): planApproved: false (stable — also with no task served) and planNote, its own key
+// — never `note` (the evidence channel) — only for an OPEN task that is no bugfix investigation task. {} on an approved plan: the
+// parent's result, byte for byte. Reads nothing: `state` is the caller's readState, the plan's file its kind's (a change's
+// change.md — what isChangeDir would read the same .state.json for).
+function planGateFields(state, block, slug, lng) {
   if (planApproved(state)) return {};
   return block && !block.done && !bugInvestigationTask(state.kind, block)
-    ? { planApproved: false, planNote: i18n.msg(lng).planGate.notApproved(slug, tasksFileName(dir)) } : { planApproved: false };
+    ? { planApproved: false, planNote: i18n.msg(lng).planGate.notApproved(slug, state.kind === "change" ? CHANGE_FILE : "tasks.md") } : { planApproved: false };
 }
 // A task's position in the WHOLE file (a brief's "next task" comes from the active view, whose objects differ).
 function blockPosition(blocks, task) {
@@ -806,12 +808,14 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   }
   // 1.41 (stable): metrics [{name, value, unit, better, tolerance}] · metricsMalformed / metricsLastMalformed · metricsDropped
   if (metricRead) Object.assign(res, metricResultFields(metricRead.read, false));
-  // 1.42 (UX-02): this call TICKED a task while the plan is not approved — beforeApproval (stable) and, unless it is a bugfix's
-  // investigation task (the documented flow), planNote: its own key, never `note`. Never a refusal (a tick records what happened),
-  // never on an alreadyDone re-check (no tick) nor a failed run (returned above).
+  // 1.42 (UX-02): this call TICKED a task while the plan is not approved — beforeApproval (stable) and planNote, its own key, never
+  // `note`: the ticked task's — or, for a bugfix's investigation task (the documented flow), the one spec_next_task gives the `next`
+  // this result serves (planGateFields — none when that one is an investigation task too; review 1, R1-TASKS-04). Never a refusal
+  // (a tick records what happened), never on an alreadyDone re-check (no tick) nor a failed run (returned above).
   if (ticks && !planApproved(state)) {
     res.beforeApproval = true;
-    if (!bugInvestigationTask(state.kind, task)) res.planNote = i18n.msg(lng).planGate.tickedEarly(n, f.slug);
+    const planNote = bugInvestigationTask(state.kind, task) ? planGateFields(state, next, f.slug, lng).planNote : i18n.msg(lng).planGate.tickedEarly(n, f.slug);
+    if (planNote) res.planNote = planNote;
   }
   return withObserved(res); // the observed stamp on every result
 }
@@ -1758,7 +1762,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     const { sch, held } = portSchedule(dir, st0.kind, tracks, activeBlocks, st0.evidence, evidenceRule(projectDir));
     block = sch.next;
     // (1.42 UX-02: no task briefed — planApproved: false while the plan is not approved, never a planNote)
-    const pg = planGateFields(st0, null, dir, slug, lng);
+    const pg = planGateFields(st0, null, slug, lng);
     if (!block && activeBlocks.some((b) => !b.done)) { // open tasks, none can start — say why, never "all done"
       if (held && held.ticked) return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, note: i18n.msg(lng).port.naHeld(held.number, held.anchor, slug, held.runnable), ...pg };
       return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, ...(sch.blocked.length ? { blocked: sch.blocked } : { skipped: sch.skipped }),
@@ -1890,10 +1894,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
 
   // Steering: the default files (as before) + front-matter scoped ones (always / fileMatch on _Implements:_ paths).
   const steer = briefSteering(root, tracks, mk.implements);
-  // 1.42 (UX-10): a file still a template (briefSteering's `template`) is listed apart — "still templates, nothing binding yet" —, never
-  // under "Read before coding"; it stays in the result's steering.included (template: true)
-  const steering = steer.included.filter((s) => !s.template).map((s) => rel(path.join(steer.dir, s.name)));
-  const steeringTemplates = steer.included.filter((s) => s.template).map((s) => rel(path.join(steer.dir, s.name)));
+  const steering = steer.included.map((s) => rel(path.join(steer.dir, s.name)));
 
   const paths = {
     dir: exDir,
@@ -1939,7 +1940,6 @@ function taskBrief(projectDir, name, number, opts = {}) {
     unresolved,
     design: { path: rel(path.join(dir, "design.md")), toc: sections.map((s) => s.title), included, omitted },
     steering,
-    steeringTemplates,
     steeringScoped: steer.included.filter((s) => s.body).map((s) => ({ path: rel(path.join(steer.dir, s.name)), patterns: s.patterns, body: s.body })),
     steeringManual: steer.manual.map((n) => rel(path.join(steer.dir, n))),
     verify: mk.verify,
@@ -1988,7 +1988,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // which steering the brief carries and why (inclusion mode; the patterns/paths that matched a fileMatch file)
     steering: {
       included: steer.included.map((s) => Object.assign({ file: rel(path.join(steer.dir, s.name)), inclusion: s.inclusion },
-        s.inclusion === "fileMatch" ? { patterns: s.patterns, matched: s.matched, quoted: !!s.body } : {}, s.template ? { template: true } : {})),
+        s.inclusion === "fileMatch" ? { patterns: s.patterns, matched: s.matched, quoted: !!s.body } : {})),
       manual: steer.manual.map((n) => rel(path.join(steer.dir, n))),
     },
     paths,
@@ -2031,7 +2031,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // 1.42 (UX-02): the plan not approved yet — planApproved: false + planNote for an open task (never a bugfix's investigation task);
   // kept with write: true (the controller decides the dispatch on it). The brief's markdown is unchanged: the controller reads the
   // note, not the subagent.
-  Object.assign(res, planGateFields(state, block, dir, slug, lng));
+  Object.assign(res, planGateFields(state, block, slug, lng));
   if (includeBrief) res.brief = md;
   else if (write) {
     // write:true is the controller's call (references/subagent-execution.md): the brief lives in the file, so the result
