@@ -1671,6 +1671,8 @@ const msg = {
       uiProjectHead: (n, files) => `  Verificações de interface nos ficheiros de vista do projeto (${n} ${files === 1 ? "no ficheiro lido" : `nos ${files} lidos`}) — o relatório de cada feature lista as suas; o spec_finish avisa das de uma feature +ui:`,
       uiProjectRule: (id, n, files, at, tag) => `    ${id}  ${n} em ${files} ${files === 1 ? "ficheiro" : "ficheiros"}${tag ? " " + tag : ""} — a primeira: ${at}`,
       uiProjectNone: (files) => `  Verificações de interface: nada ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`} do projeto`,
+      // 1.42: as remoções que um estilo de foco lido noutro sítio dispensou (`excused`) — uma contagem e um lembrete, nunca um achado
+      uiProjectExcused: (id, n, files, at) => `  ${id}: ${n} ${n === 1 ? "remoção dispensada" : "remoções dispensadas"} em ${files} ${files === 1 ? "ficheiro" : "ficheiros"} — um estilo de foco nos ficheiros lidos dispensa todas; confirma que os elementos que perdem o contorno recebem um (a primeira: ${at})`,
       // (os factos do projeto por código — at: o primeiro local, ficheiro:linha)
       uiFact: {
         "no-reduced-motion": (n, at) => `  ▲ o código declara movimento — uma animação, uma transição de transform ou um scroll suave (${n} ${n === 1 ? "local" : "locais"}, o primeiro: ${at}) — e nenhum dos ficheiros de vista e scripts do projeto lidos menciona movimento reduzido: oferecer uma variante reduzida — @media (prefers-reduced-motion: reduce), o motion-reduce: / motion-safe: do Tailwind (WCAG 2.3.3, AAA)`,

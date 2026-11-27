@@ -1946,7 +1946,13 @@ registry table's pointers name it), its rule ids read by 17-docs from `UI_RULES`
   `focus-visible:ring-2`) excuses a removal in the inventory, never in that feature report or its finish (review 1 of 1.38,
   UP-6 — kept: a class-list search project-wide reads every view file; ui-code-scan.md says it; cut again in 1.40: the
   feature reports would lose 91 warnings, ≈ 55–60 % of them certain defects — the inventory's excuse hides about as many, a
-  1.41 count). `limits`, its own — never the report's `limits`,
+  1.41 count). **The excused ones are counted** (1.42 B141-01): `excused` {`outline-removed`: {count, files, file, line?}} —
+  the deleted rule entry as it was, so an off rule, an inline silence and a finding past a file's cap follow the rule's own
+  semantics; never in total / byRule / rules, no key when nothing was excused (a cut pass with no focus style: its limit's
+  count, not `excused`). The CLI prints one line for it (`cliOutput.uiProjectExcused`, with or without a finding above) — a
+  count and a "check that…" nudge, never a finding: on the legit reset-plus-rings pattern (`*:focus { outline: none }` beside
+  `focus-visible:ring-2`) it shows every time, which is the point. The feature report gets no such key (its own focus search,
+  its own rule — 15-quality-ui-checks.js pins its key set). `limits`, its own — never the report's `limits`,
   `truncated` or `inSync`: `ui-files` {read, count?, file?, line?: the removals it left unjudged}, `view-size`, `line-length`,
   `tag-length` {read, count, file: the smallest path}, (1.39) `motion-scripts` (the fact's script search, below) (the pass
   builds them; featureReport builds the feature's). The CLI
@@ -4023,6 +4029,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `[smallish]` —, `xlarge`, any `[\w-]+:` hint, the `:`, the sheet's `@apply` on the old const, D1's declarations guard)
   and 1.38's 17 replayed on the new const (each step, `\d*`, the end guard, both brackets, the `length:` hint, a digit /
   `.`, each math function, `!?`, the `:`, the class-line test, any arbitrary value).
+- **1.42 —** B141-01 (the 1.41 count above): the inventory's excuse deleted the outline-removed entry and counted it
+  nowhere; it is kept as `excused` (report only — verdict, total, byRule and limits byte-identical) with one CLI line. Not
+  built: a ui-code-scan.md edit (its rule already says it; 94 bytes left under its cap) — tooling-reference.md names the key,
+  pinned by 17-docs.js's key walk, whose fixture now holds an excused removal.
 
 ### UI state matrix
 - **1.38.0** (item 4 of the owner's 1.38 list — chain S) — designed (ITEM_4) with a reader that took any State-headed table

@@ -1750,16 +1750,21 @@ exports.run = async ({
       put("src/styles/tokens.css", ":root {\n  --brand: #1e40af;\n}\n");
       put("src/checkout/Pay.tsx", "export function Pay() {\n  return <div className=\"p-[13px] text-[#1d4ed9]\" style={{ color: \"#1d4ed8\" }}><img src=\"a.png\" />Pay</div>;\n}\n");
       put("src/checkout/pay.css", ".pay {\n  font-family: Inter, sans-serif;\n  transition: transform 150ms ease;\n  color: #1d4ed8;\n}\n.all {\n  transition: all 200ms;\n}\n");
+      // (1.42 B141-01: an outline removal a focus style excuses — the inventory's `excused`)
+      put("src/checkout/reset.css", "*:focus {\n  outline: none;\n}\n");
+      put("src/checkout/Ring.tsx", "export const Ring = () => <button className=\"focus-visible:ring-2\">ok</button>;\n");
       const f = S.createFeature(p, { name: "Checkout", tracks: ["ui"], summary: "x" });
       fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the checkout\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/checkout/_\n  - _Verify: npm test_\n");
       const pr = S.designSystemReport(p, { uiPass: true }), fr = S.designSystemReport(p, { name: f.slug });
       const keys = new Set(), add = (o) => { for (const k of Object.keys(o || {})) if (k !== "ok") keys.add(k); };
       const first = (list) => (list || [])[0];
       [pr, fr, pr.breakpoints, pr.unitsTable, pr.uiChecks, first(pr.drift), first(Object.values(pr.uiChecks.rules)), first(pr.uiChecks.facts), first(pr.uiChecks.off),
-        first(pr.uiChecks.offIgnored), fr.counts, first(fr.groups), fr.units, first(fr.units && fr.units.findings), fr.uiChecks, first(fr.uiChecks.off)].forEach(add);
+        first(pr.uiChecks.offIgnored), first(Object.values(pr.uiChecks.excused || {})), fr.counts, first(fr.groups), fr.units, first(fr.units && fr.units.findings), fr.uiChecks,
+        first(fr.uiChecks.off)].forEach(add);
       for (const r of fr.raw || []) { add(r); if (r.near) add(r.near); }
       const sane = pr.drift.length === 1 && pr.gone.length === 1 && pr.unitsTable && pr.unitsTable.unread.length === 1 && pr.uiChecks.facts.length === 1
         && pr.uiChecks.off.length === 1 && pr.uiChecks.offIgnored.length === 1 && Object.keys(pr.uiChecks.rules).length >= 1
+        && !!(pr.uiChecks.excused && pr.uiChecks.excused["outline-removed"])
         && ["font", "motion"].every((k) => fr.raw.some((r) => r.kind === k && r.token)) && fr.raw.some((r) => r.near) && fr.groups.length >= 1
         && fr.units && fr.units.findings.length >= 1 && fr.uiChecks.off.length === 1;
       return { keys: [...keys], missed: [...keys].filter((k) => !toolRow.includes("`" + k + "`")), sane };

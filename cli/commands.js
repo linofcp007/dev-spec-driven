@@ -2043,6 +2043,8 @@ const COMMANDS = [
               Object.entries(u.rules).forEach(([id, x]) => log(T.uiProjectRule(id, u.byRule[id], x.files, x.line ? x.file + ":" + x.line : x.file, x.level === "report" ? T.uiReportTag : "")));
             // (never "nothing" beside the removals a cut pass left unjudged: its limit line names them)
             } else if (u.read && !u.limits.some((l) => l.code === "ui-files" && l.count)) log(T.uiProjectNone(u.read));
+            // 1.42: the removals a focus style excused — counted, with or without a finding above (a nudge, never a finding)
+            for (const [id, x] of Object.entries(u.excused || {})) log(T.uiProjectExcused(id, x.count, x.files, x.line ? x.file + ":" + x.line : x.file));
             if (u.silenced) log(T.uiSilenced(u.silenced));
             offLines(u);
             u.facts.forEach((x) => log(T.uiFact[x.code](x.count, x.file + ":" + x.line)));
