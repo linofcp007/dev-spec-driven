@@ -296,14 +296,16 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       "1. **Given** a user, **When** they create an album named Trip, **Then** the album is listed", "", "## Requirements", "", "### Functional Requirements", "",
       "- **FR-001**: System MUST let users create albums", "- **FR-001a**: System MUST tag albums with colors", "- **FR-1.1**: System MUST cap uploads at 50 MB",
       "- **FR-1.2**: System MUST resize uploads", "- **FR-003**: System MUST export albums as zip", "- **FR-003**: System MUST export albums as tar",
-      "- FR-006 — MUST keep originals", "- **FR-007**. Albums MUST sort by date", "- **FR-008** System MUST purge trash weekly", "- Note: FR-009 is TBD", ""].join("\n"));
+      "- FR-006 — MUST keep originals", "- **FR-007**. Albums MUST sort by date", "- **FR-008** System MUST purge trash weekly", "- Note: FR-009 is TBD",
+      "- **FR-010**: System MUST caption each photo with an LLM prompt", ""].join("\n"));
     put(path.join(p3, "specs", "003-ids", "tasks.md"), "# Tasks: Ids\n\n- [ ] T001 Export\n  - _Requirements: US-2.AC-1_\n- [ ] T002 Sort\n  - _Requirements: FR-007_\n");
     const r3 = S.importSpec(p3, "spec-kit", "specs/003-ids", {});
     const req3 = r3.ok ? rd(r3.dir, "requirements.md") : "";
     const W3 = S.msg("en").importSpec;
     all("1.42 SK-03: FR-001a / FR-1.1 / FR-1.2 are no definitions (prose, named as the parent named them: FR-001, FR-1), a second FR-003 line, a definition with no separator and a mention stay prose and are named; FR-003 (first), FR-006 (em dash), FR-007 ('**FR-007**.') convert; a stale US-2.AC-1 is reported, FR-007 resolves (got " +
       js([r3.warnings, r3.mapping]) + ")", [
-      () => r3.ok, () => r3.warnings.includes(W3.wFrCriteria("US-2", "FR-003 → US-2.AC-1, FR-006 → US-2.AC-2, FR-007 → US-2.AC-3")),
+      () => r3.ok, () => r3.warnings.includes(W3.wFrCriteria("US-2", "FR-003 → US-2.AC-1, FR-006 → US-2.AC-2, FR-007 → US-2.AC-3, FR-010 → US-2.AC-4")),
+      () => r3.tracks.includes("ai"), // the classifier still reads the converted FRs (the parent read them as prose): an LLM one is +ai
       () => r3.warnings.includes(W3.wUncoveredFr("FR-001, FR-1, FR-003, FR-008, FR-009")), () => !/\(FR-1\)|\(FR-001\)|SHALL ensure that 1\*\*:/.test(req3),
       () => /\n- \*\*FR-003\*\*: System MUST export albums as tar\n/.test(req3) && !/\n- \*\*FR-003\*\*: System MUST export albums as zip\n/.test(req3),
       () => /\n- \*\*FR-001a\*\*: System MUST tag albums with colors\n- \*\*FR-1\.1\*\*: System MUST cap uploads at 50 MB\n/.test(req3),
@@ -368,7 +370,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       put(path.join(k, "spec.md"), "# Feature Specification: " + tag + "\n\n**Input**: User description: \"x\"\n\n## User Scenarios & Testing\n\n### User Story 1 - T (Priority: P1)\n\n" +
         "**Acceptance Scenarios**:\n\n1. **Given** a user, **When** they open it, **Then** it is shown\n\n## Requirements\n\n### Functional Requirements\n\n" +
         "- **FR-001**:" + b(2 * N) + "System MUST keep" + b(N) + "order" + (big ? LS + "y" : "") + "\n- **FR-002**" + b(N) + ": System MUST log" + b(N) + "shares\n" +
-        "- **FR-" + (big ? "1".repeat(N) : "3") + "a**: Users MUST pick\n- FR-004" + b(N) + "System MUST z\n");
+        "- **FR-" + (big ? "1".repeat(N) : "3") + "a**: Users MUST pick\n- FR-004" + b(N) + "System MUST z\n- **FR-011**: System MUST" + b(N) + "keep\n  x" + (big ? LS + "y" : "") + "\n");
       put(path.join(k, "plan.md"), "# Implementation Plan: " + tag + "\n\n## Technical Context\n\n**Testing**:" + b(N) + "NEEDS CLARIFICATION" + b(N) + "- pytest\n" +
         "- **Storage**" + b(N) + ": needs clarification" + b(N) + "x\n**Note**: NEEDS CLARIFICATION" + b(N) + "markers are resolved\n");
       put(path.join(k, "tasks.md"), "# Tasks: " + tag + "\n\n## Phase 1\n\n- [ ]" + b(2 * N) + "T001 set up" + (big ? LS + "y" : "") + "\n" +
