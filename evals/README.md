@@ -63,15 +63,16 @@ dispatches the seat on the tier the controller uses (Model selection: the review
 | `review-seat-caller-left-en` | `getNote()` throws instead of returning null; `src/notes-report.js`, outside the diff, still tests for null | a changed contract → its call sites | dispatched · `Needs fixes` · a non-✅ line citing `src/notes-report.js:<n>` · *(judge)* |
 | `review-seat-weakened-test-en` | T-02's quoting assertion in `test/csv.test.js` (not in `_Implements:_`) becomes `assert.ok(csv.length > 0)` | a loosened existing test is Critical | dispatched · `Needs fixes` · a non-✅ line citing `test/csv.test.js` · *(judge)* Critical |
 | `review-seat-clean-en` | every criterion met and tested | the false-positive rate | dispatched · `Approved` · no `confidence NN` (no Critical / Important) · *(judge)* |
-| `verify-seat-pre-existing-en` | the finding (money as a float in `rushFee`) is on a line unchanged since BASE — a context line of the package | the verifier's "Introduced by this diff?" | dispatched · refuted as the controller reads it (`**Confidence:**` under 50, or `REFUTED`) · `pre-existing` · *(judge)* |
+| `verify-seat-pre-existing-en` | the finding (money as a float in `rushFee`) is on a line unchanged since BASE — a context line of the package | the verifier's "Introduced by this diff?" | dispatched · refuted as the controller reads it (`**Confidence:**` under 50, or `REFUTED`) · `pre-existing` on the verdict or "Introduced by this diff:" line · *(judge)* |
 | `verify-seat-ac-missing-en` | ❌ US-1.AC-2: no length check at HEAD; the report says the client limits the text | an ❌ is CONFIRMED or REFUTED, never UNCONFIRMED | dispatched · `**Verdict:** CONFIRMED` · no `UNCONFIRMED` · *(judge)* |
 
 **A measurement, never a gate.** Read the case scores against the reference run below, not the exit code: one run in
 three is noise at `runs: 3`. Run them after changing an agent prompt (`agents/spec-reviewer.md`, `spec-verifier.md`) or
 the review loop's prose. `node mcp/test.js` checks them offline: each case's shape, its seeded premise on the overlay files,
-that no regex grader matches any of the case's inputs (the prompt, the report, the finding, the overlay and spec files —
-and, on the one fixture the suite builds, `dispatch.md`, the brief and the package — so an echo or a relay of an input never
-passes), and that the built package is byte for byte what §4's commands write.
+that no regex grader matches any of the case's inputs (the prompt, the report, the finding, the overlay and spec files, the
+seat's own agent prompt — `agents/spec-reviewer.md` or `spec-verifier.md`, its output template included — and, on the one
+fixture the suite builds, `dispatch.md`, the brief and the package — so an echo or a relay of an input never passes), and
+that the built package is byte for byte what §4's commands write.
 
 **No shell** (native Windows): the seats read the package and the files, and can't run `git log -L` / `git blame` (the
 reviewer's §5 history check) or a focused test — the representative arm for those is Linux / WSL2 with

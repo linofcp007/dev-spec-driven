@@ -113,7 +113,7 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 `existing` runs first when the dispatch carries them (`spec_scan {duplicates: true}` — `file:from-to` repeating code
 elsewhere): each is a candidate — a copy this work added is a finding, one the spec asks for or the report lists under
 "Duplicated on purpose" is not (one line why). Task mode: the detector's file — a run counts when its place is a package
-`--stat` file (by the path's tail: repository vs project paths); only `counts.existing` 0 is "none", and a `duplicates`
+`--stat` file (by the path's tail: repository vs project paths); only `counts.existing` 0, not `truncated` and with no `partial`, is "none", and a `duplicates`
 list shorter than `total` is the top 20, which can miss this task's run. Then read the report's **Reuse** block, then list every new exported function, class,
 component, module, client or config key the diff adds and search for an existing equivalent — similarly named or
 shaped (Grep the name's stem and two synonyms, the library it wraps, the shared folders `structure.md` names). A new
