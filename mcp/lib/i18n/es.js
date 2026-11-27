@@ -1844,6 +1844,7 @@ const msg = {
       hidden: (p, part) => `'${p}' está en una carpeta oculta o es un fichero oculto (${part}) — spec_import no lee ninguno salvo los de los importadores: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
       notSource: (p) => `'${p}' no es una fuente de spec que spec_import lea — indica un fichero .md / .markdown / .mdc / .txt / .json / .yaml / .yml, o la carpeta de la fuente.`,
       nothing: (tool, p) => `No se encontraron ficheros de spec ${tool} en '${p}'.`,
+      nothingSpecKit: (p) => `No se encontraron ficheros de spec spec-kit en '${p}' — una función de Spec Kit es una carpeta con spec.md o tasks.md (normalmente specs/<nnn-name>/): importa esa carpeta.`,
       exists: (slug) => `La función '${slug}' ya existe — la importación nunca la sobrescribe. Indica otro nombre.`,
       tooLarge: (rel, max) => `${rel} tiene más de ${max} caracteres — demasiado grande para importarlo entero (la parte que pasa del límite, incluidos los pasos de un plan, se perdería). Divídelo o acórtalo y vuelve a importarlo; no se creó nada.`,
       noUsableTitle: (title) => `El título del documento '${title}' no tiene caracteres utilizables (a-z, 0-9) para un nombre de carpeta — indica el nombre de la función (name; CLI: --name "<función>").`,

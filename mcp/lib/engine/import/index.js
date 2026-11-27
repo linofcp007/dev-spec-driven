@@ -428,7 +428,8 @@ function importRun(projectDir, tool, source, opts) {
   const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
   const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot, inline, list, kind }); // inline: no file to name
   if (tooLarge.size) return { ok: false, tooLarge: true, error: W.tooLarge([...tooLarge].join(", "), IMPORT_MAX_BYTES) }; // nothing created
-  if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
+  // (spec-kit: says what a feature folder is — the whole specs/ folder found none)
+  if (!model) return { ok: false, error: t === "spec-kit" ? W.nothingSpecKit(rel) : W.nothing(IMPORT_TOOLS[t], rel) };
   if (model.error) return { ok: false, error: model.error }; // a folder of several plans — name the file
   // a single-document source shows its file; inline text has none — `source` null, `inline` true.
   const srcRel = inline ? null : model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel;

@@ -348,6 +348,22 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     ]);
   }
 
+  // 1.42 SK-10: importing the whole specs/ folder said only "No spec-kit spec files found in 'specs'" — the refusal now says what a
+  // Spec Kit feature is (one folder holding spec.md or tasks.md, usually specs/<nnn-name>/); true too when the folder named holds
+  // only a plan.md. Every other tool's message is unchanged.
+  {
+    const p = fresh("speckit-root-hint");
+    put(path.join(p, "specs", "003-chat", "spec.md"), "# Feature Specification: Chat\n");
+    put(path.join(p, "specs", "004-plan-only", "plan.md"), "# Implementation Plan: X\n");
+    const r = S.importSpec(p, "spec-kit", "specs", {});
+    const r2 = S.importSpec(p, "spec-kit", "specs/004-plan-only", {});
+    const r3 = S.importSpec(p, "kiro", "specs", {});
+    const pt = S.importSpec(p, "spec-kit", "specs", { lang: "pt" });
+    ok(r.ok === false && r.error === S.msg("en").importSpec.nothingSpecKit("specs") && /specs\/<nnn-name>\//.test(r.error) && r2.ok === false && /004-plan-only' — a Spec Kit feature is one folder/.test(r2.error) &&
+      r3.ok === false && r3.error === S.msg("en").importSpec.nothing("Kiro", "specs") && pt.ok === false && /uma feature do Spec Kit é uma pasta/.test(pt.error) && !fs.existsSync(path.join(p, ".specs", "specs")),
+      "1.42 SK-10: a spec-kit import of the whole specs/ folder (or a folder of a plan.md alone) is refused saying a feature is one folder holding spec.md or tasks.md (usually specs/<nnn-name>/); other tools keep their message; localized (got " + js([r.error, r2.error, r3.error, pt.error]) + ")");
+  }
+
   // 1.42 CRI-2: the two scans that replaced a backtracking regex read what it read — every line built from a short head and a
   // tail of up to 5 units over the characters each pattern turns on (blanks, a line separator, a CR, its marks), exhaustively.
   {

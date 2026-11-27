@@ -1844,6 +1844,7 @@ const msg = {
       hidden: (p, part) => `'${p}' está numa pasta oculta ou é um ficheiro oculto (${part}) — o spec_import não lê nenhum além dos dos importadores: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
       notSource: (p) => `'${p}' não é uma fonte de spec que o spec_import leia — indica um ficheiro .md / .markdown / .mdc / .txt / .json / .yaml / .yml, ou a pasta da fonte.`,
       nothing: (tool, p) => `Não foram encontrados ficheiros de spec ${tool} em '${p}'.`,
+      nothingSpecKit: (p) => `Não foram encontrados ficheiros de spec spec-kit em '${p}' — uma feature do Spec Kit é uma pasta com spec.md ou tasks.md (normalmente specs/<nnn-name>/): importa essa pasta.`,
       exists: (slug) => `A feature '${slug}' já existe — a importação nunca a substitui. Indica outro nome.`,
       tooLarge: (rel, max) => `${rel} tem mais de ${max} caracteres — demasiado grande para importar inteiro (a parte além do limite, incluindo os passos de um plano, perder-se-ia). Divide-o ou encurta-o e importa de novo; nada foi criado.`,
       noUsableTitle: (title) => `O título do documento '${title}' não tem caracteres utilizáveis (a-z, 0-9) para nome de pasta — indica o nome da feature (name; CLI: --name "<feature>").`,

@@ -1941,6 +1941,8 @@ const msg = {
       hidden: (p, part) => `'${p}' is in a hidden folder or is a hidden file (${part}) — spec_import reads none but the importers' own: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
       notSource: (p) => `'${p}' is no spec source spec_import reads — name a .md / .markdown / .mdc / .txt / .json / .yaml / .yml file, or the source's folder.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
+      // 1.42: spec-kit's — a whole specs/ folder was imported (its features are its sub-folders)
+      nothingSpecKit: (p) => `No spec-kit spec files found in '${p}' — a Spec Kit feature is one folder holding spec.md or tasks.md (usually specs/<nnn-name>/): import that folder.`,
       exists: (slug) => `Feature '${slug}' already exists — import never overwrites it. Pass another name.`,
       tooLarge: (rel, max) => `${rel} is over ${max} characters — too large to import whole (the part past the limit, a plan's steps included, would be lost). Split or shorten it, then import again; nothing was created.`,
       noUsableTitle: (title) => `The document's title '${title}' has no usable characters (a-z, 0-9) for a folder name — pass the feature's name (name; CLI: --name "<feature>").`,
