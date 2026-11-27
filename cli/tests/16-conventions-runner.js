@@ -103,6 +103,49 @@ exports.run = async ({ ok }) => { ok(1, "w on time"); process.emitWarning("a war
     });
   }
 
+  // 1.42 (perf-4): DEV_SPEC_TEST_TIMES_ROOT — the parent's own knob — keys the times file in place of the checkout's root: the local
+  // pre-push hook sets it to the pushing checkout, so its fresh temp worktree orders its run by that checkout's times. Two checkouts
+  // run with it write ONE file (the named folder's) and none of their own; a blank value is no value; no chain sees it, in any case
+  // spelling — started by the runner or by hand (a fake suite run from a chain, as this file's, keeps its per-checkout rows).
+  {
+    fs.rmSync(own, { recursive: true, force: true });
+    fs.mkdirSync(own, { recursive: true });
+    const twin = path.join(tmp, "runner-fake-twin"); // (the 1.30 block's copy of the suite)
+    const third = path.join(tmp, "runner-fake-third");
+    fs.mkdirSync(third, { recursive: true });
+    w("tests/17-times-env.js", `// what a chain sees of the parent's times knob (any spelling)
+exports.run = async ({ ok }) => {
+  console.log("TIMESENV " + JSON.stringify(Object.keys(process.env).filter((k) => /^dev_spec_test_times_root$/i.test(k))));
+  ok(1, "times env seen");
+};
+`);
+    fs.copyFileSync(path.join(root, "tests", "17-times-env.js"), path.join(twin, "tests", "17-times-env.js"));
+    const read = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
+    const suite = (at, extra, args) => spawnSync(process.execPath, [path.join(at, "suite.js"), ...(args || ["--only", "01,17"])], { encoding: "utf8", env: { ...env, ...extra }, timeout: 60000 });
+    const seenBy = (r) => { const l = String(r.stdout || "").split(/\r?\n/).find((x) => x.startsWith("TIMESENV ")); try { return JSON.parse(l.slice(9)); } catch { return null; } };
+    const KNOB = "DEV_SPEC_TEST_TIMES_ROOT"; // (the name itself is the contract: the hook exports it)
+    const shared = { [KNOB]: third };
+    const a = suite(root, shared), b = suite(twin, shared);
+    const named = read(path.join(own, timesName(third))), ownFiles = [timesName(root), timesName(twin)].filter((n) => fs.existsSync(path.join(own, n)));
+    fs.rmSync(own, { recursive: true, force: true });
+    fs.mkdirSync(own, { recursive: true });
+    const blank = suite(root, { [KNOB]: "  " });
+    const blankOwn = read(path.join(own, timesName(root)));
+    const lower = suite(root, { [KNOB.toLowerCase()]: third });
+    const byHand = suite(root, { ...shared, DEV_SPEC_TEST_CHAIN: "17-times-env" }, []);
+    all("1.42 (perf-4): DEV_SPEC_TEST_TIMES_ROOT keys the times file in place of the checkout's root — two checkouts run with it write the named folder's one file and none of their own; a blank value is none; no chain sees it in any spelling, by hand neither (got " +
+      js({ codes: [a.status, b.status, blank.status, lower.status, byHand.status], named, ownFiles, blankOwn, seen: [a, b, lower, byHand].map(seenBy) }) + ")", {
+      ran: () => [a, b, blank, lower].every((r) => r.status === 0 && lastLine(r.stdout || "") === "2 passed, 0 failed") && byHand.status === 0,
+      oneFile: () => !!named && js(Object.keys(named).sort()) === js(["01-clean", "17-times-env"]) && timesName(third) !== timesName(root),
+      noneOwn: () => ownFiles.length === 0,
+      blankIgnored: () => !!blankOwn && "01-clean" in blankOwn,
+      chainsBlind: () => [a, b, lower, byHand].every((r) => js(seenBy(r)) === "[]"),
+      knob: () => R.TIMES_ROOT_ENV === KNOB && !R.RE_HOST_ENV.test(KNOB),
+      // (the chain's env drops it too — the first of two drops, as for every host variable: the child's isolate() is the second)
+      chainEnv: () => js(R.hermeticEnv({ [KNOB]: "x", [KNOB.toLowerCase()]: "y", FAKE_KEEP: "z" })) === js({ FAKE_KEEP: "z" }),
+    });
+  }
+
   // 1.26 — the assertion helpers every file receives beside ok: all(label, conds) and eq(actual, expected, label), one assertion
   // each (the totals stay comparable), built on the file's own ok (a late one is a late assertion). A FAIL says WHAT failed: the
   // names of the false conditions (an object's keys, a thunk's source; a throw or a promise is false, with why) — every condition

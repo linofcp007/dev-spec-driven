@@ -84,7 +84,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   the files it needs form a chain; every chain runs in its own child process (its own temp dir and server), at most one
   per CPU, the longest first (by the previous run's times, kept in `<os tmpdir>/dev-spec-test-times-<mcp|cli>-<id>.json` —
   `<id>` 10 hex of the checkout's root path (1.30): each worktree has its own, and each write keeps only the suite's current
-  files, so a renamed or deleted file's entry goes with the next run, `--only`'s too; a file never timed starts first). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
+  files, so a renamed or deleted file's entry goes with the next run, `--only`'s too; a file never timed starts first; 1.42: a
+  non-blank `DEV_SPEC_TEST_TIMES_ROOT` keys it by that folder instead — the parent's knob alone: no chain sees it, in any spelling
+  — and the local pre-push hook sets it to the pushing checkout, so its fresh temp worktree starts the longest chains first, where
+  every chain weighed "never timed"; never export it in a shell: every checkout would share one file, the 1.30 problem). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
   slowest: …`, then the total: the LAST line is always `N passed, M failed` (scripts/test-docker.js reads it). A process
   that dies or never prints its total fails the suite, a file that throws is one FAIL (its chain goes on), a server that
   stops answering (15 s) fails the run — never a drain to exit 0. On a loaded machine (1.26): a chain whose process the OS

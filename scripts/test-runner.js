@@ -130,10 +130,19 @@ const RE_GIT_ENV = /^GIT_(?:ALTERNATE_OBJECT_DIRECTORIES|CONFIG|CONFIG_PARAMETER
 const KEEP_NODE_ENV = "DEV_SPEC_TEST_KEEP_NODE_ENV";
 const keepNodeEnv = () => /^(?:1|true|yes|on)$/i.test(String(process.env[KEEP_NODE_ENV] || "").trim());
 const hostEnvKey = (k) => RE_HOST_ENV.test(k) || RE_GIT_ENV.test(k) || (RE_NODE_ENV.test(k) && !keepNodeEnv());
-// env without the host's steering variables (a new object; `env` untouched).
+// 1.42 (perf-4): the PARENT's own knobs — read by runParent alone, never by a chain: DEV_SPEC_TEST_TIMES_ROOT, the folder that keys the
+// times file in place of the checkout's root (the local pre-push hook sets it to the pushing checkout, so its fresh temp worktree
+// orders its run by that checkout's times: every chain weighed Infinity there, file order). A chain never sees it — runChain's env
+// and isolate() (a chain started by hand) drop it, in any case spelling —: the runner's own test runs a fake suite from inside a chain,
+// and its per-checkout rows would read the hook's folder. Its own predicate: not one of the host's steering variables (hostEnvKey).
+const TIMES_ROOT_ENV = "DEV_SPEC_TEST_TIMES_ROOT";
+const RE_PARENT_ONLY_ENV = /^DEV_SPEC_TEST_TIMES_ROOT$/i;
+const parentOnlyKey = (k) => RE_PARENT_ONLY_ENV.test(k);
+const chainDropsKey = (k) => hostEnvKey(k) || parentOnlyKey(k);
+// env without the host's steering variables nor the parent's own knobs (a new object; `env` untouched).
 function hermeticEnv(env) {
   const out = {};
-  for (const [k, v] of Object.entries(env)) if (!hostEnvKey(k)) out[k] = v;
+  for (const [k, v] of Object.entries(env)) if (!chainDropsKey(k)) out[k] = v;
   return out;
 }
 const samePath = (a, b) => {
@@ -147,7 +156,7 @@ const samePath = (a, b) => {
 // hand: DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js) is just as isolated — its folder made on a neutral temp base and named its
 // TMP / TEMP / TMPDIR, as the runner does (neutralTmpBase). → the working folder.
 function isolate(prefix) {
-  for (const k of Object.keys(process.env)) if (hostEnvKey(k)) delete process.env[k];
+  for (const k of Object.keys(process.env)) if (chainDropsKey(k)) delete process.env[k];
   const given = process.env[CWD_ENV];
   // Claude Code's config folder (its plugin cache): one that does not exist, inside the chain's own folder
   if (given && samePath(given, process.cwd())) { process.env.CLAUDE_CONFIG_DIR = path.join(process.cwd(), "no-claude-config"); return process.cwd(); }
@@ -402,7 +411,9 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
   // At most one process per CPU at a time (each MCP chain also runs its own server), the longest chains first; results
   // keep the chain order.
   const all = new Array(chains.length);
-  const TIMES = timesFile(opts.key, opts.root);
+  // (1.42, perf-4: a non-blank DEV_SPEC_TEST_TIMES_ROOT keys the file in place of this checkout's root — the parent alone reads it)
+  const timesRoot = String(process.env[TIMES_ROOT_ENV] || "").trim();
+  const TIMES = timesFile(opts.key, timesRoot || opts.root);
   const times = readTimes(TIMES);
   const weight = (chain) => chain.reduce((s, f) => s + (typeof times[f.stem] === "number" ? times[f.stem] : Infinity), 0);
   const order = chains.map((c, i) => [weight(c), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).map(([, i]) => i);
@@ -630,4 +641,4 @@ function main(opts) {
 
 module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, isolate, hermeticEnv,
   assertHelpers, firstDiff, remeasure, neutralTmpBase, tmpBaseProblem, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_NODE_ENV, RE_GIT_ENV, KEEP_NODE_ENV, RE_TEST_FILE, RE_TOTAL, CHAIN_TIMEOUT_MS,
-  timesFile };
+  timesFile, TIMES_ROOT_ENV };
