@@ -17,7 +17,9 @@ exports.run = async ({ all, eq, rpc, payload, skip, S, tmp, root, __dirname }) =
   const KEYS = ["agent", "id", "model", "turns", "tools", "tokens", "truncated"];
 
   { // recordAgentRun: one line of counts — the plugin prefix dropped, only the documented keys (a transcript's text, the prompt, its path
-    // never stored), the folder ignoring itself; any field of the wrong shape refuses the whole run and writes nothing
+    // never stored), the folder ignoring itself; any count, id, agent or flag of the wrong shape refuses the whole run and writes nothing;
+    // a model that is no model id (Claude Code's own `<synthetic>` — the last model of 62 of 3,000 real transcripts —, a sentence, a
+    // number) is left out and the run kept
     const p = project("proj-ag-record");
     const r = S.recordAgentRun(p, run({ prompt: "Review task 3 of .specs/billing/ — the diff is…", transcript: "C:/Users/x/.claude/projects/a/agent-a1.jsonl", agentType: "spec-reviewer", feature: "billing" }));
     const written = lines(p).map((l) => JSON.parse(l));
@@ -27,9 +29,12 @@ exports.run = async ({ all, eq, rpc, payload, skip, S, tmp, root, __dirname }) =
       turns: [-1, 1.5, "31", NaN, Infinity, 2 ** 53],
       tools: [undefined, -2],
       tokens: [undefined, null, { in: 1, out: 2, cacheRead: 3 }, { in: 1, out: -2, cacheRead: 3, cacheWrite: 4 }, { in: 1, out: 2, cacheRead: 3.5, cacheWrite: 4 }],
-      model: ["claude opus", "m".repeat(101), 5, "claude-x\nPrompt: review"],
       truncated: [undefined, "no", 0],
     };
+    const noIds = ["<synthetic>", "claude opus", "m".repeat(101), 5, "claude-x\nPrompt: review"].map((model, i) => {
+      const res = S.recordAgentRun(p, run({ id: "agent-nomodel" + i, model }));
+      return res.ok === true && !("model" in JSON.parse(lines(p).pop()));
+    });
     const refused = Object.entries(bad).flatMap(([k, vals]) => vals.map((v) => {
       const x = run();
       if (v === undefined) delete x[k]; else x[k] = v;
@@ -41,15 +46,17 @@ exports.run = async ({ all, eq, rpc, payload, skip, S, tmp, root, __dirname }) =
     const noModel = run({ id: "agent-nomodel" });
     delete noModel.model;
     const nm = S.recordAgentRun(p, noModel);
-    all("1.42 (S9): recordAgentRun writes one line of counts — the plugin prefix dropped, only {agent, id, model, turns, tools, tokens, truncated} (no prompt, path or text), .execution/ ignoring itself; a field of the wrong shape refuses the run (invalid-run, the field named) and writes nothing (got " +
-      js({ r, written, notRefused: notRefused.slice(0, 6), okModels, nm }) + ")", {
+    all("1.42 (S9): recordAgentRun writes one line of counts — the plugin prefix dropped, only {agent, id, model, turns, tools, tokens, truncated} (no prompt, path or text), .execution/ ignoring itself; a field of the wrong shape refuses the run (invalid-run, the field named) and writes nothing; a model that is no model id is left out (got " +
+      js({ r, written, notRefused: notRefused.slice(0, 6), noIds, okModels, nm }) + ")", {
       "recorded, its keys exactly the documented ones": () => r.ok === true && r.recorded === ".specs/.execution/agents.jsonl" && written.length >= 1 && js(Object.keys(written[0])) === js(KEYS) &&
         js(written[0]) === js({ agent: "spec-reviewer", id: "agent-a1b2c3d4e5f6a7b8c", model: "claude-opus-4-5", turns: 31, tools: 24,
           tokens: { in: 1520, out: 18340, cacheRead: 812400, cacheWrite: 64210 }, truncated: false }),
       "the folder ignores itself": () => fs.readFileSync(path.join(p, ".specs", ".execution", ".gitignore"), "utf8") === "*\n",
-      "every wrong shape refused, naming its field": () => refused.length === 32 && notRefused.length === 0,
-      "nothing written for them; model ids of every real shape kept, an absent model too": () => lines(p).length === 1 + okModels.length + 1 &&
-        okModels.every(Boolean) && nm.ok === true && !("model" in JSON.parse(lines(p).pop())),
+      "every wrong shape refused, naming its field": () => refused.length === 28 && notRefused.length === 0,
+      "a model that is no model id: the run kept, the model left out": () => noIds.length === 5 && noIds.every(Boolean),
+      "nothing written for the refused; model ids of every real shape kept, an absent model too": () => lines(p).length === 1 + noIds.length + okModels.length + 1 &&
+        okModels.every(Boolean) && nm.ok === true && !("model" in JSON.parse(lines(p).pop())) &&
+        ["claude-sonnet-4-5[1m]", "anthropic/claude-haiku-4-5", "claude-opus-4-5-20251101"].every((m) => lines(p).some((l) => JSON.parse(l).model === m)),
     });
   }
 

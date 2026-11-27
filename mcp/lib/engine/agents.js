@@ -12,8 +12,10 @@
  *     Past AGENTS_MAX_BYTES the log keeps its newest lines, up to half of that.
  *   - The record's shape is checked when written AND when read (agentRecord): an agent among AGENT_ROLES (a `dev-spec-driven:`
  *     prefix dropped — a copied agent of the same name is the same role, as the stop gate reads it), an id `^[\w-]{1,64}$` (the
- *     transcript's basename), counts finite integers ≥ 0, a model id ≤ 100 characters, `truncated` a boolean (the reader stopped
- *     at its bound: the counts are a lower bound). Anything else is never stored.
+ *     transcript's basename), counts finite integers ≥ 0, `truncated` a boolean (the reader stopped at its bound: the counts are a
+ *     lower bound) — anything else refuses the run. A model is kept only when it is a model id (≤ 100 characters of RE_AGENT_MODEL),
+ *     else left out, the run kept: Claude Code writes `<synthetic>` as the model of its own messages (an API error, an interruption),
+ *     the LAST model of 62 of 3,000 real subagent transcripts — a field never worth losing the dispatch over. Nothing else is stored.
  *   - The reading (agentCosts): one record per id — the LATER one in the log wins (a dispatch the stop gate sent back finishes
  *     again; its transcript is a superset of the earlier one) — rolled up per role: spec_metrics' project `agents`.
  *
@@ -50,12 +52,12 @@ function agentRecord(run) {
   const invalid = [];
   if (!agent) invalid.push("agent");
   if (typeof r.id !== "string" || !RE_AGENT_ID.test(r.id)) invalid.push("id");
-  if (r.model != null && !(typeof r.model === "string" && RE_AGENT_MODEL.test(r.model))) invalid.push("model");
   for (const k of ["turns", "tools"]) if (!count(r[k])) invalid.push(k);
   if (!t || !TOKEN_KEYS.every((k) => count(t[k]))) invalid.push("tokens");
   if (typeof r.truncated !== "boolean") invalid.push("truncated");
   if (invalid.length) return { invalid };
-  return { record: Object.assign({ agent, id: r.id }, r.model != null ? { model: r.model } : {},
+  const model = typeof r.model === "string" && RE_AGENT_MODEL.test(r.model) ? r.model : null; // (a model id, else none — above)
+  return { record: Object.assign({ agent, id: r.id }, model ? { model } : {},
     { turns: r.turns, tools: r.tools, tokens: Object.fromEntries(TOKEN_KEYS.map((k) => [k, t[k]])), truncated: r.truncated }) };
 }
 

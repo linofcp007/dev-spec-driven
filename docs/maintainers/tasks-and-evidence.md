@@ -100,8 +100,9 @@ Phase 6, opt-in.
   one line of COUNTS per finished dispatch — {agent, id, model?, turns, tools, tokens, truncated} — written by `recordAgentRun`
   through evidence.js's appender (the write gate) and shape-checked on write AND read (an agent among the six, a
   `dev-spec-driven:` prefix dropped — a copied agent of the same name is the same role, as the stop gate reads it —, an id
-  `^[\w-]{1,64}$`, counts safe integers ≥ 0, a model id ≤ 100 characters, `truncated` a boolean); past 256 KB the newest
-  well-shaped lines, up to half. `agentCosts` (spec_metrics' project `agents`, beside `friction`; never a feature's) keeps
+  `^[\w-]{1,64}$`, counts safe integers ≥ 0, `truncated` a boolean — else the run is refused; a model kept only when it is a
+  model id, else left out with the run kept: Claude Code's own `<synthetic>` is the LAST model of 62 of 3,000 real subagent
+  transcripts); past 256 KB the newest well-shaped lines, up to half. `agentCosts` (spec_metrics' project `agents`, beside `friction`; never a feature's) keeps
   ONE record per id, the LATER in the log (a dispatch the stop gate sent back finishes again, its transcript a superset), and
   rolls them up per role (+ `truncated`: the dispatches read only in part — their counts a lower bound, said on the CLI line;
   `models`). **No time and no feature:** a transcript's first-to-last span is wait time for a resumed agent (9.5 % of 2,194
