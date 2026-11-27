@@ -1,5 +1,5 @@
 "use strict";
-// Evidence — whose record a task reads after a renumber (evidence-moved); what a run's OUTPUT proves: the could-not-run table (one fixture per runner), a vacuous pass (no test ran), node --test's file-level failures; _Expect:_ values; an _Expect: fail_ re-run into a crash; an incomplete command (`npm test &&`); the METRIC line's contract with dev-guardian (metric-lines.v1.json: its sha256 pin and its shape).
+// Evidence — whose record a task reads after a renumber (evidence-moved); what a run's OUTPUT proves: the could-not-run table (one fixture per runner), a vacuous pass (no test ran), node --test's file-level failures; _Expect:_ values; an _Expect: fail_ re-run into a crash; an incomplete command (`npm test &&`); the METRIC contracts with dev-guardian (metric-lines.v1.json, the line; metric-bytes.v1.json, its bytes: their sha256 pins and their shapes).
 
 const fs = require("fs");
 const path = require("path");
@@ -395,6 +395,67 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
         O.some((c) => c && c.expect && c.expect.repeats > 0) && O.some((c) => c && c.expect && Array.isArray(c.expect.dropped) && c.expect.dropped.length > 0) &&
         (V.verdicts || []).every((v) => used("verdict").has(v)) && (V.terms || []).every((t) => used("loosened").has(t) && used("why").has(t)),
       noCiPrWord: !/\b(?:CI|PRs?)\b/.test(text) && !/pull requests?/i.test(text),
+    });
+
+    // 1.42 (dev-guardian's DG-17): the second contract, mcp/tests/fixtures/metric-bytes.v1.json — how the two readers decode a run's
+    // BYTES (stdout and stderr): each case's two readings, the stream reader's here (done --run / finish --run) and dev-guardian's file
+    // reader's (metrics --head over a 2>&1 capture), and why they differ when they do. The same bytes at dev-guardian's
+    // mcp/test/fixtures/metrics/, both suites pinning this sha256; a change is metric-bytes/2, landed in both before either tags.
+    // This block holds the file (its bytes and shape — the readings use metric-lines/1's vocabulary above); the stream mode is
+    // checked against it in 09-evidence-metrics.js (the reader) and cli/tests/09-evidence-run-module.js (the capture). Coverage is
+    // by byte properties of the rows, never their ids, and with no threshold of dev-guardian's guess (a retune of check --file's
+    // decoder needs no edit here); `differs` is null exactly when the two readings are equal, KEY ORDER included — as
+    // dev-guardian's pin compares them (one rule, written alike in both)
+    const BX = fs.readFileSync(path.join(__dirname, "tests", "fixtures", "metric-bytes.v1.json"));
+    const bsha = crypto.createHash("sha256").update(BX).digest("hex");
+    ok(bsha === "8584f38826a7c47b77594cf891141eb67f7204c0daaa778a1bcc65c56f1c9964",
+      "1.42: mcp/tests/fixtures/metric-bytes.v1.json is the metric-bytes/1 contract, byte for byte the file dev-guardian pins (sha256 " + bsha + ")");
+    const btext = BX.toString("utf8");
+    let bdoc = null;
+    try { bdoc = JSON.parse(btext); } catch { /* said by `parsed` below */ }
+    const bx = bdoc && typeof bdoc === "object" ? bdoc : {};
+    const C = Array.isArray(bx.cases) ? bx.cases : [];
+    const hex = (v) => typeof v === "string" && /^(?:[0-9a-f]{2})*$/.test(v);
+    const hx = (h) => Buffer.from(h, "hex");
+    const readingOf = (r) => keysOf(r) === "dropped,malformed,metrics,repeats" && r.metrics && typeof r.metrics === "object" && !Array.isArray(r.metrics) &&
+      Object.values(r.metrics).every(readingOk) && count(r.repeats) && count(r.malformed) && Array.isArray(r.dropped) && r.dropped.every(among(V.bounds));
+    const decided = (c) => (JSON.stringify(c.file) !== JSON.stringify(c.stream)) === (c.differs !== null) && (c.differs === null || (oneLine(c.differs) && c.differs.trim() !== ""));
+    const byteCaseOk = (c) => caseKeys(c, ["id", "stdout", "stderr", "printed", "fileReadBytes", "file", "stream", "differs"]) && typeof c.id === "string" &&
+      hex(c.stdout) && hex(c.stderr) && (c.stdout + c.stderr).length > 0 && ["stdout", "stderr"].includes(c.printed) &&
+      (c.fileReadBytes === null || (Number.isInteger(c.fileReadBytes) && c.fileReadBytes > 0 && c.fileReadBytes < (c.stdout.length + c.stderr.length) / 2)) &&
+      readingOf(c.file) && readingOf(c.stream) && decided(c);
+    // the byte shapes the decisions name, each held by a row — read off its bytes
+    const starts = (b, ...m) => b.length >= m.length && m.every((x, i) => b[i] === x);
+    const BOM8 = [0xef, 0xbb, 0xbf];
+    const le16Head = (b) => b.length >= 8 && [0, 2, 4, 6].every((i) => b[i] !== 0 && b[i + 1] === 0); // UTF-16LE-shaped from its first byte
+    const nulPair = (b) => { for (let i = 0; i + 1 < b.length; i += 2) if (b[i] === 0 && b[i + 1] === 0) return true; return false; };
+    const lastLine = (b) => { const s = b.subarray(0, b.length - (b[b.length - 1] === 0x0a ? 1 : 0)); return s.subarray(s.lastIndexOf(0x0a) + 1); };
+    const holds = (p) => C.some((c) => { try { return p(c); } catch { return false; } });
+    const SHAPES = {
+      bomAtStart: (c) => starts(hx(c.stdout), ...BOM8) && !starts(hx(c.stdout).subarray(3), ...BOM8) && c.stderr === "",
+      bomEachStream: (c) => starts(hx(c.stdout), ...BOM8) && starts(hx(c.stderr), ...BOM8),
+      bomAfterLf: (c) => hx(c.stdout).indexOf(Buffer.from([0x0a, ...BOM8])) !== -1,
+      twoBoms: (c) => starts(hx(c.stdout), ...BOM8, ...BOM8),
+      utf16Bom: (c) => starts(hx(c.stdout), 0xff, 0xfe) && c.fileReadBytes === null,
+      utf16NoBomNulLastLine: (c) => le16Head(hx(c.stdout)) && lastLine(hx(c.stdout)).some((x) => x === 0),
+      utf16HeadUtf8LastLine: (c) => le16Head(hx(c.stdout)) && lastLine(hx(c.stdout)).every((x) => x !== 0),
+      nulPair: (c) => nulPair(hx(c.stdout)),
+      tailWindow: (c) => c.fileReadBytes !== null && starts(hx(c.stdout), 0xff, 0xfe),
+      nameOnBoth: (c) => Object.keys(c.file.metrics).concat(Object.keys(c.stream.metrics)).some((n) => [c.stdout, c.stderr].every((h) => hx(h).includes("METRIC " + n + "="))),
+      agree: (c) => c.differs === null,
+      differ: (c) => c.differs !== null,
+    };
+    const bbad = badOf(C, byteCaseOk);
+    const bids = C.map((c) => c && c.id);
+    all("1.42: metric-bytes.v1.json is well-formed — ASCII and LF, every case with exactly its fields (hex bytes, the stream printed first, the read window, two readings in metric-lines/1's shape), `differs` null exactly when the readings are equal (key order counts), the byte shapes the decisions name, no CI / PR word (bad: " +
+      js({ bad: bbad, shapes: Object.keys(SHAPES).filter((k) => !holds(SHAPES[k])) }) + ")", {
+      parsed: bdoc !== null,
+      asciiLf: [...BX].every((b) => b < 0x80 && b !== 13) && btext.endsWith("}\n"),
+      format: bx.format === "metric-bytes/1" && bx.lineFormat === "metric-lines/1" && keysOf(bx.modes) === "file,stream" && typeof bx.about === "string",
+      cases: C.length >= 10 && bbad.length === 0,
+      uniqueIds: bids.length === new Set(bids).size,
+      coverage: Object.values(SHAPES).every(holds),
+      noCiPrWord: !/\b(?:CI|PRs?)\b/.test(btext) && !/pull requests?/i.test(btext),
     });
   }
 };

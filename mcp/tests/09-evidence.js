@@ -260,6 +260,31 @@ exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, list, hoo
       () => /checks must be an object/.test(bad4.result.content[0].text), () => bad5.ok === false, () => /at most 20 project checks/.test(bad5.error),
       () => fs.readFileSync(rp5, "utf8") === before5, () => JSON.parse(before5).meta.lang !== "pt",
     ]);
+    // 1.42 R1(d): every name of Object.prototype that a check name's shape admits — derived at run time from the engine's
+    // CHECK_NAME_RE (constructor, toString, valueOf, hasOwnProperty… — never a list typed here) — and its upper-cased spelling: each
+    // refused by spec_init {checks} in-process and over MCP, the error naming it, roadmap.json unchanged after each (a check of that
+    // name would be the object's own method once read back)
+    {
+      const evSrc = fs.readFileSync(path.join(__dirname, "lib", "engine", "evidence.js"), "utf8");
+      const shapeSrc = (evSrc.match(/^const CHECK_NAME_RE = \/(.+)\/;$/m) || [])[1];
+      const SHAPE = shapeSrc ? new RegExp(shapeSrc) : null;
+      const protoNames = SHAPE ? Object.getOwnPropertyNames(Object.prototype).filter((k) => SHAPE.test(k)) : [];
+      const names = protoNames.flatMap((k) => [k, k.toUpperCase()]);
+      const stored = fs.readFileSync(rp5, "utf8");
+      const got = [];
+      for (const k of names) {
+        const inProc = S.initProject(d5, ["core"], undefined, { checks: { [k]: "npm test" } });
+        const unchanged1 = fs.readFileSync(rp5, "utf8") === stored;
+        const viaMcp = await b5Call("spec_init", { projectDir: d5, checks: { [k]: "npm test" } });
+        got.push({ k, inProc: inProc.ok === false && String(inProc.error).includes("'" + k + "'"), mcp: !!viaMcp && viaMcp.ok === false && String(viaMcp.error).includes("'" + k + "'"),
+          unchanged: unchanged1 && fs.readFileSync(rp5, "utf8") === stored });
+      }
+      all("1.42 R1(d): spec_init {checks} refuses every Object.prototype name a check name's shape admits — and its upper-cased spelling — in-process and over MCP, naming it, roadmap.json unchanged (got " +
+        JSON.stringify({ protoNames, bad: got.filter((g) => !(g.inProc && g.mcp && g.unchanged)) }) + ")", {
+        derived: () => protoNames.length >= 5 && protoNames.includes("constructor") && protoNames.includes("toString") && names.length === 2 * protoNames.length,
+        refused: () => got.length === names.length && got.every((g) => g.inProc && g.mcp && g.unchanged),
+      });
+    }
     const d6 = b5Dir("badstored");
     S.initProject(d6, ["core"], "en");
     const rp6 = path.join(d6, ".specs", "roadmap.json");

@@ -5,6 +5,51 @@
 const fs = require("fs");
 const path = require("path");
 
+// The calls that drive EVERY operation of the table (1.41.1's property, below; 1.42: a shared fixture — the read-gate root file's
+// sweep and 08-tasks-checkbox-case.js's twin drive the same calls, never a copy): each operation with the generic argument pack
+// and the arguments it requires beyond it (OWN: a mode, an action), each feature name for an operation that takes one — a read
+// pass (w false) and a write pass. Parameterized by the project's names: `names` (the features to drive), `other` (a feature a
+// dependency names), `movers` (the names whose write pass moves the folder: archive / rename / restore / remove), `report` (a
+// feature whose task-1 report a stop check names). → passFor(w): [{ op, nm, o }] in the order they run (`feature` last: it moves
+// folders). (Moved out of the property verbatim but for those four names: the same 400 calls over the same 42 operations.)
+exports.operationCalls = (OPERATIONS, { names, other, movers = [], report }) => {
+  const EV = { command: "node -v", exitCode: 0, summary: "ok" };
+  const GENERIC = (w, nm) => ({ name: nm, number: 1, write: w, includeBody: true, includeBrief: true, code: true, matrix: true, batch: true, waves: true,
+    max: 3, evidence: w ? EV : undefined, reason: "r", phase: "requirements", by: "t", force: w, lang: "en", explain: true,
+    text: "WHEN a user saves an item THE SYSTEM SHALL store it", description: "users save items", track: "sec", dependsOn: [other],
+    tasks: [{ text: "More", requirements: ["US-1.AC-1"] }], heading: undefined, gitLog: "", since: "all", apply: w, reopen: w, cap: 100,
+    minLines: 8, tests: true, title: "t", decision: "d", message: "All tasks are done and verified.", agent: "" });
+  // the arguments an operation REQUIRES beyond the generic pack (a mode, an action); every operation must have been driven
+  const OWN = {
+    init: () => [{ tracks: ["tdd"], lang: "en" }], classify: () => [{}], create: (w) => (w ? [{ name: "fresh-one", tracks: ["tdd"] }, {}] : [{}]),
+    steering: () => [{ file: "custom-one.md" }], backlog: () => [{ action: "list" }], milestone: () => [{ action: "list" }],
+    feature: (w, nm) => (w && movers.includes(nm) ? [{ action: "archive" }, { action: "rename", newName: nm + "-two" }, { action: "restore" }, { action: "remove" }, { action: "remove", confirm: true }]
+      : [{ action: "remove" }, { action: "flow", flow: "design-first" }, { action: "protect", file: "tests/ext/a.test.js", accept: true, reason: "r", dryRun: true },
+        { action: "unprotect", file: "tests/ext/a.test.js", reason: "r", dryRun: true }]),
+    import: (w) => [{ tool: "plan", text: "# Plan: OK\n\n## Steps\n1. do `src/a.js`\n", dryRun: !w }],
+    templates: () => [{ action: "list" }], tracks: () => [{ action: "list" }], signals: () => [{ op: "list" }],
+    export: () => [{ format: "md" }, { format: "html" }, { format: "adr" }, { format: "csv" }, { format: "gherkin" }], changelog: () => [{ since: "all" }],
+    "stop-check": () => [{}, { agent: "dev-spec-driven:spec-implementer", message: "**Status:** DONE\nReport: .specs/" + report + "/.execution/task-1-report.md" }],
+    approve: (w) => [{ phase: "requirements" }, ...(w ? [{ through: "tasks", reason: "r" }] : [])],
+  };
+  const order = OPERATIONS.filter((o) => o.id !== "feature").concat(OPERATIONS.filter((o) => o.id === "feature")); // the folder moves last
+  return (w) => {
+    const calls = [];
+    for (const op of order) {
+      const keys = Object.keys(op.args || {});
+      for (const nm of keys.includes("name") ? names : [undefined]) {
+        for (const extra of (OWN[op.id] ? OWN[op.id](w, nm) : [{}])) {
+          const o = {};
+          const g = GENERIC(w, nm);
+          for (const k of keys) if (g[k] !== undefined) o[k] = g[k];
+          calls.push({ op, nm, o: Object.assign(o, extra) });
+        }
+      }
+    }
+    return calls;
+  };
+};
+
 exports.run = async ({ ok, skip, all, eq, S, tmp, hookIn, fsCalls, require, __dirname }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
@@ -186,26 +231,7 @@ exports.run = async ({ ok, skip, all, eq, S, tmp, hookIn, fsCalls, require, __di
     // (b) THE property: every operation of the table, driven with each feature name (the plain ones, the linked folder, the planted
     // archive) in a read pass and a write pass, under the tracer — no fs call through a link below .specs/, no OUT text in any result.
     {
-      const NAMES = ["plaina", "plainb", "plainc", "lnk", "planted"];
-      const EV = { command: "node -v", exitCode: 0, summary: "ok" };
-      const GENERIC = (w, nm) => ({ name: nm, number: 1, write: w, includeBody: true, includeBrief: true, code: true, matrix: true, batch: true, waves: true,
-        max: 3, evidence: w ? EV : undefined, reason: "r", phase: "requirements", by: "t", force: w, lang: "en", explain: true,
-        text: "WHEN a user saves an item THE SYSTEM SHALL store it", description: "users save items", track: "sec", dependsOn: ["plainb"],
-        tasks: [{ text: "More", requirements: ["US-1.AC-1"] }], heading: undefined, gitLog: "", since: "all", apply: w, reopen: w, cap: 100,
-        minLines: 8, tests: true, title: "t", decision: "d", message: "All tasks are done and verified.", agent: "" });
-      // the arguments an operation REQUIRES beyond the generic pack (a mode, an action); every operation must have been driven
-      const OWN = {
-        init: () => [{ tracks: ["tdd"], lang: "en" }], classify: () => [{}], create: (w) => (w ? [{ name: "fresh-one", tracks: ["tdd"] }, {}] : [{}]),
-        steering: () => [{ file: "custom-one.md" }], backlog: () => [{ action: "list" }], milestone: () => [{ action: "list" }],
-        feature: (w, nm) => (w && (nm === "lnk" || nm === "planted") ? [{ action: "archive" }, { action: "rename", newName: nm + "-two" }, { action: "restore" }, { action: "remove" }, { action: "remove", confirm: true }]
-          : [{ action: "remove" }, { action: "flow", flow: "design-first" }, { action: "protect", file: "tests/ext/a.test.js", accept: true, reason: "r", dryRun: true },
-            { action: "unprotect", file: "tests/ext/a.test.js", reason: "r", dryRun: true }]),
-        import: (w) => [{ tool: "plan", text: "# Plan: OK\n\n## Steps\n1. do `src/a.js`\n", dryRun: !w }],
-        templates: () => [{ action: "list" }], tracks: () => [{ action: "list" }], signals: () => [{ op: "list" }],
-        export: () => [{ format: "md" }, { format: "html" }, { format: "adr" }, { format: "csv" }, { format: "gherkin" }], changelog: () => [{ since: "all" }],
-        "stop-check": () => [{}, { agent: "dev-spec-driven:spec-implementer", message: "**Status:** DONE\nReport: .specs/plaina/.execution/task-1-report.md" }],
-        approve: (w) => [{ phase: "requirements" }, ...(w ? [{ through: "tasks", reason: "r" }] : [])],
-      };
+      const passFor = exports.operationCalls(OPERATIONS, { names: ["plaina", "plainb", "plainc", "lnk", "planted"], other: "plainb", movers: ["lnk", "planted"], report: "plaina" });
       const P = maze("prop");
       const pc = S.createFeature(P.p, { name: "plainc", tracks: ["tdd"] });
       fs.writeFileSync(path.join(pc.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Do it for US-1.AC-1\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/c.js_\n  - _Verify: node -v_\n");
@@ -217,25 +243,13 @@ exports.run = async ({ ok, skip, all, eq, S, tmp, hookIn, fsCalls, require, __di
       const beforeP = snap(P.out);
       const driven = new Set();
       const bad = [], leaks = [];
-      const order = OPERATIONS.filter((o) => o.id !== "feature").concat(OPERATIONS.filter((o) => o.id === "feature")); // the folder moves last
       for (const w of [false, true]) {
-        for (const op of order) {
-          const keys = Object.keys(op.args || {});
-          const names = keys.includes("name") ? NAMES : [undefined];
-          for (const nm of names) {
-            for (const extra of (OWN[op.id] ? OWN[op.id](w, nm) : [{}])) {
-              const o = {};
-              const g = GENERIC(w, nm);
-              for (const k of keys) if (g[k] !== undefined) o[k] = g[k];
-              Object.assign(o, extra);
-              let r;
-              const t = traced(P.p, P.out, () => { try { return op.call(S, P.p, o); } catch (e) { return { threw: e.message }; } });
-              r = t.value;
-              driven.add(op.id);
-              for (const b of t.bad) bad.push(op.id + "(" + (nm || "") + (w ? ",w" : "") + "): " + b);
-              if (has(r)) leaks.push(op.id + "(" + (nm || "") + (w ? ",w" : "") + ")");
-            }
-          }
+        for (const { op, nm, o } of passFor(w)) {
+          const t = traced(P.p, P.out, () => { try { return op.call(S, P.p, o); } catch (e) { return { threw: e.message }; } });
+          const r = t.value;
+          driven.add(op.id);
+          for (const b of t.bad) bad.push(op.id + "(" + (nm || "") + (w ? ",w" : "") + "): " + b);
+          if (has(r)) leaks.push(op.id + "(" + (nm || "") + (w ? ",w" : "") + ")");
         }
       }
       // the hooks' decisions on the maze (the engine-free pre-filters exempted by name: EXEMPT)

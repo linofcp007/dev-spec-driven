@@ -921,10 +921,14 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
     `baseUrl` longer than DS_PATH_CHARS (1,024: no file system holds such a path, and each import built keys from it
     again — review 1, 240 KB of targets took 500 pages 114 s) — makes the folder's
     config tell NOTHING: it keeps 1.35.3's reading (an abstention where TypeScript's reading cannot be reproduced).
-    Memoised per governing folder (`tables` — a cost guard, timed), a config's own table once a FILE (`owned` /
+    Memoised per governing folder (`tables` — a cost guard, counted since 1.42), a config's own table once a FILE (`owned` /
     `tableAt` — review 1: sixty folders over one chain of thirty configs rebuilt every table, 52 s), the keys once a
     governing folder and a spec (`said`), DS_ALIAS_CHARS of them in a scan (review 2: every distinct spec kept up to ten
-    1 KB keys — 9.5 MB of pages ran a scan out of memory; past it the configs tell nothing more); an `extends` longer than
+    1 KB keys — 9.5 MB of pages ran a scan out of memory; past it the configs tell nothing more). 1.42: the scan counts the
+    work past each of the three memos — the report's `aliasStats` `{ owned, tables, keys }` (a config's own table built, a
+    governing folder's, a folder's keys for a spec looked up; one object for the scan, the watch's reader and settle's adding
+    to it), NOT enumerable as `parsed` below — in-process only —, so 15-quality-design-system-aliases.js COUNTS its three cost
+    checks (their clocks saw two of the three memos dropped not at all); an `extends` longer than
     DS_PATH_CHARS is UNKNOWN too, and every target is measured, not the first ten alone (review 2). The keys are ADDED before the package lookup and the guess, both unchanged. A
     default import looks up EACH key of the place with its own base (`lookup`, `keyBase`): a config's target, a map's,
     need not share the guess's last segment — and a target's base under the guess's folder is a place TypeScript never

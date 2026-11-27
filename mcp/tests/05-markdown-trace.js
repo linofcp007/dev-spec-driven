@@ -1350,9 +1350,8 @@ exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, approveBe
     for (let i = 0; i < 1510; i++) put(cap, "tests/data/d" + String(i).padStart(4, "0") + ".js", "module.exports = " + i + ";\n");
     put(cap, "tests/zz/greet.test.js", "test(\"T-02 greets\", () => {});\n");
     put(cap, "tests/zz/big.test.js", "test(\"T-03 early\", () => {});\n" + "/* " + "x".repeat(5 * 1024 * 1024) + " */\ntest(\"T-04 late\", () => {});\n");
-    const t1 = Date.now();
-    const scCap = S.scanTestCode(cap);
-    const capMs = Date.now() - t1;
+    // (1.42 R8: the bound under remeasure — the scan once more on a miss; 7.7 of its 20 s in a default-jobs pre-push run)
+    const { scCap, capMs } = remeasure(() => { const t1 = Date.now(); const sc1 = S.scanTestCode(cap); return { scCap: sc1, capMs: Date.now() - t1 }; }, (x) => x.capMs < 20000);
     ok(scFx.scanned === 1 && !scFx.truncated && js((scFx.tids.get("T-1") || {}).files) === '["tests/unit/greet.test.js"]' &&
       scCap.truncated === true && scCap.scanned === 1500 && js((scCap.tids.get("T-2") || {}).files) === '["tests/zz/greet.test.js"]' && !!scCap.tids.get("T-3") && !scCap.tids.get("T-4") && capMs < 20000,
       "1.21.1 languages: the test-code scan skips tests/fixtures/*.sql (1 test file read, T-01 found only in greet.test.js); past the 1,500-file cap it reads the test-NAMED files first (T-02 in tests/zz/greet.test.js found behind 1,510 tests/data/*.js); a 5 MB test file is read up to 200 KB (T-03 seen, T-04 not) (got " +

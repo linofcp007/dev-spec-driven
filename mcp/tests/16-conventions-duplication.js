@@ -46,11 +46,16 @@ const ALLOW = [
     allowed: (d) => d.code.every((l) => RE_ID_LIST.test(l)) },
 ];
 
-exports.run = async ({ all, S, root }) => {
-  const t0 = Date.now();
-  const files = sourceFiles(root).map((f) => ({ file: path.relative(root, f).split(path.sep).join("/"), text: fs.readFileSync(f, "utf8") }));
-  const guard = S.duplicateRuns(files, { minLines: GUARD_WINDOW, code: true });
-  const measure = S.duplicateRuns(files, { minLines: MEASURE_WINDOW });
+exports.run = async ({ all, S, root, remeasure }) => {
+  // (1.42 R8: the 5 s bound under remeasure — the read and both detector runs once more on a miss; 2.0 of its 5 s in a
+  // default-jobs pre-push run, over an input every round's code makes longer)
+  const { files, guard, measure, took } = remeasure(() => {
+    const t0 = Date.now();
+    const fs1 = sourceFiles(root).map((f) => ({ file: path.relative(root, f).split(path.sep).join("/"), text: fs.readFileSync(f, "utf8") }));
+    const g = S.duplicateRuns(fs1, { minLines: GUARD_WINDOW, code: true });
+    const m = S.duplicateRuns(fs1, { minLines: MEASURE_WINDOW });
+    return { files: fs1, guard: g, measure: m, took: Date.now() - t0 };
+  }, (x) => x.took < 5000);
   // each run once (the detector lists a repeat at its longest place, the others beside it), allowed or failing
   const failing = [], allowedBy = new Map();
   for (const d of guard.duplicates) {
@@ -58,7 +63,6 @@ exports.run = async ({ all, S, root }) => {
     if (a) allowedBy.set(a.name, (allowedBy.get(a.name) || 0) + 1);
     else failing.push(d);
   }
-  const took = Date.now() - t0;
   const pct = (100 * measure.scanned.duplicated / measure.scanned.lines).toFixed(1);
   const at = (x) => x.file + ":" + x.from + "-" + x.to;
   const lines = failing.map((d) => d.lines + " lines · " + at(d) + "  " + d.also.map(at).join("  ") + (d.alsoMore ? " +" + d.alsoMore : "") + " · " + d.code[0].slice(0, 80));

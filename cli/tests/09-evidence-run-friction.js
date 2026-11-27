@@ -29,7 +29,15 @@ exports.run = async ({ all, runIn, runAsync, spawnAsync, tmp, require, __dirname
     fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + task(1, "Code A", ["_Implements: src/a.js_", "_Verify: node quick.js_"]) +
       task(2, "Code B", ["_Implements: src/b.js_", "_Verify: node sleep.js 1500_"]) + task(3, "Docs", ["_Verify: " + PASS + "_"]));
     const done = async (n) => runAsync(["done", f.slug, String(n), "--run", "--project", p]);
+    // (1.42 perf-14: the in-process call on the records' own clock — runAsync runs the CLI in this process, so `ms` and wall1 are
+    // the same monotonic clock: a record never exceeds the call holding it, and the pre-run and the _Verify:_ run one after the
+    // other inside it, so their two times fit in it — containment, never a race. It was `ms < 7500` and `verify < preRun`: both
+    // compared two runs' own durations, and the pre-push's parallel run failed them. What it hides: a _Verify:_ timed from the
+    // pre-run's start escapes only while the call spends more than the pre-run's ms (≥ 1.5 s) outside the two runs — the CLI's
+    // own engine work, 19 ms in the pre-push log)
+    const w0 = process.hrtime.bigint();
     const d1 = await done(1);
+    const wall1 = Number((process.hrtime.bigint() - w0) / 1000000n);
     const t1 = timings(p);
     const d2 = await done(2);
     const t2 = timings(p);
@@ -43,10 +51,10 @@ exports.run = async ({ all, runIn, runAsync, spawnAsync, tmp, require, __dirname
     const ev = JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
     const keys = (o) => Object.keys(o || {}).sort();
     all("1.41 friction: done --run times the fast check's pre-run (≥ 1.5 s) and, apart, a _Verify:_ that is another check (shorter: never with the pre-run); a _Verify:_ that IS the fast command once; one that is no check never; finish --run one line per check; no `took` line; the records carry no ms; metrics judges the fast check over its 1 s budget (got " +
-      js({ t1, t2: t2.slice(t1.length), t3: t3.length, t4: t4.slice(t3.length), out: [d1.out, d2.out, fin.out.slice(0, 200)], friction: mj && mj.friction }) + ")", {
+      js({ t1, wall1, t2: t2.slice(t1.length), t3: t3.length, t4: t4.slice(t3.length), out: [d1.out, d2.out, fin.out.slice(0, 200)], friction: mj && mj.friction }) + ")", {
       ran: () => [d1, d2, d3].every((r) => r.code === 0) && fin.out.includes("Recorded 2 project check run(s)"), // (finish: not ready — exit 1; its checks recorded)
-      preRun: () => t1.length === 2 && t1[0].check === "fast" && t1[0].by === "cli" && t1[0].ms >= 1500 && t1[0].ms < 7500,
-      verify: () => t1[1].check === "quick" && t1[1].exitCode === 0 && t1[1].ms < t1[0].ms, // (with the pre-run in it: ≥ 1.5 s more)
+      preRun: () => t1.length === 2 && t1[0].check === "fast" && t1[0].by === "cli" && t1[0].ms >= 1500 && t1[0].ms <= wall1,
+      verify: () => t1[1].check === "quick" && t1[1].exitCode === 0 && t1[0].ms + t1[1].ms <= wall1, // (with the pre-run in it: twice the pre-run)
       once: () => t2.length === 3 && t2[2].check === "fast" && t2[2].ms >= 1500,
       noCheck: () => t3.length === 3,
       finish: () => js(t4.slice(3).map((l) => [l.check, l.by])) === js([["fast", "cli"], ["quick", "cli"]]),
