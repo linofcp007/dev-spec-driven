@@ -297,13 +297,11 @@ function convergeRef(text) {
   const s = String(text);
   let e = s.length;
   while (e > 0 && isWsUnit(s[e - 1])) e--;
-  if (s[e - 1] === ")") {
+  if (s[e - 1] === ")") { // no ref ends in ")": only a covering type, after a blank, lets a ref be read before it
     const o = s.lastIndexOf("(", e - 2);
-    if (o > 0 && isWsUnit(s[o - 1]) && /^[A-Za-z-]{1,20}$/.test(s.slice(o + 1, e - 1))) {
-      if (!CONVERGE_COVERS.includes(s.slice(o + 1, e - 1).toLowerCase())) return null;
-      e = o;
-      while (e > 0 && isWsUnit(s[e - 1])) e--;
-    }
+    if (!(o > 0 && isWsUnit(s[o - 1]) && CONVERGE_COVERS.includes(s.slice(o + 1, e - 1).toLowerCase()))) return null;
+    e = o;
+    while (e > 0 && isWsUnit(s[e - 1])) e--;
   }
   let b = e;
   while (b > 0 && !isWsUnit(s[b - 1])) b--;
