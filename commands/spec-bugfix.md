@@ -14,7 +14,8 @@ Bug: $ARGUMENTS
    obvious defect: `size: "xs"`.
 2. **Reproduce** — the exact steps, input and environment in `bug.md → Reproduction`.
 3. **Root cause with evidence** in `bug.md → Root Cause`. No fix before the cause is known: one hypothesis at a time,
-   tested with the smallest change. Until it is written the design approval is refused and `spec_complete_task` refuses
+   tested with the smallest change; tag every instrument line you add `DEBUG-<feature>` (in its log text or a comment
+   beside it). Until it is written the design approval is refused and `spec_complete_task` refuses
    the fix.
 4. **STOP for the approvals.** Fill the criterion, the test plan's File column and the tasks' `_Verify:_`, run
    `spec_doctor`, then present the reproduction, the root cause with its evidence and the fix you propose — and wait.
@@ -26,7 +27,8 @@ Bug: $ARGUMENTS
    (or `spec_complete_task` with the failing run). No shell? Ask the user to run it and paste the output — never apply
    the fix on a red nobody saw, and never send a subagent to look for a shell.
 6. **Fix the cause** (one change, task 2) — remove the instrumentation first, every line tagged `DEBUG-<feature>`
-   while you traced the root cause: `git grep -n DEBUG-<feature>` prints nothing —, run the suite and record it:
+   while you traced the root cause: `git grep -n --untracked -E 'DEBUG-<feature>([^[:alnum:]_-]|$)'` prints nothing (new
+   files too; another bugfix's `DEBUG-<feature>-…` tags stay out) —, run the suite and record it:
    `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> 2 --run`.
 7. **Close** with `spec_finish` (the user's `/spec-finish`): the merge summary carries the root cause and the fix.
 
