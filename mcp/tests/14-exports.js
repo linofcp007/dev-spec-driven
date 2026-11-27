@@ -1112,4 +1112,28 @@ exports.run = async ({ ok, skip, all, rpc, payload, S, tmp, shipFeature }) => {
         "1.23 review 5 (L5): a release-notes one-liner cut near its limit drops a split emoji whole (no lone surrogate) (got " + js(fixed && fixed.rootCause && fixed.rootCause.slice(190)) + ")");
     }
   }
+
+  // 1.42 R15 — the release notes' file of two milestones that would share one: "Sprint α" is sprint-<8 hex of its key>, and a
+  // milestone named EXACTLY that (its slug is its key: the same name part) is hashed apart — two files, each its own milestone's
+  // features; the second write neither overwrites the first nor is refused
+  {
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-142-r15");
+    S.initProject(p, ["core"], "en");
+    const fa = S.createFeature(p, "Alpha", ["core"], "x", undefined, "en"), fb = S.createFeature(p, "Beta", ["core"], "x", undefined, "en");
+    shipFeature(p, fa.slug, "2026-09-01T00:00:00.000Z");
+    shipFeature(p, fb.slug, "2026-09-01T00:00:00.000Z");
+    const addA = S.milestone(p, "add", { name: "Sprint α", date: "2099-12-01", features: [fa.slug] });
+    const alone = path.basename(S.changelog(p, { milestone: "Sprint α" }).file || "");
+    const literal = alone.replace(/^RELEASE-NOTES\.|\.md$/g, ""); // sprint-<h>
+    const addB = S.milestone(p, "add", { name: literal, date: "2099-12-02", features: [fb.slug] });
+    const wa = S.changelog(p, { milestone: "Sprint α", write: true }), wb = S.changelog(p, { milestone: literal, write: true });
+    const text = (r) => { try { return fs.readFileSync(r.file, "utf8"); } catch { return ""; } };
+    all("1.42 R15: \"Sprint α\" writes RELEASE-NOTES.sprint-<h>.md, and a milestone named exactly sprint-<h> writes its own hashed file beside it — each holding its own milestone's feature (got " +
+      js({ alone, a: [wa.ok, wa.wrote, wa.file && path.basename(wa.file)], b: [wb.ok, wb.wrote, wb.file && path.basename(wb.file)] }) + ")", {
+      added: () => addA.ok && addB.ok && /^sprint-[0-9a-f]{8}$/.test(literal),
+      twoFiles: () => wa.ok && wb.ok && wa.wrote && wb.wrote && wa.file !== wb.file && path.basename(wa.file) === alone && new RegExp("^RELEASE-NOTES\\." + literal + "-[0-9a-f]{8}\\.md$").test(path.basename(wb.file)),
+      ownFeatures: () => text(wa).includes(fa.slug) && !text(wa).includes(fb.slug) && text(wb).includes(fb.slug) && !text(wb).includes(fa.slug),
+    });
+  }
 };
