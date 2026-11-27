@@ -399,7 +399,9 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
   // --- the cost: reading ahead never costs much more than reading in sequence ----------------------------------------------------------
   {
     // (the soft side reads in sequence — no pool; the hard side's every file is handed over by a worker: a wait gone slow — a
-    // lost notify, a stall — is seconds over 400 files)
+    // lost notify, a stall — is seconds over 400 files. What the +600 ms hides (1.42, B141-13): a uniform hand-over slowdown of up
+    // to ~600 ms over the 400 files, and the pool's own start — 650–1,330 ms with two containers at once; a count of the slow takes
+    // would false-fail on that start and kill nothing more — a lost notify is a 2 s wait, AHEAD_STALL_MS)
     const list = fileSet("cost", 400, [(i) => Buffer.from("cost " + i + "\n" + "w".repeat(i % 200))]);
     const r = caught(() => remeasure(() => { const a = readAll(list, 64, "off"); const b = readAll(list, 64, "on", { tick: 0 }); return [b.ms, a.ms, b.made.length, firstDiff(b.out, a.out)]; }, (s) => s[0] < 1.5 * s[1] + 600));
     const s = r.v || [];

@@ -89,7 +89,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   files, so a renamed or deleted file's entry goes with the next run, `--only`'s too; a file never timed starts first; 1.42: a
   non-blank `DEV_SPEC_TEST_TIMES_ROOT` keys it by that folder instead — the parent's knob alone: no chain sees it, in any spelling
   — and the local pre-push hook sets it to the pushing checkout, so its fresh temp worktree starts the longest chains first, where
-  every chain weighed "never timed"; never export it in a shell: every checkout would share one file, the 1.30 problem). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
+  every chain weighed "never timed"; never export it in a shell: every checkout would share one file, the 1.30 problem; what the
+  suites leave in the OS temp folder: `dev-spec-test-times-<mcp|cli>-<id>.json` — a run's order only — and the status line's
+  `dev-spec-statusline-<16 hex>.json` cache entries — dead 10 s after their write —, both safe to delete). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
   slowest: …`, then the total: the LAST line is always `N passed, M failed` (scripts/test-docker.js reads it). A process
   that dies or never prints its total fails the suite, a file that throws is one FAIL (its chain goes on), a server that
   stops answering (15 s) fails the run — never a drain to exit 0. On a loaded machine (1.26): a chain whose process the OS
@@ -224,7 +226,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   mechanism** (`+ 1 s` beside a 2 s stall hides it once the twin takes 2 s); (7) puts **every timing assertion under
   `remeasure`** — a check of child processes runs them with `spawnSync`, so a retry can measure again; (8) is measured
   **before review** on Windows, node:22-bookworm-slim and node:24-alpine, alone and with the MCP suite running beside it at the
-  default `--jobs` (the pre-push's setting), its numbers in its comment.
+  default `--jobs` (the pre-push's setting), its numbers in its comment. **A mutation pass over a cost guard (1.42):** a mutant
+  that only the chain timeout catches — a reader the 1.17 H block (05-markdown-trace.js, 100,000-line inputs) guards made
+  quadratic — is a kill: run its file with `DEV_SPEC_TEST_CHAIN_TIMEOUT_S=180` and a timeout fails it in minutes, not 30.
 - **The source guards follow the layout:** the U+FEFF guard reads mcp/test.js, scripts/test-runner.js and every file of
   mcp/tests/. The engine guards (U+FEFF, backslash-stripped regex literals) also read scripts/build.js — a bundle's
   registry comes from it — and `libSources()` leaves a user-built `mcp/lib/spec.bundle.js` out (the sources verbatim: it
@@ -439,3 +443,20 @@ How the rules above came to be — grep a release here.
   (scripts/test-runner.js: the optional 5th field of a file's `#file` line, the `# K skipped` line before the unchanged last
   line), all 72 sites call it, and 16-conventions.js's guard keeps the old idiom out with no allowance — the fake suite's files
   assert `ok(1, …)`. Each machine's total drops by its own skips.
+- **1.42 —** (the tests chain: the suites' honesty) the pre-push hook's fresh temp worktree had no times file of its own, so every
+  chain weighed "never timed" and ran in file order (simulated −19 % of an MCP run at 24 jobs once ordered):
+  `DEV_SPEC_TEST_TIMES_ROOT`, the parent's own knob (its own predicate beside the host's variables; no chain sees it). The
+  checks that timed a count now count: the alias reader's three memos (`aliasStats`, in-process — two of them dropped cost
+  nothing the clocks could see), T10's corpus (a 0.35–0.8 ms side carried a ratio; the count bound stays), the read-ahead
+  stall (ONE slow take of at least 0.9 × AHEAD_STALL_MS, under twice it — the whole read's `took < 15000` was worker starts
+  and contention, and passed a doubled wait). K2 samples two interleaved pairs; capMs and the duplication guard's 5 s sit
+  under `remeasure`; done --run's timing rows are containments on one clock. Property nets: R1's four checks that survived
+  their removal in the 1.41.1 review and the read-pass sweep over a junction out (12-lifecycle-read-gate-root.js), every
+  Object.prototype name a check name's shape admits (09-evidence.js), an upper-case `[X]` reader by reader with a twin over
+  every operation's read pass (08-tasks-checkbox-case.js — the read gate's calls exported as `operationCalls`, the same 400
+  calls before and after), two milestones sharing a release-notes name (14-exports.js); `--alias-tmp` in test-docker.js,
+  opt-in. Cut: a sweep of the runner's litter in the shared temp folder (prose above instead), a time-named source guard (a
+  name list), the click-dense yardstick for the UI checks' click inputs (it changes the owner's "3× plain JSX" ruling: to the
+  owner), a 10,000 pass of the 1.17 H block (the chain timeout kills its quadratics — the mutation tip above), a slow-take
+  count on the read-ahead pair (a load false-fail — a comment instead), the import / hook clocks of 05-markdown-trace (6× and
+  ~200× margins), T10's render spy and R1(d)'s CLI row (they kill nothing the other rows do not).
