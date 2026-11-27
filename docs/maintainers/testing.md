@@ -16,7 +16,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   never edited: their sha1s are pinned; 1.41: `metric-lines.v1.json`, the METRIC line's contract with dev-guardian — the same
   bytes at its `mcp/test/fixtures/metrics/`, BOTH suites pinning one sha256 literal (09-evidence-runs.js here,
   `test/unit/metrics/metricLinesFixture.test.ts` there), never edited: a change is `metric-lines/2`, a new file landed in both
-  repositories before either tags); the runner loads only
+  repositories before either tags; 1.42: `metric-bytes.v1.json`, how the two METRIC readers decode a run's bytes — the same bytes
+  at its `mcp/test/fixtures/metrics/`, both suites pinning one sha256 (09-evidence-runs.js here,
+  `test/unit/metrics/metricBytesFixture.test.ts` there), a change is `metric-bytes/2`); the runner loads only
   `NN-*.js` files. 1.41's topics: 09 — `09-evidence-friction.js` (the friction budget: `_Budget:_` lines, timings.jsonl, the
   verdict, next_action's hint) and `09-evidence-metrics.js` (METRIC lines: the reader case by case against the fixture, the
   judge, the latest run's readings, finish's comparison, Silent Regressions' unmeasured names, spec_metrics' `measured`), with

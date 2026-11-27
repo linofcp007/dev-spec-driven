@@ -982,4 +982,22 @@ exports.run = async ({ ok, all, eq, rpc, payload, S, tmp, remeasure, fsCalls, ap
     ok(!bad.length && js(each.metrics) === js([["out_bom", 1, null, null], ["err_bom", 2, null, null]]),
       "1.41.0 RX-3 parity with dev-guardian 3.17 metricFile.ts: an output starting with a UTF-8 byte-order mark reads its first METRIC line — one leading U+FEFF of each text dropped, never a second one nor one mid-text (bad: " + js({ bad, each }) + ")");
   }
+  {
+    // 1.42: metric-bytes.v1.json's STREAM mode, the reader's half — each case's stdout and stderr decoded as UTF-8 (as the capture does:
+    // cli/tests/09-evidence-run-module.js holds that half) and read as two texts in that order: the reading is the case's `stream`,
+    // key order included. (The file-mode fields — printed, fileReadBytes — are dev-guardian's: never read here. RX-3 above keeps the
+    // CSI / `# ` / blank-prefix variants the file holds none of.)
+    const BF = JSON.parse(fs.readFileSync(path.join(__dirname, "tests", "fixtures", "metric-bytes.v1.json"), "utf8"));
+    const utf8 = (h) => Buffer.from(h, "hex").toString("utf8");
+    const bad = [];
+    for (const c of BF.cases) {
+      const r = E.metricLinesOf([utf8(c.stdout), utf8(c.stderr)]);
+      const metrics = {};
+      for (const m of r.metrics) metrics[m.name] = reading(m);
+      const got = { metrics, repeats: r.repeats, malformed: r.malformed, dropped: r.dropped };
+      if (js(got) !== js(c.stream)) bad.push(c.id + " → " + js(got));
+    }
+    ok(BF.cases.length >= 10 && !bad.length,
+      "1.42: metric-bytes.v1.json, the stream mode — each case's two streams decoded as UTF-8 and read apart give its `stream` reading, key order included (bad: " + js(bad) + ")");
+  }
 };

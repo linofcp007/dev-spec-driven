@@ -601,6 +601,11 @@ Engine: the `B5` block of `engine/evidence.js`.
   measured; quadratic would be 16×), and 64 MiB of output lines (2.2 M) with one METRIC line ≤ 3× a bare `lastIndexOf` of the same
   text, flattened first — the first scan of a concatenation pays for its copy — (~1×; a split is 6–9×); a 60 MiB coloured
   candidate line ≤ 3× the same line plain (equal work: the keyword's scan, the line end's, one chunk; stripped whole it was ~39×).
+- **The bytes are a second contract, `metric-bytes/1` (1.42).** mcp/tests/fixtures/metric-bytes.v1.json, byte-identical in dev-guardian,
+  pinned in 09-evidence-runs: a run's stdout and stderr bytes and two readings — `stream` (each stream decoded as UTF-8, read apart:
+  this plugin) and `file` (dev-guardian's `metrics` over a `2>&1` capture) —, `differs` exactly when the two differ (key order counts).
+  The stream mode is tested in 09-evidence-metrics (the reader) and cli 09-evidence-run-module (the capture's strings). A change that
+  alters a case is metric-bytes/2, landed in both before either tags. A sample, not a proof: a change that alters no case passes.
 - **The judge, `judgeMetric(reference, current)`** → the fixture's `{verdict, why, loosened, delta, applied}`: the REFERENCE's terms;
   judged only when it states `better=` AND `tolerance=` (else `unjudged`, `why` its missing terms, with the delta); a changed unit
   `unjudged` + `loosened: "unit"`, no delta; `loosened` is ONE term (unit, then better, then tolerance — a flipped / dropped direction,
@@ -1416,6 +1421,20 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   section states it (RX2-2). fixHint offered only an inline suppression for a blocking test-integrity finding, which reads
   none — it says restore the test or the user decides, an approved pruning blocking at `--fail-on medium` by design (RX2-3,
   pre-existing).
+- **1.42 —** (the tests chain, with dev-guardian 3.18's DG-17) **`metric-bytes.v1.json`**: the METRIC line's BYTES became a second
+  contract, 11 cases (5 agree, 6 differ — by class: a byte-order mark mid-file, UTF-16 by its mark, UTF-16 guessed with no mark or in
+  a tail window, a NUL head, print order), each with the readings both readers give it at 1.41.2 / 3.17. No reader changed:
+  B142-03's rules were CUT — (1) a U+FEFF after a line break read as nothing changes metric-lines/1's line-start grammar in both
+  readers (it would flip two agreeing rows: metric-lines/2 for a LOW); (2) UTF-16 by its mark alone narrows dev-guardian (a
+  BOM-less `cmd /u` capture, a tail window past 64 MiB and the NUL head stop reading) and, here, would put files.js's decoder on
+  `run.js`'s capture, which every reader of a run's output uses (a UTF-16 "tests 0" pass refused, a CR-only progress output split
+  into lines). The research's synthetic NUL-head row is kept beside its real-shaped correction (UTF-16 `wsl.exe`-like text, then a
+  UTF-8 line — the stream reads it, the file does not). Its pin and shape here have no committed negative controls (equivalent
+  mutants while v1 is pinned by its sha: run once, offline) and no threshold of dev-guardian's guess; `differs` compares the
+  readings key order included, as dev-guardian's pin does. **Tests:** done --run's two timing rows in
+  cli/tests/09-evidence-run-friction.js are containments on ONE clock (perf-14): the pre-run's `ms` within the in-process call that
+  holds it, and the pre-run's and the _Verify:_'s together within it — they compared two runs' own durations (`ms < 7500`, the
+  _Verify:_ under the pre-run) and failed the pre-push's parallel run; run.js and commands.js unchanged.
 
 ### Task dependencies and execution waves
 - **1.36** — +port's gate joined the bugfix gate as an execution refusal (its key `heldBy`; `waitsOn` stays a successful
