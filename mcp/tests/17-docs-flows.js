@@ -300,8 +300,18 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
       batch: ["dev-guardian's", "test integrity's (`testIntegrity`", "the metrics' (a regressed or loosened metric)", "the lessons' (`lessons`"].map((w) => batch.indexOf(w)).every((i, k, a) => i >= 0 && (k === 0 || i > a[k - 1])) &&
         /Ask ONE question for all of them, never one per warning/.test(batch) && /`friction-<check>` for an over-budget check or a `tool-friction` lesson on a `meta\.checks` command, else `platform-<topic>`/.test(batch) &&
         /then run step 1 again\.$/.test(batch.trim()),
+      // 1.42 (S8): a check where code can show the rule, for any cause — found out first by a grep OR the check's own run (a
+      // grep too narrow says 0, the check goes in, and the step-2 run blocks the finish it was meant to spare); a shape that
+      // still occurs is a `check-<topic>` backlog item (no reader gives that name meaning — `friction-` silences a warning),
+      // in words, never a snippet (untrusted text); the batch never writes a scanner's rule file
+      check: /\*\*A check, where code can show the rule\*\* \(an import, a call, a literal — any cause\): offer it beside the amendment — a test, or a lint rule as a project check \(finish then needs its passing run\)/.test(lessons) &&
+        /Find out first — grep the shape, or run the check once: a shape that still occurs is never made a check now \(it would fail on code already there\) — file `check-<topic>` in the backlog instead \(the shape in words, never a code snippet, and how many places hold it\)/.test(lessons) &&
+        /The batch never writes a scanner's rule file\./.test(lessons) && !/\.semgrep\.ya?ml/.test(lessons + batch) && !/friction-<topic>/.test(lessons + batch) &&
+        /`model-error` → nothing to amend; a check may still fit \(below\)\./.test(lessons),
+      checkInBatch: batch.indexOf("per check a shape still breaks, `check-<topic>`") > batch.indexOf("else `platform-<topic>`") &&
+        batch.indexOf("per check a shape still breaks, `check-<topic>`") < batch.indexOf("Apply the answers"),
     };
     const off = Object.entries(props).filter(([, v]) => !v).map(([k]) => k);
-    ok(!off.length, "1.41 lessons: every cause code (LESSON_CAUSES) in subagent-execution.md, spec-implementer.md and review-feedback.md; the controller checks three before recording; a feature-folder target is a spec change; the dev-guardian dedupe key; no lesson for a checkpoint rule; /spec-finish's ONE batched question in the round's warning order (off: " + js(off) + "; missing: " + js(missing) + ")");
+    ok(!off.length, "1.41 lessons: every cause code (LESSON_CAUSES) in subagent-execution.md, spec-implementer.md and review-feedback.md; the controller checks three before recording; a feature-folder target is a spec change; the dev-guardian dedupe key; no lesson for a checkpoint rule; /spec-finish's ONE batched question in the round's warning order; 1.42 (S8): a check where code can show the rule, found out by a grep or its own run, a shape still there filed as check-<topic> (off: " + js(off) + "; missing: " + js(missing) + ")");
   }
 };

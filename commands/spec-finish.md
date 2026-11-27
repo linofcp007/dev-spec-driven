@@ -28,7 +28,8 @@ before it.
    target inside the feature's own folder is a spec change, never a steering line; the approved features a constitution or
    track-file edit flags, named); per platform item its backlog name — `friction-<check>` for an over-budget check or a
    `tool-friction` lesson on a `meta.checks` command, else `platform-<topic>` (the over-budget checks are the ones
-   `spec_next_action`'s finish step names, `friction.over`); per metric or finding what the user fixes or accepts. Apply the answers — each file edited once, the lessons closed by ONE `spec_decide` entry that supersedes
+   `spec_next_action`'s finish step names, `friction.over`); per check a shape still breaks, `check-<topic>`; per metric
+   or finding what the user fixes or accepts. Apply the answers — each file edited once, the lessons closed by ONE `spec_decide` entry that supersedes
    them — then run step 1 again.
    After a protected test's accept (or a lift), run step 1 again (`spec_finish {name, write: true}`): the merge summary then lists the
    accept and no longer names the test as changed — the one written before it still does.

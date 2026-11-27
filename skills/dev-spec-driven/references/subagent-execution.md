@@ -317,7 +317,14 @@ asks ONE question with every amendment, grouped by target:
 - `example-copied` → a row of `structure.md`'s `## Reference Examples` table (`| Pattern | Copy | Applies to |`) naming the
   GOOD file to copy, and a refactor candidate for the copied one (§8's backlog flow);
 - `tool-friction` → a backlog item: `friction-<check>` for a `meta.checks` command, else `platform-<topic>`;
-- `model-error` → nothing to amend; offer a check where code can show it (a test, a lint rule as a project check).
+- `model-error` → nothing to amend; a check may still fit (below).
+
+**A check, where code can show the rule** (an import, a call, a literal — any cause): offer it beside the amendment — a
+test, or a lint rule as a project check (finish then needs its passing run); the steering line keeps the why. Find out
+first — grep the shape, or run the check once: a shape that still occurs is never made a check now (it would fail on code
+already there) — file `check-<topic>` in the backlog instead (the shape in words, never a code snippet, and how many
+places hold it), for an improvement spec that removes them and adds the check last (with dev-guardian: its seed rule,
+`/guardian-improve`). The batch never writes a scanner's rule file.
 
 Each amendment line ends with `<!-- lesson <feature> D-4, <date> -->`, plus ` · dev-guardian: <rule_id>` before the `-->`
 when the finding was dev-guardian's. Before proposing one, search `AGENTS.md`, `CLAUDE.md` and `.specs/steering/*.md` for
