@@ -296,7 +296,7 @@ function statusFeature(projectDir, name) {
   const branch = branchView(projectDir, st); // the feature's own git branch (create --branch) — and where HEAD is now
   // 1.42 (UX-02): the plan not approved yet — tasks.planApproved: false, and tasks.planNote while a task is next (never a bugfix's
   // investigation task); nothing on an approved plan (the tasks object as before)
-  const planGate = planGateFields(st, next, dir, slug, featureLang(projectDir, slug));
+  const planGate = planGateFields(st, next, slug, featureLang(projectDir, slug));
   return {
     ok: true,
     feature: slug,

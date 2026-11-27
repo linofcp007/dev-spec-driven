@@ -1103,7 +1103,7 @@ const COMMANDS = [
           log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : r.done < r.total ? "" : D.allDone));
           if (r.redRecorded) log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // _Expect: fail_
           if (r.note) log("  ⚠ " + r.note);
-          if (r.planNote) log("  ⚠ " + r.planNote); // 1.42 (UX-02): ticked before the plan's approval — its own line, never the note's
+          if (r.planNote) log("  ⚠ " + r.planNote); // 1.42 (UX-02): ticked before the plan's approval (a bugfix's investigation tick: the next task's note) — its own line, never the note's
           metricRunLines(r, spec.msg(spec.featureLang(projectDir, r.feature)).metric, "").forEach((l) => log(l)); // 1.41: stored, never judged here
         });
       };

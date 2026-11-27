@@ -28,23 +28,30 @@ Phase 6, opt-in.
 - **The plan's approval at the task surfaces (1.42, UX-02).** `spec_next_task`, `spec_task_brief` and `spec_status {name}`
   (`tasks.…`) carry `planApproved: false` while the plan is not approved — `planApproved()` (tasks.js) reads phase `tasks` (a
   change's change.md) by TRUTHINESS, the pending-gates rule (`pendingGateList`; `approvalsInForce` strips only `tests`), so
-  next_task and next_action never disagree (the harness's `planGateMismatches` checks it on every fixture of
+  next_task and next_action never disagree on whether the plan is pending (the harness's `planGateMismatches` checks it on every fixture of
   08-tasks-plan-approval, 06-gates and 07-approvals); a spike has no plan gate; a role sign-off still waiting writes no
   `approvals.tasks`. When a task is SERVED (next's task, the briefed open task, status's next) the result gains `planNote`
   (`planGate.notApproved` — "this task is not to be implemented: show the plan to the user and ask for its approval") — its own
   key, never `note` (the evidence channel, pinned `undefined` on ticks by older tests); `spec_complete_task` that TICKS a task
   gains `beforeApproval: true` and `planNote` (`planGate.tickedEarly`) — never on an `alreadyDone` re-check or a failed run.
   Never a refusal (a tick records what happened). **The exemption:** a bugfix's investigation task (`bugInvestigationTask()` —
-  kind bugfix, its prose names `bug.md`, no `_Makes green:_` / `_Verify:_`: it runs nothing and writes only bug.md, which the
-  requirements / design approvals sign off) carries no `planNote` (`beforeApproval` stays a fact) — the four-task scaffold of
-  ≤ 1.23.0 ticks 1 and 2 before the tasks approval by design (references/bugfix.md says so; it is kept word for word). Its own
+  kind bugfix, its prose names `bug.md`, and it carries no `_Implements:_`, `_Makes green:_` or `_Verify:_`: it runs nothing and
+  writes only bug.md, which the requirements / design approvals sign off) carries no `planNote` (`beforeApproval` stays a fact) —
+  the four-task scaffold of ≤ 1.23.0 ticks 1 and 2 before the tasks approval by design (references/bugfix.md says so; it is kept
+  word for word). A task naming a file it changes is a code task, never exempt (review 1: a model-written "apply the fix
+  described in bug.md"). A marker still holding its scaffold slot (`[…]`) counts as none — known limit: the short-form red test
+  edited to cite bug.md before its slots are filled reads as an investigation task. Ticking one serves its `next`: the tick's
+  `planNote` is the one `spec_next_task` gives that task (`planGateFields` — none when it is an investigation task too;
+  review 1: #2's tick served the red test #3 with no note, the CLI `done` no ⚠ line). Its own
   predicate: never `rootCauseTaskIndex`, `isBugStep` (the CURRENT short-form steps — its task 1 would lose the note) nor
   `LEGACY_BUG_STEPS` (a name list); it only READS the block (features with identical tasks.md may share one scan's blocks —
   DS-PERF's memo). The brief's markdown is unchanged (the controller decides the dispatch, not the subagent); the CLI prints
   the note on a "  ⚠ " line (`next`, `status <f>`, `done`), `brief` on stderr (stdout stays the brief). An approved plan's results
   are the parent's, byte for byte (the keys absent, not `true`). Known limit: an approved plan EDITED since its approval reads
-  approved, as pendingGateList reads it (next_action asks for the re-review). No new read: `planGateFields()` builds the fields
-  from the state the call already holds (08-tasks-plan-approval pins it and the equal fs calls of approved / unapproved twins).
+  approved, as pendingGateList reads it (next_action asks for the re-review). No new read: `planGateFields()` takes no path — it
+  builds the fields from the state the call already holds, the plan's file from that state's kind (a change's change.md; review
+  1: it called `tasksFileName(dir)`, a re-read of .state.json the primed scope hid) — 08-tasks-plan-approval counts its fs calls
+  (any path) in a fresh read scope, and pins the equal fs calls of approved / unapproved twins.
 - **Design sections** (bounded by `BRIEF_DESIGN_BUDGET`, 6,000 characters since 1.38: a view task keeps +ui's filled state
   matrix — `[UI] UI States`, ~2.7 / 3.7 / 4.7 KB at 1 / 2 / 3 views — beside the other `[UI]` sections, all five up to 2 views;
   the brief ~≤ 10 KB) match WHOLE IDs: an AC ID ends before a non-digit and never follows another
