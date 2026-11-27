@@ -547,29 +547,40 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       bothLibcs: () => /-alpine\b/.test(images) && /-(?:bookworm|trixie)(?:-slim)?\b/.test(images),
       jobs: () => badJobs.status === 2 && /--jobs needs a whole number >= 1/.test(badJobs.stderr) && /--jobs <n>/.test(help.stdout) && /\.\.\.jobs/.test(src),
     });
-    // 1.42 R10: --alias-tmp, OPT-IN — each suite's TMPDIR behind a symlink made in the container (/tmp/alias-tmp → /tmp/real-tmp: every
-    // test project's path an alias of its real one, as macOS's /var → /private/var), copied or mounted; without the flag the
-    // command is the plain one (the default flips only after a clean run of both suites under it, on the integrated branch)
+    // 1.42 R10: --alias-tmp — each suite's TMPDIR behind a symlink made in the container (/tmp/alias-tmp → /tmp/real-tmp: every
+    // test project's path an alias of its real one, as macOS's /var → /private/var), copied or mounted. suiteCommand builds the
+    // command from the options it is handed: the flag (parseArgs' aliasTmp) turns the leg on for every image, and parseArgs alone
+    // leaves it off — which image a run of the DEFAULT images aliases (the newest) is rowsPlan's, the row after this one.
     const TD = require(dockerJs);
     const cmdOf = (args, suite = "mcp") => TD.suiteCommand(suite, TD.parseArgs(args)).join(" ");
     const plain = cmdOf([]), aliased = cmdOf(["--alias-tmp"]), mounted = cmdOf(["--mounted", "--alias-tmp"]), mountedPlain = cmdOf(["--mounted"]);
-    all("1.42 R10: test-docker's --alias-tmp (opt-in) runs each suite with TMPDIR behind a symlink to the real temp folder — copied or mounted —, --help names it, and without it the container's command is the plain one (got " +
+    all("1.42 R10: test-docker's --alias-tmp runs each suite with TMPDIR behind a symlink to the real temp folder — copied or mounted —, --help names it; parseArgs alone leaves it off and suiteCommand then builds the plain command (default: the newest image only — rowsPlan's) (got " +
       JSON.stringify({ plain, aliased, mounted, mountedPlain }) + ")", {
       help: () => /--alias-tmp/.test(help.stdout),
-      optIn: () => TD.parseArgs([]).aliasTmp === false && !/alias-tmp|TMPDIR/.test(plain) && !/alias-tmp|TMPDIR/.test(mountedPlain) && mountedPlain === "node mcp/test.js",
+      flagOff: () => TD.parseArgs([]).aliasTmp === false && !/alias-tmp|TMPDIR/.test(plain) && !/alias-tmp|TMPDIR/.test(mountedPlain) && mountedPlain === "node mcp/test.js",
       aliased: () => aliased.startsWith("sh -c " + TD.ALIAS_TMP) && aliased.endsWith(plain.replace(/^sh -c /, "")) && /ln -sfn \/tmp\/real-tmp \/tmp\/alias-tmp/.test(aliased) && /export TMPDIR=\/tmp\/alias-tmp && /.test(aliased),
       mounted: () => mounted === "sh -c " + TD.ALIAS_TMP + "exec node mcp/test.js",
       jobs: () => cmdOf(["--alias-tmp", "--jobs", "4"], "cli").endsWith("exec node cli/test-cli.js --jobs 4"),
     });
-    // 1.42 (after review 1): the leg's first run on the integrated branch came back clean, so a run of the DEFAULT images runs
-    // the newest of them under it; every other default image, and any --image list, stays plain unless --alias-tmp is given.
-    const dflt = TD.parseArgs([]), listed = TD.parseArgs(["--image", TD.DEFAULT_IMAGES[TD.DEFAULT_IMAGES.length - 1]]), forced = TD.parseArgs(["--alias-tmp"]);
+    // 1.42 (after review 1): the leg's first run on the integrated branch (node:22-bookworm-slim) came back clean, so a run of the
+    // DEFAULT images runs the newest of them under it; every other default image, and any --image list, stays plain unless
+    // --alias-tmp is given. rowsPlan is what main() runs — each image's alias choice and each suite's container command, built in that
+    // one place (review 2, R2-TESTS-03: a main() that built the command from the run's options undid the choice and no row saw it).
     const newest = TD.DEFAULT_IMAGES[TD.DEFAULT_IMAGES.length - 1];
-    all("1.42: a run of the default images runs the newest (" + newest + ") with the alias temp and the others without; an --image list is plain; --alias-tmp turns it on for every image", {
-      newestOn: () => TD.aliasFor(newest, dflt) === true,
-      othersOff: () => TD.DEFAULT_IMAGES.slice(0, -1).every((im) => TD.aliasFor(im, dflt) === false),
-      listedOff: () => TD.aliasFor(newest, listed) === false,
-      forcedAll: () => TD.DEFAULT_IMAGES.every((im) => TD.aliasFor(im, forced) === true),
+    const js = JSON.stringify;
+    const planOf = (args) => TD.rowsPlan(TD.parseArgs(args));
+    const aliasedCmd = (c) => c.args.join(" ").startsWith("sh -c " + TD.ALIAS_TMP);
+    const dflt = planOf([]), listed = planOf(["--image", newest]), forced = planOf(["--alias-tmp"]), oneSuite = planOf(["--suite", "cli"]);
+    all("1.42: rowsPlan (what main() runs) runs the newest default image (" + newest + ") with the alias temp, both suites' commands too, and the others without; an --image list is plain; --alias-tmp turns it on for every image; main() builds no command of its own (got " +
+      JSON.stringify(dflt.map((r) => [r.image, r.alias, r.commands.map((c) => c.suite + ":" + aliasedCmd(c))])) + ")", {
+      images: () => js(dflt.map((r) => r.image)) === js(TD.DEFAULT_IMAGES) && dflt.every((r) => js(r.commands.map((c) => c.suite)) === js(["mcp", "cli"])),
+      newestOn: () => dflt[dflt.length - 1].alias === true && dflt[dflt.length - 1].commands.every(aliasedCmd) && TD.aliasFor(newest, TD.parseArgs([])) === true,
+      othersOff: () => dflt.slice(0, -1).every((r) => r.alias === false && !r.commands.some(aliasedCmd)),
+      listedOff: () => listed.length === 1 && listed[0].alias === false && !listed[0].commands.some(aliasedCmd),
+      forcedAll: () => forced.length === TD.DEFAULT_IMAGES.length && forced.every((r) => r.alias === true && r.commands.every(aliasedCmd)),
+      suiteKept: () => oneSuite[oneSuite.length - 1].commands.length === 1 && oneSuite[oneSuite.length - 1].commands[0].args.join(" ").endsWith("exec node cli/test-cli.js") && aliasedCmd(oneSuite[oneSuite.length - 1].commands[0]),
+      // the definition and rowsPlan's call — main() runs the plan's commands, never one it builds itself
+      planOnly: () => (src.match(/\bsuiteCommand\(/g) || []).length === 2 && /\bof rowsPlan\(o\)/.test(src),
     });
   }
 
@@ -1402,8 +1413,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     delete env0.SPEC_PROJECT_DIR;
     delete env0.CLAUDE_PROJECT_DIR;
     // (by real path: a child's resolveProjectDir() answers its process.cwd(), the PHYSICAL folder on POSIX — an aliased temp, test-docker's
-    // --alias-tmp —, while a SPEC_PROJECT_DIR keeps the spelling given; every compared folder exists. 1.42 review 1, R10 Step 0)
-    const real = (p) => { try { return fs.realpathSync.native(String(p)); } catch { return String(p); } };
+    // --alias-tmp —, while a SPEC_PROJECT_DIR keeps the spelling given; every compared folder exists. fs.realpathSync, the JS one — never
+    // .native, which expands an 8.3 name a win32 process.cwd() keeps: a child that starts answering another spelling of the right folder
+    // fails here. 1.42 review 1, R10 Step 0; review 2, R2-TESTS-01)
+    const real = (p) => { try { return fs.realpathSync(String(p)); } catch { return String(p); } };
     const same = (a, b) => (process.platform === "win32" ? real(a).toLowerCase() === real(b).toLowerCase() : real(a) === real(b));
     const resolved = (cwd, env) => spawnSync(process.execPath, ["-e", "process.stdout.write(require(process.argv[1]).resolveProjectDir())", path.join(__dirname, "lib", "spec.js")],
       { cwd, env: { ...env0, ...(env || {}) }, encoding: "utf8" }).stdout;

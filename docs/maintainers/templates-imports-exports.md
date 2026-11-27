@@ -146,8 +146,12 @@ is in History at the end.
   CLARIFICATION]` `clarificationMarkers` reads in the SOURCE quickstart (one in its title too, which ours replaces) is also
   one design.md line, under `skDocs.open`
   (the design gate's clarifications check counts it, as when the quickstart was a design.md section — resolved in both):
-  after the design the import writes, else after the scaffold's design.md, which is kept (`scaffoldDesignAppend`; never a
-  design.md of those lines alone — once resolved it would hold nothing, and the template's placeholders no longer refused).
+  after the design the import writes, appended as every spec writer appends (`appendSpecText`: a plan.md or design document
+  ending inside an open code block has it closed first — joined raw, the section was code to every reader), else after the
+  scaffold's design.md, which is kept (`scaffoldDesignAppend`; never a design.md of those lines alone — once resolved it
+  would hold nothing, and the template's placeholders no longer refused — except beside an EMPTY plan.md, a design to import
+  that holds nothing: its design.md is the title, the note and the section, and the gate refuses on phase-order and the
+  constitution check once they are resolved, as the empty design.md it gave before did).
   plan.md: `specKitPlanMarkers()` turns a `**Field**:` value that opens with a bare NEEDS CLARIFICATION into
   `[NEEDS CLARIFICATION: Field]` (the tail kept after it) unless a letter or a digit follows the blanks (`RE_PLAN_PROSE`:
   prose) — `.`, `(…)`, `,`, `?`, `;`, `/TBD` and the dashes are the marker —, on a line `codeBlockLines` / `commentLines`
@@ -435,11 +439,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   the FR criterion under a warning saying it matched nothing: the number is keyed on the inputs (every story number a source
   text names), so a stale ID is the phantom it was on main again (R1-IMP-2). Tried and reverted in the same round: dropping
   a `US-n.AC-m` of a story the import lacks, with a warning — it made the tasks gate PASS a task citing a valid AC beside a
-  stale one (the "typos?" refusal lost) and changed every importer; a finding is never closed by an accept (lesson 12).
+  stale one (the "typos?" refusal lost) and changed every importer; a finding is never closed by an accept.
   SK-06's inclusion list of tails (`:` `-` `–` `—`) left `.`, `(…)`, `,`, `?`, `;`, `/TBD` bare while three texts
   promised every value: the rule is now what prose has — a letter or digit after the blanks (R1-IMP-3, the reviewer's M13).
   frKeys' includes() over a growing list was the round's one superlinear part (40,000 scenarios citing one FR: ~800 M
   compares) — a Set per FR. The clarification-words rule of `frCovered()` gained its row (M16, older).
+- **1.42 fix 2 (review 2)** — the quickstart's open-questions section was joined raw after plan.md and the design documents
+  (while the scaffold-kept path appended it with `appendSpecText`): one ending inside an open code block swallowed it and the
+  design gate counted none — the promise fix 1 made was false on that shape. It goes on with the writer every spec append
+  uses (R2-IMP-1). A quickstart of only its title with a question got its row (R2-IMP-4); the "never those lines alone" claim
+  names the empty plan.md it does not hold for (R2-IMP-2); brownfield.md says which values stay bare (a letter or a digit
+  after them, R2-IMP-6); R1-IMP-4's row is titled by what it pins (the type, the size, the order — not the cost, R2-IMP-3).
 
 ### Stakeholder export and release notes
 - **1.14** — `spec_export`: one offline HTML / md document (roadmap palette, light / dark + toggle, print rules).

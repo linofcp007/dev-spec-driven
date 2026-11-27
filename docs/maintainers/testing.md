@@ -103,19 +103,22 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   warning on stderr after it doesn't void the count). **A check that cannot run here (1.42)** — no git, no pwsh / zsh / fish,
   links not creatable — calls `skip(label, why)`, which every file receives beside `ok` from the runner: neither a pass nor a
   fail, a `  skip - <label> (<why>)` line, the suite's skips summed in a `# K skipped in F file(s): <file> <n>, …` line before
-  the total (a late one is a late assertion) — never an `ok()` whose first argument is a truthy LITERAL (`true`, a number but 0, a
-  non-empty string, `[]` / `{}`, a falsy one negated), which counted as a pass (mcp/tests/16-conventions.js refuses one, and a
-  hand-printed skip line, in every test file, with no allowance; a falsy literal is a fail and stays — the harnesses' `ok(false,
-  label)` —, and a truthy EXPRESSION is not read). cli/tests/16-conventions-runner.js tests the runner on a fake suite, whose files
+  the total (a late one is a late assertion) — never an `ok()` whose first argument is a truthy LITERAL, which counted as a pass.
+  mcp/tests/16-conventions.js refuses, in every test file with no allowance, a hand-printed skip line and an `ok(<literal>, …)` whose
+  literal is written plainly and truthy: `true`, an unsigned number but 0 (`1`, `0x1`, `1e3`, `.5`, `1n`), a non-empty string
+  with no escaped quote, a non-empty template with no `$`, `[]` / `{}`, or a falsy one negated (`!0`, `!""`) — across lines
+  too. It does not read a signed or complemented number (`-1`, `~0`), a parenthesised literal, a string with an escaped quote, a
+  template with a placeholder, `[0]`, an `ok(true)` with no label, nor a truthy EXPRESSION. A falsy literal is a fail and stays —
+  the harnesses' `ok(false, label)`. cli/tests/16-conventions-runner.js tests the runner on a fake suite, whose files
   assert `ok(typeof exports === "object", …)`. "Links not creatable" is a win32 cause alone (a junction, a file symlink without
   Developer Mode): a link failure skips on win32 and is rethrown elsewhere — the file FAILS, a broken fixture never a skip.
-  **Known limits** (the guard cannot read either shape; split each into its own `ok()` + `skip()` when next touched): the older
-  link sites — the `link()` helpers of the 12-lifecycle-* files (and cli/tests/12-lifecycle-read-gate.js), the inline ones of
-  02-mcp-server, 04-tracks, 13-imports, 14-exports, 18-cross-area — still skip on ANY error (1.42's own sites rethrow off win32);
-  and a part skipped INSIDE a passing assertion counts as a pass — a `!linked || …` disjunct (02-mcp-server.js's linked artifact /
-  folder rows, 13-imports.js's 1.17 F3 and review 9, 14-templates.js's B1, 16-conventions.js's G-I2, cli 12-lifecycle-read-gate.js,
-  cli 16-conventions-merge-state.js), `git: ignored === null || …` (09-evidence-guardian.js), and 02-mcp-server.js's row that
-  exists only where tmp has two spellings (neither a pass nor a skip elsewhere: the alias leg's one extra MCP assertion).
+  **Known limits**, by property (the guard reads neither; split each into its own `ok()` + `skip()` when next touched): every link
+  site but 1.42's own (which rethrow off win32) still skips on ANY error — `rg -n "symlinkSync" mcp/tests cli/tests` lists every
+  site, its `catch` says which —; and a part a probe drops is a pass, or nothing, never a skip: a disjunct that is true when the
+  check cannot run (`!<link flag> || …`, `<probe> === null || …`; the candidates:
+  `rg -n "![A-Za-z.]*[Ll]ink[A-Za-z]* \|\||=== null \|\|" mcp/tests cli/tests` — most `=== null ||` hits are shape checks, read
+  each), or a row / fixture behind an `if (<it can run>)` with no `skip()` beside it (e.g. 10-guards-probe.js's two linked
+  layouts, 02-mcp-server.js's row that exists only where tmp has two spellings — the alias leg's one extra MCP assertion).
   The MCP chains today: `01-core → 17-docs` (17-docs reads
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality-fixtures`
   (re-checks of the behavioural fixtures 17-docs-evals builds under tmp — 1.30: they were 15-quality's, and the two files were the
@@ -303,9 +306,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   own, in each container — a shared machine: `--jobs 4`), `--alias-tmp` (1.42: each suite's TMPDIR behind a symlink the
   container makes, `/tmp/alias-tmp` → `/tmp/real-tmp` — every test project's path an alias of its real one on a case-sensitive file
   system, the POSIX twin of Windows' 8.3 temp and of macOS's `/var` → `/private/var`: macOS itself is never run here; the Summary
-  marks the rows `(alias tmp)`. A run of the default images runs the NEWEST one under it — its first run on the integrated branch
-  came back clean, after review 1's ten test-side path fixes —; `--alias-tmp` turns it on for every image, an `--image` list is
-  plain without it). Exit 0 all passed · 1 a
+  marks the rows `(alias tmp)`. A run of the default images runs the NEWEST one under it — the leg's first run on the integrated
+  branch, on node:22-bookworm-slim, came back clean after review 1's ten test-side path fixes —; `--alias-tmp` turns it on for
+  every image, an `--image` list is plain without it; `rowsPlan(o)` is what main() runs, each image's choice and each suite's
+  command built there alone). Exit 0 all passed · 1 a
   suite failed or an image couldn't be prepared · 2 no Docker (not installed, daemon down, Windows-containers mode) or a
   usage error; logs in `<tmp>/dev-spec-docker/<image>-<suite>.log`. Never wire it to hosted CI.
 - **Plugin evals** (`claude plugin eval`, maintainer-side, cost tokens, local only): the triggering suite
@@ -326,7 +330,13 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
 - **Tests run on Windows AND Linux** (`npm run test:docker`): a `_Verify:_` a test writes must work under cmd.exe AND
   `/bin/sh` — quote it (`node -e "process.exit(0)"`; the bare `node -e process.exit(0)` is a sh syntax error that cmd.exe
   accepts); don't depend on a case-insensitive file system (assert the Linux counterpart where Windows/macOS fold case)
-  or on the text of a V8 error (Node 18 omits a RegExp's flags in its SyntaxError). A test that RUNS PowerShell (1.21.1 —
+  or on the text of a V8 error (Node 18 omits a RegExp's flags in its SyntaxError). A path a process answers from its own
+  `process.cwd()` (the PHYSICAL folder on POSIX, an aliased temp's real one; the spelling it was given on win32, 8.3 kept) is
+  compared by `fs.realpathSync` — the JS one, never `.native`, which expands an 8.3 name — and only that value: a path a surface
+  was handed keeps its spelling in the compare, so a surface that starts answering another spelling of the right folder (its real
+  path, an expanded 8.3 name) still fails (1.42 review 2, R2-TESTS-01). The one exception is the runner's own test
+  (cli/tests/16-conventions-runner.js `realFold`): it folds as the runner's `samePath` does, `.native`, a gone folder by its
+  nearest parent's, so its startsWith negatives stay real checks on win32. A test that RUNS PowerShell (1.21.1 —
   cli/tests/09-evidence-done-run.js: `done --run --shell pwsh`, a `pwsh -Command "…"` `_Verify:_` under cmd.exe, `--shell
   powershell`) probes the program first (`<shell> -NoProfile -NonInteractive -Command "exit 0"` → 0) and calls `skip("…",
   "<why>")` without it — the Docker images have no pwsh, and cmd.exe / Windows PowerShell exist only on Windows. The
@@ -499,3 +509,14 @@ How the rules above came to be — grep a release here.
   its expanded parent made a startsWith negative vacuous on win32); the launcher row records projectPath with fs.realpathSync —
   `.native` expands the 8.3 name the launcher's own cwd keeps, which failed this machine's run. The leg stays opt-in until a clean
   run of both suites under it.
+- **1.42 (the alias leg's default, after fix round 1)** — the leg's first run on the integrated branch (node:22-bookworm-slim)
+  came back clean, so a run of the DEFAULT images runs the newest of them, node:26-trixie-slim, under it (the others plain, an
+  `--image` list plain unless `--alias-tmp`); the opt-in sentences above are what it was before.
+- **1.42 (fix round 2, tests)** — review 2. R10 Step 0's `.native` compares silenced a class review 1's tree caught on this
+  machine's 8.3 TEMP: a surface answering ANOTHER spelling of the right folder (its real path) — a probe or a resolver that
+  starts real-path-normalizing makes one project two candidates where a caller dedupes by spelling. The helpers compare by the JS
+  `fs.realpathSync` (which keeps the 8.3 name a win32 cwd keeps), and 10-guards-probe.js's shared `same()` is the spelling compare
+  again, the resolver child's values alone by real path. test-docker.js's `rowsPlan(o)` is what main() runs (each image's alias
+  choice, each suite's command): a main() building its command from the run's options undid the default and no row saw it. The
+  link / partial-skip known limits and the skip guard's reach are said by property (an `rg` line lists the sites), not by a list
+  of places that was incomplete the day it shipped.

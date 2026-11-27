@@ -411,15 +411,51 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       () => c.r.ok && !c.d.includes("Open questions") && !E.clarificationMarkers(c.d).length,
       () => pt.r.ok && pt.d.includes("\n## Questões em aberto do quickstart.md\n\n> Do spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: staging or local?]\n"),
     ]);
+    // 1.42 fix 2 R2-IMP-1: the section was joined RAW after plan.md and the design documents — one ending inside an open code block
+    // (a ```mermaid never closed, a truncated ```text tree) swallowed it, and the gate counted none. It is appended as every spec writer
+    // appends (appendSpecText): the block closed first, the question outside it — after plan.md, after research.md, and with a
+    // track's blocks after it (+tdd: they follow outside the block too).
+    const one = "# Quickstart: Albums\n\n1. Run `npm run dev` - validates SC-001\n2. Seed the demo data [NEEDS CLARIFICATION: which fixture set?]\n";
+    const OPEN = "\n## Open questions in quickstart.md\n\n> From spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: which fixture set?]\n";
+    const gated = (x, tracks) => {
+      const cs = x.r.ok ? ((S.specDoctor(x.p, x.r.feature).checks || []).find((k) => k.id === "clarifications") || {}) : {};
+      const g = x.r.ok ? S.approvePhase(x.p, x.r.feature, "design", "probe", {}) : {};
+      return { markers: E.clarificationMarkers(x.d), clar: cs.status, failing: g.failing || [], tracks };
+    };
+    const fp = q1("fence-plan", { "spec.md": spec, "plan.md": plan + "\n```mermaid\ngraph TD\n  A-->B\n", "quickstart.md": one });
+    const fr = q1("fence-research", { "spec.md": spec, "plan.md": plan, "research.md": "# Research\n\n## Decision: zip\n\n```text\nsrc/\n  albums/\n", "quickstart.md": one });
+    const ft = (() => {
+      const p = fresh("fx1-q1-fence-tdd");
+      for (const [f, t] of Object.entries({ "spec.md": spec, "plan.md": plan + "\n```mermaid\ngraph TD\n", "quickstart.md": one })) put(path.join(p, "specs", "001-albums", f), t);
+      const r = S.importSpec(p, "spec-kit", "specs/001-albums", { tracks: ["core", "tdd"] });
+      return { p, r, d: r.ok ? rd(r.dir, "design.md") : "" };
+    })();
+    const [gp, gr, gt] = [gated(fp), gated(fr), gated(ft, "tdd")];
+    all("1.42 fix 2 R2-IMP-1: the quickstart's open questions follow a plan.md or a design document that ends inside an open code block OUTSIDE it — the block closed first (appendSpecText), the question counted, the design gate refuses on clarifications; a track's blocks after it too (got " +
+      js({ gp, gr, gt, tail: fp.d.slice(-200) }) + ")", [
+      () => fp.r.ok && fp.d.includes("\n```mermaid\ngraph TD\n  A-->B\n```\n" + OPEN) && js(gp.markers) === js(["which fixture set?"]) && gp.clar === "fail" && gp.failing.includes("clarifications"),
+      () => fr.r.ok && fr.d.includes("\n```text\nsrc/\n  albums/\n```\n" + OPEN) && js(gr.markers) === js(["which fixture set?"]) && gr.clar === "fail" && gr.failing.includes("clarifications"),
+      () => ft.r.ok && ft.d.includes("\n```mermaid\ngraph TD\n```\n" + OPEN) && /\n## Testability Notes\n/.test(ft.d.slice(ft.d.indexOf(OPEN))) &&
+        js(gt.markers) === js(["which fixture set?"]) && gt.failing.includes("clarifications") && gt.failing.includes("placeholders"),
+    ]);
+    // 1.42 fix 2 R2-IMP-4: a quickstart.md holding only its title — with a question in it — writes no quickstart.md (the scaffold's is
+    // kept) and still puts the question in design.md: the design gate refuses on it
+    const to = q1("title-only", { "spec.md": spec, "plan.md": plan, "quickstart.md": "# Quickstart [NEEDS CLARIFICATION: staging or local?]\n" });
+    const gto = gated(to);
+    ok(to.r.ok && !to.r.imported.includes("quickstart.md") && to.d.endsWith("\n## Open questions in quickstart.md\n\n> From spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: staging or local?]\n") &&
+      js(gto.markers) === js(["staging or local?"]) && gto.clar === "fail" && gto.failing.includes("clarifications"),
+      "1.42 fix 2 R2-IMP-4: a spec-kit quickstart.md of only its title with a [NEEDS CLARIFICATION] keeps the scaffold's quickstart.md and the question is one design.md line — the design gate refuses on it (got " +
+      js({ imported: to.r.imported, gto, tail: to.d.slice(-160) }) + ")");
   }
 
   // 1.42 fix 1 R1-IMP-2: the synthetic FR story took max(printed) + 1, and a stale US-<that n>.AC-1 a source task cited was kept as
   // written — trace read it as covering the FR criterion, under a warning saying it matched nothing. The story is numbered past every
   // story number a source text names (keyed on the inputs: tasks.md, spec.md, plan.md, quickstart.md …), so a stale ID names no
   // imported criterion and stays what it was before 1.42: trace's phantom, which the tasks gate refuses ("unknown ACs (typos?)"). (A
-  // rule dropping such an ID was tried in fix 1 and reverted: it made that gate pass — lesson 12.) The reviewer's q3 tree; each text
-  // alone; duplicate story numbers; a loose line, a held story's missing AC, a valid ref beside a stale one; another importer (Kiro)
-  // keeps its pass-through; a story number past the safe integers (no number to write: the FRs stay prose, named).
+  // rule dropping such an ID was tried in fix 1 and reverted: it made that gate pass — a finding is never closed by an accept.) The
+  // reviewer's q3 tree; each text alone; duplicate story numbers; a loose line, a held story's missing AC, a valid ref beside a stale
+  // one; another importer (Kiro) keeps its pass-through; a story number past the safe integers (no number to write: the FRs stay
+  // prose, named).
   {
     const W = S.msg("en").importSpec;
     const base = ["# Feature Specification: Albums", "", "### User Story 1 - Create (Priority: P1)", "", "**Acceptance Scenarios**:", "",
@@ -493,7 +529,8 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
 
   // 1.42 fix 1 R1-IMP-4: frKeys deduplicated an FR's criteria with includes() over a growing list — 40,000 scenarios citing one FR
   // were ~800 M compares, the round's one superlinear part. A Set per FR: the parser's map holds one, sized by the criteria citing
-  // the FR, each once though each cites it twice; the import maps the FR to each of them once.
+  // the FR, each once though each cites it twice; the import maps the FR to each of them once. (The row pins the type, the size and
+  // the order — not the cost: a Set scanned before each add would pass it. 1.42 review 2, R2-IMP-3)
   {
     const T = require("./lib/engine/index.js").loadLazyTier();
     const specOf = (n) => {
@@ -510,7 +547,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const r = S.importSpec(p, "spec-kit", "specs/001-c", { tracks: ["core"] });
     ok(keys instanceof Set && keys.size === N && [...keys][0] === "User Story 1 / Scenario 1" && [...keys][N - 1] === "User Story 1 / Scenario " + N &&
       r.ok && r.mapping["FR-1"] === "US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4",
-      "1.42 fix 1 R1-IMP-4: an FR's criteria are a Set (O(1) membership) — 2,000 scenarios citing FR-1 twice each hold 2,000 keys, in order; the import maps FR-1 to each criterion once (got " +
+      "1.42 fix 1 R1-IMP-4: an FR's criteria are a Set per FR, each criterion once, in order — 2,000 scenarios citing FR-1 twice each hold 2,000 keys; the import maps FR-1 to each criterion once (got " +
       js({ set: keys instanceof Set, size: keys && (keys.size != null ? keys.size : keys.length), mapping: r.mapping && r.mapping["FR-1"] }) + ")");
   }
 

@@ -70,10 +70,15 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
     "state-only": "", "dot-folders": null, "generated-roadmap-md": "", "mono-classified": "packages/app", "mono-other-tool": "",
     "steering-linked": "", "feature-linked": "" };
   const want = (l) => (WANT[l.name] === null ? null : path.join(l.root, ...WANT[l.name].split("/").filter(Boolean)));
-  // (by real path: the resolver child's process.chdir makes S.resolveProjectDir() / C.resolveProject() answer process.cwd(), the
-  // PHYSICAL folder on POSIX, while the probe keeps the spelling it was given — an aliased temp, test-docker's --alias-tmp. 1.42 review 1)
-  const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync.native(r); } catch { return r; } };
-  const same = (a, b) => (a == null || b == null ? a == b : real(a).toLowerCase() === real(b).toLowerCase()); // eslint-disable-line eqeqeq
+  // (by SPELLING: a surface given one spelling of a folder answers that spelling — one that starts answering another spelling of the
+  // right folder, its real path or an expanded 8.3 name, fails here)
+  const same = (a, b) => (a == null || b == null ? a == b : path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()); // eslint-disable-line eqeqeq
+  // The resolver CHILD's values alone by real path: its process.chdir makes S.resolveProjectDir() / C.resolveProject() answer
+  // process.cwd(), the PHYSICAL folder on POSIX, while the probe keeps the spelling it was given — an aliased temp, test-docker's
+  // --alias-tmp. fs.realpathSync, the JS one — never .native, which expands an 8.3 name a win32 process.cwd() keeps. 1.42 review 1, R10
+  // Step 0; review 2, R2-TESTS-01
+  const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync(r); } catch { return r; } };
+  const childSame = (a, b) => (a == null || b == null ? a == b : real(a).toLowerCase() === real(b).toLowerCase()); // eslint-disable-line eqeqeq
 
   // (a) in process — the probe, the engine (isDevSpecDir, statusLineProject, sessionProject, the CLI resolver's walk), the status line's
   // probe and the shell completion's resolver, hook-utils' approval candidates
@@ -110,7 +115,7 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
     const pr = P.nearestProject(subs[i]);
     const r = resolved[i] || [];
     const cd = HU.approvalProjects({ cwd: l.root, command: "cd src && node cli/dev-spec.js status" });
-    return same(r[0], pr || subs[i]) && same(r[1], pr || subs[i]) && (pr === null || cd.some((d) => same(d, pr))) ? null
+    return childSame(r[0], pr || subs[i]) && childSame(r[1], pr || subs[i]) && (pr === null || cd.some((d) => same(d, pr))) ? null
       : l.name + ": engine " + r[0] + " completion " + r[1] + " probe " + pr + " candidates " + js(cd);
   }).filter(Boolean);
   ok(inProcess.length === 0 && resolver.length === 0,

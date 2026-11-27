@@ -1069,8 +1069,9 @@ exports.run = async ({
     const listEnv = await se.call("spec_list", {});
     await se.stop();
     // (by real path — a POSIX server's process.cwd() is the physical one, a path built from os.tmpdir() may be an alias of it:
-    // test-docker's --alias-tmp; a folder not made yet, cwd23/.specs, takes its nearest existing parent's. 1.42 review 1, R10 Step 0)
-    const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync.native(r); } catch { const d = path.dirname(r); return d === r ? r : path.join(real(d), path.basename(r)); } };
+    // test-docker's --alias-tmp; a folder not made yet, cwd23/.specs, takes its nearest existing parent's. fs.realpathSync, the JS one —
+    // never .native, which expands an 8.3 name a win32 process.cwd() keeps. 1.42 review 1, R10 Step 0; review 2, R2-TESTS-01)
+    const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync(r); } catch { const d = path.dirname(r); return d === r ? r : path.join(real(d), path.basename(r)); } };
     const same = (a, b) => real(a).toLowerCase() === real(b).toLowerCase();
     ok(rlA.resources.some((r) => r.uri === "specs://feature/from-roots/requirements.md") && same(listA.specsDir, path.join(rootA, ".specs")) && listA.features.length === 1 &&
       same(explicit.specsDir, path.join(other, ".specs")) && askedOnce === 1 && same(listB.specsDir, path.join(rootB, ".specs")) && askedTwice === 2 &&
@@ -1087,8 +1088,9 @@ exports.run = async ({
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const bodyOf = (res) => { try { return JSON.parse(res.result.content[0].text); } catch { return { raw: res }; } };
     const txt = (fn) => { try { return String(fn()); } catch (e) { return "THREW: " + e.message; } }; // a missing text must FAIL, not crash the run
-    // (by real path, as above: a server's cwd is the physical folder — 1.42 review 1, R10 Step 0)
-    const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync.native(r); } catch { const d = path.dirname(r); return d === r ? r : path.join(real(d), path.basename(r)); } };
+    // (by real path, as above: a server's cwd is the physical folder — the JS fs.realpathSync, never .native. 1.42 review 1, R10 Step 0;
+    // review 2, R2-TESTS-01)
+    const real = (p) => { const r = path.resolve(p); try { return fs.realpathSync(r); } catch { const d = path.dirname(r); return d === r ? r : path.join(real(d), path.basename(r)); } };
     const same = (a, b) => typeof a === "string" && real(a).toLowerCase() === real(b).toLowerCase();
     const fileUri = (p) => {
       const s = path.resolve(p).split(path.sep).join("/");
