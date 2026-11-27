@@ -73,6 +73,8 @@ Task 3: refuted (20, pre-existing): <one-liner>
 Task 3: ui review — 3 pairs: 2 match, 1 differences (1 blocker) → fix round 1/5
 Task 3: ui re-review (round 1) — U1 resolved, U2 partial; 0 regressions → fix round 2/5
 Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4f5a6b)
+Task 3: class fix (round 2) — <the defect>, 3 places
+Task 3: class outside the task — <place>
 Task 3: lesson D-4 (example-copied → src/lib/price.js)
 Task 3: parked (real) — <finding> — Ruling: <why it ships>
 Task 3: parked (contested) — <finding> — Ruling: <why the reviewer is wrong>
@@ -261,6 +263,11 @@ final review. Nor does a reviewer's `Pre-existing (deferred)` line (a problem al
   (FIX_BASE = the head the last review saw) and dispatch `dev-spec-driven:spec-reviewer` in **re-review** mode with the
   findings list. New breakage in the fix diff joins the list once its verify pass confirms it; out-of-scope observations
   become deferred minors.
+- **A defect that comes back at another place is a class.** When the verify pass confirms new breakage whose defect — the
+  input or state that breaks — an earlier finding of this task already named, at another place, the next round asks for
+  the class: every place in the task's `_Implements:_` files that holds it, listed in the fix report, and one fix for all;
+  its re-review gets the list. A place outside those files is not this task's to fix: ledger `Task N: class outside the
+  task — <place>` for the final review. Ledger `Task N: class fix (round R) — <the defect>, K places`.
 - **Gates a fix can undo run again.** A round's diff changes what a reviewed view renders → take the captures it
   changed again and a fresh `spec-ui-reviewer` in verdict mode (`references/ui-review.md` → 5), whichever review the
   round answered.
@@ -481,7 +488,8 @@ references folder path and, on +tdd, the `spec_log {name, gitLog}` output (you r
 `git log --name-only --relative` and pass its text — the server never runs git; the reviewer can't call MCP tools) — it
 runs the branch-review checklist
 (track-aware: spec compliance, red-first evidence, tenant isolation, eval deltas, security, the project's written rules
-and the history of rewritten lines) and triages the ledger's deferred minors, unconfirmed and parked findings. If it
+and the history of rewritten lines) and triages the ledger's deferred minors, unconfirmed and parked findings and the
+class places outside a task. If it
 returns findings: verify each Critical / Important one (§6), then ONE fix dispatch with the confirmed list, ONE scoped
 re-review, then adjudicate residuals as in the breaker. No second wave — residual load-bearing findings go to the human.
 **With a review panel** (`reviewPanel`): the same package to one final-mode reviewer on the most capable model and one

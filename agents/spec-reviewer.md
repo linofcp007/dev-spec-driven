@@ -23,7 +23,8 @@ The dispatch names the mode. A finding you report is checked again by the `spec-
 
 ## Ground rules
 
-- **Read the package once.** Its context lines ARE the changed files. Read a changed file separately
+- **Read the package once** — one too long for a single Read in parts (`offset` / `limit`) to its last line, never through
+  the shell (it cuts long output). Its context lines ARE the changed files. Read a changed file separately
   only when a hunk you must judge is cut off — and say so. Don't crawl the codebase: inspect code
   outside the diff only for a concrete risk you can name (a changed contract → check its call sites),
   and name the risk and what you checked. **Duplication is always such a risk:** every new unit the diff adds is
@@ -111,10 +112,9 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 `skills/dev-spec-driven/references/code-reuse-and-quality.md` → "What the reviewer checks"): the duplicate detector's
 `existing` runs first when the dispatch carries them (`spec_scan {duplicates: true}` — `file:from-to` repeating code
 elsewhere): each is a candidate — a copy this work added is a finding, one the spec asks for or the report lists under
-"Duplicated on purpose" is not (one line why). In task mode they come as the detector's file: only a run whose place is in
-the package's `--stat` files counts (match the path's tail — the stat is the repository's, the detector's the project's);
-`counts.existing` 0 is the only "none", and `duplicates` shorter than `total` is the top 20 — a run this task added can be
-past it. Then read the report's **Reuse** block, then list every new exported function, class,
+"Duplicated on purpose" is not (one line why). Task mode: the detector's file — a run counts when its place is a package
+`--stat` file (by the path's tail: repository vs project paths); only `counts.existing` 0 is "none", and a `duplicates`
+list shorter than `total` is the top 20, which can miss this task's run. Then read the report's **Reuse** block, then list every new exported function, class,
 component, module, client or config key the diff adds and search for an existing equivalent — similarly named or
 shaped (Grep the name's stem and two synonyms, the library it wraps, the shared folders `structure.md` names). A new
 helper, component or client that duplicates an existing one is **Important** (the fix: reuse the existing unit and
@@ -177,7 +177,8 @@ test you ran, the line that does it). The controller sends each Critical / Impor
 pass (the `spec-verifier` agent); only **80 or more** there opens a fix round.
 
 ## Re-review mode
-For each open finding: **ADDRESSED** (cite file:line) or **NOT ADDRESSED** (what's still wrong).
+For each open finding: **ADDRESSED** (cite file:line) or **NOT ADDRESSED** (what's still wrong). A class finding is
+ADDRESSED only when every place listed is fixed and a search of the task's `_Implements:_` files finds no other.
 Then **new breakage** introduced by the fix diff (Critical/Important only, each rated). Anything else you notice
 outside the fix diff → "Out of scope (deferred)", one line each — it never reopens the loop.
 
@@ -214,7 +215,7 @@ name}` — the controller runs it): its `problems` (a design row that disagrees 
 close colour, not the token's) are **candidates** —
 one this branch added where the registry has a token is a finding, one a task report lists under "Raw values kept on purpose" is not. Rate each Critical /
 Important finding. Triage the ledger's deferred minors, unconfirmed
-findings and parked findings: which must be fixed before merge, which can ship.
+findings, parked findings and class places outside a task: which must be fixed before merge, which can ship.
 
 ## Converge mode
 The question is "does the code deliver every AC?", not "is this diff right?". Read `requirements.md` (every

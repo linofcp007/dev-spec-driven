@@ -206,6 +206,8 @@ Write the full report to the report path, in the brief's language:
 On a fix round, **append** a fix report: what changed per finding, the covering tests, the command
 and the output — asked for causes, first a `### Causes` block, one `Cause: <code> — <what led you there>` per finding
 (`guidance-missing` · `guidance-wrong` · `example-copied` · `tool-friction` · `model-error`; never a guess — say you don't know).
+A class fix: first list every `file:line` in your task's `_Implements:_` files that holds the defect, then one fix for
+all; a place outside them you only name.
 
 Then reply with ONLY (under 15 lines — the detail lives in the file):
 - **Status:** DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED

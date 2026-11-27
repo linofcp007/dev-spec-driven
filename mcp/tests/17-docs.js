@@ -2357,12 +2357,33 @@ exports.run = async ({
       dispatch: /in \*\*task\*\* mode with: the brief path, the report path, the diff path, the detector's file \(`task-N-dupes\.json`, §4\), BASE\/HEAD/.test(SUB),
       cost: /one implementer \+ one reviewer per task, and one duplicate-detector run — seconds, its output kept in a file/.test(SUB),
       reviewerInput: /\*\*Task mode\*\* — one task's diff\. Inputs: [^\n]*the duplicate detector's file \(`task-N-dupes\.json`\)/.test(REV),
-      reviewerFilter: /In task mode they come as the detector's file: only a run whose place is in the package's `--stat` files counts \(match the path's tail — the stat is the repository's, the detector's the project's\)/.test(REV),
-      noneOnlyAtZero: /`counts\.existing` 0 is the only "none"/.test(REV),
-      capTold: Number.isInteger(DUP_TOP) && REV.includes("`duplicates` shorter than `total` is the top " + DUP_TOP + " — a run this task added can be past it"),
+      reviewerFilter: /Task mode: the detector's file — a run counts when its place is a package `--stat` file \(by the path's tail: repository vs project paths\)/.test(REV),
+      noneOnlyAtZero: /only `counts\.existing` 0 is "none"/.test(REV),
+      capTold: Number.isInteger(DUP_TOP) && REV.includes("a `duplicates` list shorter than `total` is the top " + DUP_TOP + ", which can miss this task's run"),
       pinsKept: /the duplicate detector's `existing` runs first when the dispatch carries them/.test(REV) && /"Duplicated on purpose" is not/.test(REV),
       guide: /\(the task review, the final review, `\/spec-review branch` \/ `converge` run it first\)/.test(GUIDE),
       exec: /`dev-spec-driven:spec-reviewer` \(with the duplicate detector's file — subagent-execution\.md §4;/.test(EXEC),
+    });
+
+    // S6: a defect that comes back at ANOTHER place is fixed as a class. ONE trigger with its own predicate (L7 — not the review
+    // panel's merge rule, which is the same place; not every NOT ADDRESSED, which the rounds / tier-up / breaker already answer);
+    // the scope is the task's _Implements:_ files (a property, L1); a place outside them is ledgered for the final review, never
+    // a NEEDS_CONTEXT / converge task mid-story. Ships unmeasured (no review-seat case drives fix rounds).
+    // S3 (the one clause kept): a package too long for one Read is read in parts to its end, never through the shell.
+    const IMPL = ws(raw("agents", "spec-implementer.md"));
+    const classBullet = (fix.match(/- \*\*A defect that comes back at another place is a class\.\*\*(.*?)- \*\*Gates a fix can undo/) || [])[1] || "";
+    all("1.42 (S6 + S3): a confirmed new breakage with an earlier finding's defect at another place is asked for as a class — every place in the task's _Implements:_ files, one fix, the re-review's ADDRESSED only when none is left; a place outside them ledgered for the final review; the reviewer reads a long package in parts, never through the shell", {
+      trigger: /When the verify pass confirms new breakage whose defect — the input or state that breaks — an earlier finding of this task already named, at another place, the next round asks for the class/.test(classBullet) &&
+        !/NOT ADDRESSED/.test(classBullet) && !/overlapping lines|Merge first/.test(classBullet),
+      scope: /every place in the task's `_Implements:_` files that holds it, listed in the fix report, and one fix for all; its re-review gets the list\./.test(classBullet) && !/MERGE_BASE/.test(classBullet),
+      outside: /A place outside those files is not this task's to fix: ledger `Task N: class outside the task — <place>` for the final review\./.test(classBullet) &&
+        !/NEEDS_CONTEXT|converge/.test(classBullet),
+      ledger: ["Task 3: class fix (round 2) — <the defect>, 3 places", "Task 3: class outside the task — <place>"].every((l) => ledger.includes(l)),
+      finalTriage: /triages the ledger's deferred minors, unconfirmed and parked findings and the class places outside a task\./.test(SUB) &&
+        /Triage the ledger's deferred minors, unconfirmed findings, parked findings and class places outside a task:/.test(REV),
+      implementer: /A class fix: first list every `file:line` in your task's `_Implements:_` files that holds the defect, then one fix for all; a place outside them you only name\./.test(IMPL),
+      reviewer: /A class finding is ADDRESSED only when every place listed is fixed and a search of the task's `_Implements:_` files finds no other\./.test(REV),
+      readWhole: /\*\*Read the package once\*\* — one too long for a single Read in parts \(`offset` \/ `limit`\) to its last line, never through the shell \(it cuts long output\)\./.test(REV),
     });
   }
 
