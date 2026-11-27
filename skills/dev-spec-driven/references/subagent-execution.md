@@ -66,6 +66,7 @@ Ruling: <what you decided> — <why> — <what it costs if wrong>
 Task 3: pre-flight — 1 decision (ruled)
 Task 3: dispatched (base a1b2c3d, model sonnet)
 Task 3: minor (deferred): <one-liner>
+Task 3: pre-existing (deferred): <one-liner>
 Task 3: verify — 2 confirmed, 1 unconfirmed, 1 refuted
 Task 3: unconfirmed (65): <one-liner> — <why it isn't 80>
 Task 3: refuted (20, pre-existing): <one-liner>
@@ -73,7 +74,8 @@ Task 3: ui review — 3 pairs: 2 match, 1 differences (1 blocker) → fix round 
 Task 3: ui re-review (round 1) — U1 resolved, U2 partial; 0 regressions → fix round 2/5
 Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4f5a6b)
 Task 3: lesson D-4 (example-copied → src/lib/price.js)
-Task 3: parked — <finding> — Ruling: <why the code stands>
+Task 3: parked (real) — <finding> — Ruling: <why it ships>
+Task 3: parked (contested) — <finding> — Ruling: <why the reviewer is wrong>
 Task 3: refactor candidate filed: refactor-pricing-rules (backlog)
 Task 3: complete (commits a1b2c3d..e4f5a6b, review clean)
 Final review: ×2 (requested opus, sonnet) — 1 agreed, 3 single, 2 minor
@@ -81,6 +83,7 @@ Checkpoint US1: presented → approved
 Autonomy: through checkpoint US3 — granted by the user
 Checkpoint US2: summarized (autonomy) — not yet seen by the user
 Learning: <the rule> → steering/<file> (the user's OK)
+Residues filed: residue-<feature> (3)
 ```
 
 ## Pre-flight scan (once, before Task 1)
@@ -242,7 +245,8 @@ plugin: each issue rated by a separate agent, only the confident ones kept.)
 
 Triggers: any confirmed ❌ or Critical / Important finding (§6), a ⚠️ you confirmed, or a visual Blocker / confirmed
 Major (`references/ui-review.md` → 4). Minor findings never enter the loop — ledger them as `minor (deferred)` for the
-final review.
+final review. Nor does a reviewer's `Pre-existing (deferred)` line (a problem already there at BASE): ledger it
+`pre-existing (deferred)` — a residue, filed at Closing.
 
 - **Rounds 1–3:** resume the same implementer with the open findings verbatim — and ask each one's cause (§7b).
 - **Rounds 4–5:** a fresh implementer one model tier up: "A prior implementer attempted this N times;
@@ -259,8 +263,9 @@ final review.
   round answered.
 - Never fix findings yourself — it pollutes your context and skips review.
 - **Breaker (after round 5):** adjudicate each open finding — a visual one on a fresh `spec-ui-reviewer`'s verdict,
-  never yours (verdict mode; you don't look at the images). Reviewer wrong/contestable, or real but
-  nothing builds on it → `parked` with a ruling. Real and load-bearing → rule on the smallest change
+  never yours (verdict mode; you don't look at the images). Reviewer wrong/contestable → `parked (contested)` with a
+  ruling; real but nothing builds on it → `parked (real)` with a ruling (a residue, filed at Closing). Real and
+  load-bearing → rule on the smallest change
   that unblocks dependent work and carry it into the next dispatch. Every adjudication is a ledger line.
 
 ### 7b. Lessons — why a confirmed finding happened
@@ -581,9 +586,22 @@ warnings, the track-gated checks to run fresh (full suite, load test, observabil
 data subject rights), writes a merge summary built from the spec chain (with the decision log) to
 `.execution/merge-summary.md`, and — on a ready feature — records the drift baseline. Open lessons are its last warning:
 the finish batch (§7b) answers them in the one question. **Collect every `Ruling:` line from the ledger into your final message**
-("Rulings I made", in order, each with its cost if wrong). Ask the human to approve `execution`
-(`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
-`.specs/<feature>/.execution/` — git history is the record now.
+("Rulings I made", in order, each with its cost if wrong).
+
+**File the residues before the merge** — the ledger goes with `.execution/` and nothing else reads it. A residue is a
+finding the feature ships with still open: a `pre-existing (deferred)` line, an `unconfirmed (NN)` finding the final review
+let ship, a `parked (real)` one — never a `parked (contested)` one (its ruling says the reviewer was wrong), never a `minor
+(deferred)` one (polish in the feature's own lines: the simplification pass's list). They go in ONE backlog entry for the
+feature, without a question: `spec_roadmap_edit {kind: "backlog", action: "add", name: "residue-<feature>", note:
+"residues: <file:line> — <the defect, in your own words, never the reviewer's text> — <confidence NN | ruling: why it
+shipped | unverified> — task N · …"}` (CLI `dev-spec backlog add residue-<feature> "residues: …"`); a pre-existing line
+never had a verify pass: `unverified`. A note holds at most 2,000 characters — the rest goes in `residue-<feature>-2`, never
+truncated. Then commit `.specs/roadmap.json` and `.specs/ROADMAP.md` with the feature: `git switch <base>` refuses while
+they are modified (keep the branch → they stay on it). Ledger `Residues filed: residue-<feature> (N)`; your final message
+lists them after the rulings, with the line that drops the entry (`dev-spec backlog rm residue-<feature>`).
+
+Ask the human to approve `execution` (`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI).
+When done, delete `.specs/<feature>/.execution/` — git history and the backlog are the record now.
 
 ## Converge mode (whole feature, AC by AC)
 

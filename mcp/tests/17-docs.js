@@ -2304,6 +2304,47 @@ exports.run = async ({
     });
   }
 
+  { // 1.42 (DS-PROMPTS) — the review loop's prose and the agent prompts: each row reads the real files.
+    const raw = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const SUBX = raw("skills", "dev-spec-driven", "references", "subagent-execution.md"), SUB = ws(SUBX);
+    const REV = ws(raw("agents", "spec-reviewer.md")), FIN = ws(raw("commands", "spec-finish.md"));
+    const section = (text, head) => { const i = text.indexOf(head); if (i < 0) return ""; const rest = text.slice(i + head.length); const j = rest.search(/\n#{2,3} /); return head + (j < 0 ? rest : rest.slice(0, j)); };
+    const ledger = (SUBX.match(/Ledger lines \(one per event, appended\):\n\n```\n([\s\S]*?)```/) || [])[1] || "";
+    const closing = ws(section(SUBX, "## Closing")), fix = ws(section(SUBX, "### 7. Fix loop"));
+    const step4 = (FIN.match(/ 4\. (.*?) 5\. /) || [])[1] || "";
+
+    // S1: the review loop's residues — the findings a feature ships with still open — are filed before the merge, since the ledger
+    // goes with .execution/ and nothing else reads it. The set is a property of the LEDGER LINE'S KIND: pre-existing (deferred) (the
+    // reviewer's Pre-existing label, renamed from "Out of scope (deferred)", which the re-review keeps for a deferred minor — the
+    // namesake), unconfirmed (NN) the final review let ship, parked (real); never parked (contested), never minor (deferred). ONE
+    // entry per feature (keyed on the slug, an input), split at the 2,000-character note limit; committed before git switch.
+    // UX-11: step 4 names the branch the merge line names, with no guess for a feature without a recorded one.
+    all("1.42 (S1 + UX-11): the residues — pre-existing (deferred), unconfirmed (NN) the final review let ship, parked (real) — filed as ONE residue-<feature> backlog entry before the merge, the defect in the controller's own words, the note split at 2,000 characters, roadmap.json and ROADMAP.md committed before git switch; /spec-finish step 4 says so and merges the branch spec_finish's merge line names", {
+      reviewerLabel: /one "Pre-existing \(deferred\)" line at most/.test(REV) && !/one "Out of scope \(deferred\)" line at most/.test(REV) &&
+        /outside the fix diff → "Out of scope \(deferred\)", one line each — it never reopens the loop/.test(REV),
+      ledgerKinds: ["Task 3: pre-existing (deferred): <one-liner>", "Task 3: parked (real) — ", "Task 3: parked (contested) — ", "Residues filed: residue-<feature> (3)"].every((l) => ledger.includes(l)) &&
+        !/Task 3: parked — /.test(ledger),
+      fixLoopRoutes: /Nor does a reviewer's `Pre-existing \(deferred\)` line \(a problem already there at BASE\): ledger it `pre-existing \(deferred\)` — a residue, filed at Closing\./.test(fix) &&
+        /out-of-scope observations become deferred minors\./.test(fix) && !/out-of-scope observations[^.]*residue/.test(fix),
+      breaker: /Reviewer wrong\/contestable → `parked \(contested\)` with a ruling; real but nothing builds on it → `parked \(real\)` with a ruling \(a residue, filed at Closing\)\./.test(fix),
+      set: /a `pre-existing \(deferred\)` line, an `unconfirmed \(NN\)` finding the final review let ship, a `parked \(real\)` one — never a `parked \(contested\)` one \(its ruling says the reviewer was wrong\), never a `minor \(deferred\)` one/.test(closing),
+      name: /name: "residue-<feature>"/.test(closing) && /dev-spec backlog add residue-<feature> "residues: …"/.test(closing) && !/residue-<topic>/.test(SUB),
+      ownWords: /<the defect, in your own words, never the reviewer's text>/.test(closing) && /a pre-existing line never had a verify pass: `unverified`/.test(closing),
+      split: /A note holds at most 2,000 characters — the rest goes in `residue-<feature>-2`, never truncated\./.test(closing),
+      commitFirst: /Then commit `\.specs\/roadmap\.json` and `\.specs\/ROADMAP\.md` with the feature: `git switch <base>` refuses while they are modified/.test(closing),
+      beforeMerge: closing.indexOf("**File the residues before the merge**") > 0 && closing.indexOf("**File the residues before the merge**") < closing.indexOf("Ask the human to approve `execution`") &&
+        closing.indexOf("Ask the human to approve `execution`") < closing.indexOf("delete `.specs/<feature>/.execution/`"),
+      listed: /your final message lists them after the rulings, with the line that drops the entry \(`dev-spec backlog rm residue-<feature>`\)/.test(closing) &&
+        /git history and the backlog are the record now\./.test(closing),
+      finishStep4: /^Before either option, a feature run with subagents files its review loop's residues \(`\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/dev-spec-driven\/references\/subagent-execution\.md` → Closing/.test(step4) &&
+        /then commit `\.specs\/roadmap\.json` and `\.specs\/ROADMAP\.md` with the feature — `git switch <base>` refuses while they are modified\. Offer exactly two options/.test(step4),
+      finishBranch: /`git switch <base>`, then `git merge <branch>`: the branch `spec_finish`'s merge line names \(`feature\/<slug>` by default, `fix\/<slug>` for a bugfix\); without one, the branch you worked on, if it is not the base\./.test(step4) &&
+        /A fast-forward when possible; a merge commit \(`--no-ff`, or branches that diverged\) takes the merge title and summary as its message/.test(step4) &&
+        !/git merge <name>/.test(FIN) && !/already on the base/.test(FIN),
+    });
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

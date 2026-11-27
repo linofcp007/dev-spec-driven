@@ -150,7 +150,7 @@ controller rules on it.
 
 **Not a finding**, whatever its severity would be:
 - **Pre-existing** — the problem is already there at BASE and the diff neither introduced it nor made it reachable
-  (`git show BASE:<file>`, `git blame`): one "Out of scope (deferred)" line at most. A diff that adds a caller of a
+  (`git show BASE:<file>`, `git blame`): one "Pre-existing (deferred)" line at most. A diff that adds a caller of a
   broken unit, makes a dormant bug reachable, or breaks lines it didn't touch (a caller of a contract it changed, a
   "keep in sync" target it left behind) did introduce it.
 - **An ❌ is never pre-existing:** an AC this task must deliver and the code doesn't is this task's gap, whoever wrote
