@@ -26,7 +26,8 @@ let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM
   stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks, taskProse, taskSize, timeOf, trackAcIds,
   trackLabel, trackMarker, verificationStatus, withoutTaskMarkers, withRoadmapLock, writeFileAtomic, writeRoadmap,
   wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr, catalog;
-function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR,
+let existsRaw; // files.js — the read gate (1.41.1)
+function __link(E) { ({ existsRaw, acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR,
   buildTraceMatrix, catalogData, changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, dayOf, today,
   designSections, detectPhase, detectTracks, dirKey, enumArg, existingFeature, extractAcIds, extractSection, fcDay, fcIso,
   featureDirs, featureLang, featurePercent, fenceStep, flatText, flowOfState, forecastData, headingIndex, headRest,
@@ -513,7 +514,7 @@ function exportProjectDoc(projectDir, lang, cat) {
       children: kids.concat(sc ? [{ h: X.sections.successCriteria, md: sc }] : []) });
   }
   // The living catalog, once the project keeps one (.specs/SPECS.md) — rendered fresh, archived features and superseded ACs included.
-  if (fs.existsSync(path.join(root, "SPECS.md"))) blocks.push({ id: "catalog", cls: "feature", h: X.sections.catalog, md: artifactBody(cat.markdown) });
+  if (existsRaw(path.join(root, "SPECS.md"))) blocks.push({ id: "catalog", cls: "feature", h: X.sections.catalog, md: artifactBody(cat.markdown) });
   const meta = [[X.meta.overall, X.overall(rmv.overallPercent, rmv.complete, rmv.total, done, total)], [X.meta.lang, lang]];
   return { lang, scope: "project", features: rmv.features.map((f) => f.name), title: X.projectTitle(path.basename(path.resolve(projectDir))), kicker: X.kicker.project,
     lead: X.generated(today()), autogen: X.autogen, meta, blocks };
@@ -696,7 +697,7 @@ function exportSpecs(projectDir, opts = {}) {
   // before anything is read or written through it (every format, the project's documents too).
   if (!specsWriteContained(projectDir, file)) return { ...res, ok: false, error: i18n.msg(doc.lang).stakeholderExport.exportsLinked(".specs/" + EXPORT_DIR + "/" + base + "." + ext) };
   // A feature folder named 'exports' from before the name was reserved: never drop documents into someone's spec.
-  if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(doc.lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
+  if (["requirements.md", ".state.json"].some((n) => existsRaw(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(doc.lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: i18n.msg(doc.lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + base + "." + ext) };
   writeFileAtomic(file, i18n.portableCli(content)); // committed: `dev-spec`, never a machine path
   return { ...res, wrote: true, bytes: Buffer.byteLength(content, "utf8") };
@@ -737,7 +738,7 @@ function exportGherkin(projectDir, opts, pl) {
   // all-or-nothing: a linked .specs/exports/ or one linked target refuses the whole export, named.
   const linked = docs.find((d) => !specsWriteContained(projectDir, d.file));
   if (linked) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsLinked(".specs/" + EXPORT_DIR + "/" + path.basename(linked.file)) };
-  if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
+  if (["requirements.md", ".state.json"].some((n) => existsRaw(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   const hand = docs.find((d) => !isGeneratedOrAbsent(d.file));
   if (hand) return { ...res, ok: false, skipped: true, error: i18n.msg(lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + path.basename(hand.file)) };
   for (const d of docs) writeFileAtomic(d.file, i18n.portableCli(d.content));
@@ -1558,6 +1559,7 @@ function milestone(projectDir, action, opts = {}) {
     const unknown = [];
     for (const x of asked) {
       const f = existingFeature(projectDir, x);
+      if (f.linked) return { ok: false, linked: true, code: f.code, path: f.path, error: f.error }; // (1.41.1) said, never "unknown"
       if (!f.ok) unknown.push(x);
       else if (!features.includes(f.slug)) features.push(f.slug);
     }

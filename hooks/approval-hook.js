@@ -27,7 +27,9 @@
  * against accidents and casual workarounds, not a sandbox: an inline or written script is not read.
  *
  * It NEVER blocks on its own trouble BEFORE the pre-check passes: a malformed payload or any error there exits 0 silently — past it
- * (a guarded project, a call that may be an approval) an engine failure ASKS. It FAILS CLOSED on a
+ * (a guarded project, a call that may be an approval) an engine failure ASKS. As a process (1.41.1) it decides in a worker under a
+ * deadline, and no answer by it asks (runAsProcess, below) — except a worker held in one native call that never returns, which keeps
+ * the process alive past Claude Code's timeout (a known limit: claude-code-integration.md). It FAILS CLOSED on a
  * roadmap.json that exists and doesn't parse: the strictest "approvalGuard": "ask" | "deny" its raw text names still holds
  * (appending a byte to the file must not switch the guard off; a BOM-less UTF-16 file is read through its NULs), on a missing one
  * while the .specs/ holds features (ask), on a projectDir that is no local path (a bad file:// URI — ask), and
@@ -87,14 +89,24 @@ const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 // meta = the parsed roadmap.json meta (what a spec_init / `init` change is compared with), undefined when the file is broken.
 // UTF-8 or UTF-16 with a BOM (Windows PowerShell 5.1's Out-File: read as UTF-8 it was "off").
 function rawLevel(dir) {
+  const file = path.join(dir, ".specs", "roadmap.json");
+  // (1.41.1) a roadmap.json that is a LINK reads as gone — the engine's read gate never reads through it (approvalRoadmapGone): fail
+  // closed at ask while the .specs/ holds features, as for a deleted one (its target's meta is never read). So does anything else that
+  // is no regular file (review 2, R2H-F1): a FIFO, a device, a socket, a folder — never opened by its lstat, and opened without
+  // waiting and judged by its fd after (probe.js readRegularText: a swap after the lstat): a FIFO's read never returns. Opened ONLY
+  // when the lstat says a regular file (review 3, R3H-F3): an lstat that throws reads as gone too — through \\wsl.localhost\ a Linux
+  // FIFO's lstat throws EISDIR, and win32 has no O_NONBLOCK, so its open waited for a writer. Missing (ENOENT) is the same answer.
+  const st = lstatOf(file);
+  if (!st || !st.isFile()) return { level: roadmapGone(dir) ? 1 : 0 };
   let text;
   try {
-    text = HU.readText(path.join(dir, ".specs", "roadmap.json"));
+    text = probe().readRegularText(file);
   } catch (e) {
     // missing while the .specs/ holds features (a feature folder's .state.json) — deleted: fail closed at ask, as
     // the engine's approvalGuardLevel (meta unknown). Missing in a .specs/ without features, or unreadable: out of the way.
     return { level: e && e.code === "ENOENT" && roadmapGone(dir) ? 1 : 0 };
   }
+  if (text === null) return { level: roadmapGone(dir) ? 1 : 0 };
   let j;
   try {
     j = JSON.parse(text);
@@ -116,16 +128,20 @@ function strictest(levels) {
 }
 const sessionEnv = () => ({ CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR: process.env.SPEC_PROJECT_DIR });
 
-// stdin never ended within the safety net's 2 s — the payload is partial (it doesn't parse). When its text names dev-spec,
-// .specs/, dev-guardian or an approval tool and a project the session may be in has the guard on: ask (it used to exit 0 — allowed).
-function partial(raw) {
+// A partial payload's text names what partial() reads: dev-spec, .specs/, dev-guardian, an approval tool (an 8.3 alias of a guarded name
+// too, on win32 — SPECS~1, GUARDI~1: the pre-filter's own test, probe.js mayShortName).
+const partialNames = (text) => RE_PARTIAL.test(text) || (process.platform === "win32" && probe().mayShortName(text));
+// stdin never ended within the safety net's 2 s — the payload is partial (it doesn't parse) — or (1.41.1) it was past the hook's read
+// limit (MAX_INPUT: its head alone was kept). When its text names dev-spec, .specs/, dev-guardian or an approval tool and a project the
+// session may be in has the guard on: ask (it used to exit 0 — allowed). opts.onLevel: decide's.
+function partial(raw, opts = {}) {
   const text = String(raw || "");
-  // (an 8.3 alias of a guarded name too, on win32 — SPECS~1, GUARDI~1: the pre-filter's own test, probe.js mayShortName)
-  if (!RE_PARTIAL.test(text) && !(process.platform === "win32" && probe().mayShortName(text))) return null;
+  if (!partialNames(text)) return null;
   let cwd = null;
   const m = /"cwd"\s*:\s*"((?:[^"\\]|\\.){1,4096})"/.exec(text);
   if (m) try { cwd = JSON.parse('"' + m[1] + '"'); } catch { cwd = null; }
   const s = strictest(levelsOf(HU.approvalProjects({ cwd: cwd || process.cwd(), env: sessionEnv() })));
+  if (typeof opts.onLevel === "function") opts.onLevel(s);
   if (!s.level) return null;
   try {
     const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -136,25 +152,35 @@ function partial(raw) {
     return failClosed(s.meta);
   }
 }
-// a .specs/ without roadmap.json that holds features (a feature folder's .state.json) — rawLevel fails closed on it.
+// a .specs/ without roadmap.json that holds features (a feature folder's .state.json) — rawLevel fails closed on it. A folder that
+// is a link (its Dirent: no folder) or a .state.json that is one holds no feature — the engine's read gate reads them as absent (1.41.1).
 function roadmapGone(dir) {
   const fs = require("fs");
   const root = path.join(dir, ".specs");
   try {
-    return fs.readdirSync(root, { withFileTypes: true }).some((d) => d.isDirectory() && !d.name.startsWith(".") && fs.existsSync(path.join(root, d.name, ".state.json")));
+    return fs.readdirSync(root, { withFileTypes: true }).some((d) => {
+      if (!d.isDirectory() || d.name.startsWith(".")) return false;
+      const st = lstatOf(path.join(root, d.name, ".state.json"));
+      return !!st && !st.isSymbolicLink();
+    });
   } catch {
     return false;
   }
 }
+// lstat, never followed → the Stats or null.
+function lstatOf(p) {
+  try { return require("fs").lstatSync(p); } catch { return null; }
+}
 // past the pre-check — a project the call may act on has the guard on and the call may be an approval —
 // the engine failed (a broken install, an exception): ASK, never a silent allow. The reason comes from the i18n tables when they load
-// (the project's language as its raw meta names it), else the prompt goes without one.
-function failClosed(meta) {
+// (the project's language as its raw meta names it), else the prompt goes without one. why (1.41.1): "error", or "timeout" — no
+// decision by the deadline (seconds: the deadline, shown).
+function failClosed(meta, why = "error", seconds) {
   let reason;
   try {
     const i18n = require(path.join(__dirname, "..", "mcp", "lib", "i18n.js"));
     const A = i18n.msg(i18n.normalizeLang(meta && typeof meta.lang === "string" ? meta.lang : "en")).approvalGuard;
-    reason = A.ask(A.action({ kind: "unreadable", why: "error" }), false, meta && meta.approvalGuard); // at deny it says so (it asks, never refuses)
+    reason = A.ask(A.action({ kind: "unreadable", why, seconds }), false, meta && meta.approvalGuard); // at deny it says so (it asks, never refuses)
   } catch {
     reason = undefined;
   }
@@ -163,15 +189,9 @@ function failClosed(meta) {
   return { hookSpecificOutput: out };
 }
 
-// The hook's decision on one payload → the object it prints (ask / deny) or null (silent). opts.timedOut: the stdin safety net fired —
-// a payload that doesn't parse is a partial one.
-function decide(raw, opts = {}) {
-  let payload;
-  try {
-    payload = JSON.parse(raw || "{}");
-  } catch {
-    return opts.timedOut ? partial(raw) : null;
-  }
+// The pre-check — what the payload's text alone says, nothing read from disk: null (it can't be an approval — silent) or the call's parts
+// { ti, command, fp, mcpFile }. decide's first step, and the main thread's whole share of the hook as a process (needsDecision).
+function preCheck(payload) {
   if (!isObj(payload)) return null;
   const event = payload.hook_event_name || payload.hookEventName || "";
   if (event && event !== "PreToolUse") return null;
@@ -186,6 +206,21 @@ function decide(raw, opts = {}) {
   const approvalTool = other && probe().RE_APPROVAL_MCP.test(tool);
   const mcpFile = other && !approvalTool && probe().isMcpFileTool(tool) && RE_MCP_MAYBE.test(JSON.stringify(ti));
   if (!approvalTool && !(command && candidate(command)) && !fp && !mcpFile) return null;
+  return { ti, command, fp, mcpFile };
+}
+// The hook's decision on one payload → the object it prints (ask / deny) or null (silent). opts.timedOut: the stdin safety net fired —
+// a payload that doesn't parse is a partial one. opts.onLevel(s) (the process's worker, 1.41.1): called once the candidate projects'
+// strictest level is known — s = { level, dir, meta } (level 0: no project the call may act on has the guard on).
+function decide(raw, opts = {}) {
+  let payload;
+  try {
+    payload = JSON.parse(raw || "{}");
+  } catch {
+    return opts.timedOut ? partial(raw, opts) : null;
+  }
+  const pre = preCheck(payload);
+  if (!pre) return null;
+  const { ti, command, fp, mcpFile } = pre;
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd.trim() : null;
   // the edited path as the file system reads it — `./`, `..`, an NTFS stream, an 8.3 short name and a folder linked
   // to .specs/ (hook-utils editTargets, the engine's approvalEditTargets).
@@ -216,6 +251,7 @@ function decide(raw, opts = {}) {
   const levels = levelsOf(HU.approvalProjects({ cwd, env: sessionEnv(), named, command: command || "" }));
   const s = strictest(levels);
   if (unreadableProject && s.level < 1) s.level = 1;
+  if (typeof opts.onLevel === "function") opts.onLevel(s);
   if (!s.level) return null;
 
   // Past the pre-check: an engine failure asks (failClosed), it never allows silently.
@@ -246,7 +282,88 @@ function decide(raw, opts = {}) {
   }
 }
 
-module.exports = { decide, candidate };
-// As a process (hooks/hooks.json): the payload from stdin, decide run once — from the 2 s safety net with timedOut (a partial payload
-// naming dev-spec: ask); any unexpected error before the pre-check passes is a silent no-op (never a block).
-if (require.main === module) runHook(decide);
+// ---- as a process (hooks/hooks.json): a decision by the deadline (1.41.1, review 1 of the glob fix) --------------------------------
+// A PreToolUse hook past Claude Code's timeout lets the call through (code.claude.com/docs/en/hooks), so a reader that takes long — a
+// super-linear shape, a huge payload, a slow disk — was a way past the guard (R1, S1-F1 / F2 / F3). The main thread arms the deadline at
+// the process's start (DEADLINE_MS from it, process.uptime), reads stdin (≤ MAX_PAYLOAD characters) and runs the pre-check alone
+// (needsDecision: a call that can't be an approval exits here, silent — no worker, nothing read from disk; a payload past MAX_INPUT is
+// never parsed on the main thread: it goes to the worker whole). EVERYTHING else — the candidate projects, their roadmap.json, the
+// engine, the decision — runs in a worker_threads worker with a heap limit (WORKER_LIMITS), this same file. No answer by the deadline,
+// a worker error, its exit without an answer, an out-of-memory, a worker that could not start: ASK (failClosed: why "timeout" /
+// "error", in the project's language once the worker named it — the worker tells the candidate projects' strictest level before it
+// loads the engine; silent when it told level 0: no project the call may act on has the guard on). A payload past MAX_PAYLOAD — more
+// than the hook holds — asks whatever the level (why "partial"). hooks.json's timeout (10 s) minus DEADLINE_MS is the margin for the
+// process's start and the answer's write (measured: claude-code-integration.md → Human approval guard). What the deadline does NOT
+// cover — the process ends only when its worker does (Node joins its workers at exit): a worker inside one native call that never
+// returns. The readers before the engine open no file that is not a regular one (probe.js openRegular: a FIFO, a device), and the
+// engine's read gate reads none below .specs/ (files.js) — what is left is the known limit (claude-code-integration.md → Known limits):
+// such a file the agent made by an inline script where neither of them looks, `.specs` linked to `\\.\pipe\`, a dead network share.
+// DEV_SPEC_TEST_APPROVAL_DEADLINE_MS lowers the deadline (tests only: the hermetic chains keep DEV_SPEC_TEST_*; it never raises it).
+const DEADLINE_MS = 6000;
+const MAX_INPUT = 16 * 1024 * 1024; // past this many characters the main thread parses nothing: the worker gets the payload whole
+const MAX_PAYLOAD = 64 * 1024 * 1024; // past this many, the hook does not hold the payload (runHook drains the rest): ask
+const WORKER_LIMITS = { maxOldGenerationSizeMb: 512, maxYoungGenerationSizeMb: 64, stackSizeMb: 8 };
+function deadlineMs(env = process.env) {
+  const v = Number(env.DEV_SPEC_TEST_APPROVAL_DEADLINE_MS);
+  return env.DEV_SPEC_TEST_APPROVAL_DEADLINE_MS !== undefined && env.DEV_SPEC_TEST_APPROVAL_DEADLINE_MS !== "" && Number.isFinite(v) && v >= 0 ? Math.min(v, DEADLINE_MS) : DEADLINE_MS;
+}
+// The main thread's share of decide: may the payload need a decision? Its pre-check passes; a payload past MAX_INPUT (never parsed here:
+// the worker decides on it whole); or a payload that doesn't parse, cut short by the safety net, that names what partial() reads.
+// false: silent, no worker.
+function needsDecision(raw, opts = {}) {
+  const text = String(raw || "");
+  if (text.length > MAX_INPUT) return true;
+  let payload;
+  try {
+    payload = JSON.parse(text || "{}");
+  } catch {
+    return !!opts.timedOut && partialNames(text);
+  }
+  return preCheck(payload) !== null;
+}
+function runAsProcess() {
+  const { Worker } = require("worker_threads");
+  const deadline = deadlineMs();
+  let late = false, settle = null, known = null; // known: the worker's strictest level once it read the projects ({ level, meta })
+  // the answer without the worker's: silent once it said no project has the guard on (level 0), else ask — in the project's language
+  // once the worker named it
+  const failed = (why) => (known && known.level === 0 ? null : failClosed(known && known.meta, why, Math.ceil(deadline / 1000)));
+  setTimeout(() => { late = true; if (settle) settle(failed("timeout")); }, Math.max(0, deadline - process.uptime() * 1000));
+  runHook((raw, opts) => {
+    if (opts.tooBig) return failClosed(undefined, "partial"); // past MAX_PAYLOAD: not held, so not read — ask, whatever the level
+    const timedOut = !!opts.timedOut;
+    if (!needsDecision(raw, { timedOut })) return null;
+    if (late) return failed("timeout");
+    return new Promise((resolve) => {
+      settle = (out) => { settle = null; resolve(out); };
+      let w;
+      try {
+        w = new Worker(__filename, { workerData: { approvalHook: true, raw, timedOut }, resourceLimits: WORKER_LIMITS, stdout: true });
+      } catch {
+        return settle(failed("error"));
+      }
+      w.on("message", (m) => {
+        if (isObj(m) && isObj(m.known)) known = m.known;
+        else if (isObj(m) && "out" in m && settle) settle(m.out);
+      });
+      w.on("error", () => { if (settle) settle(failed("error")); });
+      w.on("exit", () => { if (settle) settle(failed("error")); });
+    });
+  }, { maxInput: MAX_PAYLOAD });
+}
+// The worker: decide on the payload the main thread handed it (whole — parsed here when it was past MAX_INPUT), the strictest level
+// told as soon as it is known.
+function runAsWorker() {
+  const { parentPort, workerData } = require("worker_threads");
+  const onLevel = (s) => parentPort.postMessage({ known: { level: s.level, meta: { lang: s.meta && typeof s.meta.lang === "string" ? s.meta.lang : undefined, approvalGuard: LEVELS[s.level] } } });
+  parentPort.postMessage({ out: decide(workerData.raw, { timedOut: workerData.timedOut, onLevel }) });
+}
+
+module.exports = { decide, candidate, needsDecision, deadlineMs, DEADLINE_MS, MAX_INPUT, MAX_PAYLOAD, WORKER_LIMITS };
+// As a process: the main thread (runAsProcess), or the worker it starts (the same file, its workerData marked — whatever require.main
+// says there).
+{
+  const wt = require("worker_threads");
+  if (!wt.isMainThread && isObj(wt.workerData) && wt.workerData.approvalHook === true) runAsWorker();
+  else if (wt.isMainThread && require.main === module) runAsProcess();
+}

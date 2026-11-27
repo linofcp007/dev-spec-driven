@@ -21,6 +21,9 @@ const CTX = {
   // packs.js — the project's track packs
   PACK_MEMO: null, // { root, dirKey, reg } — the current call's track packs (withReadCache scope)
   GHOST_MARKERS: null, // Map(name → "[TOKEN]") — the missing packs' markers noteGhostPacks records (packs.js), same scope
+  // files.js — the project folders this call works in (every specsRoot(projectDir) records its folder): the read / write gates'
+  // root is the outermost one's own .specs/ (gateRootOf), same scope
+  GATE_BASES: null,
   // files.js — the dry-run sink while withDryRun(fn) runs ({ files: Map(key → { file, text, dir? }), children: Map(folder key →
   // Map(name → "file" | "dir" | null)) }): every write primitive records into it instead of the disk, every reader sees it. Set and
   // cleared by withDryRun itself (not by withReadCache), so it never outlives the engine call that opened it.

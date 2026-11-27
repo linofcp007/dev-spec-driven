@@ -277,17 +277,41 @@ const jsonOf = (buf) => JSON.parse(textOf(buf));
 const readText = (file) => textOf(fs.readFileSync(file));
 const readJsonFile = (file) => jsonOf(fs.readFileSync(file));
 const isUtf16 = (buf) => buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff));
+// A file opened only when it is a REGULAR one → its fd (the caller closes it), or null: a FIFO, a device, a socket, a folder. Opened
+// with O_NONBLOCK where the platform has it (opening a FIFO never waits for a writer), then judged by the fd's own fstat (a swap
+// after a stat shows there). Throws as fs.openSync does (a missing file: ENOENT). 1.41.1 (review 2, R2H-F1): a FIFO named
+// roadmap.json or ROADMAP.md under a folder a command names kept the approval hook's worker in one read that never returns — and
+// Node joins its workers at exit, so the hook went past Claude Code's timeout.
+function openRegular(file) {
+  let fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK || 0));
+  try {
+    if (fs.fstatSync(fd).isFile()) { const out = fd; fd = null; return out; }
+    return null;
+  } finally {
+    if (fd !== null) try { fs.closeSync(fd); } catch { /* closed */ }
+  }
+}
+// A regular file's text, decoded (readText), or null when it is no regular file (openRegular).
+function readRegularText(file) {
+  const fd = openRegular(file);
+  if (fd === null) return null;
+  try { return textOf(fs.readFileSync(fd)); } finally { try { fs.closeSync(fd); } catch { /* closed */ } }
+}
 
 // ---- the rule ---------------------------------------------------------------------------------------------------------------
 // The marker every file dev-spec generates carries (state.js RE_AUTOGEN — mcp/tests/10-guards-probe.js checks they are the same).
 const RE_AUTOGEN = /AUTO-GE(?:NERATED|RADO|NERADO) (?:by|por) dev-spec/;
 const HEAD_CHARS = 4000;
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
-// A file's first HEAD_CHARS characters (one bounded read, decoded as the engine decodes — files.js readFileHead), else "".
+// A file's first HEAD_CHARS characters (one bounded read, decoded as the engine decodes — files.js readFileHead), else "" — a
+// regular file only (openRegular: a FIFO named ROADMAP.md is never read), and only opened when its lstat says one (review 3, R3H-F3):
+// a link, a FIFO, a device or an lstat that throws (a Linux FIFO through \\wsl.localhost\: EISDIR — win32 opens with no O_NONBLOCK).
 function head(file) {
   let fd = null;
   try {
-    fd = fs.openSync(file, "r");
+    if (!fs.lstatSync(file).isFile()) return "";
+    fd = openRegular(file);
+    if (fd === null) return "";
     const buf = Buffer.alloc(HEAD_CHARS * 4);
     const n = fs.readSync(fd, buf, 0, buf.length, 0);
     return textOf(buf.subarray(0, n)).slice(0, HEAD_CHARS);
@@ -596,7 +620,7 @@ function closestName(word, candidates, limit) {
 
 module.exports = {
   SESSION_MAX_UP, PROJECT_MAX_UP, RE_AUTOGEN, RE_UNEXPANDED_VAR, unexpandedVar, usable, RE_HOME_PREFIX, expandHome, isNetwork,
-  fsTargetPath, editTargets, utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16,
+  fsTargetPath, editTargets, utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16, openRegular, readRegularText,
   SHORT_NAME_LONGS, shortNameOf, mayShortName, shortNamesRead, shortDirAt, winPathTrim, realPrefix, realPathLoose, longPath,
   isDevSpecProject, nearestDevSpec, nearestSpecs, nearestProject, resolveProjectDir, sessionAnchors, sessionProjects,
   trimSlashEnd, approvalPlain, approvalMayBe, APPROVAL_CANDIDATE_TESTS, RE_APPROVAL_VERB, dotGlob, guardedFileOf, specsParentOf,

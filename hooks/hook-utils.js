@@ -37,7 +37,8 @@ const path = require("path");
 // partial payload naming dev-spec) — then finishes with its answer. It never crashes: an exception in decide, or a stdin error, is a
 // silent exit 0 — never a block (past its pre-check the approval hook catches its own and asks). A terminal stdin runs decide("{}").
 // opts.maxInput: past that many characters the rest is drained unread and decide gets "" (the observe and plan hooks ignore an
-// oversized payload).
+// oversized payload) — with { tooBig: true } (the approval hook asks then, 1.41.1). A decide may answer with a promise (the approval
+// hook's worker, 1.41.1): finish runs with what it resolves to (a rejection: silent).
 const SAFETY_NET_MS = 2000;
 let finished = false;
 function finish(obj) {
@@ -53,8 +54,9 @@ function runHook(decide, opts = {}) {
     if (ran) return; // stdin's end and the safety net must not both run it
     ran = true;
     let out = null;
-    try { out = decide(raw, { timedOut }); } catch { out = null; }
-    finish(out);
+    try { out = decide(raw, { timedOut, tooBig }); } catch { out = null; }
+    if (out && typeof out.then === "function") out.then(finish, () => finish(null));
+    else finish(out);
   };
   if (process.stdin.isTTY) return run("{}", false);
   process.stdin.setEncoding("utf8");

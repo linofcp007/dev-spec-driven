@@ -23,7 +23,8 @@ let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, 
   writeFileAtomic, appendSpecText, flatText, specNameText, importSteering, isDryRun, IMPORT_TOOLS, STEERING_IMPORT_TOOLS, withDryRun;
 let today; // core.js — the local calendar date (today / dayOf)
 let portAnchored, taskBlocks; // port.js · tasks.js — an imported plan of a +port feature with no fence warns (1.36 review 1)
-function __link(E) { ({ portAnchored, taskBlocks, today, BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
+let entryAt; // files.js — the read gate (1.41.1)
+function __link(E) { ({ entryAt, portAnchored, taskBlocks, today, BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
   isInsideDir, isLtUnit, isPackTrack, isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf,
   packRequirementsBlock, packTaskBlock, parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE,
@@ -338,9 +339,14 @@ function importSourceAt(projectDir, t, source, W, lang0) {
   const rel = toPosix(path.relative(realRoot, dir)) || ".";
   const read = (file) => {
     try {
-      if (!fs.existsSync(file)) return null;
-      const real = fs.realpathSync.native(file);
-      if (!isInsideDir(realRoot, real) || importHiddenPart(toPosix(path.relative(realRoot, real))) || !importFileKind(file, IMPORT_READ_EXT) || !importFileKind(real, IMPORT_READ_EXT)) {
+      // decided on the ENTRY, never on what a link names (1.41.1: a live link out of the project warned, a dangling one was silent — the
+      // answer told whether an outside target exists): its folder by real path first (list's rule), then an entry there at all
+      const folder = path.dirname(file);
+      if (!realOk(folder)) { warnFolder(folder); return null; }
+      try { fs.lstatSync(file); } catch { return null; } // no entry: nothing
+      let real = null;
+      try { real = fs.realpathSync.native(file); } catch { real = null; } // a dangling link: the warning a live one out gets
+      if (!real || !isInsideDir(realRoot, real) || importHiddenPart(toPosix(path.relative(realRoot, real))) || !importFileKind(file, IMPORT_READ_EXT) || !importFileKind(real, IMPORT_READ_EXT)) {
         readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file))));
         return null;
       }
@@ -355,7 +361,24 @@ function importSourceAt(projectDir, t, source, W, lang0) {
       return text.replace(new RegExp("^" + BOM_CHAR), "");
     } catch { return null; }
   };
-  return { realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge };
+  // (1.41.1) a FOLDER of the source as every importer lists it: only one whose real path is inside the project and not hidden by real
+  // path — a `contracts -> ~/elsewhere` junction was listed and its names reached the warnings —: its Dirents (by name), else null and
+  // one warning naming the FOLDER, never what it holds. kind(p): "dir" | "file" by the real path the same way, else null.
+  const realOk = (p) => { try { const real = fs.realpathSync.native(p); return isInsideDir(realRoot, real) && !importHiddenPart(toPosix(path.relative(realRoot, real))) ? real : null; } catch { return null; } };
+  const warned = new Set();
+  // one warning per folder that is an ENTRY (lstat — a link dangling or not alike) whose real path is no folder of the project
+  const warnFolder = (d) => {
+    const r = toPosix(path.relative(realRoot, d));
+    let entry = true;
+    try { fs.lstatSync(d); } catch { entry = false; }
+    if (entry && !warned.has(r)) { warned.add(r); readWarnings.push(W.wUnreadable(r)); }
+  };
+  const list = (d) => {
+    if (!realOk(d)) { warnFolder(d); return null; }
+    try { return fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)); } catch { return null; }
+  };
+  const kind = (p) => { const real = realOk(p); if (!real) return null; try { const st = fs.statSync(real); return st.isDirectory() ? "dir" : st.isFile() ? "file" : null; } catch { return null; } };
+  return { realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge, list, kind };
 }
 
 function importRun(projectDir, tool, source, opts) {
@@ -383,7 +406,7 @@ function importRun(projectDir, tool, source, opts) {
   const root = path.resolve(projectDir);
   let readWarnings = [];
   let tooLarge = new Set(); // the source files over IMPORT_MAX_BYTES characters (refused, never cut)
-  let realRoot, realSrc, isFileSrc, dir, rel, read;
+  let realRoot, realSrc, isFileSrc, dir, rel, read, list = () => null, kind = () => null; // inline text: no folder to list
   if (inline) {
     try { realRoot = fs.realpathSync.native(root); } catch { realRoot = root; } // a project folder not created yet is fine
     realSrc = path.join(realRoot, t + ".md"); // a virtual file — its stem is the parsers' fallback feature name (the title wins)
@@ -398,11 +421,11 @@ function importRun(projectDir, tool, source, opts) {
   } else {
     const at = importSourceAt(projectDir, t, source, W, lang0);
     if (at.refused) return at.refused;
-    ({ realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge } = at);
+    ({ realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge, list, kind } = at);
   } // inline or a path
   // C3 parsers also get the file named (a plan among several), the language and the real root: { file, lang, root }.
   const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
-  const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot, inline }); // inline: no file to name
+  const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot, inline, list, kind }); // inline: no file to name
   if (tooLarge.size) return { ok: false, tooLarge: true, error: W.tooLarge([...tooLarge].join(", "), IMPORT_MAX_BYTES) }; // nothing created
   if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
   if (model.error) return { ok: false, error: model.error }; // a folder of several plans — name the file
@@ -425,7 +448,7 @@ function importRun(projectDir, tool, source, opts) {
   }
   const f = resolveFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
-  if (fs.existsSync(f.dir)) return { ok: false, error: W.exists(f.slug) };
+  if (entryAt(f.dir)) return { ok: false, error: W.exists(f.slug) };
   const pt = parseTracks(opts.tracks);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(lang0, pt.unknown) };
   // Tracks: explicit, else classified from the requirements-level text (not design/tasks — "data model" is not +ai).

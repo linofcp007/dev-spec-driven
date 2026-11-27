@@ -12,11 +12,11 @@ const i18n = require("../../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let checkboxUnits, closesFence, earsFromPlanText, firstParagraph, isWsUnit, leftoverExtras, markRange, mdHeadings,
   mdListItems, mdRange, newImportModel, planDone, planHeadingText, planPaths, planTaskLines, plusAfterBlanks, RE_FENCE,
-  RE_MD_HR, safeReaddir, shortTitle, stripEnd, stripHtmlComments, tidyLines, titleAfterDash, toPosix, unitProse,
+  RE_MD_HR, shortTitle, stripEnd, stripHtmlComments, tidyLines, titleAfterDash, toPosix, unitProse,
   unusedLines;
 function __link(E) { ({ checkboxUnits, closesFence, earsFromPlanText, firstParagraph, isWsUnit, leftoverExtras,
   markRange, mdHeadings, mdListItems, mdRange, newImportModel, planDone, planHeadingText, planPaths, planTaskLines,
-  plusAfterBlanks, RE_FENCE, RE_MD_HR, safeReaddir, shortTitle, stripEnd, stripHtmlComments, tidyLines, titleAfterDash,
+  plusAfterBlanks, RE_FENCE, RE_MD_HR, shortTitle, stripEnd, stripHtmlComments, tidyLines, titleAfterDash,
   toPosix, unitProse, unusedLines } = E); }
 
 // Headings whose whole section is already imported (every line used, blank, or a heading marked so) — marked used too, so
@@ -100,9 +100,12 @@ function parseBmad(dir, read0, W, src) {
   const P = i18n.msg(src.lang).importPlans;
   const seen = new Map(); // each file read once (a story file is read to recognise it, then to parse it)
   const read = (f) => { if (!seen.has(f)) seen.set(f, read0(f)); return seen.get(f); };
-  const isDir = (p) => { try { const st = fs.lstatSync(p); return st.isDirectory() && !st.isSymbolicLink(); } catch { return false; } };
-  const isFile = (p) => { try { return fs.lstatSync(p).isFile(); } catch { return false; } };
-  const mdIn = (d) => (isDir(d) ? safeReaddir(d).filter((n) => /\.md$/i.test(n) && isFile(path.join(d, n))).sort((a, b) => a.localeCompare(b, "en", { numeric: true })).map((n) => path.join(d, n)) : []);
+  // (1.41.1) by the real path too (importSourceAt's kind / list): a `docs ->` junction out of the project held "a dir" docs/stories and
+  // "a file" docs/prd.md (lstat reads the last part only) — their names reached the warnings; isDir too (fix round 2: the warning on
+  // docs/stories told whether the outside folder holds a stories/)
+  const isDir = (p) => { if (src && src.kind && src.kind(p) !== "dir") return false; try { const st = fs.lstatSync(p); return st.isDirectory() && !st.isSymbolicLink(); } catch { return false; } };
+  const isFile = (p) => { if (src && src.kind && src.kind(p) !== "file") return false; try { return fs.lstatSync(p).isFile(); } catch { return false; } };
+  const mdIn = (d) => (isDir(d) ? ((src && src.list ? src.list(d) : null) || []).map((e) => e.name).filter((n) => /\.md$/i.test(n) && isFile(path.join(d, n))).sort((a, b) => a.localeCompare(b, "en", { numeric: true })).map((n) => path.join(d, n)) : []);
   const bases = [dir, path.join(dir, "docs"), path.join(dir, "_bmad-output", "planning-artifacts"), path.join(dir, "planning-artifacts")];
   const first = (names) => { for (const b of bases) for (const n of names) if (isFile(path.join(b, n))) return path.join(b, n); return null; };
   const isStoryText = (t) => /^#\s+(?:story\s+)?\d+\.\d+\b/im.test(t || "");

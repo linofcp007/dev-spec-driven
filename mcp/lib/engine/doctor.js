@@ -49,7 +49,10 @@ let fastCheckOf; // evidence.js — the fast check (1.36, meta.fastCheck): docto
 let guardLevel, protectedTestsDoctor; // guards.js · protect.js — 1.36 guard tests: doctor's protected-tests warn
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
 let frictionHint; // friction.js — 1.41 the friction budget: next_action's finish-step hint (a platform item for a check over its budget)
-function __link(E) { ({ frictionHint, referenceExamplesCheck, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
+let existsRaw, entryAt, specsStat; // files.js — the read gate (1.41.1)
+let projectFileReal; // files.js — R3 (1.41.1): a project file by its real path
+let readDirCached, specsReadBlocked, seedParts; // files.js — the read gate (1.41.1): specs-links, the listing's seed
+function __link(E) { ({ readDirCached, specsReadBlocked, seedParts, projectFileReal, existsRaw, entryAt, specsStat, frictionHint, referenceExamplesCheck, dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designReuseGated, designWeighChecks, detectPhase,
@@ -207,7 +210,9 @@ function seedProjectLang(projectDir, lang) {
 function listFeatures(projectDir) {
   const root = specsRoot(projectDir);
   if (!fs.existsSync(root)) return { specsDir: root, exists: false, features: [] };
-  const dirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory());
+  const top = fs.readdirSync(root, { withFileTypes: true });
+  seedParts(root, top); // what the listing proved, the read gate doesn't ask again (each feature folder's lstat and real path)
+  const dirs = top.filter((d) => d.isDirectory());
   const entries = dirs.filter((d) => isFeatureFolder(d.name, root));
   // Visible, non-addressable folders are named (so a hand-made "My Feature/" can be renamed), never listed.
   const ignored = dirs.filter((d) => !isFeatureFolder(d.name, root) && !/^[._]/.test(d.name) && !reservedSlug(d.name, root)).map((d) => d.name);
@@ -273,7 +278,7 @@ function statusFeature(projectDir, name) {
   if (tracks.includes("saas")) scaleSections = sectionView(rowsOf("saas"));
   let aiSections = null;
   if (tracks.includes("ai")) {
-    aiSections = { hasEvalPlan: fs.existsSync(path.join(dir, "eval-plan.md")), promptVersions: safeReaddir(path.join(dir, "prompts")).filter((f) => /\.md$/.test(f)),
+    aiSections = { hasEvalPlan: existsRaw(path.join(dir, "eval-plan.md")), promptVersions: safeReaddir(path.join(dir, "prompts")).filter((f) => /\.md$/.test(f)),
       designHasAiSections: headingHasMarker(design, "[AI]"), sections: sectionView(rowsOf("ai")) };
   }
   // +sec / +privacy: the same view as the scale sections (null while the track is off).
@@ -384,7 +389,7 @@ function nextAction(projectDir, name, opts = {}) {
   const cur = flowPhaseIndex(phase, flow);
   const fails = doc.ok ? doc.checks.filter((c) => c.status === "fail" && checkPhaseIndex(c.id, flow) <= cur) : [];
   // Phase 4 names what it asks for: failing tests (+tdd), the eval harness + baseline (+ai), or both.
-  const plans = [tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md")), tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md"))];
+  const plans = [tracks.includes("tdd") && existsRaw(path.join(dir, "test-plan.md")), tracks.includes("ai") && existsRaw(path.join(dir, "eval-plan.md"))];
   const testsWhat = plans[0] && plans[1] ? "both" : plans[1] ? "ai" : "tdd";
   // Once tasks are ticked (executing / complete — e.g. a 1.12 feature, which had no tests gate) the code exists: "write
   // every test and confirm it fails … no implementation code until then" is impossible. The gate is then a sign-off for
@@ -802,7 +807,7 @@ const criticalNamed = (c) => !!c.critical && c.critical.signals.length > 0;
 const CONTEXT_PROTO = {
   read(file) { const t = this.memo.texts; if (!t.has(file)) t.set(file, readIfExists(path.join(this.dir, file))); return t.get(file); },
   // present AND readable (a folder of that name, no permission, a file another program holds is no artifact to judge)
-  exists(file) { return fs.existsSync(path.join(this.dir, file)) && this.read(file) != null; },
+  exists(file) { return existsRaw(path.join(this.dir, file)) && this.read(file) != null; },
 };
 for (const [key, view] of Object.entries(CHECK_VIEWS)) {
   Object.defineProperty(CONTEXT_PROTO, key, { enumerable: true, get() {
@@ -903,6 +908,27 @@ const quoted = (list) => list.map((v) => "«" + v + "»").join(", ");
 const CORE_STEERING = ["constitution.md", "product.md", "tech.md", "structure.md"];
 
 const protectOpen = (c) => !!c.approvals.tasks && c.blocks.some((b) => !b.done); // protected-tests: approved, open tasks
+// specs-links (1.41.1): the entries below .specs/ the read gate reads as absent — .specs/'s own children, steering/'s and _archive/'s,
+// and the feature folder's (`dir`, SPECS_LINKS_DEPTH levels) — each a `.specs/…` path, sorted, at most SPECS_LINKS_MAX. A listing's
+// link entry is confirmed by the gate's lstat (a cloud-file placeholder lists as one on Windows), a folder by the gate (its real
+// path); a regular file can't redirect. Listings through readDirCached: the ones doctor reads anyway.
+const SPECS_LINKS_SHOWN = 12, SPECS_LINKS_MAX = 200, SPECS_LINKS_DEPTH = 3;
+function specsLinks(root, dir) {
+  const out = new Set();
+  const scan = (d, depth) => {
+    for (const e of readDirCached(d) || []) {
+      if (out.size >= SPECS_LINKS_MAX) return;
+      if (!e.isSymbolicLink() && !e.isDirectory()) continue;
+      const p = path.join(d, e.name);
+      if (specsReadBlocked(p)) out.add(".specs/" + toPosix(path.relative(root, p)));
+      else if (depth > 0 && e.isDirectory()) scan(p, depth - 1);
+    }
+  };
+  scan(root, 0);
+  for (const sub of ["steering", "_archive"]) if (!specsReadBlocked(path.join(root, sub))) scan(path.join(root, sub), 0);
+  if (dir && !specsReadBlocked(dir)) scan(dir, SPECS_LINKS_DEPTH);
+  return [...out].sort();
+}
 
 // DOCTOR_CHECKS — every check spec_doctor runs and every check a phase's approval runs, ONE entry each, in the doctor's order:
 //   id         its stable id (an entry emitting several lists them in `emits`; `family` matches a family — a track pack's
@@ -939,11 +965,17 @@ const DOCTOR_CHECKS = [
     run: (c) => protectedTestsDoctor(c.projectDir, c.slug, c.state, c.lang, protectOpen(c)) },
   // Steering: present is not enough — a steering file that is still its template steers nothing (named, with its count).
   { id: "steering", run: (c) => {
-    const missing = CORE_STEERING.filter((f) => !fs.existsSync(path.join(c.root, "steering", f)));
+    const missing = CORE_STEERING.filter((f) => !existsRaw(path.join(c.root, "steering", f)));
     const stub = steeringPlaceholders(c.root);
     const issues = [missing.length ? c.m.steeringMissing(missing.join(", ")) : null,
       stub.length ? c.fm.scopedSteering.placeholders(stub.map((s) => s.file + (s.placeholders ? ` (${s.placeholders})` : "")).join(", ")) : null].filter(Boolean);
     return { status: issues.length ? "warn" : "pass", detail: issues.join("; ") || c.m.steeringOk };
+  } },
+  // 1.41.1 the read gate: each link below .specs/ the reads treat as ABSENT — a linked steering/ or feature folder, a file link in this
+  // feature's folder, in steering/ or at .specs/'s root — named (never what it points at), so nothing a user relied on goes silent. A warn.
+  { id: "specs-links", run: (c) => {
+    const links = specsLinks(c.root, c.dir);
+    return links.length ? { status: "warn", detail: c.m.specsLinks(links.slice(0, SPECS_LINKS_SHOWN).join(", "), Math.max(0, links.length - SPECS_LINKS_SHOWN)) } : null;
   } },
   // 1.41: structure.md's ## Reference Examples table (the brief quotes its rows for a task's files) — a warn for a Copy file that is
   // gone or rows past the read; a pass that says a section without a table is not read; nothing without the section. Project-level,
@@ -1160,7 +1192,7 @@ const DOCTOR_CHECKS = [
     }).join("; ")) };
   } },
   // tdd / ai: the test plan / the eval plan present
-  { id: "test-plan", phase: 3, applies: (c) => c.tracks.includes("tdd"), run: (c) => ({ status: fs.existsSync(path.join(c.dir, "test-plan.md")) ? "pass" : "warn", detail: "" }) },
+  { id: "test-plan", phase: 3, applies: (c) => c.tracks.includes("tdd"), run: (c) => ({ status: existsRaw(path.join(c.dir, "test-plan.md")) ? "pass" : "warn", detail: "" }) },
   // 1.33: the test plan of a critical flow — a row for the same request twice / two at once and, when the spec is about users' own
   // data or permissions, one for another user's access. A WARN (never the test-plan gate); the same skips as critical-flows, not
   // while test-plan.md is still a later phase's template; a plan approved before 1.33 (no `critical` stamp) passes with a note.
@@ -1168,7 +1200,7 @@ const DOCTOR_CHECKS = [
     !c.laterFiles.includes("test-plan.md") && criticalNamed(c),
   run: (c) => criticalFlowCheck("test-plan", c.critical, c.lang, { approval: c.approvals && c.approvals["test-plan"], plan: c.read("test-plan.md"), projectDir: c.projectDir,
     feature: { dir: c.dir, slug: c.slug, tracks: c.tracks, createdAt: c.state.createdAt } }) },
-  { id: "eval-plan", phase: 4, applies: (c) => c.tracks.includes("ai"), run: (c) => ({ status: fs.existsSync(path.join(c.dir, "eval-plan.md")) ? "pass" : "warn", detail: "" }) },
+  { id: "eval-plan", phase: 4, applies: (c) => c.tracks.includes("ai"), run: (c) => ({ status: existsRaw(path.join(c.dir, "eval-plan.md")) ? "pass" : "warn", detail: "" }) },
   // Traceability — every failing kind named with its IDs. Scoped like the placeholders check: a LATER phase's artifact that is still its
   // template (tasks.md / test-plan.md at the requirements or design gate) is not traced yet — its template rows (_Requirements:
   // US-1.AC-3…_, T-04 → US-1.AC-4) are no typos and no gap of the phase being judged: the gap kinds that read it are deferred (a warn).
@@ -1289,7 +1321,7 @@ const DOCTOR_CHECKS = [
     return xac.length ? { status: "warn", detail: crossAcDoctorDetail(xac, c.slug, c.lang) } : null;
   } },
   // Brownfield: an integration plan that is still the template (only when the feature has one).
-  { id: "integration-plan", applies: (c) => fs.existsSync(path.join(c.dir, "integration-plan.md")), run: (c) => (artifactState({ file: path.join(c.dir, "integration-plan.md") }) === "filled"
+  { id: "integration-plan", applies: (c) => existsRaw(path.join(c.dir, "integration-plan.md")), run: (c) => (artifactState({ file: path.join(c.dir, "integration-plan.md") }) === "filled"
     ? { status: "pass", detail: c.fm.brownfield.integrationPlanOk } : { status: "warn", detail: c.fm.brownfield.integrationPlanPlaceholder }) },
   // Artifacts edited after THEIR approval (next_action / finish / roadmap's view): re-review, then re-approve — spec_impact lists what
   // the edit touches when the approval has a snapshot (one `impact --phase` command per phase with one: next_action's hint).
@@ -1390,7 +1422,7 @@ function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
     return { artifact: true, checks };
   }
   const art = gate.artifact(c);
-  if (art.missing) return { artifact: false, file: art.file, checks, ...(fs.existsSync(path.join(dir, art.file)) ? { unreadable: true } : {}) };
+  if (art.missing) return { artifact: false, file: art.file, checks, ...(entryAt(path.join(dir, art.file)) ? { unreadable: true } : {}) };
   c.gateFile = art.file;
   for (const ref of gate.probes(c)) {
     const [id, name] = ref.split(":");
@@ -1506,7 +1538,8 @@ function statusActivity(dir, st) {
   if (isObj(st.approvals)) Object.values(st.approvals).forEach((a) => isObj(a) && see(a.at));
   if (isObj(st.finished)) see(st.finished.at);
   for (const f of [statePath(dir), path.join(dir, "tasks.md")]) {
-    try { const m = fs.statSync(f).mtimeMs; if (m > best) best = m; } catch { /* absent */ }
+    const st = specsStat(f); // through the read gate (1.41.1)
+    if (st && st.mtimeMs > best) best = st.mtimeMs;
   }
   return best;
 }
@@ -1518,8 +1551,8 @@ function statusActivity(dir, st) {
 // reads (an array, optional): each test file it looks at is pushed there — read or missing (the status line's render cache signs them:
 // a test written or changed outside .specs/ shows at the next render, 1.30.1).
 function statusTestsGate(pdir, dir, tracks, reads) {
-  const tdd = tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md"));
-  const ai = tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md"));
+  const tdd = tracks.includes("tdd") && existsRaw(path.join(dir, "test-plan.md"));
+  const ai = tracks.includes("ai") && existsRaw(path.join(dir, "eval-plan.md"));
   if (ai && !evalSetsState(dir).ok) return "fail";
   if (!tdd) return "pass";
   const planText = planIdText(readIfExists(path.join(dir, "test-plan.md")) || "");
@@ -1528,6 +1561,7 @@ function statusTestsGate(pdir, dir, tracks, reads) {
   const { scopes, outside } = planFileScopes(planText);
   const root = path.resolve(pdir);
   const read = new Map(); // project-relative file → the T-ID keys it names (null: not a file the scan would read)
+  let rootReal = null; // (1.41.1) the project's real path, read once: a plan's file is read by ITS real path (projectFileReal)
   const keysOf = (p) => {
     const rel = toPosix(p).replace(/^\.\/+/, "");
     if (read.has(rel)) return read.get(rel);
@@ -1535,7 +1569,8 @@ function statusTestsGate(pdir, dir, tracks, reads) {
     const abs = path.resolve(root, rel);
     const segs = toPosix(path.relative(root, abs)).split("/");
     if (read.size < STATUS_TEST_FILES && withinRoot(root, abs) && !segs.slice(0, -1).some((s) => s.startsWith(".") || SCAN_IGNORE.has(s)) &&
-      !SCAN_IGNORE.has(segs[segs.length - 1]) && isTestCodePath(segs.join("/"))) {
+      !SCAN_IGNORE.has(segs[segs.length - 1]) && isTestCodePath(segs.join("/")) &&
+      projectFileReal(root, rootReal || (rootReal = realRootOf(root)), segs.join("/"))) { // never through a junction out of the project
       if (Array.isArray(reads)) reads.push(abs);
       try {
         if (fs.lstatSync(abs).isFile()) {

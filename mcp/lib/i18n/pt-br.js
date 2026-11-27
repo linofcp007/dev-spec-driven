@@ -161,6 +161,11 @@ const PTBR_PHRASES = {
   "é uma ligação ou uma pasta": "é um link ou uma pasta", "uma ligação para fora do projeto": "um link simbólico para fora do projeto",
   "repõe a ligação": "restaura o vínculo", "ligação ao harness": "integração com o harness",
   "um pool de ligações": "um pool de conexões",
+  // 1.41.1 the read gate: feature-linked, doctor specs-links, a protected test behind a link (a link is masculine: "-o", "cada um", "lidos")
+  "através de uma ligação: substitui-a por": "através de um link: substitua-o por",
+  "ligações em": "links em", "são lidas como ausentes": "são lidos como ausentes", "através das quais o dev-spec": "através dos quais o dev-spec",
+  "substitui cada uma por uma pasta ou um ficheiro normal (copia o conteúdo para lá)": "substitua cada um por uma pasta ou um arquivo normal (copie o conteúdo para lá)",
+  "atrás de uma ligação": "atrás de um link",
   // "para lá de" (beyond) is European; Brazil says "além de"
   "para lá da": "além da", "para lá dela": "além dela", "para lá deles": "além deles", "para lá de": "além de", "para lá do": "além do",
   // a link is a "link" (a "ligação" is a phone call, "liga-o" reads "call him / turn it on")

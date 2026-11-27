@@ -2232,8 +2232,8 @@ exports.run = async ({
           && /asks: \(\) => counted\.asks === counted\.table - counted\.settled/.test(G1) && /asksReads: \(\) =>/.test(G1) && !/within\(rep\(G1\.asksOn\)/.test(G1)
           && /fsCalls\(G1\.asksOn \+ path\.sep/.test(G1)],
       ["tasks-and-evidence.md: the fast check's planned-walk reuse — counted under the project root (09-evidence-fast-check), a 2.5× backstop", () =>
-        TE.includes("`09-evidence-fast-check` COUNTS it since 1.40 — the brief and next_task with the fast check make, under the project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's; a 2.5× timed backstop beside")
-          && /counted: \(\) => js\(counted\) === js\(\{ brief: \{ openSync: 1 \}, next: \{ openSync: 1 \} \}\)/.test(FC) && /\(x\) => x\.ratio <= 2\.5\)/.test(FC)],
+        TE.includes("`09-evidence-fast-check` COUNTS it since 1.40 — the brief and next_task with the fast check make, under the project root, the fs calls of the call without it plus the planned walk's and one open more, the observed log's (1.41.1: and the read gate's two lstats and one realpath of its path); a 2.5× timed backstop beside")
+          && /counted: \(\) => js\(counted\) === js\(\{ brief: \{ lstatSync: 2, \"realpathSync\.native\": 1, openSync: 1 \}, next: \{ lstatSync: 2, \"realpathSync\.native\": 1, openSync: 1 \} \}\)/.test(FC) && /\(x\) => x\.ratio <= 2\.5\)/.test(FC)],
       ["tasks-and-evidence.md: the protected-tests walk stops at its cap — counted under the project root (10-guards-protected-tests)", () =>
         TE.includes("past the cap the walk stops — COUNTED since 1.40 under the project root (10-guards-protected-tests: 4,000 test files open and stat what 2,000 do and list strictly fewer folders")
           && /stops: \(\) => fewer\(over\.a\.k, over\.b\.k\)/.test(PT) && /a\.readdirSync < b\.readdirSync/.test(PT)],

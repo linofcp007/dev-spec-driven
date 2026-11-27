@@ -17,7 +17,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, artifactState,
   bugPlaceholders, criterionBlocks, designSections, detectTracks, duplicateTaskNumbers,
   enumArg, errs, evidenceRule, existingFeature, existsCached, extractSection, extractTestIds,
   featureLang, fingerprintMatches, hasProseOutsideBrackets, headingsOnly, inactiveTaskLines, isBugStep,
-  isInsideDir, isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap, maybeRefreshRoadmap, normalizeLang, own,
+  isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap, maybeRefreshRoadmap, normalizeLang, own,
   ownRecord, parseTasks, PHASE_FILE, phaseFile, PHASES, placeholderReport, planIdText, projectLang,
   RE_LIST_ITEM, RE_TODO_SENTINEL, readIfExists, readJson, readRoadmap, readState, reasonInput,
   specChangedSince, spikePhase, statePath, STEERING_GOVERNED,
@@ -29,11 +29,12 @@ let acIndex, activeDesign, activeTasks, artifactReport, artifactState,
   checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError, sameApprovedContent,
   approvalChecks, CHECK_PHASE; // doctor.js (the check registry)
 let protectOnApproval, protectApprovalNote; // protect.js — 1.36 guard tests: the first complete tasks approval's snapshot
-function __link(E) { ({ protectOnApproval, protectApprovalNote, acIndex, activeDesign, activeTasks, artifactReport,
+let existsRaw, entryAt, specsStat; // files.js — the read gate (1.41.1)
+function __link(E) { ({ existsRaw, entryAt, specsStat, protectOnApproval, protectApprovalNote, acIndex, activeDesign, activeTasks, artifactReport,
   artifactState, bugPlaceholders, criterionBlocks, designSections, detectTracks,
   duplicateTaskNumbers, enumArg, errs, evidenceRule, existingFeature, existsCached, extractSection,
   extractTestIds, featureLang, fingerprintMatches, hasProseOutsideBrackets, headingsOnly,
-  inactiveTaskLines, isBugStep, isInsideDir, isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap,
+  inactiveTaskLines, isBugStep, isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap,
   maybeRefreshRoadmap, normalizeLang, own, ownRecord, parseTasks, PHASE_FILE, phaseFile, PHASES, placeholderReport,
   planIdText, projectLang, RE_LIST_ITEM, RE_TODO_SENTINEL, readIfExists, readJson, readRoadmap,
   readState, reasonInput, specChangedSince, spikePhase,
@@ -60,7 +61,7 @@ function phaseActive(phase, tracks) {
 function testsGateDue(dir, tracks, kind, approvals) {
   if (kind === "bugfix" || !phaseActive("tests", tracks)) return false;
   const a = isObj(approvals) ? approvals : stateApprovals(dir);
-  const plan = (ph) => fs.existsSync(path.join(dir, PHASE_FILE[ph])) || isRecord(a[ph]);
+  const plan = (ph) => existsRaw(path.join(dir, PHASE_FILE[ph])) || isRecord(a[ph]);
   return (tracks.includes("tdd") && plan("test-plan")) || (tracks.includes("ai") && plan("eval-plan"));
 }
 // A feature folder's approvals as its .state.json holds them ({} when there are none or it can't be read).
@@ -1023,7 +1024,7 @@ function writeSnapshot(dir, phase, raw, history, design) {
   const rel = (k, ext) => `${HISTORY_DIR}/${phase}@${k}${ext}`;
   // (distinct snapshots: an identical re-approval shares its predecessor's — reuseSnapshot)
   let n = new Set((Array.isArray(history) ? history : []).filter((h) => isRecord(h) && h.phase === phase && typeof h.snapshot === "string").map((h) => h.snapshot)).size + 1;
-  while (fs.existsSync(path.join(dir, rel(n, ".md"))) || (design != null && fs.existsSync(path.join(dir, rel(n, ".design.md"))))) n++;
+  while (entryAt(path.join(dir, rel(n, ".md"))) || (design != null && entryAt(path.join(dir, rel(n, ".design.md"))))) n++;
   writeFileAtomic(path.join(dir, rel(n, ".md")), phase === "tasks" ? uncheckTasks(raw) : raw);
   if (design == null) return { snapshot: rel(n, ".md") };
   writeFileAtomic(path.join(dir, rel(n, ".design.md")), design);
@@ -1043,11 +1044,14 @@ function reuseSnapshot(dir, phase, history, fp, dfp) {
   if (typeof prev.designSnapshot !== "string" || !fingerprintMatches(historyText(dir, prev.designSnapshot), phase, dfp)) return null;
   return { snapshot: prev.snapshot, designSnapshot: prev.designSnapshot };
 }
-// A history file, only inside the feature's .history (a hand-edited path never reads elsewhere) → its text, or null.
+// A history file — `.history/<one file name>`, the engine's own `<phase>@<n>[.design].md`, judged as TEXT before any read (1.41.1
+// fix round 1: a hand-edited rel with a subfolder or a `..` — `.history/.specs/x.md`, `../../.SPECS/…` — never reads elsewhere) → its
+// text, or null.
+const RE_HISTORY_REL = /^\.history[\\/]([^\\/]+)$/;
 function historyText(dir, rel) {
-  if (typeof rel !== "string") return null;
-  const abs = path.resolve(dir, rel);
-  return isInsideDir(path.join(dir, HISTORY_DIR), abs) ? readIfExists(abs) : null;
+  const m = typeof rel === "string" ? RE_HISTORY_REL.exec(rel) : null;
+  if (!m || m[1] === "." || m[1] === ".." || m[1] !== m[1].trim()) return null;
+  return readIfExists(path.join(dir, HISTORY_DIR, m[1]));
 }
 
 // The snapshot of the phase's LATEST approval → { rel, text, at, record } — null when that approval has none (made
@@ -1080,7 +1084,7 @@ function snapshotPhases(dir, state, changedFiles) {
   const kind = state.kind || "feature";
   return IMPACT_PHASES.filter((p) => {
     const snap = latestSnapshot(dir, state, p);
-    if (!snap || !fs.existsSync(path.join(dir, phaseFile(p, kind)))) return false;
+    if (!snap || !existsRaw(path.join(dir, phaseFile(p, kind)))) return false;
     if (changedFiles.includes(phaseFile(p, kind))) return true;
     return kind !== "change" && phaseFile(p, kind) !== PHASE_FILE[p] && changedFiles.includes(PHASE_FILE[p]) && !!designBaseline(dir, snap, state.approvals[p]); // (a change: change.md alone)
   });
@@ -1452,7 +1456,7 @@ function gateWalk(dir, tracks, kind) {
   if (kind === "spike") return []; // a spike has no approval chain (question → investigate → decide)
   if (kind === "change") return ["tasks"]; // a change has ONE planning approval — the plan (change.md), phase `tasks`
   return phaseOrder(featureFlow(dir, kind)).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "tests" || testsGateDue(dir, tracks, kind)) && // the feature's flow orders the chain
-    (ph !== "classification" || fs.existsSync(path.join(dir, "classification.md"))));
+    (ph !== "classification" || existsRaw(path.join(dir, "classification.md"))));
 }
 // The artifacts a phase's approval signs off, as next_action's "fill" step checks them: classification.md, the chain
 // artifact(s) of that phase (a bugfix's design is bug.md, plus design.md while it holds active track sections), none for `tests`.
@@ -1467,10 +1471,10 @@ function gateArtifacts(dir, tracks, kind, phase) {
 // (approvalsInForce — the plan gained a T-ID, or a plan was re-approved, since the Phase 4 sign-off).
 function pendingGateList(dir, tracks, kind, approvals) {
   if (kind === "spike") return []; // 1.14 C2
-  if (kind === "change") return fs.existsSync(path.join(dir, CHANGE_FILE)) && !(approvals || {}).tasks ? ["tasks"] : []; // the plan
+  if (kind === "change") return existsRaw(path.join(dir, CHANGE_FILE)) && !(approvals || {}).tasks ? ["tasks"] : []; // the plan
   const a = isObj(approvals) ? approvals : {};
   const inForce = approvalsInForce(dir, tracks, a);
-  const due = (ph) => (ph === "tests" ? testsGateDue(dir, tracks, kind, a) : fs.existsSync(path.join(dir, phaseFile(ph, kind))));
+  const due = (ph) => (ph === "tests" ? testsGateDue(dir, tracks, kind, a) : existsRaw(path.join(dir, phaseFile(ph, kind))));
   return phaseOrder(featureFlow(dir, kind)).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && due(ph) && !inForce[ph]); // in the flow's order
 }
 
@@ -1513,7 +1517,7 @@ function parseFlow(v, lng) {
 }
 // "classification → design → requirements → test-plan → tests → tasks" — the active phases of a feature in its flow's order.
 function flowOrderText(dir, tracks, flow) {
-  return phaseOrder(flow).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "classification" || fs.existsSync(path.join(dir, "classification.md")))).join(" → ");
+  return phaseOrder(flow).filter((ph) => ph !== "execution" && phaseActive(ph, tracks) && (ph !== "classification" || existsRaw(path.join(dir, "classification.md")))).join(" → ");
 }
 // spec_feature {action: "flow", name, flow} / `dev-spec feature flow <name> <flow>` — set (or reset) a feature's flow. Phases
 // already approved stay approved (named); the pending gates follow the new order at once. → { ok, action: "flow", feature, flow,
@@ -1632,8 +1636,8 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
     if (a && !a.fingerprint && !a.file && a.at && kind === "bugfix" && ph === "design" && phaseActive(ph, tracks)) {
       // bug.md: untracked (above). design.md: 1.12 fingerprinted design.md whenever it existed, so one that exists now was
       // created after this approval (a track added since) — a change known without any date, as for a 1.13 approval.
-      if (fs.existsSync(path.join(dir, phaseFile(ph, "bugfix")))) untracked.push({ phase: ph, file: phaseFile(ph, "bugfix") });
-      if (fs.existsSync(path.join(dir, file))) out.push(file);
+      if (existsRaw(path.join(dir, phaseFile(ph, "bugfix")))) untracked.push({ phase: ph, file: phaseFile(ph, "bugfix") });
+      if (existsRaw(path.join(dir, file))) out.push(file);
       continue;
     }
     if (a && a.file !== file && a.file === phaseFile(ph, "bugfix") && phaseActive(ph, tracks)) {
@@ -1641,8 +1645,8 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
       // (`designFingerprint`) — a design.md created since (a track added) is a change too. A deleted bug.md is one as well
       // a deleted design.md is not (it only ever held a track's sections — spec_impact's rule).
       const bug = path.join(dir, a.file), design = path.join(dir, file);
-      if (!fs.existsSync(bug) || !approvedContentSame(dir, ph, a, readIfExists(bug))) out.push(a.file);
-      if (fs.existsSync(design) && !approvedContentSame(dir, ph, a, readIfExists(design), true)) out.push(file);
+      if (!existsRaw(bug) || !approvedContentSame(dir, ph, a, readIfExists(bug))) out.push(a.file);
+      if (existsRaw(design) && !approvedContentSame(dir, ph, a, readIfExists(design), true)) out.push(file);
       continue;
     }
     const rel = kind === "change" ? phaseFile(ph, kind) : file; // a change's plan approval signed off change.md
@@ -1651,12 +1655,13 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
     // an approved artifact that is gone is a change since its approval — deleting test-plan.md (and its T-IDs) used
     // to read as "nothing changed" and the hard gate after it vanished. The one exception, as in the branch above: a bugfix's
     // design.md (here an older engine's approval without `file`) is never a change when deleted.
-    if (!fs.existsSync(abs)) { if (!(kind === "bugfix" && rel === PHASE_FILE.design)) out.push(rel); continue; }
+    if (!existsRaw(abs)) { if (!(kind === "bugfix" && rel === PHASE_FILE.design)) out.push(rel); continue; }
     if (a.fingerprint) {
       // whitespace only — by the approval's wsFingerprint, else its .history snapshot
       if (!approvedContentSame(dir, ph, a, readIfExists(abs))) out.push(rel);
     } else if (a.at && ph !== "tasks") {
-      try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(rel); byDate.push(rel); } } catch { /* ignore */ }
+      const st = specsStat(abs); // through the read gate (1.41.1)
+      if (st && st.mtime.getTime() > new Date(a.at).getTime()) { out.push(rel); byDate.push(rel); }
     }
   }
   return opts.detail ? { changed: out, byDate, untracked } : out;

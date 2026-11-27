@@ -16,10 +16,11 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let catalogData, compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures, maybeRefreshCatalog, own,
   positionPhase, readIfExists, readJson, removeSpecFile, renderRoadmapHtml, renderRoadmapMd, roadmapData, roadmapExtras, safeReaddir,
-  shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent;
+  shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent, specsReadBlocked, existsRaw, specsStat, readDirCached, seedParts;
 function __link(E) { ({ catalogData, compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures,
   maybeRefreshCatalog, own, positionPhase, readIfExists, readJson, removeSpecFile, renderRoadmapHtml, renderRoadmapMd, roadmapData,
-  roadmapExtras, safeReaddir, shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent } = E); }
+  roadmapExtras, safeReaddir, shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent, specsReadBlocked, existsRaw, specsStat,
+  readDirCached, seedParts } = E); }
 
 // Language resolution. The project's language is the single source of truth, persisted in
 // .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
@@ -119,6 +120,13 @@ function resolveFeature(projectDir, name) {
 // resolveFeature + "must exist".
 function existingFeature(projectDir, name) {
   const f = resolveFeature(projectDir, name);
+  if (f.ok && !existsCached(f.dir) && specsReadBlocked(f.dir)) {
+    // (1.41.1) a folder that is a link (a symlink, a junction) or resolves outside .specs/: the read gate reads nothing through it —
+    // said, never "not found". `linked`: the folder-level operations (featureLocked, archive, rename, remove, restore) go on to the
+    // write gate's refusal / the link's removal; every reader answers this.
+    const rel = ".specs/" + f.slug + "/";
+    return { ...f, ok: false, linked: true, code: "feature-linked", path: rel, error: errs(projectDir).featureLinked(rel) };
+  }
   if (f.ok && !existsCached(f.dir)) {
     // An archived feature is not an active one — but "not found" alone sent the user nowhere (drift's finish-it-again line
     // for an archived feature used to end right here): name the archive and the restore.
@@ -473,17 +481,20 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   // Every dependency named here must be an existing feature (reserved names like `steering` included): an
   // unknown name used to be stored and then read as a dependency that could never be met.
   const unknownNames = [];
+  let linkedDep = null; // (1.41.1) a dependency a linked folder holds is feature-linked, as every reader answers it — never "unknown"
   const resolveDeps = (list) => {
     const out = [];
     for (const d of names(list)) {
       const r = existingFeature(projectDir, d);
-      if (!r.ok) unknownNames.push(d);
+      if (r.linked) linkedDep = linkedDep || r;
+      else if (!r.ok) unknownNames.push(d);
       else if (!out.includes(r.slug)) out.push(r.slug);
     }
     return out;
   };
   const replaced = dependsOn === undefined || dependsOn === null ? null : resolveDeps(dependsOn);
   const added = resolveDeps(edits.add);
+  if (linkedDep) return { ok: false, linked: true, code: linkedDep.code, path: linkedDep.path, error: linkedDep.error };
   if (unknownNames.length) return { ok: false, error: D.unknown(unknownNames.join(", ")) };
   // order: a SAFE integer, as spec_roadmap_edit {kind: "depend"}'s schema ({type: "integer"} — no bound) — the CLI passes the raw word, and
   // `--order 99999999999999999999` matched the digits and was stored as 1e20. Refused with the MCP
@@ -562,6 +573,9 @@ function addBacklog(projectDir, name, note) {
   // ROADMAP.md (under Features and under Backlog). An archived feature's name may be planned again.
   const f = existingFeature(projectDir, nm);
   if (f.ok) return { ok: false, feature: f.slug, error: i18n.msg(projectLang(projectDir)).featureOps.backlogIsFeature(nm, f.slug) };
+  // (1.41.1) a name a linked folder holds is taken too — refused as feature-linked (the folder is there, but dev-spec never reads a
+  // feature through a link: "already has a spec" would name a spec it cannot read; the parent refused it as backlogIsFeature)
+  if (f.linked) return { ok: false, feature: f.slug, linked: true, code: f.code, path: f.path, error: f.error };
   const r = withRoadmapLock(projectDir, () => addBacklogUnlocked(projectDir, nm, note));
   if (r.ok) maybeRefreshRoadmap(projectDir); // outside the lock: the lock covers roadmap.json only
   return r;
@@ -709,7 +723,7 @@ function maybeRefreshRoadmap(projectDir) {
     const root = specsRoot(projectDir);
     if (!fs.existsSync(root)) return;
     clearRoadmapStale(projectDir);
-    const html = fs.existsSync(path.join(root, "ROADMAP.html"));
+    const html = existsRaw(path.join(root, "ROADMAP.html")); // the read gate: a linked ROADMAP.html is none (never written either)
     // One computation for both files — none when neither may be written (hand-written ROADMAP.md, no HTML; a broken roadmap.json
     // keeps them as they are).
     if (!roadmapError(projectDir)) {
@@ -748,7 +762,8 @@ function markRoadmapStale(projectDir) {
 }
 // Is the stamp there? (A plain stat: never the read cache — the stamp comes and goes inside one call.)
 function roadmapStale(projectDir) {
-  try { return fs.statSync(roadmapStalePath(projectDir)).isFile(); } catch { return false; }
+  const st = specsStat(roadmapStalePath(projectDir)); // the read gate, uncached
+  return !!st && st.isFile();
 }
 function clearRoadmapStale(projectDir) {
   if (!roadmapStale(projectDir)) return false;
@@ -810,16 +825,15 @@ function roadmapReport(projectDir, opts = {}) {
 // listFeatures, without its per-feature phase work (the SessionStart drift check runs on this). → [{ slug, dir, archived }]
 function featureDirs(projectDir) {
   const root = specsRoot(projectDir);
-  const dirsIn = (base) => {
-    try {
-      return fs.readdirSync(base, { withFileTypes: true }).filter((d) => d.isDirectory() && isFeatureFolder(d.name, base)).map((d) => d.name).sort();
-    } catch {
-      return [];
-    }
-  };
+  // a link's Dirent is no folder (never listed); _archive/ through the read gate (1.41.1: a linked _archive/ lists nothing) — .specs/
+  // itself, which may be a link, as it is
+  const dirsIn = (base, entries) => (entries || []).filter((d) => d.isDirectory() && isFeatureFolder(d.name, base)).map((d) => d.name).sort();
+  let top = null;
+  try { top = fs.readdirSync(root, { withFileTypes: true }); } catch { /* no .specs/ */ }
+  seedParts(root, top); // what the listing proved, the read gate doesn't ask again (each feature folder's lstat and real path)
   const archRoot = path.join(root, "_archive");
-  return dirsIn(root).map((n) => ({ slug: n, dir: path.join(root, n), archived: false }))
-    .concat(dirsIn(archRoot).map((n) => ({ slug: n, dir: path.join(archRoot, n), archived: true })));
+  return dirsIn(root, top).map((n) => ({ slug: n, dir: path.join(root, n), archived: false }))
+    .concat(dirsIn(archRoot, readDirCached(archRoot)).map((n) => ({ slug: n, dir: path.join(archRoot, n), archived: true })));
 }
 
 // The existing folders a name reaches — active and/or archived (current or pre-1.11 slug). → [{ slug, dir, archived }]

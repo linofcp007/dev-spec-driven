@@ -790,7 +790,7 @@ const COMMANDS = [
       if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
       return createRun(c, (r) => {
         const SP = spec.msg(r.lang).spike;
-        const si = spec.spikeInfo(r.dir);
+        const si = spec.withReadCache(() => { spec.specsRoot(c.projectDir); return spec.spikeInfo(r.dir); }); // (1.41.1) the project recorded: the gate's root
         if (si.question) log(SP.cliQuestion(si.question));
         if (si.timebox.state === "date") log(SP.cliUntil(si.timebox.date));
       });
@@ -956,7 +956,9 @@ const COMMANDS = [
       if (pos[0] === "-") return c.readStdin((txt) => report(lint(txt), c.cliText(textLang)));
       // A file path is read from the project when it was named (--project / the env), else from the working folder (argPath).
       const file = c.argPath(pos[0]);
-      const isFile = fs.existsSync(file) && fs.statSync(file).isFile();
+      // (1.41.1) a file below .specs/ behind a link is none — the read gate's answer, as every engine reader's (`ears .specs/lnk/x.md`)
+      // (fix round 2) in ONE scope that names the project: the gate stands on its .specs/, never a folder merely named so above it
+      const isFile = !spec.withReadCache(() => { spec.specsRoot(projectDir); return spec.specsReadBlocked(file); }) && fs.existsSync(file) && fs.statSync(file).isFile();
       if (isFile) return report(lint(spec.decodeText(fs.readFileSync(file))), c.cliText(textLang)); // UTF-16 too
       // a word that reads as a PATH (a separator, or a .md / .markdown / .txt name) and is no file — nor a feature of that
       // name — is "no such file", never "Feature 'missing-md' not found" (its slug).

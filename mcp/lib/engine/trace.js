@@ -18,19 +18,21 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord, isCodeFile, isImplementsGlob, isObj, isRecord, isTestFixture,
   isSlashUnit, isTestFile, isWsUnit, readFileHead, testNamed, italic, latestSnapshot, mdCell, mdPlainText, normWs, oneLiner, ownEvidence,
   packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained, readIfExists, readJson, realLines,
-  requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions, safeReaddir,
+  requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes, retiredDecisions,
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
   criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
   useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir, approvedContentSame, wsText, headingEntries;
-function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
+let readDirCached; // files.js — the read gate's listing (1.41.1)
+let existsRaw, projectFileReal, realRootOf, isDirSafe; // files.js — the read gate (1.41.1)
+function __link(E) { ({ existsRaw, projectFileReal, realRootOf, isDirSafe, readDirCached, acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
   codeBlockLines, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, FOLD_CASE,
   gitEvidence, globFiles, GUARD_CODE_EXT, historyText, implementsPath, indentOf, inertOutsideCode, isApprovalRecord,
   isCodeFile, isImplementsGlob, isObj, isRecord, isSlashUnit, isTestFile, isTestFixture, readFileHead, testNamed, isWsUnit, italic, latestSnapshot, mdCell, mdPlainText,
   normWs, oneLiner, ownEvidence, packTracks, PHASE_FILE, phaseActive, placeholderReport, planIdText, readContained,
   readIfExists, readJson, realLines, requirementAcIds, requirementIndex, reservedSlug, resolveSupersedes,
-  retiredDecisions, safeReaddir, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
+  retiredDecisions, SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile,
   statePath, stripEnd, stripEnds, criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
   trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
@@ -649,7 +651,7 @@ function traceCheck(projectDir, name, opts = {}) {
     const abs = path.resolve(projRoot, p);
     const inRoot = withinRoot(projRoot, abs); // a drive root (C:\) already ends in a separator
     if (!inRoot) outOfRoot.add(f);
-    return !inRoot || !fs.existsSync(abs);
+    return !inRoot || !existsRaw(abs); // below .specs/ through the read gate (a path behind a link there: missing)
   });
   // A file that doesn't exist YET is a gap only once a task claiming it is done: an OPEN task's _Implements:_ is
   // the plan (next --batch needs those markers before a line is written) — reported as plannedImplFiles. A marker
@@ -942,11 +944,13 @@ const CODE_TRACE_FILES_PER_ID = 10; // files listed per ID (every one still coun
 // them now, with PowerShell's, shell's, C/C++'s, Lua's, R's, Erlang's, Haskell's, Clojure's, Objective-C / VB's and Perl's.
 const isTestCodePath = (rel) => isTestFile(rel);
 const tKey = (num) => "T-" + parseInt(num, 10);
-// The feature folders under .specs/ (live, then archived — their tests may still be in the tree).
+// The feature folders under .specs/ (live, then archived — their tests may still be in the tree). FOLDERS only (1.41.1): a link's Dirent is
+// none (the read gate reads nothing through it anyway), and a root file (ROADMAP.md, roadmap.json) was read as a folder.
 function specFeatureDirs(projectDir) {
-  const root = specsRoot(projectDir);
-  return safeReaddir(root).filter((n) => !n.startsWith(".") && n !== "_archive" && !reservedSlug(n, root)).map((n) => path.join(root, n))
-    .concat(safeReaddir(path.join(root, "_archive")).map((n) => path.join(root, "_archive", n)));
+  const root = specsRoot(projectDir), arch = path.join(root, "_archive");
+  const dirs = (d) => (readDirCached(d) || []).filter((e) => e.isDirectory()).map((e) => e.name);
+  return dirs(root).filter((n) => !n.startsWith(".") && n !== "_archive" && !reservedSlug(n, root)).map((n) => path.join(root, n))
+    .concat(dirs(arch).map((n) => path.join(arch, n)));
 }
 // One bounded, read-only walk of the project (walkProject: SCAN_IGNORE, hidden dirs and .specs skipped) over its TEST
 // files — code in any language of CODE_EXT (isCodeFile: a .bats suite and Perl's t/*.t too) that isTestFile says is a test:
@@ -1000,7 +1004,7 @@ function scanTestCode(projectDir) {
   for (const d of specFeatureDirs(projectDir)) {
     if (left <= 0) break;
     const tdir = path.join(d, "tests");
-    try { if (!fs.lstatSync(tdir).isDirectory()) continue; } catch { continue; } // a symlinked tests/ is never followed
+    if (!isDirSafe(tdir)) continue; // a linked tests/ is never followed (the read gate's lstat, memoized — 1.41.1)
     const tPre = toPosix(path.relative(root, tdir));
     const w = walkProject(tdir, left, (rel, full) => onFile(tPre + "/" + rel, full));
     left -= w.total;
@@ -1147,11 +1151,13 @@ function outsideCodeTemplates(projectDir, dir, tracks, greenDone) {
   const samples = new Set([SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL].map((x) => JSON.stringify(JSON.parse(x))));
   useTemplateScopeOf(dir); // the project's own templates are template text too
   const judged = new Map(); // file token → template?
+  let rootReal = null;
   const isTemplate = (t) => {
     if (judged.has(t)) return judged.get(t);
     let res = false;
-    const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
-    const abs = [path.resolve(dir, t), path.resolve(root, t)].find((p) => withinRoot(root, p) && isFile(p));
+    // a file of the project by its REAL path (1.41.1 R3: a `docs/lnk/plan.md` through a link out of the project was stat'ed and read)
+    const fileOf = (p) => { const a = projectFileReal(root, rootReal || (rootReal = realRootOf(root)), path.relative(root, p)); try { return a && fs.statSync(a).isFile() ? a : null; } catch { return null; } };
+    const abs = [path.resolve(dir, t), path.resolve(root, t)].map(fileOf).find(Boolean);
     const ext = path.extname(t).toLowerCase();
     if (abs && (ext === ".md" || ext === ".markdown")) res = artifactState({ file: abs }) === "placeholder";
     else if (abs && ext === ".json") { const j = readJson(abs); res = !!j.data && samples.has(JSON.stringify(j.data)); }

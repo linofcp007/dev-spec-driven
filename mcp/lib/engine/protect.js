@@ -34,11 +34,11 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked, fileHash,
   FOLD_CASE, globMatcher, guardLevel, implementsRel, insideDirAlias, isCodeFile, isImplementsGlob, isObj, isTestFile, projectLang,
-  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic;
+  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic, projectFileReal, realRootOf, isDirSafe;
 let portHeldNumbers, detectTracks, specsRoot, evidenceRule; // port.js · tracks.js · core.js · evidence.js — a task +port's fence holds
 function __link(E) { ({ approvalCommand, approvalGuardLevel, confirmationOf, dayOf, existingFeature, featureDirs, featureLang, featureLocked,
   fileHash, FOLD_CASE, globMatcher, guardLevel, implementsRel, insideDirAlias, isCodeFile, isImplementsGlob, isObj, isTestFile, projectLang,
-  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic,
+  readJson, readState, readyTasks, reasonInput, statePath, taskMarkers, walkProject, writeFileAtomic, projectFileReal, realRootOf, isDirSafe,
   portHeldNumbers, detectTracks, specsRoot, evidenceRule } = E); }
 
 const PROTECT_MAX_FILES = 2000; // test files a snapshot records, at most (past them: `truncated` — doctor warns)
@@ -47,6 +47,9 @@ const PROTECT_WARN_FILES = 5; // the unexplained files finish's warning names (t
 const fold = (s) => (FOLD_CASE ? String(s).toLowerCase() : String(s));
 const isTest = (rel) => isCodeFile(rel) && isTestFile(rel);
 const hash16 = (abs) => { const h = fileHash(abs); return h ? h.slice(0, PROTECT_HASH_HEX) : null; };
+// (1.41.1) a project-relative path's hash — only a file of the project by its REAL path (files.js projectFileReal: a `..` key, a junction
+// out, a link below .specs/ → null, whether or not something is there: what a path outside names is never hashed)
+const hashRel = (root, rootReal, rel) => { const abs = projectFileReal(root, rootReal, rel); return abs ? hash16(abs) : null; };
 const userName = () => process.env.USER || process.env.USERNAME || "user"; // approvePhase's default `by`
 // A feature's list as .state.json holds it — guardCheck reads that file raw, so a malformed shape is no list (never a throw).
 function listOf(state) {
@@ -88,7 +91,7 @@ function protectWalk(projectDir, first) {
   const feats = featureDirs(projectDir).filter((f) => !f.archived);
   for (const f of feats.filter((x) => x.slug === first).concat(feats.filter((x) => x.slug !== first))) {
     const tdir = path.join(f.dir, "tests");
-    try { if (!fs.lstatSync(tdir).isDirectory()) continue; } catch { continue; } // a linked tests/ is never followed
+    if (!isDirSafe(tdir)) continue; // a linked tests/ is never followed (the read gate's lstat, memoized — 1.41.1)
     const pre = path.relative(root, tdir).split(path.sep).join("/") + "/";
     const tw = walkProject(tdir, PROTECT_MAX_FILES - n, (rel, full) => { if (isTest(pre + rel)) { files[pre + rel] = hash16(full); n++; } }, { counts: (rel) => isTest(pre + rel) });
     truncated = truncated || tw.truncated;
@@ -170,12 +173,13 @@ function protectOnTick(projectDir, slug, state, task) {
   const pt = isObj(state.protectedTests) ? state.protectedTests : (state.protectedTests = {});
   const files = isObj(pt.files) ? pt.files : (pt.files = {});
   const keyOf = new Map(Object.keys(files).map((k) => [fold(k), k]));
-  for (const r of planned) { const k = keyOf.get(fold(r)); if (!(retick && k)) files[k || r] = hash16(path.join(root, r)); }
+  const rootReal = realRootOf(root);
+  for (const r of planned) { const k = keyOf.get(fold(r)); if (!(retick && k)) files[k || r] = hashRel(root, rootReal, r); }
   let hashOf = null; // the other features' lists, read only when a _Verify:_ test joins
   for (const r of ran) {
     if (keyOf.has(fold(r)) || planned.has(r)) continue;
     if (!hashOf) hashOf = recordedHashOf(otherStates(projectDir, slug));
-    const h = hashOf(r, () => hash16(path.join(root, r)));
+    const h = hashOf(r, () => hashRel(root, rootReal, r));
     if (h) files[r] = h;
   }
 }
@@ -338,7 +342,7 @@ function protectedTestDecision(pdir, abs, rel, ctx) {
 // changed-since-preview.
 function protectTests(projectDir, action, name, file, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error, code: f.code };
+  if (!f.ok && !f.linked) return { ok: false, error: f.error, code: f.code }; // linked (1.41.1): the lock refuses it, as ever
   const lng = featureLang(projectDir, f.slug);
   const P = i18n.msg(lng).protectedTests;
   let rel = null;
@@ -350,6 +354,9 @@ function protectTests(projectDir, action, name, file, opts = {}) {
     // added a second key and left the real file's lift in force); one outside the project keeps the typed path
     const real = action === "protect" ? realRel(root, path.join(root, rel)) : null;
     if (real && projectRel(root, real) === real) rel = real;
+    // (1.41.1) protect / accept hash the file: it must be one of the project by its real path (a path through a junction out was hashed —
+    // the accept's dry run returned the outside file's hash)
+    else if (action === "protect" && !projectFileReal(root, realRootOf(root), rel)) return { ok: false, code: "outside-project", error: P.err.outside(file.trim()) };
     if (/[*?[]/.test(rel) || !isTest(rel)) return { ok: false, code: "not-a-test", error: P.err.notATest(rel) };
   }
   const accept = action === "protect" && opts.accept === true;
@@ -359,7 +366,7 @@ function protectTests(projectDir, action, name, file, opts = {}) {
     if (r.error) return { ok: false, code: "invalid-arguments", invalid: ["reason"], error: r.error };
     if (!r.value) return { ok: false, code: "reason-required", error: accept ? P.err.acceptReasonRequired : P.err.reasonRequired };
     // the accept's dry run: the content the user is asked about (its hash — the MCP server's preview, 1.36.0 review 4)
-    if (opts.dryRun === true) return Object.assign({ ok: true, dryRun: true, feature: f.slug, action }, accept ? { accept: true, hash: hash16(path.join(root, rel)) } : {}, { file: rel, reason: r.value });
+    if (opts.dryRun === true) return Object.assign({ ok: true, dryRun: true, feature: f.slug, action }, accept ? { accept: true, hash: hashRel(root, realRootOf(root), rel) } : {}, { file: rel, reason: r.value });
     return featureLocked(protectLocked)(projectDir, f.slug, { action, accept, rel, reason: r.value, confirmation: opts.confirmation, preview: opts.preview, lng });
   }
   if (opts.dryRun === true) return { ok: true, dryRun: true, feature: f.slug, action, ...(rel ? { file: rel } : {}) };
@@ -383,8 +390,7 @@ function protectLocked(projectDir, slug, o) {
     return { ok: true, feature: f.slug, action: "unprotect", lifted: rec, listed: listed(), note: P.lifted(o.rel, f.slug, listed()) };
   }
   let added = 0, unlifted = null, accepted = null;
-  const abs = o.rel ? path.join(path.resolve(projectDir), o.rel) : null;
-  const now = o.accept ? hash16(abs) : null;
+  const now = o.accept ? hashRel(path.resolve(projectDir), realRootOf(path.resolve(projectDir)), o.rel) : null;
   // the accept asked over MCP elicitation records the content the question was about — never one written while it waited
   if (o.accept && isObj(o.preview) && "hash" in o.preview && o.preview.hash !== now) {
     return { ok: false, changedSincePreview: true, code: "changed-since-preview", feature: f.slug, file: o.rel, error: P.err.acceptChangedSincePreview(o.rel) };
@@ -411,7 +417,7 @@ function protectLocked(projectDir, slug, o) {
       const conf = confirmationOf(o.confirmation);
       if (conf) accepted.confirmed = conf;
       pt.lifts = (Array.isArray(pt.lifts) ? pt.lifts : []).concat([accepted]);
-    } else if (key === undefined) pt.files[o.rel] = hashOf(o.rel, () => hash16(abs)); // never re-hashes a listed one
+    } else if (key === undefined) pt.files[o.rel] = hashOf(o.rel, () => hashRel(path.resolve(projectDir), realRootOf(path.resolve(projectDir)), o.rel)); // never re-hashes a listed one
     if (key === undefined) added = 1;
   }
   writeFileAtomic(statePath(f.dir), JSON.stringify(state, null, 2));
@@ -434,8 +440,8 @@ function protectHashFirst(fn) {
     const f = existingFeature(projectDir, name);
     const pt = f.ok ? listOf(readJson(statePath(f.dir)).data) : null;
     if (!pt) return fn.apply(this, arguments);
-    const root = path.resolve(projectDir), hashes = Object.create(null);
-    for (const k of Object.keys(pt.files)) hashes[k] = hash16(path.join(root, k));
+    const root = path.resolve(projectDir), rootReal = realRootOf(root), hashes = Object.create(null);
+    for (const k of Object.keys(pt.files)) hashes[k] = hashRel(root, rootReal, k); // (an ignored key: null, never read below)
     return fn.call(this, projectDir, name, Object.assign({}, isObj(opts) ? opts : {}, { protectHashes: hashes }));
   };
   Object.defineProperty(run, "name", { value: fn.name });
@@ -450,13 +456,16 @@ function protectHashFirst(fn) {
 function protectedTestsFinish(projectDir, state, hashes, slug) {
   const own = listOf(state);
   if (!own || !Object.keys(own.files).length) return null;
-  const root = path.resolve(projectDir);
+  const root = path.resolve(projectDir), rootReal = realRootOf(root);
   const states = liveStatesWith(projectDir, slug, state);
   const recorded = recordedHashes(states);
   const lifts = activeLifts(states);
-  const unexplained = [], lifted = [];
+  const unexplained = [], lifted = [], ignored = [];
   for (const k of Object.keys(own.files)) {
-    const now = isObj(hashes) && Object.prototype.hasOwnProperty.call(hashes, k) ? hashes[k] : hash16(path.join(root, k));
+    // (1.41.1) a key that is no file of the project by its real path (`../x`, absolute, a junction out, a link below .specs/): skipped — not
+    // hashed, not counted, never unexplained ("changed" or not would tell what it names apart) — and NAMED (its text is the repository's)
+    if (!projectFileReal(root, rootReal, k)) { ignored.push(k); continue; }
+    const now = isObj(hashes) && Object.prototype.hasOwnProperty.call(hashes, k) ? hashes[k] : hashRel(root, rootReal, k);
     if (recorded.get(fold(k)).has(now)) continue;
     const l = lifts.get(fold(k));
     if (l) lifted.push({ file: k, by: l.by, at: l.at, reason: l.reason });
@@ -470,14 +479,16 @@ function protectedTestsFinish(projectDir, state, hashes, slug) {
   const since = fin >= appr ? appr : fin;
   const accepted = own.lifts.filter((l) => l.accepted === true && typeof l.file === "string" && !(Date.parse(l.at) <= since))
     .map((l) => ({ file: l.file, by: l.by, at: l.at, reason: l.reason }));
-  return { count: Object.keys(own.files).length, unexplained, lifted, accepted };
+  return { count: Object.keys(own.files).length - ignored.length, unexplained, lifted, accepted, ...(ignored.length ? { ignored } : {}) };
 }
 // …its warning (null when nothing is unexplained) and its merge-summary lines.
 function protectedFinishWarning(pt, slug, lng) {
-  if (!pt || !pt.unexplained.length) return null;
+  const ign = pt && pt.ignored ? pt.ignored : [];
+  if (!pt || (!pt.unexplained.length && !ign.length)) return null;
   const P = i18n.msg(lng).protectedTests;
   const items = pt.unexplained.slice(0, PROTECT_WARN_FILES).map((x) => P[x.status](x.file));
-  return P.finishWarn(slug, items.join(", "), Math.max(0, pt.unexplained.length - PROTECT_WARN_FILES));
+  const ignoredLine = ign.length ? P.ignored(slug, ign.slice(0, PROTECT_WARN_FILES).join(", "), Math.max(0, ign.length - PROTECT_WARN_FILES)) : null;
+  return [pt.unexplained.length ? P.finishWarn(slug, items.join(", "), Math.max(0, pt.unexplained.length - PROTECT_WARN_FILES)) : null, ignoredLine].filter(Boolean).join(" ");
 }
 function protectedSummaryLines(pt, lng) {
   const P = i18n.msg(lng).protectedTests;

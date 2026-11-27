@@ -13,7 +13,8 @@ const i18n = require("../i18n.js");
 let FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isDirSafe, isInsideDir, isObj, isSlashUnit, listFeatures,
   projectLang, readDirCached, readFileHead, readIfExists, safeReaddir, specsRoot, stripEnd;
 let fixerCommand; // evidence.js — 1.36: a command that rewrites files is never offered as the fast check
-function __link(E) { ({ FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isDirSafe, isInsideDir, isObj, isSlashUnit,
+let existsRaw; // files.js — the read gate (1.41.1)
+function __link(E) { ({ existsRaw, FOLD_CASE, implementsPath, implementsRefs, implementsTargets, isDirSafe, isInsideDir, isObj, isSlashUnit,
   listFeatures, projectLang, readDirCached, readFileHead, readIfExists, safeReaddir, specsRoot, stripEnd, fixerCommand } = E); }
 
 // ---------------------------------------------------------------------------
@@ -1183,7 +1184,7 @@ function coverage(projectDir, opts = {}) {
   const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
   const active = listFeatures(projectDir).features.map((f) => f.name);
   const archiveDir = path.join(specs, "_archive");
-  const archived = safeReaddir(archiveDir).filter((n) => { try { return fs.statSync(path.join(archiveDir, n)).isDirectory(); } catch { return false; } }).sort();
+  const archived = safeReaddir(archiveDir).filter((n) => isDirSafe(path.join(archiveDir, n))).sort(); // the read gate: an _archive/<slug> -> … is none
   const sources = active.map((n) => ({ feature: n, archived: false, dir: path.join(specs, n) }))
     .concat(archived.map((n) => ({ feature: n, archived: true, dir: path.join(archiveDir, n) })));
 
@@ -1213,7 +1214,7 @@ function coverage(projectDir, opts = {}) {
     const p = implementsPath(ref);
     if (!p || /[*?]/.test(p)) return false;
     const abs = path.resolve(root, p);
-    return abs !== root && isInsideDir(root, abs) && fs.existsSync(abs);
+    return abs !== root && isInsideDir(root, abs) && existsRaw(abs); // below .specs/ through the read gate
   };
   for (const s of sources) {
     const refs = implementsRefs(readIfExists(path.join(s.dir, "tasks.md")));

@@ -24,7 +24,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   `finish --run`); W in each suite's `09-evidence-guardian.js`; 12 — `12-lifecycle-lessons.js` (the lesson kind, finish's
   `lessons`, the brief's part, spec_metrics' lessons on the one walk, the finish batch's order against
   commands/spec-finish.md); 15 — `15-quality-reference-examples.js` (structure.md's table, doctor `reference-examples`, the
-  brief's part). **A file is named after its topic** — `10-guards-shell-writes.js`,
+  brief's part). 1.41.1: 12 — `12-lifecycle-read-gate.js` (the read gate: every `OPERATIONS` entry and the hooks on a link maze
+  under an fs tracer, `feature-linked`, doctor `specs-links`, where absence relaxes a decision, the cost as counts, R3's project
+  files by real path) and its CLI twin `cli/tests/12-lifecycle-read-gate.js`, with `12-lifecycle-read-gate-root.js` (the gate's ROOT —
+  the project's own .specs/, never a folder merely named so —, the listing's seed and its counts, the readers outside the primitives,
+  the review's surviving mutants) and `12-lifecycle-read-gate-scope.js` (every entry the surfaces call reads with its project
+  recorded — a property over the operations, resources, CLI commands, hooks and the MCP server). **A file is named after its topic** — `10-guards-shell-writes.js`,
   `12-lifecycle-branch.js` — never after a release or a review round: 1.27 renamed the 23 that were (`10-guards-review7.js`
   → `10-guards-shell-writes.js`, `13-imports-1-25.js` → `13-imports-steering.js`, `18-reviews.js` → `18-cross-area.js`…) and
   merged six small ones into their area's topic file (`05-markdown-r7-readers.js` into `05-markdown-readers.js`). An
@@ -104,7 +109,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   empty temp folder as its working folder (`<temp base>/<spec-test-|cli-test->XXXXXX`, removed once it closed — The temp base) and an
   environment without the variables that steer the plugin — `SPEC_PROJECT_DIR`, `CLAUDE_PROJECT_DIR`, `SPEC_MCP_*`,
   `CLAUDE_PLUGIN_*`, `COLUMNS` and every `DEV_SPEC_*` but the suites' own `DEV_SPEC_TEST_*` (`DEV_SPEC_TEST_CHAIN`,
-  `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`) — scripts/test-runner.js `isolate()` / `hermeticEnv()`; 1.29:
+  `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`; 1.41.1: `DEV_SPEC_TEST_APPROVAL_DEADLINE_MS`, which only lowers the
+  approval hook's deadline — a test sets it for the hook it starts, never export it) — scripts/test-runner.js `isolate()` / `hermeticEnv()`; 1.29:
   nor the maintainer's installed plugins — `DEV_GUARDIAN_CLI` is dropped and `CLAUDE_CONFIG_DIR` names an absent folder inside
   the chain's own (`no-claude-config`), so no dev-guardian plugin cache is seen (init / spec_upgrade would offer its gate on one
   machine and not on another; a test that wants one builds a fake cache and passes it); 1.30: nor Node's own steering

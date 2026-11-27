@@ -360,4 +360,621 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
       fast: () => m.long.ms <= Math.max(5000, 10 * m.short.ms),
     });
   }
+
+  // 1.41.1 (R1) — the guard's globs were RegExps built from the glob (devSpecGlob: a `*` → `[^/\\]*`; shellGlobRe: `[\s\S]*`): a program
+  // word, a path segment or the CLI's subcommand of k stars and a letter, tested against the short fixed names (the CLI's script, the
+  // guarded files, the guarded subcommands), backtracked ~C(n + k, k) ways — 18 stars ran the approval hook past its 10 s timeout, and
+  // the approve after it went through at deny. One linear matcher now (guards.js globMayName). The hook itself, in a CHILD process with
+  // a 12 s timeout (the parent's cost at 40 stars is astronomic: a red run times out, never hangs the suite) — each payload answers as
+  // its one-star twin (deny; an unreadable subcommand: ask) within max(5 s, 10 × the twin's time).
+  {
+    const pj = path.join(tmp, "r1411-glob");
+    S.initProject(pj, ["core"], "en", { approvalGuard: "deny" });
+    const APPROVE = "node cli/dev-spec.js approve feat requirements";
+    const SHAPES = {
+      "program word (devSpecGlob)": [(k) => "cli/" + "*".repeat(k) + "x approve; " + APPROVE, "deny"],
+      "path segment (shellSegCould)": [(k) => "foo .specs/" + "*".repeat(k) + "q; " + APPROVE, "deny"],
+      "CLI subcommand (cliSubcommandGlob)": [(k) => "node cli/dev-spec.js " + "*".repeat(k) + "x feat; A=approve; node cli/dev-spec.js $A feat requirements", "ask"],
+    };
+    const call = (command) => {
+      const t = Date.now();
+      const r = spawnSync(process.execPath, [path.join(HOOKS, "approval-hook.js")], { encoding: "utf8", env: hookEnv({ CLAUDE_PROJECT_DIR: pj }), cwd: pj, timeout: 12000,
+        input: js({ session_id: "s", hook_event_name: "PreToolUse", cwd: pj, tool_name: "Bash", tool_input: { command } }) });
+      let decision;
+      try { decision = JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { decision = r.status === null ? "killed by " + r.signal : "silent"; }
+      return { decision, ms: Date.now() - t };
+    };
+    const within = (x) => x.ms <= Math.max(5000, 10 * x.twin.ms);
+    const got = {}, checks = {};
+    for (const [name, [make, want]] of Object.entries(SHAPES)) {
+      const m = remeasure(() => ({ twin: call(make(1)), ...call(make(40)) }), within);
+      got[name] = { twin: m.twin.decision + " " + m.twin.ms + " ms", stars40: m.decision + " " + m.ms + " ms", tries: m.tries };
+      checks[name + " — the one-star twin: " + want] = m.twin.decision === want;
+      checks[name + " — 40 stars: " + want] = m.decision === want;
+      checks[name + " — 40 stars within max(5 s, 10 × the twin's time)"] = within(m);
+    }
+    all("1.41.1 (R1): the approval hook answers a glob of 40 stars — a program word, a path segment, the CLI's subcommand — at deny as its one-star twin, at once (got " + js(got) + ")", checks);
+  }
+
+  // …and the linear matcher matches what the RegExps matched — the parent's two builders, verbatim, as the oracle (short globs only: it
+  // backtracks): a table of glob × name (case folded as RegExp folds it — the Kelvin sign is no k —, [!set] / [^set], `[!]` any one
+  // character, an unclosed `[` itself, a range out of order null, Bash's leading dot, SHELL_VAR / SHELL_ANY) and 20,000 random globs.
+  {
+    const E = require("./lib/engine/index.js");
+    const SV = "\u0001", SA = "\u0002";
+    const DEVSPEC_NAMES = ["dev-spec", "dev-spec.js", "dev-spec.cjs", "dev-spec.mjs", "dev-spec.cmd", "dev-spec.ps1", "dev-spec.exe"];
+    function oldDevSpecGlob(word) {
+      const w = String(word);
+      if (w.length > 200 || !/[*?[]/.test(w)) return false;
+      const base = w.replace(/^.*[\\/]/, "");
+      let re = "";
+      for (let i = 0; i < base.length; i++) {
+        const c = base[i];
+        if (c === "*") re += "[^/\\\\]*";
+        else if (c === "?") re += ".";
+        else if (c === "[") {
+          const end = base.indexOf("]", i + 2);
+          if (end < 0) { re += "\\["; continue; }
+          const set = base.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&");
+          re += "[" + set + "]";
+          i = end;
+        } else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
+      }
+      try { const r = new RegExp("^(?:" + re + ")$", "i"); return DEVSPEC_NAMES.some((n) => r.test(n)); } catch { return false; }
+    }
+    function oldShellGlobRe(seg, mode) {
+      let re = "";
+      for (let i = 0; i < seg.length; i++) {
+        const c = seg[i];
+        if (c === "*" || c === SV || c === SA) re += "[\\s\\S]*";
+        else if (c === "?") re += "[\\s\\S]";
+        else if (c === "[") {
+          const end = seg.indexOf("]", i + 2);
+          if (end < 0) { re += "\\["; continue; }
+          re += "[" + seg.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&") + "]";
+          i = end;
+        } else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
+      }
+      const lead = mode === "bash" && /^[*?[]/.test(seg) ? "(?!\\.)" : "";
+      try { return new RegExp("^" + lead + re + "$", "i"); } catch { return null; }
+    }
+    const oldShell = (seg, mode, name) => { const re = oldShellGlobRe(seg, mode); return re ? re.test(name) : null; };
+    const newShell = (seg, mode, name) => { const may = E.shellGlob(seg, mode); return may ? may(name) : null; };
+    const DEV_ROWS = [["dev-sp?c.js", true], ["*.md", false], ["dev-spec.js", false], ["cli/dev-spe[c].js", true], ["cli/dev-spe[!c].js", false],
+      ["cli/dev-spe[^x].js", true], ["DEV-SPEC.*", true], ["dev-spec.[jc]s", true], ["dev[-]spec", true], ["dev?spec", true], ["dev-spec[", false],
+      ["dev-spec.[js", false], ["[]]ev-spec", false], ["[!]ev-spec", true], ["[z-a]ev-spec", false], ["*/dev-spec", true], ["cli\\dev-sp*", true],
+      ["dev-spec.*" + "s".repeat(3), false], ["x*", false], ["dev-spec.e[x-z]e", true], ["dev-ſpec*", false], ["dev-spe" + SV + "*", false]];
+    const SHELL_ROWS = [[".s*", "bash", ".specs", true], ["*", "bash", ".specs", false], ["*", "ps", ".specs", true], ["?specs", "bash", ".specs", false],
+      ["?specs", "cmd", ".specs", true], ["[.]specs", "bash", ".specs", false], ["[.]specs", "ps", ".specs", true], [".SPEC[sS]", "bash", ".specs", true],
+      ["road*.json", "bash", "roadmap.json", true], ["road*.jso[!n]", "bash", "roadmap.json", false], ["road*.jso[^x]", "bash", "roadmap.json", true],
+      ["roadmap.jso[", "bash", "roadmap.json", false], ["x[", "ps", "x[", true], ["[z-a]*", "ps", "roadmap.json", null], [SV, "bash", ".specs", true],
+      [SA + ".json", "bash", "observed.jsonl", false], [SA + "l", "bash", "observed.jsonl", true], ["*K", "bash", "add-track", false], ["*K", "bash", "add-track", true],
+      ["[!]x", "ps", "ax", true], ["[]]", "ps", "]", true], ["[a-c]pprove", "bash", "approve", true], ["*e", "bash", "merge-state", true],
+      ["*x", "bash", "merge-state", false], ["a*b*c", "ps", "a/b\\c", true], ["?", "bash", "\n", true], ["*.state.json", "bash", ".state.json", false]];
+    const rows = {};
+    for (const [w, want] of DEV_ROWS) rows["devSpecGlob(" + js(w) + ") " + want] = oldDevSpecGlob(w) === want && E.devSpecGlob(w) === want;
+    for (const [g, mode, name, want] of SHELL_ROWS) rows["shellGlob(" + js(g) + ", " + mode + ")(" + js(name) + ") " + want] = oldShell(g, mode, name) === want && newShell(g, mode, name) === want;
+    // (devSpecGlob's reading where no CLI name reaches it — the names hold no separator and no line terminator: its `*` is the old
+    // `[^/\\]*`, never across / or \, its `?` RegExp's `.`, never a line terminator; the shell's cross both)
+    const dev = (g, name) => E.globMayName(g, E.DEVSPEC_GLOB)(name), sh = (g, name) => newShell(g, "ps", name);
+    Object.assign(rows, { "devSpecGlob's a*c: a/c false": dev("a*c", "a/c") === false, "devSpecGlob's a*c: a\\c false": dev("a*c", "a\\c") === false,
+      "devSpecGlob's a*c: abbc true": dev("a*c", "abbc") === true, "devSpecGlob's a?c: a\\nc false": dev("a?c", "a\nc") === false,
+      "devSpecGlob's a?c: a\\rc false": dev("a?c", "a\rc") === false, "devSpecGlob's a?c: a.c true": dev("a?c", "a.c") === true,
+      "the shell's a*c: a/c true": sh("a*c", "a/c") === true, "the shell's a?c: a\\nc true": sh("a?c", "a\nc") === true });
+    all("1.41.1 (R1): the linear glob matcher answers each row as the parent's RegExp builders do (a row false: the oracle or the matcher disagrees with it)", rows);
+    // (a set no RegExp reads, where each reader takes it — a path segment then may be no guarded name, the CLI's subcommand is
+    // unreadable, a program word is no glob of the CLI's script: the decisions the parent made, never a throw)
+    const decide = (tool, command) => {
+      try { return E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command } }, "deny", { meta: {}, lang: "en" }).decision; } catch (e) { return "threw: " + e.message; }
+    };
+    const INVALID = [["Bash", "cp x .specs/[z-a]*", "allow"], ["PowerShell", "Remove-Item .s[z-a]* -Recurse", "allow"],
+      ["Bash", "node cli/dev-spec.js [z-a]pprove feat requirements", "ask"], ["Bash", "node cli/dev-spe[z-a].js approve feat requirements", "allow"]];
+    const invalidGot = INVALID.map(([tool, command]) => decide(tool, command));
+    all("1.41.1 (R1): a glob holding a range out of order answers as the parent did — a path segment no guarded name, the CLI's subcommand unreadable (ask), no glob of the CLI's script (got " + js(invalidGot) + ")",
+      Object.fromEntries(INVALID.map(([tool, command, want], i) => [tool + " " + command + " → " + want, invalidGot[i] === want])));
+    let seed = 1411;
+    const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+    const ALPHA = ["*", "?", "[", "]", "!", "^", "-", ".", "d", "e", "v", "s", "p", "c", "j", "D", "S", "/", "\\", "a", "z", "x", "\n", SV, SA, "K", "k", "K", "{", "(", "+", "$", "|"];
+    const NAMES = [".specs", "roadmap.json", ".state.json", "observed.jsonl", "guardian.cjs", ".execution", ".guardian", "baseline.json", "approve", "merge-state", "add-track", "", ".", "dev-spec", "k", "\n", "a]b", "["];
+    const diff = { devSpecGlob: [], shellGlob: [] };
+    for (let i = 0; i < 20000; i++) {
+      let g = "";
+      for (let n = rnd(i % 3 ? 8 : 12); n > 0; n--) g += ALPHA[rnd(ALPHA.length)];
+      if (oldDevSpecGlob(g) !== E.devSpecGlob(g)) diff.devSpecGlob.push(g);
+      for (const mode of ["bash", "ps", "cmd"]) for (const name of NAMES) if (oldShell(g, mode, name) !== newShell(g, mode, name)) diff.shellGlob.push([g, mode, name]);
+    }
+    all("1.41.1 (R1): the linear glob matcher answers as the parent's RegExp builders on 20,000 random globs (× 3 modes × " + NAMES.length + " names for the shell's) — got " +
+      js({ devSpecGlob: diff.devSpecGlob.slice(0, 3), shellGlob: diff.shellGlob.slice(0, 3) }), { devSpecGlob: diff.devSpecGlob.length === 0, shellGlob: diff.shellGlob.length === 0 });
+    // (fix round 1, S1-F1) a set's validity is read by hand now (guards.js globSetValid, no RegExp built to find it out): every body of up to
+    // five of the characters a class reading turns on — a range's ends, `-`, the escaped `\` and `]`, a negation, `[`, a code unit past
+    // ASCII — answers as the old builder's RegExp did, null or not, and on six names
+    const BODY = ["a", "b", "z", "-", "\\", "]", "^", "!", "[", "ÿ"], SET_NAMES = ["a", "]", "-", "b", "ÿ", "z"];
+    const setDiff = [];
+    let bodies = 0;
+    const walk = (body, left) => {
+      if (body) {
+        bodies++;
+        const g = "[" + body + "]";
+        if ((oldShellGlobRe(g, "ps") === null) !== (E.shellGlob(g, "ps") === null) || SET_NAMES.some((n) => oldShell(g, "ps", n) !== newShell(g, "ps", n))) setDiff.push(g);
+      }
+      if (left) for (const c of BODY) walk(body + c, left - 1);
+    };
+    walk("", 5);
+    all("1.41.1 fix round 1 (S1-F1): a set's validity read by hand answers as the old builder's RegExp on every body of up to 5 characters (" + bodies + " sets, 6 names each; got " + js(setDiff.slice(0, 3)) + ")",
+      { bodies: bodies === 111110, same: setDiff.length === 0 });
+  }
+
+  // 1.41.1 fix round 1 (review 1 of the glob fix: S1-F1 / F2 / F3, Q4) — the approval hook NEVER answers by timing out. As a process its
+  // main thread arms the deadline (approval-hook.js DEADLINE_MS) at the process's start, reads stdin with a cap (MAX_INPUT) and runs the
+  // pre-check alone; the projects, the roadmap reads, the engine and the decision run in a worker_threads worker with a heap limit. No
+  // answer by the deadline, a worker error, an out-of-memory, an exit without an answer, a worker that can't start: ask. A preload (written
+  // here, `node -r`) counts the workers the main thread starts — a property, never a time — and makes the worker slow, run out of memory,
+  // throw, exit or print. Each hook run is a child process with a 20 s timeout: a hook that hangs fails its row, never the suite.
+  {
+    const AH = require("../hooks/approval-hook.js");
+    const E = require("./lib/engine/index.js");
+    const M = require("./lib/i18n.js");
+    const pd = path.join(tmp, "r1411h-deadline");
+    S.initProject(pd, ["core"], "pt", { approvalGuard: "deny" });
+    const PRE = path.join(tmp, "r1411h-preload.js");
+    fs.writeFileSync(PRE, [
+      "const wt = require('worker_threads'), fs = require('fs');",
+      "const spin = (ms) => { const end = Date.now() + ms; while (Date.now() < end); };",
+      "if (wt.isMainThread) {",
+      "  let n = 0;",
+      "  const W = wt.Worker;",
+      "  wt.Worker = class extends W { constructor(...a) { n++; if (process.env.R1411H_MAIN === 'ctor-throw') throw new Error('preload: no worker'); super(...a); } };",
+      "  if (process.env.R1411H_COUNT) process.on('exit', () => fs.writeFileSync(process.env.R1411H_COUNT, String(n)));",
+      "  if (process.env.R1411H_MAIN === 'delay') spin(800);",
+      "} else {",
+      "  if (process.env.R1411H_LIMITS) fs.writeFileSync(process.env.R1411H_LIMITS, JSON.stringify(wt.resourceLimits));",
+      "  const mode = process.env.R1411H_WORKER;",
+      "  if (mode === 'busy') spin(20000);",
+      "  if (mode === 'oom') { const a = []; for (;;) a.push(new Array(1e6).fill(Math.random())); }",
+      "  if (mode === 'throw') throw new Error('preload: boom');",
+      "  if (mode === 'exit') process.exit(0);",
+      "  if (mode === 'log') console.log('noise from the worker');",
+      "  if (mode === 'afterlevel') { const pp = wt.parentPort, post = pp.postMessage.bind(pp); pp.postMessage = (m) => { post(m); if (m && m.known) spin(20000); }; }",
+      "  if (mode === 'slowengine') {",
+      "    const Module = require('module'), load = Module._load;",
+      "    Module._load = function (request) { if (String(request).split(String.fromCharCode(92)).join('/').endsWith('/mcp/lib/spec.js')) spin(20000); return load.apply(this, arguments); };",
+      "  }",
+      "}",
+    ].join("\n"));
+    const COUNT = path.join(tmp, "r1411h-count.txt");
+    const APPROVE = "node cli/dev-spec.js approve feat requirements";
+    const bash = (command) => js({ session_id: "s", hook_event_name: "PreToolUse", cwd: pd, tool_name: "Bash", tool_input: { command } });
+    const run = (input, env) => {
+      try { fs.unlinkSync(COUNT); } catch { /* none yet */ }
+      const t = Date.now();
+      const r = spawnSync(process.execPath, ["-r", PRE, path.join(HOOKS, "approval-hook.js")], { input, encoding: "utf8", env: hookEnv({ CLAUDE_PROJECT_DIR: pd, R1411H_COUNT: COUNT, ...(env || {}) }),
+        cwd: pd, timeout: 20000, maxBuffer: 1 << 26 });
+      let o = null;
+      try { o = JSON.parse(r.stdout).hookSpecificOutput; } catch { o = null; }
+      let workers = null;
+      try { workers = Number(fs.readFileSync(COUNT, "utf8")); } catch { workers = null; }
+      const d = o ? o.permissionDecision : r.status === null ? "killed by " + r.signal : r.stdout ? "unparsed: " + r.stdout.slice(0, 60) : "silent";
+      return { ms: Date.now() - t, d, reason: o ? o.permissionDecisionReason : null, workers };
+    };
+    const ask = (lang, why, seconds, level) => { const A = M.msg(lang).approvalGuard; return A.ask(A.action({ kind: "unreadable", why, seconds }), false, level); };
+    const D = AH.DEADLINE_MS, secs = (ms) => Math.ceil(ms / 1000);
+    const hooksJson = JSON.parse(fs.readFileSync(path.join(HOOKS, "hooks.json"), "utf8"));
+    const T = hooksJson.hooks.PreToolUse.flatMap((e) => e.hooks).find((h) => (h.args || []).some((a) => /approval-hook\.js$/.test(a))).timeout * 1000;
+    const big = (file) => js({ hook_event_name: "PreToolUse", tool_name: "Write", cwd: pd, tool_input: { file_path: path.join(pd, file), content: "x".repeat(AH.MAX_INPUT + 1024 * 1024) } });
+    // (fix round 2) an unguarded session beside the guarded one: R2H-F3's Write of the GUARDED project's roadmap.json past MAX_INPUT; R2H-F7's
+    // worker held after it said level 0; R2H-F1's candidate folders whose roadmap.json / ROADMAP.md is no regular file — a FOLDER in a
+    // project with features (gone: ask), and on POSIX a FIFO (answered, the process ended, well before T; win32 makes none)
+    const pu = path.join(tmp, "r1411h-open");
+    S.initProject(pu, ["core"], "en");
+    const inDir = (dir, tool, ti) => js({ session_id: "s", hook_event_name: "PreToolUse", cwd: dir, tool_name: tool, tool_input: ti });
+    const pdir = path.join(tmp, "r1411h-dirmap");
+    S.initProject(pdir, ["core"], "en", { approvalGuard: "deny" });
+    S.createFeature(pdir, "Feat", ["core"], "", undefined, "en");
+    fs.rmSync(path.join(pdir, ".specs", "roadmap.json"));
+    fs.mkdirSync(path.join(pdir, ".specs", "roadmap.json"));
+    const POSIX = process.platform !== "win32";
+    const fifoAt = (dir, name) => { fs.mkdirSync(path.join(dir, ".specs"), { recursive: true }); return spawnSync("mkfifo", [path.join(dir, ".specs", name)]).status === 0; };
+    const pf1 = path.join(tmp, "r1411h-fifo-map"), pf2 = path.join(tmp, "r1411h-fifo-md");
+    const fifos = POSIX ? [fifoAt(pf1, "roadmap.json"), fifoAt(pf2, "ROADMAP.md")] : [];
+    const LIMITS = path.join(tmp, "r1411h-limits.json");
+    // (each sentence also read from its locale table: the expected text above is built by the same i18n.js the hook loads)
+    const ACT = { en: require("./lib/i18n/en.js").text.approvalActions, pt: require("./lib/i18n/pt.js").text.approvalActions };
+    const R = {
+      approve: run(bash(APPROVE), { R1411H_LIMITS: LIMITS }),
+      notCandidate: run(bash("ls -la src")),
+      garbage: run("dev-spec approve feat requirements (not JSON)"),
+      late: run(bash(APPROVE), { DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "1" }),
+      lateNot: run(bash("ls -la src"), { DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "1" }),
+      busy: run(bash(APPROVE), { R1411H_WORKER: "busy", DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "1500" }),
+      slowEngine: run(bash(APPROVE), { R1411H_WORKER: "slowengine", DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "3000" }),
+      raise: run(bash(APPROVE), { R1411H_WORKER: "busy", DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "60000" }),
+      oom: run(bash(APPROVE), { R1411H_WORKER: "oom" }),
+      thrown: run(bash(APPROVE), { R1411H_WORKER: "throw" }),
+      exited: run(bash(APPROVE), { R1411H_WORKER: "exit" }),
+      noWorker: run(bash(APPROVE), { R1411H_MAIN: "ctor-throw" }),
+      printed: run(bash(APPROVE), { R1411H_WORKER: "log" }),
+      startLate: run(bash(APPROVE), { R1411H_MAIN: "delay", R1411H_WORKER: "busy", DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "500" }),
+      bigCandidate: run(big(".specs/roadmap.json")),
+      bigNot: run(big("src/a.js")),
+      bigOther: run(inDir(pu, "Write", { file_path: path.join(pd, ".specs", "roadmap.json"), content: "x".repeat(AH.MAX_INPUT + 1024 * 1024) }), { CLAUDE_PROJECT_DIR: pu }),
+      huge: run(inDir(pu, "Write", { file_path: path.join(pu, "src", "a.js"), content: "x".repeat(AH.MAX_PAYLOAD + 1024) }), { CLAUDE_PROJECT_DIR: pu }),
+      afterLevel: run(inDir(pu, "Bash", { command: APPROVE }), { CLAUDE_PROJECT_DIR: pu, R1411H_WORKER: "afterlevel", DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "1500" }),
+      dirMap: run(inDir(pu, "Bash", { command: "cd " + JSON.stringify(pdir) + " && " + APPROVE }), { CLAUDE_PROJECT_DIR: pu }),
+      fifoMap: POSIX ? run(bash("cd " + JSON.stringify(pf1) + "; cd " + JSON.stringify(pd) + "; " + APPROVE)) : null,
+      fifoMd: POSIX ? run(bash("cd " + JSON.stringify(pf2) + "; cd " + JSON.stringify(pd) + "; " + APPROVE)) : null,
+    };
+    const brief = Object.fromEntries(Object.entries(R).map(([k, v]) => [k, v ? v.d + " " + v.ms + " ms, " + v.workers + " worker(s)" : "(win32: no FIFO)"]));
+    all("1.41.1 fix round 1 (Q4): the approval hook answers by its deadline (" + D + " ms of hooks.json's " + T + ") — a worker only past the pre-check, ask on a late, failed, " +
+      "out-of-memory, exited or absent worker, the deadline never raised by the test variable, a stdin past MAX_INPUT decided whole, past MAX_PAYLOAD asked; silent after a level-0 " +
+      "report; a candidate folder's roadmap.json that is no regular file never opened (got " + js(brief) + ")", {
+      "the margin: hooks.json's timeout − the deadline ≥ 3 s (measured past the deadline under 4 suites: ≤ 1.8 s with the process's start)": () => D < T && T - D >= 3000,
+      "a normal approve at deny: deny, through one worker": () => R.approve.d === "deny" && R.approve.workers === 1,
+      // (fix round 2, R2H-F6: the numbers themselves — compared with the hook's own export, a 4,096 MB limit passed)
+      "…that worker runs under a 512 MB old space, 64 MB young, an 8 MB stack": () => { const l = JSON.parse(fs.readFileSync(LIMITS, "utf8")); return l.maxOldGenerationSizeMb === 512 && l.maxYoungGenerationSizeMb === 64 && l.stackSizeMb === 8; },
+      "the deadline's and the failure's sentences, as their locale tables write them (en, pt)": () => R.late.reason.includes(ACT.en.timeout(1)) && R.slowEngine.reason.includes(ACT.pt.timeout(3)) &&
+        R.thrown.reason.includes(ACT.en.error) && R.exited.reason.includes(ACT.en.error),
+      "a call that can't be an approval: silent, no worker": () => R.notCandidate.d === "silent" && R.notCandidate.workers === 0,
+      "a payload that is no JSON (stdin ended): silent, no worker": () => R.garbage.d === "silent" && R.garbage.workers === 0,
+      "the deadline past before the pre-check: ask, no worker started": () => R.late.d === "ask" && R.late.workers === 0 && R.late.reason === ask("en", "timeout", 1),
+      "…and a non-candidate then: silent": () => R.lateNot.d === "silent" && R.lateNot.workers === 0,
+      "a worker past the deadline: ask, the timeout's sentence, before hooks.json's timeout": () => R.busy.d === "ask" && R.busy.workers === 1 && R.busy.reason === ask("en", "timeout", 2) && R.busy.ms < 1500 + (T - D),
+      "…past it once it named the project: the project's language and level (pt, deny)": () => R.slowEngine.d === "ask" && R.slowEngine.reason === ask("pt", "timeout", 3, "deny"),
+      "the test variable never raises the deadline: ask by the default one": () => R.raise.d === "ask" && R.raise.reason === ask("en", "timeout", secs(D)) && R.raise.ms < T,
+      // (node 22+ ends the worker at its heap limit within ~0.4 s — the failure's sentence; node 18 kept it collecting past the deadline
+      // in the Linux containers — the deadline's: either way an ask before hooks.json's timeout. The limits row above proves them passed.)
+      "an out-of-memory worker: ask — the failure's sentence (its heap limit) or the deadline's — before hooks.json's timeout": () => R.oom.d === "ask" && R.oom.ms < T &&
+        (R.oom.reason === ask("en", "error") || R.oom.reason === ask("en", "timeout", secs(D))),
+      "a worker that throws: ask": () => R.thrown.d === "ask" && R.thrown.reason === ask("en", "error"),
+      "a worker that exits without an answer: ask at once": () => R.exited.d === "ask" && R.exited.reason === ask("en", "error") && R.exited.ms < D / 2,
+      "a worker that can't start: ask": () => R.noWorker.d === "ask" && R.noWorker.reason === ask("en", "error"),
+      "a worker that prints: the hook's output stays one JSON object (deny)": () => R.printed.d === "deny",
+      "the deadline counts from the process's start: a slow start past it starts no worker": () => R.startLate.d === "ask" && R.startLate.workers === 0,
+      // (fix round 2, R2H-F3: past MAX_INPUT the main thread parses nothing — the worker decides on the payload whole, as on a small one)
+      "a stdin past MAX_INPUT: decided whole in the worker — a Write of roadmap.json at deny is refused": () => R.bigCandidate.d === "deny" && R.bigCandidate.workers === 1,
+      "…a Write of src/: silent (one worker read it)": () => R.bigNot.d === "silent" && R.bigNot.workers === 1,
+      "…a Write of ANOTHER (guarded) project's roadmap.json from an unguarded session: deny, as ed680c92 (the 16 M head read only the session's)": () =>
+        R.bigOther.d === "deny" && R.bigOther.workers === 1,
+      "a stdin past MAX_PAYLOAD (not held): ask, the partial payload's sentence, no worker": () => R.huge.d === "ask" && R.huge.workers === 0 && R.huge.reason.includes(ACT.en.partial),
+      "a worker held after it said level 0 (no project guarded): silent at the deadline (R2H-F7)": () => R.afterLevel.d === "silent" && R.afterLevel.workers === 1 && R.afterLevel.ms < 1500 + (T - D),
+      "a cd target whose roadmap.json is a FOLDER, features in it: ask — no regular file reads as gone (R2H-F1)": () => R.dirMap.d === "ask",
+      "(POSIX) a cd target whose roadmap.json / ROADMAP.md is a FIFO: never opened — deny, the process ended well before T": () => !POSIX ||
+        (fifos.every(Boolean) && R.fifoMap.d === "deny" && R.fifoMap.ms < T - 3000 && R.fifoMd.d === "deny" && R.fifoMd.ms < T - 3000),
+    });
+    // in-process: the main thread's share (needsDecision), the deadline's test variable (deadlineMs), decide's onLevel
+    const calls = [];
+    const out = AH.decide(bash(APPROVE), { onLevel: (s) => calls.push({ level: s.level, lang: s.meta && s.meta.lang }) });
+    const env = (v) => ({ DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: v });
+    all("1.41.1 fix round 1 (Q4): the hook's main-thread pre-check, its deadline's test variable and decide's onLevel (got " + js({ calls, out: out && out.hookSpecificOutput.permissionDecision }) + ")", {
+      "needsDecision: an approve, a Write of roadmap.json, an MCP approval": () => AH.needsDecision(bash(APPROVE)) && AH.needsDecision(js({ tool_name: "Write", tool_input: { file_path: ".specs/roadmap.json" } })) &&
+        AH.needsDecision(js({ tool_name: "mcp__x__spec_approve", tool_input: {} })),
+      "needsDecision: not ls, not a Write of src/, not another event": () => !AH.needsDecision(bash("ls")) && !AH.needsDecision(js({ tool_name: "Write", tool_input: { file_path: "src/a.ts" } })) &&
+        !AH.needsDecision(js({ hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: APPROVE } })),
+      "needsDecision: a payload that doesn't parse only when cut short and naming dev-spec": () => !AH.needsDecision("dev-spec {") && AH.needsDecision("dev-spec {", { timedOut: true }) &&
+        !AH.needsDecision("ls {", { timedOut: true }),
+      "deadlineMs: the default, a lower test value, never a higher or a malformed one": () => AH.deadlineMs({}) === D && AH.deadlineMs(env("500")) === 500 && AH.deadlineMs(env("0")) === 0 &&
+        AH.deadlineMs(env(String(D * 10))) === D && AH.deadlineMs(env("")) === D && AH.deadlineMs(env("x")) === D && AH.deadlineMs(env("-1")) === D,
+      "decide tells the strictest level once, before the engine (2, pt)": () => calls.length === 1 && calls[0].level === 2 && calls[0].lang === "pt" && out.hookSpecificOutput.permissionDecision === "deny",
+      // (fix round 2, R2H-F1) judged by the fd's own fstat once opened: a device opens (NUL / /dev/null) and is no regular file
+      "probe.js openRegular / readRegularText: a device is no regular file (null), a regular file opens": () => {
+        const PR = require("./lib/probe.js"), BSL = String.fromCharCode(92);
+        const dev = process.platform === "win32" ? BSL + BSL + "." + BSL + "NUL" : "/dev/null";
+        const fd = PR.openRegular(path.join(pd, ".specs", "roadmap.json"));
+        try { return PR.openRegular(dev) === null && PR.readRegularText(dev) === null && typeof fd === "number"; } finally { if (typeof fd === "number") fs.closeSync(fd); }
+      },
+    });
+    // (fix round 3, review 3 — R3H-F3) an lstat that THROWS is no regular file either: through \\wsl.localhost\ a Linux FIFO's lstat
+    // throws EISDIR, and win32 opens with no O_NONBLOCK — the open waited for a writer, the worker sat in that one call and the process
+    // outlived hooks.json's timeout. Here fs.lstatSync throws EISDIR for one file (a stub, in-process: win32 makes no FIFO) and fs.openSync
+    // counts the opens of it: rawLevel reads a candidate's roadmap.json as gone (its real meta says off — opened, it would read level 0)
+    // and the rule's ROADMAP.md head reads "" (its real text carries the generated marker), as through a link to it. A swap between the
+    // lstat and the open (a regular file then, a FIFO at the open — on win32, where nothing opens without waiting) stays a documented
+    // race (R5: rawLevel's `text === null` branch, reached only by it — the known limits, claude-code-integration.md → Human approval
+    // guard); POSIX opens with O_NONBLOCK and judges the fd.
+    {
+      const PR = require("./lib/probe.js"), BSL = String.fromCharCode(92);
+      const pl = path.join(tmp, "r1411h-lstat-throws");
+      S.initProject(pl, ["core"], "en");
+      S.createFeature(pl, "Feat", ["core"], "", undefined, "en");
+      const pm = path.join(tmp, "r1411h-lstat-md");
+      fs.mkdirSync(path.join(pm, ".specs"), { recursive: true });
+      fs.writeFileSync(path.join(pm, ".specs", "ROADMAP.md"), "<!-- AUTO-GENERATED by dev-spec — do not edit by hand. -->\n# Roadmap\n");
+      const ends = (p, tail) => typeof p === "string" && p.split(BSL).join("/").toLowerCase().endsWith(tail);
+      const stubbed = (tail, fn) => {
+        const lstat0 = fs.lstatSync, open0 = fs.openSync;
+        let opens = 0;
+        fs.lstatSync = function (p) { if (ends(p, tail)) { const e = new Error("EISDIR: illegal operation on a directory, lstat"); e.code = "EISDIR"; throw e; } return lstat0.apply(fs, arguments); };
+        fs.openSync = function (p) { if (ends(p, tail)) opens++; return open0.apply(fs, arguments); };
+        try { return fn(() => opens); } finally { fs.lstatSync = lstat0; fs.openSync = open0; }
+      };
+      const lv = stubbed("/r1411h-lstat-throws/.specs/roadmap.json", (opens) => {
+        const seen = [];
+        const o = AH.decide(inDir(pu, "Bash", { command: "cd " + JSON.stringify(pl) + " && " + APPROVE }), { onLevel: (s) => seen.push({ level: s.level, opens: opens() }) });
+        return { seen, d: o ? o.hookSpecificOutput.permissionDecision : "silent" };
+      });
+      const lvPlain = (() => { const seen = []; AH.decide(inDir(pu, "Bash", { command: "cd " + JSON.stringify(pl) + " && " + APPROVE }), { onLevel: (s) => seen.push(s.level) }); return seen; })();
+      const md = stubbed("/r1411h-lstat-md/.specs/roadmap.md", (opens) => ({ is: PR.isDevSpecProject(pm), opens: opens() }));
+      // …and a ROADMAP.md that is a LINK to that file: never followed (where the OS lets the test make one — openRegular alone follows it)
+      const pk = path.join(tmp, "r1411h-link-md");
+      fs.mkdirSync(path.join(pk, ".specs"), { recursive: true });
+      let linked = false;
+      try { fs.symlinkSync(path.join(pm, ".specs", "ROADMAP.md"), path.join(pk, ".specs", "ROADMAP.md"), "file"); linked = fs.lstatSync(path.join(pk, ".specs", "ROADMAP.md")).isSymbolicLink(); } catch { linked = false; }
+      md.link = linked ? PR.isDevSpecProject(pk) : "(no link privilege)";
+      all("1.41.1 fix round 3 (R3H-F3): an lstat that throws (EISDIR, a Linux FIFO through \\\\wsl.localhost\\) never opens the file — rawLevel's roadmap.json reads as gone, the rule's ROADMAP.md head as \"\" (got " +
+        js({ lv, lvPlain, md, mdPlain: PR.isDevSpecProject(pm) }) + ")", {
+        "rawLevel: gone, features in it — level 1 (ask), the file never opened before the level is told": () => lv.seen.length === 1 && lv.seen[0].level === 1 && lv.seen[0].opens === 0 && lv.d === "ask",
+        "…its lstat answering, the same roadmap.json is read: level 0 (its meta: off)": () => js(lvPlain) === js([0]),
+        "probe.head: a ROADMAP.md whose lstat throws is never opened — not a dev-spec project by it": () => md.is === false && md.opens === 0,
+        "…its lstat answering, the same ROADMAP.md names one (the generated marker)": () => PR.isDevSpecProject(pm) === true,
+        "…a ROADMAP.md linked to it names none (a link is no regular file by its lstat)": () => !linked || md.link === false,
+      });
+    }
+    // (fix round 3, review 3 — the owner's ruling) a command BUILT to be slow for the guard's readers may make the hook ask at the
+    // deadline instead of deny — never allow, never silent, never past the timeout: the human refuses at the prompt. The tracking bounds
+    // are not tuned to turn these into too-long. R3H-F1's brace expansions over a long tracked value (×18 / ×36) and R3H-F2's long cd
+    // fold, through the hook process, the three at once: ask (the deadline's sentence) or deny, ended before T − 3 s. The deadline is
+    // lowered to 3 s by the test variable, as the busy row: the bound is the deadline (4 s past it), never a ratio — the default
+    // deadline's own exit is the raise row's.
+    {
+      const { spawn } = require("child_process");
+      const runAsync = (input, env) => new Promise((resolve) => {
+        const t = Date.now();
+        let c;
+        try { c = spawn(process.execPath, [path.join(HOOKS, "approval-hook.js")], { env: hookEnv({ CLAUDE_PROJECT_DIR: pd, ...(env || {}) }), cwd: pd, stdio: ["pipe", "pipe", "pipe"] }); }
+        catch (e) { resolve({ ms: Date.now() - t, d: "no spawn: " + (e.code || e.message), reason: null }); return; }
+        let out = "";
+        c.stdout.on("data", (d) => { out += d; });
+        c.stderr.on("data", () => { /* not read */ });
+        c.stdin.on("error", () => { /* the hook ended first */ });
+        const safety = setTimeout(() => c.kill(), 20000); // (as spawnSync's timeout above: a hook that hangs fails its row, never the suite)
+        c.on("error", (e) => { clearTimeout(safety); resolve({ ms: Date.now() - t, d: "error: " + (e.code || e.message), reason: null }); });
+        c.on("close", (code, signal) => {
+          clearTimeout(safety);
+          let o = null;
+          try { o = JSON.parse(out).hookSpecificOutput; } catch { o = null; }
+          resolve({ ms: Date.now() - t, d: o ? o.permissionDecision : signal ? "killed by " + signal : out ? "unparsed: " + out.slice(0, 60) : "silent", reason: o ? o.permissionDecisionReason : null });
+        });
+        c.stdin.end(input);
+      });
+      const dbl = (name, seed, k) => name + "=" + seed + "; " + (name + "=$" + name + "$" + name + "; ").repeat(k);
+      const BRACES = "rm -f $A{a,b}{c,d}{e,f}{g,h}{i,j}; ";
+      const SLOW = {
+        braces18: "cd x; " + dbl("A", "abcde./", 13) + BRACES.repeat(18) + APPROVE,
+        braces36: "cd x; " + dbl("A", "abcde./", 13) + BRACES.repeat(36) + APPROVE,
+        fold: dbl("B", "yyyyyyy", 12) + "cd /$B$B; " + "cd x/..; ".repeat(6900) + APPROVE,
+      };
+      const names = Object.keys(SLOW);
+      const res = await Promise.all(names.map((k) => runAsync(bash(SLOW[k]), { DEV_SPEC_TEST_APPROVAL_DEADLINE_MS: "3000" })));
+      const SR = Object.fromEntries(names.map((k, i) => [k, res[i]]));
+      const answered = (x) => x.ms < T - 3000 && (x.d === "deny" || (x.d === "ask" && !!x.reason && (x.reason.includes(ACT.pt.timeout(3)) || x.reason.includes(ACT.en.timeout(3)))));
+      all("1.41.1 fix round 3 (the ruling on R3H-F1 / F2): a command built to be slow for the guard's readers is answered by the deadline — ask or deny, never allow or silent, " +
+        "the process ended before T − 3 s (got " + js(Object.fromEntries(names.map((k) => [k, SR[k].d + " " + SR[k].ms + " ms, " + SLOW[k].length + " characters"]))) + ")",
+        Object.fromEntries(names.map((k) => [k + " — ask (the deadline's sentence) or deny, before " + (T - 3000) + " ms", () => answered(SR[k])])));
+    }
+  }
+
+  // …and the readers it turns into a prompt stay fast (the deadline makes a slow reader an ask, not a refusal): review 1's shapes and the
+  // sweep's, through the hook process (deny at deny, ≤ 6 × a benign twin of the same length and tool — a ratio, never milliseconds;
+  // 12 s child timeout: the parent ran each 7–42 s) and in-process (the decision, the action) — S1-F1 a set-heavy glob under brace
+  // expansion (each set's RegExp built per call, per name), S1-F2 a run of `[` with no `]` (a scan from each), S1-F3 `A=$A$A` (a value
+  // doubling past the read limit: too long to read), a long cd folder put before every path, a long renamed name and a slash run copied
+  // into .specs/ (regexes rescanning from each character: /[^\\/]*$/, /[\\/]+$/).
+  {
+    const pr = path.join(tmp, "r1411h-shapes");
+    S.initProject(pr, ["core"], "en", { approvalGuard: "deny" });
+    const APPROVE = "node cli/dev-spec.js approve feat requirements";
+    const B5 = "{a,b}{a,b}{a,b}{a,b}{a,b}";
+    const distinct = (L) => { let s = ""; for (let i = 0; s.length < L; i++) s += "[" + String.fromCharCode(0x4e00 + (i % 20000)) + "s]"; return s; };
+    const SHAPES = {
+      "S1-F1 braces × distinct sets (.specs)": ["Bash", "cd x; cp x .specs/" + B5 + "*" + distinct(48000) + "; " + APPROVE],
+      "S1-F1 braces × distinct sets (SPECS~1)": ["Bash", "cd x; cp x SPECS~1/" + B5 + "*" + distinct(32000) + "; " + APPROVE],
+      "S1-F2 braces × a run of [ (.specs)": ["Bash", "cd x; cp x .specs/" + B5 + "[".repeat(16000) + "; " + APPROVE],
+      "S1-F2 braces × a run of [ (SPECS~1)": ["Bash", "cd x; cp x SPECS~1/" + B5 + "[".repeat(16000) + "; " + APPROVE],
+      "S1-F3 A=$A$A ×22, cd $A": ["Bash", "A=xxxxxxxx; " + "A=$A$A; ".repeat(22) + "cd $A; " + "cp a b; ".repeat(10) + APPROVE],
+      "S1-F3 A=$A$A ×22, paths": ["Bash", "A=xxxxxxxx; " + "A=$A$A; ".repeat(22) + "cp $A/a $A/b; ".repeat(10) + APPROVE],
+      "S1-F3 PowerShell $a = \"$a$a\" ×24": ["PowerShell", "$a = 'xxxxxxxx'; " + "$a = \"$a$a\"; ".repeat(24) + "Remove-Item $a\\x; ".repeat(10) + APPROVE],
+      "sweep: a 27 K cd folder before 3,000 paths": ["Bash", "cd " + "d".repeat(27000) + "; " + "cp a b; ".repeat(3000) + APPROVE],
+      "sweep: Rename-Item of a 60 K name": ["PowerShell", "Rename-Item " + "a".repeat(60000) + "/ -NewName x; " + APPROVE],
+      "sweep: a 60 K slash run copied into .specs/": ["Bash", "cp " + "/".repeat(60000) + "x .specs/; " + APPROVE],
+      // (fix round 2) R2H-F4 a -c script built from 16,000 positional parameters, the work bound's edge, a cd / cd .. chain ×2,000 folded
+      "R2H-F4 sh -c '$1'×16,000 + a 30 K argument": ["Bash", "sh -c '" + "$1".repeat(16000) + " dev-spec' x " + "a".repeat(30000) + "; " + APPROVE],
+      "R2H-F2 a 1,000-character value in 2,098 paths": ["Bash", "A=" + "a".repeat(1000) + "; " + "cp $A/x .specs/; ".repeat(2098) + APPROVE],
+      "R2H-F2 cd x && rm -f y && cd .. ×2,000": ["Bash", "cd w && " + Array.from({ length: 2000 }, () => "cd x && rm -f y && cd ..").join(" && ") + " && " + APPROVE],
+    };
+    const twin = (tool, command) => (tool === "PowerShell" ? "Write-Output " : "echo ") + "a".repeat(Math.max(1, command.length - APPROVE.length - 20)) + "; " + APPROVE;
+    const call = (tool, command) => {
+      const t = Date.now();
+      const r = spawnSync(process.execPath, [path.join(HOOKS, "approval-hook.js")], { encoding: "utf8", env: hookEnv({ CLAUDE_PROJECT_DIR: pr }), cwd: pr, timeout: 12000,
+        input: js({ session_id: "s", hook_event_name: "PreToolUse", cwd: pr, tool_name: tool, tool_input: { command } }) });
+      let d;
+      try { d = JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { d = r.status === null ? "killed by " + r.signal : "silent"; }
+      return { d, ms: Date.now() - t };
+    };
+    const fast = (x) => x.d === "deny" && x.ms <= 6 * x.twin.ms;
+    const got = {}, checks = {};
+    for (const [name, [tool, command]] of Object.entries(SHAPES)) {
+      const m = remeasure(() => ({ twin: call(tool, twin(tool, command)), ...call(tool, command) }), fast);
+      got[name] = m.d + " " + m.ms + " ms / twin " + m.twin.d + " " + m.twin.ms + " ms (" + command.length + " characters, " + m.tries + " tries)";
+      checks[name + " — deny, ≤ 6 × its twin"] = fast(m);
+    }
+    all("1.41.1 fix round 1 (S1-F1 / F2 / F3, the sweep): the approval hook answers each hostile shape at deny within 6 × a benign twin of its length (got " + js(got) + ")", checks);
+
+    // in-process: the decision and what it says — the read limit hit by tracking is too-long (deny at deny; its own sentence), a twin under
+    // it reads as before; review 1's S1-F4 (a 33 K-literal segment: 3d74db53's RegExp threw — the hook asked — on the approve after it);
+    // the folder part and the trailing-slash trim the sweep replaced, on a backslash path (cmd's ren, Rename-Item) and a slash-ended source
+    const E = require("./lib/engine/index.js");
+    const M = require("./lib/i18n.js");
+    const dec = (tool, command) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command } }, "deny", { meta: {}, lang: "en" });
+    const acts = (r) => (r.actions || []).map((a) => a.kind + ":" + (a.setting || a.why || a.phase) + (a.expanded ? "+expanded" : ""));
+    const A = M.msg("en").approvalGuard;
+    const tooLongReason = A.deny(A.action({ kind: "unreadable", why: "too-long", expanded: "value", length: 64 * 1024 }), null);
+    const dbl = (k, tail) => "A=xxxxxxxx; " + "A=$A$A; ".repeat(k) + tail;
+    const IN = {
+      dbl22: dec("Bash", dbl(22, "cat .specs/roadmap.json")),
+      dbl5: dec("Bash", dbl(5, "cat .specs/roadmap.json")),
+      ps24: dec("PowerShell", "$a = 'xxxxxxxx'; " + "$a = \"$a$a\"; ".repeat(24) + "Get-Content .specs\\roadmap.json"),
+      cdLong: dec("Bash", "cd " + "d".repeat(30000) + "; " + "cp a b; ".repeat(3000) + "cat .specs/x"),
+      cdShort: dec("Bash", "cd " + "d".repeat(300) + "; " + "cp a b; ".repeat(30) + "cat .specs/x"),
+      f4: dec("Bash", "cp x .specs/*" + "a".repeat(33000) + "; " + APPROVE),
+      ren: dec("Bash", "cmd /c ren .specs\\notes.md roadmap.json"),
+      renamePs: dec("PowerShell", "Rename-Item .specs\\notes.md -NewName roadmap.json"),
+      renameFwd: dec("PowerShell", "Rename-Item .specs/notes.md -NewName roadmap.json"),
+      slashSrc: dec("Bash", "cp evil/roadmap.json/ .specs/"),
+    };
+    all("1.41.1 fix round 1 (S1-F3 / F4, the sweep): in-process, each shape's decision and action (got " + js(Object.fromEntries(Object.entries(IN).map(([k, r]) => [k, r.decision + " " + acts(r).join(",")]))) + ")", {
+      "A=$A$A ×22 then a reader of .specs/: too long to read — deny, its own sentence": () => IN.dbl22.decision === "deny" && js(acts(IN.dbl22)) === js(["unreadable:too-long+expanded"]) && IN.dbl22.reason === tooLongReason &&
+        IN.dbl22.reason.includes(require("./lib/i18n/en.js").text.approvalActions.tooLongExpanded("value", 64 * 1024)),
+      "…×5 (under the limit): read as before — allow": () => IN.dbl5.decision === "allow",
+      "PowerShell's $a = \"$a$a\" ×24: too long — deny": () => IN.ps24.decision === "deny" && acts(IN.ps24).includes("unreadable:too-long+expanded"),
+      "a 30 K cd folder before 3,000 paths: too long — deny; a 300-character one before 30: allow": () => IN.cdLong.decision === "deny" && acts(IN.cdLong).includes("unreadable:too-long+expanded") && IN.cdShort.decision === "allow",
+      "S1-F4: a 33 K-literal segment, then an approve: deny (3d74db53 asked)": () => IN.f4.decision === "deny" && acts(IN.f4).includes("approve:requirements"),
+      "cmd's ren and Rename-Item onto roadmap.json, a backslash path and a slash one: deny (roadmap)": () => [IN.ren, IN.renamePs, IN.renameFwd].every((r) => r.decision === "deny" && js(acts(r)) === js(["guard-down:roadmap"])),
+      "cp evil/roadmap.json/ .specs/: the file's name lands there — roadmap": () => IN.slashSrc.decision === "deny" && js(acts(IN.slashSrc)) === js(["guard-down:roadmap"]),
+    });
+    // (S1-F1) a set-heavy glob longer than every name it is asked builds no RegExp: the same count of RegExps made as a plain twin of its
+    // length — the matcher fails it on the code units it takes, before any token (counted through the global constructor, in-process)
+    const countRegExps = (fn) => {
+      const R0 = globalThis.RegExp;
+      let n = 0;
+      globalThis.RegExp = new Proxy(R0, { construct(t, a) { n++; return Reflect.construct(t, a); }, apply(t, self, a) { n++; return Reflect.apply(t, self, a); } });
+      try { fn(); } finally { globalThis.RegExp = R0; }
+      return n;
+    };
+    const setsCmd = "cd x; cp x .specs/" + B5 + "*" + distinct(16000) + "; " + APPROVE, plainCmd = "cd x; cp x .specs/" + B5 + "a".repeat(distinct(16000).length + 1) + "; " + APPROVE;
+    dec("Bash", setsCmd); dec("Bash", plainCmd); // (each once first: a literal's RegExp is made once per process)
+    const nSets = countRegExps(() => dec("Bash", setsCmd)), nPlain = countRegExps(() => dec("Bash", plainCmd));
+    // …and its glob is read once per path read, never once per name asked (guards.js shellSegReader; the engine's own counts,
+    // globMayName.reads / shellPathFacts.reads — not enumerable): every path here holds that one glob segment
+    E.globMayName.reads = 0; E.shellPathFacts.reads = 0;
+    dec("Bash", setsCmd);
+    const reads = { globs: E.globMayName.reads, paths: E.shellPathFacts.reads };
+    all("1.41.1 fix round 1 (S1-F1): a glob of 5,300 distinct sets under 32 brace expansions makes no RegExp more than a plain twin, and is read once per path (got " + js({ nSets, nPlain, reads }) + ")",
+      { noRegExp: nSets === nPlain, oncePerPath: reads.paths > 0 && reads.globs === reads.paths });
+  }
+
+  // 1.41.1 fix round 2 (review 2: R2H-F2 / F4 / F5) — what tracking BUILDS is bounded at the read limit (a value, a word with its variables
+  // put in, the cd folder — `.` / `..` folded —, a `-c` script with its positional parameters), and what the PATHS are read with by a work
+  // bound of its own (APPROVAL_TRACK_WORK). Round 1 counted every re-read against the 64 K read limit: monorepo commands of 3–4 K were
+  // refused. The LEGIT corpus below answers exactly as ed680c92 (= 3d74db53) did — the four decisions (deny / ask × win32 / POSIX readings)
+  // and the edit guard's targets (count + sha1 of the sorted, normalized list: R2H-F5, no target lost) pinned from it; the HOSTILE rows
+  // answer too-long (the reason names the bound it passed) and deny at deny; the work bound is pinned from both sides.
+  {
+    const E = require("./lib/engine/index.js");
+    const M = require("./lib/i18n.js");
+    const crypto = require("crypto");
+    const BS = String.fromCharCode(92);
+    const pkg = (i, w = 2) => "pkg-" + String(i).padStart(w, "0");
+    const times = (n, f, sep) => Array.from({ length: n }, (_, i) => f(i)).join(sep);
+    const CI = ["set -euo pipefail", "export NODE_ENV=production CI=true FORCE_COLOR=0", "export ARTIFACTS=\"$PWD/artifacts\"", "mkdir -p \"$ARTIFACTS\" dist logs",
+      "npm ci --no-audit --prefer-offline > logs/install.log 2>&1",
+      times(40, (i) => "( cd packages/" + pkg(i) + " && npm run lint > ../../logs/lint-" + pkg(i) + ".log && npm test -- --ci --reporters=default > ../../logs/test-" + pkg(i) + ".log )", "\n"),
+      times(40, (i) => "cp -r packages/" + pkg(i) + "/dist \"$ARTIFACTS/" + pkg(i) + "\"", "\n"), "tar -czf dist/artifacts.tgz -C \"$ARTIFACTS\" .",
+      "find logs -name '*.log' -size +1M -exec gzip {} \\;", "node cli/dev-spec.js doctor --json > logs/doctor.json"].join("\n");
+    const ALLOW = ["allow|", "allow|", "allow|", "allow|"];
+    // [tool, command, the four decisions, targets, their sha1] — ed680c92's answers
+    const LEGIT = {
+      "append FLAGS ×300 then tsc": ["Bash", "FLAGS=\"\"; " + times(300, (i) => "FLAGS=\"$FLAGS --include=src/module" + i + "\"", "; ") + "; tsc $FLAGS > build.log; node cli/dev-spec.js status", ALLOW, 1, "6bed715518e0"],
+      "append FLAGS ×500 then tsc": ["Bash", "FLAGS=\"\"; " + times(500, (i) => "FLAGS=\"$FLAGS --include=src/m" + i + "\"", "; ") + "; tsc $FLAGS > build.log; node cli/dev-spec.js status", ALLOW, 1, "6bed715518e0"],
+      "cd ../next && build ×150": ["Bash", "cd packages/" + pkg(0) + " && " + times(150, (i) => "npm run build > build.log && cd ../" + pkg(i + 1), " && ") + " && node ../../cli/dev-spec.js status", ALLOW, 33, "40eb0179c0cf"],
+      "cd pkg && rm -rf dist && cd .. ×300": ["Bash", "cd packages && " + times(300, (i) => "cd " + pkg(i, 3) + " && rm -rf dist && cd ..", " && ") + " && node ../cli/dev-spec.js status", ALLOW, 33, "e548c8ac3f16"],
+      "a 70-character cd, then rm -f of 1,000 files": ["Bash", "cd services/billing-api-gateway/internal/handlers/v2/generated/protobuf && rm -f " + times(1000, (i) => "f" + String(i).padStart(4, "0") + ".pb.go", " ") +
+        " && node ../../../../../../../cli/dev-spec.js status", ALLOW, 64, "9dbec889f913"],
+      "ROOT=<60>; cp $ROOT/src/fN $ROOT/out/fN ×700": ["Bash", "ROOT=/home/ci/workspace/monorepo/packages/frontend-dashboard; " + times(700, (i) => "cp $ROOT/src/f" + i + ".ts $ROOT/out/f" + i + ".ts", "; ") + "; node cli/dev-spec.js status", ALLOW, 64, "cf6057296854"],
+      "export PATH=\"$PATH:…\" ×200": ["Bash", times(200, (i) => "export PATH=\"$PATH:/opt/tools/bin" + i + "\"", "; ") + "; node cli/dev-spec.js doctor", ALLOW, 0, "da39a3ee5e6b"],
+      "CFLAGS=\"$CFLAGS -I$INC/pkgN\" ×150 then make": ["Bash", "INC=/usr/local/include; CFLAGS=\"\"; " + times(150, (i) => "CFLAGS=\"$CFLAGS -I$INC/" + pkg(i) + "\"", "; ") + "; make CFLAGS=\"$CFLAGS\" > make.log; node cli/dev-spec.js status", ALLOW, 1, "006d8d8d5e2c"],
+      "pushd pkg && build && popd ×200": ["Bash", times(200, (i) => "pushd packages/" + pkg(i, 3) + " && npm run build && popd", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "cd /repo && git status && cd sub && … && cd .. ×150": ["Bash", times(150, (i) => "cd /repo && git status && cd sub-" + i + " && git status && cd ..", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "a CI script of ~8 K": ["Bash", CI, ALLOW, 64, "7da8baf62a26"],
+      "a PowerShell build script": ["PowerShell", "$root = 'C:" + BS + "repo'; Set-Location $root; $out = ''; " + times(200, (i) => "$out = \"$out;$root" + BS + "packages" + BS + pkg(i, 3) + BS + "dist\"", "; ") + "; " +
+        times(50, (i) => "Set-Location \"$root" + BS + "packages" + BS + pkg(i, 3) + "\"; npm run build; Set-Location $root", "; ") + "; node cli" + BS + "dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "sh -c 'cd \"$1\" && npm test' _ pkg ×50": ["Bash", times(50, (i) => "sh -c 'cd \"$1\" && npm test' _ packages/" + pkg(i), " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "cd pkg && … && cd .. ×200, then an approve": ["Bash", "cd packages && " + times(200, (i) => "cd " + pkg(i, 3) + " && rm -rf dist && cd ..", " && ") + " && node ../cli/dev-spec.js approve feat requirements",
+        ["deny|approve:requirements", "deny|approve:requirements", "ask|approve:requirements", "ask|approve:requirements"], 33, "e548c8ac3f16"],
+      "F=\"$F -Iinclude/pkg\" ×100, then a test write": ["Bash", "F=x; " + times(100, (i) => "F=\"$F -Iinclude/" + pkg(i, 3) + "\"", "; ") + "; D=tests; echo hi > $D/protected.test.js; node cli/dev-spec.js status", ALLOW, 1, "590079460ad3"],
+      "git commit with a 3 K heredoc message": ["Bash", "git add -A && git commit -m \"$(cat <<'EOF'\nfeat: the monorepo build\n\n" + times(60, (i) => "- " + pkg(i) + ": the build script, the lint config and the test runner moved to the shared preset", "\n") +
+        "\nEOF\n)\" && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "cp dist files ×400": ["Bash", times(400, (i) => "cp packages/" + pkg(i, 3) + "/dist/index.js dist/" + pkg(i, 3) + ".js", " && ") + " && node cli/dev-spec.js status", ALLOW, 64, "43c976b4ac72"],
+      "cd ../../ chains (two up, one down) ×100": ["Bash", "cd apps/web/src && " + times(100, (i) => "cd ../../" + pkg(i) + "/src && npm run build", " && ") + " && node ../../../cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+      "a cd into .specs/ and out, reading": ["Bash", "cd .specs && cat roadmap.json && cd .. && " + times(100, (i) => "cat packages/" + pkg(i) + "/package.json", " && ") + " && node cli/dev-spec.js status", ALLOW, 0, "da39a3ee5e6b"],
+    };
+    const decide = (tool, command, level, win) => {
+      const r = E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: { command }, cwd: "/work/mono" }, level, { meta: {}, lang: "en", win });
+      return { s: r.decision + "|" + (r.actions || []).map((a) => a.kind + ":" + (a.why || a.setting || a.phase || "")).join(","), r };
+    };
+    const targets = (tool, command) => {
+      const l = E.shellWriteTargets(command, tool === "Bash" ? "bash" : "ps", false).map((x) => path.posix.normalize(String(x).split(BS).join("/"))).sort();
+      return [l.length, crypto.createHash("sha1").update(l.join("\n")).digest("hex").slice(0, 12)];
+    };
+    const legitGot = {}, legitRows = {};
+    for (const [name, [tool, command, want, n, sha]] of Object.entries(LEGIT)) {
+      const ds = [decide(tool, command, "deny", true).s, decide(tool, command, "deny", false).s, decide(tool, command, "ask", true).s, decide(tool, command, "ask", false).s];
+      const tg = targets(tool, command);
+      legitGot[name] = command.length + " characters: " + ds[0] + " / " + ds[2] + ", " + tg[0] + " target(s)";
+      legitRows[name + " — as ed680c92: " + want[0] + " (" + n + " target(s))"] = js(ds) === js(want) && tg[0] === n && tg[1] === sha;
+    }
+    all("1.41.1 fix round 2 (R2H-F2 / F5): " + Object.keys(LEGIT).length + " legit monorepo / CI / PowerShell commands answer exactly as ed680c92 — the four decisions and the edit guard's targets (got " + js(legitGot) + ")", legitRows);
+
+    const APPROVE = "node cli/dev-spec.js approve feat requirements";
+    const A1K = "a".repeat(1000);
+    const work = (n) => "A=" + A1K + "; " + "cp $A/x .specs/; ".repeat(n) + "cat .specs/x"; // each $A puts 1,000 characters in a path: 2,097 of them are 2,097,000
+    const HOSTILE = {
+      dbl22: ["Bash", "A=xxxxxxxx; " + "A=$A$A; ".repeat(22) + "cat .specs/roadmap.json", "deny", "value"],
+      ps24: ["PowerShell", "$a = 'xxxxxxxx'; " + "$a = \"$a$a\"; ".repeat(24) + "Get-Content .specs" + BS + "roadmap.json", "deny", "value"],
+      cd30k: ["Bash", "cd " + "d".repeat(30000) + "; " + "cp a b; ".repeat(3000) + "cat .specs/x", "deny", "total"],
+      // (fix round 3, R3H-F4) the cd folder's own bound: two relative cd's of a 40 K value build an 80 K folder — past the read limit
+      // (value); without it the folder kept growing and the path under it read as no .specs/ of the project (allow)
+      cdPast: ["Bash", "A=" + "d".repeat(40000) + "; cd $A; cd $A; cat .specs/x", "deny", "value"],
+      pos1: ["Bash", "sh -c '" + "$1".repeat(16000) + " dev-spec' x " + "a".repeat(30000) + "; " + APPROVE, "deny", "value"],
+      posAt: ["Bash", "sh -c '" + "$@".repeat(16000) + " dev-spec' x " + "a ".repeat(15000) + "; " + APPROVE, "deny", "value"],
+      over: ["Bash", work(2098), "deny", "total"],
+      under: ["Bash", work(2097), "allow", null],
+      cdChain: ["Bash", "cd w && " + times(2000, () => "cd x && rm -f y && cd ..", " && ") + " && cat .specs/x", "allow", null],
+      psChain: ["PowerShell", "Set-Location w; " + times(1000, () => "Set-Location x" + BS + "y; Remove-Item z; Set-Location .." + BS + "..", "; ") + "; Get-Content .specs" + BS + "x", "allow", null],
+    };
+    const ACT = require("./lib/i18n/en.js").text.approvalActions;
+    const hostileGot = {}, hostileRows = {};
+    for (const [name, [tool, command, want, kind]] of Object.entries(HOSTILE)) {
+      const t = Date.now();
+      const { r } = decide(tool, command, "deny", process.platform === "win32");
+      const ms = Date.now() - t;
+      const tl = (r.actions || []).find((a) => a.why === "too-long");
+      hostileGot[name] = command.length + " characters: " + r.decision + (tl ? " " + tl.expanded + " " + tl.length : "") + ", " + ms + " ms";
+      hostileRows[name + " — " + want + (kind ? " (too-long: " + kind + ", the reason naming its bound)" : " (no too-long)")] = r.decision === want &&
+        (kind ? !!tl && tl.expanded === kind && tl.length === (kind === "total" ? 2 * 1024 * 1024 : 64 * 1024) && r.reason.includes(ACT.tooLongExpanded(kind, tl.length)) : !tl);
+    }
+    // (fix round 3, R3H-F4) …and in Portuguese: each bound's reason holds pt.js's sentence for it (value: dbl22; total: cd30k), and that
+    // sentence says what it is about — a variable that grows (value), the paths that add up (total): a table whose two sentences are
+    // swapped reads the same from both sides, so the words are what pins them (en's too)
+    const reasonIn = (lang, name) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: HOSTILE[name][0], tool_input: { command: HOSTILE[name][1] }, cwd: "/work/mono" }, "deny", { meta: {}, lang }).reason || "";
+    const SAYS = { pt: { value: "em que uma variável", total: "cujos caminhos" }, en: { value: "in which a variable", total: "whose paths" } };
+    const sentenceRows = {};
+    for (const lang of ["pt", "en"]) {
+      const T8 = require("./lib/i18n/" + lang + ".js").text.approvalActions;
+      const r = { value: reasonIn(lang, "dbl22"), total: reasonIn(lang, "cd30k") };
+      const own = { value: T8.tooLongExpanded("value", 64 * 1024), total: T8.tooLongExpanded("total", 2 * 1024 * 1024) };
+      sentenceRows[lang] = ["value", "total"].every((k) => r[k].includes(own[k]) && own[k].includes(SAYS[lang][k]) && !own[k].includes(SAYS[lang][k === "value" ? "total" : "value"]));
+    }
+    hostileGot.sentences = sentenceRows;
+    hostileRows["the value bound's sentence and the total bound's, each as its table writes it and about its own bound (pt, en)"] = sentenceRows.pt && sentenceRows.en;
+    // (R2H-F5) a value built past the read limit stops growing there, the other variables are still read: the edit guard keeps
+    // ed680c92's target after a doubling ×14 (`D=tests` — round 1 read every variable after the bound as unknown and lost it)
+    const egCmd = "A=xxxxxxxx; " + "A=$A$A; ".repeat(14) + "D=tests; echo hi > $D/protected.test.js; cat .specs/x";
+    hostileRows["the edit guard after a doubling ×14: tests/protected.test.js still a target (as ed680c92); the decision too-long (value)"] =
+      E.shellWriteTargets(egCmd, "bash", false).includes("tests/protected.test.js") && decide("Bash", egCmd, "deny", false).s === "deny|unreadable:too-long";
+    all("1.41.1 fix round 2 (R2H-F2 / F4): the hostile shapes are too long — a value built past 65,536 characters (A=$A$A, PowerShell's \"$a$a\", sh -c '$1' / '$@' ×16,000), the paths' work past 2,097,152 " +
+      "(a 30 K cd folder before 3,000 paths, a 1,000-character value put in 2,098 paths — 2,097 still read), a cd / cd .. chain ×2,000 and PowerShell's ×1,000 folded, read (got " + js(hostileGot) + ")", hostileRows);
+    // the cd folder folded reads every path as ed680c92 read it (the edit guard's targets, normalized as the path readers normalize):
+    // the root, a drive, a leading `..`, `.`, both separators, PowerShell's backslashes
+    const facts = (cmd, mode) => E.shellWriteTargets(cmd, mode || "bash", false).map((x) => path.posix.normalize(String(x).split(BS).join("/")));
+    const FOLD_WANT = { root: ["b.ts", "/b.ts"], drive: ["b.ts", "b.ts"], lead: ["b.ts", "../../x/y/b.ts"], ps: ["d.ts", "a/c/d.ts"], deep: ["b.ts", "../b.ts"] }; // ed680c92's
+    const FOLD = {
+      root: ["cd /x/.. && echo a > b.ts", "bash", FOLD_WANT.root],
+      drive: ["cd C:/a/../.. && echo a > b.ts", "bash", FOLD_WANT.drive],
+      lead: ["cd ../.. && cd x/./y && echo a > b.ts", "bash", FOLD_WANT.lead],
+      ps: ["Set-Location a" + BS + "b; Set-Location .." + BS + "c; Set-Content d.ts x", "ps", FOLD_WANT.ps],
+      deep: ["cd a/b/c && cd ../../.. && cd .. && echo a > b.ts", "bash", FOLD_WANT.deep],
+    };
+    const foldGot = Object.fromEntries(Object.entries(FOLD).map(([k, [c, m]]) => [k, facts(c, m)]));
+    all("1.41.1 fix round 2 (R2H-F2): the cd folder folded reads every path as ed680c92 did — the root, a drive, a leading `..`, `.`, PowerShell's backslashes (got " + js(foldGot) + ")",
+      Object.fromEntries(Object.entries(FOLD).map(([k, [, , want]]) => [k, js(foldGot[k]) === js(want)])));
+  }
 };

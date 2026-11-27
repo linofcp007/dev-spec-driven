@@ -5,6 +5,9 @@
  * (`done --run`) or a project check of roadmap.json meta.checks (`finish --run`), only on that explicit flag — the same trust as an
  * npm script; a shell is the point, each is a shell command line. The CLI is the only surface that runs them (MCP records a run
  * reported to it); the engine judges the output (summarizeRunOutput, couldNotRunOutput…) and records the evidence.
+ * A project check ADDED, or a `_Verify:_` added or edited (spec_init {checks}, spec_append_tasks, an edit of tasks.md), is no
+ * guard-down; changing or removing a project check is one. `--run` runs what roadmap.json / tasks.md hold at that moment, and prints
+ * each command (`$ <command>`) before it runs it.
  *
  *   execCommand(command, sh, opts)   → Promise<{ status, signal, error, heldOpen, stdout, stderr }> — the run itself
  *   runVerdict(run, sh, why, timeoutS) → { code, output, summary, cantRun, crashed? } — what the run proves
@@ -89,7 +92,7 @@ function execCommand(command, sh, opts) {
     try {
       const sopts = { cwd: o.cwd, windowsHide: true, detached: !win, ...(o.env ? { env: o.env } : {}) };
       t0 = process.hrtime.bigint();
-      // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
+      // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true, javascript.lang.security.detect-child-process.detect-child-process -- runs the _Verify:_ / check command the user asked for with --run
       child = Array.isArray(sh.args) ? spawn(String(sh.shell), [...sh.args, command], sopts) : spawn(command, { shell: sh.shell, ...sopts });
     } catch (e) { error = e; return settle(null, null); }
     if (o.onSignal) {

@@ -55,7 +55,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (~100 ms) only past a raw pre-check. **The spec hook** (PostToolUse Write|Edit) lints the save — requirements.md: EARS +
   placeholders; tasks.md: trace gaps + EC/NFR/SC warnings; design.md: `designSaveCheck()` — and stamps a tasks.md / change.md
   save in `.state.json lastEditAt` (`recordSpecEdit()`, the stop gate's activity); it skips `/.execution/`, `.specs/templates/`
-  and `.specs/tracks/` (unless the folder holds a `.state.json`) and generated files (mcp/tests/10-guards-stop-gate.js). It never
+  and `.specs/tracks/` (unless the folder holds a `.state.json`) and generated files (mcp/tests/10-guards-stop-gate.js). Its project
+  is the nearest folder named `.specs` above the saved file, by text (`findProjectDir`): a project below a folder named `.specs`, a
+  session started in a subfolder or a sibling checkout keep their lint and their `lastEditAt` stamp (12-lifecycle-read-gate-root.js);
+  a save through a link named `.specs` below `.specs/` is the known limit (conventions.md → The read gate). It never
   refreshes ROADMAP.md / SPECS.md: a save leaves `.specs/.execution/roadmap-stale` (`markRoadmapStale`) for the Stop /
   SubagentStop hook to refresh at the end of the turn (lifecycle.md → Roadmap files). **SessionStart** fires in every session of
   every project (the plugin is user-wide), so `sessionMayBeDevSpec()` runs the raw probe first — a superset of what
@@ -101,7 +104,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   stdin asynchronously (never `fs.readFileSync(0)`), runs `decide(raw, {timedOut})` once — at stdin's end or from the 2 s safety net
   (`SAFETY_NET_MS`; `timedOut` true: the approval hook's `partial` path) — and finishes with its answer; it turns an exception or a
   stdin error into a silent exit 0 (past its pre-check the approval hook catches its own and asks), feeds a terminal stdin `"{}"`
-  and, past `maxInput` characters (the observe and plan hooks, 4 MB), drains the rest and hands `decide` `""`. `finish` prints at
+  and, past `maxInput` characters (the observe and plan hooks, 4 MB; the approval hook, 64 M), drains the rest and hands `decide` `""`
+  and `{tooBig: true}` (the approval hook then asks, 1.41.1). A `decide` may answer with a promise (the
+  approval hook's worker): `finish` runs with what it resolves to, a rejection silent. `finish` prints at
   most one JSON object and exits in the write's callback (conventions.md → Flush stdout before exiting). `payloadOf(raw)` is the
   payload object or null (not JSON, or no object: the hook exits), `eventOf(p)` its event name — the approval hook alone parses its
   own (a partial payload asks). A hook keeps only its decision: its pre-filter still runs first in its `decide`, and hook-utils.js
@@ -114,7 +119,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   edit guard's `pathWords`), split first (`mayWrite`'s `find … -delete`), walk segments or the text by hand (`guardedFileOf`,
   `trimSlashEnd`). mcp/tests/10-guards-hooks-cost.js times each reader by SHAPE (16 K vs 64 K characters of a hostile input: ≤ 8×)
   and the report's 120 K payload through the hook process. The engine's lexer and readers past the pre-filter read ≤
-  `APPROVAL_COMMAND_MAX` (64 K) and stay linear (review 8 swept them: ~0.1–0.2 s at the cap).
+  `APPROVAL_COMMAND_MAX` (64 K) and stay linear (review 8 swept them: ~0.1–0.2 s at the cap; 1.41.1's sweep found and replaced
+  `/[^\\/]*$/` — a separator-free run rescanned from each character: `dirPart` — and two `/[\\/]+$/` trims: `trimSlashEnd`). The
+  approval hook adds a net under them (Human approval guard → The deadline): a reader that turns slow is asked about, never let
+  through — but a prompt at deny is still a regression, so the readers stay linear.
 - **What the hooks share before the engine loads — `hooks/hook-utils.js`** (not a hook; Node core and probe.js only, the
   probe loaded on first use): the runner above, `probe()`, the probe's readers (`readJson`, `textOf` …: a UTF-16 BOM decides,
   else UTF-8 — files.js `decodeText`; Windows PowerShell 5.1 writes UTF-16, and a UTF-8-only reader sees the guards "off"; the
@@ -244,6 +252,47 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   gate), the strictest level's first, the strictest ANSWER wins (`permissionDecision`, + `systemMessage` for deny). One meta for
   every project (the strictest level's) let an outer project at deny without the check drop a nested one's dev-guardian files
   (review 9). Its own trouble before that point exits 0; past it, an engine failure ASKS (`failClosed`).
+- **The deadline: the hook decides by a deadline, not by Claude Code's timeout (1.41.1).** A PreToolUse hook past Claude Code's timeout
+  lets the call through, so every slow reader was a way past the guard (R1 and review 1's S1-F1 / F2 / F3). As a process, the hook's
+  MAIN thread arms a timer at the process's start (`DEADLINE_MS` = 6 s from `process.uptime()`'s origin), reads stdin (≤ `MAX_PAYLOAD`
+  = 64 M characters: past it the payload is not held — `runHook` drains it — and the hook asks, why `partial`, whatever the level) and
+  runs the pre-check alone (`needsDecision` = decide's `preCheck`, text only: a call that can't be an approval exits silent, no worker,
+  nothing read from disk; a payload past `MAX_INPUT` = 16 M is never parsed on the main thread — the worker decides on it WHOLE, as on
+  a small one: review 2, R2H-F3 — round 1 read its head as a partial payload, the session's projects only, so an oversized Write of
+  ANOTHER guarded project's roadmap.json went through). Everything else —
+  the candidate projects, their roadmap.json, the engine, the decision — runs in a `worker_threads` worker (this same file, its
+  `workerData` marked) with `resourceLimits` (`WORKER_LIMITS`: 512 MB old space); `decide` is unchanged and still exported for the
+  in-process tests (`onLevel`: the worker tells the main thread the strictest level and the project's language before it loads the
+  engine). No answer by the deadline (why `timeout`, its own sentence), a worker error or out-of-memory, an exit without an answer, a
+  worker that could not start (why `error`): ask, in the project's language once the worker named it — silent once the worker said
+  level 0, no project the call may act on guarded (R2H-F7). The margin, measured on
+  Windows 11 (the hook as a process, a project at deny, 20–25 runs): idle — a normal approve 294 ms (p50) / 402 ms (max), the answer
+  past the deadline (a busy worker: the reason's i18n load, the write, the exit) 91 / 131 ms, the spawn to the process's start 35 / 47
+  ms; with four test suites running (both suites of two checkouts, `--jobs 6` each) — 1,253 / 2,324 ms, 339 / 1,116 ms, 127 / 642
+  ms. So a legitimate decision stays ≥ 2.5× under the deadline and hooks.json's 10 s leaves 4 s for ≤ 1.8 s measured past it; the
+  timeout stays 10 s. Idle, interleaved against the parent (25 runs each), the worker costs a candidate nothing measurable (an
+  approve 173 vs 177 ms: the main thread no longer loads the engine); a call that can't be an approval pays only requiring
+  `worker_threads` (~1.5 ms); a Write whose path passes the text pre-check but is no guarded file (a `~1` short name in it) now
+  starts a worker to read its real path: +18 ms.
+  `DEV_SPEC_TEST_APPROVAL_DEADLINE_MS` LOWERS the deadline (tests: the hermetic chains keep `DEV_SPEC_TEST_*`; a higher or malformed
+  value is the default). **What the deadline does not cover:** the process ends only when its worker does — Node joins its workers at
+  exit — so a worker inside ONE native call that never returns keeps it alive past Claude Code's timeout, and the call goes through
+  (review 2, R2H-F1: a FIFO named roadmap.json under a folder a command `cd`s into). The readers before the engine therefore open a
+  file only when its lstat says a regular one — rawLevel's roadmap.json, the rule's ROADMAP.md head (probe.js `head`) —, and an lstat
+  that THROWS reads as no file, never opened (review 3, R3H-F3: through `\\wsl.localhost\` a Linux FIFO's lstat throws EISDIR, and
+  win32 has no `O_NONBLOCK`, so the open waited for a writer — round 2 opened on a throw, and the process ended at 10.3 s); then
+  `openRegular` opens with `O_NONBLOCK` where the platform has it and judges the fd's own `fstat` (a swap after the lstat: answered on
+  POSIX; on win32 a swap to a FIFO between the lstat and the open is a race — a known limit). The engine's read gate reads none below
+  `.specs/` (files.js — conventions.md → The read gate); what is left is a known limit (below), as is the process failing to start in
+  10 s. **What the deadline answers by choice (review 3, the owner's ruling):** a command BUILT to be slow for the guard's readers —
+  brace expansions over a long tracked value (R3H-F1: `rm -f $A{a,b}{c,d}{e,f}{g,h}{i,j}` ×18 / ×36 after `A=$A$A` ×13: under both
+  tracking bounds, read 32–128 times over the work charged), a very long `cd` fold (R3H-F2: `cd x/..` ×6,900 under a 57 K folder, each
+  one folding it again) — can make the hook answer `ask` at the deadline instead of `deny`. Never silent, never past the timeout: the
+  prompt shows, and the human refuses it. The tracking bounds and `cdJoin` are not tuned again to turn such shapes into too-long.
+  mcp/tests/10-guards-hooks-cost.js drives each path through the process (a `-r` preload counts the workers and makes the worker
+  slow, out of memory, throw, exit, print or hold after its level-0 report; a FOLDER named roadmap.json in a candidate project with
+  features asks — gone —; on POSIX a FIFO roadmap.json / ROADMAP.md under a cd target is answered and the process ends well before T;
+  an lstat that throws — stubbed, EISDIR — opens neither file; the three hostile shapes above, at once: ask or deny, ended before T − 3 s).
 - **The candidate projects** (hook-utils.js `approvalProjects`, ≤ 12 the call names, then the session's own — always kept) follow
   where the CLI acts: the folders the call names (MCP `projectDir`, the edited file's project, `--project`, `SPEC_PROJECT_DIR=` /
   `$env:` assignments), each `cd` / `Set-Location` target (chained and from cwd alone), the folder holding each `.specs/` /
@@ -287,6 +336,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   roadmap.json — every feature-making write writes it, so it was deleted — reads as `ask` (`approvalGuardLevel` →
   `approvalRoadmapGone()`; the hook's `rawLevel` → `roadmapGone()`; meta unknown, so every weakening init change counts); without
   a feature, off. Deleting it from the shell is itself a guard-down; this covers a deletion the guard didn't see. A roadmap.json
+  that is a LINK is a deleted one (1.41.1 — the read gate never reads through it, conventions.md → The read gate): the engine's
+  `approvalRoadmapGone` reads roadmap.json and each feature's `.state.json` through `existsRaw`, the hook's `rawLevel` lstats it and
+  its `roadmapGone` counts no linked `.state.json` — ask on both sides, never its target's off. A roadmap.json
   that doesn't parse keeps the strictest `"approvalGuard"` its raw text names (NULs taken out: a BOM-less UTF-16 file).
 - **`approvalGuardDecision(payload, level, {lang, cli?})`** — PURE → `{decision: allow | ask | deny, why, level, …}`; `why`
   (stable): `off` · `no-payload` · `not-pre-tool-use` · `not-an-approval` · `approval`. An approval adds `actions` (`kind`:
@@ -377,8 +429,41 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (`APPROVAL_WRITERS_ANY` / `_INPLACE` / `_TARGET` / `_OTHER`, `APPROVAL_REMOVERS`, `APPROVAL_MOVERS`, `PS_FILE_CMDLETS` by
   `psParams`), output redirections only (`seg.writes`), and `[IO.File]::` methods. Each path is read (`shellPathReadings()`)
   with the same command's variables (`shellTrack()`), after its `cd`, through brace expansion (`braceExpand()`) and as a glob
-  (`shellGlobRe()`: Bash's leading `*` never matches a dot, PowerShell's / cmd's do; an unknown variable `SHELL_VAR` matches
-  anything but never `.specs`; `SHELL_ANY` matches dot folders) → `shellPathFacts()`. Actions: an
+  (`shellGlob()`: Bash's leading `*` never matches a dot, PowerShell's / cmd's do; an unknown variable `SHELL_VAR` matches
+  anything but never `.specs`; `SHELL_ANY` matches dot folders) → `shellPathFacts()`, which reads each segment's glob once for
+  every name it asks (`shellSegReader`). **Every glob the guard reads goes through ONE matcher, `globMayName()`** (shellGlob,
+  `devSpecGlob()`, `cliSubcommandGlob()`; 1.41.1) — never a RegExp built from the glob (a `*` per character backtracked C(n + k, k)
+  ways on a name it fails: 18 stars took the approval hook past its timeout). Reading the glob is ONE pass with no RegExp: a `[`
+  looks for its `]` only while one is left after it (`lastIndexOf`, once — an `indexOf` from every `[` of a run with none was
+  quadratic, S1-F2) and a set's validity is read by hand (`globSetValid`: the old builder's class holds no escape of its own, so the
+  grammar's ranges are code units). A name is matched by a dynamic program over (token, position) that reads at most 2n + 2 tokens
+  for a name of n code units: each `?`, set and literal takes one, so a glob taking more than the name holds fails it at once — a
+  set-heavy 48 K segment against `.specs` builds no token and no RegExp (S1-F1: each set's RegExp was built per call, per name, per
+  reading). Each `?`, set and literal is the one-character RegExp the old builder made of it, made when the program first reaches it,
+  so case folding, `[!…]` / `[^…]`, an unclosed `[` and a set no RegExp reads (null: `[z-a]`) answer as before;
+  mcp/tests/10-guards-hooks-cost.js runs the old builders as the oracle (and the validity reading against V8 on every set body of up
+  to 5 of the characters it turns on). core.js `globMatcher` can't carry it: its `*` / `?` stop at `/` alone, it folds case by
+  `FOLD_CASE`, has no sets and reads `**` across folders. **What tracking builds, and what it makes the path readers read, is bounded**
+  (1.41.1: review 1 S1-F3, review 2 R2H-F2 / F4). `shellBuilt`: a text tracking BUILDS — a variable's value, a word with its variables
+  put in, the cd folder (`cdJoin`: `.` dropped and `..` folded into the plain segment before it, as `path.posix.normalize` reads every
+  path after it — the same facts, and `cd pkg && … && cd ..` ×300 no longer grows by `/..` each time), a `-c` script with its
+  positional parameters put in (`withPositionals`, its replacement-string reading of `$$`, `$&`, `$'` and the backtick form kept, built
+  piece by piece) —
+  past `APPROVAL_COMMAND_MAX` (64 K) is `too-long`, `expanded: "value"` (`A=$A$A` doubles: 21 doublings of 8 characters are 16 M;
+  `sh -c '$1'`×16,000 with a 30 K argument built 480 M). `shellWork`: the text the PATHS are read with — each value put in a path
+  word, each cd folder put before a relative one — past `APPROVAL_TRACK_WORK` (2 M; measured ~0.3 µs a character through the path
+  readers on Windows 11, so ≤ 0.6 s at the bound for a word read once: a brace expansion reads it up to 32 times, uncharged — a shape
+  built on that asks at the deadline, Human approval guard → The deadline) is `too-long`, `expanded: "total"`. An assignment copies its value and reads nothing
+  (a 32 K value copied by 10,000 assignments: 0.2 s), so it costs no work: round 1 counted every re-read against the 64 K read limit
+  and refused monorepo commands of 3–4 K (`FLAGS="$FLAGS --x"` ×76, a `cd ../next` chain ×80). Either is denied at deny, as a command
+  past the limit — never only an unknown variable (`$D/..` of a long `.specs/…` value would miss the removal of .specs); the reason
+  names the first bound passed (`tooLongExpanded(what, max)`). Past the value bound only that reference reads as unknown (the value
+  stops growing there; `D=tests` after a doubling is still read), past the work bound every variable does (`ctx.workOut`).
+  mcp/tests/10-guards-hooks-cost.js pins 19 legit monorepo / CI / PowerShell commands (3–28 K) to ed680c92's four decisions and the
+  edit guard's targets, the hostile shapes to too-long, and the work bound from both sides (2,097 × 1,000 characters read, 2,098 not).
+  The edit guard shares the bounds: on the legit corpus it reports exactly ed680c92's targets, and after a value past the bound it
+  still reads the other variables (a test write through `$D` after a doubling ×14 is kept); past the WORK bound (hostile shapes
+  only) its variables read as unknown and a path starting with one is left out — its fail-open policy, unchanged. Actions: an
   exact guarded file → its setting; `.specs/` removed / moved → `roadmap`; a write that may hit a guarded file, or a removal /
   move / extraction / recursive copy on `.specs/` or under it (`rm -rf .specs/*`) → **`specs`**; a link to `.specs/` or under it
   → **`link`**. Allowed: spec documents, `.execution/` (but the observed log), lock files, read-only git. **Fail closed:** a
@@ -422,7 +507,14 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `am`, `git stash pop`, `git reset --hard`, a branch switch), an archive extracted into the project root without naming
   `.specs/`, `patch` without a file operand, a link to a guarded FILE (not a folder) made by one of those routes and then
   edited through (only its folder's real path is read), and an 8.3 short name SET by hand (`fsutil file setshortname .specs ZZZ` —
-  administrator rights; any name, no `~N`: the rule can't know it). Outside Claude Code the elicitation path gates spec_approve /
+  administrator rights; any name, no `~N`: the rule can't know it), and a file the approval hook's worker reads that never answers —
+  a FIFO, a device or a pipe the agent made by such an inline script where neither the hook's readers nor the read gate look, `.specs`
+  itself linked to `\\.\pipe\` (Windows, a link privilege), a dead network share, on Windows a file swapped for a FIFO between the
+  readers' lstat and their open (a race: win32 opens with no `O_NONBLOCK`): the worker blocks in one native call, Node joins it at
+  exit, and Claude Code's timeout lets the call through (Human approval guard → The deadline); and a command built to be slow for the
+  guard's readers (brace expansions over a long tracked value, very long `cd` folds): the approval hook answers `ask` at the deadline
+  instead of `deny` — never silent, never past the timeout; the human refuses at the prompt (the owner's ruling, 1.41.1 review 3).
+  Outside Claude Code the elicitation path gates spec_approve /
   spec_feature / spec_init only (not a `spec_add_track {remove}` — gates-and-approvals.md → Approvals the user confirmed over
   MCP).
 
@@ -530,7 +622,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   spec_init / spec_create / spec_import report it in `userDefaults`; `init --stop-check on` writes meta when the variable says
   off. The guard and stop hooks read them raw. A roadmap.json that doesn't parse: DEV_SPEC_STOP_CHECK still decides, the guard
   stays off. DEV_SPEC_GUARD_DEFAULT reaches a dev-spec `.specs/` without roadmap.json (`isDevSpecDir`; the hook's
-  `devSpecWithoutRoadmap()`), never another tool's. **Never plugin.json `userConfig`**: a dialog on every install / enable,
+  `devSpecWithoutRoadmap()`), never another tool's. A roadmap.json that is a link is none on both sides (1.41.1): the guard hook's
+  `guardOn` and the stop hook's `gateOff` lstat it — the user's options decide, never its target's meta (the engine reads it absent). **Never plugin.json `userConfig`**: a dialog on every install / enable,
   invisible to the Bash tool (the CLI) and other MCP clients (`CLAUDE_PLUGIN_OPTION_*` reaches hooks only); settings.json `env`
   reaches hooks, stdio MCP servers and the Bash tool alike.
 - **MCP** — `annotations` on every tool from server.js `TOOL_ANNOTATIONS`: `READ_ONLY` for the 12 no argument makes write;
@@ -762,6 +855,40 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.36.0 review 3** — a protected test's accept (`spec_feature {action: "protect", accept: true}`, `feature protect <f> <file>
   --accept`) is a guard-down (setting `accept`) on every path — MCP, elicitation, the CLI through a shell; `accept` joined
   `CLI_SWITCHES` (the hook's lexer must not read the file after it as its value) and `--accept` `RE_APPROVAL_VERB`.
+- **1.41.1** — the guard's globs were RegExps built from the glob, a `*` → `[^/\\]*` (devSpecGlob) / `[\s\S]*` (shellGlobRe): a
+  program word or a path segment of k stars and a letter, tested against the short fixed names, cost ~C(n + k, k) — 12 stars
+  0.4 s, 16 stars 5 s, 18 past the hook's 10 s timeout, and a timed-out PreToolUse hook lets the call through (the approve after
+  it went unguarded at deny). One matcher now, `globMayName()` (Human approval guard → One reader of a simple command's file
+  operations); the hook at 40 stars answers deny at once (10-guards-hooks-cost.js, in a child process with a timeout).
+- **1.41.1 review 1** — the same hook-timeout class through three more inputs. **S1-F1 (HIGH, introduced):** the new matcher read the
+  WHOLE glob again on every name asked and built a RegExp for every set (V8 caches none of distinct sources): a set-heavy segment under
+  brace expansion (`cd x; cp x .specs/{a,b}…*` and 16,000 distinct sets, 48 K) took the hook 10.7–17.9 s, twice the parent's 5–8 s — a deny it had
+  answered went past the timeout. **S1-F2:** `indexOf("]")` from every `[` of a run with none — quadratic, under braces an 8 K command
+  past the timeout (pre-existing). **S1-F3:** `A=$A$A` doubled a tracked value, read again by every path after it — 321 characters, 22 s
+  (pre-existing). **S1-F4:** a 33 K-literal segment threw in the parent's RegExp (ask at deny), now deny. Fixed by reading the glob
+  in one pass without a RegExp (the code units it takes, the validity by hand, a `]` looked for once), tokens and RegExps made only
+  where a name reaches them, each segment read once per path (`shellSegReader`), and tracking's growth bounded (one count against
+  the read limit: too-long — review 2 split it into `shellBuilt` / `shellWork`); the sweep replaced `/[^\\/]*$/` (Rename-Item of a 64 K name: 12.5 s) and `/[\\/]+$/` (a 64 K slash run copied into
+  .specs/: 8 s), and bounded a long cd folder put before every path (54 K: 14 s). And the net the review proposed (its Q4): **the
+  deadline** (Human approval guard → The deadline), the decision in a worker, ask past it.
+- **1.41.1 review 2** — **R2H-F1 (HIGH, older):** a FIFO named roadmap.json under a folder a command `cd`s into kept the worker in
+  one read; the main thread printed `ask` at 6 s, but Node joins its workers at exit, so the process outlived Claude Code's 10 s and
+  the call went through (Linux; on Windows a WSL FIFO or `.specs` linked to `\\.\pipe\`). Sized by the threat model to a cheap
+  hardening: rawLevel and the rule's ROADMAP.md head open only a regular file (`openRegular`) — on Linux; the WSL FIFO stayed open
+  until review 3 (its lstat throws: rawLevel opened on a throw, the head had no lstat); the rest is a known limit. **R2H-F2
+  (introduced by round 1):** the growth bound counted every re-read against the 64 K read limit and refused legit monorepo commands
+  of 3–4 K: what tracking BUILDS is bounded now, the paths' reading by a measured work bound of its own, the cd folder folded.
+  **R2H-F3 (introduced):** past 16 M the payload was read as a partial one (the session's projects only) — the worker decides on it
+  whole. **R2H-F4 (older):** `withPositionals` built k × |argument| characters — bounded, too-long. **F5** the edit guard keeps
+  ed680c92's targets on the legit corpus; **F6** the heap limit pinned as numbers; **F7** silent after a level-0 report.
+- **1.41.1 review 3** — **R3H-F3 (MEDIUM, introduced by round 2):** rawLevel opened roadmap.json when its lstat THREW — through
+  `\\wsl.localhost\` a Linux FIFO's lstat throws EISDIR and win32 opens with no `O_NONBLOCK`: ask at 6.2 s, the process ended at
+  10.3 s, past the timeout. A throw now reads as gone, never opened; probe.js `head` takes the same lstat first (a FIFO ROADMAP.md:
+  10 s → 36 ms). **R3H-F1 / F2 (HIGH / MEDIUM):** brace expansions over a long tracked value and a long `cd` fold read far more than
+  the work charged — past the deadline, so the hook asked where 9966bffc refused. The owner's ruling: a command built to be slow for
+  the guard's readers may ask at the deadline instead of deny (never silent, never past the timeout); the bounds and `cdJoin` are not
+  tuned again — the shapes pinned to ask or deny by the deadline. **R3H-F4 (LOW):** the cd folder's own bound and pt's two
+  too-long sentences pinned; a swap between the lstat and the open stays a documented race.
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import
