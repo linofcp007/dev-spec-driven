@@ -240,8 +240,9 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
   // 1.42 SK-03: spec-kit's FR-xxx no acceptance scenario covers travelled as prose — the import only named them, and a task's
   // `_Requirements: FR-n_` passed refs() unchecked while trace ignored it. Exactly those FRs become the EARS criteria of ONE story
   // (the warning's own advice, done): a definition item per id (the first), coverage decided per item (frCovered, the parent's
-  // rule), the story numbered after the source's and reachable by no reference the source wrote ([US3], a stale US-3.AC-1);
-  // FR-n resolves to the criteria that hold it, else it is reported; what stays prose keeps the parent's warning.
+  // rule), the story numbered past the source's AND past every story number it names (fix 1, R1-IMP-2: [US3] and a stale
+  // US-3.AC-1 make it US-4 — the stale ID is dropped, never coverage); FR-n resolves to the criteria that hold it, else it is
+  // reported; what stays prose keeps the parent's warning.
   {
     const p = fresh("speckit-fr");
     const k = path.join(p, "specs", "001-photo-albums");
@@ -263,17 +264,20 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const tasks = r.ok ? rd(r.dir, "tasks.md") : "";
     const mk = (n) => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === n) || { lines: [] }).requirements;
     const W = S.msg("en").importSpec;
-    all("1.42 SK-03: the FRs no scenario covers (FR-003, FR-004, FR-005 — one still [NEEDS CLARIFICATION]) become US-3's EARS criteria, their lines out of the prose; FR-001 (its words) stays prose, FR-002 (cited) maps to US-1.AC-2 — so does a task citing it; FR-001 cited by a task is reported, so are [US3] and a stale US-3.AC-1; the classification is the parent's (got " +
-      js({ warnings: r.warnings, mapping: r.mapping, counts: r.counts, tracks: r.tracks, t: [mk(3), mk(4), mk(5), mk(6)] }) + ")", [
-      () => r.ok, () => /\n### US-3: Functional Requirements\n\n#### Acceptance Criteria \(EARS\)\n1\. \*\*US-3\.AC-1\*\* — THE SYSTEM SHALL ensure that users MUST be able to reorder photos by drag and drop \(FR-003\)\n {3}<!-- spec-kit: \*\*FR-003\*\*: Users MUST/.test(req),
-      () => /\n2\. \*\*US-3\.AC-2\*\* — THE SYSTEM SHALL log every share link created \(FR-004\)\n/.test(req),
-      () => /\n3\. \*\*US-3\.AC-3\*\* — THE SYSTEM SHALL retain albums for \[NEEDS CLARIFICATION: retention period not specified\] \(FR-005\)\n/.test(req),
+    const tc = r.ok ? S.traceCheck(p, r.feature) : {};
+    all("1.42 SK-03: the FRs no scenario covers (FR-003, FR-004, FR-005 — one still [NEEDS CLARIFICATION]) become US-4's EARS criteria (past the US3 / US-3.AC-1 the tasks name), their lines out of the prose; FR-001 (its words) stays prose, FR-002 (cited) maps to US-1.AC-2 — so does a task citing it; FR-001 cited by a task is reported, so is [US3] (kept), the stale US-3.AC-1 is dropped — trace finds no phantom and the FR criteria uncovered; the classification is the parent's (got " +
+      js({ warnings: r.warnings, mapping: r.mapping, counts: r.counts, tracks: r.tracks, t: [mk(3), mk(4), mk(5), mk(6)], trace: [tc.verdict, tc.phantomAcsInTasks, tc.uncoveredByTasks] }) + ")", [
+      () => r.ok, () => /\n### US-4: Functional Requirements\n\n#### Acceptance Criteria \(EARS\)\n1\. \*\*US-4\.AC-1\*\* — THE SYSTEM SHALL ensure that users MUST be able to reorder photos by drag and drop \(FR-003\)\n {3}<!-- spec-kit: \*\*FR-003\*\*: Users MUST/.test(req),
+      () => /\n2\. \*\*US-4\.AC-2\*\* — THE SYSTEM SHALL log every share link created \(FR-004\)\n/.test(req),
+      () => /\n3\. \*\*US-4\.AC-3\*\* — THE SYSTEM SHALL retain albums for \[NEEDS CLARIFICATION: retention period not specified\] \(FR-005\)\n/.test(req),
       () => /\n## Functional Requirements\n\n- \*\*FR-001\*\*: System MUST let users create albums\n- \*\*FR-002\*\*: System MUST limit an album to 500 photos\n\n## Key Entities/.test(req),
-      () => r.mapping["FR-001"] === "FR-001", () => r.mapping["FR-002"] === "US-1.AC-2", () => r.mapping["FR-003"] === "US-3.AC-1", () => r.mapping["FR-005"] === "US-3.AC-3",
-      () => r.mapping["Functional Requirements"] === "US-3", () => r.counts.stories === 3 && r.counts.criteria === 6,
-      () => r.warnings.includes(W.wFrCriteria("US-3", "FR-003 → US-3.AC-1, FR-004 → US-3.AC-2, FR-005 → US-3.AC-3")), () => !r.warnings.some((w) => /carried as prose/.test(w)),
+      () => r.mapping["FR-001"] === "FR-001", () => r.mapping["FR-002"] === "US-1.AC-2", () => r.mapping["FR-003"] === "US-4.AC-1", () => r.mapping["FR-005"] === "US-4.AC-3",
+      () => r.mapping["Functional Requirements"] === "US-4", () => r.counts.stories === 3 && r.counts.criteria === 6,
+      () => r.warnings.includes(W.wFrCriteria("US-4", "FR-003 → US-4.AC-1, FR-004 → US-4.AC-2, FR-005 → US-4.AC-3")), () => !r.warnings.some((w) => /carried as prose/.test(w)),
       () => js(mk(3)) === js(["US-1.AC-2"]), () => js(mk(4)) === js(["FR-001"]) && r.warnings.includes(W.wUnknownRef(4, "FR-001")),
-      () => js(mk(5)) === js(["US3"]) && r.warnings.includes(W.wUnknownRef(5, "US3")), () => r.warnings.includes(W.wUnknownRef(6, "US-3.AC-1")),
+      () => js(mk(5)) === js(["US3"]) && r.warnings.includes(W.wUnknownRef(5, "US3")),
+      () => js(mk(6)) === js([W.taskAcPlaceholder]) && r.warnings.includes(W.wDroppedRef(6, "US-3.AC-1")) && !/US-3\.AC-1/.test(tasks),
+      () => tc.verdict === "gaps-found" && js(tc.phantomAcsInTasks) === js([]) && js(tc.uncoveredByTasks) === js(["US-2.AC-1", "US-4.AC-1", "US-4.AC-2", "US-4.AC-3"]),
       () => js(r.tracks) === js(["core", "tdd"]), () => !r.warnings.some((w) => w === W.wNoRequirements("spec.md")),
     ]);
     // the FRs alone (no story): their criteria are the feature's — US-1, no "no requirements" warning; a PT modal kept as written,
@@ -300,11 +304,11 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       "- **FR-1.2**: System MUST resize uploads", "- **FR-003**: System MUST export albums as zip", "- **FR-003**: System MUST export albums as tar",
       "- FR-006 — MUST keep originals", "- **FR-007**. Albums MUST sort by date", "- **FR-008** System MUST purge trash weekly", "- Note: FR-009 is TBD",
       "- **FR-010**: System MUST caption each photo with an LLM prompt", ""].join("\n"));
-    put(path.join(p3, "specs", "003-ids", "tasks.md"), "# Tasks: Ids\n\n- [ ] T001 Export\n  - _Requirements: US-4.AC-1_\n- [ ] T002 Sort\n  - _Requirements: FR-007_\n");
+    put(path.join(p3, "specs", "003-ids", "tasks.md"), "# Tasks: Ids\n\n- [ ] T001 Export\n  - _Requirements: US-2.AC-1_\n- [ ] T002 Sort\n  - _Requirements: FR-007_\n");
     const r3 = S.importSpec(p3, "spec-kit", "specs/003-ids", {});
     const req3 = r3.ok ? rd(r3.dir, "requirements.md") : "";
     const W3 = S.msg("en").importSpec;
-    all("1.42 SK-03: FR-001a / FR-1.1 / FR-1.2 are no definitions (prose, named as the parent named them: FR-001, FR-1), a second FR-003 line, a definition with no separator and a mention stay prose and are named; FR-003 (first), FR-006 (em dash), FR-007 ('**FR-007**.') convert; stories 1 and 3 make it US-4, a stale US-4.AC-1 is reported, FR-007 resolves (got " +
+    all("1.42 SK-03: FR-001a / FR-1.1 / FR-1.2 are no definitions (prose, named as the parent named them: FR-001, FR-1), a second FR-003 line, a definition with no separator and a mention stay prose and are named; FR-003 (first), FR-006 (em dash), FR-007 ('**FR-007**.') convert; stories 1 and 3 make it US-4 (the highest number, never a count — a stale US-2.AC-1 the tasks name is below it, and dropped), FR-007 resolves (got " +
       js([r3.warnings, r3.mapping]) + ")", [
       () => r3.ok, () => r3.warnings.includes(W3.wFrCriteria("US-4", "FR-003 → US-4.AC-1, FR-006 → US-4.AC-2, FR-007 → US-4.AC-3, FR-010 → US-4.AC-4")),
       () => r3.tracks.includes("ai"), // the classifier still reads the converted FRs (the parent read them as prose): an LLM one is +ai
@@ -314,7 +318,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       () => /\n### US-4: Functional Requirements\n/.test(req3) && /\n### US-3 \(P2\): Share\n/.test(req3),
       () => /\*\*US-4\.AC-2\*\* — THE SYSTEM SHALL ensure that MUST keep originals \(FR-006\)/.test(req3), () => /\*\*US-4\.AC-3\*\* — THE SYSTEM SHALL ensure that albums MUST sort by date \(FR-007\)/.test(req3),
       () => /\n- \*\*FR-008\*\* System MUST purge trash weekly\n- Note: FR-009 is TBD\n/.test(req3),
-      () => r3.warnings.includes(W3.wUnknownRef(1, "US-4.AC-1")), () => r3.mapping["FR-007"] === "US-4.AC-3" && !r3.warnings.some((w) => /task 2:/.test(w)),
+      () => r3.warnings.includes(W3.wDroppedRef(1, "US-2.AC-1")), () => r3.mapping["FR-007"] === "US-4.AC-3" && !r3.warnings.some((w) => /task 2:/.test(w)),
     ]);
   }
 
@@ -340,12 +344,12 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const req = (n) => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === n) || { lines: [] }).requirements;
     const got = Array.from({ length: 18 }, (_, i) => req(i + 1));
     const W = S.msg("en").importSpec;
-    const want = [["US-4.AC-1"], ["US-1.AC-2"], ["SC-002"], [], [], [], ["US-3.AC-1", "US-4.AC-1"], ["US-1.AC-1"], ["US-4.AC-1"], [], ["FR-001"], [], [], ["US-3.AC-1"], ["US4/AC1"], [], [],
+    const want = [["US-5.AC-1"], ["US-1.AC-2"], ["SC-002"], [], [], [], ["US-3.AC-1", "US-5.AC-1"], ["US-1.AC-1"], ["US-5.AC-1"], [], ["FR-001"], [], [], ["US-3.AC-1"], ["US4/AC1"], [], [],
       ["US-1.AC-1", "US-1.AC-2"]];
-    all("1.42 SK-07: a /converge task's `per <ref> (<type>)` becomes its _Requirements:_ (after its [USn] tag) for none / missing / partial / contradicts — FR-004 → its FR criterion US-4.AC-1, US1/AC2 and US-1/AC-1 by the parser's keys, US3/AC1 → the story printed 3, SC-002 as written; unrequested / optional / drift / '(see notes)' / a type glued to the ref / two refs / a mid-text 'Per' claim nothing; FR-001 (covered by words, no criterion) and US4/AC1 (the FR story) are reported; a task's own _Requirements:_ kept (got " +
+    all("1.42 SK-07: a /converge task's `per <ref> (<type>)` becomes its _Requirements:_ (after its [USn] tag) for none / missing / partial / contradicts — FR-004 → its FR criterion US-5.AC-1 (the FR story past the US4 the tasks name), US1/AC2 and US-1/AC-1 by the parser's keys, US3/AC1 → the story printed 3, SC-002 as written; unrequested / optional / drift / '(see notes)' / a type glued to the ref / two refs / a mid-text 'Per' claim nothing; FR-001 (covered by words, no criterion) and US4/AC1 (no story 4 — never the FR story) are reported; a task's own _Requirements:_ kept (got " +
       js(got) + ")", [
       () => r.ok, () => js(got) === js(want), () => r.warnings.includes(W.wUnknownRef(11, "FR-001")), () => r.warnings.includes(W.wUnknownRef(15, "US4/AC1")),
-      () => r.mapping["User Story 3"] === "US-3" && r.mapping["Functional Requirements"] === "US-4", () => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === 6)).implements.includes("src/a.ts"),
+      () => r.mapping["User Story 3"] === "US-3" && r.mapping["Functional Requirements"] === "US-5", () => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === 6)).implements.includes("src/a.ts"),
     ]);
   }
 
@@ -363,6 +367,152 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     ok(r.ok === false && r.error === S.msg("en").importSpec.nothingSpecKit("specs") && /specs\/<nnn-name>\//.test(r.error) && r2.ok === false && /004-plan-only' — a Spec Kit feature is one folder/.test(r2.error) &&
       r3.ok === false && r3.error === S.msg("en").importSpec.nothing("Kiro", "specs") && pt.ok === false && /uma feature do Spec Kit é uma pasta/.test(pt.error) && !fs.existsSync(path.join(p, ".specs", "specs")),
       "1.42 SK-10: a spec-kit import of the whole specs/ folder (or a folder of a plan.md alone) is refused saying a feature is one folder holding spec.md or tasks.md (usually specs/<nnn-name>/); other tools keep their message; localized (got " + js([r.error, r2.error, r3.error, pt.error]) + ")");
+  }
+
+  // 1.42 fix 1 R1-IMP-1: SK-05 moved Spec Kit's quickstart.md out of design.md, and no gate reads quickstart.md — an open
+  // [NEEDS CLARIFICATION] there, which refused the design approval while it was a design.md section, passed silently. Each one the
+  // counter reads in the quickstart written (a fenced or commented one is no marker there either) is also one design.md line, under
+  // a heading naming the file; with no plan.md, design.md holds them alone; a quickstart with none adds nothing. The reviewer's q1 tree.
+  {
+    const E = require("./lib/engine/index.js");
+    const W = S.msg("en").importSpec;
+    const q1 = (n, files, lang) => {
+      const p = fresh("fx1-q1-" + n);
+      for (const [f, t] of Object.entries(files)) put(path.join(p, "specs", "001-albums", f), t);
+      const r = S.importSpec(p, "spec-kit", "specs/001-albums", { tracks: ["core"], ...(lang ? { lang } : {}) });
+      return { p, r, d: r.ok && fs.existsSync(path.join(r.dir, "design.md")) ? rd(r.dir, "design.md") : "" };
+    };
+    const spec = "# Feature Specification: Albums\n\n### User Story 1 - Create (Priority: P1)\n\n**Acceptance Scenarios**:\n\n" +
+      "1. **Given** a user, **When** they create an album named Trip, **Then** the album Trip is listed\n\n## Success Criteria\n\n- **SC-001**: an album is created in under 1 second\n";
+    const plan = "# Implementation Plan: Albums\n\n## Summary\n\nSQLite.\n";
+    const quick = "# Quickstart: Albums\n\n1. Run `npm run dev`\n2. Open http://localhost:3000/[endpoint] - validates SC-001\n3. Seed the demo data [NEEDS CLARIFICATION: which fixture set?]\n" +
+      "4. Sign in as [NEEDS CLARIFICATION]\n\n```text\n[NEEDS CLARIFICATION: in a code block]\n```\n\n<!-- [NEEDS CLARIFICATION: in a comment] -->\n";
+    const a = q1("plan", { "spec.md": spec, "plan.md": plan, "quickstart.md": quick });
+    const doc = a.r.ok ? S.specDoctor(a.p, a.r.feature) : {};
+    const cl = (doc.checks || []).find((c) => c.id === "clarifications") || {};
+    const ap = a.r.ok ? S.approvePhase(a.p, a.r.feature, "design", "probe", {}) : {};
+    const b = q1("noplan", { "spec.md": spec, "quickstart.md": quick });
+    const c = q1("none", { "spec.md": spec, "plan.md": plan, "quickstart.md": "# Quickstart\n\n1. npm run dev - validates SC-001\n" });
+    const pt = q1("pt", { "spec.md": spec, "quickstart.md": quick }, "pt");
+    all("1.42 fix 1 R1-IMP-1: an open [NEEDS CLARIFICATION] in spec-kit's quickstart.md is also one design.md line (under 'Open questions in quickstart.md', a fenced / commented one never) — the design gate's clarifications check refuses again; with no plan.md design.md holds them alone; none → no section; localized (got " +
+      js({ cl, failing: ap.failing, d: a.d.slice(a.d.indexOf("## Open"), a.d.indexOf("## Open") + 220), b: b.r.warnings, c: c.d.includes("Open questions") }) + ")", [
+      () => a.r.ok, () => a.d.includes("\n## Open questions in quickstart.md\n\n> From spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: which fixture set?]\n- [NEEDS CLARIFICATION]\n"),
+      () => js(E.clarificationMarkers(a.d)) === js(["which fixture set?", ""]), () => !/in a code block|in a comment/.test(a.d),
+      () => cl.status === "fail" && /\b2 unresolved \[NEEDS CLARIFICATION\] in design\.md/.test(cl.detail), () => !ap.ok && (ap.failing || []).includes("clarifications"),
+      () => rd(a.r.dir, "quickstart.md").includes("3. Seed the demo data [NEEDS CLARIFICATION: which fixture set?]\n"),
+      () => b.r.ok && b.r.warnings.includes(W.wNoPlanDocs("plan.md")) && js(E.clarificationMarkers(b.d)) === js(["which fixture set?", ""]),
+      () => c.r.ok && !c.d.includes("Open questions") && !E.clarificationMarkers(c.d).length,
+      () => pt.r.ok && pt.d.includes("\n## Questões em aberto do quickstart.md\n\n> Do spec-kit `quickstart.md`.\n\n- [NEEDS CLARIFICATION: which fixture set?]\n"),
+    ]);
+  }
+
+  // 1.42 fix 1 R1-IMP-2: the synthetic FR story took max(printed) + 1, and a stale US-<that n>.AC-1 a source task cited was kept as
+  // written — trace read it as covering the FR criterion, under a warning saying it matched nothing. The story is numbered past every
+  // story number a source text names (keyed on the inputs: tasks.md, spec.md, plan.md, quickstart.md …), and a US-n.AC-m naming no
+  // story of the import is dropped, with a warning that says so (a marker left empty holds the placeholder — the gates still refuse).
+  // The reviewer's q3 tree; the other texts; a loose line, a held number's missing AC (trace's phantom, as always), a valid ref beside a
+  // stale one; another importer (Kiro); a story number past the safe integers (no number to write: the FRs stay prose, named).
+  {
+    const W = S.msg("en").importSpec;
+    const base = ["# Feature Specification: Albums", "", "### User Story 1 - Create (Priority: P1)", "", "**Acceptance Scenarios**:", "",
+      "1. **Given** a user, **When** they create an album named Trip, **Then** the album Trip is listed", "", "## Requirements", "", "### Functional Requirements", "",
+      "- **FR-001**: System MUST log every album created", ""].join("\n");
+    const q3 = (n, files) => {
+      const p = fresh("fx1-q3-" + n);
+      for (const [f, t] of Object.entries(files)) put(path.join(p, "specs", "001-albums", f), t);
+      const r = S.importSpec(p, "spec-kit", "specs/001-albums", { tracks: ["core"] });
+      return { p, r, tasks: r.ok && fs.existsSync(path.join(r.dir, "tasks.md")) ? rd(r.dir, "tasks.md") : "", tc: r.ok ? S.traceCheck(p, r.feature) : {} };
+    };
+    const reqOf = (tasks, n) => S.taskMarkers(S.taskBlocks(tasks).find((x) => x.number === n) || { lines: [] }).requirements;
+    const a = q3("tasks", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n- [ ] T010 [US1] Create albums in src/albums.ts\n- [ ] T011 Old export task\n  - _Requirements: US-2.AC-1_\n" });
+    const ap = a.r.ok ? S.approvePhase(a.p, a.r.feature, "tasks", "probe", {}) : {};
+    const b = q3("texts", { "spec.md": base + "\n## Edge Cases\n\n- An album deleted mid-share (see US-6.AC-2)\n", "plan.md": "# Implementation Plan: Albums\n\n## Summary\n\nUS-7 is the export story.\n",
+      "quickstart.md": "# Quickstart\n\n1. Re-check us9/ac1\n" });
+    const c = q3("mixed", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n## Phase 1\n\nNote _Requirements: US-5.AC-1_\n\n- [ ] T010 [US1] Create\n  - _Requirements: US-1.AC-9_\n- [ ] T011 Log\n  - _Requirements: FR-001, US-4.AC-1_\n" });
+    const kp = fresh("fx1-q3-kiro");
+    put(path.join(kp, ".kiro", "specs", "k", "requirements.md"), "# Requirements\n\n## Requirements\n\n### Requirement 1\n\n**User Story:** As a user, I want to sign in, so that I reach my account.\n\n#### Acceptance Criteria\n\n" +
+      "1. WHEN a user signs in THEN the system SHALL create a session\n2. WHEN a user signs out THEN the system SHALL end the session\n");
+    put(path.join(kp, ".kiro", "specs", "k", "tasks.md"), "# Implementation Plan\n\n- [ ] 1. Sign in\n  - _Requirements: 1.1, US-9.AC-1_\n- [ ] 2. Sign out\n  - _Requirements: US-1.AC-2_\n");
+    const kr = S.importSpec(kp, "kiro", ".kiro/specs/k", { tracks: ["core"] });
+    const kt = kr.ok ? rd(kr.dir, "tasks.md") : "";
+    const e = q3("hostile", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n- [ ] T010 [US1] Create\n- [ ] T011 Old\n  - _Requirements: US-" + "9".repeat(20) + ".AC-1_\n" });
+    const e2 = q3("hostile-printed", { "spec.md": base.replace("User Story 1 -", "User Story " + "9".repeat(20) + " -") });
+    all("1.42 fix 1 R1-IMP-2: the FR story is numbered past every story number the source names (US-2.AC-1 in tasks.md → US-3; US-6.AC-2 / US-7 / us9/ac1 in spec, plan and quickstart → US-10); a US-n.AC-m naming no story of the import is dropped (a true warning; the placeholder when nothing is left) — trace finds no phantom and the FR criterion uncovered, the tasks gate refuses; US-1.AC-9 stays trace's phantom; a valid ref beside a stale one kept alone; Kiro alike; a number past the safe integers converts no FR (got " +
+      js({ a: [a.r.warnings, a.tc.verdict, a.tc.phantomAcsInTasks, a.tc.uncoveredByTasks, ap.failing], b: b.r.mapping && b.r.mapping["Functional Requirements"], c: [c.r.warnings, c.tc.phantomAcsInTasks, reqOf(c.tasks, 2)], k: kr.warnings, e: [e.r.counts, e.r.warnings], e2: e2.r.counts }) + ")", [
+      () => a.r.ok && a.r.mapping["Functional Requirements"] === "US-3" && a.r.mapping["FR-001"] === "US-3.AC-1",
+      () => a.r.warnings.includes(W.wDroppedRef(2, "US-2.AC-1")) && !a.r.warnings.some((w) => /'US-2\.AC-1' matches no imported criterion/.test(w)),
+      () => js(reqOf(a.tasks, 2)) === js([W.taskAcPlaceholder]) && !/US-2\.AC-1/.test(a.tasks),
+      () => a.tc.verdict === "gaps-found" && js(a.tc.phantomAcsInTasks) === js([]) && js(a.tc.uncoveredByTasks) === js(["US-3.AC-1"]),
+      () => !ap.ok && ["placeholders", "traceability"].every((x) => (ap.failing || []).includes(x)),
+      () => b.r.ok && b.r.mapping["Functional Requirements"] === "US-10" && b.r.mapping["FR-001"] === "US-10.AC-1",
+      () => c.r.ok && c.r.mapping["Functional Requirements"] === "US-6", () => c.r.warnings.includes(W.wDroppedRefLine(5, "US-5.AC-1")) && /\nNote _Requirements: \[an imported criterion this task proves\]_\n/.test(c.tasks),
+      () => js(reqOf(c.tasks, 1)) === js(["US-1.AC-9"]) && js(c.tc.phantomAcsInTasks) === js(["US-1.AC-9"]),
+      () => js(reqOf(c.tasks, 2)) === js(["US-6.AC-1"]) && c.r.warnings.includes(W.wDroppedRef(2, "US-4.AC-1")),
+      () => kr.ok && js(reqOf(kt, 1)) === js(["US-1.AC-1"]) && js(reqOf(kt, 2)) === js(["US-1.AC-2"]) && kr.warnings.includes(W.wDroppedRef(1, "US-9.AC-1")),
+      () => e.r.ok && e.r.counts.stories === 1 && !e.r.mapping["Functional Requirements"] && e.r.warnings.includes(W.wUncoveredFr("FR-001")),
+      () => e2.r.ok && e2.r.counts.stories === 1 && !e2.r.mapping["Functional Requirements"] && e2.r.warnings.includes(W.wUncoveredFr("FR-001")),
+      () => S.msg("pt").importSpec.wDroppedRef(1, "US-9.AC-1").includes("retirada") && S.msg("es").importSpec.wDroppedRefLine(5, "US-9.AC-1").includes("eliminada"),
+    ]);
+  }
+
+  // 1.42 fix 1 R1-IMP-3: SK-06 rewrote a bare NEEDS CLARIFICATION only before nothing, ':', '-', '–' or '—' — Spec Kit's /plan also
+  // writes '.', '(p95 not agreed)', ', maybe', '?', '; …' and '/TBD', which stayed bare (ungated) while the docs promised every such
+  // value. The words go on as prose only when a letter or a digit follows the blanks; anything else is the marker. The reviewer's q2
+  // tree (two trailing spaces, as plan-template.md writes them), then prose that stays: a letter, a digit, a letter past U+FFFF.
+  {
+    const E = require("./lib/engine/index.js");
+    const p = fresh("fx1-q2");
+    const k = speckit(p);
+    const fields = [["Testing", "NEEDS CLARIFICATION"], ["Storage", "NEEDS CLARIFICATION."], ["Performance Goals", "NEEDS CLARIFICATION (p95 not agreed)"],
+      ["Constraints", "NEEDS CLARIFICATION, maybe offline"], ["Scale/Scope", "NEEDS CLARIFICATION?"], ["Target Platform", "NEEDS CLARIFICATION; Linux or Windows"],
+      ["Project Type", "NEEDS CLARIFICATION: web or mobile"], ["Primary Dependencies", "NEEDS CLARIFICATION — Fastify?"], ["Language/Version", "NEEDS CLARIFICATION/TBD"]];
+    const prose = [["Note", "NEEDS CLARIFICATION markers are resolved in research.md"], ["Owners", "NEEDS CLARIFICATIONS pending"], ["Options", "NEEDS CLARIFICATION 2 ways"],
+      ["Lead", "NEEDS CLARIFICATION " + String.fromCodePoint(0x1d49c) + "lice"]];
+    put(path.join(k, "plan.md"), "# Implementation Plan: Photo Albums\n\n## Technical Context\n\n" + [...fields, ...prose].map(([f, v]) => "**" + f + "**: " + v + "  ").join("\n") + "\n\n## Project Structure\n\nsrc/\n");
+    const r = S.importSpec(p, "spec-kit", "specs/001-photo-albums", { tracks: ["core"] });
+    const d = r.ok ? rd(r.dir, "design.md") : "";
+    const tail = (v) => v.slice("NEEDS CLARIFICATION".length);
+    ok(r.ok && js(E.clarificationMarkers(d)) === js(fields.map((f) => f[0])) && fields.every(([f, v]) => d.includes("\n**" + f + "**: [NEEDS CLARIFICATION: " + f + "]" + tail(v) + "  \n")) &&
+      prose.every(([f, v]) => d.includes("\n**" + f + "**: " + v + "  \n")),
+      "1.42 fix 1 R1-IMP-3: a plan.md field's bare NEEDS CLARIFICATION is the marker before nothing, ':', '—', '.', '(…)', ',', '?', ';' or '/TBD' (the tail kept after it); a letter, a digit or a letter past U+FFFF after it is prose, untouched (got " +
+      js({ markers: E.clarificationMarkers(d), lines: d.split("\n").filter((l) => /^\*\*/.test(l)) }) + ")");
+  }
+
+  // 1.42 fix 1 R1-IMP-4: frKeys deduplicated an FR's criteria with includes() over a growing list — 40,000 scenarios citing one FR
+  // were ~800 M compares, the round's one superlinear part. A Set per FR: the parser's map holds one, sized by the criteria citing
+  // the FR, each once though each cites it twice; the import maps the FR to each of them once.
+  {
+    const T = require("./lib/engine/index.js").loadLazyTier();
+    const specOf = (n) => {
+      const l = ["# Feature Specification: C", "", "### User Story 1 - T (Priority: P1)", "", "**Acceptance Scenarios**:", ""];
+      for (let i = 1; i <= n; i++) l.push(i + ". **Given** a, **When** b, **Then** c (FR-1, again FR-1)");
+      return [...l, "", "## Requirements", "", "### Functional Requirements", "", "- **FR-1**: System MUST keep item 1", ""].join("\n");
+    };
+    const N = 2000;
+    const big = specOf(N);
+    const m = T.parseSpecKit(path.join(tmp, "proj-r6i-fx1-frkeys-src"), (f) => (path.basename(f) === "spec.md" ? big : null), S.msg("en").importSpec, { list: () => null });
+    const keys = m.frKeys.get("FR-1");
+    const p = fresh("fx1-frkeys");
+    put(path.join(p, "specs", "001-c", "spec.md"), specOf(4));
+    const r = S.importSpec(p, "spec-kit", "specs/001-c", { tracks: ["core"] });
+    ok(keys instanceof Set && keys.size === N && [...keys][0] === "User Story 1 / Scenario 1" && [...keys][N - 1] === "User Story 1 / Scenario " + N &&
+      r.ok && r.mapping["FR-1"] === "US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4",
+      "1.42 fix 1 R1-IMP-4: an FR's criteria are a Set (O(1) membership) — 2,000 scenarios citing FR-1 twice each hold 2,000 keys, in order; the import maps FR-1 to each criterion once (got " +
+      js({ set: keys instanceof Set, size: keys && (keys.size != null ? keys.size : keys.length), mapping: r.mapping && r.mapping["FR-1"] }) + ")");
+  }
+
+  // 1.42 fix 1 R1-IMP-5 (an older gap — mutant M16 survived on the parent too): "an FR still [NEEDS CLARIFICATION] is never covered by a
+  // scenario's words" had no row. Spec Kit marks an open part of a scenario the same way, so a scenario carrying the FR's own question
+  // holds its every word: the FR converts (named FR → AC), never covered by the marker's words.
+  {
+    const W = S.msg("en").importSpec;
+    const p = fresh("fx1-fr-open");
+    put(path.join(p, "specs", "001-sort", "spec.md"), ["# Feature Specification: Sort", "", "### User Story 1 - List (Priority: P1)", "", "**Acceptance Scenarios**:", "",
+      "1. **Given** an album, **When** the user lists albums, **Then** they are sorted by [NEEDS CLARIFICATION: sort order]", "", "## Requirements", "", "### Functional Requirements", "",
+      "- **FR-009**: System MUST list albums sorted by [NEEDS CLARIFICATION: sort order]", ""].join("\n"));
+    const r = S.importSpec(p, "spec-kit", "specs/001-sort", { tracks: ["core"] });
+    ok(r.ok && r.warnings.includes(W.wFrCriteria("US-2", "FR-009 → US-2.AC-1")) && r.mapping["FR-009"] === "US-2.AC-1",
+      "1.42 fix 1 R1-IMP-5: an FR still [NEEDS CLARIFICATION] is never covered by a scenario's words — one holding its every word and its question converts it (got " + js(r.warnings) + ")");
   }
 
   // 1.42 CRI-2: the two scans that replaced a backtracking regex read what it read — every line built from a short head and a

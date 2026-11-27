@@ -1979,6 +1979,9 @@ const msg = {
       wNoCriteriaAtAll: "the source holds no acceptance criteria — requirements.md defines no AC yet: write them before approving the requirements (a +tdd test plan gets one generic row until then)",
       wUnknownRef: (task, ref) => `task ${task}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
       wUnknownRefLine: (line, ref) => `tasks.md line ${line}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
+      // 1.42 fix 1: a US-n.AC-m naming no story of the import (a stale ID) is left out — trace would read it as a criterion
+      wDroppedRef: (task, ref) => `task ${task}: _Requirements:_ reference '${ref}' names no story of the import — dropped (cite the criterion the task proves)`,
+      wDroppedRefLine: (line, ref) => `tasks.md line ${line}: _Requirements:_ reference '${ref}' names no story of the import — dropped`,
       wCarried: (list) => `carried over verbatim, not mapped to stories or criteria (review them): ${list}`,
       wNoRefs: "the imported tasks carry no _Requirements:_ references — add them so trace_check can map every AC to a task",
       // 1.36 review 1: a +port feature whose imported plan has no baseline / differential check (the import replaced the scaffold's)
@@ -1993,9 +1996,9 @@ const msg = {
       wSkipped: (files) => `not imported (left in place): ${files}`,
       more: (n) => `+${n} more`, // wSkipped's names past the first 50
       // spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
-      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts" },
+      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", open: "Open questions in quickstart.md" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,
-      wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts) without the plan`,
+      wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts, the quickstart's open questions) without the plan`,
       // spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
       wUncoveredFr: (list) => `functional requirements no acceptance scenario covers — carried as prose under "Functional Requirements", so no task or test traces them: ${list}. Turn each into an EARS criterion with an AC ID (or cite it in one) before approving the requirements`,
       // 1.42: the FR definitions no scenario covers became the criteria of one story (story: its US-n; list: "FR-n → US-n.AC-m, …")

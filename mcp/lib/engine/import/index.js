@@ -62,6 +62,7 @@ function inertBlock(lines) {
 }
 
 const RE_IMPORT_TASK_HEAD = /^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?/;
+const REF_DROPPED = Object.freeze([]); // refs()'s answer for a reference left out of _Requirements:_ (importTasks)
 // line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, fn) — fn(match, list) — by a scan: the lazy list rescanned a long blank run
 // at each step, and each marker the rest of a line with no closing "_". As the engine: the list runs from the first
 // non-blank to the first "_" followed by a blank or the end, never over a line terminator — else, when that "_" comes
@@ -167,15 +168,19 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
   let n = 0;
   let anyRefs = false;
   // taskNo: the task a reference belongs to; a line no task owns is reported by its line number instead.
+  // refs(ref): the AC IDs it stands for | null (kept as written, reported) | REF_DROPPED (left out, reported); a marker whose every
+  // reference was dropped holds the placeholder a kept template task gets (fitTemplateTasks) — the gates still see it
   const rewrite = (line, taskNo, lineNo) => replaceRequirementsMarkers(line, (all, list) => {
     anyRefs = true;
     const outIds = [];
+    let dropped = false;
     for (const ref of list.split(/[,;]/).map((s) => s.trim()).filter(Boolean)) {
       const hit = refs(ref);
-      if (hit) hit.forEach((x) => { if (!outIds.includes(x)) outIds.push(x); });
+      if (hit === REF_DROPPED) { dropped = true; warnings.push(taskNo != null ? W.wDroppedRef(taskNo, ref) : W.wDroppedRefLine(lineNo, ref)); }
+      else if (hit) hit.forEach((x) => { if (!outIds.includes(x)) outIds.push(x); });
       else { outIds.push(ref); warnings.push(taskNo != null ? W.wUnknownRef(taskNo, ref) : W.wUnknownRefLine(lineNo, ref)); }
     }
-    return "_Requirements: " + outIds.join(", ") + "_";
+    return "_Requirements: " + (outIds.length || !dropped ? outIds.join(", ") : L.taskAcPlaceholder) + "_";
   });
   const out = [L.tasksTitle(name), "", "{{NOTE}}", ""];
   const heading = (h) => { if (out[out.length - 1].trim()) out.push(""); out.push(h); };
@@ -476,10 +481,11 @@ function importRun(projectDir, tool, source, opts) {
   const mapping = {};
 
   // Stories keep their printed numbers when those are unique (spec-kit's [USn] task tags point at them). A synthetic story (spec-kit's
-  // FR criteria — speckit.js) has none: it comes after them, the next number (by a loop: a spread of 100,000 numbers throws).
+  // FR criteria — speckit.js) has none: it comes after them, numbered past every story's number and every one the source names
+  // (model.citedStory — speckit.js scans each text it reads; a loop: a spread of 100,000 numbers throws).
   const printed = model.stories.filter((s) => !s.synthetic).map((s) => s.printed);
   const keepNumbers = printed.every((p) => Number.isInteger(p) && p > 0) && new Set(printed).size === printed.length;
-  let synthN = null; // the synthetic story's number — no reference the source wrote reaches it (refs, storyNo)
+  let synthN = null; // the synthetic story's number — no reference the source wrote names it (a stale US-<n>.AC-1 stays stale)
   const acOf = new Map(); // story number → its AC IDs
   const critMap = new Map(); // source criterion key → new AC ID
   const notEars = [];
@@ -490,7 +496,8 @@ function importRun(projectDir, tool, source, opts) {
   // fence it leaves open (inertBlock) — it swallowed every criterion after it.
   const req = [L.featureTitle(name), "", note, "", L.summary, model.summary ? commentInert(model.summary) : L.summaryPlaceholder, "", L.stories];
   model.stories.forEach((s, idx) => {
-    const n = !s.synthetic ? (keepNumbers ? s.printed : idx + 1) : (synthN = keepNumbers ? printed.reduce((a, p) => (p > a ? p : a), 0) + 1 : idx + 1);
+    const n = !s.synthetic ? (keepNumbers ? s.printed : idx + 1)
+      : (synthN = Math.max(keepNumbers ? printed.reduce((a, p) => (p > a ? p : a), 0) : idx, model.citedStory || 0) + 1);
     mapping[s.key] = "US-" + n;
     const title = s.synthetic ? L.functional.replace(/^#+\s*/, "") : s.title;
     req.push("", L.story(n, s.priority, title == null ? title : commentInert(title)));
@@ -520,7 +527,7 @@ function importRun(projectDir, tool, source, opts) {
   // it), after the identity mapping: an FR a carried line also names (Clarifications) keeps its AC
   const frRefs = new Map();
   for (const [fr, keys] of model.frKeys || []) {
-    const ids = keys.map((k) => critMap.get(k)).filter(Boolean);
+    const ids = Array.from(keys, (k) => critMap.get(k)).filter(Boolean); // (a Set per FR — speckit.js)
     if (ids.length) { frRefs.set(fr, ids); mapping[fr] = ids.join(", "); }
   }
   const syn = model.stories.find((s) => s.synthetic);
@@ -593,12 +600,13 @@ function importRun(projectDir, tool, source, opts) {
     // _Requirements:_ references → new AC IDs: a criterion ("1.1"), a whole requirement/story ("2", "Requirement 2",
     // "US2") or an ID that is already dev-spec's. Anything else is kept as written and reported.
     const storyNo = (s) => { const idx = model.stories.findIndex((x) => x.printed === s); return idx === -1 ? null : keepNumbers ? s : idx + 1; };
-    // An AC ID passes through — but never one of the synthetic story's (a stale US-<n>.AC-1 for a story the source deleted would
-    // cover an FR criterion silently); FR-n is no stable ID (trace ignores it, spec_append_tasks refuses it): only one an imported
-    // criterion holds (frRefs), else it is reported, kept as written
+    // An AC ID passes through when an imported story has its number (an AC that story lacks is trace's phantom, as always); one
+    // naming no story of the import — a stale US-9.AC-1 for a story the source deleted — is dropped, and its warning says so
+    // (REF_DROPPED). The synthetic FR story is never one a source ID names (numbered past them all). FR-n is no stable ID (trace
+    // ignores it, spec_append_tasks refuses it): only one an imported criterion holds (frRefs), else it is reported, kept as written
     const refs = (ref) => {
       const ac = /^US-(\d+)\.AC-\d+$/.exec(ref);
-      if (ac) return synthN != null && +ac[1] === synthN ? null : [ref];
+      if (ac) return acOf.has(+ac[1]) ? [ref] : REF_DROPPED;
       if (/^(?:SC|NFR|EC)-\d+$/.test(ref)) return [ref];
       if (/^FR-\d+$/.test(ref)) return frRefs.get(ref) || null;
       if (t === "kiro" && critMap.has(ref)) return [critMap.get(ref)];
