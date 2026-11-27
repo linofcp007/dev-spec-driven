@@ -5,6 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const { operationCalls } = require("./12-lifecycle-read-gate.js"); // (1.42: the calls that drive every operation — one fixture, never a copy)
 
 exports.run = async ({ ok, skip, all, eq, S, tmp, fsCalls, hookIn, require, __dirname }) => {
   const js = JSON.stringify;
@@ -626,6 +627,88 @@ exports.run = async ({ ok, skip, all, eq, S, tmp, fsCalls, hookIn, require, __di
       const t = path.join(other, ".specs", "lnk", "x.md");
       const r = E.withReadCache(() => { E.specsRoot(longBase); return [E.specsReadBlocked(t), E.readIfExists(t)]; });
       eq(r, [true, null], "1.41.1 fix round 2 (R2-R-6): a recorded project that holds no part of the path is no base — another checkout's .specs/<linked>/x read in a scope that recorded only the session's project is blocked");
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------------------------------------
+  // 1.42 R1 — the readers of PROJECT code outside the primitives, as properties: a project whose src/linkout is a junction OUT of
+  // it (secret.ts — the very code of an in-project file, so a duplicate WOULD be found if it were read —, top.ts, deep/g.ts), a
+  // src/dangling junction to a removed folder, a plain src/missing.ts that is not there. Each check survived its removal in the
+  // 1.41.1 review (M02 dupes' featureFileOnDisk, M07 globFiles' base, M03 onDisk; M12, the check names, is 09-evidence.js's);
+  // (e) sweeps every operation's read pass over the same project. Reads and listings are asserted — a stat through the link is the
+  // check itself (it stats, then refuses by real path). The sweep runs with the read-ahead pool off (a worker's reads are unseen).
+  // ---------------------------------------------------------------------------------------------------------------------------
+  {
+    const p = project("code"), out = path.join(tmp, "rgr-code-out"), goneDir = path.join(tmp, "rgr-code-gone");
+    const CODE = ["export function totalCents(items) {", "  let sum = 0;", "  for (const item of items) {", "    if (!Number.isInteger(item.cents)) throw new TypeError(\"cents\");",
+      "    sum += item.cents * item.quantity;", "  }", "  return sum;", "}", "", "export function formatCents(cents, currency) {",
+      "  const whole = Math.trunc(cents / 100), rest = Math.abs(cents % 100);", "  return currency + \" \" + whole + \".\" + String(rest).padStart(2, \"0\");", "}", ""].join("\n");
+    put(path.join(p, "src", "a.ts"), CODE);
+    put(path.join(p, "src", "b.ts"), "export const label = (name: string) => \"Hello, \" + name.trim() + \"!\";\n");
+    put(path.join(out, "secret.ts"), "// OUTSIDE-secret\n" + CODE);
+    put(path.join(out, "top.ts"), "// OUTSIDE-top\nexport const top = 1;\n");
+    put(path.join(out, "deep", "g.ts"), "// OUTSIDE-deep\nexport const g = 2;\n");
+    fs.mkdirSync(goneDir, { recursive: true });
+    const linked = link(out, path.join(p, "src", "linkout")) && link(goneDir, path.join(p, "src", "dangling"));
+    if (!linked) skip("1.42 R1 (a)-(c), (e): the readers of project code over a junction out", "links not creatable here");
+    else {
+      fs.rmSync(goneDir, { recursive: true, force: true }); // (src/dangling now points at nothing)
+      const f = S.createFeature(p, { name: "code", tracks: ["core"] });
+      fs.writeFileSync(path.join(f.dir, "requirements.md"), REQ);
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + [
+        "- [ ] 1. [US1] Port the cents helper for US-1.AC-1\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/linkout/secret.ts_\n  - _Verify: node -v_\n",
+        "- [ ] 2. [US1] The linked kit for US-1.AC-1\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/linkout/**/*.ts_\n  - _Verify: node -v_\n",
+        "- [ ] 3. [US1] The label for US-1.AC-1\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/b.ts_\n  - _Verify: node -v_\n"].join("\n"));
+      const READS = /^(?:readFileSync|openSync|readdirSync|opendirSync) /;
+      const reads = (t) => t.hits.filter((h) => READS.test(h));
+      // (what only a walk behind the junction finds — secret.ts is a path task 1 WRITES, and may be named as written)
+      const behind = /src[\\/]linkout[\\/](?:top|deep)/;
+      // (a) dupes: the plain _Implements:_ file behind the junction is no feature file — nothing read, no duplicate names it
+      const du = throughLinks(out, () => S.duplicationReport(p, { name: "code" }));
+      // (b) a glob whose literal base is the junction matches nothing (and is no outside path); trace {code} and coverage name no
+      // file behind it
+      const gl = throughLinks(out, () => S.globFiles(p, "src/linkout/**/*.ts"));
+      const tr = throughLinks(out, () => S.traceCheck(p, "code", { code: true }));
+      const cv = throughLinks(out, () => S.coverage(p));
+      all("1.42 R1 (a)(b): over a junction out of the project — dupes' feature files take no _Implements:_ path behind it (only src/b.ts; nothing read behind it, no duplicate names it), a glob whose base is the junction matches nothing (not `outside`), trace {code} and coverage name no file behind it and read nothing there (got " +
+        js({ du: { featureFiles: du.v.featureFiles, total: du.v.total, reads: reads(du) }, gl: [gl.v, reads(gl)], tr: reads(tr), cv: reads(cv) }) + ")", {
+        dupes: () => du.v.ok === true && du.v.featureFiles === 1 && !js(du.v).includes("linkout") && !has(du.v) && !reads(du).length,
+        glob: () => js(gl.v.files) === "[]" && gl.v.outside === false && !reads(gl).length,
+        trace: () => tr.v.ok !== false && !behind.test(js(tr.v)) && !has(tr.v) && !reads(tr).length,
+        coverage: () => !behind.test(js(cv.v)) && !has(cv.v) && !reads(cv).length,
+      });
+      // (c) onDisk — a link on the way counts as THERE (its documented rule): of three Copy cells, a file behind the junction, one
+      // below the dangling one and a plain missing one, doctor's reference-examples names the plain one alone; the same three as an
+      // example-copied lesson's _Target:_ — only the plain missing one is refused (targetGone)
+      put(path.join(p, ".specs", "steering", "structure.md"), "# Project Structure\n\n## Reference Examples\n\n| Pattern | Copy | Applies to |\n|---|---|---|\n" +
+        "| Linked | src/linkout/top.ts | |\n| Dangling | src/dangling/x.ts | |\n| Missing | src/missing.ts | |\n");
+      const rex = (S.specDoctor(p, "code").checks || []).find((c) => c.id === "reference-examples");
+      const lesson = (target) => S.decide(p, "code", { title: "Copied " + target, decision: "Copy it as it is.", kind: "lesson", cause: "example-copied", target });
+      const lessons = ["src/linkout/top.ts", "src/dangling/x.ts", "src/missing.ts"].map((t) => { const r = lesson(t); return { t, ok: r.ok, gone: r.ok === false && r.error === S.msg("en").decisions.targetGone(t, "example-copied") }; });
+      all("1.42 R1 (c): onDisk — a link on the way counts as there: doctor's reference-examples names src/missing.ts alone (never the file behind the junction nor the one below the dangling junction); an example-copied lesson's _Target:_ is refused for the missing one alone (got " + js({ rex, lessons }) + ")", {
+        doctor: () => !!rex && rex.status === "warn" && rex.detail === S.msg("en").quality.refExamplesGone("`src/missing.ts`", 0, ".specs/steering/structure.md"),
+        lessons: () => js(lessons.map((l) => [l.ok, l.gone])) === js([[true, false], [true, false], [false, true]]),
+      });
+      // (e) the sweep — lesson 13: every operation of the table, its read pass, over this project: no read or listing behind the
+      // junction, nothing behind it in any result. No allowance: a hit is a containment finding, fixed where the reader lives.
+      const pass = operationCalls(OPERATIONS, { names: ["code"], other: "code", report: "code" })(false);
+      const sweepHits = [], sweepLeaks = [], driven = new Set();
+      const ahead = process.env.DEV_SPEC_TEST_AHEAD;
+      process.env.DEV_SPEC_TEST_AHEAD = "off";
+      try {
+        for (const { op, o } of pass) {
+          const t = throughLinks(out, () => { try { return op.call(S, p, o); } catch (e) { return { threw: e.message }; } });
+          driven.add(op.id);
+          for (const h of reads(t)) sweepHits.push(op.id + ": " + h);
+          if (has(t.v)) sweepLeaks.push(op.id);
+        }
+      } finally { if (ahead === undefined) delete process.env.DEV_SPEC_TEST_AHEAD; else process.env.DEV_SPEC_TEST_AHEAD = ahead; }
+      all("1.42 R1 (e): every operation's read pass (" + pass.length + " calls, " + driven.size + " operations) over a project whose src/linkout is a junction out — no read or listing behind it, no result carrying what lies behind it (got " +
+        js({ hits: sweepHits.slice(0, 12), more: Math.max(0, sweepHits.length - 12), leaks: sweepLeaks }) + ")", {
+        everyOp: () => driven.size === OPERATIONS.length,
+        noRead: () => !sweepHits.length,
+        noLeak: () => !sweepLeaks.length,
+      });
     }
   }
 };
