@@ -112,13 +112,17 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   the harnesses' `ok(false, label)`. cli/tests/16-conventions-runner.js tests the runner on a fake suite, whose files
   assert `ok(typeof exports === "object", …)`. "Links not creatable" is a win32 cause alone (a junction, a file symlink without
   Developer Mode): a link failure skips on win32 and is rethrown elsewhere — the file FAILS, a broken fixture never a skip.
-  **Known limits**, by property (the guard reads neither; split each into its own `ok()` + `skip()` when next touched): every link
-  site but 1.42's own (which rethrow off win32) still skips on ANY error — `rg -n "symlinkSync" mcp/tests cli/tests` lists every
-  site, its `catch` says which —; and a part a probe drops is a pass, or nothing, never a skip: a disjunct that is true when the
-  check cannot run (`!<link flag> || …`, `<probe> === null || …`; the candidates:
-  `rg -n "![A-Za-z.]*[Ll]ink[A-Za-z]* \|\||=== null \|\|" mcp/tests cli/tests` — most `=== null ||` hits are shape checks, read
-  each), or a row / fixture behind an `if (<it can run>)` with no `skip()` beside it (e.g. 10-guards-probe.js's two linked
-  layouts, 02-mcp-server.js's row that exists only where tmp has two spellings — the alias leg's one extra MCP assertion).
+  **Known limits**, by property (the guard reads neither; split each into its own `ok()` + `skip()` when next touched): a link
+  site that catches its error skips on ANY error (1.42's own rethrow off win32), and some older sites have no catch at all,
+  so they FAIL where a link cannot be made (the safe direction) — `rg -n "symlinkSync" mcp/tests cli/tests` lists the
+  candidates, the code beside each says which —; and a part a probe drops is a pass, or nothing, never a skip: a disjunct that
+  is true when the check cannot run (`!<link flag> || …`, `<link flag> !== true || …`, `<probe> === null || …`), a
+  hand-written stand-in result in place of the call that cannot run (`<link flag> ? <the call> : { ok: false, … }`, its checks
+  then pass on the stand-in) — the candidates:
+  `rg -n "![A-Za-z.]*[Ll]ink[A-Za-z0-9]* \|\||[Ll]ink[A-Za-z0-9]* !== true \|\||[Ll]ink[A-Za-z0-9]* \? [^;]*: \{|=== null \|\|" mcp/tests cli/tests`
+  (most `=== null ||` hits are shape checks, read each) —, or a row / fixture behind an `if (<it can run>)` with no `skip()`
+  beside it (e.g. 10-guards-probe.js's two linked layouts, 02-mcp-server.js's row that exists only where tmp has two spellings
+  — the alias leg's one extra MCP assertion).
   The MCP chains today: `01-core → 17-docs` (17-docs reads
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality-fixtures`
   (re-checks of the behavioural fixtures 17-docs-evals builds under tmp — 1.30: they were 15-quality's, and the two files were the
@@ -332,11 +336,15 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   accepts); don't depend on a case-insensitive file system (assert the Linux counterpart where Windows/macOS fold case)
   or on the text of a V8 error (Node 18 omits a RegExp's flags in its SyntaxError). A path a process answers from its own
   `process.cwd()` (the PHYSICAL folder on POSIX, an aliased temp's real one; the spelling it was given on win32, 8.3 kept) is
-  compared by `fs.realpathSync` — the JS one, never `.native`, which expands an 8.3 name — and only that value: a path a surface
-  was handed keeps its spelling in the compare, so a surface that starts answering another spelling of the right folder (its real
-  path, an expanded 8.3 name) still fails (1.42 review 2, R2-TESTS-01). The one exception is the runner's own test
-  (cli/tests/16-conventions-runner.js `realFold`): it folds as the runner's `samePath` does, `.native`, a gone folder by its
-  nearest parent's, so its startsWith negatives stay real checks on win32. A test that RUNS PowerShell (1.21.1 —
+  compared by `fs.realpathSync` — the JS one, never `.native`, which expands an 8.3 name (1.42 review 2, R2-TESTS-01). Only
+  mcp/tests/10-guards-probe.js real-paths that value alone (`childSame`, the resolver child's): every path a surface was handed
+  keeps its spelling there, so a surface that starts answering another spelling of the right folder (its real path, an expanded
+  8.3 name) fails. Older rows real-path BOTH sides, a handed path too — 02-mcp-server.js's 1.23 roots row (a client's file://
+  root, projectDir, SPEC_PROJECT_DIR) and its 1.24 r6 `same` (init.specsDir against the root), 16-conventions.js's 1.23 `same`
+  (SPEC_PROJECT_DIR among them): on win32 they still see an 8.3 expansion (the JS realpath keeps the short name); on POSIX
+  they cannot see a surface that answers a handed path's real path. The one exception to the JS realpath is the runner's
+  own test (cli/tests/16-conventions-runner.js `realFold`): it folds as the runner's `samePath` does, `.native`, a gone
+  folder by its nearest parent's, so its startsWith negatives stay real checks on win32. A test that RUNS PowerShell (1.21.1 —
   cli/tests/09-evidence-done-run.js: `done --run --shell pwsh`, a `pwsh -Command "…"` `_Verify:_` under cmd.exe, `--shell
   powershell`) probes the program first (`<shell> -NoProfile -NonInteractive -Command "exit 0"` → 0) and calls `skip("…",
   "<why>")` without it — the Docker images have no pwsh, and cmd.exe / Windows PowerShell exist only on Windows. The
@@ -520,3 +528,11 @@ How the rules above came to be — grep a release here.
   choice, each suite's command): a main() building its command from the run's options undid the default and no row saw it. The
   link / partial-skip known limits and the skip guard's reach are said by property (an `rg` line lists the sites), not by a list
   of places that was incomplete the day it shipped.
+- **1.42 (fix round 3, tests)** — review 3. The real-path rule claimed every handed path kept its spelling in the compare;
+  only 10-guards-probe.js does that — 02-mcp-server.js's and 16-conventions.js's helpers real-path both sides, so on POSIX
+  they cannot see a surface answering a handed path's real path (on win32 they still see an 8.3 expansion): the rule now
+  says which row does what — the claim changed, the rows did not. The known limits' property gained the shapes it missed — a
+  `<link flag> !== true || …` disjunct (15-quality.js) and a hand-written stand-in result for the call that cannot run
+  (14-templates.js, 13-imports.js) — with one alternative each in the `rg` line, which lists candidates, read each; and some
+  older link sites have no catch and FAIL where links cannot be made, the safe direction. 12-lifecycle-read-gate-root.js's
+  sweep comment says its rule in words (it cited a lesson by a number no shipped text defines).

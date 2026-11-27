@@ -621,6 +621,14 @@ here. "r5 review" is 1.23's fifth review.
   a skill-less client gets), bugfix.md's gate, AGENTS.md's and SKILL.md's phase pipelines and change-management.md's loop
   named no next gate. Each got the clause by hand and is pinned one by one; the claim and the label now say the four shapes
   (widening the reader was the other option — a new mechanism for a prose finding).
+- **1.42 review 3 (R3-TASKS-01, -02)** — the clause was wrong where several approvals are asked at once: /spec-tour,
+  /spec-bugfix step 4 and bugfix.md's gate present for `spec_approve {through: "tasks"}`, while `nextGate` is only the FIRST
+  pending gate — requirements passed, the next gate read ready, bug.md's placeholders still failed the design gate, and the
+  fast-forward stopped at design after the user's yes. Those three say "fix what each gate up to tasks refuses" (the rule
+  above names the form). The narrowed claim described the shapes loosely: a fenced line IS read (change-management.md's loop is
+  unread for its wording, not for its code block), the first / before shape takes doctor directly followed by the word, the
+  boundary shape needs run / use / call, the "then" shape also reads "then ask for approval", and review 2 found seven
+  sentences, not eight — the eighth was the fixer's. The doc and the row's label say the shapes as the reader reads them.
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12
@@ -793,3 +801,9 @@ here. "r5 review" is 1.23's fifth review.
   printed bug.md; the glob form leaves out a `.specs/` at any depth, from either folder (Git Bash, PowerShell 5.1 and 7 alike).
   17-docs RUNS the Checkpoint's command as written on both layouts. Known limit (older): `git grep` searches below the folder
   it runs in — from a subfolder of the project it misses the rest.
+- **1.42 review 3 (R3-TASKS-03..05)** — the namesake of the new exclude: the glob leaves out EVERY folder named `.specs`, a
+  code folder of that name too (`src/.specs/helper.js` is not searched; `src/.specs.js` and `src/x.specs/` still are) — both
+  bugfix texts say so (prose; no new pathspec). /spec-bugfix step 6's code span broke right after `--`, so a line-by-line copy
+  of the MCP prompt ran a complete command, the one without the pathspec: the command is on one line now (pinned). The run
+  row read the developer's global git config (`grep.fullName`, `color.ui = always` changed the listed names): it isolates it
+  as 09-evidence-guardian.js's git rows do — an empty `GIT_CONFIG_GLOBAL`, `HOME` and `XDG_CONFIG_HOME` in tmp.
