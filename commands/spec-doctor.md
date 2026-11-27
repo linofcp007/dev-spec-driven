@@ -8,9 +8,10 @@ allowed-tools: mcp__plugin_dev-spec-driven_spec-driven__spec_doctor
 Feature: $ARGUMENTS
 
 Run `spec_doctor {name}` (CLI `dev-spec doctor <feature>`, exit 1 on a fail) and report: each check — pass, warn or fail —,
-the recorded approvals and the `readyToAdvance` verdict. List exactly what to fix before advancing (the fails), then the
-warnings worth acting on; `nextGate` says whether the next approval would pass (`missingRoles`: the roles still to
-sign). Each check carries its own detail; every check id is listed in
+the recorded approvals and the verdict. List exactly what to fix before the next approval — what its next gate
+(`nextGate`) refuses: `failing`, and `missingRoles` (the roles still to sign); a fail of a later phase's check is that
+phase's work, shown, never a reason to hold this approval; `spec_next_action` names the step. Then the warnings worth
+acting on. Each check carries its own detail; every check id is listed in
 `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/tooling-reference.md` → spec_doctor.
 
 **`--deep`** — also review the MEANING of the artifact the next gate approves (a bugfix's requirements: bug.md with

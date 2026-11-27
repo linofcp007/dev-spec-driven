@@ -33,4 +33,4 @@ Follow the spec-driven workflow described in [`AGENTS.md`](../../AGENTS.md). Sum
 - **Respond in the user's language** (EN/PT/ES — European or Brazilian Portuguese), including artifact prose. EARS
   keywords work in all of them (`SHALL`/`DEVE`/`DEBE`).
 
-Run `node cli/dev-spec.js doctor <feature>` before advancing a phase; only proceed on `readyToAdvance`.
+Run `node cli/dev-spec.js doctor <feature>` before advancing a phase; fix what its next gate refuses (a later phase's fail waits).

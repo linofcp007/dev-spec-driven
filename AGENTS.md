@@ -92,7 +92,7 @@ fill the scaffold, `dev-spec doctor`, present it, and record the user's yes. Pha
    - **Repeated code:** `dev-spec dupes <feature>` lists what the feature's code repeats — elsewhere in the project (`existing`: reuse or extend it) or inside the feature (`within`); candidates to check, never verdicts (finish warns on them).
    - **Close** with `dev-spec finish`, optionally after a simplification pass (`skills/dev-spec-driven/references/code-reuse-and-quality.md`) or, on +tdd, a pruning pass (the tests that no longer earn their place, each removal the user's); subagent execution and both passes: `skills/dev-spec-driven/references/subagent-execution.md`.
 
-At each phase boundary run `dev-spec doctor <feature>` and advance only on `readyToAdvance`. Record the user's sign-off (their explicit yes for that phase) with `dev-spec approve <feature> <phase>`. Unsure what comes next? `dev-spec next-action <feature>`.
+At each phase boundary run `dev-spec doctor <feature>` and fix what its next gate refuses (a later phase's fail waits). Record the user's sign-off (their explicit yes for that phase) with `dev-spec approve <feature> <phase>`. Unsure what comes next? `dev-spec next-action <feature>`.
 
 ## Gates and evidence
 

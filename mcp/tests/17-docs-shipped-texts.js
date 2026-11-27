@@ -1,6 +1,6 @@
 "use strict";
-// Docs — a list of the built-in tracks names every one of them (1.42 UX-05): a property over every text the plugin ships.
-// (17-docs.js, 17-docs-flows.js and 17-docs-identifiers.js hold the docs' other guards.)
+// Docs — properties of every text the plugin ships: a list of the built-in tracks names every track (1.42 UX-05); doctor's
+// next gate, never readyToAdvance, is what an approval waits on (1.42 UX-01). (17-docs*.js hold the docs' other guards.)
 
 const fs = require("fs");
 const path = require("path");
@@ -128,6 +128,25 @@ exports.run = async ({ all, S, root, tmp, require }) => {
       cli: texts.some(([rel]) => rel === "cli/commands.js") && texts.some(([rel]) => rel === "hooks/spec-hook.js") && texts.some(([rel]) => rel === "mcp/server.js"),
       noBundle: !texts.some(([rel]) => /spec\.bundle\.js$/.test(rel)) && !texts.some(([rel]) => /^(examples|evals|\.specs|mcp\/tests|cli\/tests)\//.test(rel)),
       many: texts.length >= 150,
+    });
+  }
+
+  { // --- 1.42 UX-01: what an approval waits on is doctor's next gate, never readyToAdvance ---
+    // readyToAdvance is "no fail anywhere" — a later phase's fail included (a +sec feature's design sections fail at
+    // classification) —, so six texts that said "advance only on readyToAdvance" held approvals for a later phase's work.
+    // nextGate is the next approval's own checks, a forecast: the approval call adds phase-order (an earlier phase changed
+    // since its approval — nextGate ready, the approve refused), so no text may promise it: never "approve on nextGate",
+    // "the next approval would pass" or "ready to approve" (in any language) — "fix what it refuses" is what holds.
+    const texts = shippedTexts(root);
+    const RE_HOLD = [/(?:advanc\w*|proceed)\W+(?:only\s+)?on\s+`?readyToAdvance/i, /one `readyToAdvance` verdict/i];
+    const RE_PROMISE = [/approve\s+on\s+(?:its\s+)?`?nextGate/i, /next approval (?:would |will )?pass/i, /ready to approve|pronto para aprovar|listo para aprobar/i];
+    const hits = texts.flatMap(([rel, t]) => RE_HOLD.concat(RE_PROMISE).filter((re) => re.test(t.replace(/\s+/g, " "))).map((re) => rel + " " + re.source));
+    const SIX = ["skills/dev-spec-driven/SKILL.md", "AGENTS.md", ".cursor/rules/dev-spec-driven.mdc", "commands/spec-doctor.md", "commands/approve.md",
+      "skills/dev-spec-driven/references/phase-guide.md", "skills/dev-spec-driven/references/tooling-reference.md"];
+    const named = SIX.filter((f) => /`nextGate`|next gate/.test((texts.find(([rel]) => rel === f) || [, ""])[1]));
+    all("1.42 UX-01: no shipped text holds an approval on readyToAdvance or promises one on nextGate; the texts that send an agent to doctor before an approval name its next gate (hits: " + js(hits) + "; naming: " + named.length + "/" + SIX.length + ")", {
+      noHold: hits.length === 0,
+      named: named.length === SIX.length,
     });
   }
 };
