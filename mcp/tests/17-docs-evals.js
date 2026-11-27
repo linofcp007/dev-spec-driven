@@ -153,7 +153,7 @@ exports.run = async ({ ok, all, skip, S, root, tmp, require }) => {
         inDiff("weakened-test", "test/csv.test.js") && !seatImplements.includes("test/csv.test.js"),
       "clean": () => /notes\.updateNote\([^\n]*req\.user\.id/.test(atHead("clean", "src/api.js")) && !/req\.body\.ownerId/.test(atHead("clean", "src/api.js")) &&
         /text\.length > MAX_TEXT/.test(atHead("clean", "src/notes.js")) && ["T-01", "T-02", "T-03", "T-04"].every((t) => atHead("clean", "test/notes.test.js").includes(`test("${t} `)) &&
-        ["src/api.js", "src/notes.js", "test/notes.test.js"].every((f) => seatImplements.includes(f)) && fs.readdirSync(path.join(seatRoot, "clean", "head"), { recursive: true }).filter((f) => /\.js$/.test(f)).length === 3,
+        ["src/api.js", "src/notes.js", "test/notes.test.js"].every((f) => seatImplements.includes(f)) && walkTexts(path.join(seatRoot, "clean", "head")).length === 3,
       // The finding's line is identical at BASE and within 10 lines of a changed one — a context line of the -U10 package.
       "pre-existing": () => {
         const [, f, n] = /^Important — (src\/[\w.-]+):(\d+) — /.exec(seatFile("pre-existing", "finding.md") || "") || [];
