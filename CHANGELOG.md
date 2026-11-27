@@ -3,6 +3,20 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.41.2] — 2026-11-27
+
+dev-guardian's scan of the plugin now reads every one of its JavaScript files in full.
+
+### Fixed
+- **Semgrep parsed three engine files only in part** (`trace.js`, `scaffold.js`, `import/fluidplan.js`): a regular-expression
+  literal holding `<!--` or `-->` reads, to its JavaScript parser, as an Annex B HTML-like comment, so nothing after it was
+  scanned and the plugin's own dev-guardian scan stayed partial. All 23 such literals (10 engine files) now write the two
+  hyphens as `-{2}` — each matches exactly what it matched, checked against the original on random texts — and CLAUDE.md
+  says why. No behaviour change.
+
+### Tests
+- `node mcp/test.js` 3225 assertions (was 3225), `node cli/test-cli.js` 723 (was 723).
+
 ## [1.41.1] — 2026-11-27
 
 A security patch from a full triage of dev-guardian 3.17's scan of this repository (629 findings: 600 false positives,

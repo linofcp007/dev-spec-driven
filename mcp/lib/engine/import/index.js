@@ -155,7 +155,7 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
       cur = { i, indent: m[1].length, done: /[xX]/.test(m[2]), optional: !!m[3], id: idm ? idm[1] : null, text: idm ? idm[2] : rest, body: [] };
       items.push(cur);
     } else if (cur && l.trim() && indentOf(l) > cur.indent) cur.body.push(i);
-    else if (l.trim()) { cur = null; if (/^\s*<!--.*-->\s*$/.test(l)) inert.add(i); }
+    else if (l.trim()) { cur = null; if (/^\s*<!-{2}.*-{2}>\s*$/.test(l)) inert.add(i); }
     if (opensComment(l)) { inComment = true; cur = null; if (!m) inert.add(i); } // a task line that opens a comment is still a task
   });
   // Parent ids ("2" when a "2.1" exists), computed once: a per-item scan made a flat 10 000-task file quadratic.
@@ -437,7 +437,7 @@ function importRun(projectDir, tool, source, opts) {
   // code span: the name reaches design.md / tasks.md too, whose decision-target reader (blankHtmlComments) sees no code spans.
   const given = opts.name != null && !!String(opts.name).trim();
   // One line (flatText): a line break in a name opened a heading in every file's title.
-  let name = given ? flatText(opts.name) : model.nameHint == null ? model.nameHint : flatText(String(model.nameHint).replace(/<!--/g, "&lt;!--"));
+  let name = given ? flatText(opts.name) : model.nameHint == null ? model.nameHint : flatText(String(model.nameHint).replace(/<!-{2}/g, "&lt;!--"));
   // a title with no Latin letter or digit (# Добавить тёмную тему, # 添加深色主题) names no folder: a document read
   // from a file falls back to the name the parser had without the title (its file's — `nameFallback`); inline text has none,
   // and says to pass a name. (A name the caller gives is theirs: resolveFeature's own error.)
@@ -500,7 +500,7 @@ function importRun(projectDir, tool, source, opts) {
       critMap.set(c.key, id);
       if (!c.ears) notEars.push(id);
       req.push(`${j + 1}. **${id}** — ${commentInert(c.ears || c.raw + " " + L.notEars)}`);
-      if (c.ears && c.ears !== c.raw) req.push("   " + L.original(IMPORT_TOOLS[t], c.raw.replace(/-->/g, "—>")));
+      if (c.ears && c.ears !== c.raw) req.push("   " + L.original(IMPORT_TOOLS[t], c.raw.replace(/-{2}>/g, "—>")));
     });
     if (!s.criteria.length) { req.push(L.noCriteria); noCriteria.push("US-" + n); }
     if (s.after && s.after.length) req.push("", ...inertBlock(s.after)); // a note after the criteria, a sub-section… verbatim

@@ -565,7 +565,7 @@ const flatText = (s) => String(s || "").replace(/\s+/g, " ").trim();
 // a feature NAME as a spec writes it (every title, a template's {{name}}): one line (flatText) and inert to HTML
 // comments — "<!--" / "-->" as &lt;!-- / --&gt; (a name holding "<!--" opened a comment in its titles that hid every criterion
 // of the scaffold; the summary and an imported title were already made inert). The slug is the name's, as before.
-const specNameText = (s) => flatText(s).replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;");
+const specNameText = (s) => flatText(s).replace(/<!-{2}/g, "&lt;!--").replace(/-{2}>/g, "--&gt;");
 function addBacklog(projectDir, name, note) {
   const nm = flatText(name);
   if (!nm) return { ok: false, error: errs(projectDir).nameRequired };

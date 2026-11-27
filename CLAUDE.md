@@ -135,6 +135,9 @@ written by hand. IDs and markers stay English-stable (languages.md). The one Eng
   backslashes, and the engine and these notes are full of them (regexes, Windows paths). Edit escape-bearing code and
   text with the Edit / Write tools or a Write'd script file (`String.fromCharCode(92)` when a script must build a
   backslash), and check the bytes after moving text.
+- **Never write `<!--` or `-->` inside a regex literal** — write `<!-{2}` / `-{2}>` (1.41.2). Semgrep's JavaScript parser
+  reads them as Annex B HTML-like comments and stops parsing the file there, so dev-guardian's scan goes partial (exit 2)
+  and nothing after that point is scanned. Strings and comments may hold them.
 - **Changed templates / tracks / i18n — the corpus? Run `npm run build`** and commit the regenerated
   `mcp/lib/engine/corpus.generated.json` (the built-in placeholder corpus). Precisely: after changing a file of
   `CORPUS_SOURCES` — `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` /

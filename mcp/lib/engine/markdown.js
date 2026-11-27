@@ -46,7 +46,7 @@ function stripHtmlComments(s) {
 // spec never opens a comment there (the importers' lines, the traceability matrix's cells). Linear.
 function inertOutsideCode(text, closers) {
   if (!text.includes("<!--") && !(closers && text.includes("-->"))) return text;
-  const esc = (t) => (closers ? t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;") : t.replace(/<!--/g, "&lt;!--"));
+  const esc = (t) => (closers ? t.replace(/<!-{2}/g, "&lt;!--").replace(/-{2}>/g, "--&gt;") : t.replace(/<!-{2}/g, "&lt;!--"));
   return text.split("\n").map((line) => {
     if (!line.includes("`")) return esc(line);
     const ticks = backtickRuns(line);

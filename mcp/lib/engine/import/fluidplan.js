@@ -158,7 +158,7 @@ const fpStr = (v) => (typeof v === "string" ? v : v == null ? "" : String(v));
 const RE_FP_MARKER_LIKE = new RegExp("(?<=[_*])(" + [...TASK_MARKER_LABELS, "Kind", "Date", "Affects", "Supersedes", "Outcome"].join("|") + ")(?=:)", "giu");
 function fpInert(s, codeOk) {
   const t = String(s == null ? "" : s);
-  return (codeOk ? inertOutsideCode(t, true) : t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;")).replace(RE_FP_MARKER_LIKE, "$1\\")
+  return (codeOk ? inertOutsideCode(t, true) : t.replace(/<!-{2}/g, "&lt;!--").replace(/-{2}>/g, "--&gt;")).replace(RE_FP_MARKER_LIKE, "$1\\")
     .replace(/(?<![A-Za-z0-9])(US-\d+)\.(?=AC-\d)/g, "$1\\.").replace(/(?<![A-Za-z0-9])(T|EC|NFR|SC)-(?=\d)/g, "$1\\-")
     .replace(/(?<![A-Za-z0-9.\\])AC-(?=\d)/g, "AC\\-");
 }
