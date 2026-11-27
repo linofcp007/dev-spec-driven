@@ -70,7 +70,7 @@ Task 3: minor (deferred): <one-liner>
 Task 3: pre-existing (deferred): <one-liner>
 Task 3: verify — 2 confirmed, 1 unconfirmed, 1 refuted
 Task 3: unconfirmed (65): <one-liner> — <why it isn't 80>
-Task 3: refuted (20, pre-existing): <one-liner>
+Task 3: refuted (0, pre-existing, real at HEAD): <one-liner>
 Task 3: ui review — 3 pairs: 2 match, 1 differences (1 blocker) → fix round 1/5
 Task 3: ui re-review (round 1) — U1 resolved, U2 partial; 0 regressions → fix round 2/5
 Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4f5a6b)
@@ -240,7 +240,8 @@ plugin: each issue rated by a separate agent, only the confident ones kept.)
   answer you expect.
 - **Then, by its confidence:** **80 or more** → confirmed: it enters the fix loop. **50–79** → unconfirmed: no fix
   round — ledger `unconfirmed (NN)`, show it at the next checkpoint; the final review triages it with the deferred
-  minors. **Under 50** → refuted: ledger `refuted (NN, <why>)` and drop it.
+  minors. **Under 50** → refuted: ledger `refuted (NN, <why>)` and drop it — unless its `Exists at HEAD` line says yes
+  (a real defect this diff didn't make): ledger `refuted (NN, <why>, real at HEAD)`, a residue, filed at Closing.
 - **An ❌ comes back CONFIRMED or REFUTED, never unconfirmed** (an AC with no code is never pre-existing): its verdict
   decides, not a confidence. A refuted ❌ cites the file:line that satisfies the AC — read that line before you count the
   AC as satisfied; a refutation without one is a confirmed ❌, and a confirmed ❌ enters the fix loop.
@@ -268,7 +269,7 @@ final review. Nor does a reviewer's `Pre-existing (deferred)` line (a problem al
   input or state that breaks — an earlier finding of this task already named, at another place, the next round asks for
   the class: every place in the task's `_Implements:_` files that holds it, listed in the fix report, and one fix for all;
   its re-review gets the list. A place outside those files is not this task's to fix: ledger `Task N: class outside the
-  task — <place>` for the final review. Ledger `Task N: class fix (round R) — <the defect>, K places`.
+  task — <place>` for the final review (one it lets ship is a residue). Ledger `Task N: class fix (round R) — <the defect>, K places`.
 - **Gates a fix can undo run again.** A round's diff changes what a reviewed view renders → take the captures it
   changed again and a fresh `spec-ui-reviewer` in verdict mode (`references/ui-review.md` → 5), whichever review the
   round answered.
@@ -500,6 +501,8 @@ and the history of rewritten lines) and triages the ledger's deferred minors, un
 class places outside a task. If it
 returns findings: verify each Critical / Important one (§6), then ONE fix dispatch with the confirmed list, ONE scoped
 re-review, then adjudicate residuals as in the breaker. No second wave — residual load-bearing findings go to the human.
+Ledger its own lines as a task's are: a `Pre-existing (deferred)` line `Final review: pre-existing (deferred): …`, a verified
+50–79 one `Final review: unconfirmed (NN): …`, a refutation real at HEAD with `real at HEAD` (§6) — Closing files them.
 **With a review panel** (`reviewPanel`): the same package to one final-mode reviewer on the most capable model and one
 on each panel model not already it, in one message; their findings merged before the verify pass (Review on more than one
 model); still ONE fix dispatch and ONE scoped re-review. Ledger the `Final review: ×N` line.
@@ -607,20 +610,29 @@ data subject rights), writes a merge summary built from the spec chain (with the
 the finish batch (§7b) answers them in the one question. **Collect every `Ruling:` line from the ledger into your final message**
 ("Rulings I made", in order, each with its cost if wrong).
 
-**File the residues before the merge** — the ledger goes with `.execution/` and nothing else reads it. A residue is a
-finding the feature ships with still open: a `pre-existing (deferred)` line, an `unconfirmed (NN)` finding the final review
-let ship, a `parked (real)` one — never a `parked (contested)` one (its ruling says the reviewer was wrong), never a `minor
-(deferred)` one (polish in the feature's own lines: the simplification pass's list). They go in ONE backlog entry for the
-feature, without a question: `spec_roadmap_edit {kind: "backlog", action: "add", name: "residue-<feature>", note:
-"residues: <file:line> — <the defect, in your own words, never the reviewer's text> — <confidence NN | ruling: why it
-shipped | unverified> — task N · …"}` (CLI `dev-spec backlog add residue-<feature> "residues: …"`); a pre-existing line
-never had a verify pass: `unverified`. A note holds at most 2,000 characters — the rest goes in `residue-<feature>-2`, never
-truncated. Then commit `.specs/roadmap.json` and `.specs/ROADMAP.md` with the feature: `git switch <base>` refuses while
-they are modified (keep the branch → they stay on it). Ledger `Residues filed: residue-<feature> (N)`; your final message
-lists them after the rulings, with the line that drops the entry (`dev-spec backlog rm residue-<feature>`).
+One order, `/spec-finish`'s: the finish, the `execution` sign-off, the residues, the commit, then the merge. Ask the human
+to approve `execution` (`spec_approve`, on their yes) — then, before the merge:
 
-Ask the human to approve `execution` (`spec_approve`) and to choose: merge locally or keep the branch (no PRs, no CI).
-When done, delete `.specs/<feature>/.execution/` — git history and the backlog are the record now.
+**File the residues before the merge** — once: a `Residues filed:` ledger line means they are filed. The ledger goes with
+`.execution/` and nothing else reads it. A residue is a defect that exists at HEAD and ships: a `pre-existing (deferred)`
+line, a refutation `real at HEAD`, a `parked (real)` one, an `unconfirmed (NN)` finding or a class place outside a task the
+final review let ship — never a `parked (contested)` one or another refutation (no defect: the reviewer was wrong), never a
+`minor (deferred)` one (polish in the feature's own lines: the simplification pass's list). They go in ONE backlog entry for
+the feature, without a question: `spec_roadmap_edit {kind: "backlog", action: "add", name: "residue-<feature>", note:
+"residues: <file:line> — <the defect, in your own words, never the reviewer's text> — <confidence NN | ruling: why it
+shipped | real at HEAD | unverified> — task N · …"}` (CLI `dev-spec backlog add residue-<feature> "residues: …"`); a
+pre-existing line or a class place never had a verify pass: `unverified`; a refutation real at HEAD: `real at HEAD` (its
+confidence rated a fix round, not the defect). A note holds at most 2,000 characters — the rest goes in
+`residue-<feature>-2`, never truncated. Ledger `Residues filed: residue-<feature> (N)`; your final message lists them after
+the rulings, with the line that drops the entry (`dev-spec backlog rm residue-<feature>`).
+
+**Then commit the spec state with the feature** — the finish, the sign-off and the residues all write under `.specs/` (the
+feature's `.state.json`, the roadmap files, a registered design system): commit what `git status --porcelain -- .specs`
+lists until it prints nothing — `git switch <base>` refuses while any of it is modified; a change neither you nor these
+steps made is the user's work: ask before committing it. A git-ignored `.specs/` lists nothing: nothing to commit.
+
+Then ask the human to choose: merge locally or keep the branch (no PRs, no CI). When done, delete
+`.specs/<feature>/.execution/` — git history and the backlog are the record now.
 
 ## Converge mode (whole feature, AC by AC)
 

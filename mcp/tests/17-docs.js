@@ -2383,12 +2383,17 @@ exports.run = async ({
     const step4 = (FIN.match(/ 4\. (.*?) 5\. /) || [])[1] || "";
 
     // S1: the review loop's residues — the findings a feature ships with still open — are filed before the merge, since the ledger
-    // goes with .execution/ and nothing else reads it. The set is a property of the LEDGER LINE'S KIND: pre-existing (deferred) (the
-    // reviewer's Pre-existing label, renamed from "Out of scope (deferred)", which the re-review keeps for a deferred minor — the
-    // namesake), unconfirmed (NN) the final review let ship, parked (real); never parked (contested), never minor (deferred). ONE
-    // entry per feature (keyed on the slug, an input), split at the 2,000-character note limit; committed before git switch.
+    // goes with .execution/ and nothing else reads it. The set is a PROPERTY (fix round 1, R1-PROMPTS-02/03): a defect that exists
+    // at HEAD and ships — pre-existing (deferred) (the reviewer's Pre-existing label, renamed from "Out of scope (deferred)", which
+    // the re-review keeps for a deferred minor — the namesake), a refutation the verifier found real at HEAD (its Exists at HEAD
+    // line: yes), parked (real), an unconfirmed (NN) finding or a class place outside a task the final review let ship; never parked
+    // (contested) or another refutation (no defect), never minor (deferred). ONE entry per feature (keyed on the slug, an input),
+    // filed once (R1-PROMPTS-10), split at the 2,000-character note limit. ONE closing order in both files (R1-PROMPTS-01): finish →
+    // the execution sign-off → the residues → commit what `git status --porcelain -- .specs` lists until it prints nothing (the
+    // sign-off and the finish rewrite .state.json and the roadmap files after any earlier commit; a git-ignored .specs/ lists
+    // nothing — R1-PROMPTS-05) → switch + merge; no recovery verb that parks or drops the spec state is ever named.
     // UX-11: step 4 names the branch the merge line names, with no guess for a feature without a recorded one.
-    all("1.42 (S1 + UX-11): the residues — pre-existing (deferred), unconfirmed (NN) the final review let ship, parked (real) — filed as ONE residue-<feature> backlog entry before the merge, the defect in the controller's own words, the note split at 2,000 characters, roadmap.json and ROADMAP.md committed before git switch; /spec-finish step 4 says so and merges the branch spec_finish's merge line names", {
+    all("1.42 (S1 + UX-11, fix round 1): the residues — a defect that exists at HEAD and ships: pre-existing (deferred), a refutation real at HEAD, parked (real), an unconfirmed (NN) or a class place outside a task the final review let ship — filed once as ONE residue-<feature> backlog entry, the defect in the controller's own words, the note split at 2,000 characters; ONE closing order in Closing and /spec-finish (finish, the execution sign-off, the residues, then the commit until `git status --porcelain -- .specs` is empty, then the merge); /spec-finish step 4 merges the branch spec_finish's merge line names", {
       reviewerLabel: /one "Pre-existing \(deferred\)" line at most/.test(REV) && !/one "Out of scope \(deferred\)" line at most/.test(REV) &&
         /outside the fix diff → "Out of scope \(deferred\)", one line each — it never reopens the loop/.test(REV),
       ledgerKinds: ["Task 3: pre-existing (deferred): <one-liner>", "Task 3: parked (real) — ", "Task 3: parked (contested) — ", "Residues filed: residue-<feature> (3)"].every((l) => ledger.includes(l)) &&
@@ -2396,17 +2401,35 @@ exports.run = async ({
       fixLoopRoutes: /Nor does a reviewer's `Pre-existing \(deferred\)` line \(a problem already there at BASE\): ledger it `pre-existing \(deferred\)` — a residue, filed at Closing\./.test(fix) &&
         /out-of-scope observations become deferred minors\./.test(fix) && !/out-of-scope observations[^.]*residue/.test(fix),
       breaker: /Reviewer wrong\/contestable → `parked \(contested\)` with a ruling; real but nothing builds on it → `parked \(real\)` with a ruling \(a residue, filed at Closing\)\./.test(fix),
-      set: /a `pre-existing \(deferred\)` line, an `unconfirmed \(NN\)` finding the final review let ship, a `parked \(real\)` one — never a `parked \(contested\)` one \(its ruling says the reviewer was wrong\), never a `minor \(deferred\)` one/.test(closing),
+      set: /A residue is a defect that exists at HEAD and ships: a `pre-existing \(deferred\)` line, a refutation `real at HEAD`, a `parked \(real\)` one, an `unconfirmed \(NN\)` finding or a class place outside a task the final review let ship — never a `parked \(contested\)` one or another refutation \(no defect: the reviewer was wrong\), never a `minor \(deferred\)` one/.test(closing),
+      // R1-PROMPTS-02: §6 ledgers a refutation the verifier found real at HEAD (its own Exists at HEAD line — an input) as a residue
+      refutedRealAtHead: /\*\*Under 50\*\* → refuted: ledger `refuted \(NN, <why>\)` and drop it — unless its `Exists at HEAD` line says yes \(a real defect this diff didn't make\): ledger `refuted \(NN, <why>, real at HEAD\)`, a residue, filed at Closing\./.test(ws(section(SUBX, "### 6. Verify the findings"))) &&
+        ledger.includes("Task 3: refuted (0, pre-existing, real at HEAD): <one-liner>") && /- Exists at HEAD: /.test(raw("agents", "spec-verifier.md")),
       name: /name: "residue-<feature>"/.test(closing) && /dev-spec backlog add residue-<feature> "residues: …"/.test(closing) && !/residue-<topic>/.test(SUB),
-      ownWords: /<the defect, in your own words, never the reviewer's text>/.test(closing) && /a pre-existing line never had a verify pass: `unverified`/.test(closing),
+      ownWords: /<the defect, in your own words, never the reviewer's text>/.test(closing) && /<confidence NN \| ruling: why it shipped \| real at HEAD \| unverified>/.test(closing) &&
+        /a pre-existing line or a class place never had a verify pass: `unverified`; a refutation real at HEAD: `real at HEAD` \(its confidence rated a fix round, not the defect\)/.test(closing),
+      // R1-PROMPTS-10: once — the ledger line is the mark (the engine dedupes a backlog note only on its exact text)
+      once: /\*\*File the residues before the merge\*\* — once: a `Residues filed:` ledger line means they are filed\./.test(closing) && /files its residues, once \(/.test(step4),
       split: /A note holds at most 2,000 characters — the rest goes in `residue-<feature>-2`, never truncated\./.test(closing),
-      commitFirst: /Then commit `\.specs\/roadmap\.json` and `\.specs\/ROADMAP\.md` with the feature: `git switch <base>` refuses while they are modified/.test(closing),
-      beforeMerge: closing.indexOf("**File the residues before the merge**") > 0 && closing.indexOf("**File the residues before the merge**") < closing.indexOf("Ask the human to approve `execution`") &&
-        closing.indexOf("Ask the human to approve `execution`") < closing.indexOf("delete `.specs/<feature>/.execution/`"),
+      // R1-PROMPTS-01 / 05: the commit is a property of the tree, after everything that writes the spec state
+      // (a change the closing steps didn't make is the user's work in progress: asked, never swept into the feature's commit)
+      commitState: /commit what `git status --porcelain -- \.specs` lists until it prints nothing — `git switch <base>` refuses while any of it is modified; a change neither you nor these steps made is the user's work: ask before committing it\. A git-ignored `\.specs\/` lists nothing: nothing to commit\./.test(closing) &&
+        /then commit with the feature what `git status --porcelain -- \.specs` lists — steps 1–3 and the residues wrote it; a change they didn't make is the user's, ask first — until it prints nothing: `git switch <base>` refuses while any of it is modified \(a git-ignored `\.specs\/` lists nothing: nothing to commit\)\. Offer exactly two options/.test(step4) &&
+        !/commit `\.specs\/roadmap\.json` and `\.specs\/ROADMAP\.md`/.test(closing + FIN) && !/\bstash\b|switch -f|--force|add -f/.test(closing + step4),
+      // residues and the commit before the merge, after the sign-off — the same order in both files
+      beforeMerge: (() => { const at = ["Ask the human to approve `execution`", "**File the residues before the merge**", "**Then commit the spec state with the feature**", "Then ask the human to choose: merge locally or keep the branch", "delete `.specs/<feature>/.execution/`"].map((s) => closing.indexOf(s));
+        return at.every((i, k) => i > 0 && (k === 0 || at[k - 1] < i)); })() &&
+        /One order, `\/spec-finish`'s: the finish, the `execution` sign-off, the residues, the commit, then the merge\./.test(closing),
+      finishOrder: (() => { const at = [FIN.indexOf("call `spec_approve {name, phase: \"execution\"}` only on their yes"), FIN.indexOf(" 4. Before either option"), FIN.indexOf("files its residues, once"), FIN.indexOf("then commit with the feature what `git status --porcelain -- .specs` lists"), FIN.indexOf("Offer exactly two options")];
+        return at.every((i, k) => i > 0 && (k === 0 || at[k - 1] < i)); })(),
       listed: /your final message lists them after the rulings, with the line that drops the entry \(`dev-spec backlog rm residue-<feature>`\)/.test(closing) &&
         /git history and the backlog are the record now\./.test(closing),
-      finishStep4: /^Before either option, a feature run with subagents files its review loop's residues \(`\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/dev-spec-driven\/references\/subagent-execution\.md` → Closing/.test(step4) &&
-        /then commit `\.specs\/roadmap\.json` and `\.specs\/ROADMAP\.md` with the feature — `git switch <base>` refuses while they are modified\. Offer exactly two options/.test(step4),
+      // R1-PROMPTS-04: the final review and /spec-review branch ledger their own pre-existing and 50–79 lines, so Closing files them;
+      // step 4 keys on the ledger (a property), not on how the feature ran
+      finalLedger: /Ledger its own lines as a task's are: a `Pre-existing \(deferred\)` line `Final review: pre-existing \(deferred\): …`, a verified 50–79 one `Final review: unconfirmed \(NN\): …`, a refutation real at HEAD with `real at HEAD` \(§6\) — Closing files them\./.test(ws(section(SUBX, "## Final review"))) &&
+        /ledger each 50–79 one `Final review: unconfirmed \(NN\): …` and each one real at HEAD that the branch did not introduce `Final review: pre-existing \(deferred\): …` — residues `\/spec-finish` files \(`subagent-execution\.md` → Closing\)/.test(ws(raw("commands", "spec-review.md"))),
+      finishStep4: /^Before either option, a feature with a review ledger \(`\.specs\/<feature>\/\.execution\/ledger\.md`\) files its residues, once \(`\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/dev-spec-driven\/references\/subagent-execution\.md` → Closing/.test(step4) &&
+        !/a feature run with subagents files/.test(FIN),
       finishBranch: /`git switch <base>`, then `git merge <branch>`: the branch `spec_finish`'s merge line names \(`feature\/<slug>` by default, `fix\/<slug>` for a bugfix\); without one, the branch you worked on, if it is not the base\./.test(step4) &&
         /A fast-forward when possible; a merge commit \(`--no-ff`, or branches that diverged\) takes the merge title and summary as its message/.test(step4) &&
         !/git merge <name>/.test(FIN) && !/already on the base/.test(FIN),
@@ -2419,14 +2442,17 @@ exports.run = async ({
     const sec4 = section(SUBX, "### 4. Review package"), fence4 = (sec4.match(/```\n([\s\S]*?)```/) || [])[1] || "";
     const DUP_TOP = +((fs.readFileSync(path.join(root, "mcp", "lib", "engine", "dupes.js"), "utf8").match(/^const DUP_TOP = (\d+);/m) || [])[1]);
     const GUIDE = ws(raw("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md")), EXEC = ws(raw("commands", "executeTask.md"));
-    all("1.42 (S4a): the task review gets the duplicate detector's file — §4 writes it beside the package, never through the controller's context; the reviewer keeps the runs in the package's files (by the path's tail), says none only at counts.existing 0 and knows a list shorter than its total is the top " + DUP_TOP, {
+    all("1.42 (S4a): the task review gets the duplicate detector's file — §4 writes it beside the package, never through the controller's context; the reviewer keeps the runs in the package's files (by the path's tail), says none only at counts.existing 0 neither truncated nor partial (fix round 1) and knows a list shorter than its total is the top " + DUP_TOP, {
       fenceLine: /^node "<clone>\/cli\/dev-spec\.js" dupes <feature> --json {2}> {2}\.specs\/<feature>\/\.execution\/task-N-dupes\.json$/m.test(fence4),
       notInContext: /The last line is the duplicate detector, run from the project root \(`<clone>`: the plugin's folder, as the tools' messages print it\): its runs go to the reviewer in that file, never through your context — the reviewer keeps the ones in the package's files\./.test(ws(sec4)),
       dispatch: /in \*\*task\*\* mode with: the brief path, the report path, the diff path, the detector's file \(`task-N-dupes\.json`, §4\), BASE\/HEAD/.test(SUB),
       cost: /one implementer \+ one reviewer per task, and one duplicate-detector run — seconds, its output kept in a file/.test(SUB),
       reviewerInput: /\*\*Task mode\*\* — one task's diff\. Inputs: [^\n]*the duplicate detector's file \(`task-N-dupes\.json`\)/.test(REV),
       reviewerFilter: /Task mode: the detector's file — a run counts when its place is a package `--stat` file \(by the path's tail: repository vs project paths\)/.test(REV),
-      noneOnlyAtZero: /only `counts\.existing` 0 is "none"/.test(REV),
+      // (fix round 1, R1-PROMPTS-07) a zero the detector's own reading caps made (`truncated`: past DUP_FILE_CAP files; `partial`:
+      // past DUP_TOTAL_BYTES — files never compared) is a capped zero, never a "none"; both keys are the detector's own
+      noneOnlyAtZero: /only `counts\.existing` 0, not `truncated` and with no `partial`, is "none"/.test(REV) &&
+        [/\btruncated: /, /\bpartial: \{/].every((re) => re.test(fs.readFileSync(path.join(root, "mcp", "lib", "engine", "dupes.js"), "utf8"))),
       capTold: Number.isInteger(DUP_TOP) && REV.includes("a `duplicates` list shorter than `total` is the top " + DUP_TOP + ", which can miss this task's run"),
       pinsKept: /the duplicate detector's `existing` runs first when the dispatch carries them/.test(REV) && /"Duplicated on purpose" is not/.test(REV),
       guide: /\(the task review, the final review, `\/spec-review branch` \/ `converge` run it first\)/.test(GUIDE),
@@ -2444,7 +2470,7 @@ exports.run = async ({
       trigger: /When the verify pass confirms new breakage whose defect — the input or state that breaks — an earlier finding of this task already named, at another place, the next round asks for the class/.test(classBullet) &&
         !/NOT ADDRESSED/.test(classBullet) && !/overlapping lines|Merge first/.test(classBullet),
       scope: /every place in the task's `_Implements:_` files that holds it, listed in the fix report, and one fix for all; its re-review gets the list\./.test(classBullet) && !/MERGE_BASE/.test(classBullet),
-      outside: /A place outside those files is not this task's to fix: ledger `Task N: class outside the task — <place>` for the final review\./.test(classBullet) &&
+      outside: /A place outside those files is not this task's to fix: ledger `Task N: class outside the task — <place>` for the final review \(one it lets ship is a residue\)\./.test(classBullet) &&
         !/NEEDS_CONTEXT|converge/.test(classBullet),
       ledger: ["Task 3: class fix (round 2) — <the defect>, 3 places", "Task 3: class outside the task — <place>"].every((l) => ledger.includes(l)),
       finalTriage: /triages the ledger's deferred minors, unconfirmed and parked findings and the class places outside a task\./.test(SUB) &&
@@ -2462,15 +2488,27 @@ exports.run = async ({
     const CRITIC = raw("agents", "spec-critic.md");
     const cell = (cat) => (CRITIC.match(new RegExp("^\\| \\*\\*" + cat + "\\*\\* \\| (.*) \\|$", "m")) || [])[1] || "";
     const clarity = cell("Clarity"), consistency = cell("Consistency"), testability = cell("Testability");
-    const s15 = "; a task citing an AC whose only `_Verify:_` is a project check's command, naming no test of it — it proves nothing broke, not the AC";
+    // (fix round 1, R1-PROMPTS-08) S15 exempts an AC that IS the check's result — the improvement-spec template's "the existing
+    // tests stay green" / "0 findings" ACs, proven by the very check; still within the 150 bytes
+    const s15 = "; a task citing an AC whose only `_Verify:_` is a project check naming no test of it, unless the AC is that check's result — it proves nothing broke";
     const p6 = (clarity.match(/; an AC naming an internal choice.*$/) || [""])[0];
-    all("1.42 (SK-P6, SK-P3, S15, SK-P2): spec-critic flags an AC naming an internal choice no user or caller would notice swapped — Minor, unless the swap IS the feature, the steering sets it or an approved artifact does, never a bugfix's; asks each constitution principle answered; flags a task proved only by a project check (≤ 150 B); and ACs that repeat each other", {
+    all("1.42 (SK-P6, SK-P3, S15, SK-P2): spec-critic flags an AC naming an internal choice no user or caller would notice swapped — Minor, unless the swap IS the feature, the steering sets it or an approved artifact does, never a bugfix's; asks each constitution principle answered; flags a task proved only by a project check unless the AC is that check's result (≤ 150 B); and ACs that repeat each other (fix round 1: only each other — contradiction still reaches the design, the constitution, Out of Scope)", {
       p6Property: /^; an AC naming an internal choice no user or caller would notice swapped \(a framework, database, library — not an endpoint path or a schema others read\): Minor, it belongs in the design/.test(p6),
       p6Exempt: /unless the swap IS the feature \(story or summary\), `\.specs\/steering\/` sets it \(Grep\) or an approved artifact the requirements follow; never a bugfix's criteria\.$/.test(p6),
       p6NotAList: !/\+api|\+data|\+port|the user's request|Important/.test(p6) && /words the glossary says to avoid \(the doctor's `glossary` check\)/.test(clarity),
       p3: /each principle of `constitution\.md` answered in the design's Constitution Check \(by number or name, with how the design meets it\) — "all principles respected" with none named is a finding\./.test(consistency),
-      p2: /^ACs that contradict or repeat each other, the design, the constitution, or `Out of Scope`/.test(consistency),
+      // (fix round 1, R1-PROMPTS-09) "repeat" is within the feature only — an AC restating a constitution principle or one the
+      // design echoes is intended repetition; contradiction still reaches the design, the constitution and Out of Scope
+      p2: /^ACs that repeat each other; ACs that contradict each other, the design, the constitution, or `Out of Scope`/.test(consistency) &&
+        !/repeat each other, the design|contradict or repeat/.test(consistency),
       s15: testability.endsWith(s15 + ".") && Buffer.byteLength(s15) <= 150 && /^ACs no test could fail; test-plan rows that don't actually exercise the AC they claim to cover/.test(testability),
+    });
+
+    // fix round 1, R1-XPLUG-02 (prose, no new reader): with dev-guardian 3.18 a coverage note can also be findings the gate did
+    // not count as new — verification.md's notes clause names that kind and says what it is, so the merge summary's count is read
+    const VERI = ws(raw("skills", "dev-spec-driven", "references", "verification.md"));
+    all("1.42 fix round 1 (R1-XPLUG-02): verification.md's coverage-notes clause names findings the gate did not count as new — never gating, findings it let through", {
+      notes: VERI.includes("The merge summary also counts dev-guardian's coverage notes (taint timeouts, a baseline entry it could not read, findings the gate did not count as new — never gating, though the last are findings it let through: `finish --run` prints the first notes)."),
     });
   }
 
