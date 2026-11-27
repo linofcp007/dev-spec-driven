@@ -1943,6 +1943,8 @@ const msg = {
       hidden: (p, part) => `'${p}' is in a hidden folder or is a hidden file (${part}) — spec_import reads none but the importers' own: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
       notSource: (p) => `'${p}' is no spec source spec_import reads — name a .md / .markdown / .mdc / .txt / .json / .yaml / .yml file, or the source's folder.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
+      // 1.42: spec-kit's — a whole specs/ folder was imported (its features are its sub-folders)
+      nothingSpecKit: (p) => `No spec-kit spec files found in '${p}' — a Spec Kit feature is one folder holding spec.md or tasks.md (usually specs/<nnn-name>/): import that folder.`,
       exists: (slug) => `Feature '${slug}' already exists — import never overwrites it. Pass another name.`,
       tooLarge: (rel, max) => `${rel} is over ${max} characters — too large to import whole (the part past the limit, a plan's steps included, would be lost). Split or shorten it, then import again; nothing was created.`,
       noUsableTitle: (title) => `The document's title '${title}' has no usable characters (a-z, 0-9) for a folder name — pass the feature's name (name; CLI: --name "<feature>").`,
@@ -1982,12 +1984,15 @@ const msg = {
       wRemoved: (name) => `REMOVED requirement '${name}' was not imported`,
       wRenamed: (from, to) => `RENAMED requirement '${from}' → '${to}' (imported under the new name)`,
       wSkipped: (files) => `not imported (left in place): ${files}`,
+      more: (n) => `+${n} more`, // wSkipped's names past the first 50
       // spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
-      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", quickstart: "Quickstart" },
+      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,
-      wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts, quickstart) without the plan`,
+      wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts) without the plan`,
       // spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
       wUncoveredFr: (list) => `functional requirements no acceptance scenario covers — carried as prose under "Functional Requirements", so no task or test traces them: ${list}. Turn each into an EARS criterion with an AC ID (or cite it in one) before approving the requirements`,
+      // 1.42: the FR definitions no scenario covers became the criteria of one story (story: its US-n; list: "FR-n → US-n.AC-m, …")
+      wFrCriteria: (story, list) => `functional requirements no acceptance scenario covers became EARS criteria of story ${story} (each original kept in a comment) — check each one's wording and give it a task: ${list}`,
       wUnreadable: (file) => `${file} points outside the project — skipped`,
       done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
