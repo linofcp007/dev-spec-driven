@@ -474,9 +474,11 @@ function importRun(projectDir, tool, source, opts) {
     : L.note(IMPORT_TOOLS[t], srcRel, today());
   const mapping = {};
 
-  // Stories keep their printed numbers when those are unique (spec-kit's [USn] task tags point at them).
-  const printed = model.stories.map((s) => s.printed);
+  // Stories keep their printed numbers when those are unique (spec-kit's [USn] task tags point at them). A synthetic story (spec-kit's
+  // FR criteria — speckit.js) has none: it comes after them, the next number (by a loop: a spread of 100,000 numbers throws).
+  const printed = model.stories.filter((s) => !s.synthetic).map((s) => s.printed);
   const keepNumbers = printed.every((p) => Number.isInteger(p) && p > 0) && new Set(printed).size === printed.length;
+  let synthN = null; // the synthetic story's number — no reference the source wrote reaches it (refs, storyNo)
   const acOf = new Map(); // story number → its AC IDs
   const critMap = new Map(); // source criterion key → new AC ID
   const notEars = [];
@@ -487,9 +489,10 @@ function importRun(projectDir, tool, source, opts) {
   // fence it leaves open (inertBlock) — it swallowed every criterion after it.
   const req = [L.featureTitle(name), "", note, "", L.summary, model.summary ? commentInert(model.summary) : L.summaryPlaceholder, "", L.stories];
   model.stories.forEach((s, idx) => {
-    const n = keepNumbers ? s.printed : idx + 1;
+    const n = !s.synthetic ? (keepNumbers ? s.printed : idx + 1) : (synthN = keepNumbers ? printed.reduce((a, p) => (p > a ? p : a), 0) + 1 : idx + 1);
     mapping[s.key] = "US-" + n;
-    req.push("", L.story(n, s.priority, s.title == null ? s.title : commentInert(s.title)));
+    const title = s.synthetic ? L.functional.replace(/^#+\s*/, "") : s.title;
+    req.push("", L.story(n, s.priority, title == null ? title : commentInert(title)));
     if (s.prose.length) req.push(...inertBlock(s.prose));
     if (s.quote.length) req.push(...s.quote.map((q) => "> " + commentInert(q)));
     req.push("", L.criteria);
@@ -512,6 +515,15 @@ function importRun(projectDir, tool, source, opts) {
     req.push("", x.heading ? commentInert(x.heading) : L[x.key] || L.importedNotes, ...inertBlock(x.lines.map((l) => l.trimEnd())));
   }
   Object.assign(mapping, model.mapping);
+  // FR-n → the AC IDs that hold it (spec-kit — speckit.js frKeys: its criterion when converted, the criteria whose scenario cites
+  // it), after the identity mapping: an FR a carried line also names (Clarifications) keeps its AC
+  const frRefs = new Map();
+  for (const [fr, keys] of model.frKeys || []) {
+    const ids = keys.map((k) => critMap.get(k)).filter(Boolean);
+    if (ids.length) { frRefs.set(fr, ids); mapping[fr] = ids.join(", "); }
+  }
+  const syn = model.stories.find((s) => s.synthetic);
+  if (syn) warnings.push(W.wFrCriteria("US-" + synthN, syn.criteria.map((c) => c.key + " → " + critMap.get(c.key)).join(", ")));
   if (notEars.length) warnings.push(W.wNotEars(notEars.join(", ")));
   if (noCriteria.length) warnings.push(W.wNoCriteria(noCriteria.join(", ")));
   if (model.carried.length) warnings.push(W.wCarried([...new Set(model.carried.map((x) => x.label || L.importedNotes.replace(/^#+\s*/, "")))].join(", ")));
@@ -580,8 +592,14 @@ function importRun(projectDir, tool, source, opts) {
     // _Requirements:_ references → new AC IDs: a criterion ("1.1"), a whole requirement/story ("2", "Requirement 2",
     // "US2") or an ID that is already dev-spec's. Anything else is kept as written and reported.
     const storyNo = (s) => { const idx = model.stories.findIndex((x) => x.printed === s); return idx === -1 ? null : keepNumbers ? s : idx + 1; };
+    // An AC ID passes through — but never one of the synthetic story's (a stale US-<n>.AC-1 for a story the source deleted would
+    // cover an FR criterion silently); FR-n is no stable ID (trace ignores it, spec_append_tasks refuses it): only one an imported
+    // criterion holds (frRefs), else it is reported, kept as written
     const refs = (ref) => {
-      if (/^US-\d+\.AC-\d+$/.test(ref) || /^(?:FR|SC|NFR|EC)-\d+$/.test(ref)) return [ref];
+      const ac = /^US-(\d+)\.AC-\d+$/.exec(ref);
+      if (ac) return synthN != null && +ac[1] === synthN ? null : [ref];
+      if (/^(?:SC|NFR|EC)-\d+$/.test(ref)) return [ref];
+      if (/^FR-\d+$/.test(ref)) return frRefs.get(ref) || null;
       if (t === "kiro" && critMap.has(ref)) return [critMap.get(ref)];
       const whole = ref.match(/^(?:requirement\s+|requisito\s+|user story\s+|US-?)?(\d+)$/i);
       if (whole) { const sn = storyNo(+whole[1]); if (sn != null && acOf.get(sn).length) return acOf.get(sn); }

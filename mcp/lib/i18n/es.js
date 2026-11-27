@@ -1887,6 +1887,7 @@ const msg = {
       skFrom: (file) => `> De spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `no hay ${file} en el origen — design.md tiene los documentos de diseño encontrados a su lado (investigación, modelo de datos, contratos) sin el plan`,
       wUncoveredFr: (list) => `requisitos funcionales que ningún escenario de aceptación cubre — quedaron como texto en "Requisitos Funcionales", así que ninguna tarea ni prueba los traza: ${list}. Convierte cada uno en un criterio EARS con un ID de AC (o cítalo en uno) antes de aprobar los requisitos`,
+      wFrCriteria: (story, list) => `los requisitos funcionales que ningún escenario de aceptación cubre pasaron a ser criterios EARS de la historia ${story} (cada original queda en un comentario) — revisa la redacción de cada uno y dale una tarea: ${list}`,
       wUnreadable: (file) => `${file} apunta fuera del proyecto — omitido`,
       done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → función '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  correspondencia: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),

@@ -7,12 +7,14 @@
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
 const path = require("path");
+const i18n = require("../../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let blankFacts, codeBlockLines, commentLines, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings, mdListItems,
-  mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths;
-function __link(E) { ({ blankFacts, codeBlockLines, commentLines, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody,
-  mdHeadings, mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory,
-  unusedLines, planPaths } = E); }
+let blankFacts, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings,
+  mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines,
+  planPaths;
+function __link(E) { ({ blankFacts, codeBlockLines, commentLines, earsFromGwt, earsThen, isLtUnit, isWsUnit, leftoverExtras, markRange,
+  mdBody, mdHeadings, mdListItems, mdRange, newImportModel, RE_MD_HR, restAfterBlanks, stripEnd, stripHtmlComments, tidyLines,
+  titleFromStory, unusedLines, planPaths } = E); }
 
 // spec-kit: specs/<nnn-name>/ — spec.md (### User Story N - Title (Priority: P1) + numbered Given/When/Then
 // Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
@@ -135,7 +137,6 @@ function parseSpecKit(dir, read, W, src) {
         storyFrom([...prose, "**Acceptance Scenarios**:", ...mdBody(lines, hs, ak)], 1, titleFromStory(prose) || model.title || "User Story 1", null);
       }
     }
-    if (!model.stories.length) model.warnings.push(W.wNoRequirements("spec.md"));
     const section = (re, key) => {
       const k = hs.findIndex((h) => h.level > 1 && !used.has(h.i) && re.test(norm(h.text)));
       if (k === -1) return;
@@ -159,9 +160,25 @@ function parseSpecKit(dir, read, W, src) {
       if (tidyLines(rest).length) model.extra.push({ heading: "## " + t, lines: rest });
     });
     model.carried.push(...leftoverExtras(lines, hs, used)); // e.g. ### Non-Functional Requirements (NFR-001)
+    // the scenarios of the source's own stories: the FR coverage rule reads these (never the FR criteria made below — each holds its
+    // FR's own text, and a second FR-003 line would read "covered" by the first one's criterion)
+    const scen = frScenarios(model.stories.flatMap((s) => s.criteria.map((c) => c.raw)));
+    const fx = model.extra.find((x) => x.key === "functional");
+    const frCriteria = fx ? specKitFrCriteria(fx, scen) : [];
+    if (fx && !tidyLines(fx.lines).length) model.extra.splice(model.extra.indexOf(fx), 1); // every line of it became a criterion
+    // FR-n → the keys of the criteria that hold it (importRun's frRefs: a task citing FR-n covers them): a converted FR its own
+    // criterion, a cited one each criterion whose scenario cites it (citesFr's reading)
+    model.frKeys = new Map();
+    const holds = (fr, key) => { if (!model.frKeys.has(fr)) model.frKeys.set(fr, []); if (!model.frKeys.get(fr).includes(key)) model.frKeys.get(fr).push(key); };
+    for (const s of model.stories) for (const c of s.criteria) for (const fr of String(c.raw).match(RE_FR_ID) || []) holds(fr, c.key);
+    for (const c of frCriteria) holds(c.key, c.key);
+    // one story of its own, last, reachable by no number the source wrote (importRun: storyNo, refs)
+    if (frCriteria.length) model.stories.push({ synthetic: true, printed: null, key: "Functional Requirements", title: null, priority: null, prose: [], quote: [], after: [], criteria: frCriteria });
+    if (!model.stories.length) model.warnings.push(W.wNoRequirements("spec.md"));
     for (const x of [...model.extra, ...model.carried]) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
-    // the functional requirements travel as prose — never silently: the ones no acceptance scenario covers are named
-    const frs = uncoveredFrs((model.extra.find((x) => x.key === "functional") || { lines: [] }).lines, frScenarios(model.stories.flatMap((s) => s.criteria.map((c) => c.raw))));
+    // what still travels as prose — never silently: the FRs no acceptance scenario covers are named (one only mentioned, an FR-1.1,
+    // an FR-001a, a second FR-003 line, a definition with no separator)
+    const frs = uncoveredFrs(fx ? fx.lines : [], scen);
     if (frs.length) model.warnings.push(W.wUncoveredFr(frs.join(", ")));
   }
   // research.md, data-model.md and contracts/ are design — each under its own heading after plan.md (they were skipped with a
@@ -218,6 +235,34 @@ const frScenarios = (raws) => raws.map((t) => ({ text: String(t), words: new Set
 function frCovered(id, body, scen) {
   const words = /NEEDS[ _-]CLARIFICATION/i.test(body) ? [] : frWords(body);
   return scen.some((s) => citesFr(s.text, id)) || (words.length > 0 && scen.some((s) => words.every((w) => s.words.has(w))));
+}
+// The FR definitions no acceptance scenario covers → EARS criteria: the parent's own advice ("turn each into an EARS criterion with
+// an AC ID") done for the user, for exactly the FRs it named. ONE reader of a definition — a list item of the Functional
+// Requirements section that OPENS with its id, the id ending there (RE_FR_DEF: FR-1.1, FR-001a, FR-002-b define no FR-1 / FR-001 /
+// FR-002), then `:` `.` `-` `–` `—` —; the FIRST item of an id only (a second one stays prose), converted when frCovered says no for
+// its OWN id and text. The criterion: the text as EARS in English tokens (earsThen "en": a PT / ES modal — DEVE, DEBE — kept as
+// written; any other subject takes "THE SYSTEM SHALL ensure that …"), then "(FR-n)"; an empty text, or one crossing a line
+// terminator, is no EARS (notEars). The converted items' lines leave fx.lines; the rest stays prose. → [{ key: id, raw, ears }]
+const RE_FR_DEF = /^(?:\*\*|__)?(FR-\d+)(?![A-Za-z0-9]|[.-][A-Za-z0-9])(?:\*\*|__)?[ \t]*[:.–—-](?:\*\*|__)?/;
+function specKitFrCriteria(fx, scen) {
+  const E = i18n.msg("en").importSpec.ears;
+  const seen = new Set(), drop = new Set(), out = [];
+  for (const it of mdListItems(fx.lines, false)) {
+    const m = RE_FR_DEF.exec(it.text);
+    if (!m || seen.has(m[1])) continue;
+    seen.add(m[1]);
+    let q = m[0].length;
+    while (q < it.text.length && isWsUnit(it.text[q])) q++;
+    const body = it.text.slice(q);
+    if (frCovered(m[1], body, scen)) continue;
+    it.at.forEach((r) => drop.add(r));
+    let lt = false;
+    for (let i = 0; i < body.length && !lt; i++) lt = isLtUnit(body[i]);
+    const ears = body && !lt ? earsThen(body, "en", E) : null;
+    out.push({ key: m[1], raw: it.text, ears: ears ? ears + " (" + m[1] + ")" : null });
+  }
+  if (drop.size) fx.lines = fx.lines.filter((_, r) => !drop.has(r));
+  return out;
 }
 function uncoveredFrs(frLines, scen) {
   const out = [];

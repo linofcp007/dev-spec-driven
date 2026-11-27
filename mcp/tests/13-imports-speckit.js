@@ -237,6 +237,82 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     ]);
   }
 
+  // 1.42 SK-03: spec-kit's FR-xxx no acceptance scenario covers travelled as prose — the import only named them, and a task's
+  // `_Requirements: FR-n_` passed refs() unchecked while trace ignored it. Exactly those FRs become the EARS criteria of ONE story
+  // (the warning's own advice, done): a definition item per id (the first), coverage decided per item (frCovered, the parent's
+  // rule), the story numbered after the source's and reachable by no reference the source wrote ([US3], a stale US-3.AC-1);
+  // FR-n resolves to the criteria that hold it, else it is reported; what stays prose keeps the parent's warning.
+  {
+    const p = fresh("speckit-fr");
+    const k = path.join(p, "specs", "001-photo-albums");
+    put(path.join(k, "spec.md"), ["# Feature Specification: Photo Albums", "", "**Feature Branch**: `001-photo-albums`", "**Created**: 2026-11-20", "**Status**: Draft",
+      "**Input**: User description: \"Let users group photos into albums and share them\"", "", "## Clarifications", "", "### Session 2026-11-21", "",
+      "- Q: Can photos be reordered (FR-003)? → A: by drag and drop", "", "## User Scenarios & Testing *(mandatory)*", "", "### User Story 1 - Create albums (Priority: P1)", "",
+      "A user groups photos into a named album.", "", "**Acceptance Scenarios**:", "", "1. **Given** a user with photos, **When** they create an album named Trip, **Then** the album Trip is listed",
+      "2. **Given** an album, **When** the user adds 501 photos, **Then** the system rejects the last one (FR-002)", "", "### User Story 2 - Share albums (Priority: P2)", "",
+      "**Acceptance Scenarios**:", "", "1. **Given** an album, **When** the owner shares it by link, **Then** the invitee can view it", "", "## Requirements *(mandatory)*", "",
+      "### Functional Requirements", "", "- **FR-001**: System MUST let users create albums", "- **FR-002**: System MUST limit an album to 500 photos",
+      "- **FR-003**: Users MUST be able to reorder photos by drag and drop", "- **FR-004**: System MUST log every share link created",
+      "- **FR-005**: System MUST retain albums for [NEEDS CLARIFICATION: retention period not specified]", "", "### Key Entities", "", "- **Album**: name, owner, photos", ""].join("\n"));
+    put(path.join(k, "tasks.md"), ["# Tasks: Photo Albums", "", "## Phase 1: Setup", "", "- [X] T001 Create project structure per implementation plan", "",
+      "## Phase 3: User Story 1 - Create albums (Priority: P1)", "", "- [ ] T012 [P] [US1] Create the Album model in packages/albums/src/album.ts",
+      "- [ ] T013 Enforce the album cap", "  - _Requirements: FR-002_", "- [ ] T014 Wire album creation", "  - _Requirements: FR-001_", "",
+      "## Phase 6: Stale", "", "- [ ] T030 [US3] Export albums as zip", "- [ ] T031 Keep the export", "  - _Requirements: US-3.AC-1_", ""].join("\n"));
+    const r = S.importSpec(p, "spec-kit", "specs/001-photo-albums", {});
+    const req = r.ok ? rd(r.dir, "requirements.md") : "";
+    const tasks = r.ok ? rd(r.dir, "tasks.md") : "";
+    const mk = (n) => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === n) || { lines: [] }).requirements;
+    const W = S.msg("en").importSpec;
+    all("1.42 SK-03: the FRs no scenario covers (FR-003, FR-004, FR-005 — one still [NEEDS CLARIFICATION]) become US-3's EARS criteria, their lines out of the prose; FR-001 (its words) stays prose, FR-002 (cited) maps to US-1.AC-2 — so does a task citing it; FR-001 cited by a task is reported, so are [US3] and a stale US-3.AC-1; the classification is the parent's (got " +
+      js({ warnings: r.warnings, mapping: r.mapping, counts: r.counts, tracks: r.tracks, t: [mk(3), mk(4), mk(5), mk(6)] }) + ")", [
+      () => r.ok, () => /\n### US-3: Functional Requirements\n\n#### Acceptance Criteria \(EARS\)\n1\. \*\*US-3\.AC-1\*\* — THE SYSTEM SHALL ensure that users MUST be able to reorder photos by drag and drop \(FR-003\)\n {3}<!-- spec-kit: \*\*FR-003\*\*: Users MUST/.test(req),
+      () => /\n2\. \*\*US-3\.AC-2\*\* — THE SYSTEM SHALL log every share link created \(FR-004\)\n/.test(req),
+      () => /\n3\. \*\*US-3\.AC-3\*\* — THE SYSTEM SHALL retain albums for \[NEEDS CLARIFICATION: retention period not specified\] \(FR-005\)\n/.test(req),
+      () => /\n## Functional Requirements\n\n- \*\*FR-001\*\*: System MUST let users create albums\n- \*\*FR-002\*\*: System MUST limit an album to 500 photos\n\n## Key Entities/.test(req),
+      () => r.mapping["FR-001"] === "FR-001", () => r.mapping["FR-002"] === "US-1.AC-2", () => r.mapping["FR-003"] === "US-3.AC-1", () => r.mapping["FR-005"] === "US-3.AC-3",
+      () => r.mapping["Functional Requirements"] === "US-3", () => r.counts.stories === 3 && r.counts.criteria === 6,
+      () => r.warnings.includes(W.wFrCriteria("US-3", "FR-003 → US-3.AC-1, FR-004 → US-3.AC-2, FR-005 → US-3.AC-3")), () => !r.warnings.some((w) => /carried as prose/.test(w)),
+      () => js(mk(3)) === js(["US-1.AC-2"]), () => js(mk(4)) === js(["FR-001"]) && r.warnings.includes(W.wUnknownRef(4, "FR-001")),
+      () => js(mk(5)) === js(["US3"]) && r.warnings.includes(W.wUnknownRef(5, "US3")), () => r.warnings.includes(W.wUnknownRef(6, "US-3.AC-1")),
+      () => js(r.tracks) === js(["core", "tdd"]), () => !r.warnings.some((w) => w === W.wNoRequirements("spec.md")),
+    ]);
+    // the FRs alone (no story): their criteria are the feature's — US-1, no "no requirements" warning; a PT modal kept as written,
+    // a PT text with none takes the English tokens (no language guessing); a one-line definition with an empty text is no EARS
+    const p2 = fresh("speckit-fr-only");
+    put(path.join(p2, "specs", "002-fr-only", "spec.md"), "# Feature Specification: Só requisitos\n\n## Requirements\n\n### Functional Requirements\n\n" +
+      "- **FR-001**: O sistema DEVE guardar cada álbum\n- **FR-002**: Fotos ordenadas por data\n- **FR-003**:\n");
+    const r2 = S.importSpec(p2, "spec-kit", "specs/002-fr-only", { lang: "pt" });
+    const req2 = r2.ok ? rd(r2.dir, "requirements.md") : "";
+    all("1.42 SK-03: a spec of FRs only imports them as US-1's criteria (no 'no requirements' warning); a PT modal kept, a PT text with none in English tokens, an empty one no EARS (got " + js([r2.warnings, req2.slice(req2.indexOf("### US-1"), req2.indexOf("### US-1") + 500)]) + ")", [
+      () => r2.ok, () => r2.counts.stories === 1 && r2.counts.criteria === 3, () => /\n### US-1: Requisitos Funcionais\n/.test(req2),
+      () => /1\. \*\*US-1\.AC-1\*\* — O sistema DEVE guardar cada álbum \(FR-001\)\n/.test(req2), () => /2\. \*\*US-1\.AC-2\*\* — THE SYSTEM SHALL ensure that fotos ordenadas por data \(FR-002\)\n/.test(req2),
+      () => /3\. \*\*US-1\.AC-3\*\* — \*\*FR-003\*\*: \[NEEDS CLARIFICATION: /.test(req2), () => !r2.warnings.some((w) => w === S.msg("pt").importSpec.wNoRequirements("spec.md")),
+    ]);
+    // one id reader: FR-001a / FR-1.1 / FR-1.2 define no FR-001 / FR-1 (the parent's reading named them; a second reader garbled
+    // `**FR-1.1**:` into a criterion and silenced FR-001a); a second FR-003 line, a definition with no separator and a mention stay
+    // prose — named in the parent's warning, the converted ones too (em dash, a dot after the bold id)
+    const p3 = fresh("speckit-fr-ids");
+    put(path.join(p3, "specs", "003-ids", "spec.md"), ["# Feature Specification: Ids", "", "### User Story 1 - Albums (Priority: P1)", "", "**Acceptance Scenarios**:", "",
+      "1. **Given** a user, **When** they create an album named Trip, **Then** the album is listed", "", "## Requirements", "", "### Functional Requirements", "",
+      "- **FR-001**: System MUST let users create albums", "- **FR-001a**: System MUST tag albums with colors", "- **FR-1.1**: System MUST cap uploads at 50 MB",
+      "- **FR-1.2**: System MUST resize uploads", "- **FR-003**: System MUST export albums as zip", "- **FR-003**: System MUST export albums as tar",
+      "- FR-006 — MUST keep originals", "- **FR-007**. Albums MUST sort by date", "- **FR-008** System MUST purge trash weekly", "- Note: FR-009 is TBD", ""].join("\n"));
+    put(path.join(p3, "specs", "003-ids", "tasks.md"), "# Tasks: Ids\n\n- [ ] T001 Export\n  - _Requirements: US-2.AC-1_\n- [ ] T002 Sort\n  - _Requirements: FR-007_\n");
+    const r3 = S.importSpec(p3, "spec-kit", "specs/003-ids", {});
+    const req3 = r3.ok ? rd(r3.dir, "requirements.md") : "";
+    const W3 = S.msg("en").importSpec;
+    all("1.42 SK-03: FR-001a / FR-1.1 / FR-1.2 are no definitions (prose, named as the parent named them: FR-001, FR-1), a second FR-003 line, a definition with no separator and a mention stay prose and are named; FR-003 (first), FR-006 (em dash), FR-007 ('**FR-007**.') convert; a stale US-2.AC-1 is reported, FR-007 resolves (got " +
+      js([r3.warnings, r3.mapping]) + ")", [
+      () => r3.ok, () => r3.warnings.includes(W3.wFrCriteria("US-2", "FR-003 → US-2.AC-1, FR-006 → US-2.AC-2, FR-007 → US-2.AC-3")),
+      () => r3.warnings.includes(W3.wUncoveredFr("FR-001, FR-1, FR-003, FR-008, FR-009")), () => !/\(FR-1\)|\(FR-001\)|SHALL ensure that 1\*\*:/.test(req3),
+      () => /\n- \*\*FR-003\*\*: System MUST export albums as tar\n/.test(req3) && !/\n- \*\*FR-003\*\*: System MUST export albums as zip\n/.test(req3),
+      () => /\n- \*\*FR-001a\*\*: System MUST tag albums with colors\n- \*\*FR-1\.1\*\*: System MUST cap uploads at 50 MB\n/.test(req3),
+      () => /\*\*US-2\.AC-2\*\* — THE SYSTEM SHALL ensure that MUST keep originals \(FR-006\)/.test(req3), () => /\*\*US-2\.AC-3\*\* — THE SYSTEM SHALL ensure that albums MUST sort by date \(FR-007\)/.test(req3),
+      () => /\n- \*\*FR-008\*\* System MUST purge trash weekly\n- Note: FR-009 is TBD\n/.test(req3),
+      () => r3.warnings.includes(W3.wUnknownRef(1, "US-2.AC-1")), () => r3.mapping["FR-007"] === "US-2.AC-3" && !r3.warnings.some((w) => /task 2:/.test(w)),
+    ]);
+  }
+
   // 1.42 CRI-2: the two scans that replaced a backtracking regex read what it read — every line built from a short head and a
   // tail of up to 5 units over the characters each pattern turns on (blanks, a line separator, a CR, its marks), exhaustively.
   {

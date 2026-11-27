@@ -1987,6 +1987,8 @@ const msg = {
       wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts) without the plan`,
       // spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
       wUncoveredFr: (list) => `functional requirements no acceptance scenario covers — carried as prose under "Functional Requirements", so no task or test traces them: ${list}. Turn each into an EARS criterion with an AC ID (or cite it in one) before approving the requirements`,
+      // 1.42: the FR definitions no scenario covers became the criteria of one story (story: its US-n; list: "FR-n → US-n.AC-m, …")
+      wFrCriteria: (story, list) => `functional requirements no acceptance scenario covers became EARS criteria of story ${story} (each original kept in a comment) — check each one's wording and give it a task: ${list}`,
       wUnreadable: (file) => `${file} points outside the project — skipped`,
       done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),

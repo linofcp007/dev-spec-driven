@@ -25,7 +25,9 @@ exports.run = async ({ ok, S, tmp }) => {
       js([r.stack, kinds]) + ")");
   }
 
-  { // 1.25.1 (11): spec-kit's functional requirements no acceptance scenario covers are named — never carried as prose silently
+  { // 1.25.1 (11): spec-kit's functional requirements no acceptance scenario covers are named — never carried as prose silently.
+    // 1.42 SK-03: and become the EARS criteria of one story (the warning's own advice, done): FR-002 → US-3.AC-1, FR-003 (still
+    // [NEEDS CLARIFICATION], no scenario's) → US-3.AC-2; FR-001 (covered by its words) stays prose; FR-004 (cited) maps to US-2.AC-1
     const p = path.join(tmp, "proj-r7r-speckit");
     const k = path.join(p, "specs", "001-photo-albums");
     put(k, "spec.md", "# Feature Specification: Photo Albums\n\n**Input**: User description: \"Organize photos in albums\"\n\n## User Scenarios & Testing *(mandatory)*\n\n" +
@@ -35,11 +37,12 @@ exports.run = async ({ ok, S, tmp }) => {
       "- **FR-003**: System MUST [NEEDS CLARIFICATION: max photos per album?]\n- **FR-004**: System MUST let owners share an album by link\n");
     S.initProject(p, ["core"], "en");
     const r = S.importSpec(p, "spec-kit", "specs/001-photo-albums", {});
-    const w = (r.warnings || []).find((x) => x === S.msg("en").importSpec.wUncoveredFr("FR-002, FR-003")) || "";
+    const w = (r.warnings || []).find((x) => x === S.msg("en").importSpec.wFrCriteria("US-3", "FR-002 → US-3.AC-1, FR-003 → US-3.AC-2")) || "";
     const pt = S.importSpec(p, "spec-kit", "specs/001-photo-albums", { lang: "pt", name: "albuns-pt" });
-    ok(r.ok && /FR-002, FR-003/.test(w) && !/FR-001|FR-004/.test(w) && pt.ok && (pt.warnings || []).some((x) => /requisitos funcionais que nenhum cenário/.test(x) && /FR-002, FR-003/.test(x)),
-      "1.25.1 (11): a spec-kit import warns for the FR-xxx no acceptance scenario covers (not covered by its words, not cited; one still [NEEDS CLARIFICATION]) — FR-002, FR-003; an FR a scenario covers or cites is not named; localized (PT) (got " +
-      js([w, pt.ok && pt.warnings]) + ")");
+    ok(r.ok && w && !(r.warnings || []).some((x) => /no acceptance scenario covers — carried as prose/.test(x)) && r.mapping["FR-001"] === "FR-001" && r.mapping["FR-004"] === "US-2.AC-1" &&
+      r.mapping["FR-002"] === "US-3.AC-1" && r.mapping["FR-003"] === "US-3.AC-2" && pt.ok && (pt.warnings || []).some((x) => /requisitos funcionais que nenhum cenário/.test(x) && /FR-002 → US-3\.AC-1, FR-003 → US-3\.AC-2/.test(x)),
+      "1.25.1 (11) + 1.42 SK-03: the FR-xxx no acceptance scenario covers (not covered by its words, not cited; one still [NEEDS CLARIFICATION]) — FR-002, FR-003 — become US-3's criteria, named in a warning; an FR a scenario covers stays prose, one it cites maps to that criterion; localized (PT) (got " +
+      js([r.warnings, r.mapping, pt.ok && pt.warnings]) + ")");
   }
 
   { // 1.25.1 (15): the importers read headings with the ONE heading reader — a setext heading is a heading, its underline never carried
