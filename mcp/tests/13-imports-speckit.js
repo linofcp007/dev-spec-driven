@@ -80,6 +80,21 @@ exports.run = async ({ ok, all, S, tmp, remeasure, require }) => {
       "1.24 r6 G-I3: a spec-kit design document over the import cap refuses the import (tooLarge, nothing created) (got " + js([r2.ok, r2.error]) + ")");
   }
 
+  // 1.42 SK-04: Spec Kit's --timestamp folders (create-new-feature.sh: YYYYMMDD-HHMMSS-<name>; its own reader strips
+  // ^[0-9]{8}-[0-9]{6}-) slugged as `101500-photo-albums`: the number is stripped once, sequential or timestamp
+  {
+    const p = fresh("speckit-ts");
+    const one = (folder) => {
+      const k = path.join(p, "specs", folder);
+      put(path.join(k, "spec.md"), "# Feature Specification: \n\n### User Story 1 - T (Priority: P1)\n\n**Acceptance Scenarios**:\n\n1. **Given** a, **When** b, **Then** c\n");
+      const r = S.importSpec(p, "spec-kit", "specs/" + folder, {});
+      return r.ok ? r.feature : "ERR " + r.error;
+    };
+    const got = ["20261120-101500-photo-albums", "004-2026-roadmap", "12345678-1234567-x", "001-20260115-143022-y", "20261120_101500-z"].map(one);
+    ok(js(got) === js(["photo-albums", "2026-roadmap", "1234567-x", "20260115-143022-y", "101500-z"]),
+      "1.42 SK-04: a spec-kit folder's number is stripped once — YYYYMMDD-HHMMSS- (Spec Kit's --timestamp) or digits — 20261120-101500-photo-albums → photo-albums, 004-2026-roadmap keeps 2026-, a 7-digit time is no timestamp, one strip only (got " + js(got) + ")");
+  }
+
   // 1.42 CRI-2: the two scans that replaced a backtracking regex read what it read — every line built from a short head and a
   // tail of up to 5 units over the characters each pattern turns on (blanks, a line separator, a CR, its marks), exhaustively.
   {

@@ -73,7 +73,9 @@ function parseSpecKit(dir, read, W, src) {
   const tasks = read(path.join(dir, "tasks.md"));
   if (spec == null && tasks == null) return null;
   const model = newImportModel();
-  model.nameHint = path.basename(dir).replace(/^\d+[-_]/, "") || path.basename(dir);
+  // the feature's number, once: spec-kit's sequential `001-` or its --timestamp `YYYYMMDD-HHMMSS-` (Spec Kit's own reading of
+  // ^[0-9]{8}-[0-9]{6}- — the slug was `101500-photo-albums`)
+  model.nameHint = path.basename(dir).replace(/^(?:\d{8}-\d{6}|\d+)[-_]/, "") || path.basename(dir);
   // /\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i dropped — read after the last ')' but the closing one (the
   // only place it can match), from a blank run's start (?<!\s): each "(include if" and each blank rescanned the rest.
   const norm = (t) => {
