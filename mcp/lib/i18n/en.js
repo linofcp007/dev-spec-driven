@@ -4023,6 +4023,7 @@ const brief = {
     verification: "## Verification (_Verify:_)",
     verifyRule: "Run every _Verify:_ command above on the final code and put the exact command, its exit code and the last lines of its output in the report — the controller records them with spec_complete_task as the task's evidence.",
     steeringRead: "Read before coding:",
+    steeringTemplates: "Still templates — nothing binding yet:", // 1.42 (UX-10): steering files that are a built-in stub verbatim or headings only
     unresolved: "## ⚠ Unresolved references",
     unresolvedNote: "The task cites these IDs but the spec doesn't define them. Report NEEDS_CONTEXT instead of guessing.",
     dod: "## Definition of done",

@@ -3747,6 +3747,7 @@ const brief = {
     verification: "## Verificación (_Verify:_)",
     verifyRule: "Ejecuta cada comando _Verify:_ de arriba sobre el código final y pon en el informe el comando exacto, su exit code y las últimas líneas de la salida — el controlador los registra con spec_complete_task como evidencia de la tarea.",
     steeringRead: "Lee antes de programar:",
+    steeringTemplates: "Aún plantillas — nada vinculante por ahora:",
     unresolved: "## ⚠ Referencias sin resolver",
     unresolvedNote: "La tarea cita estos IDs pero la spec no los define. Responde NEEDS_CONTEXT en vez de adivinar.",
     dod: "## Definición de hecho",
