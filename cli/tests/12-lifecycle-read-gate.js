@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, runIn, tmp }) => {
+exports.run = ({ ok, skip, run, runIn, tmp }) => {
   const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg;
   const link = (target, at) => { try { fs.symlinkSync(target, at, "junction"); return true; } catch { return false; } };
   const p = path.join(tmp, "rg-cli"), out = path.join(tmp, "rg-cli-out");
@@ -13,7 +13,7 @@ exports.run = ({ ok, run, runIn, tmp }) => {
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(path.join(out, "requirements.md"), "# Feature: OUTSIDE-CLI\n\n## Summary\nOUTSIDE-CLI-SUMMARY\n");
   fs.writeFileSync(path.join(out, "tasks.md"), "# Tasks\n\n- [ ] 1. OUTSIDE-CLI-TASK\n");
-  if (!link(out, path.join(p, ".specs", "lnk"))) { ok(true, "1.41.1 read gate (CLI): links not creatable here — skipped"); return; }
+  if (!link(out, path.join(p, ".specs", "lnk"))) { skip("1.41.1 read gate (CLI)", "links not creatable here"); return; }
   const st = runIn(["status", "lnk", "--project", p]);
   const sj = runIn(["status", "lnk", "--json", "--project", p]);
   let parsed = null;

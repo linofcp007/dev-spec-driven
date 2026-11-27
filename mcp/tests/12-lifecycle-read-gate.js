@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, eq, S, tmp, hookIn, fsCalls, require, __dirname }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
   const { OPERATIONS } = require("./lib/operations.js");
@@ -153,7 +153,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
   };
 
   const M = maze("main");
-  if (!M.folders) ok(true, "1.41.1 read gate: folder links not creatable here — skipped");
+  if (!M.folders) skip("1.41.1 read gate", "folder links not creatable here");
   else {
     const fl = M.links.files; // file symlinks (Windows: admin / Developer Mode — else skipped; Linux: always)
     const before = snap(M.out);
@@ -383,7 +383,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         finish: () => (f7.blockers || []).some((b) => b.includes(typeof F.noTasks === "string" ? F.noTasks : String(F.noTasks).slice(0, 10))),
         scope: () => s8plain.decision === "allow" && s8.decision === "ask",
       });
-    } else ok(true, "1.41.1 Addition A: file symlinks not creatable here — skipped (Linux runs them)");
+    } else skip("1.41.1 Addition A", "file symlinks not creatable here — Linux runs them");
 
     // (d) .specs ITSELF a link (a project keeping its specs elsewhere): read exactly as a plain .specs/ — the gate is BELOW it
     {
@@ -399,7 +399,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         const view = (p) => { const r = [S.statusFeature(p, "login"), S.nextTask(p, "login"), S.traceCheck(p, "login", { code: true }), S.taskBrief(p, "login", 1, {}).task, S.specDoctor(p, "login").checks.map((c) => c.id + c.status)];
           return js(r).split(p).join("<P>").split(fold(p)).join("<P>"); };
         eq(view(lp), view(real), "1.41.1 read gate: a project whose .specs/ IS a link reads every spec as a plain .specs/ does (status, next_task, trace {code} — its own tests/ found through a listing of .specs/ itself —, the brief, doctor) — only what lies BELOW .specs/ is gated");
-      } else ok(true, "1.41.1 read gate (.specs a link): links not creatable here — skipped");
+      } else skip("1.41.1 read gate (.specs a link)", "links not creatable here");
     }
 
     // meta.evidence observed: a feature's observed log behind a link holds no run — the tick is refused as unobserved, and since no log
@@ -437,7 +437,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         let got = [];
         try { const r = E.readFileHeads(files, 100); try { for (let i = 0; i < files.length; i++) got.push(r.next()); } finally { r.stop(); } } finally { if (ahead === undefined) delete process.env.DEV_SPEC_TEST_AHEAD; else process.env.DEV_SPEC_TEST_AHEAD = ahead; }
         ok(got[80] === null && got.filter((x) => x !== null).length === 110 && !has(got), "1.41.1 read gate: the read-ahead pool (workers on, 111 heads) gives null for a file behind a link below .specs/ and every other head as read (got " + js([got[80], got.filter((x) => x !== null).length]) + ")");
-      } else ok(true, "1.41.1 read gate (pool): file symlinks not creatable here — skipped");
+      } else skip("1.41.1 read gate (pool)", "file symlinks not creatable here");
     }
     // a rename onto a name held by a link (a dangling one too): taken — never a move onto it
     {
@@ -447,7 +447,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
       if (link(path.join(tmp, "proj-rg-rename-nowhere"), path.join(p, ".specs", "beta"))) {
         const r = S.manageFeature(p, "rename", "alpha", "beta");
         ok(r.ok === false && r.error === S.msg("en").err.alreadyExists("beta") && fs.existsSync(path.join(p, ".specs", "alpha")), "1.41.1: a rename onto a name a dangling link holds is refused as taken (entryAt) — the feature stays (got " + js(r) + ")");
-      } else ok(true, "1.41.1 (rename onto a link): links not creatable here — skipped");
+      } else skip("1.41.1 (rename onto a link)", "links not creatable here");
     }
     // roadmap.json gone, the only feature's .state.json a link: no feature on both sides (the engine's existsRaw, the hook's lstat)
     if (M.links.files) {
@@ -535,7 +535,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         all("1.41.1 read gate: spec_import's dry run beside a linked steering/ previews what the real import writes and reads nothing through the link (got " + js({ bad: t.bad, files }) + ")", {
           ok: () => t.value.ok === true && real.ok === true, parity: () => files.length > 0 && files.every(([, same]) => same), noRead: () => !t.bad.length && !has(t.value),
         });
-      } else ok(true, "1.41.1 read gate (dry run): links not creatable here — skipped");
+      } else skip("1.41.1 read gate (dry run)", "links not creatable here");
     }
   }
 
@@ -650,7 +650,7 @@ exports.run = async ({ ok, all, eq, S, tmp, hookIn, fsCalls, require, __dirname 
         openspec: () => runs[1].warnings.includes(W.wUnreadable("openspec/changes/add-x/specs")),
         bmad: () => !runs[2].warnings.some((w) => /bmadsrc.docs./.test(w)),
       });
-    } else ok(true, "1.41.1 R3 (imports): links not creatable here — skipped");
+    } else skip("1.41.1 R3 (imports)", "links not creatable here");
     // trace's feature folders are FOLDERS: a root file (ROADMAP.md, roadmap.json) is never read as one
     const calls = fsCalls(path.join(path.resolve(p), ".specs") + path.sep, () => S.traceCheck(p, "feat", { code: true }));
     const seen = [];

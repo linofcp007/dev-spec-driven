@@ -6,7 +6,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 // 1.14 full review (Ga) — evidence, project checks, CLI runs.
-exports.run = async ({ ok, all, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
   const Sga = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const jsonGa = (s) => { try { return JSON.parse(s); } catch { return null; } };
   const rga = (proj, args, env) => { // in-process (1.27), but a --run — it waits for its commands: spawned
@@ -138,5 +138,5 @@ exports.run = async ({ ok, all, spawnIn, spawnAsync, tmp, CLI, require, __dirnam
     ok((wslRan || wslNot) && (!g9b || (g9b.code === 0 && g9bj && g9bj.verified === true)),
       "full review Ga9 (Windows): --shell <System32 bash.exe> is used as given — it runs under WSL or, when WSL can't run it, is could-not-run with nothing recorded; --shell bash runs under Git Bash when installed (got " +
       JSON.stringify([g9.code, g9j, gitBash, g9b && g9b.out.slice(0, 200)]).slice(0, 600) + ")");
-  } else ok(true, "full review Ga9: --shell <System32 bash.exe> refusal — Windows only (resolveRunShell is unit-tested in mcp/test.js)");
+  } else skip("full review Ga9: --shell <System32 bash.exe> refusal", "Windows only — resolveRunShell is unit-tested in mcp/test.js");
 };

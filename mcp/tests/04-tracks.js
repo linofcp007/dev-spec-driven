@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, __dirname, hookIn, handRoadmap }) => {
+exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, root, tmp, approveBefore, __dirname, hookIn, handRoadmap }) => {
 
   { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
   const w2 = path.join(tmp, "proj-wp2");
@@ -586,7 +586,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       const lc = S.trackPacks(tl, "check");
       ok(lc.problems.some((p) => p.pack === "evil" && p.code === "linked-folder") && !S.trackPacks(tl, "list").packs.some((p) => p.valid) && S.createFeature(tl, "X", ["evil"], "", undefined, "en").ok === false,
         "feature F4: a pack folder linked (junction / symlink) to a folder outside .specs/ is reported linked-folder and never read");
-    } else ok(true, "feature F4: (no link support here — the linked-pack check is skipped)");
+    } else skip("feature F4: the linked-pack check", "no link support here");
 
     // `tracks` is a reserved feature slug — unless .specs/tracks/ is a feature created before 1.15 (its .state.json): then no packs.
     const rs = S.createFeature(tp, "tracks", ["core"], "", undefined, "en");

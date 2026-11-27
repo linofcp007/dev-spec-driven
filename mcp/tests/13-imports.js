@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require, handRoadmap }) => {
+exports.run = async ({ ok, skip, all, remeasure, rpc, payload, S, tmp, require, handRoadmap }) => {
 
   { // --- 1.13 WP6: brownfield depth (scan routes/tests/entrypoints/env/migrations, coverage by _Implements:_), spec_import, integration-plan ---
     const call6 = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
@@ -1468,7 +1468,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require, handRo
       const slScan = S.scanCodebase(sl);
       ok(!slScan.stack.some((s) => /node|secret-dep/.test(s)) && !slScan.frameworks.includes("express") && slScan.stack.includes("go") && slScan.frameworks.includes("echo"),
         "1.22 review F9: a root package.json linked to a file outside the project is not read (no node stack, no express); a go.mod linked inside the project is (got " + js([slScan.stack, slScan.frameworks]) + ")");
-    } else ok(true, "1.22 review F9: file symlinks unavailable here (Windows without the privilege) — skipped");
+    } else skip("1.22 review F9", "file symlinks unavailable here (Windows without the privilege)");
 
     // F11. coverage(): a folder reference's files by a binary search of keys sorted once — the same files as the scan of every
     // key, far faster (18,000 keys × 709 references here; two scans of every key per reference were most of a coverage run).

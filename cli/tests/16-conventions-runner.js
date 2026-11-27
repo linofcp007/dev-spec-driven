@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, fsCalls, tmp, __dirname }) => {
+exports.run = ({ ok, skip, all, fsCalls, tmp, __dirname }) => {
   const js = JSON.stringify;
   const RUNNER = path.join(__dirname, "..", "scripts", "test-runner.js");
   // A fake suite built under tmp: its entry, a harness shaped like the real ones (ok, counts, fail, end → the total line and
@@ -28,23 +28,23 @@ const end = () => { console.log("\\n" + pass + " passed, " + fail + " failed"); 
 exports.setup = () => ({ ctx: { ok }, counts: () => ({ pass, fail }), fail: (label) => ok(false, label), end });
 `);
   w("tests/01-clean.js", `// clean
-exports.run = async ({ ok }) => { ok(true, "clean one"); };
+exports.run = async ({ ok }) => { ok(1, "clean one"); };
 `);
   // A forgotten await in the LAST file of its chain: its assertion fires 50 ms after run() resolved (the CLI harness exited first).
   w("tests/02-late.js", `// a late assertion that ends its chain
-exports.run = async ({ ok }) => { ok(true, "on time"); setTimeout(() => ok(true, "fired by a timer after run() resolved"), 50); };
+exports.run = async ({ ok }) => { ok(1, "on time"); setTimeout(() => ok(1, "fired by a timer after run() resolved"), 50); };
 `);
   // …and one that fires while the NEXT file of its chain runs (it counted as that file's pass).
   w("tests/03-pair-a.js", `// a late assertion that fires during the next file
-exports.run = async ({ ok }) => { ok(true, "a on time"); setTimeout(() => ok(true, "a's late one"), 30); };
+exports.run = async ({ ok }) => { ok(1, "a on time"); setTimeout(() => ok(1, "a's late one"), 30); };
 `);
   w("tests/04-pair-b.js", `// needs 03-pair-a
 exports.deps = ["03-pair-a"];
-exports.run = async ({ ok }) => { await new Promise((r) => setTimeout(r, 400)); ok(true, "b on time"); };
+exports.run = async ({ ok }) => { await new Promise((r) => setTimeout(r, 400)); ok(1, "b on time"); };
 `);
   // A Node warning, and a line written to stderr at exit — after the total line.
   w("tests/05-stderr.js", `// stderr after the total
-exports.run = async ({ ok }) => { ok(true, "w on time"); process.emitWarning("a warning"); process.on("exit", () => process.stderr.write("STDERR-AFTER-TOTAL\\n")); };
+exports.run = async ({ ok }) => { ok(1, "w on time"); process.emitWarning("a warning"); process.on("exit", () => process.stderr.write("STDERR-AFTER-TOTAL\\n")); };
 `);
   const env = { ...process.env, TMPDIR: own, TEMP: own, TMP: own };
   delete env.DEV_SPEC_TEST_CHAIN; // this process is itself a chain of the CLI suite: the fake one starts as a parent
@@ -150,7 +150,7 @@ exports.run = async ({ ok, remeasure }) => {
   const never = remeasure(() => ({ v: ++m }), () => false);
   const first = remeasure(() => ({ v: ++k }), () => true);
   console.log("REMEASURE " + JSON.stringify([pass2.v, pass2.tries, n, never.v, never.tries, m, first.v, first.tries, k, Object.keys(pass2)]));
-  ok(true, "remeasured");
+  ok(1, "remeasured");
 };
 `);
     w("tests/10-hang.js", `// a chain that never finishes
@@ -181,7 +181,7 @@ exports.run = async ({ ok }) => {
   const fs = require("fs");
   const env = Object.fromEntries(${js(KEYS)}.map((k) => [k, process.env[k] === undefined ? null : process.env[k]]));
   console.log("ENV " + JSON.stringify({ cwd: process.cwd(), files: fs.readdirSync(process.cwd()), env }));
-  ok(true, "env seen");
+  ok(1, "env seen");
 };
 `;
     w("tests/06-env.js", envFile);
@@ -226,7 +226,7 @@ exports.run = async ({ ok }) => {
   const env = Object.fromEntries(${js(NODE_KEYS)}.map((k) => [k, process.env[k] === undefined ? null : process.env[k]]));
   const kid = require("child_process").spawnSync(process.execPath, ["-e", "process.stdout.write(String(!!globalThis.__hostPreload))"], { encoding: "utf8" }).stdout;
   console.log("NODEENV " + JSON.stringify({ preloaded: !!globalThis.__hostPreload, kid, env }));
-  ok(true, "node env seen");
+  ok(1, "node env seen");
 };
 `);
     const host = { ...env, NODE_OPTIONS: "--require " + js(pre), NODE_COMPILE_CACHE: path.join(own, "cc"), NODE_DISABLE_COMPILE_CACHE: "1",
@@ -255,7 +255,7 @@ exports.run = async ({ ok }) => {
     w("tests/12-tmp.js", `// where a chain's temp folder is
 exports.run = async ({ ok }) => {
   console.log("TMPSEEN " + JSON.stringify({ cwd: process.cwd(), tmpdir: require("os").tmpdir(), TMP: process.env.TMP || null, TEMP: process.env.TEMP || null, TMPDIR: process.env.TMPDIR || null }));
-  ok(true, "tmp seen");
+  ok(1, "tmp seen");
 };
 `);
     const named = path.join(own, "dev-spec-tmp"), long = path.join(own, "l".repeat(Math.max(1, 110 - own.length)), "tmp");
@@ -281,7 +281,7 @@ exports.run = async ({ ok }) => {
   // 1.32.1: nor git's repository variables — git exports GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE… to its hooks (a pre-push hook
   // running the suites) and `git rebase --exec` to its command, and a chain's `git init` / `git commit` in a temp repo of its
   // own then acted on the repository the suite was started from. Every name `git rev-parse --local-env-vars` prints is dropped.
-  if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.32.1: git's repository variables reach no chain — skipped: no git");
+  if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.32.1: git's repository variables reach no chain", "no git");
   else {
     const GIT_KEYS = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY"];
     const id = ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"];
@@ -304,7 +304,7 @@ exports.run = async ({ ok }) => {
   g(["add", "b.txt"]);
   g(${js(id)}.concat(["commit", "-q", "-m", "chain"]));
   console.log("GITENV " + JSON.stringify({ env, log: g(["log", "--format=%s"]).stdout.trim() }));
-  ok(true, "git env seen");
+  ok(1, "git env seen");
 };
 `);
     const gd = path.join(outer, ".git");
@@ -362,7 +362,7 @@ exports.run = async ({ ok }) => {
   }
 
   // 1.42 (R7) — skip(label, why), the runner's own (every file receives it beside ok; no harness change): a check that cannot run
-  // here is neither a pass nor a fail. Its `  skip - <label> (<why>)` line (test-docker.js counts those), the file's count on its
+  // here is neither a pass nor a fail. Its line — `skip - <label> (<why>)`, indented as an ok line (test-docker.js counts those) —, the file's count on its
   // #file line (stripped from the output like the rest of it) and the suite's sum in ONE `# K skipped in F file(s): <file> <n>, …`
   // line, in file order, after the `# N file(s)` line and before the total — the LAST line stays `N passed, M failed` (RE_TOTAL:
   // release-counts.js, the pre-push hook). A skip after run() resolved is a late assertion; a suite with no skip prints no line.
@@ -384,7 +384,7 @@ exports.run = async ({ skip }) => { skip("d", "why d"); };
     const filesAt = at(/^# 3 file\(s\) in 2 process\(es\), /), skipAt = at(/^# \d+ skipped in /);
     const shownSkips = ls.filter((l) => /^ {2}skip - /.test(l)).map((l) => l.replace(/^ {2}skip - /, ""));
     const dockerSrc = fs.readFileSync(path.join(__dirname, "..", "scripts", "test-docker.js"), "utf8");
-    all("1.42 (R7): skip(label, why) is neither a pass nor a fail — a `  skip - ` line each, the files' counts summed in one `# K skipped in F file(s): …` line (file order) between the `# N file(s)` line and the total, which stays the last line; a late skip is a late assertion; no skip, no line (got " +
+    all("1.42 (R7): skip(label, why) is neither a pass nor a fail — a `skip - ` line each, the files' counts summed in one `# K skipped in F file(s): …` line (file order) between the `# N file(s)` line and the total, which stays the last line; a late skip is a late assertion; no skip, no line (got " +
       js({ code: sk.code, tail: ls.slice(-4), shownSkips, fails: ls.filter((l) => /FAIL/.test(l)) }) + ")", {
       total: () => sk.code === 1 && lastLine(sk.stdout) === "1 passed, 1 failed" && js((sk.stdout.match(R.RE_TOTAL) || []).slice(1)) === js(["1", "1"]),
       skipLine: () => ls[skipAt] === "# 4 skipped in 3 file(s): 14-skips 2, 15-skip-one 1, 16-skip-dep 1",

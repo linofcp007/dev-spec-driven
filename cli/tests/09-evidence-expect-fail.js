@@ -6,7 +6,7 @@ const path = require("path");
 const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, skip, all, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
 // B5 — `done --run` honours _Expect: fail_ (+ records the git commit), `init --check` / `finish --run` (meta.checks), `dev-spec log`.
 // Commands run in cmd.exe and sh alike (node -e "…" in double quotes); git runs isolated from the user's config and is optional.
 const Sb5 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -69,7 +69,7 @@ if (hasGitB5) {
   ok(g1.code === 0 && g2.code === 0 && /^[0-9a-f]{4,40}$/.test(headB5) && evg["1"].commit === headB5 && evg["1"].dirty === false && evg["2"].commit === headB5 && evg["2"].dirty === true &&
     evg["1"].history[0].commit === headB5,
     "done --run records the commit it ran on (git rev-parse --short HEAD) and whether the tree was dirty — the spec's own files under .specs/ don't count (got " + JSON.stringify([headB5, evg["1"], evg["2"].dirty]).slice(0, 300) + ")");
-} else ok(true, "done --run git evidence — skipped (git is not available)");
+} else skip("done --run git evidence", "git is not available");
 
 // init --check: repeatable, name= removes one, a bad value is refused (localized); the result line lists the checks.
 const pc = path.join(tmp, "b5-checks");
@@ -180,7 +180,7 @@ if (hasGitB5) {
     lgMax.code === 0 && /1 commit\(s\) read \(the window is full/.test(lgMax.out) && /red-first: task 2 \(T-01\) — can't tell: the log window is full/.test(lgMax.out),
     "dev-spec log reads git log (read-only): per task the commits citing it ('task #N' + the feature name, T-IDs), the red-first warning when the implementation was committed before its test; --json; --max bounds the window (got " +
     JSON.stringify(lg.out.slice(0, 500)) + ")");
-} else ok(true, "dev-spec log over a real git repository — skipped (git is not available)");
+} else skip("dev-spec log over a real git repository", "git is not available");
 
 // help and the command table document the new command and flags.
 const hB5 = rb5(["help"]).out;

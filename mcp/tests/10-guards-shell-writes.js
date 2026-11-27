@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
+exports.run = async ({ ok, skip, all, S, tmp, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the reader) — read through mcp/test.js's require
   const HU = require("../hooks/hook-utils.js");
   const js = JSON.stringify;
@@ -441,7 +441,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
     fs.writeFileSync(path.join(r, "src", "Main.java"), "class Main {}");
     let shortNames = false;
     try { shortNames = WIN && /[\\/]\.specs$/.test(fs.realpathSync.native(path.join(r, "SPECS~2"))) && /spe cs$/.test(fs.realpathSync.native(path.join(r, "SPECS~1"))); } catch { shortNames = false; }
-    if (!shortNames) ok(true, "1.30.1: the file system's own 8.3 names — skipped: " + (WIN ? "this volume makes no 8.3 names" : "not win32"));
+    if (!shortNames) skip("1.30.1: the file system's own 8.3 names", WIN ? "this volume makes no 8.3 names" : "not win32");
     else {
       const rd = (command) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, cwd: r }, "deny", { meta: {}, lang: "en" }).decision;
       const gh = (tool, ti) => decisionOf(hookOut(path.join(HOOKS, "guard-hook.js"), pre(r, tool, ti), { CLAUDE_PROJECT_DIR: r }));

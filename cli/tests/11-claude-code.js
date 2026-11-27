@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, skip, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   const S16 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = JSON.stringify;
   const OPTS = ["DEV_SPEC_DEFAULT_LANG", "CLAUDE_PLUGIN_OPTION_DEFAULT_LANG", "DEV_SPEC_STOP_CHECK", "CLAUDE_PLUGIN_OPTION_STOP_CHECK",
@@ -64,7 +64,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     js(q.map((r) => [r.code, r.out, r.err.slice(0, 60)])) + ")");
   // 1.23 review 5 (M8): in a git worktree of the project (EnterWorktree: workspace.current_dir is the worktree, project_dir the
   // folder Claude Code started in), the line is the checkout the MCP server records in — the worktree's own copy holds no tick.
-  if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.23 review 5 (M8): statusline in a worktree — skipped: no git");
+  if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) skip("1.23 review 5 (M8): statusline in a worktree", "no git");
   else {
     const sw = path.join(tmp, "p16c-status-wt");
     fs.cpSync(sp, sw, { recursive: true });

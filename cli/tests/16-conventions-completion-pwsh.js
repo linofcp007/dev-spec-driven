@@ -7,7 +7,7 @@ const { spawnSync } = require("child_process");
 const { fixture, helpers: { fwd, cleanEnv, probe } } = require("./16-conventions-completion.js");
 
 // 1.30 (review 8, ds-maint 2): 16-conventions-completion.js ran bash and PowerShell too, one process — the CLI suite's critical path (~60 s).
-exports.run = async ({ ok, runIn, tmp, CLI }) => {
+exports.run = async ({ ok, skip, runIn, tmp, CLI }) => {
   const { S, scripts, p, cache, staleCli, withCli } = fixture({ runIn, tmp, CLI }, ["powershell"]);
 
   // 1.25 completion: Windows PowerShell 5.1 (and pwsh when installed) — the script dot-sourced, TabExpansion2 asked: the same answers,
@@ -50,7 +50,7 @@ exports.run = async ({ ok, runIn, tmp, CLI }) => {
     const turns = (out) => out.split(/\r?\n/).reduce((acc, l) => { if (l === "@@") acc.push([]); else if (l.startsWith("@ ")) acc[acc.length - 1].push(l.slice(2).trim()); return acc; }, [[]]);
     const ran = [process.platform === "win32" ? "powershell.exe" : null, "pwsh"].filter(Boolean).map((psh) => [psh, go(psh)])
       .filter(([, r]) => !(r.error && r.error.code === "ENOENT"));
-    if (!ran.length) ok(true, "1.25 completion: PowerShell at work — skipped (no PowerShell here)");
+    if (!ran.length) skip("1.25 completion: PowerShell at work", "no PowerShell here");
     for (const [psh, r] of ran) {
       const [got = [], st = [], sb = []] = turns(r.stdout || "");
       const want = ["status statusline steering stop-check", "login logout", "--flow", "design-first", "--lang=pt --lang=pt-BR", S.PHASES.join(" "), "billing old-thing",
