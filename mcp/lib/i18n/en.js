@@ -1982,9 +1982,9 @@ const msg = {
       wSkipped: (files) => `not imported (left in place): ${files}`,
       more: (n) => `+${n} more`, // wSkipped's names past the first 50
       // spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
-      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", quickstart: "Quickstart" },
+      skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,
-      wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts, quickstart) without the plan`,
+      wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts) without the plan`,
       // spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
       wUncoveredFr: (list) => `functional requirements no acceptance scenario covers — carried as prose under "Functional Requirements", so no task or test traces them: ${list}. Turn each into an EARS criterion with an AC ID (or cite it in one) before approving the requirements`,
       wUnreadable: (file) => `${file} points outside the project — skipped`,

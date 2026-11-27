@@ -1,5 +1,5 @@
 "use strict";
-// Imports — spec-kit: its [USn] task tags → _Requirements:_, the paths a task names → _Implements:_, and data-model.md / research.md / contracts/ / quickstart.md carried into design.md.
+// Imports — spec-kit: its [USn] task tags → _Requirements:_, the paths a task names → _Implements:_, data-model.md / research.md / contracts/ carried into design.md, quickstart.md, plan.md's open fields, what an import leaves, its readers' cost.
 // (13-imports.js holds the area's main tests.)
 
 const fs = require("fs");
@@ -65,11 +65,13 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     put(path.join(k, "contracts", "events.md"), "# Events\n\n## album.created\nPayload: { id }\n");
     const r = S.importSpec(p, "spec-kit", "specs/001-photo-albums", {});
     const d = r.ok ? rd(r.dir, "design.md") : "";
-    const order = ["## Summary", "## Research", "## Data Model", "## Contracts", "## Quickstart"].map((h) => d.indexOf("\n" + h + "\n"));
+    const order = ["## Summary", "## Research", "## Data Model", "## Contracts"].map((h) => d.indexOf("\n" + h + "\n"));
+    const qs = r.ok ? rd(r.dir, "quickstart.md") : "";
+    // (1.42 SK-05: quickstart.md is the feature's quickstart.md, no design.md section)
     ok(r.ok && order.every((i, j) => i > 0 && (j === 0 || i > order[j - 1])) && /\n### Decision: SQLite\n/.test(d) && /\n### Entities\n\n#### Album\n/.test(d) &&
       /# not a heading\nCREATE TABLE/.test(d) && /\n### `contracts\/albums\.yaml`\n\n```yaml\nopenapi: 3\.0\.0\n/.test(d) && /\n### `contracts\/events\.md`\n/.test(d) && /\n#### album\.created\n/.test(d) &&
-      /1\. npm install/.test(d) && !(r.warnings || []).some((w) => /not imported/.test(w)) && !/# Research: Photo Albums/.test(d),
-      "1.24 r6 G-I3: spec-kit's research.md, data-model.md, contracts/ (markdown demoted, others fenced) and quickstart.md land in design.md under their own headings — no 'not imported' warning (got " +
+      !/## Quickstart|npm install/.test(d) && /\n1\. npm install\n2\. npm run dev\n$/.test(qs) && !(r.warnings || []).some((w) => /not imported/.test(w)) && !/# Research: Photo Albums/.test(d),
+      "1.24 r6 G-I3: spec-kit's research.md, data-model.md and contracts/ (markdown demoted, others fenced) land in design.md under their own headings, quickstart.md in the feature's quickstart.md — no 'not imported' warning (got " +
       js({ order, warnings: r.warnings, tail: d.slice(d.indexOf("## Research"), d.indexOf("## Research") + 400) }) + ")");
     // bounded: a design document over the import cap refuses the whole import (nothing created), as any source file does
     const p2 = fresh("speckit-big");
@@ -206,6 +208,33 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       ok(live.ok && dead.ok && js(live.warnings) === js(dead.warnings) && (live.warnings || []).includes("not imported (left in place): linked") && unread(live) === 1,
         "1.42 SK-01: a link entry is named without '/', live or dangling (the same warnings both ways); contracts linked out is one wUnreadable, never named as left (got " + js([live.warnings, dead.warnings]) + ")");
     }
+  }
+
+  // 1.42 SK-05: Spec Kit's quickstart.md ("runnable validation scenarios that prove the feature works end-to-end") IS the feature's
+  // quickstart.md — the file trace reads an SC's coverage from — but went into design.md and left the scaffold's template: doctor
+  // said "SC-001 no test or quickstart step". Written there now (our title, the note, its text); one holding only its title leaves
+  // the scaffold's.
+  {
+    const p = fresh("speckit-quickstart");
+    const k = speckit(p);
+    fs.appendFileSync(path.join(k, "spec.md"), "\n## Success Criteria *(mandatory)*\n\n### Measurable Outcomes\n\n- **SC-001**: 90% of users create an album in under 1 minute\n" +
+      "- **SC-002**: a shared album opens in under 2 seconds\n");
+    put(path.join(k, "quickstart.md"), "# Quickstart Guide\r\n\r\n## Validation\r\n\r\n1. `npm run dev`\r\n2. Create an album in under a minute - validates SC-001\r\n");
+    const r = S.importSpec(p, "spec-kit", "specs/001-photo-albums", { tracks: ["core"] });
+    const q = r.ok ? rd(r.dir, "quickstart.md") : "";
+    const tc = r.ok ? S.traceCheck(p, r.feature) : {};
+    const p2 = fresh("speckit-quickstart-title");
+    const k2 = speckit(p2);
+    put(path.join(k2, "quickstart.md"), "# Quickstart\n\n");
+    const r2 = S.importSpec(p2, "spec-kit", "specs/001-photo-albums", { tracks: ["core"] });
+    const q2 = r2.ok ? rd(r2.dir, "quickstart.md") : "";
+    all("1.42 SK-05: spec-kit's quickstart.md becomes the feature's quickstart.md (our title, the note, its text as written; in `imported`) and covers the SC it names — SC-002 alone uncovered; none in design.md; a title-only one keeps the scaffold's (got " +
+      js({ q: q.slice(0, 300), unc: tc.uncoveredSuccessCriteria, imported: r.imported, q2: q2.slice(0, 80) }) + ")", [
+      () => r.ok, () => q.startsWith("# Quickstart: photo-albums\n\n> Imported from spec-kit `specs/001-photo-albums` on "),
+      () => q.endsWith("\n\n## Validation\n\n1. `npm run dev`\n2. Create an album in under a minute - validates SC-001\n"), () => !/Quickstart Guide/.test(q),
+      () => r.imported.includes("quickstart.md"), () => js(tc.uncoveredSuccessCriteria) === js(["SC-002"]), () => !/SC-001 - |validates SC-001/.test(rd(r.dir, "design.md")),
+      () => r2.ok, () => !r2.imported.includes("quickstart.md"), () => /^# Quickstart: photo-albums\n\nA human-runnable acceptance scenario/.test(q2),
+    ]);
   }
 
   // 1.42 CRI-2: the two scans that replaced a backtracking regex read what it read — every line built from a short head and a

@@ -563,6 +563,11 @@ function importRun(projectDir, tool, source, opts) {
     // block (a ```mermaid never closed) had the track sections written into it, and doctor read them all 'missing'.
     put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", blocks ? appendSpecText(body, blocks, { trim: true }) : body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
   }
+  // spec-kit's quickstart.md replaces the scaffold's (a project template's too, as requirements / design / tasks are replaced): its
+  // title is the scaffold's own first line, then the note and the source's text as written
+  if (model.quickstart) {
+    put("quickstart.md", [i18n.quickstart(name, lng).split("\n")[0], "", note, "", model.quickstart].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
+  }
 
   let taskCount = 0; // the imported tasks (`counts.tasks`) — none when the scaffold's tasks.md is kept
   if (model.tasks && model.tasks.numbered) {

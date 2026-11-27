@@ -164,9 +164,9 @@ function parseSpecKit(dir, read, W, src) {
     const frs = uncoveredFrs((model.extra.find((x) => x.key === "functional") || { lines: [] }).lines, frScenarios(model.stories.flatMap((s) => s.criteria.map((c) => c.raw))));
     if (frs.length) model.warnings.push(W.wUncoveredFr(frs.join(", ")));
   }
-  // research.md, data-model.md, contracts/ and quickstart.md are design — each under its own heading after plan.md
-  // (they were skipped with a warning: "not imported"). Read through `read` like every source file: inside the project, a file
-  // over the import cap refuses the import.
+  // research.md, data-model.md and contracts/ are design — each under its own heading after plan.md (they were skipped with a
+  // warning: "not imported"); quickstart.md is the feature's quickstart.md (model.quickstart). Read through `read` like every
+  // source file: inside the project, a file over the import cap refuses the import.
   const docs = specKitDesignDocs(dir, read, rd, W, model, src, got);
   model.skipped.push(...specKitLeft(dir, src, got));
   if (plan != null || docs) model.design = { text: [plan == null ? null : specKitPlanMarkers(plan), docs].filter((x) => x != null).join("\n\n"), file: "plan.md" };
@@ -297,7 +297,7 @@ function specKitPlanMarkers(text) {
   return changed ? out.join("\n") : text;
 }
 
-// spec-kit's design documents beside plan.md, in its own order (research → data model → contracts → quickstart),
+// spec-kit's design documents beside plan.md, in its own order (research → data model → contracts),
 // as design.md sections: `## <localized title>`, a provenance line, then the document — its first-line title dropped and every
 // other heading one level down (outside fenced code), so its sections stay under ours; a contract that is no markdown goes into a
 // fenced block (its language from the extension). contracts/ is read two levels deep, sorted, at most SPECKIT_CONTRACTS_MAX files of
@@ -350,8 +350,12 @@ function specKitDesignDocs(dir, read, rd, W, model, src, got) {
     }
   }
   if (contracts.length) parts.push("## " + D.contracts + "\n\n" + W.skFrom("contracts/") + "\n\n" + contracts.join("\n\n"));
+  // quickstart.md is no design: Spec Kit's ("runnable validation scenarios that prove the feature works end-to-end") IS the
+  // feature's quickstart.md, the file trace reads an SC's coverage from — importRun writes it there (its title replaced by ours);
+  // one holding only its title leaves the scaffold's
   const q = rd("quickstart.md");
-  if (q != null && q.trim()) section(D.quickstart, "quickstart.md", demoteMd(q));
+  const qs = q == null ? "" : demoteMd(q, 0).trim();
+  if (qs) model.quickstart = qs;
   if (skipped.length) model.skipped.push(...skipped);
   return parts.length ? parts.join("\n\n") : null;
 }
