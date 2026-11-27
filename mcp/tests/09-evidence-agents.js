@@ -91,20 +91,23 @@ exports.run = async ({ all, eq, rpc, payload, skip, S, tmp, root, __dirname }) =
       run({ id: "agent-r1", turns: 20, tools: 15, tokens: tok(160, 3100, 90000, 5000) }), // sent back: the same transcript, grown
       run({ id: "agent-i2", agent: "spec-implementer", model: "claude-opus-4-5", turns: 10, tools: 8, tokens: tok(50, 1000, 30000, 2000), truncated: true }),
       run({ id: "agent-c1", agent: "spec-critic", model: "claude-opus-4-5", turns: 3, tools: 2, tokens: tok(20, 900, 10000, 3000) }),
+      // (1.42 fix round 1) a dispatch with no model (its last one `<synthetic>`: left out) that called no tool and read no cache — a
+      // zero is a count (3 of 4,180 real runs read no cache), and a role's `models` holds only the ids it has
+      Object.assign(run({ id: "agent-i3", agent: "spec-implementer", turns: 1, tools: 0, tokens: tok(8, 40, 0, 6200) }), { model: undefined }),
     ];
     const rec = runs.map((x) => S.recordAgentRun(p, x).ok);
     fs.appendFileSync(logOf(p), [js({ agent: "spec-writer", id: "agent-w1", turns: 1, tools: 1, tokens: tok(1, 1, 1, 1), truncated: false }),
       js({ agent: "spec-reviewer", id: "agent-r9", turns: -1, tools: 1, tokens: tok(1, 1, 1, 1), truncated: false }), "{not json", "[1,2]"].join("\n") + "\n");
     const c = S.agentCosts(p);
-    const want = { dispatches: 4, roles: {
+    const want = { dispatches: 5, roles: {
       "spec-critic": { dispatches: 1, turns: 3, tools: 2, tokens: tok(20, 900, 10000, 3000), truncated: 0, models: ["claude-opus-4-5"] },
-      "spec-implementer": { dispatches: 2, turns: 50, tools: 43, tokens: tok(350, 10000, 430000, 22000), truncated: 1, models: ["claude-opus-4-5", "claude-sonnet-4-5"] },
+      "spec-implementer": { dispatches: 3, turns: 51, tools: 43, tokens: tok(358, 10040, 430000, 28200), truncated: 1, models: ["claude-opus-4-5", "claude-sonnet-4-5"] },
       "spec-reviewer": { dispatches: 1, turns: 20, tools: 15, tokens: tok(160, 3100, 90000, 5000), truncated: 0, models: ["claude-opus-4-5"] } } };
     const m = S.metrics(p), viaMcp = payload(await rpc("tools/call", { name: "spec_metrics", arguments: { projectDir: p } }));
     const f = S.createFeature(p, "Billing", ["core"]);
     const withFeature = S.metrics(p), one = S.metrics(p, f.slug);
     const out = S.metricsLines(withFeature).join("\n"), none = S.metricsLines(m).join("\n");
-    const roleLines = [M.agentsHead(4), M.agentsRole("spec-critic", 1, 3, 20, 900, 10000, 0), M.agentsRole("spec-implementer", 2, 50, 350, 10000, 430000, 1),
+    const roleLines = [M.agentsHead(5), M.agentsRole("spec-critic", 1, 3, 20, 900, 10000, 0), M.agentsRole("spec-implementer", 3, 51, 358, 10040, 430000, 1),
       M.agentsRole("spec-reviewer", 1, 20, 160, 3100, 90000, 0)];
     all("1.42 (S9): agentCosts — one record per id (the later wins), per role in AGENT_ROLES' order (prefixed and copied names one role), other shapes skipped, a dispatch read in part counted; spec_metrics' project `agents` (MCP the same), never a feature's; the metrics lines print it, with or without an active feature (got " +
       js({ rec, c, mcp: viaMcp.agents, one: "agents" in one }) + ")", {
@@ -133,15 +136,22 @@ exports.run = async ({ all, eq, rpc, payload, skip, S, tmp, root, __dirname }) =
     fs.mkdirSync(path.dirname(logOf(p)), { recursive: true });
     const hand = Array.from({ length: 1500 }, (_, i) => js({ agent: "spec-implementer", id: "agent-t" + String(i).padStart(5, "0"), model: "claude-opus-4-5", turns: i, tools: 2,
       tokens: { in: 100, out: 2000, cacheRead: 90000, cacheWrite: 8000 }, truncated: false }) + "\n").join("");
-    fs.writeFileSync(logOf(p), hand + "{a hand-made, broken line\n");
+    // (1.42 fix round 1: among the NEWEST lines, two that parse but are ill-shaped — another agent, a negative count — beside the broken
+    // one: the trim keeps well-shaped lines only, never merely the newest ones)
+    const ill = [js({ agent: "spec-writer", id: "agent-ill-writer", model: "claude-opus-4-5", turns: 3, tools: 2, tokens: { in: 10, out: 200, cacheRead: 9000, cacheWrite: 800 }, truncated: false }),
+      js({ agent: "spec-implementer", id: "agent-ill-negative", turns: -1, tools: 2, tokens: { in: 10, out: 200, cacheRead: 9000, cacheWrite: 800 }, truncated: false })];
+    fs.writeFileSync(logOf(p), hand + ill.map((l) => l + "\n").join("") + "{a hand-made, broken line\n");
     const before = fs.statSync(logOf(p)).size;
     const r = S.recordAgentRun(p, run({ id: "agent-newest" }));
     const after = lines(p), size = fs.statSync(logOf(p)).size;
-    const ids = after.map((l) => { try { return JSON.parse(l).id; } catch { return null; } });
-    all("1.42 (S9): past 256 KB the log keeps its newest well-shaped lines, at most 128 KB (got " + js({ before, size, n: after.length, first: ids[0], last: ids[ids.length - 1] }) + ")", {
+    const parsed = after.map((l) => { try { return JSON.parse(l); } catch { return null; } });
+    const ids = parsed.map((e) => (e && e.id) || null);
+    const shaped = (e) => !!e && E.AGENT_ROLES.includes(e.agent) && [e.turns, e.tools, ...Object.values(e.tokens || {})].every((v) => Number.isSafeInteger(v) && v >= 0) &&
+      Object.keys(e.tokens || {}).length === 4 && typeof e.truncated === "boolean";
+    all("1.42 (S9): past 256 KB the log keeps its newest well-shaped lines, at most 128 KB — an ill-shaped line among the newest is dropped (got " + js({ before, size, n: after.length, first: ids[0], last: ids[ids.length - 1], ill: ids.filter((x) => /^agent-ill/.test(x || "")) }) + ")", {
       "it was past the bound": () => before > 256 * 1024 && r.ok === true,
       "at most half of the bound, the newest kept": () => size <= 128 * 1024 && size > 100 * 1024 && ids[ids.length - 1] === "agent-newest" && ids.includes("agent-t01499") && !ids.includes("agent-t00000"),
-      "every line kept is well shaped": () => ids.every((x) => typeof x === "string"),
+      "every line kept is well shaped — the ill-shaped newest ones gone": () => parsed.every(shaped) && !ids.includes("agent-ill-writer") && !ids.includes("agent-ill-negative"),
     });
   }
 

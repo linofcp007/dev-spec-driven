@@ -484,13 +484,21 @@ exports.run = async ({ ok, skip, all, S, tmp, hookIn, __dirname, require }) => {
     const big = write("agent-b00000000000000001.jsonl", Array.from({ length: 400 }, (_, k) => asst("msg_01" + String(k).padStart(22, "E"), call("Read"), [2, 150, 20000 + k, 500])));
     const bigSize = fs.statSync(big).size;
     const cut = OH.agentRunOf(big, { max: 64 * 1024 }), whole = OH.agentRunOf(big);
-    all("1.42 S9-c: the SubagentStop reader (observe-hook agentRunOf) counts a transcript's assistant lines — turns the distinct message ids, tokens per id the per-field MAX of its lines (a grown output_tokens, never the first line nor a sum) summed, tool calls per LINE, the last model; an API error Claude Code wrote itself (<synthetic>, isApiErrorMessage) neither a turn nor the model; every chunk size the same (a line carried across a chunk's end); bounded by max — a COUNT of the bytes read, `truncated` past it (got " +
-      js({ r1, chunks: [...new Set(chunks)].length, cut, whole: whole && { ...whole, size: bigSize }, max: OH.TRANSCRIPT_MAX }) + ")", {
+    // the DEFAULT bound reached (no opts — the hook's own call): three real-shaped lines, then zero bytes up to TRANSCRIPT_MAX + 4096 —
+    // one line with no end past the bound (1.42 fix round 1: only the constant was pinned, never the reader falling back to it)
+    const atMax = write("agent-m00000000000000001.jsonl", Array.from({ length: 3 }, (_, k) => asst("msg_01" + String(k).padStart(22, "M"), call("Read"), [2, 150, 20000 + k, 500])));
+    { const fd = fs.openSync(atMax, "r+"); try { fs.ftruncateSync(fd, OH.TRANSCRIPT_MAX + 4096); } finally { fs.closeSync(fd); } }
+    const capped = OH.agentRunOf(atMax);
+    fs.rmSync(atMax, { force: true });
+    all("1.42 S9-c: the SubagentStop reader (observe-hook agentRunOf) counts a transcript's assistant lines — turns the distinct message ids, tokens per id the per-field MAX of its lines (a grown output_tokens, never the first line nor a sum) summed, tool calls per LINE, the last model; an API error Claude Code wrote itself (<synthetic>, isApiErrorMessage) neither a turn nor the model; every chunk size the same (a line carried across a chunk's end); bounded by max — a COUNT of the bytes read, `truncated` past it — and with no max by TRANSCRIPT_MAX (got " +
+      js({ r1, chunks: [...new Set(chunks)].length, cut, whole: whole && { ...whole, size: bigSize }, capped, max: OH.TRANSCRIPT_MAX }) + ")", {
       "the counts": () => !!r1 && js({ turns: r1.turns, tools: r1.tools, tokens: r1.tokens, model: r1.model, truncated: r1.truncated }) === js(WANT1) && r1.read === fs.statSync(T1).size,
       "every chunk size the same counts": () => chunks.every((c) => c === js(r1)),
       "past max: the bytes read stop there, truncated, a lower bound": () => !!cut && cut.read <= 64 * 1024 && cut.read > 32 * 1024 && cut.truncated === true && cut.turns > 0 && cut.turns < 400,
       "within the default bound: the whole file": () => !!whole && whole.read === bigSize && whole.truncated === false && whole.turns === 400 && whole.tools === 400 && bigSize > 128 * 1024,
       "the default bound: 32 MB (the largest local dev-spec agent transcript: 26.8 MB)": () => OH.TRANSCRIPT_MAX === 32 * 1024 * 1024,
+      "no max given: TRANSCRIPT_MAX bytes read (a COUNT), truncated, the lines before it counted": () => !!capped && capped.read === OH.TRANSCRIPT_MAX &&
+        capped.truncated === true && capped.turns === 3 && capped.tools === 3,
     });
 
     // decide: one record per dispatch in the session's project; never the parent's transcript; the id the transcript's name, always
