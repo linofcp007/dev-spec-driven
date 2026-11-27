@@ -125,8 +125,7 @@ it all — the original stays in the comment below it; split it into several FRs
 For every tool: each scenario becomes ONE EARS criterion (`WHEN … THE SYSTEM SHALL …`) where possible, else its
 text is kept with `[NEEDS CLARIFICATION]`; tasks are renumbered 1…K and keep their checkbox state and `[P]`/`[USn]`
 tags; the active tracks' mandatory design sections are appended when the imported design lacks them; every generated
-artifact carries an "Imported from <tool> <path> on <date>" note. A task's `_Requirements:_` reference that names a story the
-import does not have (`US-9.AC-1`) is dropped, with a warning; any other one it cannot map is kept as written, with a warning. Tracks come from `tracks`, else are classified from
+artifact carries an "Imported from <tool> <path> on <date>" note. Tracks come from `tracks`, else are classified from
 the imported requirements. The result returns `mapping` (old ID → new ID) and `warnings` — show both, confirm the
 tracks with the human (Phase 0), then run the normal gates. Imported checkboxes carry no evidence: re-verify
 ticked tasks before trusting them.

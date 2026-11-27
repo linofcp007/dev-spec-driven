@@ -241,7 +241,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
   // `_Requirements: FR-n_` passed refs() unchecked while trace ignored it. Exactly those FRs become the EARS criteria of ONE story
   // (the warning's own advice, done): a definition item per id (the first), coverage decided per item (frCovered, the parent's
   // rule), the story numbered past the source's AND past every story number it names (fix 1, R1-IMP-2: [US3] and a stale
-  // US-3.AC-1 make it US-4 — the stale ID is dropped, never coverage); FR-n resolves to the criteria that hold it, else it is
+  // US-3.AC-1 make it US-4 — the stale ID stays trace's phantom, never coverage); FR-n resolves to the criteria that hold it, else it is
   // reported; what stays prose keeps the parent's warning.
   {
     const p = fresh("speckit-fr");
@@ -265,7 +265,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const mk = (n) => S.taskMarkers(S.taskBlocks(tasks).find((b) => b.number === n) || { lines: [] }).requirements;
     const W = S.msg("en").importSpec;
     const tc = r.ok ? S.traceCheck(p, r.feature) : {};
-    all("1.42 SK-03: the FRs no scenario covers (FR-003, FR-004, FR-005 — one still [NEEDS CLARIFICATION]) become US-4's EARS criteria (past the US3 / US-3.AC-1 the tasks name), their lines out of the prose; FR-001 (its words) stays prose, FR-002 (cited) maps to US-1.AC-2 — so does a task citing it; FR-001 cited by a task is reported, so is [US3] (kept), the stale US-3.AC-1 is dropped — trace finds no phantom and the FR criteria uncovered; the classification is the parent's (got " +
+    all("1.42 SK-03: the FRs no scenario covers (FR-003, FR-004, FR-005 — one still [NEEDS CLARIFICATION]) become US-4's EARS criteria (past the US3 / US-3.AC-1 the tasks name), their lines out of the prose; FR-001 (its words) stays prose, FR-002 (cited) maps to US-1.AC-2 — so does a task citing it; FR-001 cited by a task is reported, so is [US3] (kept); the stale US-3.AC-1 stays as written — trace's phantom, never the FR criteria's coverage; the classification is the parent's (got " +
       js({ warnings: r.warnings, mapping: r.mapping, counts: r.counts, tracks: r.tracks, t: [mk(3), mk(4), mk(5), mk(6)], trace: [tc.verdict, tc.phantomAcsInTasks, tc.uncoveredByTasks] }) + ")", [
       () => r.ok, () => /\n### US-4: Functional Requirements\n\n#### Acceptance Criteria \(EARS\)\n1\. \*\*US-4\.AC-1\*\* — THE SYSTEM SHALL ensure that users MUST be able to reorder photos by drag and drop \(FR-003\)\n {3}<!-- spec-kit: \*\*FR-003\*\*: Users MUST/.test(req),
       () => /\n2\. \*\*US-4\.AC-2\*\* — THE SYSTEM SHALL log every share link created \(FR-004\)\n/.test(req),
@@ -276,8 +276,8 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       () => r.warnings.includes(W.wFrCriteria("US-4", "FR-003 → US-4.AC-1, FR-004 → US-4.AC-2, FR-005 → US-4.AC-3")), () => !r.warnings.some((w) => /carried as prose/.test(w)),
       () => js(mk(3)) === js(["US-1.AC-2"]), () => js(mk(4)) === js(["FR-001"]) && r.warnings.includes(W.wUnknownRef(4, "FR-001")),
       () => js(mk(5)) === js(["US3"]) && r.warnings.includes(W.wUnknownRef(5, "US3")),
-      () => js(mk(6)) === js([W.taskAcPlaceholder]) && r.warnings.includes(W.wDroppedRef(6, "US-3.AC-1")) && !/US-3\.AC-1/.test(tasks),
-      () => tc.verdict === "gaps-found" && js(tc.phantomAcsInTasks) === js([]) && js(tc.uncoveredByTasks) === js(["US-2.AC-1", "US-4.AC-1", "US-4.AC-2", "US-4.AC-3"]),
+      () => js(mk(6)) === js(["US-3.AC-1"]) && !r.warnings.some((w) => w.includes("'US-3.AC-1'")),
+      () => tc.verdict === "gaps-found" && js(tc.phantomAcsInTasks) === js(["US-3.AC-1"]) && js(tc.uncoveredByTasks) === js(["US-2.AC-1", "US-4.AC-1", "US-4.AC-2", "US-4.AC-3"]),
       () => js(r.tracks) === js(["core", "tdd"]), () => !r.warnings.some((w) => w === W.wNoRequirements("spec.md")),
     ]);
     // the FRs alone (no story): their criteria are the feature's — US-1, no "no requirements" warning; a PT modal kept as written,
@@ -308,7 +308,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
     const r3 = S.importSpec(p3, "spec-kit", "specs/003-ids", {});
     const req3 = r3.ok ? rd(r3.dir, "requirements.md") : "";
     const W3 = S.msg("en").importSpec;
-    all("1.42 SK-03: FR-001a / FR-1.1 / FR-1.2 are no definitions (prose, named as the parent named them: FR-001, FR-1), a second FR-003 line, a definition with no separator and a mention stay prose and are named; FR-003 (first), FR-006 (em dash), FR-007 ('**FR-007**.') convert; stories 1 and 3 make it US-4 (the highest number, never a count — a stale US-2.AC-1 the tasks name is below it, and dropped), FR-007 resolves (got " +
+    all("1.42 SK-03: FR-001a / FR-1.1 / FR-1.2 are no definitions (prose, named as the parent named them: FR-001, FR-1), a second FR-003 line, a definition with no separator and a mention stay prose and are named; FR-003 (first), FR-006 (em dash), FR-007 ('**FR-007**.') convert; stories 1 and 3 make it US-4 (the highest number, never a count — a stale US-2.AC-1 the tasks name is below it, kept as written), FR-007 resolves (got " +
       js([r3.warnings, r3.mapping]) + ")", [
       () => r3.ok, () => r3.warnings.includes(W3.wFrCriteria("US-4", "FR-003 → US-4.AC-1, FR-006 → US-4.AC-2, FR-007 → US-4.AC-3, FR-010 → US-4.AC-4")),
       () => r3.tracks.includes("ai"), // the classifier still reads the converted FRs (the parent read them as prose): an LLM one is +ai
@@ -318,7 +318,7 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       () => /\n### US-4: Functional Requirements\n/.test(req3) && /\n### US-3 \(P2\): Share\n/.test(req3),
       () => /\*\*US-4\.AC-2\*\* — THE SYSTEM SHALL ensure that MUST keep originals \(FR-006\)/.test(req3), () => /\*\*US-4\.AC-3\*\* — THE SYSTEM SHALL ensure that albums MUST sort by date \(FR-007\)/.test(req3),
       () => /\n- \*\*FR-008\*\* System MUST purge trash weekly\n- Note: FR-009 is TBD\n/.test(req3),
-      () => r3.warnings.includes(W3.wDroppedRef(1, "US-2.AC-1")), () => r3.mapping["FR-007"] === "US-4.AC-3" && !r3.warnings.some((w) => /task 2:/.test(w)),
+      () => !r3.warnings.some((w) => w.includes("'US-2.AC-1'")) && /_Requirements: US-2\.AC-1_/.test(rd(r3.dir, "tasks.md")), () => r3.mapping["FR-007"] === "US-4.AC-3" && !r3.warnings.some((w) => /task 2:/.test(w)),
     ]);
   }
 
@@ -414,10 +414,11 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
 
   // 1.42 fix 1 R1-IMP-2: the synthetic FR story took max(printed) + 1, and a stale US-<that n>.AC-1 a source task cited was kept as
   // written — trace read it as covering the FR criterion, under a warning saying it matched nothing. The story is numbered past every
-  // story number a source text names (keyed on the inputs: tasks.md, spec.md, plan.md, quickstart.md …), and a US-n.AC-m naming no
-  // story of the import is dropped, with a warning that says so (a marker left empty holds the placeholder — the gates still refuse).
-  // The reviewer's q3 tree; the other texts; a loose line, a held number's missing AC (trace's phantom, as always), a valid ref beside a
-  // stale one; another importer (Kiro); a story number past the safe integers (no number to write: the FRs stay prose, named).
+  // story number a source text names (keyed on the inputs: tasks.md, spec.md, plan.md, quickstart.md …), so a stale ID names no
+  // imported criterion and stays what it was before 1.42: trace's phantom, which the tasks gate refuses ("unknown ACs (typos?)"). (A
+  // rule dropping such an ID was tried in fix 1 and reverted: it made that gate pass — lesson 12.) The reviewer's q3 tree; each text
+  // alone; duplicate story numbers; a loose line, a held story's missing AC, a valid ref beside a stale one; another importer (Kiro)
+  // keeps its pass-through; a story number past the safe integers (no number to write: the FRs stay prose, named).
   {
     const W = S.msg("en").importSpec;
     const base = ["# Feature Specification: Albums", "", "### User Story 1 - Create (Priority: P1)", "", "**Acceptance Scenarios**:", "",
@@ -430,38 +431,39 @@ exports.run = async ({ ok, all, skip, S, tmp, remeasure, require }) => {
       return { p, r, tasks: r.ok && fs.existsSync(path.join(r.dir, "tasks.md")) ? rd(r.dir, "tasks.md") : "", tc: r.ok ? S.traceCheck(p, r.feature) : {} };
     };
     const reqOf = (tasks, n) => S.taskMarkers(S.taskBlocks(tasks).find((x) => x.number === n) || { lines: [] }).requirements;
+    const named = (r, id) => (r.warnings || []).some((w) => w.includes("'" + id + "'"));
     const a = q3("tasks", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n- [ ] T010 [US1] Create albums in src/albums.ts\n- [ ] T011 Old export task\n  - _Requirements: US-2.AC-1_\n" });
     const ap = a.r.ok ? S.approvePhase(a.p, a.r.feature, "tasks", "probe", {}) : {};
+    const tr = a.r.ok ? ((S.specDoctor(a.p, a.r.feature).checks || []).find((x) => x.id === "traceability") || {}) : {};
     // each text the parser reads names a story number alone (any case); a word ending in "us<digits>" names none (extractAcIds' boundary)
     const texts = [["spec.md", base + "\n## Edge Cases\n\n- An album deleted mid-share (see US-6.AC-2)\n", 7], ["plan.md", "# Implementation Plan: Albums\n\n## Summary\n\nUS-7 is the export story; the corpus12 notes, status-15.\n", 8],
       ["quickstart.md", "# Quickstart\n\n1. Re-check us9/ac1\n", 10], ["research.md", "# Research\n\n## Decision: zip\n\nFor [US4].\n", 5], ["contracts/api.yaml", "openapi: 3.0.0\nx-story: US11\n", 12]];
     const bs = texts.map(([f, t], i) => q3("text-" + i, { "spec.md": f === "spec.md" ? t : base, ...(f === "spec.md" ? {} : { [f]: t }) }).r.mapping["Functional Requirements"]);
     const dup = q3("dup", { "spec.md": base.replace("## Requirements", "### User Story 1 - Again (Priority: P2)\n\n**Acceptance Scenarios**:\n\n1. **Given** a, **When** b, **Then** c\n\n## Requirements") });
-    const c = q3("mixed", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n## Phase 1\n\nNote _Requirements: US-5.AC-1_\n\n- [ ] T010 [US1] Create\n  - _Requirements: US-1.AC-9_\n- [ ] T011 Log\n  - _Requirements: FR-001, US-4.AC-1_\n- [ ] T012 Empty\n  - _Requirements: ,_\n" });
+    const c = q3("mixed", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n## Phase 1\n\nNote _Requirements: US-5.AC-1_\n\n- [ ] T010 [US1] Create\n  - _Requirements: US-1.AC-9_\n- [ ] T011 Log\n  - _Requirements: FR-001, US-4.AC-1_\n" });
     const kp = fresh("fx1-q3-kiro");
     put(path.join(kp, ".kiro", "specs", "k", "requirements.md"), "# Requirements\n\n## Requirements\n\n### Requirement 1\n\n**User Story:** As a user, I want to sign in, so that I reach my account.\n\n#### Acceptance Criteria\n\n" +
       "1. WHEN a user signs in THEN the system SHALL create a session\n2. WHEN a user signs out THEN the system SHALL end the session\n");
     put(path.join(kp, ".kiro", "specs", "k", "tasks.md"), "# Implementation Plan\n\n- [ ] 1. Sign in\n  - _Requirements: 1.1, US-9.AC-1_\n- [ ] 2. Sign out\n  - _Requirements: US-1.AC-2_\n");
     const kr = S.importSpec(kp, "kiro", ".kiro/specs/k", { tracks: ["core"] });
     const kt = kr.ok ? rd(kr.dir, "tasks.md") : "";
+    const ktc = kr.ok ? S.traceCheck(kp, kr.feature) : {};
     const e = q3("hostile", { "spec.md": base, "tasks.md": "# Tasks: Albums\n\n- [ ] T010 [US1] Create\n- [ ] T011 Old\n  - _Requirements: US-" + "9".repeat(20) + ".AC-1_\n" });
     const e2 = q3("hostile-printed", { "spec.md": base.replace("User Story 1 -", "User Story " + "9".repeat(20) + " -") });
-    all("1.42 fix 1 R1-IMP-2: the FR story is numbered past every story number the source names (US-2.AC-1 in tasks.md → US-3; one in spec.md, plan.md, quickstart.md, research.md or a contract alone moves it past that one; corpus12 / status-15 name none; duplicate story numbers: past the positions); a US-n.AC-m naming no story of the import is dropped (a true warning; the placeholder when nothing is left) — trace finds no phantom and the FR criterion uncovered, the tasks gate refuses; US-1.AC-9 stays trace's phantom; a valid ref beside a stale one kept alone, a marker naming nothing the placeholder; Kiro alike; a number past the safe integers converts no FR (got " +
-      js({ a: [a.r.warnings, a.tc.verdict, a.tc.phantomAcsInTasks, a.tc.uncoveredByTasks, ap.failing], bs, dup: dup.r.mapping, c: [c.r.warnings, c.tc.phantomAcsInTasks, reqOf(c.tasks, 2)], k: kr.warnings, e: [e.r.counts, e.r.warnings], e2: e2.r.counts }) + ")", [
+    all("1.42 fix 1 R1-IMP-2: the FR story is numbered past every story number the source names (US-2.AC-1 in tasks.md → US-3; one in spec.md, plan.md, quickstart.md, research.md or a contract alone moves it past that one; corpus12 / status-15 name none; duplicate story numbers: past the positions) — so a stale US-n.AC-m stays as written, trace's phantom, and the tasks gate refuses it as unknown; a held story's missing AC and a stale ref beside a valid one the same; Kiro's pass-through unchanged; a number past the safe integers converts no FR (got " +
+      js({ a: [a.r.warnings, a.tc.verdict, a.tc.phantomAcsInTasks, a.tc.uncoveredByTasks, ap.failing, tr.detail], bs, dup: dup.r.mapping, c: [c.r.warnings, c.tc.phantomAcsInTasks, reqOf(c.tasks, 2)], k: [kr.warnings, ktc.phantomAcsInTasks], e: [e.r.counts, e.r.warnings], e2: e2.r.counts }) + ")", [
       () => a.r.ok && a.r.mapping["Functional Requirements"] === "US-3" && a.r.mapping["FR-001"] === "US-3.AC-1",
-      () => a.r.warnings.includes(W.wDroppedRef(2, "US-2.AC-1")) && !a.r.warnings.some((w) => /'US-2\.AC-1' matches no imported criterion/.test(w)),
-      () => js(reqOf(a.tasks, 2)) === js([W.taskAcPlaceholder]) && !/US-2\.AC-1/.test(a.tasks),
-      () => a.tc.verdict === "gaps-found" && js(a.tc.phantomAcsInTasks) === js([]) && js(a.tc.uncoveredByTasks) === js(["US-3.AC-1"]),
-      () => !ap.ok && ["placeholders", "traceability"].every((x) => (ap.failing || []).includes(x)),
+      () => js(reqOf(a.tasks, 2)) === js(["US-2.AC-1"]) && !named(a.r, "US-2.AC-1"),
+      () => a.tc.verdict === "gaps-found" && js(a.tc.phantomAcsInTasks) === js(["US-2.AC-1"]) && js(a.tc.uncoveredByTasks) === js(["US-3.AC-1"]),
+      () => !ap.ok && (ap.failing || []).includes("traceability") && /unknown ACs \(typos\?\): US-2\.AC-1/.test(tr.detail || ""),
       () => js(bs) === js(texts.map((x) => "US-" + x[2])),
       () => dup.r.ok && dup.r.mapping["Functional Requirements"] === "US-3" && dup.r.mapping["FR-001"] === "US-3.AC-1",
-      () => c.r.ok && c.r.mapping["Functional Requirements"] === "US-6", () => c.r.warnings.includes(W.wDroppedRefLine(5, "US-5.AC-1")) && /\nNote _Requirements: \[an imported criterion this task proves\]_\n/.test(c.tasks),
-      () => js(reqOf(c.tasks, 1)) === js(["US-1.AC-9"]) && js(c.tc.phantomAcsInTasks) === js(["US-1.AC-9"]),
-      () => js(reqOf(c.tasks, 2)) === js(["US-6.AC-1"]) && c.r.warnings.includes(W.wDroppedRef(2, "US-4.AC-1")), () => js(reqOf(c.tasks, 3)) === js([W.taskAcPlaceholder]),
-      () => kr.ok && js(reqOf(kt, 1)) === js(["US-1.AC-1"]) && js(reqOf(kt, 2)) === js(["US-1.AC-2"]) && kr.warnings.includes(W.wDroppedRef(1, "US-9.AC-1")),
+      () => c.r.ok && c.r.mapping["Functional Requirements"] === "US-6" && /\nNote _Requirements: US-5\.AC-1_\n/.test(c.tasks) && !named(c.r, "US-5.AC-1"),
+      () => js(reqOf(c.tasks, 1)) === js(["US-1.AC-9"]) && js(reqOf(c.tasks, 2)) === js(["US-6.AC-1", "US-4.AC-1"]) && !named(c.r, "US-4.AC-1"),
+      () => ["US-1.AC-9", "US-4.AC-1"].every((id) => (c.tc.phantomAcsInTasks || []).includes(id)),
+      () => kr.ok && js(reqOf(kt, 1)) === js(["US-1.AC-1", "US-9.AC-1"]) && js(reqOf(kt, 2)) === js(["US-1.AC-2"]) && !named(kr, "US-9.AC-1") && js(ktc.phantomAcsInTasks) === js(["US-9.AC-1"]),
       () => e.r.ok && e.r.counts.stories === 1 && !e.r.mapping["Functional Requirements"] && e.r.warnings.includes(W.wUncoveredFr("FR-001")),
       () => e2.r.ok && e2.r.counts.stories === 1 && !e2.r.mapping["Functional Requirements"] && e2.r.warnings.includes(W.wUncoveredFr("FR-001")),
-      () => S.msg("pt").importSpec.wDroppedRef(1, "US-9.AC-1").includes("retirada") && S.msg("es").importSpec.wDroppedRefLine(5, "US-9.AC-1").includes("eliminada"),
     ]);
   }
 

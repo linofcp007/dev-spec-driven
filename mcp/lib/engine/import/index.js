@@ -62,7 +62,6 @@ function inertBlock(lines) {
 }
 
 const RE_IMPORT_TASK_HEAD = /^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?/;
-const REF_DROPPED = Object.freeze([]); // refs()'s answer for a reference left out of _Requirements:_ (importTasks)
 // line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, fn) — fn(match, list) — by a scan: the lazy list rescanned a long blank run
 // at each step, and each marker the rest of a line with no closing "_". As the engine: the list runs from the first
 // non-blank to the first "_" followed by a blank or the end, never over a line terminator — else, when that "_" comes
@@ -168,19 +167,15 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
   let n = 0;
   let anyRefs = false;
   // taskNo: the task a reference belongs to; a line no task owns is reported by its line number instead.
-  // refs(ref): the AC IDs it stands for | null (kept as written, reported) | REF_DROPPED (left out, reported); a marker left naming
-  // nothing (every reference dropped, or none: `_Requirements: ,_`) holds the placeholder a kept template task gets
-  // (fitTemplateTasks) — the gates refuse it
   const rewrite = (line, taskNo, lineNo) => replaceRequirementsMarkers(line, (all, list) => {
     anyRefs = true;
     const outIds = [];
     for (const ref of list.split(/[,;]/).map((s) => s.trim()).filter(Boolean)) {
       const hit = refs(ref);
-      if (hit === REF_DROPPED) warnings.push(taskNo != null ? W.wDroppedRef(taskNo, ref) : W.wDroppedRefLine(lineNo, ref));
-      else if (hit) hit.forEach((x) => { if (!outIds.includes(x)) outIds.push(x); });
+      if (hit) hit.forEach((x) => { if (!outIds.includes(x)) outIds.push(x); });
       else { outIds.push(ref); warnings.push(taskNo != null ? W.wUnknownRef(taskNo, ref) : W.wUnknownRefLine(lineNo, ref)); }
     }
-    return "_Requirements: " + (outIds.length ? outIds.join(", ") : L.taskAcPlaceholder) + "_";
+    return "_Requirements: " + outIds.join(", ") + "_";
   });
   const out = [L.tasksTitle(name), "", "{{NOTE}}", ""];
   const heading = (h) => { if (out[out.length - 1].trim()) out.push(""); out.push(h); };
@@ -605,13 +600,13 @@ function importRun(projectDir, tool, source, opts) {
     // _Requirements:_ references → new AC IDs: a criterion ("1.1"), a whole requirement/story ("2", "Requirement 2",
     // "US2") or an ID that is already dev-spec's. Anything else is kept as written and reported.
     const storyNo = (s) => { const idx = model.stories.findIndex((x) => x.printed === s); return idx === -1 ? null : keepNumbers ? s : idx + 1; };
-    // An AC ID passes through when an imported story has its number (an AC that story lacks is trace's phantom, as always); one
-    // naming no story of the import — a stale US-9.AC-1 for a story the source deleted — is dropped, and its warning says so
-    // (REF_DROPPED). The synthetic FR story is never one a source ID names (numbered past them all). FR-n is no stable ID (trace
-    // ignores it, spec_append_tasks refuses it): only one an imported criterion holds (frRefs), else it is reported, kept as written
+    // An AC ID passes through as written — one naming no imported criterion (a stale US-2.AC-1 for a story the source deleted) is
+    // trace's phantom, and the tasks gate refuses it ("unknown ACs (typos?)"). It never names the synthetic FR story: that one is
+    // numbered past every story number the source names. FR-n is no stable ID (trace ignores it, spec_append_tasks refuses it): only
+    // one an imported criterion holds (frRefs), else it is reported, kept as written
     const refs = (ref) => {
       const ac = /^US-(\d+)\.AC-\d+$/.exec(ref);
-      if (ac) return acOf.has(+ac[1]) ? [ref] : REF_DROPPED;
+      if (ac) return [ref];
       if (/^(?:SC|NFR|EC)-\d+$/.test(ref)) return [ref];
       if (/^FR-\d+$/.test(ref)) return frRefs.get(ref) || null;
       if (t === "kiro" && critMap.has(ref)) return [critMap.get(ref)];

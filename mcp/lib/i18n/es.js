@@ -1876,8 +1876,6 @@ const msg = {
       wNoCriteriaAtAll: "el origen no tiene criterios de aceptación — requirements.md aún no define ningún AC: escríbelos antes de aprobar los requisitos (hasta entonces, un plan de pruebas +tdd recibe una fila genérica)",
       wUnknownRef: (task, ref) => `tarea ${task}: la referencia _Requirements:_ '${ref}' no corresponde a ningún criterio importado — se conserva tal cual`,
       wUnknownRefLine: (line, ref) => `tasks.md, línea ${line}: la referencia _Requirements:_ '${ref}' no corresponde a ningún criterio importado — se conserva tal cual`,
-      wDroppedRef: (task, ref) => `tarea ${task}: la referencia _Requirements:_ '${ref}' nombra una historia que la importación no tiene — eliminada (cita el criterio que la tarea prueba)`,
-      wDroppedRefLine: (line, ref) => `tasks.md, línea ${line}: la referencia _Requirements:_ '${ref}' nombra una historia que la importación no tiene — eliminada`,
       wCarried: (list) => `copiado tal cual, sin correspondencia con historias o criterios (revísalo): ${list}`,
       wNoRefs: "las tareas importadas no tienen referencias _Requirements:_ — añádelas para que trace_check asocie cada AC a una tarea",
       wPortNoFence: (slug) => `+port: el tasks.md importado no tiene tarea de línea base ni verificación diferencial, así que la barrera no retiene nada — deja que add_track las escriba: ${DEV_SPEC} add-track ${slug} port --remove y después ${DEV_SPEC} add-track ${slug} port (añadidas tras las tareas importadas: mueve la línea base al principio — references/port-patterns.md)`,

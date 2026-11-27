@@ -1979,9 +1979,6 @@ const msg = {
       wNoCriteriaAtAll: "the source holds no acceptance criteria — requirements.md defines no AC yet: write them before approving the requirements (a +tdd test plan gets one generic row until then)",
       wUnknownRef: (task, ref) => `task ${task}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
       wUnknownRefLine: (line, ref) => `tasks.md line ${line}: _Requirements:_ reference '${ref}' matches no imported criterion — kept as written`,
-      // 1.42 fix 1: a US-n.AC-m naming no story of the import (a stale ID) is left out — trace would read it as a criterion
-      wDroppedRef: (task, ref) => `task ${task}: _Requirements:_ reference '${ref}' names no story of the import — dropped (cite the criterion the task proves)`,
-      wDroppedRefLine: (line, ref) => `tasks.md line ${line}: _Requirements:_ reference '${ref}' names no story of the import — dropped`,
       wCarried: (list) => `carried over verbatim, not mapped to stories or criteria (review them): ${list}`,
       wNoRefs: "the imported tasks carry no _Requirements:_ references — add them so trace_check can map every AC to a task",
       // 1.36 review 1: a +port feature whose imported plan has no baseline / differential check (the import replaced the scaffold's)

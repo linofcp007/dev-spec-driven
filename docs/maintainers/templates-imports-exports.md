@@ -160,11 +160,9 @@ is in History at the end.
   ceiling past the safe integers converts nothing: the FRs stay prose, named). A definition's nested list and lazy
   continuation lines fold into its one criterion (mdListItems' text, kept whole in the `<!-- spec-kit: … -->` line) — the
   stated limit. `model.frKeys` (a Set per FR) → importRun's `frRefs`: a task's `FR-n` resolves to the criteria holding it,
-  for every importer, else `wUnknownRef`. `refs()` (every importer): a `US-n.AC-m` passes through when an imported story
-  has the number n (an AC it lacks is trace's phantom), else it is dropped (`REF_DROPPED` → `wDroppedRef` /
-  `wDroppedRefLine`; a marker left naming nothing — every reference dropped, or a `_Requirements: ,_` — holds
-  `taskAcPlaceholder`, which the gates refuse). What stays prose gets the
-  parent's `wUncoveredFr` (`uncoveredFrs` over the lines left). `counts.stories` counts the synthetic story. **What the
+  for every importer, else `wUnknownRef`. `refs()` (every importer) passes a `US-n.AC-m` through as written: one naming no
+  imported criterion — a stale `US-2.AC-1` — is trace's phantom, and the tasks gate refuses it ("unknown ACs (typos?)");
+  it never names the synthetic story's criteria, numbered past it. What stays prose gets the parent's `wUncoveredFr` (`uncoveredFrs` over the lines left). `counts.stories` counts the synthetic story. **What the
   import leaves:** `specKitLeft()` names
   every entry of the folder but a hidden one, a `SPECKIT_KNOWN` name and the case twin of one whose read / listing reached
   it (the decision follows the read); the exact-name rule hides a known name of the wrong kind (a FOLDER plan.md, a FILE
@@ -432,11 +430,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.42 fix 1 (review 1)** — SK-05 took quickstart.md out of design.md and asked only who READS quickstart.md (trace), never
   which gate its content left: an open `[NEEDS CLARIFICATION]` there passed the design gate — now one design.md line each
   (R1-IMP-1; with no design to import they follow the kept scaffold's: a first draft wrote a design.md of those lines alone,
-  which held nothing once they were resolved — the template's placeholders no longer refused). The synthetic FR story took max(printed) + 1 and refs() returned null for `US-<its n>.AC-m`, which importTasks
-  then KEPT — a stale ID became coverage of the FR criterion under a warning saying it matched nothing: the number is keyed
-  on the inputs (every story number a source text names), and a `US-n.AC-m` naming no imported story is dropped with a
-  warning that says so (R1-IMP-2; a refusal that returns null still means "kept as written" — a third answer, not a reused
-  one). SK-06's inclusion list of tails (`:` `-` `–` `—`) left `.`, `(…)`, `,`, `?`, `;`, `/TBD` bare while three texts
+  which held nothing once they were resolved — the template's placeholders no longer refused). The synthetic FR story took
+  max(printed) + 1 and refs() returned null for `US-<its n>.AC-m`, which importTasks then KEPT — a stale ID became coverage of
+  the FR criterion under a warning saying it matched nothing: the number is keyed on the inputs (every story number a source
+  text names), so a stale ID is the phantom it was on main again (R1-IMP-2). Tried and reverted in the same round: dropping
+  a `US-n.AC-m` of a story the import lacks, with a warning — it made the tasks gate PASS a task citing a valid AC beside a
+  stale one (the "typos?" refusal lost) and changed every importer; a finding is never closed by an accept (lesson 12).
+  SK-06's inclusion list of tails (`:` `-` `–` `—`) left `.`, `(…)`, `,`, `?`, `;`, `/TBD` bare while three texts
   promised every value: the rule is now what prose has — a letter or digit after the blanks (R1-IMP-3, the reviewer's M13).
   frKeys' includes() over a growing list was the round's one superlinear part (40,000 scenarios citing one FR: ~800 M
   compares) — a Set per FR. The clarification-words rule of `frCovered()` gained its row (M16, older).
