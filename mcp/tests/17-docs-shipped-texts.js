@@ -136,10 +136,12 @@ exports.run = async ({ all, S, root, tmp, require }) => {
     // classification) —, so six texts that said "advance only on readyToAdvance" held approvals for a later phase's work.
     // nextGate is the next approval's own checks, a forecast: the approval call adds phase-order (an earlier phase changed
     // since its approval — nextGate ready, the approve refused), so no text may promise it: never "approve on nextGate",
-    // "the next approval would pass" or "ready to approve" (in any language) — "fix what it refuses" is what holds.
+    // "the next approval would pass" or "ready to approve" (in any language) — "fix what it refuses" is what holds. Nor "what the
+    // next approval would refuse" (review 1, R1-SURF-09: spec_doctor's description, read by skill-less clients — nextGate is the
+    // next gate's own checks; the approval adds phase order and roles).
     const texts = shippedTexts(root);
     const RE_HOLD = [/(?:advanc\w*|proceed)\W+(?:only\s+)?on\s+`?readyToAdvance/i, /one `readyToAdvance` verdict/i];
-    const RE_PROMISE = [/approve\s+on\s+(?:its\s+)?`?nextGate/i, /next approval (?:would |will )?pass/i, /ready to approve|pronto para aprovar|listo para aprobar/i];
+    const RE_PROMISE = [/approve\s+on\s+(?:its\s+)?`?nextGate/i, /next approval (?:would |will )?(?:pass|refuse)/i, /ready to approve|pronto para aprovar|listo para aprobar/i];
     const hits = texts.flatMap(([rel, t]) => RE_HOLD.concat(RE_PROMISE).filter((re) => re.test(t.replace(/\s+/g, " "))).map((re) => rel + " " + re.source));
     // The texts that SEND an agent to doctor before an approval / before advancing, by PROPERTY (review 1, R1-SURF-01: a list of
     // seven missed GEMINI.md's and the Copilot rule's "Run `dev-spec doctor` before advancing" — `rules gemini` / `rules copilot`
