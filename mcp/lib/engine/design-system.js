@@ -226,7 +226,6 @@ const DS_EXPORT_NAMES = 500; // components kept of one file (what the registry's
 const DS_EXPORT_LIST_LINES = 200; // lines an `export { … }` list or an `import` clause may go on over
 const DS_DECL_LINES = 60; // lines a declaration's annotation may go on over before its `=`
 const RE_EXPORTS_EXT = /\.(?:tsx|jsx|js|mjs)$/i;
-const RE_COMPONENT_NAME = /^\p{Lu}[\p{L}\p{N}]*$/u;
 const RE_IDENTIFIERS = /[\p{L}_$][\p{L}\p{N}_$]*/gu;
 const RE_DECL_FN = /^(export\s+)?(?:default\s+)?(?:async\s+)?(function|class)\s+([\p{L}_$][\p{L}\p{N}_$]*)/u;
 const RE_DECL_CONST = /^(export\s+)?(?:const|let|var)\s+([\p{L}_$][\p{L}\p{N}_$]*)/u;

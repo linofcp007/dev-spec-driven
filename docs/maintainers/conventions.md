@@ -173,7 +173,8 @@ History at the end.
   `loadRoadmap()` check each key's type), **is an ERROR every mutator returns before its destructive step** (`roadmapError()`,
   `state.invalid`) — never "repaired" into `{}` (that erases deps, approvals, `meta.lang`). Readers get a sanitized copy and
   SAY it: doctor fails `state`, next_action's step is `fix`, spec_finish blocks, the status line says repair. A leading BOM is
-  tolerated; `writeIfAbsent` uses `flag:"wx"`.
+  tolerated; `writeIfAbsent` uses `flag:"wx"`. readJson's `error` is the code `invalid-json`; the caller says it
+  (`err.invalidJson(errorRel, errorDetail)`, the project's language).
 - **`writeFileAtomic` is durable and never tears a file in place:** a `wx` temp file (`<file>.<pid>.<ts>.tmp`), written whole,
   fsynced, renamed, its folder fsynced on POSIX (best effort where refused). A rename Windows refuses (EPERM / EACCES / EBUSY —
   a scanner, the indexer) is retried ~1.6 s, never for a read-only target; then the write is REFUSED — the old content
@@ -491,6 +492,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   disk or a concurrent reader met it empty or half written) and followed a link the gate had checked a moment before. Chosen
   over a `.bak` copy: nothing to clean up or recover by hand, the gate's guarantee kept whole. The fsync measured ~0.5 ms per
   write (Windows / NTFS).
+- **1.42 —** R13: readJson's `error` held an English sentence no surface ever showed (every reader truth-tests it; the two that say it
+  localize `errorRel` / `errorDetail`); it is the code `invalid-json` (mcp/tests/16-conventions.js). design-system.js lost an unused
+  component-name regex (nothing read it).
 
 ### Merging the spec state
 - **1.21 F1a** — the merge driver: two branches that both approved, ticked or recorded evidence conflicted in `.state.json` /

@@ -677,15 +677,15 @@ function withRoadmapLock(projectDir, fn, onBusy) {
 
 // JSON state (.specs/roadmap.json, .specs/<feature>/.state.json). A file that EXISTS but doesn't parse
 // is never treated as empty — the next write would silently erase deps/backlog/approvals/lang. A
-// leading BOM (Windows editors) is tolerated.
+// leading BOM (Windows editors) is tolerated. A parse failure's `error` is the stable code "invalid-json" (1.42 R13): the caller
+// says it, in the project's language (`err.invalidJson(errorRel, errorDetail)`) — an English sentence here was never shown.
 function readJson(file) {
   const raw = readIfExists(file);
   if (raw == null) return { exists: false, data: null, error: null };
   try {
     return { exists: true, data: JSON.parse(raw.replace(/^\uFEFF/, "")), error: null };
   } catch (e) {
-    const rel = jsonRel(file);
-    return { exists: true, data: null, error: `${rel} is not valid JSON (${e.message}) — fix it by hand; refusing to overwrite it.`, errorRel: rel, errorDetail: e.message };
+    return { exists: true, data: null, error: "invalid-json", errorRel: jsonRel(file), errorDetail: e.message };
   }
 }
 

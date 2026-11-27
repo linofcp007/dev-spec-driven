@@ -1468,4 +1468,30 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       "no constant-true ok() and no hand-printed skip line in the suites": () => found.length === 0,
     });
   }
+
+  // 1.42 (R13): the engine's readJson answers a file that doesn't parse with the stable CODE "invalid-json" — its English sentence
+  // was never shown (every reader truth-tests `error`; the two that say it localize errorRel / errorDetail through err.invalidJson).
+  {
+    const E = require("./lib/engine/index.js");
+    const pj = path.join(tmp, "proj-r13-invalid-json");
+    S.initProject(pj, ["core"], "pt");
+    S.createFeature(pj, "Billing", ["core"]);
+    const rmFile = path.join(pj, ".specs", "roadmap.json"), stFile = path.join(pj, ".specs", "billing", ".state.json");
+    const rmText = "{ \"features\": ", stText = "{ \"approvals\": [ }";
+    const why = (t) => { try { JSON.parse(t); return null; } catch (e) { return e.message; } };
+    fs.writeFileSync(stFile, stText);
+    const said = S.readState(pj, "billing").invalid; // the project's language (pt) while roadmap.json still parses
+    fs.writeFileSync(rmFile, rmText);
+    const rm = E.readJson(rmFile), st = E.readJson(stFile), none = E.readJson(path.join(pj, ".specs", "nothing.json"));
+    all("1.42 (R13): readJson of a file that doesn't parse → { exists: true, data: null, error: \"invalid-json\", errorRel, errorDetail } (got " +
+      JSON.stringify({ rm, st, none, said }) + ")", {
+      "roadmap.json: the code, its relative name and the parser's own detail": () => rm.exists === true && rm.data === null && rm.error === "invalid-json" &&
+        rm.errorRel === ".specs/roadmap.json" && rm.errorDetail === why(rmText),
+      "a feature's .state.json: the same code": () => st.exists === true && st.data === null && st.error === "invalid-json" &&
+        st.errorRel === "billing/.state.json" && st.errorDetail === why(stText),
+      "an absent file: no error": () => none.exists === false && none.error === null,
+      "the caller still says it, localized (pt), with the name and the detail": () => typeof said === "string" &&
+        said.startsWith("billing/.state.json não é JSON válido (" + why(stText) + ")"),
+    });
+  }
 };
