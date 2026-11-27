@@ -41,9 +41,10 @@ let phaseFile; // state.js — the file a phase writes (tasks: an xs change's ch
 let protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines; // protect.js — 1.36 guard tests: protect / unprotect, finish's check
 let portOn, portFinishRecheck, evidenceRule; // port.js — +port's re-check of the differential check (1.36) · evidence.js
 let frictionStatus, frictionLines; // friction.js — 1.41 the friction budget: spec_metrics' project `friction` and its CLI lines
+let agentCosts, agentLines; // agents.js — 1.42 the plugin subagents' cost: spec_metrics' project `agents` and its CLI lines
 let finishMetrics, walkFeatureStates, measuredBlock, measuredLines; // metric.js — 1.41: the METRIC readings at finish, spec_metrics' walk
 let lessonView, lessonCounts, lessonsBlock; // decisions.js — 1.41 the lessons (finish's `lessons`, spec_metrics' counts and project block)
-function __link(E) { ({ frictionStatus, frictionLines, finishMetrics, walkFeatureStates, measuredBlock, measuredLines, lessonView, lessonCounts, lessonsBlock, protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, portOn, portFinishRecheck, evidenceRule,
+function __link(E) { ({ frictionStatus, frictionLines, agentCosts, agentLines, finishMetrics, walkFeatureStates, measuredBlock, measuredLines, lessonView, lessonCounts, lessonsBlock, protectTests, protectedTestsFinish, protectedFinishWarning, protectedSummaryLines, portOn, portFinishRecheck, evidenceRule,
   phaseFile, duplicationReport, designSystemFinish, DESIGN_SYSTEM_FILE, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -619,7 +620,10 @@ function metrics(projectDir, name, opts = {}) {
   const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
   // 1.41 the friction budget (project-level, never per feature): each project check's measured time against its steering/tech.md
   // budget — null with no budget, no unreadable budget line and no measured run (friction.js frictionStatus)
-  const res = { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity, friction: frictionStatus(projectDir, lng) };
+  // 1.42 the plugin subagents' cost (project-level like friction, never per feature): per role, the dispatches, turns, tool calls and
+  // tokens the observe hook counted from their transcripts — null with no record (agents.js agentCosts; Claude Code only)
+  const res = { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity, friction: frictionStatus(projectDir, lng),
+    agents: agentCosts(projectDir) };
   for (const b of blocks) { const v = b.result(); if (v != null) res[b.key] = v; }
   return res;
 }
@@ -676,7 +680,7 @@ function metricsLines(r) {
     return out;
   }
   // 1.41: no active feature — the project blocks still print (an archived folder's lessons and readings; the JSON carries them)
-  if (!r.features.length) return [M.noFeatures(r.specsDir), ...lessonsLines(r.lessons, M), ...frictionLines(r.friction, r.lang), ...measuredLines(r.measured, r.lang)];
+  if (!r.features.length) return [M.noFeatures(r.specsDir), ...lessonsLines(r.lessons, M), ...frictionLines(r.friction, r.lang), ...agentLines(r.agents, r.lang), ...measuredLines(r.measured, r.lang)];
   const out = [M.projectHead(r.features.length)];
   const w = Math.min(28, Math.max(8, ...r.features.map((m) => m.feature.length)));
   for (const m of r.features) {
@@ -698,6 +702,7 @@ function metricsLines(r) {
   out.push(...lessonsLines(r.lessons, M)); // 1.41: every feature folder's, archived ones too
   if (r.velocity) out.push(i18n.msg(r.lang).forecast.metricsVelocity(r.velocity)); // 1.14 B4
   out.push(...frictionLines(r.friction, r.lang)); // 1.41 the friction budget
+  out.push(...agentLines(r.agents, r.lang)); // 1.42 the plugin subagents' cost
   out.push(...measuredLines(r.measured, r.lang)); // 1.41: each METRIC reading across finishes (the creep view)
   return out;
 }

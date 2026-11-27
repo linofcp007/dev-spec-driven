@@ -2054,6 +2054,9 @@ const msg = {
       lessonsUnread: (list) => `  lecciones cuya causa no es ninguno de los cinco códigos (¿una edición a mano?): ${list}`,
       lessonsTruncated: (n) => `  lecciones: ${n} carpeta(s) de funcionalidad más allá de las primeras 1000 sin leer`,
       lessonsRepeated: (cause, target, features, n) => `  repetida: ${cause} → ${target} — ${n} lecciones en ${features}`,
+      // 1.42 el coste de los subagentes del plugin (el `agents` de spec_metrics del proyecto): recuentos de sus transcripciones de Claude Code, nunca un tiempo
+      agentsHead: (n) => `  subagentes (los agentes del plugin, contados a partir de sus transcripciones de Claude Code — sin tiempo): ${n} ${n === 1 ? "ejecución" : "ejecuciones"}`,
+      agentsRole: (role, n, turns, tin, tout, cached, partial) => `    ${role}  ${n} ${n === 1 ? "ejecución" : "ejecuciones"} · ${turns} turnos · tokens de entrada ${tin}, de salida ${tout}, leídos de caché ${cached}${partial ? ` — ${partial} ${partial === 1 ? "leída" : "leídas"} solo en parte: un mínimo` : ""}`,
       retroText: {
         title: (f) => `# Retrospectiva: ${f}`,
         intro: (date) => `> Generada por dev-spec el ${date} a partir de .state.json, .history/ y los artefactos. Los números se calculan localmente; el resto te toca a ti. Nada de esto se aplica automáticamente.`,

@@ -98,4 +98,22 @@ exports.run = async ({ all, runIn, runAsync, spawnAsync, tmp, require, __dirname
       exit: () => t.length === 1 && t[0].check === "serve" && t[0].ms + RUN.RUN_DRAIN_MS * 0.75 <= wall,
     });
   }
+
+  { // 1.42 (S9): the plugin subagents' cost on the CLI — `metrics` (the project) prints the head and one line per role after the friction
+    // line, --json carries `agents` (spec_metrics'); none of it without a record
+    const p = path.join(tmp, "fr-agents");
+    SD.initProject(p, ["core"], "en", { checks: { test: PASS } });
+    const tok = { in: 1520, out: 18340, cacheRead: 812400, cacheWrite: 64210 };
+    SD.recordAgentRun(p, { agent: "dev-spec-driven:spec-reviewer", id: "agent-c1", model: "claude-opus-4-5", turns: 31, tools: 24, tokens: tok, truncated: false });
+    const bare = path.join(tmp, "fr-agents-none");
+    SD.initProject(bare, ["core"], "en");
+    const mh = runIn(["metrics", "--project", p]), mj = jsonOf(runIn(["metrics", "--json", "--project", p])), mn = runIn(["metrics", "--project", bare]);
+    const MM = SD.msg("en").metrics, head = MM.agentsHead(1), role = MM.agentsRole("spec-reviewer", 1, 31, 1520, 18340, 812400, 0);
+    const at = (s) => mh.out.split("\n").indexOf(s);
+    all("1.42 (S9) metrics (CLI): the subagents' head and its role line, --json `agents`; nothing without a record (got " + js([mh.out.slice(-400), mj && mj.agents, mn.out.slice(-200)]) + ")", {
+      lines: () => mh.code === 0 && at(head) > 0 && at(role) === at(head) + 1,
+      json: () => mj && mj.agents && mj.agents.dispatches === 1 && js(mj.agents.roles["spec-reviewer"].tokens) === js(tok),
+      none: () => mn.code === 0 && !mn.out.includes(head.split("(")[0].trim()),
+    });
+  }
 };
